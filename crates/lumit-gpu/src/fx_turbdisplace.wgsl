@@ -23,7 +23,7 @@ struct Params {
     cycle: i32,               // depth loop length in cells; 0 = no loop
     mix_amt: f32,             // 0..1, blended against the unprocessed input
     matte_on: f32,            // 1 = scale the displacement by the matte's luma
-    invert: f32,              // 1 = the matte drives where it is DARK
+    _pad1: f32,               // was Invert; applied once at the seam since K-425
     _pad0: f32,
 };
 
@@ -36,14 +36,11 @@ struct Params {
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
 // == cpu::matte_strength / fx_blur.wgsl's matte_k: premultiplied Rec. 709 luma,
-// clamped, then inverted. One reading of "how much matte is here".
+// clamped. One reading of "how much matte is here"; the Channel pick and
+// Invert happened once already, in fx_matte_prepare.wgsl (K-425).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
-    let k = clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
-    if (p.invert != 0.0) {
-        return 1.0 - k;
-    }
-    return k;
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
 }
 
 // == cpu::bilinear_edge with the Repeat policy (edge == 1), which is the only

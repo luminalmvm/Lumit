@@ -145,6 +145,8 @@ pub const DOF_ENABLED_WHEN: &[EnabledWhen] = &[
          and the blur widens with the distance from the focus depth — so a \
          mid-grey matte can be perfectly sharp",
     ),
+    // K-425: `depth_channel` below is this effect's own channel pick.
+    matte_channel = false,
 )]
 pub struct Dof {
     /// The layer whose depth channel is the depth pass (0 = near, 1 = far by

@@ -15,9 +15,6 @@ pub struct BlurOp {
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// The Matte's Invert switch (K-395): with it on, the blur widens where the
-    /// matte is *dark*. Read only when a matte is actually bound.
-    pub matte_invert: bool,
 }
 
 /// One resolved directional blur (docs/08 §3.8): a line integral along a
@@ -114,7 +111,9 @@ pub(super) struct BlurParams {
     /// wrap's spill are not the user's Gaussian blur, and their matte (if any)
     /// has already been spent elsewhere.
     pub(super) matte_on: f32,
-    pub(super) invert: f32,
+    /// Was the Matte's Invert; since K-425 the seam applies it once, before
+    /// the kernel (`FxEngine::matte_prepare`), and this pad is always 0.
+    pub(super) _pad0: f32,
 }
 
 #[repr(C)]
@@ -241,9 +240,6 @@ pub struct GlowOp {
     pub tint: [f32; 4],
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// The Matte's Invert switch (K-395): with it on, the *dark* parts of the
-    /// matte are what seed the halo. Read only when a matte is bound.
-    pub matte_invert: bool,
 }
 
 #[repr(C)]
@@ -257,7 +253,8 @@ pub(super) struct GlowParams {
     /// 1 = gate the bright pass by the matte's luma (K-395). The combine pass
     /// reads the same uniform and ignores both fields.
     pub(super) matte_on: f32,
-    pub(super) invert: f32,
+    /// Was Invert; the seam applies it once since K-425. Always 0.
+    pub(super) _pad0: f32,
     pub(super) _pad: [f32; 2],
 }
 
@@ -280,7 +277,7 @@ impl FxEngine {
         // The Matte scales the radius per pixel (K-395) — see fx_blur.wgsl.
         // Both passes carry it, because each reads its DESTINATION pixel's
         // matte and the two halves must agree on this pixel's kernel width.
-        let (matte_on, invert) = (f32::from(matte.is_some()), f32::from(op.matte_invert));
+        let matte_on = f32::from(matte.is_some());
         // Horizontal into tmp (mix 1: the blend happens once, at the end).
         self.dispatch_matted(
             ctx,
@@ -298,7 +295,7 @@ impl FxEngine {
                 edge: op.edge,
                 mix_amt: 1.0,
                 matte_on,
-                invert,
+                _pad0: 0.0,
             }),
         );
         // Vertical into out, blending against the original input.
@@ -318,7 +315,7 @@ impl FxEngine {
                 edge: op.edge,
                 mix_amt: op.mix,
                 matte_on,
-                invert,
+                _pad0: 0.0,
             }),
         );
         out
@@ -442,7 +439,7 @@ impl FxEngine {
                     edge: 1, // Repeat, always (see the schema comment)
                     mix_amt: 1.0,
                     matte_on: 0.0,
-                    invert: 0.0,
+                    _pad0: 0.0,
                 }),
             );
         }
@@ -537,10 +534,6 @@ impl FxEngine {
             // wraps with the plate rather than with black.
             edge: 1,
             mix: 1.0,
-            // Light wrap's spill blur is internal plumbing, not the user's
-            // Gaussian blur: this effect's own matte is the generic strength
-            // dissolve and has already been dealt with beside the dispatch.
-            matte_invert: false,
         };
         let spill = self.blur(ctx, background, w, h, None, &blur);
         let soft = self.blur(ctx, src, w, h, None, &blur);
@@ -641,7 +634,7 @@ impl FxEngine {
             // survived, which is the whole difference from dissolving the
             // finished glow.
             matte_on: f32::from(matte.is_some()),
-            invert: f32::from(op.matte_invert),
+            _pad0: 0.0,
             _pad: [0.0; 2],
         };
         // The bright pass wants ONE picture, so its `orig` slot is free and the
@@ -676,7 +669,7 @@ impl FxEngine {
                     edge: 1, // Repeat, always (see the CPU reference)
                     mix_amt: 1.0,
                     matte_on: 0.0,
-                    invert: 0.0,
+                    _pad0: 0.0,
                 }),
             );
         }
@@ -820,10 +813,6 @@ impl FxEngine {
                 // would smear it into a fan.
                 edge: 0,
                 mix: 1.0,
-                // This effect's own matte is the generic strength dissolve and
-                // has already been dealt with beside the dispatch; the softening
-                // is internal plumbing, not the user's Gaussian blur.
-                matte_invert: false,
             },
         );
         let out = work_texture(ctx, w, h, "fx-drop-shadow-out");

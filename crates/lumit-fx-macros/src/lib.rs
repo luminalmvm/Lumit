@@ -12,9 +12,11 @@
 //! expansion. See `docs/impl/effect-registry.md` §2.1 for the shape and the full
 //! attribute table.
 //!
-//! Two parameters are **injected** rather than declared: the Matte layer row
-//! and its Invert switch (K-395), which every effect gets so the row means
-//! something on all of them from day one. `matte = "<id>"` says the effect
+//! Four parameters are **injected** rather than declared: the Matte layer row,
+//! its Invert switch (K-395) and its Channel choice (K-425), which every effect
+//! gets so the row means something on all of them from day one, and the Blend
+//! choice beside every Mix slider (K-425). `matte_channel = false` keeps the
+//! Channel off an effect that picks its matte's channels itself. `matte = "<id>"` says the effect
 //! reads the matte out of the named parameter *itself*, inside its own maths,
 //! instead of the generic dissolve — `matte = "matte"` for an effect that takes
 //! the injected row and means something deeper by it (Gaussian blur, Glow), and
@@ -81,6 +83,11 @@ struct EffectAttr {
     enabled_when: TokenStream2,
     /// What this effect's Matte row means (K-395). Default [`MatteAttr::Strength`].
     matte: MatteAttr,
+    /// Whether the injected Matte row also gets the Channel choice (K-425).
+    /// `matte_channel = false` for an effect that owns a channel choice for
+    /// its matte already (Set matte, Displacement map, Depth of field, the
+    /// Lens flare). Default true.
+    matte_channel: bool,
 }
 
 /// The generic Matte parameter's id, repeated here because a proc-macro crate
@@ -91,6 +98,13 @@ struct EffectAttr {
 /// `every_effect_carries_a_matte_row` in lumit-core fails on the first effect it
 /// walks.
 const MATTE_PARAM: &str = "matte";
+
+/// The Mix slider's id, the Blend row's (K-425) and the Channel row's — the
+/// same copies-for-the-same-reason as [`MATTE_PARAM`]: the emitted schema uses
+/// the `lumit_core::fx` consts for the ids, and these only decide whether to
+/// emit.
+const MIX_PARAM: &str = "mix";
+const BLEND_PARAM: &str = "blend";
 
 /// The `matte = ...` attribute's three spellings (K-395), which become
 /// `lumit_core::fx::MatteRole` in the emitted schema.
@@ -202,7 +216,33 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
         groups,
         enabled_when,
         matte,
+        matte_channel,
     } = effect;
+
+    // The Blend row (K-425), injected right after the Mix slider on every
+    // effect that has one and does not declare a `blend` of its own (the Lens
+    // flare). An effect with no Mix touches no pixel (the Controls, the Camera
+    // track, Posterize time) and has nothing to blend. It sits beside `mix` in
+    // schema order because the panel draws it on the Mix row.
+    if let Some(at) = declared.iter().position(|d| d == MIX_PARAM) {
+        if !declared.iter().any(|d| d == BLEND_PARAM) {
+            schemas.insert(
+                at + 1,
+                quote! {
+                    ::lumit_core::fx::ParamSchema {
+                        id: ::lumit_core::fx::BLEND_PARAM,
+                        label: "Blend",
+                        kind: ::lumit_core::fx::ParamKind::Choice {
+                            options: ::lumit_core::model::BlendMode::NAMES,
+                            default: 0,
+                            dividers_after: ::lumit_core::fx::CHOICE_UNGROUPED,
+                        },
+                        unit: ::lumit_core::fx::Unit::Raw,
+                    }
+                },
+            );
+        }
+    }
 
     // The Matte pair (K-395), appended to every effect's parameters unless the
     // declaration opted out. It is injected here rather than written down 33
@@ -238,6 +278,22 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
                 unit: ::lumit_core::fx::Unit::Raw,
             }
         });
+        // The Channel choice (K-425), unless the effect picks its matte's
+        // channels itself.
+        if matte_channel {
+            schemas.push(quote! {
+                ::lumit_core::fx::ParamSchema {
+                    id: ::lumit_core::fx::MATTE_CHANNEL_PARAM,
+                    label: "Channel",
+                    kind: ::lumit_core::fx::ParamKind::Choice {
+                        options: ::lumit_core::fx::CHANNEL_OPTIONS,
+                        default: 0,
+                        dividers_after: ::lumit_core::fx::CHOICE_UNGROUPED,
+                    },
+                    unit: ::lumit_core::fx::Unit::Raw,
+                }
+            });
+        }
     }
 
     let doc =
@@ -306,6 +362,7 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
     let mut groups = quote! { &[] };
     let mut enabled_when = quote! { &[] };
     let mut matte = MatteAttr::Strength;
+    let mut matte_channel = true;
 
     for meta in metas {
         let Meta::NameValue(nv) = meta else {
@@ -335,6 +392,20 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
             // *itself*, which is how an effect declares a deeper meaning than
             // strength — and how the two that owned the idea first keep their
             // stored ids (K-065).
+            // Whether the injected matte row gets its Channel choice (K-425).
+            "matte_channel" => {
+                matte_channel = match value {
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Bool(b), ..
+                    }) => b.value(),
+                    other => {
+                        return Err(syn::Error::new(
+                            other.span(),
+                            "expected `matte_channel = false` for an effect that picks its                              matte's channel itself (K-425)",
+                        ))
+                    }
+                }
+            }
             "matte" => {
                 matte = match value {
                     Expr::Lit(ExprLit {
@@ -389,6 +460,7 @@ fn parse_effect_attr(input: &DeriveInput) -> syn::Result<EffectAttr> {
         groups,
         enabled_when,
         matte,
+        matte_channel,
     })
 }
 

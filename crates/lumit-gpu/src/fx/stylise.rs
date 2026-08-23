@@ -339,10 +339,6 @@ impl FxEngine {
                 // edge along the frame's own sides.
                 edge: 0,
                 mix: 1.0,
-                // This effect's own matte is the generic strength dissolve and
-                // has already been dealt with beside the dispatch; the softening
-                // is internal plumbing, not the user's Gaussian blur.
-                matte_invert: false,
             },
         );
         let out = work_texture(ctx, w, h, "fx-roughen-edges-out");

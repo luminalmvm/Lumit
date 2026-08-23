@@ -194,6 +194,28 @@ shape.
   Bypass state is not animatable (use the effect's own Mix/Amount parameter for that).
 - Every effect SHOULD expose a final **Mix** parameter (0–100%, default 100%) blending
   processed over unprocessed input, host-provided so it is uniform.
+- **Every Mix row carries a Blend choice** (K-425): how the effect's result combines with
+  its input, offered as the layer blend modes verbatim (`BlendMode::ALL`, the same words
+  the layer's Mode dropdown uses), default Normal. It is injected beside `mix` by the
+  derive on every effect that has a Mix slider and does not declare a `blend` of its own
+  (the Lens flare keeps its older one), and implemented **once at the dispatch seam**, not
+  per kernel:
+
+  ```
+  unmixed = kernel(input)  at Mix 100          # the seam forces the kernel's Mix
+  out     = input·(1 − mix) + blend(input, unmixed)·mix
+  ```
+
+  The Mix lives inside every kernel, and blending an already-mixed output would apply the
+  Mix twice; so when Blend is anything but Normal the kernel runs with Mix forced to 100
+  and the seam lerps once, after the blend (`cpu::blend_seam`, `cpu::blend_mix` and its
+  op-for-op WGSL twin `fx_blend_mix.wgsl`). The domains follow the compositor's layer
+  modes ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §blend domains): Add, Multiply,
+  Lighten, Darken and Subtract per channel in linear light, the rest encoded to sRGB for
+  the W3C formula and decoded; alpha is the effect's own. **Normal runs no pass** — the
+  kernel's own Mix does the whole job and the picture is byte for byte what it was
+  (K-258). Where an effect also has a generic strength matte (§2.6), the blend runs first
+  and the matte dissolve after it, so the matte still holds the whole result off.
 
 ### 1.6 CPU reference as oracle
 
@@ -278,7 +300,26 @@ the boundary frame, matching Overrun semantics in [04-RETIMING.md](04-RETIMING.m
 
 Every built-in effect has a **Matte** input: a layer whose brightness says *how much of the
 effect* each pixel gets. It is one row, in the same place, on all of them — the layer
-picker with an **Invert** checkbox beside it, labelled "Matte" / "Invert".
+picker with an **Invert** checkbox beside it and a **Channel** choice (K-425), labelled
+"Matte" / "Invert" / "Channel". The Matte key alone carries none (K-425): a keyer's
+subject is the picture it keys, and a strength matte over a key is a garbage matte,
+which is a mask's job.
+
+**The Channel choice says which channel of the matte layer drives the effect**: Luminance
+(the default — the premultiplied Rec. 709 luma every kernel has always read), Red, Green,
+Blue or Alpha, the same `CHANNEL_OPTIONS` list Set matte and Depth of field offer. The
+pick and the Invert are applied **once, at the dispatch seam, before anyone reads the
+matte**: `cpu::matte_prepare` and its op-for-op twin `fx_matte_prepare.wgsl` rewrite the
+RGBA matte into a grey picture whose R = G = B = the chosen channel, clamped to 0..1 and
+inverted if asked, alpha 1. Every kernel then reads luma of that grey — which is the
+channel — and no kernel learns about the row, nor inverts on its own any more (Gaussian
+blur, Glow and Turbulent displace used to; they read the matte as it arrives now, so
+Invert cannot be applied twice). Luminance with Invert off runs **no pass**: the kernels
+read exactly that already, and a pass through an fp16 texture would requantise what they
+read, so the default is byte for byte the matte of K-395 (K-258). Effects that own a
+channel choice for their matte carry no Channel row and get the raw RGBA: Depth of field
+(`depth_channel`), Displacement map (its two channel choices), Set matte (Channel) and the
+Lens flare (source detection).
 
 This is **not** masking the effect's result. A mask hides what an effect did; a matte feeds
 the effect itself, and what "feeds" means may differ per effect. The two are worth having

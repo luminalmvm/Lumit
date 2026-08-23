@@ -278,3 +278,170 @@ fn a_black_matte_suppresses_the_effect_entirely() {
         );
     }
 }
+
+/// The bound document again, with the Matte row's Invert and Channel and the
+/// Mix row's Blend set as asked — `None` for a parameter leaves it at its
+/// default, and `strip` removes the two K-425 rows altogether, which is what
+/// every project saved before they existed looks like.
+fn project_with(
+    invert: bool,
+    channel: Option<u32>,
+    blend: Option<u32>,
+    strip: bool,
+) -> (Arc<Document>, Uuid) {
+    let (doc, comp_id) = project(true);
+    let mut doc = Arc::try_unwrap(doc).expect("unshared");
+    for item in &mut doc.items {
+        let ProjectItem::Composition(c) = item else {
+            continue;
+        };
+        for layer in &mut c.layers {
+            for fx in &mut layer.effects {
+                for p in &mut fx.params {
+                    if p.id == lumit_core::fx::MATTE_INVERT_PARAM {
+                        p.value = EffectValue::Bool(invert);
+                    }
+                    if let (true, Some(ch)) = (p.id == lumit_core::fx::MATTE_CHANNEL_PARAM, channel)
+                    {
+                        p.value = EffectValue::Choice(ch);
+                    }
+                    if let (true, Some(b)) = (p.id == lumit_core::fx::BLEND_PARAM, blend) {
+                        p.value = EffectValue::Choice(b);
+                    }
+                }
+                if strip {
+                    fx.params.retain(|p| {
+                        p.id != lumit_core::fx::MATTE_CHANNEL_PARAM
+                            && p.id != lumit_core::fx::BLEND_PARAM
+                    });
+                }
+            }
+        }
+    }
+    (Arc::new(doc), comp_id)
+}
+
+/// **Luminance and Normal are yesterday's picture, byte for byte** (K-258,
+/// K-425). A matted render with the Channel and Blend rows at their defaults
+/// is the same bytes as the same document with the two rows stripped — which
+/// is every project saved before they existed — because neither default runs
+/// a pass: the kernels already read luma, and Normal is the kernel's own Mix.
+#[test]
+fn the_default_channel_and_blend_render_the_same_bytes_as_before_they_existed() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (today, today_comp) = project_with(false, Some(0), Some(0), false);
+    let (before, before_comp) = project_with(false, None, None, true);
+    let (a, w, h) = r.render_rgba(&today, today_comp, 0, 1.0).expect("render");
+    let (b, bw, bh) = r.render_rgba(&before, before_comp, 0, 1.0).expect("render");
+    assert_eq!((w, h), (bw, bh));
+    assert_eq!(a, b, "the default rows must not change a single byte");
+    // And it is the matted picture, not a coincidence of two passthroughs.
+    let lifted = lumit_core::pixels::srgb_encode(0.5);
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    assert_eq!(px(&a, w, LIT.start), lifted);
+    assert_eq!(px(&a, w, DARK.end - 1), source);
+}
+
+/// **Invert is applied once, end to end** (K-425). With Invert on, the lit
+/// half of the band is where the Exposure is held off and the dark half where
+/// it applies in full — the two flat regions swap exactly. Applied twice, the
+/// two inverts would cancel and the picture would be the un-inverted one;
+/// applied nowhere, likewise. Either failure is this assertion.
+#[test]
+fn invert_swaps_the_two_halves_once() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (doc, comp) = project_with(true, None, None, false);
+    let (rgba, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
+    let lifted = lumit_core::pixels::srgb_encode(0.5);
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    for x in LIT {
+        assert_eq!(
+            px(&rgba, w, x),
+            source,
+            "column {x} is under the (inverted) lit matte: the source, untouched"
+        );
+    }
+    for x in DARK {
+        assert_eq!(
+            px(&rgba, w, x),
+            lifted,
+            "column {x} is under the (inverted) black matte: the Exposure in full"
+        );
+    }
+}
+
+/// **The Channel row reads the channel it names** (K-425). The band precomp is
+/// white on transparent: its Blue channel is the same picture as its luma, and
+/// its Alpha the same again — but read by Red on the *grey* base, the matte
+/// is a different picture. Here the Alpha pick must reproduce the Luminance
+/// render byte for byte (both are 1 inside the band and 0 outside), which
+/// proves the pick is wired through the seam and the kernel reads it.
+#[test]
+fn the_alpha_channel_of_a_white_band_drives_like_its_luma() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (luma_doc, luma_comp) = project_with(false, Some(0), None, false);
+    let (alpha_doc, alpha_comp) = project_with(false, Some(1), None, false);
+    let (luma, w, _) = r.render_rgba(&luma_doc, luma_comp, 0, 1.0).expect("render");
+    let (alpha, _, _) = r
+        .render_rgba(&alpha_doc, alpha_comp, 0, 1.0)
+        .expect("render");
+    let lifted = lumit_core::pixels::srgb_encode(0.5);
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    for x in LIT {
+        assert_eq!(
+            px(&alpha, w, x),
+            lifted,
+            "column {x}: alpha 1 under the band"
+        );
+        assert_eq!(px(&alpha, w, x), px(&luma, w, x));
+    }
+    for x in DARK {
+        assert_eq!(
+            px(&alpha, w, x),
+            source,
+            "column {x}: alpha 0 past the band"
+        );
+        assert_eq!(px(&alpha, w, x), px(&luma, w, x));
+    }
+}
+
+/// **The Blend row combines the effect with its input, end to end** (K-425).
+/// An Exposure of +1 stop on mid grey, blended Multiply: the lifted grey
+/// multiplied by the source grey, 0.5 x 0.25 = 0.125 in linear, darker than
+/// the source — where Normal lifts it. Under the matte's dark half the
+/// dissolve still returns the untouched source, so the blend and the matte
+/// compose in the order docs/08 §2.6 gives: blend, then matte.
+#[test]
+fn a_multiply_blend_darkens_where_normal_lifts() {
+    let Ok(mut r) = HeadlessRenderer::new() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (doc, comp) = project_with(false, None, Some(2), false);
+    let (rgba, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("render");
+    let multiplied = lumit_core::pixels::srgb_encode(0.125);
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    for x in LIT {
+        let got = px(&rgba, w, x);
+        assert!(
+            (i16::from(got) - i16::from(multiplied)).abs() <= 1,
+            "column {x}: Multiply of the lifted grey with the source, got {got} want {multiplied}"
+        );
+    }
+    for x in DARK {
+        assert_eq!(
+            px(&rgba, w, x),
+            source,
+            "column {x}: the matte still holds it off"
+        );
+    }
+}

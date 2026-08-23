@@ -152,7 +152,7 @@ fn render_the_dissolve_and_the_override() {
             to_srgb(&d)
         });
         let mut varied = lin.clone();
-        cpu::blur_gaussian_matted(&mut varied, w, h, radius, 1, 1.0, &matte, false);
+        cpu::blur_gaussian_matted(&mut varied, w, h, radius, 1, 1.0, &matte);
         write("3-blur-radius", &to_srgb(&varied));
 
         // ---- Glow: seed gate vs dissolving a finished glow.
@@ -171,7 +171,6 @@ fn render_the_dissolve_and_the_override() {
             [1.0; 4],
             1.0,
             &[],
-            false,
         );
         write("4-glow-dissolved", &{
             let mut d = glowed.clone();
@@ -190,7 +189,6 @@ fn render_the_dissolve_and_the_override() {
             [1.0; 4],
             1.0,
             &matte,
-            false,
         );
         write("5-glow-seeded", &to_srgb(&seeded));
     }

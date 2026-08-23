@@ -42,9 +42,6 @@ pub struct TurbulentDisplaceOp {
     pub inv_pin_band: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
-    /// The Matte's Invert switch (K-395): with it on, the warp is strongest
-    /// where the matte is *dark*. Read only when a matte is actually bound.
-    pub matte_invert: bool,
 }
 
 #[repr(C)]
@@ -62,7 +59,8 @@ struct TurbulentDisplaceParams {
     cycle: i32,
     mix_amt: f32,
     matte_on: f32,
-    invert: f32,
+    /// Was Invert; the seam applies it once since K-425. Always 0.
+    _pad1: f32,
     _pad0: f32,
 }
 
@@ -768,7 +766,7 @@ impl FxEngine {
                 cycle: op.cycle,
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
-                invert: f32::from(op.matte_invert),
+                _pad1: 0.0,
                 _pad0: 0.0,
             }),
         );

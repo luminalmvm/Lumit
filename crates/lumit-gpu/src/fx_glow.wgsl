@@ -16,7 +16,7 @@ struct Params {
     intensity: f32,    // halo gain; 0 is the neutral point
     mix_amt: f32,      // 0..1, blended against the unprocessed input
     matte_on: f32,     // 1 = gate the bright pass by the matte (K-395)
-    invert: f32,       // 1 = the matte seeds where it is DARK
+    _pad0: f32,        // was Invert; applied once at the seam since K-425
     _pad: vec2<f32>,
 };
 
@@ -65,10 +65,9 @@ fn glow_bright(@builtin(global_invocation_id) gid: vec3<u32>) {
     var c = textureLoad(src, xy, 0);
     if (p.matte_on != 0.0) {
         let m = textureLoad(orig, xy, 0);
-        var k = clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
-        if (p.invert != 0.0) {
-            k = 1.0 - k;
-        }
+        // Channel pick and Invert already applied, once, by
+        // fx_matte_prepare.wgsl (K-425).
+        let k = clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
         c = c * k;
     }
     textureStore(dst, xy, vec4<f32>(bright(c.r), bright(c.g), bright(c.b), bright(c.a)));

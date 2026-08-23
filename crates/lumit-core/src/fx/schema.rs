@@ -495,6 +495,41 @@ pub const MATTE_INVERT_PARAM: &str = "matte_invert";
 /// switch out of the bag by, once per op rather than once per effect.
 pub const MATTE_INVERT_ID: super::params::ParamId = super::params::ParamId::new(MATTE_INVERT_PARAM);
 
+/// The id of the Channel choice that rides beside [`MATTE_PARAM`] (K-425):
+/// which channel of the matte layer drives the effect, by the shared
+/// [`CHANNEL_OPTIONS`](super::CHANNEL_OPTIONS) index (Luminance by default).
+///
+/// Injected on every effect that takes the injected matte row and does not
+/// already own a channel choice for it (Depth of field, Displacement map and
+/// Set matte pick their channels themselves; the Lens flare detects sources).
+/// The seam reads it once, in `cpu::matte_prepare` and its WGSL twin, so no
+/// kernel learns about it.
+pub const MATTE_CHANNEL_PARAM: &str = "matte_channel";
+
+/// [`MATTE_CHANNEL_PARAM`]'s resolved id.
+pub const MATTE_CHANNEL_ID: super::params::ParamId =
+    super::params::ParamId::new(MATTE_CHANNEL_PARAM);
+
+/// The id every effect's host-uniform Mix slider is declared under (docs/08
+/// §1.5). Named here because the seam has to find it: when the injected
+/// [`BLEND_PARAM`] is anything but Normal the kernel runs with this forced to
+/// 100 and the seam applies the Mix itself, after the blend.
+pub const MIX_PARAM: &str = "mix";
+
+/// [`MIX_PARAM`]'s resolved id.
+pub const MIX_ID: super::params::ParamId = super::params::ParamId::new(MIX_PARAM);
+
+/// The id of the Blend choice injected beside every Mix slider (K-425): how
+/// the effect's result combines with its input, by index into
+/// [`BlendMode::ALL`](crate::model::BlendMode::ALL) — the layer modes, verbatim.
+/// Normal (index 0, the default) is the effect's output unchanged, byte for
+/// byte, and no pass runs. The Lens flare declares its own `blend` and keeps
+/// it.
+pub const BLEND_PARAM: &str = "blend";
+
+/// [`BLEND_PARAM`]'s resolved id.
+pub const BLEND_ID: super::params::ParamId = super::params::ParamId::new(BLEND_PARAM);
+
 /// What an effect's Matte row *means*, and therefore who consumes it (K-395).
 ///
 /// # In plain terms
@@ -628,6 +663,24 @@ impl EffectSchema {
     ///
     /// The first declaration wins: an effect takes at most one path, because a
     /// second would need a second carriage and nothing has asked for one.
+    /// Whether this effect carries the injected Channel row beside its matte
+    /// (K-425) — and therefore whether the seam prepares the matte (channel
+    /// pick and Invert, once) before the kernel or the dissolve sees it. An
+    /// effect that owns its channel choice (Depth of field, Displacement map,
+    /// Set matte, the Lens flare) carries none and keeps reading the raw RGBA
+    /// matte itself, Invert included.
+    #[must_use]
+    pub fn matte_channel(&self) -> bool {
+        self.params.iter().any(|p| p.id == MATTE_CHANNEL_PARAM)
+    }
+
+    /// Whether this effect carries the injected Blend row (K-425): every
+    /// effect with a Mix slider that does not declare a `blend` of its own.
+    #[must_use]
+    pub fn blend(&self) -> bool {
+        self.params.iter().any(|p| p.id == BLEND_PARAM)
+    }
+
     #[must_use]
     pub fn mask_path(&self) -> Option<(&'static str, bool)> {
         self.params.iter().find_map(|p| match p.kind {

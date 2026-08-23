@@ -275,6 +275,13 @@ pub struct FxEngine {
     /// input by the matte's luma. Shares [`Self::adjust_layout`] — three
     /// sampled inputs, a storage output, one uniform.
     matte_mix: wgpu::ComputePipeline,
+    /// The matte's Channel pick and Invert (K-425), once before any kernel or
+    /// the dissolve reads it. Shares [`Self::adjust_layout`].
+    matte_prepare: wgpu::ComputePipeline,
+    /// The effect Blend and Mix (K-425): one pass after a kernel run at Mix
+    /// 100, blending its result onto its input by a layer mode and then
+    /// applying the effect's own Mix. Shares [`Self::adjust_layout`].
+    blend_mix: wgpu::ComputePipeline,
     /// 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md). Its own pipeline and
     /// [`Self::lut_layout`]: the shared two sampled inputs (src, orig) plus
     /// the cube as a fifth binding — a 3D texture, the first effect to need

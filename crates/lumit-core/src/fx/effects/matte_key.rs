@@ -48,6 +48,10 @@ pub const MATTE_KEY_GROUPS: &[ParamGroup] = &[ParamGroup {
     // holds, and pointwise, so the region of interest is exact.
     cost = Cheap,
     roi = Exact,
+    // K-425 (the owner's rule for mattes): a keyer carries no Matte row. Its
+    // subject is the picture it keys, and a strength matte over a key is a
+    // garbage matte — which is a mask's job, not this row's.
+    matte = false,
     // §2.2: keying and despill work on straight colour, so the host wraps the
     // kernel in unpremultiply → key → re-premultiply.
     premultiplied = false,

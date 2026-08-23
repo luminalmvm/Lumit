@@ -130,7 +130,6 @@ impl EffectDef for GlowDef {
             tint,
             mix,
             &[],
-            false,
         );
     }
 }

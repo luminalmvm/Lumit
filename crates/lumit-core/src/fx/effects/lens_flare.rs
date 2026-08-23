@@ -274,6 +274,9 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
          parts of the matte brighter than Detect threshold are the lights, and \
          everything else contributes nothing",
     ),
+    // K-425: the flare detects its sources from the matte as it is; no
+    // Channel choice.
+    matte_channel = false,
 )]
 pub struct LensFlare {
     /// Where the light is, px@comp (K-260: point parameters are PIXELS, the

@@ -23,8 +23,55 @@ use super::{MatteKeyParams, MbQuality, MbView, MAX_BLADES};
 /// second picture.
 pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack) {
     for fx in ops.iter() {
-        fx.def.apply_cpu(rgba, w, h, fx.params);
+        match blend_seam(fx.params) {
+            // The Blend row (K-425), the CPU half of the seam: the kernel runs
+            // at Mix 100 into a copy, and the blend and the Mix are applied
+            // here, once, exactly as `run_ops` does on the GPU.
+            Some((mode, mix, entries)) => {
+                let input = rgba.to_vec();
+                fx.def.apply_cpu(rgba, w, h, super::Params::new(&entries));
+                blend_mix(rgba, &input, mode, mix);
+            }
+            None => fx.def.apply_cpu(rgba, w, h, fx.params),
+        }
     }
+}
+
+/// What [`blend_seam`] hands back when an op blends: the mode, the op's own
+/// Mix as 0..1, and its parameters with Mix forced to 100.
+pub type BlendSeam = (u32, f32, Vec<(super::ParamId, super::Value)>);
+
+/// What the seam does about an op's Blend row (K-425), read once for both
+/// render paths: `None` when the row is Normal (or absent), in which case the
+/// kernel runs exactly as it always has; otherwise the mode, the op's own Mix
+/// as a 0..1 fraction, and the op's parameters with Mix forced to 100, which
+/// is what the kernel is run with so that its output is the *unmixed* effect
+/// the blend wants.
+///
+/// The Mix lives inside every kernel (docs/08 §1.5), and a blend of the input
+/// with an already-mixed output would apply the Mix twice — once as the
+/// kernel's lerp and again as the seam's. Forcing it to 100 for the kernel and
+/// lerping once here, after the blend, is the one order in which "Blend, then
+/// Mix" means what it says. Normal takes no pass at all, so an effect whose
+/// Blend row is unset renders byte for byte what it did (K-258).
+#[must_use]
+pub fn blend_seam(p: super::Params<'_>) -> Option<BlendSeam> {
+    let mode = p.choice(super::BLEND_ID, 0);
+    if mode == 0 {
+        return None;
+    }
+    let mix = (p.float(super::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
+    let entries = p
+        .iter()
+        .map(|(id, v)| {
+            if id == super::MIX_ID {
+                (id, super::Value::Float(100.0))
+            } else {
+                (id, v)
+            }
+        })
+        .collect();
+    Some((mode, mix, entries))
 }
 
 /// Glow (docs/08 §3.3, v1 core): bright-pass every premultiplied channel
@@ -52,7 +99,10 @@ pub fn apply_stack(rgba: &mut [f32], w: u32, h: u32, ops: &super::ResolvedStack)
 /// behaves. Gating the seed lets the sign light the wall beside it.
 ///
 /// An empty `matte` multiplies nothing and reads no pixels, leaving the
-/// arithmetic exactly as it was before K-395 (K-258).
+/// arithmetic exactly as it was before K-395 (K-258). The matte arrives
+/// already prepared — channel picked and Invert applied once, by
+/// [`matte_prepare`] at the seam (K-425) — so this reads its luma and nothing
+/// else.
 #[allow(clippy::too_many_arguments)]
 pub fn glow(
     rgba: &mut [f32],
@@ -65,7 +115,6 @@ pub fn glow(
     tint: [f32; 4],
     mix: f32,
     matte: &[f32],
-    matte_invert: bool,
 ) {
     if intensity == 0.0 {
         return; // neutral: bit-exact identity (the WGSL twin matches)
@@ -81,18 +130,7 @@ pub fn glow(
             // One k for all four channels, from the matte pixel under this one.
             // A matte shorter than the picture seeds those pixels in full —
             // degrade, never fault (14-ENGINEERING-RULES §4).
-            let k = match matte.get(i..i + 3) {
-                Some(m) => {
-                    let luma = m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2];
-                    let k = luma.clamp(0.0, 1.0);
-                    if matte_invert {
-                        1.0 - k
-                    } else {
-                        k
-                    }
-                }
-                None => 1.0,
-            };
+            let k = matte_strength(matte, i);
             for c in 0..4 {
                 halo[i + c] = super::glow_bright(original[i + c] * k, threshold, knee);
             }
@@ -1186,23 +1224,17 @@ pub fn fractal_noise(rgba: &mut [f32], w: u32, h: u32, p: &FractalNoiseParams) {
 }
 
 /// One pixel's matte strength: the clamped premultiplied Rec. 709 luma of the
-/// matte under it, inverted if the Matte row's Invert is on (docs/08 §2.6).
+/// matte under it (docs/08 §2.6).
 ///
 /// The one reading of "how much matte is here" — the same expression
 /// [`matte_mix`] and the WGSL twins use, so a matte means the same thing whether
-/// it dissolves an effect or steers one. A matte shorter than the picture leaves
-/// the remaining pixels at full strength: degrade, never fault
-/// (14-ENGINEERING-RULES §4).
-fn matte_strength(matte: &[f32], i: usize, invert: bool) -> f32 {
+/// it dissolves an effect or steers one. Invert is not read here: it is applied
+/// exactly once, by [`matte_prepare`] at the seam (K-425), before any kernel
+/// sees the matte. A matte shorter than the picture leaves the remaining pixels
+/// at full strength: degrade, never fault (14-ENGINEERING-RULES §4).
+fn matte_strength(matte: &[f32], i: usize) -> f32 {
     match matte.get(i..i + 3) {
-        Some(m) => {
-            let k = (m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2]).clamp(0.0, 1.0);
-            if invert {
-                1.0 - k
-            } else {
-                k
-            }
-        }
+        Some(m) => (m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2]).clamp(0.0, 1.0),
         None => 1.0,
     }
 }
@@ -1254,7 +1286,6 @@ pub fn turbulent_displace(
     h: u32,
     p: &TurbulentDisplaceParams,
     matte: &[f32],
-    invert: bool,
 ) {
     let original = rgba.to_vec();
     // The second field is the first under a salted seed — one shape, two
@@ -1281,7 +1312,7 @@ pub fn turbulent_displace(
             let ramp = |d: f32| (d * p.inv_pin_band).clamp(0.0, 1.0);
             let pin_x = 1.0 + p.pin[0] * (ramp((px - 0.5).min(fw - 0.5 - px)) - 1.0);
             let pin_y = 1.0 + p.pin[1] * (ramp((py - 0.5).min(fh - 0.5 - py)) - 1.0);
-            let s = p.amount * pin_x * pin_y * matte_strength(matte, i, invert);
+            let s = p.amount * pin_x * pin_y * matte_strength(matte, i);
             let v = bilinear_edge(
                 &original,
                 w,
@@ -3019,6 +3050,312 @@ pub fn matte_mix(processed: &mut [f32], input: &[f32], matte: &[f32], invert: bo
     }
 }
 
+/// The matte's Channel pick and Invert, applied once at the seam (K-425,
+/// docs/08 §2.6) — the CPU twin of `fx_matte_prepare.wgsl`.
+///
+/// **In plain terms.** Every kernel that reads a matte reads its luma, and the
+/// dissolve does too. Rather than teach each of them which channel the user
+/// chose and whether to flip it, the seam rewrites the matte *once* into a grey
+/// picture whose red, green and blue are all the chosen channel — clamped to
+/// 0..1, flipped if Invert is on — with alpha 1. Everything downstream then
+/// reads luma of that grey and gets the chosen channel back, and Invert is
+/// applied in exactly one place.
+///
+/// `channel` is a [`CHANNEL_OPTIONS`](super::CHANNEL_OPTIONS) index read
+/// through [`channel_of`]: Luminance is the premultiplied Rec. 709 luma the
+/// kernels have always read, the colour channels are the raw premultiplied
+/// values, and Alpha is the coverage. The seam skips this pass altogether for
+/// Luminance with Invert off ([`matte_needs_prepare`]) — not for speed alone,
+/// but because the kernels already read exactly that and a pass through an
+/// fp16 texture would requantise what they read, and K-258's byte-for-byte
+/// promise is a promise about bytes.
+pub fn matte_prepare(matte: &mut [f32], channel: u32, invert: bool) {
+    for px in matte.chunks_exact_mut(4) {
+        let k = channel_of(px, channel).clamp(0.0, 1.0);
+        let k = if invert { 1.0 - k } else { k };
+        px[0] = k;
+        px[1] = k;
+        px[2] = k;
+        px[3] = 1.0;
+    }
+}
+
+/// Whether [`matte_prepare`] would change what a kernel reads: a matte read by
+/// Luminance with Invert off is what every kernel reads already, so the seam
+/// runs no pass (K-258). One predicate for both render paths.
+#[must_use]
+pub fn matte_needs_prepare(channel: u32, invert: bool) -> bool {
+    channel != 0 || invert
+}
+
+/// The encoded-domain half of [`blend_pixel`]: the compositor's sRGB curve on
+/// one clamped channel, the same expression `composite.wgsl` and
+/// `fx_blend_mix.wgsl` spell.
+fn blend_encode(v: f32) -> f32 {
+    if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.max(0.0).powf(1.0 / 2.4) - 0.055
+    }
+}
+
+fn blend_decode(v: f32) -> f32 {
+    if v <= 0.040_45 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// One channel of the W3C separable blends, `s` the effect's output and `d` its
+/// input, both in the encoded domain, by [`BlendMode::ALL`](crate::model::
+/// BlendMode::ALL) index.
+fn blend_separable(mode: u32, s: f32, d: f32) -> f32 {
+    let colour_burn = |s: f32, d: f32| {
+        if d >= 1.0 {
+            1.0
+        } else if s <= 0.0 {
+            0.0
+        } else {
+            1.0 - ((1.0 - d) / s).min(1.0)
+        }
+    };
+    let colour_dodge = |s: f32, d: f32| {
+        if d <= 0.0 {
+            0.0
+        } else if s >= 1.0 {
+            1.0
+        } else {
+            (d / (1.0 - s)).min(1.0)
+        }
+    };
+    let hard_light = |s: f32, d: f32| {
+        if s <= 0.5 {
+            2.0 * s * d
+        } else {
+            1.0 - 2.0 * (1.0 - s) * (1.0 - d)
+        }
+    };
+    let vivid = |s: f32, d: f32| {
+        if s <= 0.5 {
+            colour_burn(2.0 * s, d)
+        } else {
+            colour_dodge(2.0 * s - 1.0, d)
+        }
+    };
+    match mode {
+        // Colour burn.
+        3 => colour_burn(s, d),
+        // Linear burn.
+        4 => (s + d - 1.0).clamp(0.0, 1.0),
+        // Screen.
+        8 => s + d - s * d,
+        // Colour dodge.
+        9 => colour_dodge(s, d),
+        // Overlay: hard light with the backdrop as the switch.
+        11 => hard_light(d, s),
+        // Soft light (W3C).
+        12 => {
+            let dd = if d <= 0.25 {
+                ((16.0 * d - 12.0) * d + 4.0) * d
+            } else {
+                d.sqrt()
+            };
+            if s <= 0.5 {
+                d - (1.0 - 2.0 * s) * d * (1.0 - d)
+            } else {
+                d + (2.0 * s - 1.0) * (dd - d)
+            }
+        }
+        // Hard light.
+        13 => hard_light(s, d),
+        // Linear light.
+        14 => (d + 2.0 * s - 1.0).clamp(0.0, 1.0),
+        // Vivid light.
+        15 => vivid(s, d),
+        // Pin light.
+        16 => {
+            if s <= 0.5 {
+                d.min(2.0 * s)
+            } else {
+                d.max(2.0 * s - 1.0)
+            }
+        }
+        // Hard mix.
+        17 => {
+            if vivid(s, d) >= 0.5 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        // Difference.
+        18 => (s - d).abs(),
+        // Exclusion.
+        19 => s + d - 2.0 * s * d,
+        // Divide.
+        21 => (d / s.max(1e-6)).clamp(0.0, 1.0),
+        _ => s,
+    }
+}
+
+/// The non-separable (HSL) helpers, W3C compositing §non-separable, on encoded
+/// RGB — the same arithmetic `composite.wgsl` uses for a layer's Mode.
+fn blend_lum(c: [f32; 3]) -> f32 {
+    0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2]
+}
+
+fn blend_clip(c: [f32; 3]) -> [f32; 3] {
+    let l = blend_lum(c);
+    let n = c[0].min(c[1]).min(c[2]);
+    let x = c[0].max(c[1]).max(c[2]);
+    let mut r = c;
+    if n < 0.0 {
+        for v in &mut r {
+            *v = l + (*v - l) * (l / (l - n).max(1e-6));
+        }
+    }
+    if x > 1.0 {
+        for v in &mut r {
+            *v = l + (*v - l) * ((1.0 - l) / (x - l).max(1e-6));
+        }
+    }
+    r
+}
+
+fn blend_set_lum(c: [f32; 3], l: f32) -> [f32; 3] {
+    let d = l - blend_lum(c);
+    blend_clip([c[0] + d, c[1] + d, c[2] + d])
+}
+
+fn blend_sat(c: [f32; 3]) -> f32 {
+    c[0].max(c[1]).max(c[2]) - c[0].min(c[1]).min(c[2])
+}
+
+fn blend_set_sat(c: [f32; 3], s: f32) -> [f32; 3] {
+    let mn = c[0].min(c[1]).min(c[2]);
+    let mx = c[0].max(c[1]).max(c[2]);
+    if mx > mn {
+        let k = s / (mx - mn).max(1e-6);
+        [(c[0] - mn) * k, (c[1] - mn) * k, (c[2] - mn) * k]
+    } else {
+        [0.0; 3]
+    }
+}
+
+/// One pixel of the effect Blend (K-425): the effect's output `s` combined
+/// with its input `d` by [`BlendMode::ALL`](crate::model::BlendMode::ALL)
+/// index `mode`, both premultiplied linear RGBA. The CPU twin of
+/// `fx_blend_mix.wgsl`'s `blend_pixel`, in the same arithmetic order.
+///
+/// The domains follow the compositor's (docs/06 §blend domains), so an
+/// effect's Blend looks like the same word on a layer: Add, Multiply, Lighten,
+/// Darken and Subtract run per channel in linear light; everything else
+/// encodes both sides to sRGB, applies the W3C formula, and decodes. Alpha is
+/// the effect's own — the blend is about colour, and an effect that changed
+/// coverage has said so in its alpha already. Normal is `s`, untouched, and
+/// the seam never calls this for it.
+pub fn blend_pixel(mode: u32, d: [f32; 4], s: [f32; 4]) -> [f32; 4] {
+    let mut o = [0.0f32; 4];
+    o[3] = s[3];
+    match mode {
+        0 => o = s,
+        // Linear, per channel: Add, Multiply, Lighten, Darken, Subtract.
+        6 => {
+            for c in 0..3 {
+                o[c] = d[c] + s[c];
+            }
+        }
+        2 => {
+            for c in 0..3 {
+                o[c] = d[c] * s[c];
+            }
+        }
+        7 => {
+            for c in 0..3 {
+                o[c] = d[c].max(s[c]);
+            }
+        }
+        1 => {
+            for c in 0..3 {
+                o[c] = d[c].min(s[c]);
+            }
+        }
+        20 => {
+            for c in 0..3 {
+                o[c] = (d[c] - s[c]).max(0.0);
+            }
+        }
+        // The encoded (perceptual) set.
+        m => {
+            let se = [
+                blend_encode(s[0].clamp(0.0, 1.0)),
+                blend_encode(s[1].clamp(0.0, 1.0)),
+                blend_encode(s[2].clamp(0.0, 1.0)),
+            ];
+            let de = [
+                blend_encode(d[0].clamp(0.0, 1.0)),
+                blend_encode(d[1].clamp(0.0, 1.0)),
+                blend_encode(d[2].clamp(0.0, 1.0)),
+            ];
+            let b = match m {
+                // Darker colour / Lighter colour: whole-pixel picks by luma.
+                5 => {
+                    if blend_lum(se) < blend_lum(de) {
+                        se
+                    } else {
+                        de
+                    }
+                }
+                10 => {
+                    if blend_lum(se) > blend_lum(de) {
+                        se
+                    } else {
+                        de
+                    }
+                }
+                // Hue, Saturation, Colour, Luminosity.
+                22 => blend_set_lum(blend_set_sat(se, blend_sat(de)), blend_lum(de)),
+                23 => blend_set_lum(blend_set_sat(de, blend_sat(se)), blend_lum(de)),
+                24 => blend_set_lum(se, blend_lum(de)),
+                25 => blend_set_lum(de, blend_lum(se)),
+                _ => [
+                    blend_separable(m, se[0], de[0]),
+                    blend_separable(m, se[1], de[1]),
+                    blend_separable(m, se[2], de[2]),
+                ],
+            };
+            for c in 0..3 {
+                o[c] = blend_decode(b[c]);
+            }
+        }
+    }
+    o
+}
+
+/// The effect Blend and Mix, once at the seam (K-425, docs/08 §1.5) — the CPU
+/// twin of `fx_blend_mix.wgsl`. `processed` is the kernel's output **at Mix
+/// 100** (in place, and the result), `input` the picture it was given, `mode`
+/// a [`BlendMode::ALL`](crate::model::BlendMode::ALL) index and `mix` the
+/// effect's own Mix as 0..1. Each pixel becomes
+/// `input·(1 − mix) + blend(input, processed)·mix`, the lerp spelled as WGSL's
+/// `mix` so the two paths agree. Never called for Normal.
+pub fn blend_mix(processed: &mut [f32], input: &[f32], mode: u32, mix: f32) {
+    for i in (0..processed.len().min(input.len())).step_by(4) {
+        let d = [input[i], input[i + 1], input[i + 2], input[i + 3]];
+        let s = [
+            processed[i],
+            processed[i + 1],
+            processed[i + 2],
+            processed[i + 3],
+        ];
+        let b = blend_pixel(mode, d, s);
+        for c in 0..4 {
+            processed[i + c] = d[c] * (1.0 - mix) + b[c] * mix;
+        }
+    }
+}
+
 /// The unpremultiplied colour of one premultiplied RGBA pixel. A fully
 /// transparent pixel's colour is undefined, so it reads as black — the
 /// WGSL kernels use the identical rule.
@@ -4216,7 +4553,6 @@ pub fn blur_gaussian_matted(
     edge: u32,
     mix: f32,
     matte: &[f32],
-    invert: bool,
 ) {
     if matte.is_empty() {
         return blur_gaussian(rgba, w, h, radius_px, edge, mix);
@@ -4230,19 +4566,7 @@ pub fn blur_gaussian_matted(
     // leaves the remaining pixels at the full radius — degrade, never fault
     // (14-ENGINEERING-RULES §4).
     let kernel = |d: usize| -> (i64, f32) {
-        let k = match matte.get(d..d + 3) {
-            Some(m) => {
-                let luma = m[0] * LUMA[0] + m[1] * LUMA[1] + m[2] * LUMA[2];
-                let k = luma.clamp(0.0, 1.0);
-                if invert {
-                    1.0 - k
-                } else {
-                    k
-                }
-            }
-            None => 1.0,
-        };
-        let rad = radius_px * k;
+        let rad = radius_px * matte_strength(matte, d);
         (rad.ceil() as i64, (rad * 0.5).max(1e-3))
     };
     // Horizontal.

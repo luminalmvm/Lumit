@@ -42,6 +42,9 @@ use lumit_fx_macros::Effect;
          layer's coverage, which is the whole effect rather than a strength \
          applied to one",
     ),
+    // K-425: the Channel choice below IS this effect's channel pick, so the
+    // seam injects none and hands the kernel the raw RGBA matte.
+    matte_channel = false,
 )]
 pub struct SetMatte {
     /// Which channel of the matte layer carries the shape. **Luminance by

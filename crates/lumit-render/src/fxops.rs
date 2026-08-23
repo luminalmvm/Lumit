@@ -300,6 +300,23 @@ pub fn run_ops(
         // cheap handle clone) so the dissolve below has something to lerp
         // back towards, and nothing at all happens when the row is unset.
         let matte = matte.and_then(|m| m.texture(&tex)).cloned();
+        // The Channel pick and Invert, once, before anyone reads the matte
+        // (K-425): a bound matte on an effect that carries the injected
+        // Channel row is rewritten to a grey of the chosen channel, inverted
+        // here and nowhere else. Luminance with Invert off runs no pass, which
+        // is what keeps that case byte for byte (K-258); an effect that owns
+        // its channel choice (no Channel row) reads the raw RGBA as it always
+        // has, Invert included.
+        let schema = resolved.def.schema();
+        let matte = matte.map(|m| {
+            let channel = resolved.params.choice(lumit_core::fx::MATTE_CHANNEL_ID, 0);
+            let invert = resolved.params.bool(lumit_core::fx::MATTE_INVERT_ID, false);
+            if schema.matte_channel() && lumit_core::fx::cpu::matte_needs_prepare(channel, invert) {
+                fx.matte_prepare(ctx, &m, w, h, channel, invert)
+            } else {
+                m
+            }
+        });
         // **Who gets it** — the one branch (K-395). A generic effect's matte is
         // spent in the dissolve after the kernel, and must therefore not reach
         // the kernel; an override's is spent inside the kernel, and must
@@ -323,7 +340,18 @@ pub fn run_ops(
         // table entry (an orchestration-only effect) passes the texture through
         // — the convention a missing LUT or flow field already uses, never a
         // fault (engine crates do not panic, 14-ENGINEERING-RULES §4).
-        if let Some(gpu) = crate::gpufx::gpu_effect(resolved.def.schema().match_name) {
+        if let Some(gpu) = crate::gpufx::gpu_effect(schema.match_name) {
+            // The Blend row (K-425): anything but Normal runs the kernel at
+            // Mix 100 and applies the blend and the Mix itself, afterwards and
+            // once — the same decision `cpu::apply_stack` makes, read from
+            // the same function. Normal leaves the kernel's own Mix alone and
+            // runs no pass.
+            let blend = lumit_core::fx::cpu::blend_seam(resolved.params);
+            let params = match &blend {
+                Some((_, _, entries)) => lumit_core::fx::Params::new(entries),
+                None => resolved.params,
+            };
+            let blend_input = blend.as_ref().map(|_| tex.clone());
             let data = match gpu.aux() {
                 AuxKind::None => AuxData::None,
                 AuxKind::Lut => {
@@ -353,25 +381,24 @@ pub fn run_ops(
                 &tex,
                 w,
                 h,
-                resolved.params,
+                params,
                 AuxSlot::new(data, own_matte, mask_path),
             );
+            if let (Some((mode, mix, _)), Some(input)) = (blend, blend_input) {
+                tex = fx.blend_mix(ctx, &input, &tex, w, h, mode, mix);
+            }
         }
 
         // The generic strength semantic (K-395), one implementation for every
         // effect that has not claimed the matte for itself: after the effect's
-        // own Mix (which happens inside its kernel), dissolve back to the
-        // picture it was handed, by the matte's luma.
+        // own Mix (inside its kernel, or the blend pass above), dissolve back
+        // to the picture it was handed, by the matte's luma. Invert is passed
+        // only when the prepare pass above did not already apply it — an
+        // effect with no Channel row — so it is applied exactly once.
         if let (Some(m), Some(input)) = (generic_matte, unmatted_input) {
-            tex = fx.matte_mix(
-                ctx,
-                &input,
-                &tex,
-                m,
-                w,
-                h,
-                resolved.params.bool(lumit_core::fx::MATTE_INVERT_ID, false),
-            );
+            let invert = !schema.matte_channel()
+                && resolved.params.bool(lumit_core::fx::MATTE_INVERT_ID, false);
+            tex = fx.matte_mix(ctx, &input, &tex, m, w, h, invert);
         }
 
         if let (Some(started), Some(into)) = (started, timings.as_mut()) {

@@ -11228,3 +11228,40 @@ reference format, and a test fails the build on any parameter that declares it. 
 projects are **not** converted and the format version does not move: none exist in the
 wild yet. This supersedes docs/08 §2.3's old "% diag" default wherever an earlier entry
 (K-135, K-388, K-398, K-400 and the Wave 2 batches) relied on it.
+
+## K-425 — Every matte row picks its channel and every Mix row picks its blend, once at the seam
+
+**DECIDED** (2026-08-23, backlog 6.50 and 6.51; numbered K-425 because K-420..K-424 are
+reserved by another branch). Two controls on the rows every effect already carries,
+implemented once at the dispatch seam so no kernel learns about either:
+
+- **Channel** beside Matte / Invert: which channel of the matte layer drives the effect
+  (the shared `CHANNEL_OPTIONS` list — Luminance by default, the premultiplied Rec. 709
+  luma every kernel has always read — then Alpha, Red, Green, Blue). The seam rewrites the
+  matte once, before the kernel or the dissolve sees it, into a grey whose R = G = B = the
+  channel, clamped, inverted if asked, alpha 1 (`cpu::matte_prepare`,
+  `fx_matte_prepare.wgsl`). Invert therefore happens in exactly one place: Gaussian blur,
+  Glow and Turbulent displace no longer invert inside their own maths. Effects that own a
+  channel choice — Depth of field, Displacement map, Set matte, the Lens flare — opt out
+  (`matte_channel = false`) and keep reading the raw RGBA matte, Invert included.
+- **Blend** beside Mix: the layer blend modes verbatim (`BlendMode::ALL`), Normal by
+  default, on every effect with a Mix slider except the Lens flare, which owns one. The
+  Mix lives inside every kernel, so blending an already-mixed output would mix twice:
+  when Blend is not Normal the seam runs the kernel at Mix 100 and applies
+  `input·(1 − mix) + blend(input, unmixed)·mix` itself (`cpu::blend_seam`,
+  `cpu::blend_mix`, `fx_blend_mix.wgsl`), in the compositor's domains (docs/06). Blend
+  runs before the generic matte dissolve, so the matte still holds the whole result off.
+- **The owner's rule for mattes**: the matte multiplies the effect's amount per pixel; it
+  is not a mask. Where scaling the amount is mathematically the generic dissolve the
+  effect keeps `MatteRole::Strength`. The **Matte key carries no matte row at all**
+  (`matte = false`): a strength matte over a keyer is a garbage matte, a mask's job. Set
+  matte keeps its `matte` — it is the effect's subject, not a strength — and gains no
+  Channel row because it owns one.
+- **Defaults are yesterday's bytes** (K-258). Luminance without Invert and Normal both
+  run **no pass** — not a pass at identity, because a trip through an fp16 texture would
+  requantise what the kernels read. An instance stripped of both rows resolves to the
+  same numbers as a fresh one, and a matted document renders the same bytes with the
+  rows stripped and with them at their defaults (`matte_end_to_end.rs`).
+
+No new strings: "Channel", "Blend" and every option label already had `app_en.arb` and
+`engine_labels.dart` entries from Set matte, the Lens flare and the layer Mode dropdown.

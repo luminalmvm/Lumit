@@ -150,7 +150,6 @@ fn render_the_five_distort_effects() {
             h,
             &td(fw * 0.02, fw * 0.25, 3, 1).packed(),
             &[],
-            false,
         );
         write("1-turbdisplace-gentle", &to_srgb(&gentle));
         let mut violent = lin.clone();
@@ -160,17 +159,16 @@ fn render_the_five_distort_effects() {
             h,
             &td(fw * 0.08, fw * 0.08, 6, 1).packed(),
             &[],
-            false,
         );
         write("2-turbdisplace-violent", &to_srgb(&violent));
 
         let matte = ramp_matte(w, h);
         let strong = td(fw * 0.06, fw * 0.15, 4, 0);
         let mut scaled = lin.clone();
-        cpu::turbulent_displace(&mut scaled, w, h, &strong.packed(), &matte, false);
+        cpu::turbulent_displace(&mut scaled, w, h, &strong.packed(), &matte);
         write("3-turbdisplace-matte-scales", &to_srgb(&scaled));
         let mut faded = lin.clone();
-        cpu::turbulent_displace(&mut faded, w, h, &strong.packed(), &[], false);
+        cpu::turbulent_displace(&mut faded, w, h, &strong.packed(), &[]);
         dissolved(&lin, &mut faded, &matte);
         write("4-turbdisplace-matte-dissolved", &to_srgb(&faded));
 

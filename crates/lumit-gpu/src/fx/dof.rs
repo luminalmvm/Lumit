@@ -149,6 +149,24 @@ struct MatteMixParams {
     _pad: [f32; 3],
 }
 
+/// The matte preparation's two numbers (K-425): the channel and the invert.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MattePrepareParams {
+    channel: u32,
+    invert: u32,
+    _pad: [u32; 2],
+}
+
+/// The effect Blend's two numbers (K-425): the mode and the effect's Mix.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct BlendMixParams {
+    mode: u32,
+    mix: f32,
+    _pad: [f32; 2],
+}
+
 /// One resolved 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md). The cube
 /// itself arrives as its own 3D texture (see [`upload_lut_3d`] and
 /// [`FxEngine::lut`]); this uniform carries the edge length the shader needs to
@@ -562,5 +580,148 @@ impl FxEngine {
         }
         drop(enc);
         out
+    }
+
+    /// One pass on the adjustment layout — three sampled inputs, a storage
+    /// output and a uniform — the shape `matte_prepare` and `blend_mix` share
+    /// with `matte_mix`.
+    #[allow(clippy::too_many_arguments)]
+    fn three_input_pass(
+        &self,
+        ctx: &GpuContext,
+        pipeline: &wgpu::ComputePipeline,
+        label: &str,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        c: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        params: &[u8],
+    ) -> wgpu::Texture {
+        use wgpu::util::DeviceExt;
+        let out = work_texture(ctx, w, h, label);
+        let ubuf = ctx
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents: params,
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &self.adjust_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &a.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        &b.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(
+                        &c.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(
+                        &out.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: ubuf.as_entire_binding(),
+                },
+            ],
+        });
+        let mut enc = ctx.encoder(label);
+        {
+            let mut cpass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some(label),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(pipeline);
+            cpass.set_bind_group(0, &bind, &[]);
+            cpass.dispatch_workgroups(w.div_ceil(8), h.div_ceil(8), 1);
+        }
+        drop(enc);
+        out
+    }
+
+    /// The matte's Channel pick and Invert, once (K-425, docs/08 §2.6): the
+    /// RGBA `matte` becomes a grey picture whose R = G = B = the chosen
+    /// channel (a `CHANNEL_OPTIONS` index), clamped and inverted if asked,
+    /// alpha 1. The op-for-op twin of
+    /// [`lumit_core::fx::cpu::matte_prepare`](../../../lumit_core/fx/cpu/fn.matte_prepare.html).
+    ///
+    /// The seam calls it only when
+    /// [`matte_needs_prepare`](lumit_core::fx::cpu::matte_needs_prepare) says
+    /// so: Luminance with Invert off is what every kernel reads already, and
+    /// not running the pass is what keeps that case byte for byte (K-258).
+    pub fn matte_prepare(
+        &self,
+        ctx: &GpuContext,
+        matte: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        channel: u32,
+        invert: bool,
+    ) -> wgpu::Texture {
+        self.three_input_pass(
+            ctx,
+            &self.matte_prepare,
+            "fx-matte-prepare",
+            matte,
+            matte,
+            matte,
+            w,
+            h,
+            bytemuck::bytes_of(&MattePrepareParams {
+                channel,
+                invert: u32::from(invert),
+                _pad: [0; 2],
+            }),
+        )
+    }
+
+    /// The effect Blend and Mix, once (K-425, docs/08 §1.5): `processed` is
+    /// the kernel's output at Mix 100, `input` what it was given; each pixel
+    /// becomes `input * (1 - mix) + blend(input, processed) * mix` for `mode`
+    /// a `BlendMode::ALL` index. The op-for-op twin of
+    /// [`lumit_core::fx::cpu::blend_mix`](../../../lumit_core/fx/cpu/fn.blend_mix.html).
+    /// Never called for Normal, which runs no pass at all.
+    #[allow(clippy::too_many_arguments)]
+    pub fn blend_mix(
+        &self,
+        ctx: &GpuContext,
+        input: &wgpu::Texture,
+        processed: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        mode: u32,
+        mix: f32,
+    ) -> wgpu::Texture {
+        self.three_input_pass(
+            ctx,
+            &self.blend_mix,
+            "fx-blend-mix",
+            input,
+            processed,
+            processed,
+            w,
+            h,
+            bytemuck::bytes_of(&BlendMixParams {
+                mode,
+                mix,
+                _pad: [0.0; 2],
+            }),
+        )
     }
 }

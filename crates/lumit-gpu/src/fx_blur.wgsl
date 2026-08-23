@@ -26,7 +26,7 @@ struct Params {
     edge: u32,          // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,       // 0..1, blended against `orig` (1 on the h-pass)
     matte_on: f32,      // 1 = scale the radius by the matte's luma
-    invert: f32,        // 1 = the matte drives where it is DARK
+    _pad0: f32,         // was Invert; applied once at the seam since K-425
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -38,16 +38,13 @@ struct Params {
 // by `matte_on` — a texture binding cannot be left empty.
 @group(0) @binding(4) var matte: texture_2d<f32>;
 
-// This pixel's matte strength: premultiplied Rec. 709 luma, clamped, then
-// inverted — the same reading `fx_matte_mix.wgsl` and cpu::matte_mix use, so
-// "how much matte is here" means one thing across the whole campaign.
+// This pixel's matte strength: premultiplied Rec. 709 luma, clamped — the
+// same reading `fx_matte_mix.wgsl` and cpu::matte_mix use, so "how much matte
+// is here" means one thing across the whole campaign. The Channel pick and
+// Invert have already happened, once, in fx_matte_prepare.wgsl (K-425).
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
-    let k = clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
-    if (p.invert != 0.0) {
-        return 1.0 - k;
-    }
-    return k;
+    return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
 }
 
 // Resolve a tap index under the edge policy; -1 means transparent (no tap).

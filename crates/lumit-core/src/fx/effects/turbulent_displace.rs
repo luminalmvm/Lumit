@@ -231,6 +231,6 @@ impl EffectDef for TurbulentDisplaceDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::turbulent_displace(rgba, w, h, &TurbulentDisplace::read(p).packed(), &[], false);
+        cpu::turbulent_displace(rgba, w, h, &TurbulentDisplace::read(p).packed(), &[]);
     }
 }

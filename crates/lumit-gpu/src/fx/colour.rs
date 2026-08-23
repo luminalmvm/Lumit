@@ -1144,10 +1144,6 @@ impl FxEngine {
                 // neighbourhood and lift the picture's edges.
                 edge: 1,
                 mix: 1.0,
-                // This effect's matte is the generic strength dissolve and has
-                // already been dealt with beside the dispatch; the blur here is
-                // internal plumbing, not the user's Gaussian blur.
-                matte_invert: false,
             },
         );
         let out = work_texture(ctx, w, h, "fx-shadow-highlight-out");

@@ -96,7 +96,6 @@ fn wgsl_blur_matches_the_cpu_oracle() {
                 radius_px: radius,
                 edge,
                 mix,
-                matte_invert: false,
             };
             let out = fx.blur(&ctx, &tex, w, h, None, &op);
             let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -167,22 +166,32 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
     let spike = ((8 * w + 24) * 4) as usize;
     img[spike..spike + 4].copy_from_slice(&[6.0, 3.0, 1.5, 1.0]);
 
-    let matte_tex = upload_linear_f32(&ctx, &matte, w, h);
+    // Invert is the seam's business since K-425: the matte is prepared once
+    // (`matte_prepare`, both paths) and the kernel reads it as it is. Running
+    // the pair through here is what proves the kernel applies no invert of its
+    // own any more.
+    let plain_tex = upload_linear_f32(&ctx, &matte, w, h);
     for invert in [false, true] {
+        let matte_tex = if invert {
+            fx.matte_prepare(&ctx, &plain_tex, w, h, 0, true)
+        } else {
+            plain_tex.clone()
+        };
         for (radius, mix) in [(6.0f32, 1.0f32), (9.0, 0.7)] {
             let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
-            let qmatte: Vec<f32> = matte.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+            let mut qmatte: Vec<f32> = matte.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+            if invert {
+                lumit_core::fx::cpu::matte_prepare(&mut qmatte, 0, true);
+                qmatte = qmatte.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+            }
             let mut cpu = quantised.clone();
-            lumit_core::fx::cpu::blur_gaussian_matted(
-                &mut cpu, w, h, radius, 1, mix, &qmatte, invert,
-            );
+            lumit_core::fx::cpu::blur_gaussian_matted(&mut cpu, w, h, radius, 1, mix, &qmatte);
 
             let tex = upload_linear_f32(&ctx, &img, w, h);
             let op = BlurOp {
                 radius_px: radius,
                 edge: 1,
                 mix,
-                matte_invert: invert,
             };
             let out = fx.blur(&ctx, &tex, w, h, Some(&matte_tex), &op);
             let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -221,7 +230,6 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
                 radius_px: 10.0,
                 edge: 1,
                 mix: 1.0,
-                matte_invert: false,
             },
         );
         let got = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -267,13 +275,12 @@ fn an_unmatted_blur_is_the_pre_matte_blur() {
         radius_px: 4.0,
         edge: 1,
         mix: 1.0,
-        matte_invert: false,
     };
     let unmatted = readback_linear_f32(&ctx, &fx.blur(&ctx, &tex, w, h, None, &op), w, h).unwrap();
     assert_ne!(unmatted, img, "the blur must actually have blurred");
 
     let mut oracle: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
-    lumit_core::fx::cpu::blur_gaussian_matted(&mut oracle, w, h, 4.0, 1, 1.0, &[], false);
+    lumit_core::fx::cpu::blur_gaussian_matted(&mut oracle, w, h, 4.0, 1, 1.0, &[]);
     let mut plain: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
     lumit_core::fx::cpu::blur_gaussian(&mut plain, w, h, 4.0, 1, 1.0);
     assert_eq!(
@@ -327,24 +334,28 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
     }
 
     let matte_tex = upload_linear_f32(&ctx, &matte, w, h);
-    let op = |invert: bool| GlowOp {
+    let op = GlowOp {
         radius_px: 6.0,
         threshold: 0.8,
         knee: 0.5,
         intensity: 1.0,
         tint: [1.0; 4],
         mix: 1.0,
-        matte_invert: invert,
     };
+    // Invert arrives through the seam's prepare pass (K-425), both paths.
     for invert in [false, true] {
         let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
-        let qmatte: Vec<f32> = matte.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+        let mut qmatte: Vec<f32> = matte.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+        let mtex = if invert {
+            lumit_core::fx::cpu::matte_prepare(&mut qmatte, 0, true);
+            fx.matte_prepare(&ctx, &matte_tex, w, h, 0, true)
+        } else {
+            matte_tex.clone()
+        };
         let mut cpu = quantised.clone();
-        lumit_core::fx::cpu::glow(
-            &mut cpu, w, h, 6.0, 0.8, 0.5, 1.0, [1.0; 4], 1.0, &qmatte, invert,
-        );
+        lumit_core::fx::cpu::glow(&mut cpu, w, h, 6.0, 0.8, 0.5, 1.0, [1.0; 4], 1.0, &qmatte);
         let tex = upload_linear_f32(&ctx, &img, w, h);
-        let out = fx.glow(&ctx, &tex, w, h, Some(&matte_tex), &op(invert));
+        let out = fx.glow(&ctx, &tex, w, h, Some(&mtex), &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         assert!(worst < 5e-3, "invert {invert}: worst diff {worst}");
@@ -352,7 +363,7 @@ fn wgsl_matted_glow_seeds_only_inside_the_matte_and_spills_past_it() {
 
     // The picture claim, on the un-inverted run.
     let tex = upload_linear_f32(&ctx, &img, w, h);
-    let out = fx.glow(&ctx, &tex, w, h, Some(&matte_tex), &op(false));
+    let out = fx.glow(&ctx, &tex, w, h, Some(&matte_tex), &op);
     let got = readback_linear_f32(&ctx, &out, w, h).unwrap();
     let at = |x: u32, y: u32| got[((y * w + x) * 4) as usize];
     // Beside the RIGHT square, well outside it: no halo, because the matte was
@@ -2031,7 +2042,6 @@ fn wgsl_glow_matches_the_cpu_oracle() {
             tint,
             mix,
             &[],
-            false,
         );
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
@@ -2042,7 +2052,6 @@ fn wgsl_glow_matches_the_cpu_oracle() {
             intensity,
             tint,
             mix,
-            matte_invert: false,
         };
         let out = fx.glow(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -2548,6 +2557,200 @@ fn wgsl_matte_mix_matches_the_cpu_oracle() {
             "a {name} matte must pass its end of the dissolve through bit-exactly"
         );
     }
+}
+
+/// The §1.6 oracle for the seam's matte preparation (K-425, docs/08 §2.6):
+/// `fx_matte_prepare.wgsl` against `lumit_core::fx::cpu::matte_prepare`, on
+/// every channel, both ways round Invert. The pass is pointwise arithmetic —
+/// a channel pick, a clamp, a subtraction — so the bound is the fp16 store
+/// alone, and the GPU must be bit-stable (§2.4).
+///
+/// The picture claim beside it: the prepared matte is grey (R = G = B) with
+/// alpha 1, so every kernel's luma read returns the chosen channel — which is
+/// the whole mechanism by which a kernel that only knows luma gains a Channel
+/// row without learning anything.
+#[test]
+fn wgsl_matte_prepare_matches_the_cpu_oracle() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (40u32, 24u32);
+    // A matte with four distinct channels, partial alpha and an HDR band.
+    let mut matte = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let g = x as f32 / (w - 1) as f32;
+            let v = y as f32 / (h - 1) as f32;
+            matte[i] = f16_to_f32(f16_bits(g * 1.5));
+            matte[i + 1] = f16_to_f32(f16_bits(1.0 - g));
+            matte[i + 2] = f16_to_f32(f16_bits(v));
+            matte[i + 3] = f16_to_f32(f16_bits(0.25 + 0.75 * v));
+        }
+    }
+    let tm = upload_linear_f32(&ctx, &matte, w, h);
+    for channel in 0..5u32 {
+        for invert in [false, true] {
+            let out = fx.matte_prepare(&ctx, &tm, w, h, channel, invert);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+            let mut want = matte.clone();
+            lumit_core::fx::cpu::matte_prepare(&mut want, channel, invert);
+            let want: Vec<f32> = want.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+            let worst = worst_f16_ulp(&gpu, &want);
+            assert!(
+                worst <= 1,
+                "channel {channel} invert {invert}: worst {worst} fp16 ULP"
+            );
+            for px in gpu.chunks_exact(4) {
+                assert_eq!(px[0], px[1], "grey: R = G");
+                assert_eq!(px[1], px[2], "grey: G = B");
+                assert_eq!(px[3], 1.0, "alpha 1");
+                assert!((0.0..=1.0).contains(&px[0]), "clamped");
+            }
+            let again = fx.matte_prepare(&ctx, &tm, w, h, channel, invert);
+            assert_eq!(
+                readback_linear_f32(&ctx, &again, w, h).unwrap(),
+                gpu,
+                "the prepare pass must be bit-stable"
+            );
+        }
+    }
+}
+
+/// **Invert is applied exactly once** (K-425). The three kernels that used to
+/// invert their own matte — Gaussian blur, Glow, Turbulent displace — now read
+/// it as it arrives, so a matte the seam has inverted drives them the other
+/// way round, and a matte it has not is read straight. The proof is the
+/// Gaussian blur's width probe under a FLAT matte: prepared with Invert from
+/// black, it reads as white and the blur runs at full radius; handed the
+/// prepared (white) matte, the kernel must not flip it back to black, which
+/// would leave the picture sharp. A second invert would cancel the first, and
+/// the dot would not spread at all.
+#[test]
+fn the_seam_inverts_the_matte_once_and_the_kernel_not_again() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (48u32, 16u32);
+    let mut dot = vec![0.0f32; (w * h * 4) as usize];
+    let c = ((8 * w + 24) * 4) as usize;
+    dot[c..c + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
+    let tex = upload_linear_f32(&ctx, &dot, w, h);
+    let black: Vec<f32> = (0..(w * h) as usize)
+        .flat_map(|_| [0.0, 0.0, 0.0, 1.0])
+        .collect();
+    let black_tex = upload_linear_f32(&ctx, &black, w, h);
+    let op = BlurOp {
+        radius_px: 10.0,
+        edge: 1,
+        mix: 1.0,
+    };
+    let spread = |m: &wgpu::Texture| -> f32 {
+        let out = fx.blur(&ctx, &tex, w, h, Some(m), &op);
+        let got = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        got[c]
+    };
+    // A black matte: no blur, the dot keeps its full value.
+    assert_eq!(spread(&black_tex), 1.0, "black matte: the dot is untouched");
+    // The same matte inverted once, by the seam: a white matte, a full blur,
+    // the dot's light spread thin.
+    let inverted = fx.matte_prepare(&ctx, &black_tex, w, h, 0, true);
+    let centre = spread(&inverted);
+    assert!(
+        centre < 0.2,
+        "the seam's invert makes the matte white and the blur runs: centre {centre}"
+    );
+    // And preparing the *inverted* matte without Invert changes nothing: the
+    // kernel reads luma of a grey, which is the grey.
+    let again = fx.matte_prepare(&ctx, &inverted, w, h, 0, false);
+    assert_eq!(
+        spread(&again),
+        centre,
+        "a second, non-inverting prepare is a no-op"
+    );
+}
+
+/// The §1.6 oracle for the seam's Blend and Mix (K-425, docs/08 §1.5):
+/// `fx_blend_mix.wgsl` against `lumit_core::fx::cpu::blend_mix`, across every
+/// layer blend mode on a small picture, at full and partial Mix.
+///
+/// The linear modes are a handful of arithmetic ops and hold to 1 fp16 ULP.
+/// The encoded set passes through `pow` twice, whose CPU and GPU
+/// implementations differ by a few f32 ULP before the fp16 store, so they are
+/// held to 2; Hard mix is a step function on a derived value and a pixel that
+/// lands on the threshold may fall either side of it, so it is held on the
+/// fraction of pixels that agree rather than the worst one. Every mode must be
+/// bit-stable (§2.4), and Mix 0 must be the input bit-exactly on every mode.
+#[test]
+fn wgsl_blend_mix_matches_the_cpu_oracle_on_every_mode() {
+    use lumit_core::model::BlendMode;
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (24u32, 16u32);
+    let input = corpus(w, h);
+    // A distinct "effected" picture: the corpus shifted and recoloured.
+    let processed: Vec<f32> = input
+        .iter()
+        .enumerate()
+        .map(|(i, v)| match i % 4 {
+            3 => *v,
+            0 => f16_to_f32(f16_bits(1.0 - v * 0.6)),
+            1 => f16_to_f32(f16_bits((v * 1.3).min(5.0))),
+            _ => f16_to_f32(f16_bits(v * 0.4 + 0.1)),
+        })
+        .collect();
+    let ti = upload_linear_f32(&ctx, &input, w, h);
+    let tp = upload_linear_f32(&ctx, &processed, w, h);
+    for (mode, name) in BlendMode::NAMES.iter().enumerate().skip(1) {
+        let mode = mode as u32;
+        for mix in [1.0f32, 0.35, 0.0] {
+            let out = fx.blend_mix(&ctx, &ti, &tp, w, h, mode, mix);
+            let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+            let mut want = processed.clone();
+            lumit_core::fx::cpu::blend_mix(&mut want, &input, mode, mix);
+            let want: Vec<f32> = want.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+            if *name == "Hard mix" {
+                let agree = gpu
+                    .iter()
+                    .zip(&want)
+                    .filter(|(a, b)| (*a - *b).abs() <= 1e-3)
+                    .count();
+                assert!(
+                    agree * 100 >= gpu.len() * 98,
+                    "{name} mix {mix}: {agree} of {} values agree",
+                    gpu.len()
+                );
+            } else {
+                let worst = worst_f16_ulp(&gpu, &want);
+                let bound = if matches!(mode, 1 | 2 | 6 | 7 | 20) {
+                    1
+                } else {
+                    2
+                };
+                assert!(worst <= bound, "{name} mix {mix}: worst {worst} fp16 ULP");
+            }
+            if mix == 0.0 {
+                assert_eq!(gpu, input, "{name}: Mix 0 is the input bit-exactly");
+            }
+            let again = fx.blend_mix(&ctx, &ti, &tp, w, h, mode, mix);
+            assert_eq!(
+                readback_linear_f32(&ctx, &again, w, h).unwrap(),
+                gpu,
+                "{name}: the blend pass must be bit-stable"
+            );
+        }
+    }
+    // Normal at Mix 1 through the pass is the effect's output: the seam never
+    // dispatches it, but the kernel's own table says so too.
+    let out = fx.blend_mix(&ctx, &ti, &tp, w, h, 0, 1.0);
+    assert_eq!(readback_linear_f32(&ctx, &out, w, h).unwrap(), processed);
 }
 
 /// The §1.6 oracle for Echo (docs/08 §3.13; blend modes + 16-echo cap since
@@ -6738,7 +6941,7 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
         t.seed = 4242;
         t
     };
-    let op_of = |t: TurbulentDisplace, invert: bool| {
+    let op_of = |t: TurbulentDisplace| {
         let p = t.packed();
         TurbulentDisplaceOp {
             seed_x: p.field.seed,
@@ -6755,7 +6958,6 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
             pin: p.pin,
             inv_pin_band: p.inv_pin_band,
             mix: p.mix,
-            matte_invert: invert,
         }
     };
 
@@ -6803,9 +7005,9 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
         ("mix-zero", off),
     ] {
         let p = t.packed();
-        let op = op_of(t, false);
+        let op = op_of(t);
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::turbulent_displace(&mut cpu, w, h, &p, &[], false);
+        lumit_core::fx::cpu::turbulent_displace(&mut cpu, w, h, &p, &[]);
 
         let out = fx.turbulent_displace(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -6831,7 +7033,7 @@ fn wgsl_turbulent_displace_matches_the_cpu_oracle() {
     // **Pinning holds the border still.** With Pin all edges the frame's top row
     // must be exactly what arrived; with Pin none it must not be.
     let row_moved = |t: TurbulentDisplace| -> bool {
-        let out = fx.turbulent_displace(&ctx, &tex, w, h, None, &op_of(t, false));
+        let out = fx.turbulent_displace(&ctx, &tex, w, h, None, &op_of(t));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         (0..w).any(|x| {
             let i = (x * 4) as usize;
@@ -6875,7 +7077,7 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
         t.seed = 99;
         t
     };
-    let op_of = |t: TurbulentDisplace, invert: bool| {
+    let op_of = |t: TurbulentDisplace| {
         let p = t.packed();
         TurbulentDisplaceOp {
             seed_x: p.field.seed,
@@ -6892,7 +7094,6 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
             pin: p.pin,
             inv_pin_band: p.inv_pin_band,
             mix: p.mix,
-            matte_invert: invert,
         }
     };
 
@@ -6910,11 +7111,19 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
     }
     let qramp: Vec<f32> = ramp.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
     let ramp_tex = upload_linear_f32(&ctx, &ramp, w, h);
+    // Invert arrives through the seam's prepare pass (K-425), both paths.
     for invert in [false, true] {
         let p = base.packed();
+        let mut qm = qramp.clone();
+        let mtex = if invert {
+            lumit_core::fx::cpu::matte_prepare(&mut qm, 0, true);
+            fx.matte_prepare(&ctx, &ramp_tex, w, h, 0, true)
+        } else {
+            ramp_tex.clone()
+        };
         let mut cpu = img.clone();
-        lumit_core::fx::cpu::turbulent_displace(&mut cpu, w, h, &p, &qramp, invert);
-        let out = fx.turbulent_displace(&ctx, &tex, w, h, Some(&ramp_tex), &op_of(base, invert));
+        lumit_core::fx::cpu::turbulent_displace(&mut cpu, w, h, &p, &qm);
+        let out = fx.turbulent_displace(&ctx, &tex, w, h, Some(&mtex), &op_of(base));
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
         let worst = worst_diff(&cpu, &gpu);
         assert!(worst < 2e-3, "invert {invert}: worst diff {worst}");
@@ -6930,7 +7139,7 @@ fn wgsl_matted_turbulent_displace_scales_the_displacement() {
         let src = ((12 * w + 16) * 4) as usize;
         dot[src..src + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
         let flat: Vec<f32> = (0..(w * h) as usize).flat_map(|_| [k, k, k, 1.0]).collect();
-        lumit_core::fx::cpu::turbulent_displace(&mut dot, w, h, &base.packed(), &flat, false);
+        lumit_core::fx::cpu::turbulent_displace(&mut dot, w, h, &base.packed(), &flat);
         // The lit pixel's new centre of mass, distance from where it began.
         let (mut sx, mut sy, mut sw) = (0.0f32, 0.0f32, 0.0f32);
         for y in 0..h {

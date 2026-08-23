@@ -387,7 +387,6 @@ impl GpuEffect for Blur {
                 radius_px,
                 edge,
                 mix,
-                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
         )
     }
@@ -1145,7 +1144,6 @@ impl GpuEffect for TurbulentDisplace {
                 pin: t.pin,
                 inv_pin_band: t.inv_pin_band,
                 mix: t.mix,
-                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
         )
     }
@@ -2427,7 +2425,6 @@ impl GpuEffect for Glow {
                 intensity,
                 tint,
                 mix,
-                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
         )
     }
@@ -4098,7 +4095,6 @@ mod tests {
                     radius_px,
                     edge,
                     mix,
-                    matte_invert: false,
                 },
             );
             lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")

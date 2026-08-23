@@ -1036,6 +1036,31 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   wall beside it, which never looks right. Gating the seed lets the sign light
   the wall.
 
+  **Which channel of the matte, and how the effect blends back in (K-425).**
+  Two small controls on rows every effect already has. Beside the Matte picker
+  and its Invert tickbox there is now a **Channel** choice: by default an
+  effect is driven by the matte's brightness, but a depth pass or a packed
+  render might keep the useful picture in its alpha or in one colour channel,
+  and the choice says which. And beside every **Mix** slider there is a
+  **Blend** choice — the same list a layer's Mode dropdown offers — saying how
+  the effect's result combines with the untouched picture: Normal simply
+  replaces it, as it always has; Add lays the result on as light; Multiply
+  darkens; and so on.
+
+  Both are done in one place rather than taught to forty kernels, which is the
+  part worth understanding. The engine does not tell a blur "read the red
+  channel"; it rewrites the matte *once* — before any effect sees it — into a
+  grey picture whose brightness is the chosen channel, flipped if Invert is on.
+  Every effect then reads brightness as it always did and gets the right
+  answer, and Invert happens exactly once (three effects used to flip the matte
+  themselves and no longer do, so it cannot be flipped twice). The Blend works
+  the same way. An effect's Mix lives inside the effect, so blending an
+  already-faded result would fade it twice; instead, when the Blend is anything
+  but Normal, the engine runs the effect at full strength, blends that onto the
+  untouched picture, and then applies the Mix itself, once. When you leave
+  both at their defaults nothing extra runs at all, and a project saved before
+  the two controls existed renders the same bytes it did.
+
   **Handing an effect a mask's shape, not its cut-out (K-408).** A matte is a
   picture, and a picture is the wrong thing for some effects. Think of a brush
   that travels along a line you have drawn, from 20 % of the way along to 80 %,

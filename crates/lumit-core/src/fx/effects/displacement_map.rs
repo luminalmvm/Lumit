@@ -42,6 +42,9 @@ use lumit_fx_macros::Effect;
          which way and how far each pixel is pushed, mid-grey meaning no push at \
          all — the effect's subject rather than a strength applied to one",
     ),
+    // K-425: the two channel choices below are this effect's own channel pick,
+    // so the seam injects none and hands the kernel the raw RGBA map.
+    matte_channel = false,
 )]
 pub struct DisplacementMap {
     /// Which channel of the map steers the sideways push. **Red, as AE's is** —

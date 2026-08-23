@@ -1290,6 +1290,40 @@ impl BlendMode {
         BlendMode::Luminosity,
     ];
 
+    /// Every mode's display name, in [`Self::ALL`]'s order — the same words
+    /// [`Self::name`] returns, as one `'static` list so a schema's Choice
+    /// parameter can offer the layer modes verbatim (the injected effect
+    /// Blend row, K-425). `blend_mode_all_is_complete_and_named` holds the two
+    /// in step.
+    pub const NAMES: &'static [&'static str] = &[
+        "Normal",
+        "Darken",
+        "Multiply",
+        "Colour burn",
+        "Linear burn",
+        "Darker colour",
+        "Add",
+        "Lighten",
+        "Screen",
+        "Colour dodge",
+        "Lighter colour",
+        "Overlay",
+        "Soft light",
+        "Hard light",
+        "Linear light",
+        "Vivid light",
+        "Pin light",
+        "Hard mix",
+        "Difference",
+        "Exclusion",
+        "Subtract",
+        "Divide",
+        "Hue",
+        "Saturation",
+        "Colour",
+        "Luminosity",
+    ];
+
     /// The mode's display name (British English, sentence case — docs/15).
     pub fn name(self) -> &'static str {
         match self {
@@ -1973,6 +2007,12 @@ mod tests {
         let names: HashSet<_> = BlendMode::ALL.iter().map(|m| m.name()).collect();
         assert_eq!(names.len(), BlendMode::ALL.len(), "a name is duplicated");
         assert!(BlendMode::ALL.iter().all(|m| !m.name().is_empty()));
+        let listed: Vec<&str> = BlendMode::ALL.iter().map(|m| m.name()).collect();
+        assert_eq!(
+            listed,
+            BlendMode::NAMES,
+            "NAMES must be ALL's names, in order"
+        );
     }
 
     #[test]

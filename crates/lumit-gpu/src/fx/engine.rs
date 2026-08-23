@@ -369,6 +369,9 @@ impl FxEngine {
         let dof_mod = module(include_str!("../fx_dof.wgsl"), "fx-dof");
         let adjust_mod = module(include_str!("../fx_adjust.wgsl"), "fx-adjust");
         let matte_mix_mod = module(include_str!("../fx_matte_mix.wgsl"), "fx-matte-mix");
+        let matte_prepare_mod =
+            module(include_str!("../fx_matte_prepare.wgsl"), "fx-matte-prepare");
+        let blend_mix_mod = module(include_str!("../fx_blend_mix.wgsl"), "fx-blend-mix");
         let lut_mod = module(include_str!("../fx_lut.wgsl"), "fx-lut");
         let blur = pipeline(&blur_mod, "fx-blur", "blur_pass");
         let dir_blur = pipeline(&dir_blur_mod, "fx-dir-blur", "dir_blur");
@@ -532,6 +535,27 @@ impl FxEngine {
                 compilation_options: Default::default(),
                 cache: None,
             });
+        // The seam's two K-425 passes, on the same layout for the same reason.
+        let matte_prepare = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("fx-matte-prepare"),
+                layout: Some(&adjust_pl),
+                module: &matte_prepare_mod,
+                entry_point: Some("matte_prepare"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
+        let blend_mix = ctx
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("fx-blend-mix"),
+                layout: Some(&adjust_pl),
+                module: &blend_mix_mod,
+                entry_point: Some("blend_mix"),
+                compilation_options: Default::default(),
+                cache: None,
+            });
         let lut = ctx
             .device
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -634,6 +658,8 @@ impl FxEngine {
             dof,
             adjust,
             matte_mix,
+            matte_prepare,
+            blend_mix,
             lut,
             layout,
             adjust_layout,

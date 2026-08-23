@@ -108,14 +108,28 @@ effect that wants a path wants the one path most layers have). Group and greying
 (`ParamGroup`, `EnabledWhen`, K-145 and K-313) stay declared on the effect attribute,
 because they name *runs* of parameters rather than living inside one.
 
-**Two parameters are injected, not declared** (K-395): the `matte` Layer row and its
-`matte_invert` switch, which every effect gets so the row means something on all of them
-from the day it landed rather than on the handful someone remembered. The `matte`
-attribute is the only thing that varies, and it says what the row *means* rather than
-whether it exists — see §2.5b for the roles and the table of the four effects that claim
-their matte. The injection itself is conditional on the struct not already declaring a
-`matte` field, which is how the Lens flare keeps the row it wrote itself (K-065) without
-getting a second one under the same id.
+**Four parameters are injected, not declared** (K-395, K-425): the `matte` Layer row, its
+`matte_invert` switch and its `matte_channel` choice, which every effect gets so the row
+means something on all of them from the day it landed rather than on the handful someone
+remembered; and the `blend` choice beside every `mix` slider. The `matte` attribute says
+what the Matte row *means* rather than whether it exists — see §2.5b for the roles and
+the table of the effects that claim their matte. The matte injection is conditional on
+the struct not already declaring a `matte` field, which is how the Lens flare keeps the
+row it wrote itself (K-065) without getting a second one under the same id;
+`matte_channel = false` keeps the Channel off an effect that picks its matte's channels
+itself (Depth of field, Displacement map, Set matte, the Lens flare), and `matte = false`
+drops the row entirely (the Controls, the Camera track, the Matte key). The Blend is
+injected right after `mix` in schema order — the panel draws it on the Mix row — on every
+effect that declares a `mix` and no `blend` of its own (the Lens flare keeps its older
+one); an effect with no Mix touches no pixel and gets none.
+
+Both new rows are read **at the dispatch seam only** (`fxops::run_ops` on the GPU,
+`cpu::apply_stack` on the CPU), never by a kernel: `EffectSchema::matte_channel()` says
+whether the seam prepares the matte (`cpu::matte_prepare` / `fx_matte_prepare.wgsl`,
+skipped for Luminance without Invert so the default stays byte for byte), and
+`cpu::blend_seam` says whether the kernel runs at Mix 100 with the blend and the Mix
+applied afterwards by `cpu::blend_mix` / `fx_blend_mix.wgsl` (skipped for Normal, same
+reason). docs/08 §1.5 and §2.6 carry the formulas.
 
 ### 2.2 Units are declared, not remembered
 

@@ -3758,12 +3758,12 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
 
     // Intensity 0 is the bit-exact identity (the neutral pin).
     let mut n = img.clone();
-    cpu::glow(&mut n, w, h, 4.0, 1.0, 0.5, 0.0, [1.0; 4], 1.0, &[], false);
+    cpu::glow(&mut n, w, h, 4.0, 1.0, 0.5, 0.0, [1.0; 4], 1.0, &[]);
     assert_eq!(n, img);
 
     // Mix 0 is the exact identity whatever the parameters.
     let mut m0 = img.clone();
-    cpu::glow(&mut m0, w, h, 4.0, 0.2, 0.1, 2.0, [1.0; 4], 0.0, &[], false);
+    cpu::glow(&mut m0, w, h, 4.0, 0.2, 0.1, 2.0, [1.0; 4], 0.0, &[]);
     assert_eq!(m0, img);
 
     // A frame entirely below the threshold gains nothing: the halo is
@@ -3774,25 +3774,13 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
         d
     };
     let mut quiet = dim.clone();
-    cpu::glow(
-        &mut quiet,
-        w,
-        h,
-        4.0,
-        1.0,
-        0.5,
-        1.0,
-        [1.0; 4],
-        1.0,
-        &[],
-        false,
-    );
+    cpu::glow(&mut quiet, w, h, 4.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0, &[]);
     assert_eq!(quiet, dim);
 
     // The spike blooms: neighbours gain light, the spike itself gains
     // its own halo back (additive, §2.1: nothing clips).
     let mut g = img.clone();
-    cpu::glow(&mut g, w, h, 3.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0, &[], false);
+    cpu::glow(&mut g, w, h, 3.0, 1.0, 0.5, 1.0, [1.0; 4], 1.0, &[]);
     assert!(g[at(10, 4)] > img[at(10, 4)], "neighbour catches the halo");
     assert!(g[mid] > img[mid], "the spike gains its own bloom");
 
@@ -3800,7 +3788,7 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
     // enough that opaque coverage passes it, the transparent border
     // next to the footprint gains coverage — glow reads as light there.
     let mut a = img.clone();
-    cpu::glow(&mut a, w, h, 3.0, 0.05, 0.0, 1.0, [1.0; 4], 1.0, &[], false);
+    cpu::glow(&mut a, w, h, 3.0, 0.05, 0.0, 1.0, [1.0; 4], 1.0, &[]);
     assert!(a[at(1, 4) + 3] > 0.0, "coverage bloomed past the edge");
     assert!(a[at(8, 4) + 3] <= 1.0, "alpha saturates at full coverage");
 
@@ -3818,7 +3806,6 @@ fn cpu_glow_blooms_spreads_alpha_and_keeps_neutral_exact() {
         [1.0, 0.0, 0.0, 1.0],
         1.0,
         &[],
-        false,
     );
     assert!(t[at(1, 4)] > 0.0, "red halo over the border");
     assert_eq!(t[at(1, 4) + 1], 0.0, "no green in a red-tinted halo");
@@ -8312,6 +8299,8 @@ fn dof_declares_the_folded_aperture_surface() {
             "repeat_edge_pixels",
             "display",
             "mix",
+            // K-425: the Blend injected beside every Mix.
+            "blend",
         ],
         "row order is what the panel draws"
     );
@@ -10169,21 +10158,7 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
             ),
             (effects::glow::Glow::MIX, Value::Float(60.0)),
         ],
-        &|p| {
-            cpu::glow(
-                p,
-                4,
-                4,
-                2.0,
-                0.2,
-                0.5,
-                1.5,
-                [1.0, 0.8, 0.5, 1.0],
-                0.6,
-                &[],
-                false,
-            )
-        },
+        &|p| cpu::glow(p, 4, 4, 2.0, 0.2, 0.5, 1.5, [1.0, 0.8, 0.5, 1.0], 0.6, &[]),
     );
     both(
         &effects::transform::TransformDef,
@@ -10590,6 +10565,22 @@ fn every_effect_carries_a_matte_row() {
             );
             continue;
         }
+        // The Matte key opts out too (K-425, the owner's rule for mattes): a
+        // keyer's subject is the picture it keys, and a strength matte over it
+        // would be a garbage matte, which is a mask's job. It is the one image
+        // effect that carries no row.
+        if s.match_name == "matte_key" {
+            assert_eq!(
+                s.matte,
+                MatteRole::None,
+                "the Matte key carries no matte row"
+            );
+            assert!(
+                !s.params.iter().any(|p| p.id == MATTE_PARAM),
+                "the Matte key must not carry a matte row"
+            );
+            continue;
+        }
         let claims = matches!(
             s.match_name,
             "dof"
@@ -10666,7 +10657,313 @@ fn every_effect_carries_a_matte_row() {
             "{} — a fresh Invert starts off",
             s.match_name
         );
+        // The Channel choice (K-425) rides beside the injected pair on every
+        // effect that does not pick its matte's channels itself. The four that
+        // do — Depth of field (`depth_channel`), Displacement map (its two
+        // channel choices), Set matte (`channel`) and the Lens flare (source
+        // detection) — carry none, and the seam leaves their matte raw.
+        let owns_channel = matches!(
+            s.match_name,
+            "dof" | "displacement_map" | "set_matte" | "lens_flare"
+        );
+        let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
+        assert_eq!(
+            channel.is_some(),
+            !owns_channel,
+            "{} — the Channel row is injected exactly where the effect does not own one",
+            s.match_name
+        );
+        assert_eq!(s.matte_channel(), !owns_channel, "{}", s.match_name);
+        if let Some(channel) = channel {
+            assert_eq!(channel.label, "Channel", "{}", s.match_name);
+            assert_eq!(
+                channel.kind,
+                ParamKind::Choice {
+                    options: CHANNEL_OPTIONS,
+                    default: 0,
+                    dividers_after: CHOICE_UNGROUPED,
+                },
+                "{} — Luminance by default, the reading every kernel had (K-258)",
+                s.match_name
+            );
+            // Beside the pair, in schema order: picker, Invert, Channel.
+            let at = |id: &str| s.params.iter().position(|p| p.id == id).unwrap();
+            assert_eq!(
+                at(MATTE_CHANNEL_PARAM),
+                at(MATTE_INVERT_PARAM) + 1,
+                "{}",
+                s.match_name
+            );
+        }
     }
+}
+
+/// **Every Mix slider has a Blend beside it** (K-425): the layer blend modes,
+/// verbatim, Normal by default, injected right after `mix` in schema order so
+/// the panel can draw it on the Mix row. The Lens flare declares its own
+/// `blend` and keeps it; an effect with no Mix (the Controls, the Camera
+/// track, Posterize time) touches no pixel and gets none.
+#[test]
+fn every_mix_row_carries_a_blend() {
+    use crate::model::BlendMode;
+    for def in BUILTIN_DEFS.iter() {
+        let s = def.schema();
+        let mix = s.params.iter().position(|p| p.id == MIX_PARAM);
+        let blend = s.params.iter().position(|p| p.id == BLEND_PARAM);
+        match mix {
+            None => assert!(
+                blend.is_none(),
+                "{} has no Mix and so nothing to blend",
+                s.match_name
+            ),
+            Some(at) => {
+                let at_blend = blend
+                    .unwrap_or_else(|| panic!("{} has a Mix and no Blend beside it", s.match_name));
+                assert!(s.blend(), "{}", s.match_name);
+                if s.match_name == "lens_flare" {
+                    // Its own, older row: a save is a save (K-065).
+                    continue;
+                }
+                assert_eq!(
+                    at_blend,
+                    at + 1,
+                    "{} — Blend sits right after Mix",
+                    s.match_name
+                );
+                let row = s.params[at_blend];
+                assert_eq!(row.label, "Blend", "{}", s.match_name);
+                assert_eq!(
+                    row.kind,
+                    ParamKind::Choice {
+                        options: BlendMode::NAMES,
+                        default: 0,
+                        dividers_after: CHOICE_UNGROUPED,
+                    },
+                    "{} — the layer modes, Normal by default (K-258)",
+                    s.match_name
+                );
+            }
+        }
+    }
+    assert_eq!(BlendMode::NAMES[0], "Normal");
+}
+
+/// **The seam forces Mix to 100 for the kernel, and only when it blends**
+/// (K-425). `blend_seam` is the one decision both render paths read: Normal
+/// is `None` (the kernel runs untouched), anything else hands back the mode,
+/// the op's own Mix as a fraction, and the op's parameters with Mix at 100.
+#[test]
+fn the_blend_seam_forces_mix_to_full_only_when_it_blends() {
+    let mix = ParamId::new("mix");
+    let other = ParamId::new("stops");
+    let normal = [
+        (other, Value::Float(1.0)),
+        (mix, Value::Float(40.0)),
+        (BLEND_ID, Value::Choice(0)),
+    ];
+    assert!(cpu::blend_seam(Params::new(&normal)).is_none());
+    let absent = [(other, Value::Float(1.0)), (mix, Value::Float(40.0))];
+    assert!(
+        cpu::blend_seam(Params::new(&absent)).is_none(),
+        "a project saved before the row existed blends Normal (K-258)"
+    );
+
+    let add = [
+        (other, Value::Float(1.0)),
+        (mix, Value::Float(40.0)),
+        (BLEND_ID, Value::Choice(6)),
+    ];
+    let (mode, k, forced) = cpu::blend_seam(Params::new(&add)).expect("Add blends");
+    assert_eq!(mode, 6);
+    assert!((k - 0.4).abs() < 1e-6);
+    let forced = Params::new(&forced);
+    assert_eq!(forced.float(mix, 0.0), 100.0, "the kernel runs at Mix 100");
+    assert_eq!(
+        forced.float(other, 0.0),
+        1.0,
+        "every other parameter is untouched"
+    );
+    assert_eq!(forced.len(), 3);
+}
+
+/// **The blend maths, pinned at its end stops** (K-425): Add sums, Multiply
+/// multiplies, Normal is the effect's output, and the Mix lerp runs after the
+/// blend — so Mix 0 is the input on every mode and Mix 1 the blend alone.
+/// Alpha is always the effect's own.
+#[test]
+fn the_blend_combines_the_effect_with_its_input_and_then_mixes() {
+    let d = [0.25, 0.5, 0.75, 1.0];
+    let s = [0.5, 0.5, 0.5, 0.5];
+    assert_eq!(
+        cpu::blend_pixel(0, d, s),
+        s,
+        "Normal is the effect's output"
+    );
+    assert_eq!(cpu::blend_pixel(6, d, s), [0.75, 1.0, 1.25, 0.5], "Add");
+    assert_eq!(
+        cpu::blend_pixel(2, d, s),
+        [0.125, 0.25, 0.375, 0.5],
+        "Multiply"
+    );
+    assert_eq!(cpu::blend_pixel(7, d, s), [0.5, 0.5, 0.75, 0.5], "Lighten");
+    assert_eq!(cpu::blend_pixel(1, d, s), [0.25, 0.5, 0.5, 0.5], "Darken");
+    assert_eq!(
+        cpu::blend_pixel(20, d, s),
+        [0.0, 0.0, 0.25, 0.5],
+        "Subtract"
+    );
+    // The encoded set: Screen of x with itself is 1 - (1-x)^2 in the encoded
+    // domain, which for encoded 0.5 is 0.75 — round-tripped through the curve.
+    let e = crate::pixels::srgb_decode(128);
+    let screen = cpu::blend_pixel(8, [e, e, e, 1.0], [e, e, e, 1.0]);
+    let want = {
+        let enc = f32::from(128u8) / 255.0;
+        let v = 1.0 - (1.0 - enc) * (1.0 - enc);
+        ((v + 0.055) / 1.055f32).powf(2.4)
+    };
+    assert!(
+        (screen[0] - want).abs() < 1e-3,
+        "Screen runs encoded: {} vs {want}",
+        screen[0]
+    );
+    // Difference of a pixel with itself is black, whatever the domain.
+    assert_eq!(cpu::blend_pixel(18, d, d)[..3], [0.0, 0.0, 0.0]);
+
+    let input = vec![0.25, 0.5, 0.75, 1.0];
+    let mut out = vec![0.5, 0.5, 0.5, 0.5];
+    cpu::blend_mix(&mut out, &input, 6, 0.0);
+    assert_eq!(out, input, "Mix 0 is the input on any mode");
+    let mut out = vec![0.5, 0.5, 0.5, 0.5];
+    cpu::blend_mix(&mut out, &input, 6, 1.0);
+    assert_eq!(out, [0.75, 1.0, 1.25, 0.5], "Mix 1 is the blend alone");
+    let mut out = vec![0.5, 0.5, 0.5, 0.5];
+    cpu::blend_mix(&mut out, &input, 6, 0.5);
+    assert_eq!(out, [0.5, 0.75, 1.0, 0.75], "Mix 0.5 is halfway");
+}
+
+/// **The stack applies the blend through the seam** (K-425): an Exposure at
+/// Blend = Multiply and Mix 50 through `apply_stack` equals the kernel run at
+/// Mix 100, multiplied with its input, then lerped to half — and at Normal the
+/// kernel's own Mix does the whole job, untouched.
+#[test]
+fn apply_stack_runs_the_kernel_at_full_mix_and_blends_once() {
+    use crate::fx::effects::exposure::Exposure;
+    let (w, h) = (2u32, 2u32);
+    let img: Vec<f32> = (0..(w * h * 4) as usize)
+        .map(|i| {
+            if i % 4 == 3 {
+                1.0
+            } else {
+                0.1 + i as f32 * 0.03
+            }
+        })
+        .collect();
+    let resolve = |blend: u32| {
+        let mut inst = instantiate("exposure").unwrap();
+        for p in &mut inst.params {
+            if p.id == "stops" {
+                p.value = EffectValue::Float(Property::fixed(1.0));
+            }
+            if p.id == "mix" {
+                p.value = EffectValue::Float(Property::fixed(50.0));
+            }
+            if p.id == BLEND_PARAM {
+                p.value = EffectValue::Choice(blend);
+            }
+        }
+        super::resolve_stack(
+            &[inst],
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
+        )
+    };
+    let mut normal = img.clone();
+    cpu::apply_stack(&mut normal, w, h, &resolve(0));
+    let mut direct = img.clone();
+    {
+        let ops = resolve(0);
+        let op = ops.iter().next().unwrap();
+        let (stops, mix) = Exposure::read(op.params).packed();
+        assert!(
+            (mix - 0.5).abs() < 1e-6,
+            "the kernel sees the real Mix at Normal"
+        );
+        cpu::exposure(&mut direct, stops, mix);
+    }
+    assert_eq!(normal, direct, "Normal is the kernel alone, byte for byte");
+
+    let mut multiplied = img.clone();
+    cpu::apply_stack(&mut multiplied, w, h, &resolve(2));
+    let mut want = img.clone();
+    {
+        let ops = resolve(2);
+        let op = ops.iter().next().unwrap();
+        let (stops, _) = Exposure::read(op.params).packed();
+        cpu::exposure(&mut want, stops, 1.0);
+        cpu::blend_mix(&mut want, &img, 2, 0.5);
+    }
+    assert_eq!(
+        multiplied, want,
+        "Multiply: kernel at Mix 100, blended, then mixed once"
+    );
+    assert_ne!(multiplied, normal);
+}
+
+/// **The prepared matte is the chosen channel, inverted once** (K-425): a grey
+/// of R = G = B = channel, alpha 1 — so every kernel's luma read gets the
+/// channel back — and Luminance without Invert is declared a no-op by the
+/// predicate the seam gates on.
+#[test]
+fn matte_prepare_picks_the_channel_and_inverts_once() {
+    let px = [0.2f32, 0.4, 0.8, 0.5];
+    let luma = 0.2126 * 0.2 + 0.7152 * 0.4 + 0.0722 * 0.8;
+    for (channel, want) in [(0u32, luma), (1, 0.5), (2, 0.2), (3, 0.4), (4, 0.8)] {
+        let mut m = px.to_vec();
+        cpu::matte_prepare(&mut m, channel, false);
+        assert_eq!(m, [want, want, want, 1.0], "channel {channel}");
+        let mut m = px.to_vec();
+        cpu::matte_prepare(&mut m, channel, true);
+        assert_eq!(
+            m,
+            [1.0 - want, 1.0 - want, 1.0 - want, 1.0],
+            "channel {channel} inverted"
+        );
+    }
+    // Clamped: an HDR matte reads 1, and inverts to 0.
+    let mut m = vec![4.0, 4.0, 4.0, 1.0];
+    cpu::matte_prepare(&mut m, 0, true);
+    assert_eq!(m, [0.0, 0.0, 0.0, 1.0]);
+    assert!(
+        !cpu::matte_needs_prepare(0, false),
+        "Luminance, no Invert: no pass (K-258)"
+    );
+    assert!(cpu::matte_needs_prepare(0, true));
+    assert!(cpu::matte_needs_prepare(2, false));
+}
+
+/// **Every new row defaults to yesterday's behaviour** (K-258): an instance
+/// stripped of `matte_channel` and `blend` resolves to the same numbers as a
+/// fresh one reads through the typed accessors.
+#[test]
+fn a_pre_k425_instance_reads_luminance_and_normal() {
+    let mut inst = instantiate("blur").unwrap();
+    inst.params
+        .retain(|p| p.id != MATTE_CHANNEL_PARAM && p.id != BLEND_PARAM);
+    let ops = super::resolve_stack(
+        &[inst],
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+        std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
+    );
+    let op = ops.iter().next().unwrap();
+    assert_eq!(op.params.choice(MATTE_CHANNEL_ID, 0), 0);
+    assert_eq!(op.params.choice(BLEND_ID, 0), 0);
+    assert!(cpu::blend_seam(op.params).is_none());
 }
 
 /// **The two that opted out still say the same words** (K-395).
