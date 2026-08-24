@@ -481,7 +481,7 @@ void main() {
       await openEditor();
       await tester.tap(find.text('Slow start'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply'));
+      await tester.tap(find.text('Apply'.toUpperCase()));
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Linear>(),
           reason: 'one key on its own has no span to shape');
@@ -497,7 +497,7 @@ void main() {
       await openEditor();
       await tester.tap(find.text('Slow start'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Apply'));
+      await tester.tap(find.text('Apply'.toUpperCase()));
       await tester.pumpAndSettle();
 
       final keys = opacityKeys(p.layer);
@@ -539,7 +539,7 @@ void main() {
       expect(panelVisible(p.uiState.split, Panel.easing), isTrue);
       expect(p.uiState.activePanel.value, Panel.easing,
           reason: 'a panel you just asked for is the one you want to look at');
-      expect(find.text('Apply'), findsNothing,
+      expect(find.text('Apply'.toUpperCase()), findsNothing,
           reason: 'nothing floats over the footer in panel mode');
     });
 
