@@ -12214,3 +12214,14 @@ more visible at once. Where a K-451 metric reads tighter than the mockup renders
 mockup's value becomes the Regular default and the tighter value moves into Compact;
 §12A.6's table gains the second column as the measurements land. Supersedes K-451 only
 in that sense — the table's authority and its degradation ladder stand.
+
+## K-455 — Keys returns as a third Timeline mode
+
+**DECIDED 2026-08-24.** Supersedes K-441's first bullet only. The owner's ruling: the
+dope sheet earns its place after all — the closer look at the approved Keys drawing
+showed a genuinely different reading of a comp's keyframes, not a subset of Layers.
+The Timeline's modes are **Layers, Keys and Graph**. Layers keeps everything it
+absorbed when Keys was withdrawn — the Animated filter (`U`), twirl-down lane editing,
+block selection, end-handle stretch, the Ease popover — because that is where
+After Effects hands land. Keys is an additional way of seeing, built to the approved
+Keys drawing; it adds no editing behaviour Layers lacks. K-441's other bullets stand.

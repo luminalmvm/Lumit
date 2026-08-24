@@ -799,7 +799,9 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 
 ### 12A.1 Timeline (K-441)
 
-- **Modes are Layers and Graph** — there is no Keys mode. Layers mode carries an **Animated
+- **Modes are Layers, Keys and Graph** (K-455). Keys is the dope sheet built to the approved
+  Keys drawing — another way of seeing a comp's keyframes, adding no editing behaviour
+  Layers lacks. Layers mode carries an **Animated
   filter** (`U`): on, the outline shows only keyframed properties across all layers; All
   restores the full twirl-down lists. Block selection, end-handle stretch and the Ease
   popover are Layers behaviours, not a mode of their own.
@@ -807,7 +809,7 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   `TIMELINE` kicker at the far left and **one filled `EXPORT`** at the far right — the
   single filled action a surface is allowed (§3.1), running the File menu's own Export
   command rather than a second route to the same dialog. The row above the outline
-  puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
+  puts the timecode and frame count at its far left and the Layers / Keys / Graph mode tabs at its
   far right. **The frame count says how far through**: the frame in hand, then the comp's
   whole length after it — `f48 / 250`, the total quieter again than the number it follows.
 - **The column headers are kicker words, not icons**: Switches · # · Layer · Matte ·
