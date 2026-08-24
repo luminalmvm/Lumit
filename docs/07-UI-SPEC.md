@@ -905,8 +905,11 @@ layer lanes.
 - **Work area**: `B` and `N` set start/end at the playhead; drag the ends; double-click the
   bar to reset to the full comp. Work area is the preview range and default export range,
   and playback **loops** it (§10's default loop mode): reaching its end resumes from its
-  start. On the ruler it occupies the **lower half** only, so the ticks and their labels
-  keep the upper half; over the lane area the wash outside it is drawn both under the rows
+  start. It draws as **one band in `animated`** (K-441,
+  [15-DESIGN.md](15-DESIGN.md) §12A.1): the ruler's **lower half** only, so the ticks and
+  their labels keep the upper half, then on behind the cache bar and down through the lanes,
+  behind the bars and the keys. Its two edges, at half strength, *are* the two drag handles.
+  Outside it the lane ground stays a step darker, drawn both under the rows
   and again, lightly, over the layer bars — under them alone it was invisible along every
   row that had a layer in it (K-207).
   A comp that has never had one set **reads as the whole comp** (K-203) — the engine's
@@ -929,12 +932,16 @@ nearest end — the layer search, the master motion-blur button, the shy filter,
 Lane and Graph view buttons, and a ⋯ menu with the layer / razor / work-area / marker /
 beat commands) and the **column-group header** (§4.2). The lane side gives those two
 rows' height to a taller, labelled time ruler — a bigger playhead grab — with the cache
-bar tucked under it. Markers draw on the ruler itself rather than in a ribbon of their
-own (K-254): a small flag with its **point at the top**, centred on the frame it marks so
-the point sits on the playhead, hanging into the ruler's lower row beside the work-area
-band. What a marker says rides in a box of the same colour flying from the flag's **centre
-point**, like a flag from a pole, not as loose text over the ticks; both carry a hairline
-outline, and both sit on the floor of the ruler. Styling — a grey `marker` token, editable like any other
+bar tucked under it. The ruler is **double height** (K-441): the time labels, the
+ticks and the playhead's head in the upper half, the markers and the work-area band in the
+lower. Minor ticks subdivide between the labelled ones as the zoom grows, and stop at one
+tick per frame. A few pixels of padding sit either side of the axis, so a handle on the
+first or last frame stays visible and grabbable; the lanes carry the same padding, so both
+halves stay lined up. Markers draw on the ruler itself rather than in a ribbon of their
+own (K-254): an **upward triangle** standing on the cache bar at the floor of the ruler,
+centred on the frame it marks so its point aims at the clock above. What a marker says
+rides in a backdrop **pill** that starts at the triangle's point and runs right, half the
+triangle inside it and half outside to its left, not as loose text over the ticks. Styling — a grey `marker` token, editable like any other
 — is in [15-DESIGN.md](15-DESIGN.md) §6.4.
 
 **One marker per frame**: adding one where a marker already sits replaces it, and so does

@@ -484,14 +484,15 @@ status line's cache meter, where each tier already has its own bar.
 - **Comp markers (shipped, K-254)**: a `marker` token of its own — a plain grey, `#c4c4c4`
   on a dark scheme and `#565656` on a light one, editable in the theme editor like any other
   role. Grey rather than a role colour on purpose: a marker says *here*, not *good* or
-  *careful*, and the work area already has its own colour (`animated`, §12A.1). The flag is
-  an 11×12 shape with its **point at the top**, centred on the frame it marks so the point
-  sits on the playhead, hanging into the ruler's lower row. What it says rides in a box of the same
-  colour flying from the flag's **centre point**, `caption` weight 400 in `surface_0`,
-  rather than as loose text over the ticks. Flag and box both carry a 1px `surface_0`
-  outline and sit flush with the floor of the ruler. **One marker per frame** — a second
-  dropped on an occupied frame replaces the first, since two flags on one moment are two
-  things to click and one place.
+  *careful*, and the work area already has its own colour (`animated`, §12A.1). Under the
+  redesign (K-441) the flag is an **upward triangle**, 8 wide and 6 tall, standing on the
+  cache bar at the floor of the ruler's lower row and centred on the frame it marks, so its
+  point aims at the clock above. What it says rides in a **backdrop pill** in `surface_4`,
+  12px tall, starting at the triangle's point and running right — the triangle's left half
+  stands clear of it, its right half is inside — with the label in **mono at 9px** in
+  `text_primary`, rather than as loose text over the ticks. **One marker per frame** — a
+  second dropped on an occupied frame replaces the first, since two flags on one moment are
+  two things to click and one place.
 - **Beat markers**: `marker.beat` = `#aef3e7` (mint) 1px ticks in the ruler with a small
   triangular head — still to come, and it needs a token of its own beside `marker`. Span
   markers draw a hairline-bounded band.

@@ -212,8 +212,8 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
   void _wantPeaks(BridgeClip clip, double left, double width) {
     final id = clip.id.toString();
     final axis = widget.axis;
-    if (axis.width <= 0 || widget.fps <= 0 || width <= 0) return;
-    final secondsPerPixel = axis.frames / widget.fps / axis.width;
+    if (axis.perFrame <= 0 || widget.fps <= 0 || width <= 0) return;
+    final secondsPerPixel = 1 / (axis.perFrame * widget.fps);
     // The visible slice of this clip, in the clip's own placed clock.
     final scroll = widget.hScroll;
     final viewLeft = scroll != null && scroll.hasClients ? scroll.offset : 0.0;
@@ -441,11 +441,10 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                         // placed clock starts at `place_start` — so a slid
                         // clip carries its wave with it and nothing refetches.
                         originSeconds: originSeconds,
-                        secondsPerPixel: widget.axis.width <= 0
-                            ? 0.0
-                            : widget.axis.frames /
-                                widget.fps /
-                                widget.axis.width,
+                        secondsPerPixel:
+                            widget.axis.perFrame <= 0 || widget.fps <= 0
+                                ? 0.0
+                                : 1 / (widget.axis.perFrame * widget.fps),
                         left: 0,
                         right: width,
                         colours: t.waveform,
@@ -469,9 +468,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                           child: Text(
                             // A ramp has no single number to show, and printing one would
                             // be a lie about a curve — the envelope below reads it.
-                            speed == null
-                                ? l10n.clipRamp
-                                : '${speed.round()}%',
+                            speed == null ? l10n.clipRamp : '${speed.round()}%',
                             style: t.small.copyWith(color: t.textPrimary),
                             overflow: TextOverflow.clip,
                             softWrap: false,

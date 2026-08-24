@@ -1500,7 +1500,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void _addKeyAt(Offset local, (double, double) range, double height) {
     final frame = widget.magnet
         ? widget.axis.frameAt(local.dx).toDouble()
-        : (local.dx / (widget.axis.perFrame <= 0 ? 1 : widget.axis.perFrame));
+        : widget.axis.frameAtExact(local.dx);
     final seconds = frame / (widget.fps <= 0 ? 1 : widget.fps);
 
     // The curve nearest the pointer vertically takes the key — measured in
@@ -1778,9 +1778,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// Seconds ↔ pixels on the time axis, so handle geometry can be worked out
   /// where the user actually sees it: on screen.
   double _xOfSeconds(double t) => widget.axis.xOf(t * widget.fps);
-  double _secondsOfX(double x) => widget.axis.perFrame <= 0
-      ? 0
-      : x / widget.axis.perFrame / (widget.fps <= 0 ? 1 : widget.fps);
+  double _secondsOfX(double x) =>
+      widget.axis.frameAtExact(x) / (widget.fps <= 0 ? 1 : widget.fps);
 
   /// A side's handle endpoint in (seconds, value) whatever its interpolation —
   /// a bezier side's own, or where a linear side's *would* be. Used to measure
@@ -2698,7 +2697,8 @@ class _GraphPainter extends CustomPainter {
           continue;
         }
         if (keys.length == 1) {
-          final y = _yOf(chLens == GraphLens.value ? keys.first.value : 0, size);
+          final y =
+              _yOf(chLens == GraphLens.value ? keys.first.value : 0, size);
           canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
           continue;
         }
@@ -2711,8 +2711,8 @@ class _GraphPainter extends CustomPainter {
         // An expression has no keys to walk, so the curve is sampled from the
         // engine across the visible span — the same evaluator the renderer
         // uses, so the drawn line matches the motion that will be rendered.
-        final startSeconds = 0 / axis.perFrame / f;
-        final endSeconds = size.width / axis.perFrame / f;
+        final startSeconds = axis.frameAtExact(0) / f;
+        final endSeconds = axis.frameAtExact(size.width) / f;
         final start = timeOfSubframe(
             startSeconds * f, comp.fpsExact.$1, comp.fpsExact.$2);
         final end =
@@ -2738,7 +2738,7 @@ class _GraphPainter extends CustomPainter {
         }
       } else {
         for (var x = 0.0; x <= size.width; x += step) {
-          final seconds = axis.perFrame <= 0 ? 0.0 : x / axis.perFrame / f;
+          final seconds = axis.frameAtExact(x) / f;
           final v = chLens == GraphLens.value
               ? evaluateKeys(keys, seconds)
               : evaluateKeysSpeed(keys, seconds) * speedScale;

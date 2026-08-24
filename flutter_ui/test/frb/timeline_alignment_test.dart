@@ -22,6 +22,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import 'frb_test_support.dart';
@@ -112,7 +113,8 @@ void main() {
       // ascend exactly as the lanes' do.
       final rowTops = [for (final l in layers) outlineRow(tester, l).top];
       final barTops = [for (final l in layers) laneBar(tester, l).top];
-      expect(barTops, orderedEquals([for (final t in rowTops) closeTo(t, 0.5)]));
+      expect(
+          barTops, orderedEquals([for (final t in rowTops) closeTo(t, 0.5)]));
       // Rows are stacked, not overlapping: consecutive tops differ by a row.
       final sorted = [...rowTops]..sort();
       for (var i = 1; i < sorted.length; i++) {
@@ -139,16 +141,15 @@ void main() {
       final beforeBar = laneBar(tester, bottom).top;
       expect(find.text('Transform'), findsNothing);
 
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-twirl-${idOf(middle)}')));
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-twirl-${idOf(middle)}')));
       await tester.pumpAndSettle();
 
       // The outline grew property rows.
       expect(find.text('Transform'), findsOneWidget,
           reason: 'the fold-out opened');
       // The lanes grew the matching block of lane rows.
-      final lanes =
-          find.byKey(ValueKey<String>('tl-lanes-${idOf(middle)}'));
+      final lanes = find.byKey(ValueKey<String>('tl-lanes-${idOf(middle)}'));
       expect(lanes, findsOneWidget,
           reason: 'the lane side has a block for the fold-out rows');
 
@@ -194,8 +195,7 @@ void main() {
       // GESTURE; every assertion about what the open view looks like below
       // is as strict as it ever was.
       final bar = find.byKey(ValueKey<String>('tl-bar-body-${idOf(seq)}'));
-      final room =
-          find.byKey(ValueKey<String>('tl-seq-room-${idOf(seq)}'));
+      final room = find.byKey(ValueKey<String>('tl-seq-room-${idOf(seq)}'));
       for (var attempt = 0; attempt < 3; attempt++) {
         await tester.tap(bar);
         await tester.pump(const Duration(milliseconds: 30));
@@ -211,7 +211,8 @@ void main() {
       expect(view, findsOneWidget, reason: 'the lanes draw the view');
       expect(tester.getRect(room).height,
           closeTo(tester.getRect(view).height - _seqOwnRow, 0.5),
-          reason: 'the spacer holds everything the view added below the bar row');
+          reason:
+              'the spacer holds everything the view added below the bar row');
 
       // The layer under it moved down, and its two halves moved together.
       expect(outlineRow(tester, below).top, greaterThan(beforeRow));
@@ -258,7 +259,8 @@ void main() {
     /// 5. **Horizontal scroll belongs to the lanes alone**, and the ruler and
     /// cache bar ride with them because they share that viewport — while
     /// neither follows the rows vertically.
-    testWidgets('scrolling sideways moves the lanes, the ruler and the cache'
+    testWidgets(
+        'scrolling sideways moves the lanes, the ruler and the cache'
         ' bar, and never the outline', (tester) async {
       final p = withComp();
       final layers = [
@@ -284,8 +286,7 @@ void main() {
       final rulerBefore = tester.getRect(ruler);
       final cacheBefore = tester.getRect(cache);
 
-      await modifiedWheel(
-          tester, LogicalKeyboardKey.shiftLeft, laneAt, 120);
+      await modifiedWheel(tester, LogicalKeyboardKey.shiftLeft, laneAt, 120);
       await tester.pumpAndSettle();
 
       final barAfter = laneBar(tester, probe);
@@ -330,14 +331,20 @@ void main() {
       Rect playhead() => tester.getRect(find.byType(PlayheadMarker));
 
       // The marker is centred on its frame, and the axis is the ruler's own
-      // span — so the clock and the picture agree.
-      expect(playhead().center.dx, closeTo(ruler.left, 1.0),
-          reason: 'frame zero stands at the start of the axis');
+      // span *inside its padding* (docs/15 §12A.1) — so the clock and the
+      // picture agree, and frame zero has a few pixels to its left to hang a
+      // handle in.
+      const pad = TimelineAxis.pad;
+      final span = ruler.width - pad * 2;
+      expect(playhead().center.dx, closeTo(ruler.left + pad, 1.0),
+          reason: 'frame zero stands a padding in from the edge of the ruler');
+      expect(playhead().left, greaterThan(ruler.left),
+          reason: 'and the whole head is inside the ruler, so it can be seen');
 
       p.uiState.playheadFrame.value = frames ~/ 2;
       await tester.pump();
       expect(playhead().center.dx,
-          closeTo(ruler.left + ruler.width * (frames ~/ 2) / frames, 1.0),
+          closeTo(ruler.left + pad + span * (frames ~/ 2) / frames, 1.0),
           reason: 'half way along the comp is half way along the axis');
 
       // And it runs the full height of the lane side: from the ruler down past
@@ -347,6 +354,91 @@ void main() {
           reason: 'the playhead starts up in the ruler');
       expect(marker.bottom, greaterThan(laneBar(tester, layers.first).bottom),
           reason: 'and carries on past the last row');
+    });
+
+    /// 6b. **The ruler is two rows, not one** (docs/15 §12A.1). The clock owns
+    /// the upper half — the labels, the ticks and the playhead's head — and the
+    /// lower half carries the markers and the work-area band, so a flag never
+    /// sits on a tick and the band never tints the time.
+    testWidgets('the ruler is double height, clock above, band below',
+        (tester) async {
+      final p = withComp();
+      p.comp.addAdjustmentLayer();
+      addMarkerFrb(p.comp, frame: 40, label: 'Chorus');
+      p.comp.setWorkArea(
+        span: BridgeSpan(
+          inPoint: p.comp.timeOfFrame(frame: 10),
+          outPoint: p.comp.timeOfFrame(frame: 60),
+          startOffset: p.comp.timeOfFrame(frame: 0),
+        ),
+      );
+      p.uiState.playheadFrame.value = 0;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      final waist = ruler.top + ruler.height / 2;
+
+      final band = tester.getRect(find.byKey(const ValueKey('tl-work-area')));
+      expect(band.top, closeTo(waist, 0.5),
+          reason: 'the band hangs from the waist of the ruler');
+      expect(band.bottom, closeTo(ruler.bottom, 0.5),
+          reason: 'and reaches its floor, where the cache bar takes it on');
+
+      final flag = tester.getRect(find
+          .byKey(ValueKey<String>('tl-marker-${markersOf(p.comp).single.id}')));
+      expect(flag.top, greaterThanOrEqualTo(waist - 0.5),
+          reason: 'a marker lives in the lower half with the band');
+      expect(flag.bottom, closeTo(ruler.bottom, 0.5),
+          reason: 'standing on the cache bar');
+
+      final head = tester.getRect(find.byType(PlayheadMarker).first);
+      expect(head.top, closeTo(ruler.top, 0.5),
+          reason: 'the playhead head is in the upper half, with the clock');
+    });
+
+    /// 6c. **The axis pads its two ends, and both halves of the table share the
+    /// padding** (docs/15 §12A.1) — a handle on the first frame has room to be
+    /// drawn and grabbed, and the lanes stay lined up with the ruler while it
+    /// does.
+    testWidgets('the axis pads both ends, ruler and lanes alike',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addAdjustmentLayer();
+      p.comp.setWorkArea(
+        span: BridgeSpan(
+          inPoint: p.comp.timeOfFrame(frame: 0),
+          outPoint: p.comp.timeOfFrame(frame: 40),
+          startOffset: p.comp.timeOfFrame(frame: 0),
+        ),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      final row =
+          tester.getRect(find.byKey(ValueKey<String>('tl-bar-${idOf(layer)}')));
+      final bar = tester
+          .getRect(find.byKey(ValueKey<String>('tl-bar-body-${idOf(layer)}')));
+
+      // A layer running the whole comp starts where frame zero is, and frame
+      // zero is a padding in from the edge — in the lanes exactly as in the
+      // ruler, because there is one axis.
+      expect(row.left, closeTo(ruler.left, 0.5),
+          reason: 'the lane row and the ruler are the same width');
+      expect(bar.left, closeTo(row.left + TimelineAxis.pad, 0.5),
+          reason: 'the lanes carry the same padding the ruler has');
+      expect(bar.right, closeTo(row.right - TimelineAxis.pad, 0.5),
+          reason: 'and the far end is padded too');
+
+      // Which is what the padding is for: the work-area handle on frame zero
+      // is inside the ruler, whole, rather than half off its edge.
+      final handle =
+          tester.getRect(find.byKey(const ValueKey('tl-work-start')));
+      expect(handle.left, greaterThanOrEqualTo(ruler.left - 0.5),
+          reason: 'the handle on the first frame is grabbable');
+      expect(handle.center.dx, closeTo(ruler.left + TimelineAxis.pad, 0.5),
+          reason: 'and centred on frame zero');
     });
 
     testWidgets('the work-area wash spans every row', (tester) async {
@@ -359,7 +451,8 @@ void main() {
 
       final wash = find.byWidgetPredicate(
           (w) => w is CustomPaint && w.painter is WorkAreaGroundPainter);
-      expect(wash, findsWidgets, reason: 'the lanes are washed by the work area');
+      expect(wash, findsWidgets,
+          reason: 'the lanes are washed by the work area');
       final rect = tester.getRect(wash.first);
       final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
 
@@ -368,8 +461,8 @@ void main() {
       // It starts at the top of the rows and reaches past the last of them:
       // this is a cross-row overlay, not a decoration on any single row.
       expect(rect.top, lessThan(laneBar(tester, layers.last).top + 0.5));
-      expect(rect.bottom,
-          greaterThan(laneBar(tester, layers.first).bottom - 0.5));
+      expect(
+          rect.bottom, greaterThan(laneBar(tester, layers.first).bottom - 0.5));
     });
 
     /// 7. **A reorder drag lands the layer where the drop said it would.** The
@@ -385,8 +478,13 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      expect([for (final l in p.comp.getLayers()) l.internallayerId],
-          [top.internallayerId, middle.internallayerId, bottom.internallayerId]);
+      expect([
+        for (final l in p.comp.getLayers()) l.internallayerId
+      ], [
+        top.internallayerId,
+        middle.internallayerId,
+        bottom.internallayerId
+      ]);
 
       // Two full rows down: past the midpoint of both blocks below it, which is
       // the slot rule `layerDragTarget` uses. The first move only buys the
@@ -402,9 +500,13 @@ void main() {
       await g.up();
       await tester.pumpAndSettle();
 
-      expect([for (final l in p.comp.getLayers()) l.internallayerId],
-          [middle.internallayerId, bottom.internallayerId, top.internallayerId],
-          reason: 'the dragged layer landed at the bottom of the stack');
+      expect([
+        for (final l in p.comp.getLayers()) l.internallayerId
+      ], [
+        middle.internallayerId,
+        bottom.internallayerId,
+        top.internallayerId
+      ], reason: 'the dragged layer landed at the bottom of the stack');
 
       // And the moved row is a row again: both halves level, in its new place.
       for (final l in [top, middle, bottom]) {

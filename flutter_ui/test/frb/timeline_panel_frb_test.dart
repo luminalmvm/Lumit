@@ -1896,8 +1896,11 @@ void main() {
       // Measured, not assumed: the axis is as wide as the panel leaves it,
       // and the columns can be resized, so the test asks how many pixels a
       // frame is worth rather than hard-coding one.
+      // The row is the axis's whole width, padding included (§12A.1), so the
+      // frames' own span is what one frame is worth in pixels.
       final perFrame =
-          tester.getRect(find.byKey(laneKey)).width / p.comp.durationFrames();
+          (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
+              p.comp.durationFrames();
 
       // Magnet on (the default): a drag of ten and a half frames still lands
       // on a whole one.
@@ -1964,8 +1967,11 @@ void main() {
           'tl-keys-${layer.internallayerId}/transform/opacity');
       final handle = find.byKey(ValueKey<String>(
           'tl-key-${layer.internallayerId}/transform/opacity#0'));
+      // The row is the axis's whole width, padding included (§12A.1), so the
+      // frames' own span is what one frame is worth in pixels.
       final perFrame =
-          tester.getRect(find.byKey(laneKey)).width / p.comp.durationFrames();
+          (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
+              p.comp.durationFrames();
 
       // Ten frames lands at 610 — one frame short of the marker, which at this
       // zoom is well inside the eight-pixel reach.
@@ -2040,8 +2046,11 @@ void main() {
           'tl-keys-${layer.internallayerId}/transform/opacity');
       final handle = find.byKey(ValueKey<String>(
           'tl-key-${layer.internallayerId}/transform/opacity#0'));
+      // The row is the axis's whole width, padding included (§12A.1), so the
+      // frames' own span is what one frame is worth in pixels.
       final perFrame =
-          tester.getRect(find.byKey(laneKey)).width / p.comp.durationFrames();
+          (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
+              p.comp.durationFrames();
 
       // The little push that gets the gesture past the pointer slop.
       const nudge = 3.0;
@@ -2895,6 +2904,45 @@ void main() {
       expect(rulerLabelOf(90), '1:30s');
     });
 
+    /// Minor ticks subdivide as the zoom grows, and stop at one frame: a ruler
+    /// that went on dividing would draw ticks nothing can land between
+    /// (docs/15 §12A.1).
+    test('the ruler subdivides down to one frame and no further', () {
+      double minor(double pxPerSec, {double fps = 25}) => rulerMinorStepSeconds(
+          pixelsPerSecond: pxPerSec,
+          labelStep: rulerLabelStepSeconds(pixelsPerSecond: pxPerSec),
+          fps: fps);
+
+      // Wide open: one tick a frame, and the ladder has no rung below it —
+      // whatever the rate, and however much further the zoom goes.
+      expect(minor(150), closeTo(1 / 25, 1e-9));
+      expect(minor(100000), closeTo(1 / 25, 1e-9),
+          reason: 'a frame is the floor however far the zoom goes');
+      expect(minor(100000, fps: 60), closeTo(1 / 60, 1e-9));
+
+      // Zooming in only ever subdivides further, and every tick keeps a few
+      // pixels to itself — a comb is not a ruler.
+      var last = double.infinity;
+      for (final px in [2.0, 8.0, 20.0, 60.0, 150.0, 600.0, 5000.0]) {
+        final step = minor(px);
+        final labels = rulerLabelStepSeconds(pixelsPerSecond: px);
+        expect(step, lessThanOrEqualTo(last),
+            reason: 'the ruler never coarsens as it is zoomed in');
+        expect(step, lessThanOrEqualTo(labels),
+            reason: 'ticks are never coarser than the labels they sit between');
+        expect(step, greaterThanOrEqualTo(1 / 25 - 1e-9),
+            reason: 'and never finer than a frame');
+        if (step < labels) {
+          expect(step * px, greaterThanOrEqualTo(6.0),
+              reason: 'a drawn tick has room to be seen');
+        }
+        last = step;
+      }
+
+      // No room for anything at all: the labelled ticks stand alone.
+      expect(minor(0.01), rulerLabelStepSeconds(pixelsPerSecond: 0.01));
+    });
+
     /// What a grab does to the waveform's preview of the span — the mapping
     /// the lane draws while the gesture is still in flight (K-172).
     test('barDragPreview maps each grab onto the span', () {
@@ -3242,8 +3290,10 @@ void main() {
       final beforeIn = p.comp.frameAtTime(time: before.inPoint);
       final beforeOut = p.comp.frameAtTime(time: before.outPoint);
 
+      // The **body**, not the full-width row it sits in: the axis pads a few
+      // pixels either side (§12A.1), so the row's edge is no longer the bar's.
       final bar =
-          find.byKey(ValueKey<String>('tl-bar-${layer.internallayerId}'));
+          find.byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
       var rect = tester.getRect(bar);
       // Near the left edge: a trim of the in point, content unmoved.
       await tester.dragFrom(

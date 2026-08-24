@@ -122,8 +122,11 @@ const double _zoomGlyphLarge = 14;
 
 /// The time ruler's height: the toolbar and column header stay inside the
 /// outline (docs/07 §4.1), so the lane side gives their whole height to the
-/// ruler — a taller bar is an easier playhead grab — minus the cache bar
-/// tucked under it.
+/// ruler — minus the cache bar tucked under it. That is what makes the ruler
+/// **double height** (docs/15 §12A.1): the upper half is the clock, carrying
+/// the labels, the ticks and the playhead's head, and the lower half carries
+/// the markers and the work-area band. A taller bar is an easier playhead grab
+/// as well, but the two rows are the point.
 const double _rulerHeight =
     _toolbarHeight + _headerHeight - TimelineCacheBar.height;
 
@@ -1363,8 +1366,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// scope is in reach — the same arrangement the Viewer's zoom uses.
   AnimationLevel _animationLevel = AnimationLevel.all;
 
-  double get _perFrameNow =>
-      _laneFrames <= 0 ? 0 : _laneViewport * _zoomMotion.value / _laneFrames;
+  double get _perFrameNow => _laneFrames <= 0
+      ? 0
+      : max(0.0, _laneViewport * _zoomMotion.value - TimelineAxis.pad * 2) /
+          _laneFrames;
 
   /// How many frames full zoom-in shows across the lanes (owner, 2026-08-06).
   ///
@@ -1966,7 +1971,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// pointer — the frame under the cursor stays under it — and Shift scrolls
   /// sideways. A plain wheel is not touched here, so it still reaches the
   /// scrollable and moves the rows.
-  void _wheel(PointerScrollEvent event, double contentX, double perFrame) {
+  void _wheel(PointerScrollEvent event, double contentX, TimelineAxis axis) {
     final keys = HardwareKeyboard.instance;
     if (keys.isControlPressed) {
       // What to hold still, in the numbers that are true *now*: which frame is
@@ -1974,7 +1979,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // re-applies these every tick, so the frame under the cursor stays under
       // it for the whole zoom rather than only at its ends.
       _zoomAnchorViewportX = contentX - (_hLane.hasClients ? _hLane.offset : 0);
-      _zoomAnchorFrame = perFrame <= 0 ? 0.0 : contentX / perFrame;
+      _zoomAnchorFrame = axis.frameAtExact(contentX);
       _zoomMotion.nudge(
         event.scrollDelta.dy < 0 ? 1.2 : 1 / 1.2,
         duration: animationDuration(_animationLevel),
@@ -2045,13 +2050,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _hLane.hasClients ? _hLane.position.viewportDimension : _laneViewport;
     final offset = _hLane.hasClients ? _hLane.offset : 0.0;
     final perFrame = _hLane.hasClients && _laneFrames > 0
-        ? (_hLane.position.viewportDimension +
-                _hLane.position.maxScrollExtent) /
+        ? max(
+                0.0,
+                _hLane.position.viewportDimension +
+                    _hLane.position.maxScrollExtent -
+                    TimelineAxis.pad * 2) /
             _laneFrames
         : _perFrameNow;
     final playhead = (_ui?.playheadFrame.value ?? 0).toDouble();
     _zoomAnchorFrame = playhead;
-    final x = playhead * perFrame - offset;
+    final x = TimelineAxis.pad + playhead * perFrame - offset;
     _zoomAnchorViewportX =
         perFrame > 0 && x >= 0 && x <= viewport ? x : viewport / 2;
   }
@@ -2091,6 +2099,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       frame: _zoomAnchorFrame,
       viewportX: _zoomAnchorViewportX,
       frames: _laneFrames,
+      pad: TimelineAxis.pad,
     ));
   }
 
@@ -2688,10 +2697,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               onSeek: (f) => ui.scrubTo(
                                   f.clamp(0, frames == 0 ? 0 : frames - 1)),
                             ),
-                            TimelineCacheBar(
+                            CacheStrip(
                               comp: comp,
                               axis: axis,
                               revision: _cacheRevision!,
+                              work: graphWork,
                             ),
                             Expanded(
                               child: Stack(
@@ -2712,8 +2722,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                         painter: WorkAreaGroundPainter(
                                           startX: graphWork?.$1,
                                           endX: graphWork?.$2,
-                                          inside: t.surface1,
+                                          // The same band the ruler hangs and
+                                          // the lanes carry (§12A.2: nothing
+                                          // about the work area changes on a
+                                          // mode switch).
+                                          inside: Color.alphaBlend(
+                                              t.animated.withValues(
+                                                  alpha: workAreaLaneFillAlpha),
+                                              t.surface1),
                                           outside: t.timelineOutOfRange,
+                                          edge: workAreaEdgeColour(t),
                                         ),
                                       ),
                                     ),
@@ -2737,8 +2755,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     selectedKeys: _graphKeySelection,
                                     onSelectionChanged: () => setState(() {}),
                                     onChanged: ui.model.refresh,
-                                    onWheelTime: (e, x) =>
-                                        _wheel(e, x, axis.perFrame),
+                                    onWheelTime: (e, x) => _wheel(e, x, axis),
                                   ),
                                 ],
                               ),
@@ -2895,7 +2912,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                   _highlighted;
                         });
                       },
-                      onWheel: (e, x) => _wheel(e, x, axis.perFrame),
+                      onWheel: (e, x) => _wheel(e, x, axis),
                       onSeek: (f) =>
                           ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
                       onSelect: (l) => _selectLayer(ui, l, among: layers),
@@ -6718,7 +6735,7 @@ class _LayerArea extends StatelessWidget {
     // where the edge bites. The cut was always quantised (`frameAt` rounds);
     // it is the line that used to follow the pointer between frames.
     double razorFrameAt(double x) => snapFrame(
-          frame: axis.perFrame <= 0 ? 0 : x / axis.perFrame,
+          frame: axis.frameAtExact(x),
           targets: snap,
           perFrame: axis.perFrame,
           magnet: magnet &&
@@ -6760,8 +6777,11 @@ class _LayerArea extends StatelessWidget {
                 ),
                 // Directly under the ruler and above the lanes, which is where the
                 // interface spec puts it (docs/07 §3.2).
-                TimelineCacheBar(
-                    comp: comp, axis: axis, revision: cacheRevision),
+                CacheStrip(
+                    comp: comp,
+                    axis: axis,
+                    revision: cacheRevision,
+                    work: workAreaPixels),
                 // The rows scroll under the pinned ruler, in step with the
                 // outline; the thumb lives in the gutter beside this area, so it
                 // stays pinned to the viewport's edge rather than riding the
@@ -6816,8 +6836,16 @@ class _LayerArea extends StatelessWidget {
                                   painter: WorkAreaGroundPainter(
                                     startX: workAreaPixels?.$1,
                                     endX: workAreaPixels?.$2,
-                                    inside: t.surface1,
+                                    // The lower reach of the one band the
+                                    // ruler starts (§12A.1) — behind the bars,
+                                    // the keys and the marquee, because it is
+                                    // the ground they stand on.
+                                    inside: Color.alphaBlend(
+                                        t.animated.withValues(
+                                            alpha: workAreaLaneFillAlpha),
+                                        t.surface1),
                                     outside: t.timelineOutOfRange,
+                                    edge: workAreaEdgeColour(t),
                                   ),
                                 ),
                               ),
@@ -7086,15 +7114,16 @@ class _LayerArea extends StatelessWidget {
           final startOffset =
               rationalSeconds(span.startOffset) + (p?.offsetShift ?? 0) / fps;
           final secondsPerPixel =
-              axis.width <= 0 ? 0.0 : axis.frames / fps / axis.width;
+              axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
           return CustomPaint(
             key: ValueKey<String>('tl-wave-$id'),
             size: Size(axis.width, _rowHeight),
             painter: WaveformPainter(
               peaks: peaks[id],
-              // Canvas x 0 is comp time 0, and the source's own clock runs
-              // from there less wherever the layer starts it.
-              originSeconds: -startOffset,
+              // Canvas x 0 is the axis's left padding, comp time 0 sits a
+              // padding's width in, and the source's own clock runs from there
+              // less wherever the layer starts it.
+              originSeconds: -startOffset - TimelineAxis.pad * secondsPerPixel,
               secondsPerPixel: secondsPerPixel,
               left: axis.xOf(inFrame),
               right: axis.xOf(outFrame),
@@ -7965,7 +7994,9 @@ class _BarState extends State<_Bar> {
                           // picks the edge up again from where it stuck.
                           _delta = clampBarDelta(
                             grab: _grab ?? BarGrab.move,
-                            delta: widget.axis.frameAt(_deltaPx),
+                            // A *travel*, not a place: the axis's end padding
+                            // must not be taken off it.
+                            delta: widget.axis.framesOfPx(_deltaPx).round(),
                             inFrame: inFrame,
                             outFrame: outFrame,
                             bounds: widget.bounds,
@@ -8082,8 +8113,8 @@ class _BarState extends State<_Bar> {
                   child: MarkerFlag(
                     label: m.marker.label,
                     fill: t.marker,
-                    ink: t.surface0,
-                    text: t.caption,
+                    pill: t.surface4,
+                    text: markerLabelStyle(t),
                   ),
                 ),
               ),

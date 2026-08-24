@@ -847,6 +847,14 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
 /// it at this size. Nothing drawn means nothing held. No amber, no red, no
 /// pulsing — an empty cache is not a fault.
 ///
+/// **The redesign's resolution-tier hues are not drawn yet** (docs/15 §6.3,
+/// §12A.1): a bar whose hue says *full, half or quarter* needs the engine to
+/// report which resolution a frame is held at, and `cached_frames` answers a
+/// different question — held or parked, at the shown resolution or coarser,
+/// relative to the scale it is asked about. Until that reaches the bridge, the
+/// four storage states above are what there is to colour by, and they are
+/// coloured by §6.3's table.
+///
 /// **It never polls, and it is not asked again just because the panel
 /// rebuilt.** The cache's lock is the one a render holds, so reading it per
 /// paint would put the interface behind the renderer. `revision` is bumped when
@@ -945,6 +953,66 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
   }
 }
 
+/// The cache bar with the work-area band running **behind** it (docs/15
+/// §12A.1): the two-pixel strip between the ruler's floor and the lanes is
+/// still part of the band's height, and leaving it out cut the band in half at
+/// exactly the place the eye follows it across.
+///
+/// [work] is the band's edges in this axis's pixels, or null when the work area
+/// covers the whole comp and there is no band to draw.
+class CacheStrip extends StatelessWidget {
+  final CompositionReference comp;
+  final TimelineAxis axis;
+  final Listenable revision;
+  final (double, double)? work;
+
+  const CacheStrip({
+    super.key,
+    required this.comp,
+    required this.axis,
+    required this.revision,
+    required this.work,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final band = work;
+    return Stack(
+      // The column's tight width goes straight through to the bar, which
+      // otherwise sizes to nothing: a `CustomPaint` given loose constraints
+      // and no child takes no space at all, and the bar would simply vanish.
+      fit: StackFit.passthrough,
+      children: [
+        // A work area covering the whole comp (K-203) is still a work area:
+        // the strip fills with the band rather than showing a gap in it, which
+        // is what the lane ground below does with the same news.
+        if (band == null)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: ColoredBox(
+                color: t.animated.withValues(alpha: workAreaLaneFillAlpha),
+              ),
+            ),
+          )
+        else
+          Positioned(
+            left: band.$1,
+            width: (band.$2 - band.$1).clamp(1.0, 1e6),
+            top: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: workAreaBand(t, fillAlpha: workAreaLaneFillAlpha),
+              ),
+            ),
+          ),
+        TimelineCacheBar(comp: comp, axis: axis, revision: revision),
+      ],
+    );
+  }
+}
+
 /// What the cache bar needs from the Timeline's frames-to-pixels mapping. Named
 /// separately so the painter can be tested without building a Timeline.
 abstract class CacheBarAxis {
@@ -958,13 +1026,39 @@ abstract class CacheBarAxis {
 class TimelineAxis implements CacheBarAxis {
   @override
   final int frames;
+
+  /// The whole width the axis is laid out in — [pad] either side plus the
+  /// [span] the frames occupy.
   final double width;
   const TimelineAxis({required this.frames, required this.width});
 
-  double get perFrame => frames <= 0 ? 0 : width / frames;
+  /// The few pixels either side of the frames (docs/15 §12A.1). Without them a
+  /// handle on the first or last frame is half outside the area that draws it,
+  /// and the half that is left cannot be grabbed: the work-area edges at the
+  /// ends of a comp, and a keyframe on frame zero, were both unreachable. Every
+  /// timeline mode shares the one number, because they share this axis — which
+  /// is what keeps the ruler, the lanes and the curves lined up.
+  ///
+  /// Six: half the widest thing hung on a single frame — the work-area
+  /// handle's ten-pixel grab, the lane's twelve-pixel keyframe slot. Symmetric,
+  /// so the middle of the axis is still the middle frame.
+  static const double pad = 6;
+
+  /// The pixels the frames themselves occupy.
+  double get span => max(0.0, width - pad * 2);
+
+  double get perFrame => frames <= 0 ? 0 : span / frames;
   @override
-  double xOf(num frame) => frame * perFrame;
-  int frameAt(double x) => perFrame <= 0 ? 0 : (x / perFrame).round();
+  double xOf(num frame) => pad + frame * perFrame;
+  int frameAt(double x) => frameAtExact(x).round();
+
+  /// Where [x] falls **between** frames — what a drag with the magnet off, or
+  /// a curve being sampled across the pane, asks for.
+  double frameAtExact(double x) => perFrame <= 0 ? 0 : (x - pad) / perFrame;
+
+  /// How many frames a *travel* of [dx] pixels is worth. Not [frameAtExact]:
+  /// a distance has no origin, so the padding must not be taken off it.
+  double framesOfPx(double dx) => perFrame <= 0 ? 0 : dx / perFrame;
 }
 
 /// The time ruler: the time labels and ticks, the work area, the markers, and
@@ -1131,7 +1225,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     axis: axis,
                     fps: widget.fps,
                     tick: t.hairlineStrong,
-                    label: t.small.copyWith(color: t.textMuted),
+                    minorTick: t.hairline,
+                    // Mono at 9, per §7.1: a clock is a number, and the
+                    // ruler's numbers set in the face every other number in
+                    // the interface does.
+                    label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
                   ),
                 ),
               ),
@@ -1139,7 +1237,9 @@ class _TimelineRulerState extends State<TimelineRuler> {
             // The work area: the span the Viewer previews and the export
             // writes. The ruler's lower half only, so the ticks and labels
             // above it stay legible and the band reads as a bar hung under the
-            // clock rather than a tint over it.
+            // clock rather than a tint over it — and this is the top of *one*
+            // band that carries on behind the cache bar and down through the
+            // lanes (docs/15 §12A.1).
             Positioned(
               left: axis.xOf(work.start),
               width:
@@ -1149,7 +1249,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
               child: IgnorePointer(
                 child: Container(
                   key: const ValueKey('tl-work-area'),
-                  color: t.accent.withValues(alpha: 0.14),
+                  decoration:
+                      workAreaBand(t, fillAlpha: workAreaRulerFillAlpha),
                 ),
               ),
             ),
@@ -1215,17 +1316,12 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       // to the document's span, which is what cancel means.
                       onHorizontalDragCancel: () =>
                           setState(() => _dragFrame = null),
-                      // The grab stays the ruler's full height — a handle you
-                      // have to aim at is not a handle — while the mark it
-                      // draws follows the band into the lower half.
-                      child: Align(
-                        alignment: Alignment.bottomCenter,
-                        child: SizedBox(
-                          width: 2,
-                          height: widget.height / 2,
-                          child: ColoredBox(color: t.accent),
-                        ),
-                      ),
+                      // Nothing of its own to draw: the band's own edges *are*
+                      // the two handles (docs/15 §12A.1), and a second mark
+                      // over them only thickened the line. The grab stays the
+                      // ten pixels this box is wide — a handle you have to aim
+                      // at is not a handle.
+                      child: const SizedBox.expand(),
                     ),
                   ),
                 ),
@@ -1277,8 +1373,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     child: MarkerFlag(
                       label: marker.label,
                       fill: t.marker,
-                      ink: t.surface0,
-                      text: t.caption,
+                      pill: t.surface4,
+                      text: markerLabelStyle(t),
                     ),
                   ),
                 ),
@@ -1294,36 +1390,44 @@ class _TimelineRulerState extends State<TimelineRuler> {
 /// handle is catchable without the mark being heavy.
 const double _workHandleWidth = 10;
 
-/// A comp marker on the time ruler: a small flag with its **point at the top**,
-/// centred on the moment it marks, and what it says in a box hung off its right
-/// (docs/07 §4.1, K-254).
+/// A comp marker on the time ruler: an **upward triangle sitting on the cache
+/// bar**, half inside the backdrop pill that carries what it says
+/// (docs/15 §12A.1, docs/07 §4.1, K-254).
 ///
 /// The point is the whole of the design. It is what carries the meaning — this
-/// frame, not the one next door — so it sits on the playhead and the body of
-/// the flag hangs below it, out of the way of the ticks. The label rides in a
-/// box of the same colour rather than as loose text over the ruler, where it
-/// crossed the ticks and the work-area band and read as neither.
+/// frame, not the one next door — so it points *up*, at the clock in the
+/// ruler's upper half, and stands on the cache bar at the ruler's floor where
+/// nothing else is drawn. The pill starts at the point and runs right, so the
+/// triangle's left half stands clear of it and its right half is inside: a long
+/// comment then reads as belonging to *this* moment rather than as a bar
+/// starting somewhere to its right.
 class MarkerFlag extends StatelessWidget {
   final String label;
+
+  /// The triangle — the part that says *which frame*.
   final Color fill;
 
-  /// What is drawn *on* the flag and in its label box — the darkest surface, so
-  /// the writing reads as cut out of the marker rather than printed over it.
-  /// The same trick the playhead's notch uses.
-  final Color ink;
+  /// The pill behind the label. A surface, not the marker's own colour: the
+  /// writing is read, the triangle is aimed at, and giving them one value made
+  /// the label the louder of the two.
+  final Color pill;
   final TextStyle text;
 
-  static const double width = 11;
-  static const double height = 12;
+  /// The triangle's footprint. The whole flag is placed at
+  /// `xOf(frame) - width / 2`, so the point lands on the frame.
+  static const double width = 8;
 
-  /// How far down the point reaches before the flag squares off.
-  static const double _pointDepth = 0.42;
+  /// How tall the triangle stands off the ruler's floor.
+  static const double pointHeight = 6;
+
+  /// The pill's height — and the flag's, the triangle standing inside it.
+  static const double height = 12;
 
   const MarkerFlag({
     super.key,
     required this.label,
     required this.fill,
-    required this.ink,
+    required this.pill,
     required this.text,
   });
 
@@ -1332,7 +1436,7 @@ class MarkerFlag extends StatelessWidget {
     final flag = SizedBox(
       width: width,
       height: height,
-      child: CustomPaint(painter: _MarkerFlagPainter(fill: fill, edge: ink)),
+      child: CustomPaint(painter: _MarkerFlagPainter(fill: fill)),
     );
     if (label.isEmpty) return flag;
     return LumitTooltip(
@@ -1340,29 +1444,31 @@ class MarkerFlag extends StatelessWidget {
       child: Stack(
         alignment: Alignment.bottomLeft,
         children: [
-          // The label flies from the point, not from the flag's right edge —
-          // the pole is the marker's centre line and the cloth hangs off it,
-          // which is what makes a long comment read as belonging to *this*
-          // moment rather than as a bar starting somewhere to its right.
           Padding(
             padding: const EdgeInsets.only(left: width / 2),
             child: Container(
               height: height,
-              padding: const EdgeInsets.only(left: width / 2 + 2, right: 3),
+              // Clear of the triangle's right half, which lies over the pill.
+              padding: const EdgeInsets.only(left: width / 2 + 3, right: 4),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: fill,
-                border: Border.all(color: ink, width: 1),
+                color: pill,
+                // Square where the triangle meets it, rounded away from it.
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(2),
+                  bottomRight: Radius.circular(2),
+                  topLeft: Radius.circular(2),
+                ),
               ),
               child: Text(
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: text.copyWith(color: ink, height: 1),
+                style: text,
               ),
             ),
           ),
-          // Over the cloth, so the point stays the shape you aim at.
+          // Over the pill, so the point stays the shape you aim at.
           flag,
         ],
       ),
@@ -1373,41 +1479,25 @@ class MarkerFlag extends StatelessWidget {
 class _MarkerFlagPainter extends CustomPainter {
   final Color fill;
 
-  /// The hairline round the shape. Without it a pale flag sitting on the pale
-  /// work-area band lost its silhouette, and the point — the part that says
-  /// which frame — was the first thing to go.
-  final Color edge;
-  const _MarkerFlagPainter({required this.fill, required this.edge});
+  const _MarkerFlagPainter({required this.fill});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // A point at the top opening out to shoulders, then square to the bottom:
-    // the shape hangs *from* the frame it marks.
-    final shoulder = size.height * MarkerFlag._pointDepth;
-    // Inset by half the stroke, so the outline lands inside the box rather
-    // than straddling its edge and going soft on a fractional pixel ratio.
-    const half = 0.5;
-    final path = Path()
-      ..moveTo(size.width / 2, half)
-      ..lineTo(size.width - half, shoulder)
-      ..lineTo(size.width - half, size.height - half)
-      ..lineTo(half, size.height - half)
-      ..lineTo(half, shoulder)
-      ..close();
-    canvas
-      ..drawPath(path, Paint()..color = fill)
-      ..drawPath(
-        path,
-        Paint()
-          ..color = edge
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1,
-      );
+    // Base on the floor, point up: the shape *stands on* the cache bar and
+    // aims at the time it marks.
+    final base = size.height;
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, base)
+        ..lineTo(size.width, base)
+        ..lineTo(size.width / 2, base - MarkerFlag.pointHeight)
+        ..close(),
+      Paint()..color = fill,
+    );
   }
 
   @override
-  bool shouldRepaint(_MarkerFlagPainter old) =>
-      old.fill != fill || old.edge != edge;
+  bool shouldRepaint(_MarkerFlagPainter old) => old.fill != fill;
 }
 
 /// Ask for what a marker says. Returns the new label, or null when the user
@@ -1663,6 +1753,74 @@ double rulerLabelStepSeconds({required double pixelsPerSecond}) {
   return nice.last;
 }
 
+/// The minor-tick step for a ruler, in seconds: the finest division that still
+/// gives each tick a few pixels, and **never finer than one frame** — so
+/// zooming in subdivides the ruler step by step until one tick is one frame,
+/// and no further (docs/15 §12A.1). Exposed for its test.
+///
+/// The ladder is anchored on the frame rather than on the label step, which is
+/// what makes the finest rung land exactly on frames: a step of "the label step
+/// over ten" would sit between them at most rates. Returns [labelStep] itself
+/// when there is no room for anything finer — meaning no minor ticks, because
+/// they would only double the ones already labelled.
+double rulerMinorStepSeconds({
+  required double pixelsPerSecond,
+  required double labelStep,
+  required double fps,
+}) {
+  const minPixels = 6.0;
+  final frame = fps > 0 ? 1 / fps : 0.0;
+  final ladder = <double>[
+    if (frame > 0) ...[frame, frame * 2, frame * 5, frame * 10],
+    0.5,
+    1,
+    2,
+    5,
+    10,
+    15,
+    30,
+    60,
+    120,
+    300,
+    600,
+  ]..sort();
+  for (final step in ladder) {
+    if (step >= labelStep) break;
+    if (step * pixelsPerSecond >= minPixels) return step;
+  }
+  return labelStep;
+}
+
+/// The work-area band (docs/15 §12A.1, K-441): **one** band in `animated`
+/// running from the ruler's lower half, behind the cache bar, down through the
+/// lanes — the span the Viewer previews and the export writes.
+///
+/// [fillAlpha] varies with what the piece is lying on — heavier over the
+/// ruler's own surface than over the lane ground — and the edges never do,
+/// because it is the two edges lining up that make three drawn pieces read as
+/// one band. They are also the two handles: what you grab is the line you see.
+BoxDecoration workAreaBand(LumitTheme t, {required double fillAlpha}) =>
+    BoxDecoration(
+      color: t.animated.withValues(alpha: fillAlpha),
+      border: Border.symmetric(
+        vertical: BorderSide(color: workAreaEdgeColour(t)),
+      ),
+    );
+
+/// The band's two edges, at half strength (§12A.1).
+Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
+
+/// What a marker's label is set in: mono at 9, per §12A.1 — a marker's label
+/// is a cue read at a glance beside a clock, and it sets in the same face the
+/// clock does.
+TextStyle markerLabelStyle(LumitTheme t) =>
+    t.mono.copyWith(fontSize: 9, color: t.textPrimary, height: 1);
+
+/// The band's fill over the ruler's surface, and over the lane ground. Two
+/// values because the two grounds are not the same value; one band either way.
+const double workAreaRulerFillAlpha = 0.10;
+const double workAreaLaneFillAlpha = 0.06;
+
 /// A ruler label: seconds under a minute as `05s`, above as `01:00s` — the
 /// familiar editor idiom.
 String rulerLabelOf(double seconds) {
@@ -1678,50 +1836,69 @@ String rulerLabelOf(double seconds) {
   return '$m:${s.toString().padLeft(2, '0')}s';
 }
 
-/// The ruler's ticks and time labels: a labelled tick per nice step, minor
-/// ticks per second when there is room.
+/// The ruler's ticks and time labels — the **upper half** of the double-height
+/// ruler (docs/15 §12A.1). Labelled ticks at a nice step, minor ticks
+/// subdividing between them as the zoom allows, and the seam the markers and
+/// the work area hang below.
 class _RulerTicksPainter extends CustomPainter {
   final TimelineAxis axis;
   final double fps;
   final Color tick;
+
+  /// The minor ticks, and the seam across the ruler's waist: quieter than the
+  /// labelled ticks, so a subdivided ruler still reads as a row of labels
+  /// rather than as a comb.
+  final Color minorTick;
   final TextStyle label;
 
   const _RulerTicksPainter({
     required this.axis,
     required this.fps,
     required this.tick,
+    required this.minorTick,
     required this.label,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    // The waist: everything the clock owns sits above it, the markers and the
+    // work-area band below.
+    final mid = size.height / 2;
+    final quiet = Paint()
+      ..color = minorTick
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0, mid), Offset(size.width, mid), quiet);
+
     if (axis.frames <= 0 || fps <= 0 || size.width <= 0) return;
     final seconds = axis.frames / fps;
-    final pxPerSec = size.width / seconds;
+    final pxPerSec = axis.perFrame * fps;
+    if (pxPerSec <= 0) return;
     final step = rulerLabelStepSeconds(pixelsPerSecond: pxPerSec);
     final paint = Paint()
       ..color = tick
       ..strokeWidth = 1;
 
-    // Minor ticks each second, only when they have a few pixels each.
-    if (pxPerSec >= 6) {
-      for (var s = 0.0; s <= seconds; s += 1) {
-        final x = s * pxPerSec;
-        canvas.drawLine(
-            Offset(x, size.height - 4), Offset(x, size.height), paint);
+    // Minor ticks between the labels, subdividing further the more room the
+    // zoom gives them — down to one tick per frame (§12A.1).
+    final minor = rulerMinorStepSeconds(
+        pixelsPerSecond: pxPerSec, labelStep: step, fps: fps);
+    if (minor < step) {
+      for (var s = 0.0; s <= seconds; s += minor) {
+        final x = axis.xOf(s * fps);
+        canvas.drawLine(Offset(x, mid - 4), Offset(x, mid), quiet);
       }
     }
 
     for (var s = 0.0; s <= seconds; s += step) {
-      final x = s * pxPerSec;
-      canvas.drawLine(
-          Offset(x, size.height - 9), Offset(x, size.height), paint);
+      final x = axis.xOf(s * fps);
+      canvas.drawLine(Offset(x, mid - 8), Offset(x, mid), paint);
       final text = TextPainter(
         text: TextSpan(text: rulerLabelOf(s), style: label),
         textDirection: TextDirection.ltr,
       )..layout();
-      // Labels sit just right of their tick; the last one may clip out at the
-      // comp's end rather than jumping inside, which would misplace it.
+      // Labels sit just right of their tick, at the top of the upper half; the
+      // last one may clip out at the comp's end rather than jumping inside,
+      // which would misplace it.
       text.paint(canvas, Offset(x + 3, 2));
     }
   }
@@ -1730,6 +1907,7 @@ class _RulerTicksPainter extends CustomPainter {
   bool shouldRepaint(_RulerTicksPainter old) =>
       old.fps != fps ||
       old.tick != tick ||
+      old.minorTick != minorTick ||
       old.axis.frames != axis.frames ||
       old.axis.width != axis.width;
 }
@@ -1829,12 +2007,31 @@ class WorkAreaGroundPainter extends CustomPainter {
   final Color inside;
   final Color outside;
 
+  /// The band's two edges (docs/15 §12A.1), or null for a wash with no edges —
+  /// which is what the overlay drawn *over* the bars wants, since the band
+  /// beneath them has already drawn them.
+  final Color? edge;
+
   const WorkAreaGroundPainter({
     required this.startX,
     required this.endX,
     required this.inside,
     required this.outside,
+    this.edge,
   });
+
+  /// The two edges, drawn last so nothing washes over them.
+  void _paintEdges(Canvas canvas, Size size) {
+    final colour = edge;
+    if (colour == null || startX == null || endX == null) return;
+    final paint = Paint()
+      ..color = colour
+      ..strokeWidth = 1;
+    for (final x in [startX!, endX!]) {
+      if (x < 0 || x > size.width) continue;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1854,6 +2051,7 @@ class WorkAreaGroundPainter extends CustomPainter {
       final to = endX!.clamp(from, size.width);
       canvas.drawRect(Rect.fromLTRB(0, 0, from, size.height), paint);
       canvas.drawRect(Rect.fromLTRB(to, 0, size.width, size.height), paint);
+      _paintEdges(canvas, size);
       return;
     }
     // The wash goes down first and the work area is painted back over it, so
@@ -1868,6 +2066,7 @@ class WorkAreaGroundPainter extends CustomPainter {
         Paint()..color = inside,
       );
     }
+    _paintEdges(canvas, size);
   }
 
   @override
@@ -1875,7 +2074,8 @@ class WorkAreaGroundPainter extends CustomPainter {
       old.startX != startX ||
       old.endX != endX ||
       old.inside != inside ||
-      old.outside != outside;
+      old.outside != outside ||
+      old.edge != edge;
 
   /// Never absorbs a pointer — it is the ground, not a control.
   @override

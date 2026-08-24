@@ -116,9 +116,12 @@ void main() {
       await mount(tester, p);
 
       final first = find.byKey(ValueKey<String>('tl-tab-${p.comp.internalid}'));
-      expect(tester.getCenter(first).dx,
-          lessThan(tester.getCenter(
-              find.byKey(ValueKey<String>('tl-tab-${second.internalid}'))).dx));
+      expect(
+          tester.getCenter(first).dx,
+          lessThan(tester
+              .getCenter(
+                  find.byKey(ValueKey<String>('tl-tab-${second.internalid}')))
+              .dx));
 
       // Onto the tab to its left, which is where it lands.
       await tester.drag(
@@ -128,12 +131,12 @@ void main() {
                   find.byKey(ValueKey<String>('tl-tab-${second.internalid}'))));
       await tester.pumpAndSettle();
 
-      expect(p.uiState.openComps,
-          [second.internalid, p.comp.internalid]);
+      expect(p.uiState.openComps, [second.internalid, p.comp.internalid]);
       expect(p.uiState.selectedComp?.internalid, second.internalid,
           reason: 'reordering the strip fronts nothing new');
       expect(
-          tester.getCenter(
+          tester
+              .getCenter(
                   find.byKey(ValueKey<String>('tl-tab-${second.internalid}')))
               .dx,
           lessThan(tester.getCenter(first).dx),
@@ -151,7 +154,8 @@ void main() {
           find.byKey(ValueKey<String>('tl-tab-${p.comp.internalid}')),
           buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('tl-tab-menu-settings')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('tl-tab-menu-settings')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('tl-tab-menu-settings')));
       await tester.pumpAndSettle();
@@ -190,7 +194,8 @@ void main() {
       expect(p.uiState.selectedComp?.internalid, p.comp.internalid,
           reason: 'the comp the user came from fronts again');
       expect(find.byKey(ValueKey<String>('tl-tab-${inner.internalid}')),
-          findsNothing, reason: 'and the tab it had goes with it');
+          findsNothing,
+          reason: 'and the tab it had goes with it');
       expect(tester.takeException(), isNull);
     });
 
@@ -471,7 +476,8 @@ void main() {
       await mount(tester, p);
 
       await tester.tap(
-          find.byKey(ValueKey<String>('tl-marker-${p.comp.getMarkers().single.id}')),
+          find.byKey(
+              ValueKey<String>('tl-marker-${p.comp.getMarkers().single.id}')),
           buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('marker-menu-delete')));
@@ -501,10 +507,8 @@ void main() {
       addMarkerFrb(comp, frame: 60, label: 'Drop');
       final drop = markersOf(comp).firstWhere((m) => m.label == 'Drop');
 
-      writeMarkers(
-          comp,
-          markersWithFrb(comp,
-              frame: 10, label: drop.label, id: drop.id));
+      writeMarkers(comp,
+          markersWithFrb(comp, frame: 10, label: drop.label, id: drop.id));
 
       final left = comp.getMarkers();
       expect(left, hasLength(1), reason: 'the two did not stack');
@@ -523,11 +527,37 @@ void main() {
       p.uiState.playheadFrame.value = 40;
       await mount(tester, p);
 
-      final flag = tester.getTopLeft(find.byKey(
-          ValueKey<String>('tl-marker-${markersOf(p.comp).single.id}')));
+      final flag = tester.getTopLeft(find
+          .byKey(ValueKey<String>('tl-marker-${markersOf(p.comp).single.id}')));
       final playhead = tester.getCenter(find.byType(PlayheadMarker).first);
       expect(flag.dx + MarkerFlag.width / 2, closeTo(playhead.dx, 1.5),
           reason: 'the point and the playhead are on the same frame');
+    });
+
+    /// And the shape is the redesign's (docs/15 §12A.1): an upward triangle
+    /// standing on the cache bar, half of it outside the backdrop pill that
+    /// carries the label — the pill starting at the point, so what is written
+    /// reads as hanging off *this* moment.
+    testWidgets('the marker pill starts at the point of the triangle',
+        (tester) async {
+      final p = withComp();
+      p.comp.addAdjustmentLayer();
+      addMarkerFrb(p.comp, frame: 40, label: 'Chorus');
+      await mount(tester, p);
+
+      final flagFinder = find
+          .byKey(ValueKey<String>('tl-marker-${markersOf(p.comp).single.id}'));
+      final flag = tester.getRect(flagFinder);
+      final pill = tester.getRect(
+          find.descendant(of: flagFinder, matching: find.byType(Container)));
+
+      expect(pill.left, closeTo(flag.left + MarkerFlag.width / 2, 0.5),
+          reason: 'the pill begins where the point is');
+      expect(pill.right, greaterThan(flag.left + MarkerFlag.width),
+          reason: 'and runs away to the right, clear of the triangle');
+      expect(pill.height, MarkerFlag.height);
+      expect(pill.bottom, closeTo(flag.bottom, 0.5),
+          reason: 'both stand on the same floor');
     });
 
     /// A numbered marker names one place, so setting it again moves it rather
@@ -648,14 +678,15 @@ void main() {
       expect(find.byKey(ValueKey<String>('seq-clip-${clip.id}')), findsNothing,
           reason: 'shut until it is opened');
 
-      final name = find.byKey(
-          ValueKey<String>('tl-name-${layer.internallayerId}'));
+      final name =
+          find.byKey(ValueKey<String>('tl-name-${layer.internallayerId}'));
       await tester.tap(name);
       await tester.pump(kDoubleTapMinTime);
       await tester.tap(name);
       await tester.pumpAndSettle();
 
-      expect(find.byKey(ValueKey<String>('seq-clip-${clip.id}')), findsOneWidget,
+      expect(
+          find.byKey(ValueKey<String>('seq-clip-${clip.id}')), findsOneWidget,
           reason: 'the clip is on screen');
       expect(find.byKey(const ValueKey('seq-envelope')), findsOneWidget,
           reason: 'and so is the speed envelope beneath it');
@@ -809,8 +840,8 @@ void main() {
       final layer = await sequencedLayer(p);
       await mount(tester, p);
       await tester.pump();
-      final name = find.byKey(
-          ValueKey<String>('tl-name-${layer.internallayerId}'));
+      final name =
+          find.byKey(ValueKey<String>('tl-name-${layer.internallayerId}'));
       await tester.tap(name);
       await tester.pump(kDoubleTapMinTime);
       await tester.tap(name);
@@ -855,8 +886,8 @@ void main() {
       await tester.pump();
 
       // Unarmed, a click on the bar does not cut.
-      final bar = find.byKey(
-          ValueKey<String>('tl-bar-body-${sequenced.internallayerId}'));
+      final bar = find
+          .byKey(ValueKey<String>('tl-bar-body-${sequenced.internallayerId}'));
       expect(bar, findsOneWidget);
       final box = tester.getRect(bar);
       // Near the start of the bar: a Sequence layer's own span is the comp's,

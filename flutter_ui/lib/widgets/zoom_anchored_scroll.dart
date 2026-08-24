@@ -34,6 +34,7 @@ class ZoomAnchor {
     required this.frame,
     required this.viewportX,
     required this.frames,
+    this.pad = 0,
   });
 
   /// The frame to keep under [viewportX].
@@ -46,15 +47,22 @@ class ZoomAnchor {
   /// How many frames the content spans end to end.
   final int frames;
 
+  /// The pixels of padding at each end of the content that the frames do
+  /// *not* occupy (`TimelineAxis.pad`). Passed in rather than assumed, so this
+  /// arithmetic stays a pure function of what it is told; without it every
+  /// anchor drifts by up to a padding's width, worst at the two ends.
+  final double pad;
+
   @override
   bool operator ==(Object other) =>
       other is ZoomAnchor &&
       other.frame == frame &&
       other.viewportX == viewportX &&
-      other.frames == frames;
+      other.frames == frames &&
+      other.pad == pad;
 
   @override
-  int get hashCode => Object.hash(frame, viewportX, frames);
+  int get hashCode => Object.hash(frame, viewportX, frames, pad);
 }
 
 /// A [ScrollController] that can be asked to hold a frame still through the
@@ -107,8 +115,9 @@ double zoomAnchorOffset(
 }) {
   if (anchor.frames <= 0) return minScrollExtent;
   final content = viewportDimension + maxScrollExtent;
-  final perFrame = content / anchor.frames;
-  return (anchor.frame * perFrame - anchor.viewportX)
+  final span = content - anchor.pad * 2;
+  final perFrame = (span < 0 ? 0 : span) / anchor.frames;
+  return (anchor.pad + anchor.frame * perFrame - anchor.viewportX)
       .clamp(minScrollExtent, maxScrollExtent)
       .toDouble();
 }
@@ -125,7 +134,8 @@ class _ZoomAnchoredScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
-    final settled = super.applyContentDimensions(minScrollExtent, maxScrollExtent);
+    final settled =
+        super.applyContentDimensions(minScrollExtent, maxScrollExtent);
     final anchor = owner.anchor;
     if (anchor == null || anchor.frames <= 0 || !hasViewportDimension) {
       return settled;
