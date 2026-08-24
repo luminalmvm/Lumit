@@ -207,6 +207,27 @@ reads `keyRoving` correctly and there is nothing to import), and a 3D layer's
 has nowhere to put — the one place in the mapping that loses something without
 a report row.
 
+**What the fixture cannot be given without After Effects** (2026-08-24). `fixture.aep`
+is *authored by After Effects*: `make-fixture.jsx` builds the project through the
+scripting DOM inside a running AE and saves it, and the golden capture beside it is
+AE's own account of that same file from the same sitting. So the fixture cannot be
+extended by hand — bytes written into an `.aep` would be this parser's guess about the
+format compared against this parser, which is the one thing the differential test
+exists not to be. Three rows are owed from the next sitting, and each has a synthetic
+stand-in until then:
+
+| Owed of the fixture | Why it matters | Standing in, and its limit |
+| --- | --- | --- |
+| **A layer dragged along the timeline** (non-zero `start_time`) | Every layer in the project starts at zero, so `ldta`'s start offset is measured against AE at that one value — and the start is what puts in and out points, keyframe times and a stretch's reach back on the comp's clock. Read wrong, an assembling comp opens with every clip at the origin. | `a_layers_in_and_out_are_counted_from_its_own_start` in `aep::tests`, on a synthetic `ldta` |
+| **A layer both stretched and moved** | The one 50 % layer sits at zero, so stretch-about-the-start and stretch-about-the-origin are indistinguishable in the fixture. | `a_stretched_layer_is_stretched_from_its_start`, likewise synthetic |
+| **One real footage item with a name and a path** | The project is solids and comps; the whole footage interpretation group (§7.1) stays unread for want of anything to check it against, and `path`/`name` are read but unmeasured against AE. | `a_footage_item_is_named_and_pathed_from_its_file` and the two sequence tests beside it |
+
+The limit is the same in all three: a synthetic chunk proves the parser reads the field
+it was handed, not that the field is where After Effects puts it. Only a project AE
+wrote can prove the second, which is why these stay owed rather than closed.
+`tests/aep_differential.rs` asserts the fixture still has neither a dragged layer nor a
+footage item, so both exemptions fail loudly the day a sitting supplies one.
+
 ## 6. Phases
 
 1. **The walker and the reader** — `tools/ae-bridge/` + `lumit-import`'s capture

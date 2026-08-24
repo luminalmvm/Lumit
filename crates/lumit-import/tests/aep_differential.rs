@@ -83,7 +83,17 @@
 //! 9. **The `CUSTOM_VALUE` blobs** — the DOM could not read them at all, so
 //!    there is no value to compare against. This route recovers the raw bytes,
 //!    which is the one place it beats the Bridge outright (K-412's stretch).
-//! 10. **Two derived keyframe numbers** — a mask path's linear speed (the DOM
+//! 10. **A layer's start on the comp's timeline** — every layer in the golden
+//!     project starts at zero, so `ldta`'s start offset is compared against
+//!     After Effects at that one value and the layer-local arithmetic the whole
+//!     timing rests on (in and out points, keyframe times, a stretch's reach)
+//!     is proved only by the synthetic chunks in `aep::tests`. Those prove the
+//!     parser reads the field it was handed; they cannot prove the field is
+//!     where After Effects puts it. Owed: a fixture layer dragged along the
+//!     timeline, and a second one both dragged and stretched
+//!     (docs/impl/ae-import.md §5, docs/TODO.md). The test asserts the fixture
+//!     still has none, so the exemption cannot rot.
+//! 11. **Two derived keyframe numbers** — a mask path's linear speed (the DOM
 //!     reports exactly 1.0 per segment and one sample cannot say whether that
 //!     is a constant), and every linear speed to a relative 1e-3 rather than
 //!     bit for bit, because After Effects does not store a linear key's ease at
@@ -374,6 +384,19 @@ fn every_layer_matches_after_effects_except_its_properties() {
     assert_eq!(
         compared, 24,
         "the golden project's two comps hold 24 layers"
+    );
+
+    // Exemption 10, asserted rather than assumed: nobody dragged a layer along
+    // the timeline in the sitting that built the fixture, so every start is
+    // zero and the `ldta` start offset is measured against After Effects at one
+    // value only. `aep::tests` covers the arithmetic on synthetic chunks —
+    // which proves the parser reads the field it was handed, not that the field
+    // is where After Effects puts it.
+    assert!(
+        want.iter()
+            .flat_map(|comp| &comp.layers)
+            .all(|layer| layer.start_time == Some(0.0)),
+        "this exemption stops being honest the moment the fixture gains a          dragged layer — delete it and let the comparison above do the work"
     );
 }
 

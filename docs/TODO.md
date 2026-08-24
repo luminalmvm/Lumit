@@ -926,6 +926,18 @@ field; §7.1 and §7.2 are the proved layout maps.
    self-naming JSON in `LIST Als2` ▸ `alas` rather than out of an offset, and the item
    takes the file's base name where nobody renamed it - without which a project of file
    footage imported as a list of blank rows pointing nowhere. `aep::tests` covers both.
+ - **A dragged layer is owed too, and cannot be forged.** Every layer in `fixture.aep`
+   starts at zero, so `ldta`'s start offset - what puts in and out points, keyframe times
+   and a stretch's reach back on the comp's clock - is measured against AE at one value
+   only, and the 50 % layer sitting at zero cannot tell stretch-about-the-start from
+   stretch-about-the-origin. The fixture is authored *by* After Effects
+   (`make-fixture.jsx` inside a running AE), so hand-written bytes would be this parser's
+   guess compared against this parser: owed is a sitting with a layer dragged along the
+   timeline and a second both dragged and stretched. Standing in meanwhile:
+   `a_layers_in_and_out_are_counted_from_its_own_start` and
+   `a_stretched_layer_is_stretched_from_its_start` in `aep::tests`, which prove the parser
+   reads the field it was handed and not that the field is where AE puts it. The
+   differential test asserts every start is still zero, so the exemption cannot rot.
  - **A reflected layer's ends are one frame loose.** At −100% stretch AE reports its
    two ends 1/3000 s further out than the file's arithmetic gives, as if it reflects
    inclusive indices on an internal grid; with one sample the grid cannot be proved,
