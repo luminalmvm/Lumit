@@ -62,6 +62,46 @@ void main() {
       expect(cacheBarRuns([0, 0, 0]), isEmpty);
       expect(cacheBarRuns([]), isEmpty);
     });
+
+    /// K-441: a run breaks on the WHOLE byte, so a stretch held at half and a
+    /// stretch held at quarter are two runs even though both are "held" — they
+    /// are drawn at different strengths, and merging them would say the whole
+    /// stretch was the finer of the two.
+    test('a change of resolution tier breaks the run too', () {
+      const heldFull = 0x12;
+      const heldHalf = 0x22;
+      expect(cacheBarRuns([heldFull, heldFull, heldHalf]),
+          [(0, 2, heldFull), (2, 3, heldHalf)]);
+    });
+  });
+
+  group('Cache bar strip bytes', () {
+    /// The two nibbles, split the same way the painter splits them and the
+    /// same way `framecache::bar::storage_of` splits them in Rust.
+    test('a strip byte carries the storage state and the resolution tier', () {
+      expect(cacheStorageOf(0x12), 2, reason: 'held at the shown resolution');
+      expect(cacheDivisorOf(0x12), 1, reason: 'and made at full size');
+      expect(cacheStorageOf(0x43), 3, reason: 'parked on disk, coarser');
+      expect(cacheDivisorOf(0x43), 4, reason: 'a quarter of the shown size');
+      expect(cacheStorageOf(0), 0, reason: 'nothing held has no state');
+      expect(cacheDivisorOf(0), 0, reason: 'and no size');
+    });
+
+    /// §6.3, and the one thing the design table did not name: the realtime
+    /// controller renders a **third** as well as a half and a quarter, so
+    /// there are four tiers and three steps. A third takes the coarsest step,
+    /// which under-promises rather than telling anyone it is finer than it is;
+    /// a divisor a later engine invents lands there too.
+    test('the coarsest step means a third or a quarter, and anything stranger',
+        () {
+      expect(cacheTierOpacity(1), 1.0);
+      expect(cacheTierOpacity(2), 0.7);
+      expect(cacheTierOpacity(3), cacheTierOpacity(4),
+          reason: 'a third is drawn as coarsely as a quarter, never finer');
+      expect(cacheTierOpacity(4), 0.4);
+      expect(cacheTierOpacity(9), 0.4,
+          reason: 'a divisor this build does not know is coarser, not finer');
+    });
   });
 
   group('Cache bar against the engine', () {
@@ -110,12 +150,14 @@ void main() {
           minRounds: 20,
           maxRounds: 200,
           until: () =>
-              comp.cachedFrames(
-                  frames: BigInt.from(8), scale: p.uiState.viewerScale)[0] !=
+              cacheStorageOf(comp.cachedFrames(
+                  frames: BigInt.from(8), scale: p.uiState.viewerScale)[0]) !=
               0,
         );
-        tiers = comp.cachedFrames(
-            frames: BigInt.from(8), scale: p.uiState.viewerScale);
+        tiers = comp
+            .cachedFrames(frames: BigInt.from(8), scale: p.uiState.viewerScale)
+            .map(cacheStorageOf)
+            .toList();
         if (tiers[0] != 0) break;
       }
       expect(tiers[0], 2, reason: 'the frame under the playhead is held');
@@ -164,13 +206,13 @@ void main() {
         minRounds: 20,
         maxRounds: 400,
         until: () =>
-            comp.cachedFrames(
-                frames: BigInt.from(4), scale: p.uiState.viewerScale)[0] !=
+            cacheStorageOf(comp.cachedFrames(
+                frames: BigInt.from(4), scale: p.uiState.viewerScale)[0]) !=
             0,
       );
       expect(
-        comp.cachedFrames(
-            frames: BigInt.from(4), scale: p.uiState.viewerScale)[0],
+        cacheStorageOf(comp.cachedFrames(
+            frames: BigInt.from(4), scale: p.uiState.viewerScale)[0]),
         2,
       );
 
@@ -180,8 +222,8 @@ void main() {
       // frame is still held.
       await settleFrb(tester, minRounds: 20, maxRounds: 200);
       expect(
-        comp.cachedFrames(
-            frames: BigInt.from(4), scale: p.uiState.viewerScale)[0],
+        cacheStorageOf(comp.cachedFrames(
+            frames: BigInt.from(4), scale: p.uiState.viewerScale)[0]),
         2,
         reason: 'a rename cannot change a pixel, so the frame is still held',
       );
@@ -262,8 +304,8 @@ void main() {
         minRounds: 15,
         maxRounds: 400,
         until: () =>
-            comp.cachedFrames(
-                frames: BigInt.one, scale: p.uiState.viewerScale)[0] !=
+            cacheStorageOf(comp.cachedFrames(
+                frames: BigInt.one, scale: p.uiState.viewerScale)[0]) !=
             0,
       );
 
@@ -336,7 +378,10 @@ void main() {
       await tester.runAsync(() async {
         for (var i = 0; i < 150; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
-          final tiers = second.cachedFrames(frames: BigInt.from(8), scale: 1.0);
+          final tiers = second
+              .cachedFrames(frames: BigInt.from(8), scale: 1.0)
+              .map(cacheStorageOf)
+              .toList();
           if (tiers[0] == 2) return;
         }
         fail('fronting the composition never asked for a frame of it');
@@ -371,8 +416,10 @@ void main() {
         size: const Size(700, 500),
       ));
       await tester.pump();
-      List<int> tiers() => comp.cachedFrames(
-          frames: BigInt.from(4), scale: p.uiState.viewerScale);
+      List<int> tiers() => comp
+          .cachedFrames(frames: BigInt.from(4), scale: p.uiState.viewerScale)
+          .map(cacheStorageOf)
+          .toList();
       await settleFrb(
         tester,
         minRounds: 20,
@@ -467,8 +514,13 @@ void main() {
       ));
       await tester.pump();
 
-      List<int> tiers() =>
-          comp.cachedFrames(frames: BigInt.from(40), scale: 1.0);
+      // The storage half of each strip byte: these tests ask whether a frame
+      // is held, which is the low nibble's question (K-441 put the resolution
+      // tier in the high one).
+      List<int> tiers() => comp
+          .cachedFrames(frames: BigInt.from(40), scale: 1.0)
+          .map(cacheStorageOf)
+          .toList();
 
       // Let the fill work around frame 0 until the frames near it are banked
       // and the ones behind have been pushed down into memory.
@@ -522,8 +574,10 @@ void main() {
 
       // Fill it around frame 0 first — the cache has to be genuinely full for
       // this to be a test of anything.
-      List<int> tiers() =>
-          comp.cachedFrames(frames: BigInt.from(1000), scale: 1.0);
+      List<int> tiers() => comp
+          .cachedFrames(frames: BigInt.from(1000), scale: 1.0)
+          .map(cacheStorageOf)
+          .toList();
       await tester.runAsync(() async {
         for (var i = 0; i < 60; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -614,7 +668,10 @@ void main() {
       await tester.runAsync(() async {
         for (var i = 0; i < 150; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 100));
-          final tiers = comp.cachedFrames(frames: BigInt.from(12), scale: 1.0);
+          final tiers = comp
+              .cachedFrames(frames: BigInt.from(12), scale: 1.0)
+              .map(cacheStorageOf)
+              .toList();
           // Ahead of the playhead fills first (two forward for one back),
           // but all three neighbours arriving is the honest "it works".
           if (tiers[6] == 2 && tiers[7] == 2 && tiers[4] == 2) return;

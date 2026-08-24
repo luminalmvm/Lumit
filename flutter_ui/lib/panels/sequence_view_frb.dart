@@ -312,6 +312,12 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                     child: ColoredBox(color: t.surface1),
                   ),
                 ),
+                // Each clip's untrimmed reach, behind the clips (K-441,
+                // §12A.1): what shows past a clip's ends is exactly the
+                // material trimmed away, the same outline a trimmed *layer*
+                // draws around its bar.
+                for (final c in _clips)
+                  if (_clipGhost(t, c) case final ghost?) ghost,
                 for (final c in _clips) _clip(t, c),
                 // Where the clips end and the graph begins. Drawn *inside*
                 // the clip region rather than as a row of its own: a
@@ -353,6 +359,72 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
           onHeight: (h) => widget.onGraphHeight?.call(h),
         ),
       ],
+    );
+  }
+
+  /// Where this clip's **whole source** would sit if none of it had been
+  /// trimmed away (K-441, docs/15 §12A.1) — the clip-level twin of the outline
+  /// a trimmed layer bar draws.
+  ///
+  /// `null` when there is nothing to draw, and the engine decides most of
+  /// those: a **retimed** clip has no reach at all, because its map decides
+  /// which source moment each of its frames shows; a source whose length could
+  /// not be read has none either, rather than one pinned to a guess. The last
+  /// case is this side's: a clip already showing all of its source needs no
+  /// outline, because there is nothing trimmed away to outline.
+  ///
+  /// The reach travels with a move, exactly as the layer bar's does: sliding a
+  /// clip along the row carries the material it can show with it, and an
+  /// outline that stayed behind made a clip at its limit look as though it had
+  /// left the limit.
+  Widget? _clipGhost(LumitTheme t, BridgeClip clip) {
+    final reachStart = clip.reachStartFrame;
+    final reachEnd = clip.reachEndFrame;
+    if (reachStart == null || reachEnd == null) return null;
+
+    final drag = _drag;
+    final moving = drag != null && drag.clip.id == clip.id;
+    // Only a whole-clip move carries the source with it. Trimming an edge
+    // moves the box over material that stays put, which is the whole point of
+    // the outline.
+    final shift =
+        moving && drag.grab == _Grab.body ? _draggedFrames(drag.dx) : 0;
+    final start = reachStart.toInt() + shift;
+    final end = reachEnd.toInt() + shift;
+    final clipStart = clip.startFrame.toInt() +
+        (moving && drag.grab != _Grab.end ? _draggedFrames(drag.dx) : 0);
+    final clipEnd = clip.endFrame.toInt() +
+        (moving && drag.grab != _Grab.start ? _draggedFrames(drag.dx) : 0);
+    if (clipStart <= start && clipEnd >= end) return null;
+
+    final left = _xOf(start);
+    return Positioned(
+      key: ValueKey<String>('seq-clip-ghost-${clip.id}'),
+      left: left,
+      width: (_xOf(end) - left).clamp(1.0, double.infinity),
+      top: 2,
+      bottom: 2,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            // A hairline and nothing inside it, the layer bar's own treatment
+            // (§12A.1): the outline says how far this same clip could still be
+            // pulled, and a fill would read as a second, dimmer clip sitting
+            // behind it.
+            border: Border.all(
+              color: t
+                  .labelColour(widget.entry.info.label)
+                  .withValues(alpha: 0.25),
+              width: 1,
+            ),
+            // The clip's own ends, because this *is* the clip drawn as far as
+            // its source goes.
+            borderRadius: BorderRadius.circular(t.shape == ThemeShape.round
+                ? t.tokens.controlRadius
+                : sharpClipRadius),
+          ),
+        ),
+      ),
     );
   }
 

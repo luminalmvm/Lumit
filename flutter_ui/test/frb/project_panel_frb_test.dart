@@ -1158,7 +1158,7 @@ void main() {
       expect(rowText('Folder 2'), findsOneWidget);
     });
 
-    testWidgets('a footage row states its path, hushed, at the list\'s right',
+    testWidgets('the Path column carries the folder, never the name again',
         (tester) async {
       final p = freshProject();
       p.state.project!.importFootage(path: 'C:/clips/shot.mov');
@@ -1175,13 +1175,24 @@ void main() {
 
       expect(find.text('PATH'), findsOneWidget,
           reason: 'the column has a kicker heading like the rest');
-      // Importing records the bare file name as the relative path (K-173).
-      expect(rowText('shot.mov'), findsOneWidget);
-      expect(
-        find.descendant(
-            of: find.byType(ListView), matching: find.text('shot.mov')),
-        findsOneWidget,
-      );
+      // Importing records the file by its bare name, so there is no folder to
+      // state yet — and the cell says nothing rather than repeating the Name
+      // column, which is the whole reason it carries the folder and not the
+      // path (the engine's own `file_path` is pinned in the Rust tests).
+      expect(rowText('shot.mov'), findsOneWidget,
+          reason: 'the name appears once in the row, not once per column');
+
+      // Narrow enough and the column goes, with the preview card and Items.
+      tester.view.physicalSize = const Size(260, 760);
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(260, 760),
+      ));
+      await settleFrb(tester, minRounds: 6);
+      expect(find.text('PATH'), findsNothing,
+          reason: 'the docked mockup at 260 draws no Path column');
     });
 
     testWidgets('a placed item wears the in use badge, and only a placed one',

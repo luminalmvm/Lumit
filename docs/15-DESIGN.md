@@ -471,11 +471,25 @@ Per the no-punishment rule, **uncached is neutral, never alarming** — no amber
 red, no pulsing. An uncached timeline is the normal starting state of every project, not a
 failure.
 
-Under the redesign (K-441) the bar's hue carries the **resolution tier** — full resolution
-in the `success` family, half and quarter in progressively cooler/warmer steps of their own —
-so a glance says not just "cached" but "cached at what size", and the Viewer's quality
-control wears the same colours. The storage split above (memory vs disk) folds into the
-status line's cache meter, where each tier already has its own bar.
+Under the redesign (K-441) the bar also carries the **resolution tier**, so a glance says
+not just "cached" but "cached at what size". **Shipped:** each strip byte carries two
+nibbles — the storage state above, and the preview *divisor* the found picture was actually
+made at relative to the resolution being shown. The storage state picks the **family**
+(mint in memory or on the card, steel blue on disk) and the divisor picks the **step**
+within it: full at full strength, half at 70%, and the faintest step at 40%.
+
+**The faintest step means a third _or_ a quarter**, and that is deliberate. The realtime
+controller renders a third as well as the half and quarter this table names, so there are
+four tiers and three steps; folding the third in with the coarsest under-promises, where
+giving it the half's step would tell someone a third is finer than it is. A divisor a
+later engine invents lands at the same faintest step, for the same reason — "held, and
+coarser than that" is the safe thing to say about a number this build does not recognise.
+Nothing here changes the two truths behind the reading: a frame held at a scale no adaptive
+tier renders at reads as **nothing held**, and on a sampled composition a frame the
+refinement sweep has not reached wears its sample's tier.
+
+The fuller storage split (which of memory and the card holds a frame) stays the status
+line's cache meter's business, where each tier already has its own bar.
 
 ### 6.4 Overrun, markers, waveforms
 
@@ -847,8 +861,12 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **The ruler is double height**: times and the playhead head in the upper half; markers and
   the work area in the lower. A marker is an upward triangle sitting on the cache bar, half
   inside its backdrop pill and half outside to its left; the pill starts at the triangle's
-  point. Minor ticks subdivide as zoom grows until one tick is one frame, and no tick is
-  drawn closer than **30px** to its neighbour — which is the mockup's own density at the
+  point. **A marker that carries a duration draws a bar** running from its own frame for
+  that long, on the same floor the flag stands on and hushed under it: the flag is what is
+  read and aimed at, and a span at full strength read as a second work-area band. The bar
+  takes no gestures — a span has no editing control yet, and one that could be grabbed but
+  not moved would promise one. Minor ticks subdivide as zoom grows until one tick is one
+  frame, and no tick is drawn closer than **30px** to its neighbour — which is the mockup's own density at the
   resting zoom, three half-second ticks between labels two seconds apart (K-451).
 - **The cache bar is drawn on the ruler's floor, coloured by resolution tier** (§6.3) —
   on the work-area band's own row, inside the ruler's 36, not as a strip of its own

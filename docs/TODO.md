@@ -463,43 +463,6 @@ px@comp. One straggler noticed on the way and left alone: the Lens flare's
 `ghost_softness` is documented as a fraction of the frame *diagonal*, which K-419
 outlawed for distances; converting it changes pictures, so it wants its own change.
 
-**Cache bar coloured by resolution tier** (K-441, docs/15-DESIGN.md §6.3, §12A.1).
-The bar is meant to say not just "cached" but "cached at what size", with full,
-half and quarter each their own hue. **The engine half has landed**: a strip byte
-is now two nibbles — the storage state the bar has always drawn in the low one,
-and in the high one the preview divisor the found picture was actually made at
-(`1` full, `2` half, `3` third, `4` quarter, relative to the scale asked about),
-probed finest first (docs/06 §5.6). **Owed: the bridge and the painter.**
-`cached_frames` still masks the strip to the storage nibble so today's bar is
-unchanged; the follow-up points it at `framecache::bar::read_packed` and teaches
-the painter the two nibbles. Two truths to carry over rather than paper over: a
-frame held at a scale no adaptive tier renders at reads as nothing held, and on
-a sampled composition an unrefined frame wears its sample's tier.
-
-**A Sequence clip's own source reach** (K-441, docs/15-DESIGN.md §12A.1).
-A trimmed *layer* draws the faint outline of the material trimmed away; §12A.1
-asks for the same per clip inside a Sequence layer. **The engine half has
-landed**: `Clip::source_reach(source_duration)` answers the pair in layer-local
-time, mirroring the layer bar's bounds exactly — a retimed clip and a source of
-unknown length both have no reach, and nothing is clamped. **Owed: the bridge.**
-`BridgeClip` needs the pair as comp frames (add the layer's `start_offset` and
-run it through `frame_rate.frame_at`, exactly as `start_frame` already does),
-and the caller has to supply the source's length — a nested comp's is on the
-comp, a footage item's comes from the media probe, which is why the model takes
-it rather than looks it up. After that the lane's ghost is one more Positioned
-per clip.
-
-**A comp marker's duration** (docs/15-DESIGN.md §12A.1).
-The approved timeline design draws a marker as a pill that can carry a span —
-a bar running from the marker's frame for its duration. **The engine half is
-done**: `Marker::duration` was already on the model and in the `.lum` (absent =
-a moment; an older file opens as moments), the whole-list marker ops carry it
-undoably, and both are now held down by tests. **Owed: the bridge.**
-`BridgeMarker` carries id, time and label only, and `core_markers` merges an
-incoming marker onto the document's to keep the duration it cannot see — so the
-follow-up adds the duration as frames to `BridgeMarker`, writes it through that
-merge, and the ruler's pill becomes one more sized box.
-
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
 solve link and Convert to keyframes, all against an injected solve. Stage 2 landed

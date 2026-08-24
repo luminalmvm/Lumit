@@ -272,7 +272,14 @@ Future<void> showMarkerMenuFrb({
       write([
         for (final m in markers())
           if (m.id == marker.id)
-            BridgeMarker(id: m.id, time: m.time, label: label)
+            // The span rides along: the seam carries it now (K-441), so a
+            // marker rebuilt without it would be the panel saying "make this a
+            // moment" — the same shape of loss K-270 fixed for a beat's kind.
+            BridgeMarker(
+                id: m.id,
+                time: m.time,
+                label: label,
+                durationFrames: m.durationFrames)
           else
             m,
       ]);
@@ -909,13 +916,13 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
 /// it at this size. Nothing drawn means nothing held. No amber, no red, no
 /// pulsing — an empty cache is not a fault.
 ///
-/// **The redesign's resolution-tier hues are not drawn yet** (docs/15 §6.3,
-/// §12A.1): a bar whose hue says *full, half or quarter* needs the engine to
-/// report which resolution a frame is held at, and `cached_frames` answers a
-/// different question — held or parked, at the shown resolution or coarser,
-/// relative to the scale it is asked about. Until that reaches the bridge, the
-/// four storage states above are what there is to colour by, and they are
-/// coloured by §6.3's table.
+/// **And the tier says at what size** (K-441, docs/15 §6.3). Each strip byte
+/// carries two nibbles: the storage state above in the low one, and in the high
+/// one the preview *divisor* the picture that was found was actually made at,
+/// relative to the resolution the Viewer is showing. Full holds its colour;
+/// half steps down; a third or a quarter takes the faintest step of the two
+/// families. So the family says *where* the frame is and the step says *how
+/// big*, and a glance answers both.
 ///
 /// **It never polls, and it is not asked again just because the panel
 /// rebuilt.** The cache's lock is the one a render holds, so reading it per
@@ -1009,10 +1016,8 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
         painter: _CacheBarPainter(
           tiers: _tiers,
           axis: widget.axis,
-          ready: t.success,
-          coarse: t.success.withValues(alpha: 0.4),
+          held: t.success,
           onDisk: t.cacheDisk,
-          onDiskCoarse: t.cacheDisk.withValues(alpha: 0.4),
         ),
       ),
     );
@@ -1341,6 +1346,35 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     ),
                   ),
                 ),
+            // A spanning marker's bar (docs/15 §12A.1, K-441): a marker can
+            // carry a duration, and the ruler draws it as a bar running from
+            // the marker's own frame for that long. Drawn **before** the flags
+            // so a flag parked inside another marker's span is still the thing
+            // the pointer finds; the bar is scenery, not a target, so it takes
+            // no gestures of its own — resizing a span has no control yet, and
+            // a bar that could be grabbed but not moved would promise one.
+            for (final marker in markers)
+              if ((marker.durationFrames ?? 0) > 0)
+                Positioned(
+                  // From the marker's frame, not from the flag's left edge:
+                  // the point is what says *where*, so the span starts under
+                  // the point rather than under the shape around it.
+                  left: axis.xOf(_markerFrame(marker)),
+                  width:
+                      axis.xOf(_markerFrame(marker) + marker.durationFrames!) -
+                          axis.xOf(_markerFrame(marker)),
+                  bottom: TimelineCacheBar.height,
+                  height: MarkerFlag.spanHeight,
+                  child: IgnorePointer(
+                    child: ColoredBox(
+                      key: ValueKey<String>('tl-marker-span-${marker.id}'),
+                      // The marker's own colour, hushed: the flag is what is
+                      // read and aimed at, and a span at full strength read as
+                      // a second work area rather than as one marker's reach.
+                      color: t.marker.withValues(alpha: 0.35),
+                    ),
+                  ),
+                ),
             // Comp markers (docs/07 §4.1): After Effects' bookmark flags, in
             // the ruler's lower row where the work-area band lives. The clock
             // above stays legible, and a flag never sits on a tick.
@@ -1449,6 +1483,11 @@ class MarkerFlag extends StatelessWidget {
 
   /// The pill's height — and the flag's, the triangle standing inside it.
   static const double height = 12;
+
+  /// How thick a **spanning** marker's bar is (§12A.1). Thin enough to read as
+  /// a marker's reach rather than as a second work-area band, and it stands on
+  /// the cache bar with the flag so the two share one floor.
+  static const double spanHeight = 3;
 
   const MarkerFlag({
     super.key,
@@ -1661,8 +1700,20 @@ List<BridgeMarker> markersWithFrb(
         id: id ?? UuidValue.fromString(const Uuid().v4()),
         time: timeOfFrame(comp, frame),
         label: label,
+        // A marker being **moved** keeps the span it was carrying; a marker
+        // being made is a moment, which is what every new cue is.
+        durationFrames: id == null ? null : _spanOf(comp, id),
       ),
     ];
+
+/// The span the marker already on the ruler under [id] is carrying, so a drag
+/// moves the whole thing rather than flattening it to a moment.
+int? _spanOf(CompositionReference comp, UuidValue id) {
+  for (final m in markersOf(comp)) {
+    if (m.id == id) return m.durationFrames;
+  }
+  return null;
+}
 
 /// The frame of the marker labelled [label], or null when there is none — what
 /// the bare digit keys jump to, and what makes them a quiet no-op until the
@@ -2005,10 +2056,16 @@ class _RulerTicksPainter extends CustomPainter {
       old.axis.width != axis.width;
 }
 
-/// Collapse per-frame tiers into the fewest contiguous runs, so a 3000-frame
-/// composition draws a handful of rectangles rather than three thousand.
+/// Collapse per-frame strip bytes into the fewest contiguous runs, so a
+/// 3000-frame composition draws a handful of rectangles rather than three
+/// thousand.
 ///
-/// Returns `(startFrame, endFrameExclusive, tier)`, skipping tier 0.
+/// Returns `(startFrame, endFrameExclusive, byte)`, skipping a byte of zero —
+/// which is the one byte that means nothing at all is held, since a frame that
+/// is held always has both a storage state and a divisor. Runs break on the
+/// **whole** byte, so a stretch held at half and a stretch held at quarter are
+/// two runs even though both are "held": they are drawn at different strengths
+/// and merging them would say the whole stretch was the finer of the two.
 List<(int, int, int)> cacheBarRuns(List<int> tiers) {
   final runs = <(int, int, int)>[];
   var start = 0;
@@ -2024,37 +2081,61 @@ List<(int, int, int)> cacheBarRuns(List<int> tiers) {
   return runs;
 }
 
+/// The two halves of a cache-strip byte (K-441). The **storage state** — `0`
+/// nothing, `1` held coarser, `2` held here, `3` parked coarser, `4` parked
+/// here — and the **preview divisor** the found picture was made at, `1` full
+/// through `4` quarter, `0` when nothing is held. One split, named once, so
+/// the painter and anything asking the bar a question read the same halves;
+/// `framecache::bar::storage_of` is its opposite number in Rust.
+int cacheStorageOf(int byte) => byte & 0x0f;
+int cacheDivisorOf(int byte) => byte >> 4;
+
+/// How faint a run is drawn, by the preview divisor its picture was made at
+/// (docs/15 §6.3, K-441). Full holds its family's colour; half steps down; and
+/// **the faintest step means a third _or_ a quarter**, deliberately — the
+/// realtime controller renders a third as well as the half and quarter §6.3
+/// names, and lumping it in with the coarsest under-promises rather than
+/// telling anyone a third is finer than it is.
+///
+/// A divisor a newer engine invents lands here too, at the faintest step:
+/// "held, and coarser than that" is the safe thing to say about a number this
+/// build does not recognise.
+double cacheTierOpacity(int divisor) => switch (divisor) {
+      1 => 1.0,
+      2 => 0.7,
+      _ => 0.4,
+    };
+
 class _CacheBarPainter extends CustomPainter {
   final Uint8List tiers;
   final CacheBarAxis axis;
-  final Color ready;
-  final Color coarse;
+
+  /// The two **families**: mint for a frame in memory or on the card, steel
+  /// blue for one parked on disk (§6.3). The step within a family is the
+  /// resolution tier, so neither hue is passed in twice.
+  final Color held;
   final Color onDisk;
-  final Color onDiskCoarse;
 
   const _CacheBarPainter({
     required this.tiers,
     required this.axis,
-    required this.ready,
-    required this.coarse,
+    required this.held,
     required this.onDisk,
-    required this.onDiskCoarse,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint();
-    for (final (start, end, tier) in cacheBarRuns(tiers)) {
-      // The engine's five states (`cached_frames`): 1 held coarser, 2 held at
-      // this resolution, 3 on disk coarser, 4 on disk at this resolution. An
-      // unknown value from a newer engine draws as the plainest "something is
-      // held" rather than as nothing.
-      paint.color = switch (tier) {
-        1 => coarse,
-        3 => onDiskCoarse,
-        4 => onDisk,
-        _ => ready,
-      };
+    for (final (start, end, byte) in cacheBarRuns(tiers)) {
+      // Two nibbles (K-441). The low one is the storage state the bar has
+      // always drawn: 1 held coarser, 2 held at this resolution, 3 on disk
+      // coarser, 4 on disk at this resolution. The high one is the preview
+      // divisor the found picture was made at. A storage state from a newer
+      // engine draws as the plainest "something is held" rather than as
+      // nothing.
+      final storage = cacheStorageOf(byte);
+      paint.color = (storage == 3 || storage == 4 ? onDisk : held)
+          .withValues(alpha: cacheTierOpacity(cacheDivisorOf(byte)));
       final left = axis.xOf(start).clamp(0.0, size.width);
       // The run's right edge is the left edge of the frame after it, so a run
       // covers its last frame rather than stopping at that frame's start. At
@@ -2081,8 +2162,7 @@ class _CacheBarPainter extends CustomPainter {
       !identical(old.tiers, tiers) ||
       old.axis.frames != axis.frames ||
       old.axis.xOf(axis.frames) != axis.xOf(axis.frames) ||
-      old.ready != ready ||
-      old.coarse != coarse ||
+      old.held != held ||
       old.onDisk != onDisk;
 }
 

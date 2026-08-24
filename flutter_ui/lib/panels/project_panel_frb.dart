@@ -170,14 +170,20 @@ const double projectMinWidth = 180;
 /// columns hide, least essential first). The two mockups are the two ends of
 /// this ladder — the 360-wide artboard shows everything, the 260-wide docked
 /// panel has already dropped the preview card and the Items column.
-const double _widthForPreview = 300;
-
-/// Path and Items leave at the same step, deliberately. §12A.3a lists them one
-/// after the other, but the two mockups are the only measurements there are —
-/// 360 wide shows both, 260 shows neither — so nothing renders a width between
-/// them, and a third step would be a drawing nobody approved.
-const double _widthForPath = 300;
-const double _widthForItems = 300;
+/// The preview card, the Path column and the Items column leave **together**,
+/// at the first step down from the 360 artboard.
+///
+/// §12A.3a lists them one after the other, but the two mockups are the only
+/// measurements there are — 360 wide shows all three, 260 shows none — so
+/// nothing renders a width between them and a third step would be a drawing
+/// nobody approved. The number inside that gap is set by what a *row* can
+/// carry rather than by what the header can: a row wears badges as well as
+/// columns, and four columns plus an `in use` pill need more room than the
+/// header alone does. Below this the row keeps its badges and sheds the two
+/// least essential columns, which is §12A.6's ladder in the order it asks for.
+const double _widthForPreview = 340;
+const double _widthForPath = 340;
+const double _widthForItems = 340;
 const double _widthForFps = 230;
 const double _widthForSize = 190;
 

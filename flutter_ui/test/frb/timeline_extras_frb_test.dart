@@ -4,6 +4,9 @@
 // Driven through the panel rather than in isolation, for the same reason as
 // everywhere else here: what matters is that a click reaches the document.
 
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -505,6 +508,63 @@ void main() {
       expect(moved.id, id, reason: 'it is the same marker, not a new one');
     });
 
+    /// A marker can carry a span (K-441, docs/15 §12A.1): the ruler draws a bar
+    /// running from its frame for its duration, and a moment draws none.
+    testWidgets('a spanning marker draws a bar, a moment draws none',
+        (tester) async {
+      final p = withComp();
+      p.comp.addAdjustmentLayer();
+      addMarkerFrb(p.comp, frame: 10, label: 'Chorus');
+
+      final moment = p.comp.getMarkers().single;
+      expect(moment.durationFrames, isNull,
+          reason: 'a marker made on the ruler is a moment');
+      await mount(tester, p);
+      expect(find.byKey(ValueKey<String>('tl-marker-span-${moment.id}')),
+          findsNothing);
+
+      // Give it a span. The panel has no control for one yet — the seam
+      // carries it so the ruler can DRAW it — so this writes what a marker
+      // imported or detected with a duration would arrive as.
+      writeMarkers(p.comp, [
+        BridgeMarker(
+          id: moment.id,
+          time: moment.time,
+          label: moment.label,
+          durationFrames: 20,
+        ),
+      ]);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      final bar = find.byKey(ValueKey<String>('tl-marker-span-${moment.id}'));
+      expect(bar, findsOneWidget, reason: 'the span draws as a bar');
+      final flag = tester
+          .getRect(find.byKey(ValueKey<String>('tl-marker-${moment.id}')));
+      final span = tester.getRect(bar);
+      expect(span.left, closeTo(flag.left + MarkerFlag.width / 2, 0.5),
+          reason: 'the bar starts under the point, which is what says where');
+      expect(span.width, greaterThan(0));
+      expect(span.height, MarkerFlag.spanHeight);
+
+      // And it survives an edit that never touched it — the same promise
+      // K-270 made for a beat's kind.
+      await tester.tap(find.byKey(ValueKey<String>('tl-marker-${moment.id}')),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('marker-menu-edit')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('marker-edit-label')), 'Drop');
+      await tester.tap(find.byKey(const ValueKey('marker-edit-ok')));
+      await tester.pumpAndSettle();
+
+      final renamed = p.comp.getMarkers().single;
+      expect(renamed.label, 'Drop');
+      expect(renamed.durationFrames, 20,
+          reason: 'renaming a spanning marker did not flatten it to a moment');
+    });
+
     testWidgets('right-clicking a marker edits what it says', (tester) async {
       final p = withComp();
       p.comp.addAdjustmentLayer();
@@ -757,6 +817,69 @@ void main() {
       await tester.tap(name);
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey<String>('seq-clip-${clip.id}')), findsNothing);
+    });
+
+    /// A trimmed clip draws the outline of the material trimmed away (K-441,
+    /// docs/15 §12A.1) — the clip-level twin of the layer bar's own ghost.
+    ///
+    /// The source's length is the one thing the model cannot look up, so this
+    /// needs a file that genuinely probes: a two-second WAV, which the probe
+    /// answers a real duration for without needing a video encoder on the
+    /// machine.
+    testWidgets('a trimmed clip outlines the source it was cut from',
+        (tester) async {
+      final p = withComp();
+      final footage =
+          p.state.project!.importFootage(path: _oneSecondY4m('reach.y4m'));
+      p.comp.addFootageLayer(footage: footage, asSequence: false);
+      final layer = p.comp.getLayers().first;
+      layer.convertToSequenced();
+      await mount(tester, p);
+
+      final name =
+          find.byKey(ValueKey<String>('tl-name-${layer.internallayerId}'));
+      await tester.tap(name);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(name);
+      await tester.pumpAndSettle();
+
+      final whole = layer.getClips().single;
+      expect(
+          find.byKey(ValueKey<String>('seq-clip-${whole.id}')), findsOneWidget,
+          reason: 'the sequence view is open');
+      expect(whole.reachStartFrame, isNotNull,
+          reason: 'a probeable source has a knowable reach');
+      expect(find.byKey(ValueKey<String>('seq-clip-ghost-${whole.id}')),
+          findsNothing,
+          reason: 'a clip showing all of its source has nothing to outline');
+
+      // Trim the tail off, and what was cut away becomes the outline.
+      layer.trimClip(
+        clip: whole.id,
+        startFrame: whole.startFrame,
+        endFrame: whole.startFrame + 10,
+      );
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      final trimmed = layer.getClips().single;
+      final ghost =
+          find.byKey(ValueKey<String>('seq-clip-ghost-${trimmed.id}'));
+      expect(ghost, findsOneWidget);
+      final box = tester
+          .getRect(find.byKey(ValueKey<String>('seq-clip-${trimmed.id}')));
+      expect(tester.getRect(ghost).right, greaterThan(box.right),
+          reason: 'the outline reaches past the clip by what was trimmed off');
+
+      // A retimed clip has no reach: its map decides which source moment each
+      // of its frames shows, so its length stops being the source's business.
+      layer.setClipSpeed(clip: trimmed.id, percent: 50, endPercent: 50);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expect(layer.getClips().single.reachStartFrame, isNull,
+          reason: 'a retimed clip has no reach to draw');
+      expect(find.byKey(ValueKey<String>('seq-clip-ghost-${trimmed.id}')),
+          findsNothing);
     });
 
     /// A clip fills the way its layer's bar does (§12A.1): the label colour
@@ -1066,4 +1189,38 @@ void main() {
       expect(p.comp.getMarkers(), isEmpty);
     });
   }, skip: !engineAvailable);
+}
+
+/// A real one-second moving picture on disk, so a clip's source has a length
+/// the probe can actually read.
+///
+/// **Y4M**, not a WAV and not a still. A sound file becomes an Audio layer,
+/// which has no clips at all; a still has a picture but no length to be
+/// trimmed out of. Y4M is the one moving-picture container that can be written
+/// here byte by byte — a text header and raw planes, no encoder — so this
+/// needs no ffmpeg CLI on the machine, which a widget test must not depend on.
+///
+/// 2x2 at 25 fps for 25 frames: with 4:2:0 chroma each frame is four luma
+/// samples and one of each chroma, so the whole file is under three hundred
+/// bytes.
+String _oneSecondY4m(String name) {
+  const width = 2;
+  const height = 2;
+  const frames = 25;
+  final out = BytesBuilder();
+  void ascii(String s) => out.add(s.codeUnits);
+
+  ascii('YUV4MPEG2 W$width H$height F25:1 Ip A1:1 C420\n');
+  for (var f = 0; f < frames; f++) {
+    ascii('FRAME\n');
+    // A mid-grey frame: four luma samples, then one sample of each chroma
+    // plane at half resolution.
+    out.add(Uint8List(width * height)..fillRange(0, width * height, 128));
+    out.add(Uint8List(2)..fillRange(0, 2, 128));
+  }
+
+  final dir = Directory.systemTemp.createTempSync('lumit-reach');
+  final file = File('${dir.path}/$name');
+  file.writeAsBytesSync(out.takeBytes());
+  return file.path;
 }
