@@ -397,7 +397,7 @@ pub(crate) fn to_export_spec(
 #[cfg(feature = "media")]
 fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExportSpec> {
     use lumit_media::encode::BitDepth;
-    use lumit_render::export::{AlphaMode, Bitrate, Channels, ColourSpace, DiskCachePolicy};
+    use lumit_render::export::{AlphaMode, Bitrate, Channels, DiskCachePolicy};
     let (bitrate_auto, bitrate_mbps, peak_mbps) = match spec.bitrate {
         Bitrate::Auto => (true, 0, 0),
         Bitrate::EncoderDefault => (false, 0, 0),
