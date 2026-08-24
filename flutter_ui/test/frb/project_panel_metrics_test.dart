@@ -181,9 +181,8 @@ void main() {
     /// them** (K-456: the 16 grid is what a glyph is drawn on, not what it
     /// displays at). A row's twirl slot and type mark are 13 square, so a name
     /// starts at 8 + 13 + 8 + 13 + 8 = 50, and a child sits one indent step
-    /// further in. The bottom bar's controls draw at 14.
-    testWidgets('glyphs are 13 in a row and 14 on the bottom bar',
-        (tester) async {
+    /// further in. The bottom bar's controls draw at 13 too.
+    testWidgets('glyphs are 13 in a row and on the bottom bar', (tester) async {
       final p = withItems();
       await mount(tester, p, width: 360);
       await settleFrb(tester, minRounds: 6);
@@ -218,7 +217,7 @@ void main() {
               .getRect(find.byKey(const ValueKey<String>('project-new-folder')))
               .height,
           projectFooterIconSize,
-          reason: 'the bottom bar draws its glyphs at 14');
+          reason: 'the bottom bar draws its glyphs at 13');
     });
 
     /// 4. **The faces are the mockup's.** Column headings are kickers — Geist

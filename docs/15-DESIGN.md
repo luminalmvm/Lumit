@@ -365,7 +365,7 @@ crosses over the day its glyph exists, and no panel changes. The set's grammar i
   not the display size** (K-456, superseding K-209's fixed 16 where a mockup renders
   smaller): every glyph is still drawn on the 16 grid, and each panel renders it at the
   size its own approved mockup computed — in the Project panel, 13 in the tree's rows and
-  14 on the bottom bar. The slight softening of the stroke at a non-native size is the
+  13 on the bottom bar. The slight softening of the stroke at a non-native size is the
   mockups' own look and is accepted as such.
 - Rules that stand from the beginning: monochrome only (bar the Channels indicator above),
   no filled multi-colour icons, and **no emoji or bare symbol characters in UI ever** — a
@@ -990,7 +990,7 @@ carries. The rules worth writing down:
   sits hard right, where the eye looks for it, and the missing half reads to its left —
   and that half is the "show only missing" filter. The two are separate strings laid out
   in that order, never one sentence with fragments spliced into it.
-- **Glyphs render at 13 in the rows and 14 on the bottom bar** (K-456, §5): the 16 grid is
+- **Glyphs render at 13 throughout, rows and bottom bar alike** (K-456, §5): the 16 grid is
   what they are drawn on, and the mockup's computed sizes are what they display at.
 - **Width degrades in this order**: the preview card goes first (the docked mockup has
   none at 260), then Path, then Items, then fps, then Size; below the panel's minimum the
@@ -1060,7 +1060,7 @@ a plain constant in the code rather than a token with two equal values.
 | Project panel: horizontal scrollbar strip (a 4px track inset 8 either side) | 6 | 6 |
 | Project panel: bottom bar (new-item controls and the item count) | 20 | 20 |
 | Project panel: glyphs — the twirl and type marks in a row (K-456) | 13 | 13 |
-| Project panel: glyphs — the bottom bar's new-item controls (K-456) | 14 | 14 |
+| Project panel: glyphs — the bottom bar's new-item controls (K-456) | 13 | 13 |
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
 | Dialog value wells and dropdowns | 22 | 22 |

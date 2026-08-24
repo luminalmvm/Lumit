@@ -164,7 +164,7 @@ const double projectRowGap = 8;
 /// the name stay one cluster: shrinking one of the two and not the other would
 /// leave the names 3px out of the mockup's columns.
 const double projectRowIconSize = 13;
-const double projectFooterIconSize = 14;
+const double projectFooterIconSize = 13;
 
 /// A row's own inset. The header's left is 10 rather than 8: the heading words
 /// stand a touch in from the twirls below them, as the mockup draws it.
