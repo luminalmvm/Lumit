@@ -25,10 +25,12 @@ the interface is truly the user's.
 > tab group with a title tab per panel, draggable to re-arrange the workspace; a panel that
 > sits alone renders as a bare pane with no tab bar — the Viewer's look on every solo panel.
 > A tabbed panel's pop-out button lifts it into its own OS window and dragging its tab moves
-> it; a bare pane, having no tab bar to carry either, gets both a different way — right-click
-> anywhere empty in it for the same pop-out, and a small grip in its top-right corner to drag
-> it. The Timeline's comp-tab-strip right-click pop-out is this same mechanism, not a special
-> case. Closing a popped-out window docks the panel back.
+> it; a bare pane, having no tab bar to carry either, is popped out by right-clicking
+> anywhere empty in it. It carries **no drag grip of its own** (K-478 — the corner square of
+> dots is withdrawn): it stays a drop target for any panel dragged onto it, and rearranging
+> from a bare pane is done through Window → Workspace. The Timeline's comp-tab-strip
+> right-click pop-out is this same mechanism, not a special case. Closing a popped-out
+> window docks the panel back.
 
 ### 1.1 Frames, groups, tabs
 
@@ -301,7 +303,8 @@ anywhere, including other monitors.
 - **The bottom bar**, 22 tall, padded 10 either end, glyphs at 14 and gaps of 8: the
   **transparency board** (item 4), the **view menu** (items 5–6, which also carries the
   layer-controls switch, the region of interest of item 7 and the composition background
-  of item 10), the **channel** (item 3) and the **exposure** (item 12); a hairline seam;
+  of item 10), the **channel** (item 3) and the **exposure** (item 12, with its reset mark
+  to the left of the number while it is engaged); a hairline seam;
   the **snapshot** (item 14). Then, spaced 10, the five transport marks and the **clock**
   (item 11). At the right-hand end the **reading** — `comp · time · source → preview ·
   zoom` — which is where degradation is stated (item 9), and the preview progress bar,
@@ -346,9 +349,11 @@ Every control on either strip keeps the behaviour its item below defines. The it
    the pixels the current magnification can display. The setting is **stored per comp** in
    the project. Preview resolution MUST never affect export.
 3. **Channel view**: RGB / Red / Green / Blue / Alpha (alpha as greyscale matte). One
-   **bare mark** on the bar, tinted by the channel on show — alpha, not being a colour,
-   takes a matte mark instead — opening a menu that lists the names in full. It is not
-   boxed as a dropdown (K-466): a border round a tint is a box round a colour.
+   **bare mark** on the bar, opening a menu that lists the names in full. The closed face
+   is a **coloured circle for the view in force** (K-478, §5's one glyph with colour of its
+   own): the tri-colour mark for RGB, a single circle in the channel's own colour for R, G
+   and B, and the near-white a matte reads as for alpha. It is not boxed as a dropdown
+   (K-466): a border round a colour is a box round a colour.
 4. **Transparency grid** toggle (checkerboard behind transparent pixels instead of the comp
    background colour). An icon — the checkerboard itself — rather than the word (K-411).
 5. **Wireframe/overlay menu**: layer wireframes, motion paths, mask paths, gizmo visibility,
@@ -399,6 +404,10 @@ Every control on either strip keeps the behaviour its item below defines. The it
     The number means what the Exposure effect's does: the same `2^stops` gain in
     scene-linear (K-106), so the two agree. **Preview only; it MUST NOT change the
     export.**
+    A **reset mark** stands to the left of the number and puts it back to `+0.0`. It is
+    there only while the exposure is not zero (K-478): the drawing puts none beside a
+    resting exposure, and a mark that is always there says a control is engaged when it
+    is not.
 13. **Tone mapping** toggle (K-314): an icon, no menu. A fixed highlight rolloff — the
     identity below the knee, so an ordinary composite is untouched, and a smooth shoulder
     above it that folds however-bright highlights back under 1 instead of letting them clip

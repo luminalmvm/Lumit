@@ -5376,6 +5376,10 @@
     "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. Under five words."
   },
   "tipViewerToneMap": "Tone mapping — preview only",
+  "tipViewerExposureReset": "Reset exposure",
+  "@tipViewerExposureReset": {
+    "description": "Tooltip on the small mark to the left of the Viewer bar's exposure number. It appears only while the exposure is not zero, and clicking it puts the exposure back to zero."
+  },
   "@tipViewerToneMap": {
     "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this sentence is the only description of it. \"The knee\" is where the rolloff starts; \"what is up there\" means detail brighter than the display can show. Preview only."
   },
@@ -7740,6 +7744,39 @@
     "description": "One choice for how a waveform is drawn: a single wave, with no frequency bands."
   },
   "waveformCentre": "Centre",
+  "viewerReadoutNoComp": "{time} · {source} · {zoom}",
+  "@viewerReadoutNoComp": {
+    "description": "The Viewer bar's reading, third and shortest form, used when the bar is too narrow for the composition's name as well: the time shown, the composition's pixel size, and the magnification. Every part is a number, so only the separators are translatable.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "zoom": {
+        "type": "String"
+      }
+    }
+  },
+  "viewerReadoutNoPreview": "{comp} · {time} · {source} · {zoom}",
+  "@viewerReadoutNoPreview": {
+    "description": "The Viewer bar's reading, second form, used when the bar is too narrow for the full one: the same line with the arrow and the preview's own pixel size dropped. Which composition is on screen, the time shown, the composition's pixel size, and the magnification. Every part is a number or a name, so only the separators are translatable.",
+    "placeholders": {
+      "comp": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "zoom": {
+        "type": "String"
+      }
+    }
+  },
   "@waveformCentre": {
     "description": "One choice for where a waveform sits in its row: centred about silence, swinging both ways."
   },

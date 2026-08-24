@@ -45,20 +45,33 @@ void main() {
       return (state: p.state, uiState: p.uiState, layer: layer);
     }
 
+    /// The panel, at [size] — the **surface's** own size, not just the
+    /// MediaQuery's: what a bar has to lay out in is the constraint it is
+    /// given, and a MediaQuery that disagrees with the surface changes nothing
+    /// about the room a row has.
     Future<void> mount(WidgetTester tester, dynamic p,
-        {ViewerBars bars = ViewerBars.split}) async {
+        {ViewerBars bars = ViewerBars.split,
+        Size size = const Size(900, 520)}) async {
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       (p.uiState as LumitUiState).workspace.interface.viewerBars = bars;
       await tester.pumpWidget(hostPanel(
         child: const ViewerPanelFrb(),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
-        size: const Size(900, 520),
+        size: size,
       ));
       await tester.pump();
     }
 
     Rect rectOf(WidgetTester tester, String key) =>
         tester.getRect(find.byKey(ValueKey<String>(key)));
+
+    /// The channel picker's painted face. It carries no key of its own — the
+    /// bar's order is asserted by the keys of the controls on it — so what
+    /// finds it is the one painter that draws it.
+    final channelFace = find.byWidgetPredicate(
+        (w) => w is CustomPaint && w.painter is ChannelFacePainter);
 
     /// The **glyph** inside a bar mark, which is what the drawing measures —
     /// never the button's box, which carries a transparent edge so that hover
@@ -150,24 +163,26 @@ void main() {
       expect(bar.height, 22);
       expect(decorationOf(tester, 'viewer-bar').color, t.surface2);
 
-      const looking = [
-        'viewer-grid',
-        'viewer-guides-menu',
-        'viewer-channel',
-      ];
+      const looking = ['viewer-grid', 'viewer-guides-menu'];
       for (final key in looking) {
         expect(glyphOf(tester, key).size, const Size(14, 14), reason: key);
       }
       expect(glyphOf(tester, 'viewer-snapshot').size, const Size(14, 14));
+      // The channel's face is painted rather than set from the icon set (it is
+      // the one mark in colour, §5), so it is measured by its own key — at the
+      // same 14 as every glyph beside it.
+      expect(tester.getRect(channelFace).size, const Size(14, 14));
 
       expect(glyphOf(tester, 'viewer-grid').left, closeTo(bar.left + 10, 0.5),
           reason: 'the strip is padded 10 before its first mark');
-      for (var i = 1; i < looking.length; i++) {
-        expect(
-            glyphOf(tester, looking[i]).left -
-                glyphOf(tester, looking[i - 1]).right,
-            closeTo(8, 0.5),
-            reason: '${looking[i]} stands 8 from the mark before it');
+      final marks = [
+        glyphOf(tester, 'viewer-grid'),
+        glyphOf(tester, 'viewer-guides-menu'),
+        tester.getRect(channelFace),
+      ];
+      for (var i = 1; i < marks.length; i++) {
+        expect(marks[i].left - marks[i - 1].right, closeTo(8, 0.5),
+            reason: 'mark $i stands 8 from the mark before it');
       }
 
       const transport = [
@@ -233,7 +248,9 @@ void main() {
     testWidgets('the reading names the comp, the time, the pixels and the zoom',
         (tester) async {
       final p = withLayer();
-      await mount(tester, p);
+      // Wide enough that the ladder below has shed nothing — the test font
+      // gives every character a full em, so the drawing's own width is not it.
+      await mount(tester, p, size: const Size(1400, 520));
 
       final text = tester
           .widget<Text>(find.byKey(const ValueKey('viewer-readout')))
@@ -327,6 +344,114 @@ void main() {
       expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
       expect(rectOf(tester, 'viewer-bar').top, closeTo(stage.bottom, 0.5),
           reason: 'gathered at the bottom, under the picture');
+    });
+
+    /// **The channel's face is the answer's own colour** (§5, owner review):
+    /// the tri-colour mark for RGB, a single circle in the channel's colour for
+    /// R, G and B, and the near-white a matte reads as for alpha. It is the one
+    /// mark in the set that carries colour, so it is painted rather than set
+    /// from a font glyph.
+    testWidgets('the channel face is a coloured circle for the view in force',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      ChannelFacePainter faceNow() =>
+          tester.widget<CustomPaint>(channelFace).painter!
+              as ChannelFacePainter;
+
+      expect(faceNow().channel, ViewerChannel.rgb);
+      expect(ChannelFacePainter.single(t, ViewerChannel.rgb), isNull,
+          reason: 'RGB is the tri-colour mark, not one circle');
+      expect(ChannelFacePainter.single(t, ViewerChannel.red),
+          ScopeColours.standard.red);
+      expect(ChannelFacePainter.single(t, ViewerChannel.green),
+          ScopeColours.standard.green);
+      expect(ChannelFacePainter.single(t, ViewerChannel.blue),
+          ScopeColours.standard.blue);
+      expect(ChannelFacePainter.single(t, ViewerChannel.alpha), t.textPrimary,
+          reason: 'alpha is not a colour, so its circle is the matte white');
+
+      // And the face follows the pick rather than a name appearing beside it.
+      await tester.tap(find.byKey(const ValueKey('viewer-channel')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('viewer-channel-green')));
+      await tester.pumpAndSettle();
+      expect(faceNow().channel, ViewerChannel.green);
+    });
+
+    /// **The exposure's way back to nothing** (owner review): a reset mark to
+    /// the left of the number, there only while there is something to undo.
+    testWidgets('the exposure reset appears with a value and clears it',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+      final reset = find.byKey(const ValueKey('viewer-exposure-reset'));
+
+      expect(reset, findsNothing,
+          reason: 'the drawing puts no reset beside a resting exposure');
+
+      p.uiState.setViewerStops(1.5);
+      await tester.pump();
+      expect(reset, findsOneWidget);
+      expect(find.text('+1.5'), findsOneWidget);
+      expect(tester.getRect(reset).right,
+          lessThanOrEqualTo(tester.getRect(find.text('+1.5')).left),
+          reason: 'it stands to the left of the number it undoes');
+
+      await tester.tap(reset);
+      await tester.pump();
+      expect(p.uiState.viewerLook.stops, 0);
+      expect(reset, findsNothing, reason: 'and goes with the value');
+    });
+
+    /// **What the reading sheds, and in what order** (§12A.6, K-451). The two
+    /// gaps give way first — the reading keeps its full line at widths that
+    /// used to elide it — then the arrowed preview size, then the composition's
+    /// name. The time, the size and the magnification are the last to stand.
+    ///
+    /// The widths below are wider than the drawing's because the test font
+    /// gives every character a full em: what is asserted is the **order** of
+    /// the shedding, which the font cannot change.
+    testWidgets('the reading sheds the arrowed size, then the comp name',
+        (tester) async {
+      final p = withLayer();
+      final widths = [1400.0, 1200.0, 1050.0, 950.0, 860.0];
+      final seen = <double, String>{};
+      for (final width in widths) {
+        await mount(tester, p, size: Size(width, 520));
+        seen[width] = tester
+            .widget<Text>(find.byKey(const ValueKey('viewer-readout')))
+            .data!;
+      }
+
+      expect(seen[1400]!, contains('→'),
+          reason: 'given the room, the reading says the whole of it');
+      expect(seen[1400]!, contains('Opening titles'));
+
+      // Every rung keeps the values: the time, the comp's size, the zoom.
+      for (final text in seen.values) {
+        expect(text, contains('00:00:00:00'));
+        expect(text, contains('1920×1080'));
+        expect(text, contains('%'));
+      }
+
+      // Shedding is monotone and in the stated order: the arrowed preview size
+      // goes first, the name second, and neither comes back as the bar narrows.
+      var arrow = true, name = true;
+      for (final width in widths) {
+        final text = seen[width]!;
+        if (!text.contains('→')) arrow = false;
+        if (!text.contains('Opening titles')) name = false;
+        expect(text.contains('→'), arrow, reason: 'the arrow, at $width');
+        expect(text.contains('Opening titles'), name,
+            reason: 'the name, at $width');
+        expect(arrow && !name, isFalse,
+            reason: 'the name never goes while the arrow is still there');
+      }
+      expect(seen[860]!.contains('→'), isFalse,
+          reason: 'by the narrowest width the arrowed preview size has gone');
+      expect(arrow, isFalse, reason: 'the ladder was actually exercised');
     });
 
     /// The surround is the neutral grey no scheme colours (§3.2), and the

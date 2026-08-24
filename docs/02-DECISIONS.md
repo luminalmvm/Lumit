@@ -12775,3 +12775,60 @@ the reference desktop with a cancellation check between passes. Under pressure t
 effect's degradation rung draws the newest half of its particles (halving as pressure
 demands) — deterministic, interaction-only, in the status readout, never on export; the
 CPU fallback renders the same particles at the same cap, slower but not different.
+
+## K-476 — Tooltips have one length and one switch: the rich tooltip is withdrawn
+
+**DECIDED 2026-08-24.** Owner ruling, completing K-440. A tooltip is **one or two words,
+never more**, everywhere and always — [07-UI-SPEC.md](07-UI-SPEC.md) §13.2's reserved
+"rich" tooltip (a sentence, sometimes with a *Learn more* link) is withdrawn, and so is
+the named exception list `arb_test.dart` kept for it. The nine exempt strings — the four
+cache meters, the two playback modes, the two Flow switches and the Viewer's
+preview-view badge — are shortened to names; the live figures they carried stay in the
+readouts themselves, where they are read. `arb_test.dart` now walks every `tip*` key with
+nothing allowed past the limit, and adding an allowance is not a fix.
+
+**The setting is a switch, not a choice.** Settings ▸ Interface ▸ Tooltips is on or off,
+in the drawing's pill (K-465), replacing the Short/Off picker: with one length there is
+nothing to pick. Off means no tooltip anywhere, and it always did — `LumitTooltip` reads
+the flag from the theme scope and hands back the bare control, so the rule holds at the
+one place every tooltip in the application passes through rather than at any call site.
+
+## K-478 — The dock's corner grip goes, and four owner corrections to the Viewer's bars
+
+**DECIDED 2026-08-24.** An owner review of the Viewer and the dock chrome. Five rulings,
+one of which narrows an earlier decision and four of which fill in K-466's drawing.
+
+**The bare pane's corner grip is removed** (superseding that clause of K-086 and the
+sentence in [07-UI-SPEC.md](07-UI-SPEC.md) §1's shell-shape note). A solo pane wore a 16px
+square of dots at its top-right that dragged its panel; it read as a control on every
+panel that had one, and on the Viewer it stood over the right-hand end of that panel's own
+header strip. What still moves a panel: a **tab pill** drags, every pane remains a **drop
+target**, and **Window → Workspace** carries the presets, the reset and the per-panel
+toggles. A pane alone in its slot can no longer be lifted, which is accepted; if that is
+wanted back it belongs on the panel's own header strip, not on a mark over its content.
+
+**The transparency board's glyph is redrawn to a 2×2 checker.** It and the view menu's
+grid stand side by side on the Viewer's bottom bar, and both were an 11×11 frame with the
+inside divided into thirds — at the 14 that bar renders them (K-456) the checker collapsed
+into the same lattice the grid draws. Halves keep the checker a block of tone against the
+grid's lines. The grid is unchanged; §5's grammar (16 grid, 1.5 stroke, one weight) is
+unchanged.
+
+**The channel picker's closed face is a coloured circle**, which is what §5 already
+reserved for it as the set's one glyph with colour of its own: the tri-colour mark for
+RGB, a single circle in the channel's own colour for R, G and B — the Scopes panel's three
+(§8) — and the near-white a matte reads as for alpha. It is painted rather than set from a
+font glyph, because three colours cannot come out of one.
+
+**The exposure gains a reset mark to its left**, and only while the exposure is not zero.
+The drawing puts none beside a resting exposure and that is right: a mark that is always
+there says a control is engaged when it is not.
+
+**The Viewer's reading gives way in a stated order**, recorded in
+[15-DESIGN.md](15-DESIGN.md) §12A.6. K-451's ladder says "flexible text ellipsises", which
+for a line of four statements is four decisions rather than one, and cutting at the
+ellipsis took the magnification. So: the two gaps either side of the transport give way
+first, then the arrowed preview size, then the composition's name, and only what is left —
+the time, the size, the magnification — ellipsises. In practice the bar reaches its
+minimum and scrolls (the ladder's step 5) before that, so a value is never cut. This
+refines K-451 for one compound reading; it reverses nothing.

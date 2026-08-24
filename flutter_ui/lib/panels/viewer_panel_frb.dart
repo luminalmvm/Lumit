@@ -2395,29 +2395,60 @@ class _ViewerBar extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final loose = constraints.maxWidth >= _barMinimum;
+          final reading = _Readout(
+            comp: comp,
+            settings: settings,
+            compSize: compSize,
+            frame: frame,
+            tier: tier,
+            shownScale: shownScale,
+          );
           final row = Row(
+            // **The two gaps are the same gap, and they are what gives way
+            // first** (§12A.6, K-451). The drawing sets the transport and the
+            // reading each with a `margin-left: auto`, which in a flex row
+            // splits whatever is left over equally between them — so the
+            // reading is at its own natural width and the gaps take the rest.
+            // `spaceBetween` over three groups is exactly that, and it is why
+            // the reading is a plain child of the last group rather than one
+            // of three equal flex shares: sharing the free space three ways
+            // gave the reading a third of it and elided a line that fitted.
+            mainAxisAlignment: loose
+                ? MainAxisAlignment.spaceBetween
+                : MainAxisAlignment.start,
             children: [
-              ...leading,
-              if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
-              ..._looking(context, t),
-              if (loose) const Spacer() else const SizedBox(width: 24),
-              ..._transport(t),
-              if (loose) const Spacer() else const SizedBox(width: 24),
-              _Readout(
-                comp: comp,
-                settings: settings,
-                compSize: compSize,
-                frame: frame,
-                tier: tier,
-                shownScale: shownScale,
-                flexible: loose,
-              ),
-              // Nothing at all while no frame is being waited on (K-287), so
-              // at rest the reading really is the bar's right-hand end.
-              ViewerProgressBar(
-                tracker: Provider.of<LumitUiState>(context, listen: false)
-                    .previewProgress,
-              ),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                ...leading,
+                if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
+                ..._looking(context, t),
+              ]),
+              if (!loose) const SizedBox(width: 24),
+              Row(mainAxisSize: MainAxisSize.min, children: _transport(t)),
+              if (!loose) const SizedBox(width: 24),
+              // The reading takes the room the two gaps are not using, and
+              // sheds parts of itself before it elides — the ladder is in
+              // [_Readout]. Flexible only where the bar is spread; where it
+              // scrolls there is no width to be flexible against.
+              if (loose)
+                Flexible(
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Flexible(child: reading),
+                    // Nothing at all while no frame is being waited on
+                    // (K-287), so at rest the reading really is the bar's
+                    // right-hand end.
+                    ViewerProgressBar(
+                      tracker: Provider.of<LumitUiState>(context, listen: false)
+                          .previewProgress,
+                    ),
+                  ]),
+                )
+              else ...[
+                reading,
+                ViewerProgressBar(
+                  tracker: Provider.of<LumitUiState>(context, listen: false)
+                      .previewProgress,
+                ),
+              ],
             ],
           );
           return loose
@@ -2457,6 +2488,22 @@ class _ViewerBar extends StatelessWidget {
         // and a green mark is a thing to see. The menu still lists the names.
         _ChannelPicker(channel: channel, onChannel: onChannel),
         viewerBarGapBox(viewerBarGap),
+        // **The way back to nothing**, and only while there is somewhere to
+        // come back from. The drawing puts no reset beside the exposure, which
+        // is right at rest: a mark that is always there says a control is
+        // engaged when it is not. Standing to the left of the number, it
+        // appears with the value it undoes and goes with it.
+        if (look.stops != 0) ...[
+          viewerBarMark(
+            key: const ValueKey('viewer-exposure-reset'),
+            icon: LumitIcon.reset,
+            colour: t.textMuted,
+            onPressed: () => onStops(0),
+            tip: l10n.tipViewerExposureReset,
+          ),
+          // One edge to allow for rather than two: the exposure is text.
+          SizedBox(width: viewerBarGap - viewerMarkEdge),
+        ],
         // The exposure (K-314, docs/07 §2.2 item 12), bare: the drawing sets
         // it as the number alone, with no aperture beside it and no well
         // under it. Preview only, and the header's colour picker is what says
@@ -2598,6 +2645,35 @@ const double _barMinimum = 560;
 /// reading that always says `1920×1080 → 960×540` states the tier plainly, in
 /// the one place a person already looks to ask what they are looking at, and
 /// without a box appearing mid-playback and dragging the bar about.
+/// **What it sheds, and in what order** (§12A.6's ladder, K-451). The reading is
+/// four statements on one line, so step 1 — "flexible text ellipsises" — is not
+/// one decision but four, and cutting the line at the ellipsis would take the
+/// magnification, which is the part a person is most often watching.
+///
+/// So, narrowing:
+///
+/// 1. it **takes room from the two gaps** either side of the transport, which
+///    slides the transport off centre rather than shortening a word;
+/// 2. it drops the **arrowed preview size** (`→ 960×540`) — the tier is the
+///    least of what the line says, and the picture itself shows it;
+/// 3. it drops the **composition's name**, which the panel's header and the
+///    composition tabs both still carry;
+/// 4. and only then does what is left — the time, the size, the magnification —
+///    **ellipsise**. In practice the bar reaches [_barMinimum] and scrolls
+///    (step 5) before that, so a value is never cut.
+List<String> viewerReadoutLadder({
+  required String comp,
+  required String time,
+  required String source,
+  required String preview,
+  required String zoom,
+}) =>
+    [
+      l10n.viewerReadout(comp, time, source, preview, zoom),
+      l10n.viewerReadoutNoPreview(comp, time, source, zoom),
+      l10n.viewerReadoutNoComp(time, source, zoom),
+    ];
+
 class _Readout extends StatelessWidget {
   final CompositionReference comp;
   final BridgeCompSettings settings;
@@ -2606,10 +2682,6 @@ class _Readout extends StatelessWidget {
   final int tier;
   final double shownScale;
 
-  /// Whether there is room for it to give way: it ellipsises where the bar is
-  /// spread, and keeps its full width where the bar scrolls.
-  final bool flexible;
-
   const _Readout({
     required this.comp,
     required this.settings,
@@ -2617,53 +2689,74 @@ class _Readout extends StatelessWidget {
     required this.frame,
     required this.tier,
     required this.shownScale,
-    required this.flexible,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final divisor = tier < 1 ? 1 : tier;
-    final text = Text(
-      l10n.viewerReadout(
-        settings.name,
-        timecodeOf(frame, settings),
-        '${compSize.width}×${compSize.height}',
-        '${compSize.width ~/ divisor}×${compSize.height ~/ divisor}',
-        '${(shownScale * 100).round()}%',
-      ),
-      key: const ValueKey('viewer-readout'),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: t.mono.copyWith(fontSize: barValueTextSize, color: t.textMuted),
+    final style =
+        t.mono.copyWith(fontSize: barValueTextSize, color: t.textMuted);
+    final rungs = viewerReadoutLadder(
+      comp: settings.name,
+      time: timecodeOf(frame, settings),
+      source: '${compSize.width}×${compSize.height}',
+      preview: '${compSize.width ~/ divisor}×${compSize.height ~/ divisor}',
+      zoom: '${(shownScale * 100).round()}%',
     );
-    return flexible ? Flexible(child: text) : text;
+    return LayoutBuilder(
+      builder: (context, constraints) => Text(
+        _widestThatFits(rungs, style, constraints.maxWidth, context),
+        key: const ValueKey('viewer-readout'),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
+        style: style,
+      ),
+    );
+  }
+
+  /// The first rung of the ladder that fits [maxWidth], or the last one — which
+  /// is then left to the ellipsis. Measured rather than guessed at: the reading
+  /// is mono, but the composition's name is not a fixed number of characters.
+  static String _widestThatFits(
+    List<String> rungs,
+    TextStyle style,
+    double maxWidth,
+    BuildContext context,
+  ) {
+    if (!maxWidth.isFinite) return rungs.first;
+    final scaler = MediaQuery.textScalerOf(context);
+    for (final rung in rungs) {
+      final painter = TextPainter(
+        text: TextSpan(text: rung, style: style),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      if (width <= maxWidth) return rung;
+    }
+    return rungs.last;
   }
 }
 
 /// The channel picker's mark, and the menu of names behind it (K-411, K-466).
 ///
-/// A bare glyph rather than a boxed dropdown, which is what the drawing draws:
-/// the answer is a tint, and a border round a tint is a box round a colour.
+/// A bare mark rather than a boxed dropdown, which is what the drawing draws:
+/// the answer is a colour, and a border round a colour is a box round a colour.
+///
+/// **The closed face is the answer, in the answer's own colour** (§5): the
+/// Channels indicator is the one glyph in the set that carries real colour, and
+/// it carries it here — the tri-colour mark for RGB, and a single circle in the
+/// channel's own colour for R, G and B. Alpha is not a colour, so its circle is
+/// the near-white a matte is drawn in, which is also the only light circle on
+/// the bar and so tells itself apart from the three.
 class _ChannelPicker extends StatelessWidget {
   final ViewerChannel channel;
   final ValueChanged<ViewerChannel> onChannel;
 
   const _ChannelPicker({required this.channel, required this.onChannel});
-
-  /// The tints are the Scopes panel's own red, green and blue
-  /// ([ScopeColours.standard]) — the only place in the theme module that names
-  /// the three, and the right ones by meaning: a scope's red trace and a red
-  /// channel view are the same red channel.
-  ///
-  /// Alpha is not a colour, so it gets a different mark rather than a tint: a
-  /// matte, which is what an alpha view is drawn as.
-  static Color _tint(LumitTheme t, ViewerChannel c) => switch (c) {
-        ViewerChannel.rgb || ViewerChannel.alpha => t.textMuted,
-        ViewerChannel.red => ScopeColours.standard.red,
-        ViewerChannel.green => ScopeColours.standard.green,
-        ViewerChannel.blue => ScopeColours.standard.blue,
-      };
 
   static String _label(ViewerChannel c) => switch (c) {
         ViewerChannel.rgb => 'RGB',
@@ -2677,38 +2770,119 @@ class _ChannelPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Builder(
-      builder: (context) => viewerBarMark(
-        key: const ValueKey('viewer-channel'),
-        icon: channel == ViewerChannel.alpha
-            ? LumitIcon.matte
-            : LumitIcon.channels,
-        colour: _tint(t, channel),
-        tip: l10n.tipViewerChannel,
-        onPressed: () {
-          final box = context.findRenderObject();
-          if (box is! RenderBox) return;
-          showMenuAt<void>(
-            context: context,
-            position: box.localToGlobal(Offset(0, box.size.height + 2)),
-            rows: (close) => [
-              for (final c in ViewerChannel.values)
-                MenuRow(
-                  key: ValueKey<String>('viewer-channel-${c.name}'),
-                  onPressed: () {
-                    close(null);
-                    onChannel(c);
-                  },
-                  child: Row(children: [
-                    menuTick(t, c == channel),
-                    Text(_label(c)),
-                  ]),
+      builder: (context) => LumitTooltip(
+        message: l10n.tipViewerChannel,
+        child: HouseButton(
+          key: const ValueKey('viewer-channel'),
+          frameless: true,
+          padding: EdgeInsets.zero,
+          onPressed: () {
+            final box = context.findRenderObject();
+            if (box is! RenderBox) return;
+            showMenuAt<void>(
+              context: context,
+              position: box.localToGlobal(Offset(0, box.size.height + 2)),
+              rows: (close) => [
+                for (final c in ViewerChannel.values)
+                  MenuRow(
+                    key: ValueKey<String>('viewer-channel-${c.name}'),
+                    onPressed: () {
+                      close(null);
+                      onChannel(c);
+                    },
+                    child: Row(children: [
+                      menuTick(t, c == channel),
+                      Text(_label(c)),
+                    ]),
+                  ),
+              ],
+            );
+          },
+          child: SizedBox(
+            width: viewerBarIconSize,
+            height: viewerStripHeight - 2 * viewerMarkEdge,
+            child: Center(
+              // Unkeyed: the bar's order is asserted by the keys of the
+              // controls standing on it, and the face is part of one rather
+              // than another. What finds it is its painter's own type.
+              child: SizedBox(
+                width: viewerBarIconSize,
+                height: viewerBarIconSize,
+                child: CustomPaint(
+                  painter: ChannelFacePainter(channel: channel, theme: t),
                 ),
-            ],
-          );
-        },
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
+}
+
+/// The channel picker's closed face: a coloured circle for the view in force.
+///
+/// **Why it is painted rather than set from the icon set.** Every glyph in the
+/// set is one colour, taken from the text colour around it (§5); this mark is
+/// the set's one stated exception — three circles that fill per viewed channel —
+/// and three colours cannot come out of one font glyph. The geometry is the set
+/// glyph's own, so the mark is the same mark: three circles of r 3.8 on the 16
+/// grid, at (8, 5.5), (6, 9.5) and (10, 9.5), and a centre dot of r 1.2.
+///
+/// The three colours are the Scopes panel's ([ScopeColours.standard]) — the one
+/// place in the theme module that names a red, a green and a blue, and the right
+/// ones by meaning: a scope's red trace and a red channel view are the same red
+/// channel. Alpha takes `text_primary`, the near-white a matte reads as.
+class ChannelFacePainter extends CustomPainter {
+  final ViewerChannel channel;
+  final LumitTheme theme;
+
+  const ChannelFacePainter({required this.channel, required this.theme});
+
+  /// The single circle's colour for a channel, or null for RGB — which is the
+  /// tri-colour mark rather than one circle.
+  static Color? single(LumitTheme t, ViewerChannel c) => switch (c) {
+        ViewerChannel.rgb => null,
+        ViewerChannel.red => ScopeColours.standard.red,
+        ViewerChannel.green => ScopeColours.standard.green,
+        ViewerChannel.blue => ScopeColours.standard.blue,
+        ViewerChannel.alpha => t.textPrimary,
+      };
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // The set's own 16 grid, scaled to whatever the bar renders the mark at.
+    final k = size.width / 16;
+    final one = single(theme, channel);
+    if (one != null) {
+      // One circle, filling the cell as the three together do — a lone r 3.8
+      // would read as a smaller mark than RGB rather than a different one.
+      canvas.drawCircle(Offset(8 * k, 8 * k), 4.5 * k, Paint()..color = one);
+      return;
+    }
+    const centres = [Offset(8, 5.5), Offset(6, 9.5), Offset(10, 9.5)];
+    final colours = [
+      ScopeColours.standard.red,
+      ScopeColours.standard.green,
+      ScopeColours.standard.blue,
+    ];
+    for (var i = 0; i < 3; i++) {
+      canvas.drawCircle(
+        centres[i] * k,
+        3.8 * k,
+        Paint()..color = colours[i].withValues(alpha: 0.9),
+      );
+    }
+    canvas.drawCircle(
+      Offset(8 * k, 8 * k),
+      1.2 * k,
+      Paint()..color = theme.textPrimary,
+    );
+  }
+
+  @override
+  bool shouldRepaint(ChannelFacePainter old) =>
+      old.channel != channel || old.theme != theme;
 }
 
 /// **Snapshot and compare, on one mark** (K-416, K-466).

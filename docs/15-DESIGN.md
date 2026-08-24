@@ -354,7 +354,9 @@ crosses over the day its glyph exists, and no panel changes. The set's grammar i
   `text_secondary` at rest, `text_primary` on hover, `accent` when active — exactly like a
   word would. **The one glyph with real colour of its own is the Viewer's Channels
   indicator**, whose circles fill per viewed channel (all three plus a white centre for RGB;
-  a single circle for R, G or B). Nothing else in the set carries colour.
+  a single circle for R, G or B, and a near-white one for alpha, K-478). It is painted
+  rather than set from a font glyph, three colours not fitting in one. Nothing else in the
+  set carries colour.
 - **One icon per chrome word.** The set covers the tools, layer switches, transport,
   timeline and graph controls, keyframes, effects, the Viewer bar, the Project panel, the
   graph panel and the application chrome — so the Icons setting (§5.1) has a glyph for
@@ -1168,6 +1170,31 @@ strips, a seam of **1×12** in `hairline`, pickers of **18** with a 10px label s
 at **10px mono** — the exposure in `text_secondary` and the reading in `text_muted`. The
 exposure is **the one editable value in the application that rests bare**: the drawing sets
 it as the number alone, and a 20px well in a 22px bar reads as the bar's own edge.
+
+**Two marks the drawing does not draw at rest** (K-478). The **channel picker's closed
+face** is a coloured circle for the view in force — the tri-colour mark for RGB, a single
+circle in the channel's own colour for R, G and B (§8's three), and the near-white a matte
+reads as for alpha; it is painted rather than set from a font glyph, being §5's one mark
+with colour of its own. And a **reset mark stands to the left of the exposure** whenever
+the exposure is not zero, at the same 14 as every glyph beside it, muted; at zero there is
+nothing there, because a mark that is always there says a control is engaged when it is
+not.
+
+**The reading gives way in this order** (K-478, refining §12A.6's ladder below for one
+compound line). K-451's step 1 says "flexible text ellipsises", which for a line of four
+statements is four decisions rather than one — and the ellipsis eats the magnification,
+which is the part most often being watched. So, narrowing:
+
+1. it **takes room from the two gaps** either side of the transport, which slides the
+   transport off centre rather than shortening a word — the reading is at its natural width
+   and the gaps hold what is left over, which is what the drawing's own two
+   `margin-left: auto` do;
+2. it drops the **arrowed preview size** (`→ 960×540`), the least of what the line says;
+3. it drops the **composition's name**, which the panel's header and the composition tabs
+   both still carry;
+4. and only then does what is left — the time, the size, the magnification — **ellipsise**.
+   In practice the bar reaches its minimum and scrolls (step 5) before that, so a value is
+   never cut.
 
 **The selection's name is drawn on the picture** — 16 in from the stage's left edge and 8
 down from its top, 9px mono tracked 0.08em, in `animated` inside an `animated` hairline.

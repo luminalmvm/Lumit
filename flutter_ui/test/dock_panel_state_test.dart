@@ -25,6 +25,9 @@ Finder _tab(String title) => find.text(title.toUpperCase());
 /// where the test can inspect it.
 int _scrollBodyBuilds = 0;
 
+/// Taps that reached a bare pane's own body, for the corner-grip test below.
+int taps = 0;
+
 class _ScrollBody extends StatefulWidget {
   final ScrollController controller;
   const _ScrollBody(this.controller);
@@ -264,5 +267,42 @@ void main() {
 
     expect(controller.offset, 90,
         reason: 'the hidden tab kept its scroll offset alive');
+  });
+
+  /// **A bare pane draws no corner grip** (owner review, 2026-08-24).
+  ///
+  /// A solo pane used to wear a 16px square of dots at its top-right, which
+  /// dragged the panel. It is gone: nothing is painted over the panel's own
+  /// top-right corner, and nothing there takes a pointer. What still moves a
+  /// panel is a tab pill, and Window → Workspace.
+  testWidgets('a bare pane paints nothing over its top-right corner',
+      (tester) async {
+    final active = ValueNotifier<Panel?>(Panel.viewer);
+    addTearDown(active.dispose);
+
+    await tester.pumpWidget(_harness(
+      root: DockSplit(
+        DockAxis.horizontal,
+        [DockPane(Panel.viewer)],
+        [1.0],
+      ),
+      buildPanel: (context, panel) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => taps++,
+        child: const SizedBox.expand(child: Text('pane body')),
+      ),
+      active: active,
+    ));
+    await tester.pump();
+
+    // The pane's own top-right corner, a few pixels in — where the grip stood.
+    final pane = tester.getRect(find.text('pane body'));
+    await tester.tapAt(Offset(pane.right - 8, pane.top + 8));
+    await tester.pump();
+    expect(taps, 1,
+        reason: 'the corner belongs to the panel, not to a dock affordance');
+
+    // And the grip's own tooltip is nowhere in the tree.
+    expect(find.byType(LumitTooltip), findsNothing);
   });
 }

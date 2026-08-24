@@ -1,22 +1,21 @@
 // Renders the dock tree (state/dock.dart): weighted splits with draggable
 // dividers, tab groups as pill tab bars (dock.rs::tab_ui styling), solo panes
-// bare (K-086), and the Sharp/Round pane chrome (K-092). Tabs and bare panes
-// drag to re-dock (dock.rs drag-to-redock, via egui_tiles): a ghost pill
-// follows the cursor, the hovered pane shows a drop-zone preview, and release
-// commits the move through movePanel.
+// bare (K-086), and the Sharp/Round pane chrome (K-092). A tab drags to re-dock
+// (dock.rs drag-to-redock, via egui_tiles): a ghost pill follows the cursor, the
+// hovered pane shows a drop-zone preview, and release commits the move through
+// movePanel. Every pane is a drop target, bare ones included.
 
 import 'package:flutter/rendering.dart' show RenderOffstage;
 import 'package:flutter/widgets.dart';
 
-import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
 typedef PanelBuilder = Widget Function(BuildContext context, Panel panel);
 
-/// A pointer must travel this far before a press on a tab or grip becomes a
-/// re-dock drag rather than a click.
+/// A pointer must travel this far before a press on a tab becomes a re-dock
+/// drag rather than a click.
 const double _dragSlop = 6.0;
 
 class DockWidget extends StatefulWidget {
@@ -90,7 +89,6 @@ class _DockWidgetState extends State<DockWidget> {
 
   Widget _buildNode(BuildContext context, DockNode node) => switch (node) {
         DockPane(:final panel) => _PaneChrome(
-            bare: true,
             panel: panel,
             activePanel: widget.activePanel,
             drag: _drag,
@@ -150,7 +148,7 @@ class _DockWidgetState extends State<DockWidget> {
 }
 
 /// The live state of a re-dock drag, shared between the dragged source (a tab
-/// pill or a bare pane's grip), the ghost pill and every pane's drop preview.
+/// pill), the ghost pill and every pane's drop preview.
 /// It resolves the hovered pane and drop position by hit-testing the pointer
 /// against the pane rects each update, because MouseRegion does not fire while
 /// a pointer is captured by a drag.
@@ -554,7 +552,6 @@ class _TabGroup extends StatelessWidget {
       child: _KeepAlivePane(
         visible: visible,
         builder: (context) => _PaneChrome(
-          bare: false,
           panel: panel,
           activePanel: activePanel,
           drag: drag,
@@ -645,9 +642,8 @@ class _TabPillState extends State<_TabPill> {
     // border insets its child, so letting one appear would shrink the pill by
     // 2 px and shuffle every tab beside it as the pointer crossed the strip.
     final border = Border.all(
-      color: _hover && !widget.active
-          ? t.hairlineStrong
-          : const Color(0x00000000),
+      color:
+          _hover && !widget.active ? t.hairlineStrong : const Color(0x00000000),
       width: 1,
     );
     // A panel's name is a container label, so it is a kicker (§7.1, K-438):
@@ -712,17 +708,14 @@ class _TabPillState extends State<_TabPill> {
 /// the content in a rounded, shadowed, padded card (dock.rs::pane_ui). Any
 /// click inside makes this the active panel, which wears the accent boundary
 /// (Shell::active_panel). A live re-dock drag paints the drop-zone preview
-/// over the hovered pane, and a bare pane carries the corner drag grip
-/// (dock.rs::paint_bare_pane_grip).
+/// over the hovered pane.
 class _PaneChrome extends StatelessWidget {
-  final bool bare;
   final Panel panel;
   final ValueNotifier<Panel?> activePanel;
   final _DragController drag;
   final Widget child;
 
   const _PaneChrome({
-    required this.bare,
     required this.panel,
     required this.activePanel,
     required this.drag,
@@ -773,12 +766,6 @@ class _PaneChrome extends StatelessWidget {
               children: [
                 child,
                 Positioned.fill(child: _DropPreview(panel: panel, drag: drag)),
-                if (bare)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: _PaneGrip(panel: panel, drag: drag),
-                  ),
               ],
             ),
           ),
@@ -846,72 +833,17 @@ class _DropPainter extends CustomPainter {
       old.pos != pos || old.accent != accent;
 }
 
-/// The bare-pane drag grip (dock.rs::BARE_PANE_GRIP_SIZE / paint_bare_pane_grip):
-/// a 16 px corner square of a 2×3 dot grid, muted at half alpha, brightening on
-/// hover or drag, that drags the pane's panel exactly like a tab.
-class _PaneGrip extends StatefulWidget {
-  final Panel panel;
-  final _DragController drag;
-  const _PaneGrip({required this.panel, required this.drag});
-
-  @override
-  State<_PaneGrip> createState() => _PaneGripState();
-}
-
-class _PaneGripState extends State<_PaneGrip> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return _DragSource(
-      panel: widget.panel,
-      drag: widget.drag,
-      child: LumitTooltip(
-        message: l10n.tipMovePanel,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.grab,
-          onEnter: (_) => setState(() => _hover = true),
-          onExit: (_) => setState(() => _hover = false),
-          child: AnimatedBuilder(
-            animation: widget.drag,
-            builder: (context, _) {
-              final t = ThemeScope.of(context).theme;
-              final lit = _hover || widget.drag.dragged == widget.panel;
-              return SizedBox(
-                width: 16,
-                height: 16,
-                child: CustomPaint(
-                  painter: _GripPainter(
-                    lit ? t.textSecondary : t.textMuted.withValues(alpha: 0.5),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GripPainter extends CustomPainter {
-  final Color colour;
-  const _GripPainter(this.colour);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const pad = 4.0;
-    final inner = (Offset.zero & size).deflate(pad);
-    final paint = Paint()..color = colour;
-    for (var col = 0; col < 2; col++) {
-      for (var row = 0; row < 3; row++) {
-        final x = inner.left + col * inner.width;
-        final y = inner.top + row * (inner.height / 2);
-        canvas.drawCircle(Offset(x, y), 1, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GripPainter old) => old.colour != colour;
-}
+/// **The bare-pane corner grip is gone** (owner review, 2026-08-24).
+///
+/// A solo pane used to carry a 16px dot-grid square in its top-right corner
+/// (dock.rs::paint_bare_pane_grip), which dragged the pane's panel exactly like
+/// a tab. It read as a control on every panel that had one, and on the Viewer it
+/// sat over the right-hand end of that panel's own header strip — so the one
+/// dock affordance drawn on the picture was also the one covering a picker.
+///
+/// What still carries re-docking: a **tab pill** drags its panel (`_TabPill`),
+/// every pane is still a **drop target** (`_DropPreview`), and Window →
+/// Workspace holds the presets, the reset and the per-panel toggles. A pane
+/// that is alone in its slot can no longer be lifted; the natural home for that,
+/// if it is wanted back, is the panel's own header strip rather than a mark
+/// floating over its content.
