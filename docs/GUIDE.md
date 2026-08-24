@@ -8181,6 +8181,54 @@ no value of their own.
 
 This is also what After Effects shows for a mask path, and for the same reason.
 
+### A soft edge that is soft in one place and sharp in another (K-445)
+
+A mask's **feather** is the width of the soft band across its edge, and until now it was one
+number for the whole shape. A sky replacement wants the opposite: crisp along the horizon,
+blending away at the corner. So a mask can now be given a width **per point** of its drawn
+shape, and the width runs smoothly from one point to the next along the curve between them.
+
+The interesting part is what that costs, because the answer is "almost nothing", and the
+reason is worth following.
+
+Lumit does not feather a mask by blurring it. It first works out, for every pixel in the
+frame, **how far that pixel is from the edge of the shape** — a positive number inside,
+negative outside. That map of distances is built once, and everything about the edge is read
+off it: growing or shrinking the shape (expansion) slides the point where the distance crosses
+zero, and the feather is simply the number the distance is *divided by* before it is turned
+into an opacity. Divide by 2 and the edge goes from solid to clear over two pixels; divide by
+60 and it takes sixty.
+
+Making the feather vary means that divisor stops being one number and becomes a second
+picture: a width at every pixel. And the honest width for a pixel is the width of the piece of
+edge it is nearest to — because the nearest piece of edge is exactly what its distance was
+measured against in the first place.
+
+Which sounds like a second, expensive search: for every pixel, find the closest point on the
+outline, then look up what width was written there. It is not, because the algorithm that
+computed the distances already knows the answer. The method Lumit uses (Felzenszwalb and
+Huttenlocher's) works by sliding a parabola outwards from every starting pixel and keeping,
+at each position, whichever parabola sits lowest — and *which* parabola won is the same thing
+as *which starting pixel is nearest*. It was being computed and thrown away. Writing it down
+costs one extra number per pixel, and it turns "how far to the edge" into "how far, and to
+which bit of edge" at no real extra cost. From there the width is a lookup.
+
+The starting pixels themselves come from walking the outline: the same walk that draws the
+shape also stamps, into each pixel it crosses, the width interpolated between the two points
+it is currently between.
+
+Two things follow, and both matter more than they sound. A mask whose widths happen to be all
+the same is spotted before any of this runs and takes the old single-number path, so an
+ordinary mask is not made slower by a feature it does not use — and switching the feature on
+without changing a width renders a frame identical to the one before. And the widths are
+absent from the saved file until somebody actually varies them, so every project ever saved
+still writes exactly the bytes it wrote yesterday, and every frame the cache has stored stays
+valid.
+
+The same change added the two mask combine modes that were missing, **Lighten** and
+**Darken**: where **Add** sums two overlapping masks and can saturate, Lighten simply keeps
+whichever of the two is more opaque, and Darken whichever is less.
+
 ## 13. The two public web sites
 
 `web/` and `web-docs/` are the public face of the project: **lumitlab.com**,

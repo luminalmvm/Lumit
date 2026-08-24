@@ -12304,3 +12304,94 @@ with only the `-1`; the full run must differ from both one-field runs, which is 
 comparison that was an equality before). No new user-facing strings. The manual's two
 "One flow measurement per layer" note blocks (`datamosh.mdx`, `fast-motion-blur.mdx`) stated
 the old behaviour as advice and are rewritten.
+
+## K-445 — A mask's feather can be a width per point, and Lighten and Darken join the modes
+
+**DECIDED 2026-08-24.** Allocated on safe-lane. Closes the two gaps K-338 left open and
+03-DATA-MODEL §7 has carried as "Future" ever since: the `Lighten` and `Darken` mask modes,
+and a feather that is not one number all the way round the shape.
+
+**The modes are the easy half, and they are max and min.** `MaskMode` gains `Lighten` and
+`Darken`; the fold that combines a mask into the running total gains `max` and `min` against
+what the stack holds, which is what After Effects means by the two. The starting value follows
+the same rule K-338 set: a lone `Lighten` builds from an empty frame exactly as `Add` does
+(max against a full frame would leave the layer untouched, which is a mask doing the opposite
+of nothing), and a lone `Darken` cuts a full one down to its own shape as `Intersect` does.
+`Lighten` is genuinely not `Add` — Add saturates the overlap of two half-opacity masks and
+Lighten does not — which is the whole reason it exists. **`Darken` and `Intersect` do coincide
+today**, because Lumit's `Intersect` is `min` where After Effects multiplies the two
+opacities; that is a pre-existing reading of `Intersect` this entry does not change, and it is
+recorded here so the coincidence is a known one rather than a surprise. Changing `Intersect`
+to multiply would re-render every project that uses it and wants a decision of its own.
+
+The AE importer stops apologising for the two: `Reason::MaskModeUnavailable` had exactly one
+producer and, with all seven of `PF_MaskMode` now mapped, no reachable case at all, so the
+variant and its string are deleted rather than left as dead code.
+
+**Per-vertex widths, not feather points, and this is the choice worth recording.** After
+Effects' Mask Feather Tool drops *feather points* along the path: each has a position measured
+in path parameter, an inner and an outer radius, and a tension. That is a second point set
+with its own tool, its own editing gestures and its own interpolation — and none of it is
+implementable well against the rasteriser Lumit actually has. So the honest minimal version
+the model supports properly is a width **per vertex**, running straight-line along each
+segment between them: `Mask::vertex_feather: Vec<Property>`, positionally matched to the
+path's own vertices, each animatable exactly as the single `feather` is. Empty — the ordinary
+mask — means one width all the way round.
+
+**Why per vertex is what the rasteriser can carry with quality.** Feather in Lumit is not a
+blur: it is a reading of a signed distance field (K-338), where the ramp width is the number
+the distance is divided by. Making the feather vary therefore means turning that one number
+into a *picture* — a width at every pixel — and the honest picture is "the width of the piece
+of edge this pixel is nearest to", because the nearest piece of edge is exactly what the
+distance field measured it against. That is a **feature transform**, and Felzenszwalb and
+Huttenlocher's transform — already in the file, already computing the distance — yields it for
+one extra store per sample: the parabola that won at each position *is* the nearest seed.
+`edt_1d` grows an argmin output; `spread_seeds` runs the two passes and carries the seeding
+pixel's value out; `feather_map` seeds it by walking the same fixed flattening the rasteriser
+uses and stamping the interpolated width. A per-edge value — one number for the whole segment
+— was the alternative and was rejected: it is no cheaper to render, and it steps at every
+vertex where a drawn shape should be smooth.
+
+**The ordinary mask pays nothing.** `feather_widths_at` answers "one width" whenever the list
+is empty *or* every width in it is equal, so a hard-edged mask still takes the fast path that
+returns the rasteriser's own bytes untouched, an evenly feathered one still takes the single
+distance transform, and switching the feature on without changing a width renders identically.
+Only a mask whose widths actually differ pays for the second transform.
+
+**The file does not change until somebody uses it.** `vertex_feather` is `default`/
+`skip_serializing_if = "Vec::is_empty"`, and its still values write as bare numbers exactly as
+`opacity`, `feather` and `expansion` do (K-340). An untouched mask therefore serialises to the
+bytes it always did, which is what keeps every frame the cache has banked — the same promise
+K-338 and K-339 made, kept for the same reason.
+
+**Two limits, both deliberate.** The widths are matched to vertices **by position**, so
+deleting a point shifts the widths after it, and an animated path whose keys hold different
+point counts is reconciled upward (`resample`) before the widths are read against it — a list
+shorter than the reconciled path falls back to the single width for the vertices it does not
+reach. Feather points anchored by arc length would dodge both, and are the shape to reach for
+if the Mask Feather Tool is ever built. And the AE importer does **not** map AE's variable
+feather: no fixture proves the layout of that property, and guessing one would draw a shape
+nobody asked for, so the single averaged width stands as it always has.
+
+**The frontend.** `BridgeMask` carries the list, each entry clamped into `0..5000` layer
+pixels exactly as the one width is. The Timeline shows a **Point *n* feather** row per width,
+under the mask's own Feather row and only once the mask carries them, each with the same
+stopwatch, navigator, lane diamonds and graph channel every other mask value has. They are
+switched on from the mask row's own menu — **Feather per point** gives every point the width
+the mask already had, so turning it on does not move the picture, and **One feather width**
+drops them again. The Viewer's mask overlay grows a pair of dimmer lines half a feather either
+side of the path, which is the only way a varying width can be *seen* before the frame is
+drawn; they are drawn from still widths only, because evaluating a keyframed one is the
+engine's job and the Viewer does not ask it while it paints (K-184).
+
+Regression tests: in `lumit-core`, `lighten_and_darken_take_the_greater_and_the_lesser`,
+`a_lone_lighten_mask_shows_its_own_shape`, `feather_varies_along_the_path`,
+`equal_vertex_feathers_are_the_uniform_feather`,
+`a_short_vertex_feather_list_falls_back_to_the_uniform_width`, `a_vertex_feather_animates` and
+`an_unvaried_mask_serialises_as_it_always_did`; in `lumit-bridge`,
+`a_masks_per_point_feather_crosses_and_is_clamped`; in `lumit-import`,
+`every_mask_mode_maps_and_the_animated_path_survives` (was
+`an_unbuilt_mask_mode_falls_back_...`); in Flutter, `a mask gains a feather row per point, and
+gives them back`. New strings: `maskModeLighten`, `maskModeDarken`, `maskVertexFeather`,
+`maskFeatherPerPoint`, `maskFeatherOneWidth`; `aeMaskModeUnavailable` is deleted with its
+reason.

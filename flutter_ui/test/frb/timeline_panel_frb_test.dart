@@ -387,6 +387,7 @@ void main() {
           opacity: const BridgeScalar.static_(100),
           mode: BridgeMaskMode.add,
           feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
           expansion: const BridgeScalar.static_(0),
           pathKeys: const [],
         ),
@@ -429,6 +430,7 @@ void main() {
           opacity: const BridgeScalar.static_(100),
           mode: BridgeMaskMode.add,
           feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
           expansion: const BridgeScalar.static_(0),
           pathKeys: const [],
         ),
@@ -698,7 +700,10 @@ void main() {
       // Every one of the four rows picks itself when its name is clicked —
       // the same as a transform or an effect parameter row.
       final masks = masksPath(layer.internallayerId.toString());
+      // Not the per-point feather (K-445): this mask has one width, so it
+      // has no per-point rows to click.
       for (final value in MaskValue.values) {
+        if (value == MaskValue.vertexFeather) continue;
         await tester.tap(find.text(maskValueLabel(value)));
         await tester.pump();
         expect(p.uiState.selectedProperties.value, ['$masks/$id/${value.name}'],
@@ -737,7 +742,10 @@ void main() {
       final id = layer.getMasks().single.id;
       final masks = masksPath(layer.internallayerId.toString());
 
+      // Not the per-point feather (K-445): this mask has one width, so it
+      // has no per-point rows to click.
       for (final value in MaskValue.values) {
+        if (value == MaskValue.vertexFeather) continue;
         final gesture = await tester
             .startGesture(tester.getCenter(find.text(maskValueLabel(value))));
         await tester.pump();
@@ -989,6 +997,64 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(layer.getMasks().single.name, 'Vignette');
+    });
+
+    /// **A feather per point is switched on from the mask's own menu, and
+    /// gives every point a row** (K-445).
+    ///
+    /// Switching it on must not move the picture: each point starts at the
+    /// width the mask already had, so the change is an offer of control and
+    /// not an edit of the shape. The rows that appear key like any other
+    /// number, which is what makes one edge animatable soft and another sharp.
+    testWidgets('a mask gains a feather row per point, and gives them back',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await openMaskRow(tester, p, layer, 'Ellipse');
+      layer.setMask(
+          mask: maskWith(layer.getMasks().single,
+              feather: const BridgeScalar.static_(12)));
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      final id = layer.getMasks().single.id;
+
+      expect(find.text('Point 1 feather'), findsNothing,
+          reason: 'an ordinary mask shows the four rows it always did');
+
+      Future<void> toggleFromMenu() async {
+        await tester.tapAt(
+            tester.getCenter(find.byKey(ValueKey<String>('tl-mask-name-$id'))),
+            buttons: kSecondaryButton);
+        await tester.pumpAndSettle();
+        await tester
+            .tap(find.byKey(ValueKey<String>('tl-mask-vary-feather-$id')));
+        await tester.pumpAndSettle();
+      }
+
+      await toggleFromMenu();
+      final varied = layer.getMasks().single;
+      expect(varied.vertexFeather.length, varied.vertices.length,
+          reason: 'one width per point of the shape');
+      expect(varied.vertexFeather.map(stillValue), everyElement(12),
+          reason: 'each point starts at the width the mask already had, so '
+              'switching this on does not move the picture');
+      expect(find.text('Point 1 feather'), findsOneWidget);
+      expect(find.text('Point 3 feather'), findsOneWidget);
+
+      // A per-point row is a value row like any other: its field writes
+      // through to that point alone.
+      await dragLeft(
+          tester, find.byKey(ValueKey<String>('tl-mask-vertexFeather-$id-0')), 20);
+      final dragged = layer.getMasks().single;
+      expect(stillValue(dragged.vertexFeather[0]), lessThan(12),
+          reason: 'the drag reached point 1');
+      expect(stillValue(dragged.vertexFeather[1]), 12,
+          reason: 'and nothing else');
+
+      await toggleFromMenu();
+      expect(layer.getMasks().single.vertexFeather, isEmpty,
+          reason: 'switching it off puts the one width back');
+      expect(find.text('Point 1 feather'), findsNothing);
     });
 
     /// Paint strokes list under their own heading, between Masks and Effects —

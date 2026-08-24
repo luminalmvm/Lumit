@@ -505,6 +505,16 @@ class BridgeMask {
   /// Width of the soft edge in layer pixels; 0 is the hard antialiased edge.
   final BridgeScalar feather;
 
+  /// A width of its own for each **vertex**, in layer pixels (K-445), each
+  /// animatable exactly as [`Self::feather`] is. Empty — the ordinary mask —
+  /// means one width all the way round, and is what the Timeline shows no
+  /// per-point rows for.
+  ///
+  /// Positional: entry *i* belongs to vertex *i* of [`Self::vertices`], so a
+  /// caller changing the shape and the widths in one write must send the two
+  /// lists agreeing with each other.
+  final List<BridgeScalar> vertexFeather;
+
   /// Grow (+) or shrink (−) the shape, in layer pixels.
   final BridgeScalar expansion;
 
@@ -533,6 +543,7 @@ class BridgeMask {
     required this.opacity,
     required this.mode,
     required this.feather,
+    required this.vertexFeather,
     required this.expansion,
     required this.pathKeys,
   });
@@ -547,6 +558,7 @@ class BridgeMask {
       opacity.hashCode ^
       mode.hashCode ^
       feather.hashCode ^
+      vertexFeather.hashCode ^
       expansion.hashCode ^
       pathKeys.hashCode;
 
@@ -563,6 +575,7 @@ class BridgeMask {
           opacity == other.opacity &&
           mode == other.mode &&
           feather == other.feather &&
+          vertexFeather == other.vertexFeather &&
           expansion == other.expansion &&
           pathKeys == other.pathKeys;
 }
@@ -576,6 +589,12 @@ enum BridgeMaskMode {
   add,
   subtract,
   intersect,
+
+  /// The greater of this mask and the stack below it (K-445).
+  lighten,
+
+  /// The lesser of the two (K-445).
+  darken,
   difference,
   ;
 

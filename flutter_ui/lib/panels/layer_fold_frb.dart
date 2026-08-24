@@ -104,7 +104,7 @@ final class FoldMaskRow extends LayerFoldRow {
 ///
 /// [path] is the shape itself: a value with no number, so its row carries a
 /// stopwatch and diamonds but no field (K-339).
-enum MaskValue { path, opacity, feather, expansion }
+enum MaskValue { path, opacity, feather, expansion, vertexFeather }
 
 /// One of a mask's values — its shape, opacity, feather or expansion — on a
 /// row of its own under the mask (K-222, K-340).
@@ -116,7 +116,13 @@ enum MaskValue { path, opacity, feather, expansion }
 final class FoldMaskValueRow extends LayerFoldRow {
   final BridgeMask mask;
   final MaskValue value;
-  const FoldMaskValueRow(this.mask, this.value, {required int depth})
+
+  /// Which vertex's own feather this row carries, for
+  /// [MaskValue.vertexFeather] (K-445). `-1` on every other row, which have
+  /// one value each and no point to belong to.
+  final int vertex;
+  const FoldMaskValueRow(this.mask, this.value,
+      {required int depth, this.vertex = -1})
       : super(depth);
 }
 
@@ -219,35 +225,46 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
       // paths, and those keys carry their own eases and a counted-up value
       // (K-344), so the lane draws their diamonds and the graph can draw the
       // rate the shape is changing at.
-      FoldMaskValueRow(:final mask, :final value) => value == MaskValue.path
-          ? mask.pathKeys
-          : switch (maskScalarOf(mask, value)) {
-              BridgeScalar_Keyframed(:final field0) => field0,
-              _ => const [],
-            },
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        value == MaskValue.path
+            ? mask.pathKeys
+            : switch (maskScalarOf(mask, value, vertex)) {
+                BridgeScalar_Keyframed(:final field0) => field0,
+                _ => const [],
+              },
       _ => const [],
     };
 
 /// What a mask's value row is called — shared by the row, the graph channel
 /// and anything else that has to name one.
-String maskValueLabel(MaskValue value) => switch (value) {
+String maskValueLabel(MaskValue value, [int vertex = -1]) => switch (value) {
       MaskValue.path => l10n.maskPath,
       MaskValue.opacity => l10n.maskOpacity,
       MaskValue.feather => l10n.maskFeather,
       MaskValue.expansion => l10n.maskExpansion,
+      // Counted from one, as the person drawing counts points.
+      MaskValue.vertexFeather => l10n.maskVertexFeather(vertex + 1),
     };
 
 /// Which of a mask's animatable numbers [value] names. The shape is not one of
-/// them — it has no number — and asks for the still zero nobody reads.
-BridgeScalar maskScalarOf(BridgeMask mask, MaskValue value) => switch (value) {
+/// them — it has no number — and asks for the still zero nobody reads, as does
+/// a per-point feather naming a point the mask no longer has.
+BridgeScalar maskScalarOf(BridgeMask mask, MaskValue value,
+        [int vertex = -1]) =>
+    switch (value) {
       MaskValue.opacity => mask.opacity,
       MaskValue.feather => mask.feather,
       MaskValue.expansion => mask.expansion,
+      MaskValue.vertexFeather =>
+        vertex >= 0 && vertex < mask.vertexFeather.length
+            ? mask.vertexFeather[vertex]
+            : const BridgeScalar.static_(0),
       MaskValue.path => const BridgeScalar.static_(0),
     };
 
 /// [mask] with the one number [value] names replaced.
-BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to) =>
+BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to,
+        [int vertex = -1]) =>
     BridgeMask(
       id: mask.id,
       name: mask.name,
@@ -257,6 +274,12 @@ BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to) =>
       opacity: value == MaskValue.opacity ? to : mask.opacity,
       mode: mask.mode,
       feather: value == MaskValue.feather ? to : mask.feather,
+      vertexFeather: value == MaskValue.vertexFeather
+          ? [
+              for (var i = 0; i < mask.vertexFeather.length; i++)
+                i == vertex ? to : mask.vertexFeather[i]
+            ]
+          : mask.vertexFeather,
       expansion: value == MaskValue.expansion ? to : mask.expansion,
       pathKeys: mask.pathKeys,
     );
@@ -364,7 +387,7 @@ bool moveLaneKey({
       entry.layer.setRetimeProperty(value: BridgeScalar.keyframed(next));
       return true;
 
-    case FoldMaskValueRow(:final mask, :final value):
+    case FoldMaskValueRow(:final mask, :final value, :final vertex):
       if (value == MaskValue.path) {
         // A path key is a whole shape, so the engine moves it rather than the
         // frontend rebuilding a list of them (K-340).
@@ -375,12 +398,12 @@ bool moveLaneKey({
           to: time,
         );
       }
-      final scalar = maskScalarOf(mask, value);
+      final scalar = maskScalarOf(mask, value, vertex);
       if (scalar is! BridgeScalar_Keyframed) return false;
       final next = moved(scalar.field0);
       if (next == null) return false;
       entry.layer.setMask(
-        mask: maskWithScalar(mask, value, BridgeScalar.keyframed(next)),
+        mask: maskWithScalar(mask, value, BridgeScalar.keyframed(next), vertex),
         at: null,
       );
       return true;
@@ -407,8 +430,9 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
       FoldMaskRow(:final mask) => '${masksPath(layerId)}/${mask.id}',
-      FoldMaskValueRow(:final mask, :final value) =>
-        '${masksPath(layerId)}/${mask.id}/${value.name}',
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        '${masksPath(layerId)}/${mask.id}/${value.name}'
+            '${vertex < 0 ? '' : '/$vertex'}',
       FoldStrokeRow(:final stroke) => '${paintPath(layerId)}/${stroke.id}',
       FoldShapeRow(:final item) => '${contentsPath(layerId)}/${item.id}',
     };
@@ -596,7 +620,15 @@ List<LayerFoldRow> layerFoldRows({
         // the effect — shape first, because it is what the mask *is*, then the
         // numbers in the order they apply.
         for (final value in MaskValue.values) {
+          if (value == MaskValue.vertexFeather) continue;
           rows.add(FoldMaskValueRow(mask, value, depth: 3));
+        }
+        // The per-point widths, under the one width they vary from (K-445),
+        // and only once the mask actually carries them: a mask feathered the
+        // ordinary way shows the four rows it always did.
+        for (var i = 0; i < mask.vertexFeather.length; i++) {
+          rows.add(FoldMaskValueRow(mask, MaskValue.vertexFeather,
+              depth: 3, vertex: i));
         }
       }
     }

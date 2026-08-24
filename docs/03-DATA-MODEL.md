@@ -566,8 +566,9 @@ struct Mask {
     path_keys: Vec<PathKeyframe>,     // empty = not animated (absent from the file)
     inverted: bool,
     opacity: Property,                // 0..100
-    mode: MaskMode,                   // None | Add | Subtract | Intersect | Difference
+    mode: MaskMode,                   // None | Add | Subtract | Intersect | Lighten | Darken | Difference
     feather: Property,                // layer px, total ramp width (0 = hard edge)
+    vertex_feather: Vec<Property>,    // layer px, one per vertex; empty = one width (K-445)
     expansion: Property,              // layer px, + grows the shape, − shrinks it
 }
 
@@ -592,12 +593,20 @@ raster: expansion moves the edge, feather sets the width of the ramp across it. 
 layer pixels and scale with preview resolution, so a soft edge keeps its real width at half
 resolution. A mask with neither takes a fast path and is used exactly as rasterised.
 
-`mode`, `feather`, `expansion` and `path_keys` are omitted from the file when they hold their
-defaults (`Add`, 0, 0, empty), so a project that predates them reads and writes
-byte-identically and keeps the frames its cache has already banked.
+`Lighten` and `Darken` are `max` and `min` against the running total, which is what After
+Effects means by them (K-445). `Lighten` starts a lone mask from an empty frame as `Add` does;
+`Darken` cuts a full one down as `Intersect` does. `Lighten` is not `Add` — Add saturates the
+overlap of two half-opacity masks and Lighten does not. `Darken` and `Intersect` do coincide
+today, because Lumit's `Intersect` is `min` where After Effects multiplies the two opacities;
+that reading of `Intersect` is unchanged and is noted so the coincidence is known.
 
-`opacity`, `feather` and `expansion` are `Property`s but **do not write themselves as one
-while they are still** (K-340): a static value writes as the bare number it always wrote,
+`mode`, `feather`, `vertex_feather`, `expansion` and `path_keys` are omitted from the file
+when they hold their defaults (`Add`, 0, empty, 0, empty), so a project that predates them
+reads and writes byte-identically and keeps the frames its cache has already banked.
+
+`opacity`, `feather`, `expansion` and each entry of `vertex_feather` are `Property`s but **do
+not write themselves as one while they are still** (K-340, K-445): a static value writes as
+the bare number it always wrote,
 and only a mask somebody has keyed writes the animation object. Reading takes either. The
 same promise, for the same reason — the frame key names a mask by the bytes its list
 serialises to, so an unkeyed mask must be byte-identical to what it was.
@@ -646,8 +655,26 @@ as it was.
 
 The op is still `SetLayerMasks`, the whole list, exactly invertible.
 
-**Future:** the `Lighten` / `Darken` modes, deliberately left out of the first mode set. Variable-width feather is later still; the model
-will reserve per-vertex feather data.
+### 7.0.1 A feather that varies along the path (K-445)
+
+`vertex_feather` holds one ramp width per **vertex**, in layer pixels, running straight-line
+along each segment between them. Empty — the ordinary mask — means `feather` all the way
+round; a list shorter than the path falls back to `feather` for the vertices it does not
+reach. Every entry animates exactly as `feather` does.
+
+The rasteriser turns those widths into a width at **every pixel**: the boundary walk stamps
+the interpolated width into the pixels it crosses, and every other pixel takes the width of
+the nearest stamped one, found by the feature half of the same distance transform that
+computes the distance. A pixel is therefore feathered by the width of the piece of edge it was
+measured against. Widths that are all equal — including all zero — are the single width, down
+to the byte, so switching this on and changing nothing renders identically and the ordinary
+mask never pays for the second transform.
+
+**The widths are matched to vertices by position**, so deleting a point shifts the widths
+after it, and an animated path whose keys hold different point counts is reconciled upward
+(§7.0) before the widths are read against it. Feather points anchored by arc length would
+dodge both, and are the shape to reach for if the Mask Feather Tool of After Effects is ever
+built.
 
 ### 7.1 Paint strokes (K-227)
 
@@ -831,5 +858,4 @@ migration (they are logged in 02-DECISIONS instead). A registry lands as 1.0 nea
   (AE allows 30000²) or cap and revisit?
 - Should `stretch` survive long-term, or is it sugar the UI lowers into Retime? (It rescales
   keyframes, which Retime deliberately does not — kept for AE compatibility for now.)
-- Per-vertex mask feather data reserved but unspecified — spec when variable-width feather lands.
 - Gradient model for text stroke/fill v1 or tier 2?

@@ -8939,8 +8939,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeMask dco_decode_bridge_mask(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return BridgeMask(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -8950,8 +8950,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       opacity: dco_decode_bridge_scalar(arr[5]),
       mode: dco_decode_bridge_mask_mode(arr[6]),
       feather: dco_decode_bridge_scalar(arr[7]),
-      expansion: dco_decode_bridge_scalar(arr[8]),
-      pathKeys: dco_decode_list_bridge_keyframe(arr[9]),
+      vertexFeather: dco_decode_list_bridge_scalar(arr[8]),
+      expansion: dco_decode_bridge_scalar(arr[9]),
+      pathKeys: dco_decode_list_bridge_keyframe(arr[10]),
     );
   }
 
@@ -11311,6 +11312,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_opacity = sse_decode_bridge_scalar(deserializer);
     var var_mode = sse_decode_bridge_mask_mode(deserializer);
     var var_feather = sse_decode_bridge_scalar(deserializer);
+    var var_vertexFeather = sse_decode_list_bridge_scalar(deserializer);
     var var_expansion = sse_decode_bridge_scalar(deserializer);
     var var_pathKeys = sse_decode_list_bridge_keyframe(deserializer);
     return BridgeMask(
@@ -11322,6 +11324,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         opacity: var_opacity,
         mode: var_mode,
         feather: var_feather,
+        vertexFeather: var_vertexFeather,
         expansion: var_expansion,
         pathKeys: var_pathKeys);
   }
@@ -13912,6 +13915,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.opacity, serializer);
     sse_encode_bridge_mask_mode(self.mode, serializer);
     sse_encode_bridge_scalar(self.feather, serializer);
+    sse_encode_list_bridge_scalar(self.vertexFeather, serializer);
     sse_encode_bridge_scalar(self.expansion, serializer);
     sse_encode_list_bridge_keyframe(self.pathKeys, serializer);
   }

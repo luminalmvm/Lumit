@@ -883,8 +883,6 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeChunkUnreadable(a('chunk'));
 
     // Masks.
-    case 'mask_mode_unavailable':
-      return l10n.aeMaskModeUnavailable(a('ae_mode'));
     case 'mask_feather_axes_differ':
       return l10n.aeMaskFeatherAxesDiffer(a('x'), a('y'));
     case 'mask_roto_bezier_flattened':

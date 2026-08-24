@@ -267,6 +267,15 @@ pub struct BridgeMask {
     pub mode: BridgeMaskMode,
     /// Width of the soft edge in layer pixels; 0 is the hard antialiased edge.
     pub feather: BridgeScalar,
+    /// A width of its own for each **vertex**, in layer pixels (K-445), each
+    /// animatable exactly as [`Self::feather`] is. Empty — the ordinary mask —
+    /// means one width all the way round, and is what the Timeline shows no
+    /// per-point rows for.
+    ///
+    /// Positional: entry *i* belongs to vertex *i* of [`Self::vertices`], so a
+    /// caller changing the shape and the widths in one write must send the two
+    /// lists agreeing with each other.
+    pub vertex_feather: Vec<BridgeScalar>,
     /// Grow (+) or shrink (−) the shape, in layer pixels.
     pub expansion: BridgeScalar,
     /// This mask's **shape** keys — empty when the path does not animate.
@@ -332,6 +341,10 @@ pub enum BridgeMaskMode {
     Add,
     Subtract,
     Intersect,
+    /// The greater of this mask and the stack below it (K-445).
+    Lighten,
+    /// The lesser of the two (K-445).
+    Darken,
     Difference,
 }
 
@@ -343,6 +356,8 @@ impl BridgeMaskMode {
             lumit_core::mask::MaskMode::Add => Self::Add,
             lumit_core::mask::MaskMode::Subtract => Self::Subtract,
             lumit_core::mask::MaskMode::Intersect => Self::Intersect,
+            lumit_core::mask::MaskMode::Lighten => Self::Lighten,
+            lumit_core::mask::MaskMode::Darken => Self::Darken,
             lumit_core::mask::MaskMode::Difference => Self::Difference,
         }
     }
@@ -354,6 +369,8 @@ impl BridgeMaskMode {
             Self::Add => lumit_core::mask::MaskMode::Add,
             Self::Subtract => lumit_core::mask::MaskMode::Subtract,
             Self::Intersect => lumit_core::mask::MaskMode::Intersect,
+            Self::Lighten => lumit_core::mask::MaskMode::Lighten,
+            Self::Darken => lumit_core::mask::MaskMode::Darken,
             Self::Difference => lumit_core::mask::MaskMode::Difference,
         }
     }
@@ -371,6 +388,11 @@ impl BridgeMask {
             opacity: BridgeScalar::read_at(&mask.opacity, offset),
             mode: BridgeMaskMode::read(mask.mode),
             feather: BridgeScalar::read_at(&mask.feather, offset),
+            vertex_feather: mask
+                .vertex_feather
+                .iter()
+                .map(|p| BridgeScalar::read_at(p, offset))
+                .collect(),
             expansion: BridgeScalar::read_at(&mask.expansion, offset),
             path_keys: mask
                 .path_keys
@@ -420,6 +442,13 @@ impl BridgeMask {
             // size of a continent. The ceiling is generous: 5000 layer pixels
             // is wider than any comp anyone is masking.
             feather: clamped_property(&self.feather, offset, 0.0, 5000.0)?,
+            // Each per-vertex width is bounded exactly as the one width is,
+            // and for the same reason (K-445).
+            vertex_feather: self
+                .vertex_feather
+                .iter()
+                .map(|s| clamped_property(s, offset, 0.0, 5000.0))
+                .collect::<Result<Vec<_>, _>>()?,
             expansion: clamped_property(&self.expansion, offset, -5000.0, 5000.0)?,
         })
     }

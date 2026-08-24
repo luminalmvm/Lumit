@@ -634,17 +634,8 @@ fn mask(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Mask> {
         Some("SUBTRACT") => MaskMode::Subtract,
         Some("INTERSECT") => MaskMode::Intersect,
         Some("DIFFERENCE") => MaskMode::Difference,
-        Some(other @ ("LIGHTEN" | "DARKEN")) => {
-            // docs/06 §2: not built. Add is the honest neighbour.
-            conv.report.row(
-                here.clone(),
-                Outcome::Adjusted,
-                Reason::MaskModeUnavailable {
-                    ae_mode: other.to_string(),
-                },
-            );
-            MaskMode::Add
-        }
+        Some("LIGHTEN") => MaskMode::Lighten,
+        Some("DARKEN") => MaskMode::Darken,
         _ => MaskMode::Add,
     };
 
@@ -706,6 +697,11 @@ fn mask(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Mask> {
         opacity: scalar(conv, &here, props, "ADBE Mask Opacity", 0, 100.0),
         mode,
         feather: LumProperty::fixed((fx + fy) / 2.0),
+        // AE's variable feather is a second point set with positions of its
+        // own, which Lumit's per-vertex widths (K-445) are not a place to put:
+        // no fixture proves the layout, and guessing one would draw a shape
+        // nobody asked for. The single width above stands, as it always has.
+        vertex_feather: Vec::new(),
         expansion: scalar(conv, &here, props, "ADBE Mask Offset", 0, 0.0),
         extra: ae_map(vec![
             ("mode", serde_json::json!(facts.mode)),

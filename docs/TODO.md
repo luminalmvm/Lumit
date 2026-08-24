@@ -154,19 +154,18 @@ These are v1-scope surfaces it does not yet match.
     whole path by a segment.
 - **Mask paths have no per-key op.** `SetLayerMasks` rewrites the whole list for
     every keyframe drag, so one drag is one undo step only because the drag is
-    staged - a per-key op would make it so by construction (K-344). **Lighten**
-    and **Darken** are the two mask modes still unbuilt, and feather is uniform:
-    the variable-width, per-vertex kind is a model change
-    ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7).
-- **Variable-width mask feather** (K-338) - After Effects has had this since CS6:
-    the **Mask Feather Tool** (`G` cycles onto it, under the Pen) drops *feather
-    points* along an existing mask path, each dragging its own radius in or out,
-    so one edge of a mask can be razor-sharp and another 200 px soft. It is what
-    a sky replacement wants - crisp along the horizon, blending away at the
-    corner. It needs a second point set on the path, its own tool, and a
-    rasteriser that varies the ramp width along the boundary rather than using
-    one number. `ToolMode.penMaskFeather` already exists in the toolbar as a stub
-    with an icon and a string and nothing behind it.
+    staged - a per-key op would make it so by construction (K-344).
+- **The Mask Feather Tool** (K-445 built the half under it) - a mask's feather
+    can now be a width **per vertex**, keyed and dragged from its own Timeline
+    rows, and switched on from the mask row's menu. What is still owed is After
+    Effects' *tool*: `ToolMode.penMaskFeather` (`G` cycles onto it, under the
+    Pen) remains a stub with an icon and a string and nothing behind it, so the
+    widths cannot yet be dragged on the picture. Doing that properly wants
+    feather points anchored by **arc length** rather than by vertex index, which
+    would also close K-445's two recorded limits: deleting a point shifts the
+    widths after it, and a path whose keys hold different point counts reads its
+    widths against the reconciled vertices. AE's own variable feather is
+    therefore still not imported ([11-AE-IMPORT.md](11-AE-IMPORT.md)).
 - **Type** - vertical type (needs `lumit-text` to lay a line downwards); true
     glyph metrics across the bridge (the caret, the anchor and the gizmo all use
     the same half-an-em estimate, and one measured advance width would replace

@@ -708,22 +708,19 @@ fn key_times_are_measured_from_the_layers_own_start() {
     assert_eq!(shifted.transform.rotation.value_at(1.0), 90.0);
 }
 
-/// **An unbuilt mask mode falls back to Add, and an animated path keeps its
-/// keys.**
+/// **Every mask mode comes across, and an animated path keeps its keys.**
 ///
-/// Lighten and Darken are not built (docs/06 §2). Everything else about the
-/// mask — feather, opacity, expansion, the animated shape — comes across, and
-/// AE's two feather axes average into Lumit's one width with a row saying so.
+/// Lighten was the mode this fixture was picked for: it used to arrive as Add
+/// with a row apologising, and since K-445 it arrives as itself. Everything
+/// else about the mask — feather, opacity, expansion, the animated shape —
+/// comes across too, and AE's two feather axes average into Lumit's one width
+/// with a row saying so.
 #[test]
-fn an_unbuilt_mask_mode_falls_back_and_the_animated_path_survives() {
+fn every_mask_mode_maps_and_the_animated_path_survives() {
     let (doc, report) = mapped("edges.lum-bundle");
     let mask = &layer(comp(&doc, "Edges"), "Lighten mask").masks[0];
 
-    assert_eq!(mask.mode, MaskMode::Add);
-    assert!(reported(&report, |r| matches!(
-        r,
-        Reason::MaskModeUnavailable { ae_mode } if ae_mode == "LIGHTEN"
-    )));
+    assert_eq!(mask.mode, MaskMode::Lighten);
 
     assert_eq!(mask.feather.value_at(0.0), 7.0, "10 and 4 average to 7");
     assert!(reported(&report, |r| matches!(

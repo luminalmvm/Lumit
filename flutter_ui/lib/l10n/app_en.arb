@@ -3213,6 +3213,14 @@
   "@maskFeather": {
     "description": "Row label under a mask: the width of its soft edge, in layer pixels."
   },
+  "maskFeatherOneWidth": "One feather width",
+  "@maskFeatherOneWidth": {
+    "description": "Item in a mask row's right-click menu: go back to a single feather width all the way round the shape, dropping the per-point widths."
+  },
+  "maskFeatherPerPoint": "Feather per point",
+  "@maskFeatherPerPoint": {
+    "description": "Item in a mask row's right-click menu: give every point of the shape a feather width of its own, so one edge can be sharp and another soft."
+  },
   "maskInvertMark": "Inv",
   "@maskInvertMark": {
     "description": "Very short marker on a mask row meaning it is inverted. Abbreviate in your language too — the cell is about three characters wide."
@@ -3221,6 +3229,10 @@
   "@maskModeAdd": {
     "description": "Mask mode: this mask adds its shape to what the masks above it let through."
   },
+  "maskModeDarken": "Darken",
+  "@maskModeDarken": {
+    "description": "Mask mode: keeps the lesser of this mask's opacity and what the masks above it let through."
+  },
   "maskModeDifference": "Difference",
   "@maskModeDifference": {
     "description": "Mask mode: what one of this mask and the masks above it cover, but not both."
@@ -3228,6 +3240,10 @@
   "maskModeIntersect": "Intersect",
   "@maskModeIntersect": {
     "description": "Mask mode: only where this mask and the masks above it overlap."
+  },
+  "maskModeLighten": "Lighten",
+  "@maskModeLighten": {
+    "description": "Mask mode: keeps the greater of this mask's opacity and what the masks above it let through."
   },
   "maskModeNone": "None",
   "@maskModeNone": {
@@ -3253,6 +3269,15 @@
   "maskPath": "Path",
   "@maskPath": {
     "description": "The name of a mask's shape row in the Timeline fold-out — the row that keyframes the drawn shape itself."
+  },
+  "maskVertexFeather": "Point {point} feather",
+  "@maskVertexFeather": {
+    "description": "Row label under a mask, one per point of its shape: that point's own soft-edge width, in layer pixels. {point} counts up from 1.",
+    "placeholders": {
+      "point": {
+        "type": "int"
+      }
+    }
   },
   "menu3dLayer": "3D layer",
   "@menu3dLayer": {
@@ -6888,11 +6913,6 @@
   "@aeChunkUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
     "placeholders": { "chunk": { "type": "String" } }
-  },
-  "aeMaskModeUnavailable": "mask mode {aeMode} is not built yet — imported as Add",
-  "@aeMaskModeUnavailable": {
-    "description": "Import report row reason, lower case. Add is one of Lumit's mask combine modes.",
-    "placeholders": { "aeMode": { "type": "String" } }
   },
   "aeMaskFeatherAxesDiffer": "feather {x} × {y} has one width in Lumit — imported at their average",
   "@aeMaskFeatherAxesDiffer": {

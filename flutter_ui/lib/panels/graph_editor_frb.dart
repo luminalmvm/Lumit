@@ -140,6 +140,10 @@ class GraphChannel {
   final BridgeMask? mask;
   final MaskValue? maskValue;
 
+  /// Which point a per-point feather channel belongs to (K-445); `-1` on every
+  /// other channel.
+  final int maskVertex;
+
   /// True for a mask's **shape** (K-344). A path has no value to plot, so what
   /// this channel carries is the interpolation parameter — counted up, one per
   /// key — and both lenses draw its *slope*: the rate the shape is changing
@@ -160,6 +164,7 @@ class GraphChannel {
     this.retime = false,
     this.mask,
     this.maskValue,
+    this.maskVertex = -1,
   });
 
   List<BridgeKeyframe> get keys => keysOf(scalar);
@@ -281,7 +286,13 @@ List<GraphChannel> graphChannels({
       final slash = rest.indexOf('/');
       if (slash <= 0) continue;
       final maskId = rest.substring(0, slash);
-      final valueName = rest.substring(slash + 1);
+      // A per-point feather row's path carries the point after its name
+      // (K-445): `.../vertexFeather/3`.
+      final rawValue = rest.substring(slash + 1);
+      final tail = rawValue.indexOf('/');
+      final valueName = tail < 0 ? rawValue : rawValue.substring(0, tail);
+      final vertex =
+          tail < 0 ? -1 : int.tryParse(rawValue.substring(tail + 1)) ?? -1;
       for (final mask in entry.info.masks) {
         if (mask.id.toString() != maskId) continue;
         final value =
@@ -293,14 +304,16 @@ List<GraphChannel> graphChannels({
         out.add(GraphChannel(
           path: path,
           id: path,
-          label: '${entry.info.name} · ${mask.name} · ${maskValueLabel(value)}',
+          label: '${entry.info.name} · ${mask.name} · '
+              '${maskValueLabel(value, vertex)}',
           colourIndex: out.length,
           scalar: value == MaskValue.path
               ? BridgeScalar.keyframed(mask.pathKeys)
-              : maskScalarOf(mask, value),
+              : maskScalarOf(mask, value, vertex),
           entry: entry,
           mask: mask,
           maskValue: value,
+          maskVertex: vertex,
         ));
         break;
       }
@@ -345,7 +358,8 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       // property; two curves on one mask are two writes and two undo steps,
       // which is what `SetLayerMasks` costs until it grows a per-key op.
       channel.entry.layer.setMask(
-        mask: maskWithScalar(mask, channel.maskValue!, next),
+        mask: maskWithScalar(mask, channel.maskValue!, next,
+            channel.maskVertex),
         at: null,
       );
     }

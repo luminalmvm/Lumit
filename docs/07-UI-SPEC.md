@@ -555,6 +555,14 @@ there is something to say.
   and each with its value in the same column an effect parameter's value sits in. Path is
   the shape itself: it has no number, so its row has no field and its lane shows diamonds
   without a curve (K-339).
+- **A feather can be a width per point** (K-445), and then a **Point *n* feather** row joins
+  them for each point of the shape — the same stopwatch, navigator, diamonds and graph
+  channel. The rows appear only once the mask carries the widths, and the mask row's own menu
+  is where they are switched on: **Feather per point** gives every point the width the mask
+  already had, so turning it on does not move the picture, and **One feather width** drops
+  them again. The Viewer draws a dimmer line half a feather either side of the path, which is
+  how a varying width is seen before the frame is; a keyframed width has no line, because the
+  Viewer does not evaluate one while it paints (K-184).
 - **A mask (and a shape item) is renamed in place.** A shape drawn with a tool is named
   after that tool, which is right until two ellipses need telling apart, so the name is
   editable: **double-click** it, or pick **Rename** from the row's menu. `Enter` or a click

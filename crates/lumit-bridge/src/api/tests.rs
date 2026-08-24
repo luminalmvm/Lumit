@@ -5760,6 +5760,8 @@ fn enabling_retime_keys_the_layer_where_it_sits() {
 ///
 /// The regression this pins: `BridgeMask::write` rebuilds the engine's mask
 /// field by field, so `set_mask` used to replace the stored mask outright.
+/// See also [`a_masks_per_point_feather_crosses_and_is_clamped`], which pins
+/// the same field-by-field rebuild for the per-point widths.
 /// Dragging a mask's opacity therefore deleted its animation, and dropped
 /// exactly the unknown fields docs/10 §1.1 makes it mandatory to round-trip.
 #[test]
@@ -5802,6 +5804,7 @@ fn editing_a_mask_keeps_what_the_bridge_cannot_describe() {
         opacity: BridgeScalar::Static(100.0),
         mode: BridgeMaskMode::Add,
         feather: BridgeScalar::Static(0.0),
+        vertex_feather: Vec::new(),
         expansion: BridgeScalar::Static(0.0),
         path_keys: Vec::new(),
     };
@@ -6370,4 +6373,90 @@ fn a_partial_track_reports_its_span_and_the_camera_holds_past_it() {
         "one frame past the solved span is already held"
     );
     assert_eq!(camera_link(camera, 49).state, BridgeLinkState::Held);
+}
+
+/// **A mask's per-point feather widths cross the bridge, and each is clamped
+/// exactly as the one width is** (K-445).
+///
+/// The clamp is the half worth pinning: `BridgeMask::write` rebuilds the mask
+/// field by field, so a list arriving with a negative width — or one wide
+/// enough to ask for a distance field the size of a continent — would be
+/// written straight into the document and render wrongly for ever after.
+#[test]
+fn a_masks_per_point_feather_crosses_and_is_clamped() {
+    use crate::api::layer::{BridgeMask, BridgeMaskMode, BridgeVertex};
+
+    let (_project, layer) = project_with_layer();
+    let corner = |x: f64, y: f64| BridgeVertex {
+        x,
+        y,
+        tan_in_x: 0.0,
+        tan_in_y: 0.0,
+        tan_out_x: 0.0,
+        tan_out_y: 0.0,
+    };
+    let mask = BridgeMask {
+        id: uuid::Uuid::now_v7(),
+        name: "Rectangle".into(),
+        vertices: vec![
+            corner(0.0, 0.0),
+            corner(10.0, 0.0),
+            corner(10.0, 10.0),
+            corner(0.0, 10.0),
+        ],
+        closed: true,
+        inverted: false,
+        opacity: BridgeScalar::Static(100.0),
+        mode: BridgeMaskMode::Lighten,
+        feather: BridgeScalar::Static(4.0),
+        vertex_feather: vec![
+            BridgeScalar::Static(0.0),
+            BridgeScalar::Static(30.0),
+            // Both ends of the clamp, in one list.
+            BridgeScalar::Static(-5.0),
+            BridgeScalar::Static(9_999_999.0),
+        ],
+        expansion: BridgeScalar::Static(0.0),
+        path_keys: Vec::new(),
+    };
+    layer.add_mask(mask.clone()).expect("added");
+
+    let stored = layer.get_masks().expect("read back");
+    let stored = stored.first().expect("the mask");
+    assert_eq!(
+        stored.mode,
+        BridgeMaskMode::Lighten,
+        "the mode came back as itself"
+    );
+    let widths: Vec<f64> = stored
+        .vertex_feather
+        .iter()
+        .map(|s| match s {
+            BridgeScalar::Static(v) => *v,
+            other => panic!("a still width read back as {other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        widths,
+        vec![0.0, 30.0, 0.0, 5000.0],
+        "a width below zero and one past the ceiling are both brought inside"
+    );
+
+    // And an ordinary edit does not lose them, for the same reason an opacity
+    // drag must not lose the path keys.
+    layer
+        .set_mask(
+            BridgeMask {
+                opacity: BridgeScalar::Static(40.0),
+                ..stored.clone()
+            },
+            None,
+        )
+        .expect("edited");
+    let after = layer.get_masks().expect("read back");
+    assert_eq!(
+        after.first().map(|m| m.vertex_feather.len()),
+        Some(4),
+        "an opacity edit dropped the per-point widths"
+    );
 }

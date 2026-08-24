@@ -1017,6 +1017,7 @@ void main() {
             opacity: const BridgeScalar.static_(100),
             mode: BridgeMaskMode.add,
             feather: const BridgeScalar.static_(0),
+            vertexFeather: const [],
             expansion: const BridgeScalar.static_(0),
             pathKeys: const [],
           );

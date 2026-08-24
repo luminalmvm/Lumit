@@ -26,6 +26,7 @@ With no layer selected, the same tools make a [shape layer](/use/shapes/).
 | --- | --- |
 | **Path** | The bezier path. Drag its points in the Viewer, and keyframe it to animate the shape. |
 | **Feather** | Softens the edge, half the width either side of the path. |
+| **Point _n_ feather** | That point's own soft-edge width, once the mask has been given a feather per point. |
 | **Expansion** | Grows or shrinks the mask from its path. |
 | **Opacity** | Adjusts similar to a layers opacity property. |
 | **Mode** | How this mask interacts with the layer and other masks. |
@@ -33,12 +34,26 @@ With no layer selected, the same tools make a [shape layer](/use/shapes/).
 
 A layer can carry several masks, and they combine top to bottom by their mode. **Add**
 is the default. **Subtract** cuts this shape out of what the masks above it built,
-**Intersect** keeps where both overlap, and **Difference** keeps area's only one covers. 
-Setting a mask to **None** leaves the path drawn and editable while affecting nothing.
+**Intersect** keeps where both overlap, and **Difference** keeps area's only one covers.
+**Lighten** keeps the greater of this mask and what the masks above it let through, and
+**Darken** the lesser. Setting a mask to **None** leaves the path drawn and editable while
+affecting nothing.
+
+## A feather per point
+
+One edge of a mask can be sharp and another soft. Right-click the mask's row in the Timeline
+and pick **Feather per point**: every point of the shape gets a **Point _n_ feather** row of
+its own, starting at the width the mask already had, so nothing moves until you change one.
+Each row drags and keyframes like any other. The width runs smoothly from one point to the
+next, and the Viewer draws a faint line half a feather either side of the path so you can see
+how far it reaches. **One feather width** on the same menu drops the rows and goes back to a
+single width.
 
 :::note[Not built yet]
-Feather currently is uniform and doesn't support variable wdith along the path. 
-After Effects' Lighten and Darken mask modes also have no equivalent yet either.
+The widths are edited on their Timeline rows, not on the picture: After Effects' Mask Feather
+Tool, which drags a feather point in and out in the Viewer, has no equivalent yet. Variable
+feather in an imported After Effects project is not carried across either — the mask arrives
+at one width.
 :::
 
 ## Related

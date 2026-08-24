@@ -356,6 +356,7 @@ fn oval_mask(mode: MaskMode) -> Mask {
         opacity: Property::fixed(100.0),
         mode,
         feather: Property::zero(),
+        vertex_feather: Vec::new(),
         expansion: Property::zero(),
         extra: serde_json::Map::new(),
     }

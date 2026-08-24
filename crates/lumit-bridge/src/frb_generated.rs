@@ -9504,6 +9504,8 @@ impl SseDecode for crate::api::layer::BridgeMask {
         let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_mode = <crate::api::layer::BridgeMaskMode>::sse_decode(deserializer);
         let mut var_feather = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_vertexFeather =
+            <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         let mut var_expansion = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_pathKeys = <Vec<crate::api::effect::BridgeKeyframe>>::sse_decode(deserializer);
         return crate::api::layer::BridgeMask {
@@ -9515,6 +9517,7 @@ impl SseDecode for crate::api::layer::BridgeMask {
             opacity: var_opacity,
             mode: var_mode,
             feather: var_feather,
+            vertex_feather: var_vertexFeather,
             expansion: var_expansion,
             path_keys: var_pathKeys,
         };
@@ -9530,7 +9533,9 @@ impl SseDecode for crate::api::layer::BridgeMaskMode {
             1 => crate::api::layer::BridgeMaskMode::Add,
             2 => crate::api::layer::BridgeMaskMode::Subtract,
             3 => crate::api::layer::BridgeMaskMode::Intersect,
-            4 => crate::api::layer::BridgeMaskMode::Difference,
+            4 => crate::api::layer::BridgeMaskMode::Lighten,
+            5 => crate::api::layer::BridgeMaskMode::Darken,
+            6 => crate::api::layer::BridgeMaskMode::Difference,
             _ => unreachable!("Invalid variant for BridgeMaskMode: {}", inner),
         };
     }
@@ -13040,6 +13045,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMask {
             self.opacity.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
             self.feather.into_into_dart().into_dart(),
+            self.vertex_feather.into_into_dart().into_dart(),
             self.expansion.into_into_dart().into_dart(),
             self.path_keys.into_into_dart().into_dart(),
         ]
@@ -13062,7 +13068,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMaskMode {
             Self::Add => 1.into_dart(),
             Self::Subtract => 2.into_dart(),
             Self::Intersect => 3.into_dart(),
-            Self::Difference => 4.into_dart(),
+            Self::Lighten => 4.into_dart(),
+            Self::Darken => 5.into_dart(),
+            Self::Difference => 6.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -15165,6 +15173,7 @@ impl SseEncode for crate::api::layer::BridgeMask {
         <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
         <crate::api::layer::BridgeMaskMode>::sse_encode(self.mode, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.feather, serializer);
+        <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.vertex_feather, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.expansion, serializer);
         <Vec<crate::api::effect::BridgeKeyframe>>::sse_encode(self.path_keys, serializer);
     }
@@ -15179,7 +15188,9 @@ impl SseEncode for crate::api::layer::BridgeMaskMode {
                 crate::api::layer::BridgeMaskMode::Add => 1,
                 crate::api::layer::BridgeMaskMode::Subtract => 2,
                 crate::api::layer::BridgeMaskMode::Intersect => 3,
-                crate::api::layer::BridgeMaskMode::Difference => 4,
+                crate::api::layer::BridgeMaskMode::Lighten => 4,
+                crate::api::layer::BridgeMaskMode::Darken => 5,
+                crate::api::layer::BridgeMaskMode::Difference => 6,
                 _ => {
                     unimplemented!("");
                 }

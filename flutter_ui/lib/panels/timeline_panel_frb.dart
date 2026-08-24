@@ -3329,11 +3329,13 @@ class _FoldRow extends StatelessWidget {
           },
           onLabelTap: () => onSelectProperty(path),
         ),
-      FoldMaskValueRow(:final mask, :final value) => _MaskValueRow(
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        _MaskValueRow(
           comp: comp,
           layer: layer,
           mask: mask,
           value: value,
+          vertex: vertex,
           valueColumn: valueColumn,
           playheadFrame: playheadFrame,
           onSeek: onSeek,
@@ -3711,6 +3713,7 @@ BridgeMask maskWith(
   BridgeScalar? opacity,
   BridgeMaskMode? mode,
   BridgeScalar? feather,
+  List<BridgeScalar>? vertexFeather,
   BridgeScalar? expansion,
 }) =>
     BridgeMask(
@@ -3722,6 +3725,7 @@ BridgeMask maskWith(
       opacity: opacity ?? m.opacity,
       mode: mode ?? m.mode,
       feather: feather ?? m.feather,
+      vertexFeather: vertexFeather ?? m.vertexFeather,
       expansion: expansion ?? m.expansion,
       // Where the shape's own keys are is the engine's to say; an edit here
       // never moves them (`set_mask` patches them back).
@@ -3734,6 +3738,8 @@ String maskModeLabel(BridgeMaskMode mode) => switch (mode) {
       BridgeMaskMode.add => l10n.maskModeAdd,
       BridgeMaskMode.subtract => l10n.maskModeSubtract,
       BridgeMaskMode.intersect => l10n.maskModeIntersect,
+      BridgeMaskMode.lighten => l10n.maskModeLighten,
+      BridgeMaskMode.darken => l10n.maskModeDarken,
       BridgeMaskMode.difference => l10n.maskModeDifference,
     };
 
@@ -3884,10 +3890,19 @@ class _MaskRowState extends State<_MaskRow> with _InlineRename<_MaskRow> {
 
   /// Write the mask back with one field changed. The engine takes the whole
   /// mask, so this is the only shape an edit has.
-  void _write({String? name, bool? inverted, BridgeMaskMode? mode}) {
+  void _write({
+    String? name,
+    bool? inverted,
+    BridgeMaskMode? mode,
+    List<BridgeScalar>? vertexFeather,
+  }) {
     try {
       widget.layer.setMask(
-        mask: maskWith(widget.mask, name: name, inverted: inverted, mode: mode),
+        mask: maskWith(widget.mask,
+            name: name,
+            inverted: inverted,
+            mode: mode,
+            vertexFeather: vertexFeather),
       );
       widget.onChanged();
     } catch (_) {
@@ -3981,6 +3996,26 @@ class _MaskRowState extends State<_MaskRow> with _InlineRename<_MaskRow> {
           // The same bare "Rename" the Project panel's row menu offers.
           child: Text(l10n.rename),
         ),
+        // **Where a varying feather is switched on** (K-445). Turning it on
+        // gives every point the width the mask already had, so the picture
+        // does not move until a point is actually dragged; turning it off
+        // drops the points and the one width stands again.
+        MenuRow(
+          key: ValueKey<String>('tl-mask-vary-feather-${widget.mask.id}'),
+          onPressed: () {
+            close(null);
+            final on = widget.mask.vertexFeather.isNotEmpty;
+            _write(
+              vertexFeather: on
+                  ? const []
+                  : List<BridgeScalar>.filled(
+                      widget.mask.vertices.length, widget.mask.feather),
+            );
+          },
+          child: Text(widget.mask.vertexFeather.isEmpty
+              ? l10n.maskFeatherPerPoint
+              : l10n.maskFeatherOneWidth),
+        ),
         MenuRow(
           key: ValueKey<String>('tl-mask-delete-${widget.mask.id}'),
           onPressed: () {
@@ -3998,7 +4033,8 @@ class _MaskRowState extends State<_MaskRow> with _InlineRename<_MaskRow> {
 }
 
 /// One of a mask's values on a row under it (K-222, K-340): its shape, its
-/// opacity, its feather or its expansion.
+/// opacity, its feather — one width or one point's own (K-445) — or its
+/// expansion.
 ///
 /// **Every one of them animates, and animates the way everything else does.**
 /// The row carries the same stopwatch and ◄ ◆ ► the transform and effect rows
@@ -4020,6 +4056,10 @@ class _MaskValueRow extends StatefulWidget {
   final CompositionReference comp;
   final BridgeMask mask;
   final MaskValue value;
+
+  /// Which point this row's width belongs to, for a per-point feather row;
+  /// `-1` on every other row (K-445).
+  final int vertex;
   final ValueColumn valueColumn;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -4034,6 +4074,7 @@ class _MaskValueRow extends StatefulWidget {
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
+    this.vertex = -1,
   });
 
   @override
@@ -4048,14 +4089,15 @@ class _MaskValueRowState extends State<_MaskValueRow> {
 
   /// This row's animation. The path has none of its own — its keys are whole
   /// shapes, not numbers — so [maskScalarOf] answers a still zero for it.
-  BridgeScalar get _scalar => maskScalarOf(widget.mask, widget.value);
+  BridgeScalar get _scalar =>
+      maskScalarOf(widget.mask, widget.value, widget.vertex);
 
   /// What a drag on this row may ask for. Feather is a width, so it has no
   /// negative side; expansion grows one way and shrinks the other; opacity is
   /// a percentage.
   (double, double) get _range => switch (widget.value) {
         MaskValue.opacity => (0, 100),
-        MaskValue.feather => (0, 1000),
+        MaskValue.feather || MaskValue.vertexFeather => (0, 1000),
         _ => (-1000, 1000),
       };
 
@@ -4081,7 +4123,7 @@ class _MaskValueRowState extends State<_MaskValueRow> {
           masks: [
             for (final m in widget.layer.getMasks())
               if (m.id == widget.mask.id)
-                maskWithScalar(m, widget.value, v)
+                maskWithScalar(m, widget.value, v, widget.vertex)
               else
                 m,
           ],
@@ -4095,7 +4137,9 @@ class _MaskValueRowState extends State<_MaskValueRow> {
   void _write(BridgeScalar v) {
     setState(() => _staged = null);
     try {
-      widget.layer.setMask(mask: maskWithScalar(widget.mask, widget.value, v));
+      widget.layer.setMask(
+          mask:
+              maskWithScalar(widget.mask, widget.value, v, widget.vertex));
       widget.onChanged();
     } catch (_) {
       // The mask or its layer went away mid-drag.
@@ -4131,11 +4175,11 @@ class _MaskValueRowState extends State<_MaskValueRow> {
             comp: widget.comp,
             playheadFrame: widget.playheadFrame,
             onSeek: widget.onSeek,
-            rowKey: 'tl-mask-${widget.value.name}-${widget.mask.id}',
+            rowKey: _rowKey,
           ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(maskValueLabel(widget.value),
+          child: Text(maskValueLabel(widget.value, widget.vertex),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         // Left of the value column, exactly where an effect parameter's field
@@ -4154,10 +4198,15 @@ class _MaskValueRowState extends State<_MaskValueRow> {
     );
   }
 
+  /// This row's key, which per-point feather rows must not share: they are
+  /// several rows of the same value on the same mask (K-445).
+  String get _rowKey =>
+      'tl-mask-${widget.value.name}-${widget.mask.id}'
+      '${widget.vertex < 0 ? '' : '-${widget.vertex}'}';
+
   Widget _field() {
     final (min, max) = _range;
-    final key =
-        ValueKey<String>('tl-mask-${widget.value.name}-${widget.mask.id}');
+    final key = ValueKey<String>(_rowKey);
     final scalar = _scalar;
     if (scalar is! BridgeScalar_Keyframed) {
       final stored =

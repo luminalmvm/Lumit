@@ -279,9 +279,31 @@ BridgeMask maskWithVertices(BridgeMask mask, List<BridgeVertex> vertices) =>
       opacity: mask.opacity,
       mode: mask.mode,
       feather: mask.feather,
+      vertexFeather: mask.vertexFeather,
       expansion: mask.expansion,
       pathKeys: mask.pathKeys,
     );
+
+/// Half the soft edge's width at each of [mask]'s vertices, in layer pixels —
+/// what the Viewer's guide is drawn from (K-445).
+///
+/// `null` when there is nothing to draw: a hard-edged mask, or one whose width
+/// is **keyframed**. A keyframed width has no number here — evaluating one is
+/// the engine's job and the Viewer does not ask it while it paints (K-184) —
+/// so the guide steps aside rather than drawing a width that is not the one in
+/// the picture.
+List<double>? stillHalfFeather(BridgeMask mask) {
+  double? still(BridgeScalar s) => s is BridgeScalar_Static ? s.field0 : null;
+  final one = still(mask.feather);
+  final half = <double>[];
+  for (var i = 0; i < mask.vertices.length; i++) {
+    final w =
+        i < mask.vertexFeather.length ? still(mask.vertexFeather[i]) : one;
+    if (w == null) return null;
+    half.add(w / 2);
+  }
+  return half.any((w) => w > 0) ? half : null;
+}
 
 /// A mask ready to send, from a path and a name.
 BridgeMask shapeMask({
@@ -298,6 +320,7 @@ BridgeMask shapeMask({
       opacity: const BridgeScalar.static_(100),
       mode: BridgeMaskMode.add,
       feather: const BridgeScalar.static_(0),
+      vertexFeather: const [],
       expansion: const BridgeScalar.static_(0),
       // A shape just drawn has no keys; a mask being edited keeps its own,
       // which the engine patches back.

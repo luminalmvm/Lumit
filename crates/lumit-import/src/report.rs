@@ -209,9 +209,6 @@ pub enum Reason {
     ChunkUnreadable { chunk: String },
 
     // --- masks ---
-    /// Lighten and Darken mask modes are not built (docs/06 §2); imported as
-    /// Add.
-    MaskModeUnavailable { ae_mode: String },
     /// AE feathers a mask separately in x and y; Lumit has one width.
     MaskFeatherAxesDiffer { x: f64, y: f64 },
     /// A RotoBezier mask: AE computes its tangents rather than storing them,
@@ -411,9 +408,6 @@ impl std::fmt::Display for Reason {
                 f,
                 "a record in the project file ({chunk}) could not be read and was skipped"
             ),
-            Self::MaskModeUnavailable { ae_mode } => {
-                write!(f, "mask mode {ae_mode} is not built yet — imported as Add")
-            }
             Self::MaskFeatherAxesDiffer { x, y } => write!(
                 f,
                 "feather {x} × {y} has one width in Lumit — imported at their average"

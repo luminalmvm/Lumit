@@ -40,7 +40,7 @@ import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'viewer_anchor.dart';
 import 'viewer_layer_map.dart';
-import 'viewer_shapes.dart' show bezierPath;
+import 'viewer_shapes.dart' show bezierPath, stillHalfFeather;
 import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
 import 'layer_fold_frb.dart';
 
@@ -455,6 +455,7 @@ BridgeMask? maskWithPointsMoved(
     opacity: mask.opacity,
     mode: mask.mode,
     feather: mask.feather,
+    vertexFeather: mask.vertexFeather,
     expansion: mask.expansion,
     pathKeys: mask.pathKeys,
   );
@@ -1513,6 +1514,7 @@ class _GizmoPainter extends CustomPainter {
           mask.vertices,
           mask.closed,
           (i) => maskPointKey(box.id, mask.id, i),
+          feather: stillHalfFeather(mask),
         );
       }
       // A shape layer's own art gets the same outline and the same vertices, so
@@ -1581,6 +1583,7 @@ class _GizmoPainter extends CustomPainter {
     bool closed,
     String Function(int index) keyOf, {
     bool art = false,
+    List<double>? feather,
   }) {
     if (vertices.length < 2) return;
     // A selected point follows the pointer while it is being dragged, so the
@@ -1617,6 +1620,50 @@ class _GizmoPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
+
+    // **How wide the soft edge is, either side of the path** (K-445). A pair
+    // of dimmer lines rather than a second solid one, because they are a guide
+    // to a width and not a path anybody can grab: they say where the feather
+    // reaches, which is the only way a feather that varies from point to point
+    // can be seen before the frame is drawn.
+    if (feather != null && vertices.length >= 2) {
+      final perPx = (screen(1, 0) - screen(0, 0)).distance;
+      final segments = closed ? vertices.length : vertices.length - 1;
+      final inside = <Offset>[];
+      final outside = <Offset>[];
+      for (var i = 0; i < segments; i++) {
+        final j = (i + 1) % vertices.length;
+        final (p0, p1, p2, p3) = (at(i), out(i), into(j), at(j));
+        const steps = 12;
+        for (var step = 0; step <= steps; step++) {
+          final t = step / steps;
+          final u = 1 - t;
+          final p = p0 * (u * u * u) +
+              p1 * (3 * u * u * t) +
+              p2 * (3 * u * t * t) +
+              p3 * (t * t * t);
+          // The cubic's own derivative gives the direction the edge runs in,
+          // and the feather is measured square to it.
+          final d = (p1 - p0) * (3 * u * u) +
+              (p2 - p1) * (6 * u * t) +
+              (p3 - p2) * (3 * t * t);
+          if (d.distance < 1e-6) continue;
+          final normal = Offset(-d.dy, d.dx) / d.distance;
+          final half =
+              (feather[i] + (feather[j] - feather[i]) * t) * perPx;
+          inside.add(p - normal * half);
+          outside.add(p + normal * half);
+        }
+      }
+      final guide = Paint()
+        ..color = accent.withValues(alpha: 0.35)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1;
+      for (final band in [inside, outside]) {
+        if (band.length < 2) continue;
+        canvas.drawPath(Path()..addPolygon(band, closed), guide);
+      }
+    }
 
     // Every vertex, so a path can be seen point by point (K-224): hollow when
     // it is merely there, filled when it is selected — the same "outline means
