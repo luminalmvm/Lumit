@@ -1886,6 +1886,55 @@ void main() {
       expect(p.comp.frameAtTime(time: keys()[1].time), 30);
     });
 
+    /// **An outline switch is a bare glyph** (owner, 2026-08-24). Every
+    /// toggle in a layer's row — the eye, solo, lock, shy, and every mode
+    /// switch beside them — used to sit on a small outlined face, which the
+    /// drawing puts on none of them; ten boxed marks at the head of a row
+    /// turned two quiet columns into a grid of buttons.
+    ///
+    /// **And no accent, and no `animated`, in the Modes column** (the owner's
+    /// longstanding ruling, and §3.1's closed accent list). On is
+    /// `text_primary` and off is `text_muted` — the two strengths the drawing
+    /// lights a row switch at; `animated` means "this is keyed", which a
+    /// motion-blur switch is not.
+    testWidgets('a row switch is a bare glyph, lit in the foreground',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final t = LumitTheme.dark();
+      final id = layer.internallayerId;
+
+      for (final name in ['visible', 'solo', 'locked', 'shy', 'fx', 'mb']) {
+        final cell = find.byKey(ValueKey<String>('tl-$name-$id'));
+        expect(cell, findsOneWidget, reason: '$name is on the row');
+        // No face: nothing inside the cell paints a fill or a border.
+        for (final box in tester.widgetList<DecoratedBox>(
+            find.descendant(of: cell, matching: find.byType(DecoratedBox)))) {
+          final d = box.decoration as BoxDecoration;
+          expect(d.color, isNull, reason: '$name wears no face');
+          expect(d.border, isNull, reason: '$name wears no outline');
+        }
+      }
+
+      // The Modes column's on-state, read off the glyph itself.
+      ColorFilter? tintOf(String name) => tester
+          .widget<SvgPicture>(find.descendant(
+              of: find.byKey(ValueKey<String>('tl-$name-$id')),
+              matching: find.byType(SvgPicture)))
+          .colorFilter;
+
+      expect(tintOf('fx'), ColorFilter.mode(t.textPrimary, BlendMode.srcIn),
+          reason: 'effects are on, and an on switch is text_primary');
+      expect(tintOf('fx'), isNot(ColorFilter.mode(t.accent, BlendMode.srcIn)),
+          reason: 'never the accent — §3.1\'s list is closed');
+      expect(tintOf('fx'), isNot(ColorFilter.mode(t.animated, BlendMode.srcIn)),
+          reason: 'and never animated, which means "this is keyed"');
+      expect(tintOf('mb'), ColorFilter.mode(t.textMuted, BlendMode.srcIn),
+          reason: 'motion blur is off, and an off switch is text_muted');
+    });
+
     /// A shut layer says on its own row what is keyed inside it (§12A.1):
     /// the same diamonds, at half the scale, in `animated` rather than in
     /// `accent` — the accent's list is the playhead, the one filled button and
@@ -1941,10 +1990,11 @@ void main() {
       // The sizes themselves, not only their ratio: a diamond that shrank at
       // both ends would keep the ratio and lose the mark. A property's own
       // key is the drawing's 11 point to point in **both** modes (half 5.5,
-      // K-459 — it was 8 here); the mockup's summary diamond is a 4px square
-      // on its corner, 4√2 ≈ 5.7 point to point (half 2.8), and is unchanged.
+      // K-459 — it was 8 here); the summary diamond is the **8** the drawing
+      // renders (2026-08-24), a 4px square with a 1px border stood on its
+      // corner, and it had been drawn at 5.
       expect(lane.half, laneKeyHalf, reason: 'a lane key is 11 across');
-      expect(painter.half, 2.8, reason: 'a summary diamond is 5.7 across');
+      expect(painter.half, 4, reason: 'a summary diamond is 8 across');
     });
 
     /// Keyframes draw as diamonds on the lane (docs/07 §4.3), and a marquee

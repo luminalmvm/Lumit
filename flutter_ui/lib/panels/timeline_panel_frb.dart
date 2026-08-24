@@ -187,11 +187,14 @@ Path keyHalfPath(KeyShape shape, double x, double mid, double half,
 }
 
 /// The same on a **shut layer's** row: smaller than the keys you take hold
-/// of, because these are a summary of everything keyed inside the layer. The
-/// mockup draws them as a 4px square stood on its corner, so point to point
-/// they span 4√2 ≈ 5.7px — half of that here. Twirl the layer open and each
-/// property draws its own at full size, where they can be dragged.
-const double _summaryKeyHalf = 2.8;
+/// of, because these are a summary of everything keyed inside the layer.
+///
+/// **8 point to point, measured off the drawing** (2026-08-24). The mockup's
+/// summary mark is a 4px square with a 1px border stood on its corner, which
+/// renders 8×8 — not the 5.7 the square's own side had been read as, and not
+/// the 5 the outline drew. Half of 8 is the number here. Twirl the layer open
+/// and each property draws its own at full size, where they can be dragged.
+const double _summaryKeyHalf = 4;
 
 /// The block-selection box's metrics, from the approved Keys drawing (K-458).
 ///
@@ -3596,7 +3599,15 @@ class _FoldRow extends StatelessWidget {
                   ? t.selectionFill.withValues(alpha: 0.45)
                   : null,
         ),
-        padding: EdgeInsets.only(left: indent, right: 4),
+        // **The trailing inset is the layer rows' own** (`outlineRowTrailing`).
+        // A fold row's value cells and its render-time reading sit in the
+        // columns the layer rows set, and both are laid out from the right —
+        // so a row that kept less space at its trailing end than a layer row
+        // pushed every one of them out of column. It kept a bare 4, which was
+        // the layer rows' padding before the redesign made it 8 and before the
+        // header's inset added the 2 on top; the effect headings' milliseconds
+        // stood 6px right of the layer totals they add up to.
+        padding: EdgeInsets.only(left: indent, right: outlineRowTrailing),
         // A locked layer's rows are read-only, not hidden (K-291): the numbers
         // are still the document's and the curves still draw, but nothing on the
         // row can be touched. The engine refuses the edit anyway — this is what
@@ -7019,7 +7030,9 @@ class _OutlineRowState extends State<_OutlineRow> {
                   child: _name(t, id, info),
                 ),
         ),
-        const SizedBox(width: 4),
+        // No trailing gap of its own: the seam after this cluster is the gap
+        // (`outlineGap`), and a second one behind it made the name's column
+        // end 4px short of every other cluster's.
       ],
     );
   }
@@ -7248,8 +7261,20 @@ class _OutlineRowState extends State<_OutlineRow> {
     );
   }
 
-  /// One switch cell: the icon in a small outlined box, so the click targets
-  /// read as buttons rather than loose glyphs. With an [offIcon] the glyph
+  /// One switch cell: **a bare glyph** (owner, 2026-08-24). It wore a small
+  /// outlined box, on the theory that a boxed target reads as a button; the
+  /// drawing has no box on any switch anywhere in the outline, and five boxed
+  /// marks beside five more turned two quiet columns into a grid of buttons.
+  /// The cell is still [switchCellWidth] wide and still takes the whole click,
+  /// so nothing about the aiming changed — only the paint.
+  ///
+  /// **On is `text_primary`, off is `text_muted`, and neither is the accent**
+  /// (§3.1's accent list is closed, and the owner has ruled on this column
+  /// more than once). Nor is it `animated`: that token means "this is keyed",
+  /// and a motion-blur switch is not a keyframe. The drawing agrees — it lights
+  /// a row switch in the same foreground it writes the chosen layer's name in.
+  ///
+  /// With an [offIcon] the glyph
   /// itself flips (closed eye, muted speaker, hollow circle) and keeps full
   /// strength either way; without one the off state dims, as before.
   /// [onTap] replaces the default `set_switch` write for a cell that only
@@ -7273,9 +7298,14 @@ class _OutlineRowState extends State<_OutlineRow> {
     VoidCallback? onTap,
   }) {
     final t = ThemeScope.of(context).theme;
-    final ink = on || offIcon != null || offMark != null
-        ? (on ? t.textPrimary : t.textMuted)
-        : t.textDisabled;
+    // **Two strengths, one rule** — the drawing lights every row switch at
+    // `text_primary` and rests it at `text_muted`, and has no third reading.
+    // A switch whose glyph does not flip used to rest at `text_disabled`
+    // instead, on the theory that a shape that says nothing needs the dimmer
+    // off; with the boxed faces gone the colour is the whole of the state, and
+    // two strengths that a reader can tell apart beat three that shade into
+    // one another.
+    final ink = on ? t.textPrimary : t.textMuted;
     final Widget face = mark != null
         ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
             size: iconSize, colour: ink)
@@ -7292,18 +7322,7 @@ class _OutlineRowState extends State<_OutlineRow> {
       child: SizedBox(
         width: switchCellWidth,
         height: t.density.laneRow,
-        child: Center(
-          child: Container(
-            width: 18,
-            height: 18,
-            decoration: BoxDecoration(
-              color: t.surface0,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: t.hairline),
-            ),
-            child: Center(child: face),
-          ),
-        ),
+        child: Center(child: face),
       ),
     );
     return tip == null ? cell : LumitTooltip(message: tip, child: cell);

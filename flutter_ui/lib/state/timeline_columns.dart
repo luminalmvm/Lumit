@@ -48,17 +48,32 @@ const List<TimelineGroup> defaultGroupOrder = [
 /// stack into columns. Wide enough for the boxed icon plus breathing room.
 const double switchCellWidth = 22;
 
-/// The gap between two cells of the *same* group — the switch cells' own
-/// breathing room, reused between the compose group's pickers so every gap
-/// inside a group reads the same.
-const double cellGap = 4;
+/// **One gap, everywhere in an outline row: 8** (owner, 2026-08-24). The
+/// mockup's rows are a single flex line with `gap: 8` and 8 of padding at each
+/// end — one even space between the switches, the twirl, the number, the dot,
+/// the name, the three pickers and the render time, with nothing carrying more
+/// air than its neighbour. The outline had three different values instead: 8
+/// inside the identity cluster (K-461), 4 between the compose pickers, and 7
+/// for the seam between two clusters. They are now the same number, which is
+/// this one.
+///
+/// **Inside a switch cluster the drawing is tighter, and so is this**: its
+/// switches div sets `gap: 6`, and a cell of [switchCellWidth] holding a 16px
+/// glyph stands them exactly 6 apart while keeping the whole cell a click
+/// target (§7.2's dense floor). The 8 is the gap between the row's *items* —
+/// the clusters, the marks in the identity cluster, and the pickers.
+const double outlineGap = 8;
+
+/// The gap between two cells of the *same* group — the compose group's
+/// pickers. [outlineGap], like every other gap in a row.
+const double cellGap = outlineGap;
 
 /// The gap between the pieces of the **identity** cluster — the twirl, the
-/// layer number and the label dot (K-461). The mockup's rows set every one of
-/// them at 8; the outline ran the twirl hard against the dot and gave the
-/// number 4, which packed the three smallest marks in the panel into the one
-/// place they most need air.
-const double identityGap = 8;
+/// layer number and the label dot (K-461). [outlineGap], like every other gap
+/// in a row; the outline used to run the twirl hard against the dot and give
+/// the number 4, which packed the three smallest marks in the panel into the
+/// one place they most need air.
+const double identityGap = outlineGap;
 
 /// The five A/V switch cells.
 const double switchesGroupWidth = 5 * switchCellWidth;
@@ -80,8 +95,12 @@ const double renderGroupWidth = 5 * switchCellWidth;
 ///
 /// The matte cell's width covers the dropdown **plus its two mode toggles**
 /// even when unset, so the blend column never shifts as mattes come and go —
-/// which is why it is the 84 the mockup draws plus the toggles' 28.
-const double matteCellWidth = 84 + 28;
+/// which is why it is the 84 the mockup draws plus the toggles' 28. The face
+/// itself stays 84 either way (owner, 2026-08-24): the extra room in this
+/// column is the toggles', and a dropdown that swelled to fill it whenever no
+/// matte was set was a third width in a row of two.
+const double matteToggleWidth = 28;
+const double matteCellWidth = 84 + matteToggleWidth;
 const double blendCellWidth = 84;
 const double parentCellWidth = 64;
 const double composeGroupWidth =
@@ -96,7 +115,10 @@ const double timingsGroupWidth = 56;
 /// margin each side, plain space in the rows (the header's rule is enough to
 /// read the grouping by; repeating it down every row is noise). Part of the
 /// fixed geometry either way, so the layout maths count it.
-const double groupDividerWidth = 7;
+///
+/// [outlineGap] — a cluster seam is a gap like any other in the row, and was
+/// the odd 7 out.
+const double groupDividerWidth = outlineGap;
 
 /// A dropdown's text inset — [HouseButton]'s horizontal padding (6) plus its
 /// always-there 1 px border. The compose group's header titles carry the same
@@ -145,14 +167,29 @@ double minGroupWidth(TimelineGroup group) => switch (group) {
       TimelineGroup.timings => 56,
     };
 
+/// The space at an outline row's **trailing** end: the row's own 8 of padding
+/// plus the 2 spare pixels [outlineWidthOf] leaves there, since the outline is
+/// sized to the column header's wider left inset rather than to the rows.
+///
+/// **A fold-out row hangs its cells off this, and that is the whole point.**
+/// A property row, and an effect heading's render-time readout, sit in the
+/// same columns as the layer rows above them — so what they reserve at the
+/// right must be what a layer row leaves there. The fold rows had kept a bare
+/// `4`, which was the layer rows' own padding before the redesign widened it
+/// to 8 (K-441) and before the header's inset added the 2 (K-454); neither
+/// change reached them, so every value cell and every effect's millisecond
+/// reading stood 6px right of the column it belongs to.
+const double outlineRowTrailing = 10;
+
 /// The outline's total width for a set of group widths: the groups, the seam
 /// between each pair, and the widest edge padding anything in the outline
 /// carries — the column header's 10 + 8, two more than the layer rows' 8 + 8
 /// (both the mockups' own values). Sized to the header, because a row that
 /// does not fit its box overflows; the layer rows keep the two spare pixels at
-/// their trailing end, where nothing is drawn.
+/// their trailing end, where nothing is drawn ([outlineRowTrailing]).
 double outlineWidthOf(Map<TimelineGroup, double> widths) =>
-    18 +
+    8 +
+    outlineRowTrailing +
     widths.values.fold(0.0, (a, b) => a + b) +
     (widths.length - 1) * groupDividerWidth;
 

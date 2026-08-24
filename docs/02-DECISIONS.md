@@ -12316,3 +12316,48 @@ compose column defaults that shipped with it.
   every name, 9 for the kickers over the columns and in the bottom bar. Two numbers had
   drifted and are corrected — the Retime clock, at `mono`'s bare 12 rather than the value
   well's 11, and the render-time readout at a kicker's 9 rather than a value's 10.
+
+## K-462 — One gap in an outline row, bare switches, and three measurements taken off the drawing
+
+**DECIDED 2026-08-24.** The owner's polish pass on the Timeline outline, against the
+approved Main drawing. It supersedes parts of §12A.1 and §12A.6 recorded under K-451,
+K-454 and K-461, and settles a colour ruling the owner has now given more than once.
+
+- **One gap, everywhere in an outline row: 8.** The drawing lays a layer's row out as a
+  single line with one even space between every item on it and 8 of padding at either
+  end. The outline had used three different numbers — 8 inside the identity cluster
+  (K-461), 4 between the compose pickers, 7 for the seam between two clusters — plus a
+  stray 4 tucked behind the layer name. They are now one number, which supersedes K-461's
+  wording that made the 8 a property of the identity cluster alone. Inside a switch
+  cluster the drawing is tighter, at 6, and so is the outline: its cells stand the glyphs
+  6 apart while the whole cell stays the click target (§7.2).
+- **The dropdown faces are 84 / 84 / 64, the matte's included.** K-461 cut the compose
+  *columns* to the drawing's widths but let the matte's face swell to the whole column
+  whenever no matte was set, on the reasoning that empty room beside a picker reads as a
+  gap. It reads worse as a third dropdown width in a row that draws two: the room beyond
+  84 in that column belongs to the two mode toggles whether they are drawn or not.
+- **A row switch is a bare glyph.** No boxed or outlined face on the eye, solo, lock, shy,
+  or on any mode switch, anywhere in the outline — the drawing puts one on none of them,
+  and ten boxed marks at the head of a row turned two quiet columns into a grid of
+  buttons. This supersedes the "small outlined box, so the click targets read as buttons"
+  that shipped with K-441. The cell keeps its width, so nothing about the aiming changes.
+- **On is `text_primary`, off is `text_muted`, and the Modes column takes no accent.**
+  Two strengths, the drawing's own, replacing the third (`text_disabled`) that switches
+  whose glyph does not flip used to rest at: with the faces gone the colour is the whole
+  of the state, and two readings a person can tell apart beat three that shade into one
+  another. Never the accent (§3.1's list is closed) and never `animated`, which means
+  "this is keyed" and has no business on a motion-blur switch.
+- **A shut layer's summary keyframe mark is 8px point to point**, not the 5 the outline
+  drew. §12A.6 had read the drawing's mark as a 4px square, ≈5.7 across its diagonal; the
+  square carries a 1px border and stands on its corner, so it renders 8×8. The measured
+  rendering wins over the arithmetic done on the declared side.
+- **The layer-search well is 16 tall**, in a secondary row of 19. It had sized itself to
+  its own 16px glyph plus its hairline, come out at 18, and filled the row edge to edge;
+  the drawing keeps ground above and below, which is what makes it read as a well sitting
+  in a row rather than as the row itself. Measured in the same pass: the in-row pickers
+  already stand at the drawing's 18 under Regular and 16 under Compact, and did not move.
+- **A fold-out row keeps the same trailing space as a layer row** (8 of padding plus the 2
+  the outline spends on the column header's wider left inset). It had kept a bare 4 — the
+  layer rows' own padding before K-441 widened it and before K-454 added the 2 — so every
+  value cell and every effect heading's millisecond reading stood 6px right of the column
+  it belongs to. This is a bug the pinned test had been failing on, not a new rule.

@@ -19,6 +19,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/icons/icons.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
@@ -661,6 +662,28 @@ void main() {
       }
     });
 
+    /// 10c-bis. **The layer-search well is the drawing's 16**, in a secondary
+    /// row of 19 — ground above and below it, rather than a field filling its
+    /// row edge to edge. Measured against the artboard, 2026-08-24: the well
+    /// had sized itself to its own 16px glyph plus its hairline and come out
+    /// at 18. (The in-row pickers were measured in the same pass and already
+    /// matched the drawing's 18, so only this one moved.)
+    testWidgets('the layer search sits in the drawing\'s 16px well',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      expect(tester.getRect(find.byKey(const ValueKey('tl-search'))).height,
+          closeTo(layerSearchWellHeight, 0.5));
+      expect(layerSearchWellHeight, 16,
+          reason: 'which is the drawing\'s own value');
+      expect(layerSearchWellHeight,
+          lessThan(DensityTokens.compact.secondaryRow.toDouble()),
+          reason: 'and leaves ground in the row at either density');
+    });
+
     /// 10d. **Compact is the same panel, a pixel tighter** (K-454, §12A.6's
     /// second column). The setting reaches the rows that matter — the layer
     /// rows and the panel's own chrome — and it reaches them through the
@@ -761,11 +784,13 @@ void main() {
       expect(composeGroupWidth, lessThan(334),
           reason: 'which is narrower than the 334 that shipped');
 
-      // With no matte set the dropdown takes the toggles' room, so the face
-      // measured here is the whole cell — the point being that the *column*
-      // no longer leaves the picker sitting in a gap.
+      // **The faces themselves are 84 / 84 / 64** (owner, 2026-08-24), the
+      // matte's included: the room the matte column has beyond 84 belongs to
+      // its two mode toggles whether or not a matte is set, and a dropdown
+      // that swelled to 112 while the column was empty put a third width in a
+      // row that draws two.
       for (final (cell, width) in [
-        ('matte', matteCellWidth),
+        ('matte', matteCellWidth - matteToggleWidth),
         ('blend', blendCellWidth),
         ('parent', parentCellWidth),
       ]) {
@@ -775,11 +800,60 @@ void main() {
                     ValueKey<String>('tl-$cell-${layer.internallayerId}')))
                 .width,
             closeTo(width, 1.0),
-            reason: 'the $cell cell is its default width at rest');
+            reason: 'the $cell face is the drawing\'s width at rest');
       }
       expect(minGroupWidth(TimelineGroup.compose),
           lessThanOrEqualTo(composeGroupWidth),
           reason: 'and the group can still be dragged narrower than it starts');
+    });
+
+    /// 10d-quinquies. **One gap, everywhere in an outline row: 8** (owner,
+    /// 2026-08-24). The drawing's rows are a single flex line with `gap: 8`
+    /// and 8 of padding at each end — one even space between every mark in
+    /// the row. The outline had three values: 8 inside the identity cluster,
+    /// 4 between the compose pickers, and 7 for a cluster seam.
+    ///
+    /// Measured across the row rather than read off the constants, because
+    /// the claim is about what the eye walks past.
+    testWidgets('every gap in an outline row is the drawing\'s 8',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      expect((outlineGap, identityGap, cellGap, groupDividerWidth),
+          (8.0, 8.0, 8.0, 8.0),
+          reason: 'the gap inside a cluster, between its cells, and at a '
+              'cluster seam are one number');
+
+      Rect at(String key) =>
+          tester.getRect(find.byKey(ValueKey<String>('tl-$key-$id')));
+
+      // Inside a switch cluster the drawing is tighter — its switches div sets
+      // `gap: 6` — and so is this: the cells abut, and a cell of
+      // `switchCellWidth` around a 16px glyph stands them 6 apart while the
+      // whole cell stays the click target (§7.2).
+      expect(at('locked').left - at('solo').left, closeTo(switchCellWidth, 0.5),
+          reason: 'switch cells abut');
+      expect(switchCellWidth - iconSize, closeTo(6, 0.5),
+          reason: 'and the glyphs inside a cluster stand at the drawing\'s 6');
+
+      // Across the row: the two cluster seams a solid layer draws cells on
+      // either side of, and then picker to picker.
+      expect(at('twirl').left - at('shy').right, closeTo(outlineGap, 0.5),
+          reason: 'the seam between the switches and the identity cluster is '
+              'one gap, where it had been 7');
+      expect(at('matte').left - at('lit').right, closeTo(outlineGap, 0.5),
+          reason: 'as is the seam between the modes and the pickers — the '
+              'name\'s own trailing 4 is gone with it');
+      expect(at('blend').left - (at('matte').left + matteCellWidth),
+          closeTo(outlineGap, 0.5),
+          reason: 'and the matte cell — face plus toggle room — is one gap '
+              'from the blend');
+      expect(at('parent').left - at('blend').right, closeTo(outlineGap, 0.5),
+          reason: 'as the blend is from the parent');
     });
 
     /// 10d-quater. **A lane key is the drawing's 11 in Layers mode too**

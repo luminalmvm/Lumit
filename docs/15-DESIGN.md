@@ -857,15 +857,32 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   The bottom bar's toggles carry the same words as the headings they show and hide.
 - **A layer number column** sits between the twirl and the label dot, in muted mono; the
   dot follows it and belongs to the name it colours, so the cluster reads twirl · number ·
-  dot · name (K-461). **The three marks stand 8 apart** — the mockup's own row gap, where
-  the outline had run the twirl hard against the dot and given the number 4.
+  dot · name (K-461).
+- **One gap, everywhere in an outline row: 8** (K-462). The mockup draws a layer's row as a
+  single line with one even space between everything on it and 8 of padding at either end,
+  and the outline now uses that one number for all of it — between the marks in the
+  identity cluster, between the matte, blend and parent cells, and for the seam between two
+  clusters. It had used three: 8 inside the cluster, 4 between the pickers, 7 at a seam,
+  plus a stray 4 behind the layer name. **Inside a switch cluster the drawing is tighter**
+  and so is the outline: its switches sit in cells that stand the glyphs 6 apart, which is
+  the mockup's own gap there, with the whole cell still the click target (§7.2).
+- **A row switch is a bare glyph** (K-462): no boxed or outlined face on the eye, solo,
+  lock, shy, or on any of the mode switches, anywhere in the outline. On is `text_primary`,
+  off is `text_muted` — two strengths, the drawing's own, and **never the accent** (§3.1's
+  list is closed) nor `animated`, which means "this is keyed" and has no business on a
+  motion-blur switch.
 - **A key's mark says its interpolation, half by half** (K-457): diamond linear, hourglass
   bezier, square hold, all at one height, split at the vertical centre so the left half is
   the side coming in and the right half the side going out. The same marks at the same
   **11px** in Layers mode and in Keys (K-459); a shut layer's summary diamonds stay small.
 - **The matte, blend and parent columns start at their content's width** (K-461): the
   mockup's 84 / 84 / 64 dropdown faces, the matte cell carrying its two mode toggles on top
-  of that. Each seam still drags wider and stays where it is put.
+  of that. Each seam still drags wider and stays where it is put. **The faces themselves are
+  those widths** (K-462) — the matte's included: the room its column has beyond 84 belongs
+  to the toggles whether or not a matte is set, where the dropdown used to swell into it and
+  put a third width in a row that draws two.
+- **The layer search sits in a 16px well** — the mockup's own height, with ground above and
+  below it in the 19px row (K-462); it had sized itself to its glyph and filled the row.
 - **The open composition tab carries no accent tick** — the seated surface colour alone
   marks it, as the mockup draws it. (The workspace tabs keep their accent underline;
   §3.1's "active tab tick" means those.)
@@ -1124,9 +1141,10 @@ a row changes with it, and the degradation ladder below is the same under both.
 
 **The pieces inside a row are the mockups' too**, and are pinned by
 `timeline_alignment_test` and, for the Project panel, `project_panel_metrics_test`: a layer's label colour is a **6px dot**, its number stands in an
-**18px column** set in muted mono at 10, the keyframe mark on a shut layer's row is a **4px square stood
-on its corner** (≈5.7px point to point, against the **11px** one a property's own lane draws in
-both Layers and Keys — K-459), a labelled ruler tick is **7px** tall
+**18px column** set in muted mono at 10, the keyframe mark on a shut layer's row is **8px
+point to point** (K-462 — the mockup's 4px square has a 1px border and stands on its
+corner, so it renders 8; the earlier reading of ≈5.7 measured the square's side and drew 5.
+Against the **11px** mark a property's own lane draws in both Layers and Keys — K-459), a labelled ruler tick is **7px** tall
 against a minor tick's **4**, and under Sharp a bar's ends are **square** — the stadium ends are
 Round's, and are the whole of that shape's difference here.
 

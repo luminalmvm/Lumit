@@ -415,6 +415,11 @@ class _CompTab extends StatelessWidget {
   }
 }
 
+/// The layer-search well's height — **the mockup's own 16**, in a secondary
+/// row of 19 (Regular) or 18 (Compact), so there is ground above and below it
+/// at either density.
+const double layerSearchWellHeight = 16;
+
 /// The outline's search field: narrows the rows to those whose name matches.
 class LayerSearchFrb extends StatefulWidget {
   final ValueChanged<String> onChanged;
@@ -443,21 +448,28 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return HouseTextField(
-      key: const ValueKey('tl-search'),
-      controller: _controller,
-      width: widget.width,
-      // The well fills the secondary row it sits in rather than floating
-      // inside it: that row is 18 (K-451) and the 16px search glyph plus the
-      // well's own hairline is already all of it, so there is no room above
-      // and below to spend.
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      hint: l10n.searchLayers,
-      // The well says "editable"; the glyph says *what* it edits — the field
-      // stretches the width of the outline (§12A.1), and a bare well that wide
-      // reads as a name box rather than as a search.
-      leading: glyph.LumitIcon(LumitIcons.search,
-          size: iconSize, colour: t.textMuted),
+    // **16, the mockup's own well** (measured against the drawing, 2026-08-24
+    // — the artboard renders this field 16 tall inside its 19px row). It had
+    // been left to size itself to the 16px search glyph plus its hairline,
+    // which came out at 18 and filled the row edge to edge; the drawing keeps
+    // ground above and below, which is what makes the field read as a well
+    // sitting in a row rather than as the row itself.
+    return SizedBox(
+      height: layerSearchWellHeight,
+      child: HouseTextField(
+        key: const ValueKey('tl-search'),
+        controller: _controller,
+        width: widget.width,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        hint: l10n.searchLayers,
+        // The well says "editable"; the glyph says *what* it edits — the field
+        // stretches the width of the outline (§12A.1), and a bare well that
+        // wide reads as a name box rather than as a search. A size down from
+        // the row glyphs' 16, so it stands *inside* the well the drawing draws
+        // rather than being the whole of it.
+        leading: glyph.LumitIcon(LumitIcons.search,
+            size: layerSearchWellHeight - 4, colour: t.textMuted),
+      ),
     );
   }
 }
@@ -568,18 +580,19 @@ class MattePickerFrb extends StatelessWidget {
             engineLabel('Matte');
 
     // A fixed overall width whether or not the mode toggles are showing, so
-    // the columns after the matte cell never shift as mattes come and go —
-    // with no matte set, the dropdown takes the toggles' room rather than
-    // leaving a dead gap before the blend cell.
+    // the columns after the matte cell never shift as mattes come and go.
     return SizedBox(
       width: width,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            // The two mode toggles are 28 px between them; with no matte set
-            // the dropdown takes that room rather than leaving a dead gap.
-            width: matte == null ? width : (width - 28).clamp(40.0, width),
+            // **The face is the mockup's 84, matte or no matte** (owner,
+            // 2026-08-24): the two mode toggles are 28px between them, and
+            // that room is theirs whether or not they are drawn. The dropdown
+            // used to swell into it while no matte was set, which put a third
+            // dropdown width in a row that draws two.
+            width: (width - matteToggleWidth).clamp(40.0, width),
             child: BareLazyDropdown<UuidValue?>(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
               // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).
