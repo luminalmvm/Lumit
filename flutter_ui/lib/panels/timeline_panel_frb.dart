@@ -3066,7 +3066,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // (K-448). The block was already reserved to keep the two halves the
           // same height — it now has something in it.
           _ColumnToggles(
-            groups: _toggleableGroups,
+            // Keys mode draws no columns (§12A.1a), so it has none to
+            // toggle: the drawing gives that end of its bottom bar to the
+            // sheet's own strip, and three words that hide nothing are worse
+            // than no words at all. The comp-wide cluster to the right of the
+            // rule stays — shy, motion blur and the ⋯ commands are the
+            // document's, not the outline's, and are wanted in every mode.
+            groups: _keys ? const [] : _toggleableGroups,
             hidden: _hiddenGroups,
             onToggle: (group) => setState(() {
               if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);

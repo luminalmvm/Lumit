@@ -5891,6 +5891,27 @@ void main() {
       expect(x('keys-copy'), lessThan(x('keys-paste')));
     });
 
+    /// The outline's end of the bottom bar has no columns to toggle in Keys
+    /// mode, because Keys mode draws none (§12A.1a) — and the drawing gives
+    /// that end of the bar to the sheet's strip instead. The comp-wide cluster
+    /// stays: it is the document's, not the outline's.
+    testWidgets('Keys mode drops the column toggles that toggle nothing',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+      expect(find.byKey(const ValueKey('tl-column-switches')), findsOneWidget,
+          reason: 'Layers mode has columns to hide');
+
+      await openKeys(tester, layer);
+      expect(find.byKey(const ValueKey('tl-column-switches')), findsNothing);
+      expect(find.byKey(const ValueKey('tl-column-render')), findsNothing);
+      expect(find.byKey(const ValueKey('tl-column-compose')), findsNothing);
+      expect(find.byKey(const ValueKey('tl-hide-shy')), findsOneWidget,
+          reason: 'the comp-wide switches are wanted in every mode');
+      expect(find.byKey(const ValueKey('tl-more')), findsOneWidget);
+    });
+
     /// Interpolation, from the strip: the selected keys' two sides, set at a
     /// press, using K-457's vocabulary — and drawn with K-457's shapes.
     testWidgets(

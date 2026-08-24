@@ -913,8 +913,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - Keys keeps the **same double-height ruler, cache bar, work area, markers, playhead and
   zoom bar** as Layers mode, so all three views scroll the same range and nothing jumps on
   a switch. Only the body under them changes.
-- **The outline's columns stand down.** In their place the second row carries the sheet's
-  filters: **Show — All / Animated** (Animated is the default; it is K-441's filter, and
+- **The outline's columns stand down** — and with them the bottom bar's toggles for those
+  columns, which in Keys mode would hide nothing; the drawing gives that end of the bar to
+  the sheet's own strip. The comp-wide cluster to the right of the bar's rule stays, being
+  the document's rather than the outline's. In the columns' place the second row carries
+  the sheet's filters: **Show — All / Animated** (Animated is the default; it is K-441's filter, and
   `U` is the same reveal from the keyboard) and a scope of **Layers / Selected only**.
 - **A layer's row, then its properties flat.** The layer's own row carries its twirl, its
   label-colour bullet, its name and — quietly, at the right — how many properties are
