@@ -17,6 +17,7 @@ import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/folder.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
@@ -52,28 +53,33 @@ Future<void> main() async {
   final lowerThird = project.newComposition(
       name: 'Lower third', settings: _settings('Lower third', 5));
 
-  // The folders a project of this shape would have. Only Compositions holds
-  // anything: it is the engine's own auto-folder, filled by `newComposition`
-  // above, and the bridge has no call that moves an existing item into a
-  // folder — the Project panel cannot do it either, its only filing action is
-  // Move to root — so the footage stays where an import leaves it, at the
-  // root. Their labels are what tints the folder icons (§12A.3a).
+  // The folders a project of this shape would have, filled below: the drawing
+  // shows the footage filed rather than loose at the root. Compositions is the
+  // engine's own auto-folder, filled by `newComposition` above. Their labels
+  // are what tints the folder icons (§12A.3a).
+  final folders = <String, FolderReference>{};
   for (final (name, label) in [('Footage', 1), ('Audio', 6)]) {
-    ItemReference.folder(project.newFolder(name: name)).setLabel(label: label);
+    final folder = project.newFolder(name: name);
+    ItemReference.folder(folder).setLabel(label: label);
+    folders[name] = folder;
   }
 
   // Bottom of the stack upwards: each call puts its layer on top of the last.
   // The fixture files are named the way the layers should read, so nothing
   // needs renaming afterwards. The label is the item's colour tag — azure for
   // the video, indigo for the music.
-  for (final (file, label) in [
-    ('Music.wav', 6),
-    ('Gameplay.mp4', 1),
-    ('Title card.mp4', 1),
+  for (final (file, label, folder) in [
+    ('Music.wav', 6, 'Audio'),
+    ('Gameplay.mp4', 1, 'Footage'),
+    ('Title card.mp4', 1, 'Footage'),
   ]) {
     final footage = project.importFootage(path: '$fixtures/$file');
     comp.addFootageLayer(footage: footage, asSequence: false);
-    ItemReference.footage(footage).setLabel(label: label);
+    final item = ItemReference.footage(footage);
+    item.setLabel(label: label);
+    // Filed as the drawing shows it — the panel's own gesture, through the
+    // same bridge call a drag onto a folder row makes.
+    item.moveToFolder(folder: folders[folder]!.internalid);
   }
   // Imported but not placed — a project usually has one of those, and the
   // later sweeps need a still in the Project panel.
