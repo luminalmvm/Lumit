@@ -737,6 +737,26 @@ class CompositionReference {
           leaveAttributes: leaveAttributes,
           adjustDuration: adjustDuration);
 
+  /// Add this composition to the export queue, and start the queue when
+  /// `start` is set.
+  ///
+  /// The two footer actions are this one call: *Add to queue* leaves the
+  /// item waiting, *Export* sets it running. Either way the document is
+  /// snapshotted here, so the export renders what the composition was when
+  /// it was queued. `open_folder` is the dialogue's *Open folder* tick,
+  /// honoured as the item lands rather than by whatever window is watching.
+  int queueExport(
+          {required BridgeExportSpec spec,
+          required String path,
+          required bool start,
+          required bool openFolder}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceQueueExport(
+          that: this,
+          spec: spec,
+          path: path,
+          start: start,
+          openFolder: openFolder);
+
   /// Ask for `frame` at `scale` — 1.0 meaning "shown at comp resolution".
   /// Below 1.0 the engine decodes and composites smaller, which is how a
   /// Viewer that is not filling the screen stays cheap.

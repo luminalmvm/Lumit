@@ -8,8 +8,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'export.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`, `spec_json`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// What a delivery preset stamps into the dialogue, and what to call the file.
 ///
@@ -32,6 +32,26 @@ BridgeExportState exportPoll() =>
 /// reports `Failed` with "cancelled" — a cancelled export leaves no half-file
 /// pretending to be a finished one.
 void exportCancel() => BridgeLib.instance.api.crateApiExportExportCancel();
+
+/// Every item in the queue, oldest first.
+///
+/// Asking is also what turns the queue over: the next item starts when the one
+/// before it finishes, on the same cadence the progress is read.
+List<BridgeExportQueueItem> exportQueueList() =>
+    BridgeLib.instance.api.crateApiExportExportQueueList();
+
+/// Let the queue run: the next waiting item starts, and the rest follow it.
+void exportQueueStart() =>
+    BridgeLib.instance.api.crateApiExportExportQueueStart();
+
+/// Cancel one item. A running export stops at its next frame and leaves no
+/// half-file; an item still waiting simply leaves the list.
+void exportQueueCancel({required int id}) =>
+    BridgeLib.instance.api.crateApiExportExportQueueCancel(id: id);
+
+/// Forget one item, cancelling it first if it is the one running.
+void exportQueueRemove({required int id}) =>
+    BridgeLib.instance.api.crateApiExportExportQueueRemove(id: id);
 
 /// What a delivery preset fills the export dialogue with.
 class BridgeExportPreset {
@@ -73,6 +93,90 @@ class BridgeExportPreset {
           height == other.height &&
           bitrateMbps == other.bitrateMbps &&
           defaultName == other.defaultName;
+}
+
+/// One item in the export queue.
+///
+/// Everything here was true when the item was *added*: the document it renders
+/// was snapshotted then (docs/06 §7.1), and so was the comp's name. Editing the
+/// composition afterwards changes nothing about a queued export.
+class BridgeExportQueueItem {
+  final int id;
+  final String compName;
+
+  /// Where it writes. The interface shows the file's own name and keeps the
+  /// whole path for the tooltip.
+  final String path;
+
+  /// The delivery preset, empty for a custom export.
+  final String preset;
+
+  /// The format key — `h264`/`hevc`, or `png`/`tiff` for a sequence.
+  final String codec;
+
+  /// The range in comp frames, end exclusive. Both −1 when the item takes the
+  /// default: the work area as it stood at queue time, else the whole comp.
+  final PlatformInt64 rangeStartFrame;
+  final PlatformInt64 rangeEndFrame;
+  final BridgeExportQueueState state;
+
+  const BridgeExportQueueItem({
+    required this.id,
+    required this.compName,
+    required this.path,
+    required this.preset,
+    required this.codec,
+    required this.rangeStartFrame,
+    required this.rangeEndFrame,
+    required this.state,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      compName.hashCode ^
+      path.hashCode ^
+      preset.hashCode ^
+      codec.hashCode ^
+      rangeStartFrame.hashCode ^
+      rangeEndFrame.hashCode ^
+      state.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExportQueueItem &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          compName == other.compName &&
+          path == other.path &&
+          preset == other.preset &&
+          codec == other.codec &&
+          rangeStartFrame == other.rangeStartFrame &&
+          rangeEndFrame == other.rangeEndFrame &&
+          state == other.state;
+}
+
+@freezed
+sealed class BridgeExportQueueState with _$BridgeExportQueueState {
+  const BridgeExportQueueState._();
+
+  /// Waiting its turn — nothing runs until the queue is started.
+  const factory BridgeExportQueueState.waiting() =
+      BridgeExportQueueState_Waiting;
+  const factory BridgeExportQueueState.running({
+    required BigInt frame,
+
+    /// Zero until the exporter has worked out how many there are.
+    required BigInt total,
+
+    /// The encoder actually chosen, which may not be the one asked for.
+    required String encoder,
+  }) = BridgeExportQueueState_Running;
+  const factory BridgeExportQueueState.done() = BridgeExportQueueState_Done;
+  const factory BridgeExportQueueState.failed({
+    required String error,
+  }) = BridgeExportQueueState_Failed;
 }
 
 /// What the export dialogue is asking for.

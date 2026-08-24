@@ -3040,6 +3040,75 @@ fn the_export_surface_refuses_calmly_and_never_panics() {
     std::fs::remove_file(&target).ok();
 }
 
+/// The queue holds what it was given and starts nothing on its own.
+///
+/// Added items wait: *Add to queue* is a list of work, not a start button, and
+/// on a machine with no GPU that is also what keeps this test honest — nothing
+/// here can launch an encoder. Cancelling a waiting item takes it off the list
+/// (it never ran, so it has nothing to report), and every row carries the facts
+/// as they were at queue time.
+#[test]
+fn the_queue_holds_its_items_until_it_is_started() {
+    use crate::api::export::{
+        export_queue_cancel, export_queue_list, export_queue_remove, BridgeExportQueueState,
+        BridgeExportSpec,
+    };
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let spec = BridgeExportSpec {
+        preset: "youtube_1080p60".into(),
+        codec: "h264".into(),
+        width: 0,
+        height: 0,
+        bitrate_mbps: 16,
+        fps: 0.0,
+        range_start_frame: 4,
+        range_end_frame: 12,
+        include_audio: true,
+        audio_bit_rate: 320_000,
+    };
+
+    // Nowhere to write is refused before anything is added.
+    assert!(matches!(
+        comp.queue_export(spec.clone(), "  ".into(), false, false),
+        Err(BridgeError::NoProjectPath)
+    ));
+
+    let first = comp
+        .queue_export(spec.clone(), "queued-one.mp4".into(), false, false)
+        .expect("the item is queued");
+    let second = comp
+        .queue_export(spec, "queued-two.mp4".into(), false, false)
+        .expect("and so is the second");
+
+    let rows = export_queue_list();
+    let mine: Vec<_> = rows
+        .iter()
+        .filter(|row| row.id == first || row.id == second)
+        .collect();
+    assert_eq!(mine.len(), 2, "both items are in the list");
+    let row = mine[0];
+    assert_eq!(row.state, BridgeExportQueueState::Waiting);
+    assert_eq!(row.preset, "youtube_1080p60");
+    assert_eq!(row.codec, "h264");
+    assert_eq!(row.range_start_frame, 4);
+    assert_eq!(row.range_end_frame, 12);
+    assert!(row.path.ends_with("queued-one.mp4"));
+    assert!(!row.comp_name.is_empty(), "the comp's name at queue time");
+
+    // Cancelling a waiting item takes it off the list; removing does the same
+    // for one that has already run, and both are safe to repeat.
+    export_queue_cancel(first);
+    export_queue_remove(second);
+    export_queue_remove(second);
+    let after = export_queue_list();
+    assert!(
+        !after.iter().any(|row| row.id == first || row.id == second),
+        "a cancelled or removed item leaves the queue"
+    );
+}
+
 // --- Journalling ----------------------------------------------------------
 
 /// Every commit is written to the crash journal as it happens. Without this the

@@ -11,8 +11,11 @@
 //! channel's receiver and drains it on each poll, so Dart can drive a simple
 //! `start → poll* → done/failed` loop over the C ABI.
 //!
-//! One export runs at a time (docs/06 §7.1); a second `start` while one is
-//! running returns a calm `ok:false` and the Dart side queues.
+//! One export runs at a time (docs/06 §7.1); the rest wait in the queue kept
+//! here — each item holding the document snapshot it will render, so editing
+//! the composition afterwards never alters what a queued export writes. The
+//! queue is turned by the interface's own polling rather than by a thread of
+//! its own: the next item starts when the one before it finishes.
 //!
 //! Two pieces are pure and always compiled (and unit-tested without a GPU):
 //! - the **spec resolver** — the preset stamp plus the VBR-peak-preserved-while-
@@ -383,6 +386,115 @@ pub(crate) fn export_cancel() -> String {
     driving::cancel()
 }
 
+/// One row of the export queue, as the interface reads it.
+///
+/// The document each item renders from was snapshotted when it was added
+/// (docs/06 §7.1), so everything here is what was true at *queue* time — the
+/// comp's name included, which is why it is stored rather than looked up.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct QueueRow {
+    pub id: u32,
+    pub comp_name: String,
+    pub out_path: String,
+    /// The delivery preset's name, empty for a custom export.
+    pub preset: String,
+    pub codec: String,
+    /// The range this item exports, end exclusive; `None` = the work area at
+    /// queue time, else the whole comp.
+    pub range: Option<(u64, u64)>,
+    pub state: QueueRowState,
+}
+
+/// Where one queued item has got to.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum QueueRowState {
+    /// Waiting its turn. Nothing starts until the queue is told to run.
+    Waiting,
+    Running {
+        frame: u64,
+        total: u64,
+        encoder: String,
+    },
+    Done,
+    Failed(String),
+}
+
+/// Add an export to the queue, and start the queue when `start` is set.
+///
+/// The document is snapshotted by the caller, so later edits never alter a
+/// queued item. Returns the item's id.
+pub(crate) fn queue_add(
+    doc: std::sync::Arc<lumit_core::Document>,
+    comp: uuid::Uuid,
+    comp_name: String,
+    spec_json: &str,
+    out_path: &str,
+    start: bool,
+    open_folder: bool,
+) -> Result<u32, String> {
+    driving::queue_add(
+        doc,
+        comp,
+        comp_name,
+        spec_json,
+        out_path,
+        start,
+        open_folder,
+    )
+}
+
+/// Show a file in the desktop's own file manager — the *Open folder* tick, and
+/// what a finished item with that tick set does for itself.
+///
+/// Here rather than in the api layer because the queue calls it as an item
+/// lands, which happens whether or not any window is still up to notice.
+pub(crate) fn reveal_in_folder(path: &str) -> bool {
+    let path = std::path::Path::new(path);
+    if !path.exists() {
+        return false;
+    }
+    #[cfg(target_os = "windows")]
+    let launched = std::process::Command::new("explorer")
+        .arg(format!("/select,{}", path.display()))
+        .spawn();
+    #[cfg(target_os = "macos")]
+    let launched = std::process::Command::new("open")
+        .arg("-R")
+        .arg(path)
+        .spawn();
+    // Everything else opens the containing folder: `xdg-open` has no way to
+    // ask for one file inside it, and an open folder is the point.
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let launched = std::process::Command::new("xdg-open")
+        .arg(path.parent().unwrap_or(path))
+        .spawn();
+    launched.is_ok()
+}
+
+/// Every queued item, oldest first — and the pump that starts the next one
+/// when the queue is running and nothing is in flight.
+pub(crate) fn queue_list() -> Vec<QueueRow> {
+    driving::queue_list()
+}
+
+/// Let the queue run: the next waiting item starts, and each one after it
+/// follows as the one before finishes.
+pub(crate) fn queue_start() {
+    driving::queue_start();
+}
+
+/// Cancel one item — the running export stops at its next frame, a waiting one
+/// simply never starts.
+pub(crate) fn queue_cancel(id: u32) {
+    driving::queue_cancel(id);
+}
+
+/// Forget one item. A running item is cancelled first: a row cannot leave the
+/// list while the encoder it named is still writing.
+pub(crate) fn queue_remove(id: u32) {
+    driving::queue_remove(id);
+}
+
 mod driving {
     use super::{err_json, parse_inputs, resolve_spec, ResolvedSpec};
     use lumit_render::export::{ExportEvent, ExportHandle, ExportSpec};
@@ -406,11 +518,50 @@ mod driving {
         },
     }
 
+    /// One item waiting its turn. The document was snapshotted when it was
+    /// added (docs/06 §7.1), so later edits never alter what it renders.
+    struct Item {
+        id: u32,
+        comp_name: String,
+        doc: std::sync::Arc<lumit_core::Document>,
+        comp: Uuid,
+        spec_json: String,
+        out_path: String,
+        preset: String,
+        range: Option<(u64, u64)>,
+        /// Show the file when it lands (docs/07 §11's *Reveal in folder*).
+        open_folder: bool,
+        state: ItemState,
+    }
+
+    /// Where an item is in its life. Progress is not held here: the in-flight
+    /// item's frame count is [`State::Running`], one place rather than two that
+    /// could disagree.
+    enum ItemState {
+        Waiting,
+        Running,
+        Done,
+        Failed(String),
+    }
+
     /// The one in-flight export: its state plus the handle whose receiver a poll
     /// drains. The handle is dropped once a terminal event arrives.
+    ///
+    /// The queue lives here too rather than in a slot of its own, because "is
+    /// anything running" is the question both halves ask: one lock answers it
+    /// for the export in flight and for the items waiting behind it.
     struct Run {
         state: State,
         handle: Option<ExportHandle>,
+        queue: Vec<Item>,
+        next_id: u32,
+        /// Whether the queue may start things. Adding holds by default —
+        /// "Add to queue" is a list of work, not a start button — and Export
+        /// (and the queue window's own action) sets it.
+        running: bool,
+        /// The queued item the handle belongs to, when the export in flight
+        /// came from the queue rather than from a direct start.
+        current: Option<u32>,
     }
 
     static EXPORT: OnceLock<Mutex<Run>> = OnceLock::new();
@@ -420,6 +571,10 @@ mod driving {
             Mutex::new(Run {
                 state: State::Idle,
                 handle: None,
+                queue: Vec::new(),
+                next_id: 1,
+                running: false,
+                current: None,
             })
         })
     }
@@ -468,10 +623,6 @@ mod driving {
         spec_json: &str,
         out_path: &str,
     ) -> String {
-        let inputs = match parse_inputs(spec_json) {
-            Ok(i) => i,
-            Err(e) => return err_json(format!("export: {e}")),
-        };
         if out_path.trim().is_empty() {
             return err_json("export: no output path");
         }
@@ -483,22 +634,42 @@ mod driving {
             return err_json("an export is already running");
         }
 
+        match launch(&mut guard, &doc, comp, spec_json, out_path) {
+            Ok(()) => {
+                guard.current = None;
+                json!({ "ok": true }).to_string()
+            }
+            Err(e) => err_json(e),
+        }
+    }
+
+    /// Start one export against the slot: resolve its spec, build its inputs
+    /// over the headless seam, and hand it to the exporter. The caller has
+    /// already established that nothing is in flight.
+    ///
+    /// Split out so the queue and a direct start cannot drift apart — there is
+    /// one way to begin an export, whoever asked for it.
+    fn launch(
+        run: &mut Run,
+        doc: &std::sync::Arc<lumit_core::Document>,
+        comp: Uuid,
+        spec_json: &str,
+        out_path: &str,
+    ) -> Result<(), String> {
+        let parsed = parse_inputs(spec_json).map_err(|e| format!("export: {e}"))?;
         // Resolve the spec against the comp's own size.
-        let Some((cw, ch)) = doc.comp(comp).map(|c| (c.width, c.height)) else {
-            return err_json("export: unknown composition");
-        };
-        let resolved = resolve_spec(&inputs, cw, ch);
-        let spec = match to_export_spec(&resolved) {
-            Ok(s) => s,
-            Err(e) => return err_json(e),
-        };
+        let (cw, ch) = doc
+            .comp(comp)
+            .map(|c| (c.width, c.height))
+            .ok_or("export: unknown composition")?;
+        let resolved = resolve_spec(&parsed, cw, ch);
+        let spec = to_export_spec(&resolved)?;
 
         // Build the audio inputs through the headless seam (K-175), then hand
         // off to the exporter, which drives the same render walk the Viewer
         // uses on its own thread and device (K-017, K-031).
-        let Some(inputs) = crate::render::with_export_inputs(&doc, comp) else {
-            return err_json("export: the GPU pipeline is unavailable");
-        };
+        let inputs = crate::render::with_export_inputs(doc, comp)
+            .ok_or("export: the GPU pipeline is unavailable")?;
         let handle = lumit_render::export::start(
             doc.clone(),
             comp,
@@ -507,13 +678,162 @@ mod driving {
             spec,
         );
 
-        guard.state = State::Running {
+        run.state = State::Running {
             frame: 0,
             total: 0,
             encoder: None,
         };
-        guard.handle = Some(handle);
-        json!({ "ok": true }).to_string()
+        run.handle = Some(handle);
+        Ok(())
+    }
+
+    pub(super) fn queue_add(
+        doc: std::sync::Arc<lumit_core::Document>,
+        comp: Uuid,
+        comp_name: String,
+        spec_json: &str,
+        out_path: &str,
+        start: bool,
+        open_folder: bool,
+    ) -> Result<u32, String> {
+        if out_path.trim().is_empty() {
+            return Err("export: no output path".to_owned());
+        }
+        // Parsed here rather than at launch time so a spec the resolver cannot
+        // read is refused while the user is looking at the dialogue, instead of
+        // failing silently minutes later when its turn comes.
+        let parsed = parse_inputs(spec_json).map_err(|e| format!("export: {e}"))?;
+
+        let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        let id = guard.next_id;
+        guard.next_id += 1;
+        guard.queue.push(Item {
+            id,
+            comp_name,
+            doc,
+            comp,
+            spec_json: spec_json.to_owned(),
+            out_path: out_path.to_owned(),
+            preset: parsed.preset.clone(),
+            range: parsed.range,
+            open_folder,
+            state: ItemState::Waiting,
+        });
+        if start {
+            guard.running = true;
+        }
+        pump(&mut guard);
+        Ok(id)
+    }
+
+    pub(super) fn queue_list() -> Vec<super::QueueRow> {
+        let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        drain(&mut guard);
+        pump(&mut guard);
+        let running = match &guard.state {
+            State::Running {
+                frame,
+                total,
+                encoder,
+            } => Some((*frame as u64, *total as u64, encoder.clone())),
+            _ => None,
+        };
+        guard
+            .queue
+            .iter()
+            .map(|item| super::QueueRow {
+                id: item.id,
+                comp_name: item.comp_name.clone(),
+                out_path: item.out_path.clone(),
+                preset: item.preset.clone(),
+                codec: parse_inputs(&item.spec_json)
+                    .map(|i| i.codec)
+                    .unwrap_or_default(),
+                range: item.range,
+                state: match &item.state {
+                    ItemState::Waiting => super::QueueRowState::Waiting,
+                    ItemState::Running => {
+                        let (frame, total, encoder) = running.clone().unwrap_or_default();
+                        super::QueueRowState::Running {
+                            frame,
+                            total,
+                            encoder: encoder.unwrap_or_default(),
+                        }
+                    }
+                    ItemState::Done => super::QueueRowState::Done,
+                    ItemState::Failed(error) => super::QueueRowState::Failed(error.clone()),
+                },
+            })
+            .collect()
+    }
+
+    pub(super) fn queue_start() {
+        let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        guard.running = true;
+        drain(&mut guard);
+        pump(&mut guard);
+    }
+
+    pub(super) fn queue_cancel(id: u32) {
+        let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        if guard.current == Some(id) {
+            if let Some(handle) = &guard.handle {
+                handle.cancel();
+            }
+            return;
+        }
+        // A waiting item has nothing to stop and nothing to report, so it
+        // simply leaves the list rather than sitting there as a failure.
+        guard
+            .queue
+            .retain(|item| item.id != id || !matches!(item.state, ItemState::Waiting));
+    }
+
+    pub(super) fn queue_remove(id: u32) {
+        let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        if guard.current == Some(id) {
+            if let Some(handle) = &guard.handle {
+                handle.cancel();
+            }
+            guard.current = None;
+        }
+        guard.queue.retain(|item| item.id != id);
+    }
+
+    /// Start the next waiting item when the queue is running and nothing is in
+    /// flight. An item that cannot start at all is marked failed and the one
+    /// behind it is tried, so a bad path cannot stall the whole queue.
+    ///
+    /// The pump is turned by the interface's own polling rather than by a
+    /// thread of its own: every caller here already holds the lock, and the
+    /// queue moves on the same 250 ms tick the progress does.
+    fn pump(run: &mut Run) {
+        while run.handle.is_none() && run.running {
+            let Some(index) = run
+                .queue
+                .iter()
+                .position(|item| matches!(item.state, ItemState::Waiting))
+            else {
+                return;
+            };
+            let (doc, comp, spec_json, out_path, id) = {
+                let item = &run.queue[index];
+                (
+                    item.doc.clone(),
+                    item.comp,
+                    item.spec_json.clone(),
+                    item.out_path.clone(),
+                    item.id,
+                )
+            };
+            match launch(run, &doc, comp, &spec_json, &out_path) {
+                Ok(()) => {
+                    run.queue[index].state = ItemState::Running;
+                    run.current = Some(id);
+                }
+                Err(error) => run.queue[index].state = ItemState::Failed(error),
+            }
+        }
     }
 
     pub(super) fn poll() -> String {
@@ -584,6 +904,23 @@ mod driving {
             }
         }
         if let Some(state) = terminal {
+            // The queued item this handle belonged to takes the same outcome:
+            // the row in the queue window and the progress line in the status
+            // strip are two readings of one export, never two answers.
+            if let Some(id) = run.current.take() {
+                if let Some(item) = run.queue.iter_mut().find(|item| item.id == id) {
+                    item.state = match &state {
+                        State::Failed { error } => ItemState::Failed(error.clone()),
+                        _ => ItemState::Done,
+                    };
+                    // The tick the dialogue set, honoured here rather than by
+                    // whatever window happens to be watching: an export that
+                    // lands after its dialogue closed still opens its folder.
+                    if item.open_folder && matches!(item.state, ItemState::Done) {
+                        super::reveal_in_folder(&item.out_path);
+                    }
+                }
+            }
             run.state = state;
             run.handle = None;
         }

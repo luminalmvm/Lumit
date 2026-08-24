@@ -8607,3 +8607,46 @@ gold-outlined chip at the top-left corner. Selection is agreed in four places �
 Timeline, the graph, the properties and the Viewer — and this is the Viewer's half of that
 agreement. The box round the layer is the same gold, which is the colour Lumit reserves for
 "this is selected, or animated, or in your hand" and for nothing else.
+
+## 19. The export queue, in plain terms
+
+Exporting is the one job in Lumit that takes minutes rather than milliseconds, and only one
+of them can run at a time — two exports sharing a graphics card make each other slow and
+neither of them predictable. So the second one waits, and the thing it waits in is the
+**queue**.
+
+**What one queued item is.** Not "export this composition later", which would be a promise
+about a moving target: an item is a *photograph* of the project, taken the moment you add
+it. Every layer, every keyframe, every effect setting is copied into the item as it stood
+then. Keep working afterwards — move a layer, change a colour, delete the whole
+composition — and the item still writes what you queued. That copy costs almost nothing,
+because the document is stored as shared, unchanging pieces: the photograph is a note
+saying "these pieces", not a second copy of the work (docs/06 §7.1).
+
+**Adding does not start.** The export dialog's footer has two actions for a reason. *Add to
+queue* puts the item on the list and leaves it there — the list is a plan for later, and
+nothing about it moves. *Export* adds the item and lets the queue run, which starts it now
+and then starts the next one after it, and the one after that, until the list runs dry.
+The queue window has its own start for the list you built with the first button.
+
+**Nothing turns a crank in the background.** There is no timer thread in the engine driving
+this. Whenever the interface asks the queue how it is getting on — which it does a few
+times a second while a window that shows it is open — the answer is worked out first: any
+finished export is settled, and if nothing is running and something is waiting, that
+something is started right there. So "asking" and "moving along" are the same act, which
+means the queue cannot get stuck in a state nobody is looking at, and there is no lock held
+by a thread that nothing is watching.
+
+**Cancelling and removing.** Cancelling something that is *running* asks it to stop at the
+end of the frame it is on, and the half-written file is deleted — a cancelled export never
+leaves something that looks like a finished one. Cancelling something that has not started
+just takes it off the list: it has nothing to stop and nothing to report. Removing a
+finished row forgets it.
+
+**One place says what an export is doing.** The progress numbers live with the export in
+flight, not on the item — the row in the queue window and the line in the status strip are
+two readings of the same thing, so they cannot disagree about which frame it is on.
+
+**Open folder.** The tick in the export dialog is remembered by the item, not by the window
+that set it, so a long export whose dialog you closed an hour ago still opens the folder it
+landed in.

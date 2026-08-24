@@ -34,6 +34,16 @@ BridgePlaybackTier resetRealtime() =>
 List<BridgeAutosave> listAutosaves({required String project}) =>
     BridgeLib.instance.api.crateApiShellListAutosaves(project: project);
 
+/// Show a finished file in the desktop's own file manager.
+///
+/// The export dialogue's *Open folder* is the only caller that asks directly;
+/// a queued export with that tick set reveals itself as it lands. Returns
+/// whether the request was handed over — a machine with no file manager (a
+/// headless CI box, most obviously) says no rather than failing, because
+/// nothing depends on the window appearing.
+bool revealInFolder({required String path}) =>
+    BridgeLib.instance.api.crateApiShellRevealInFolder(path: path);
+
 /// One rotating autosave beside a project.
 class BridgeAutosave {
   /// 1 is the newest.

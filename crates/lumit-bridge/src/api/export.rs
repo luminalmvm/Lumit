@@ -7,9 +7,11 @@
 //! than one — `start`, `poll`, `cancel` — and why nothing here returns a
 //! finished file.
 //!
-//! Only one export runs at a time. Starting a second while one is in flight is
-//! refused rather than queued, because two exports competing for the same GPU
-//! would make both slower and neither predictable.
+//! Only one export runs at a time, because two exports competing for the same
+//! GPU would make both slower and neither predictable. The rest wait in the
+//! **queue**: `queue_export` adds one (with the document snapshotted there and
+//! then, docs/06 §7.1), `export_queue_list` reads the whole list and turns it
+//! over, and `export_queue_cancel`/`export_queue_remove` take one out.
 
 use flutter_rust_bridge::frb;
 use serde_json::Value;
@@ -99,10 +101,19 @@ impl CompositionReference {
             state.store.snapshot()
         };
 
-        // The exporter takes the dialogue's own JSON shape, which is also what
-        // the egui frontend sends — one spec parser, so the two frontends cannot
-        // export differently.
-        let spec_json = serde_json::json!({
+        let spec_json = spec_json(&spec);
+        let reply = crate::export::start_export_with_document(document, self.id, &spec_json, &path);
+        reply_ok(&reply).then_some(()).ok_or_else(|| {
+            BridgeError::ExportFailed(reply_error(&reply).unwrap_or_else(|| "export".into()))
+        })
+    }
+}
+
+/// The dialogue's own JSON shape, which is also what the egui frontend sends —
+/// one spec parser, so the two frontends cannot export differently.
+#[frb(ignore)]
+fn spec_json(spec: &BridgeExportSpec) -> String {
+    serde_json::json!({
             "preset": spec.preset,
             "codec": spec.codec,
             "size": if spec.width == 0 || spec.height == 0 {
@@ -125,14 +136,8 @@ impl CompositionReference {
             },
             "include_audio": spec.include_audio,
             "audio_bit_rate": spec.audio_bit_rate,
-        })
-        .to_string();
-
-        let reply = crate::export::start_export_with_document(document, self.id, &spec_json, &path);
-        reply_ok(&reply).then_some(()).ok_or_else(|| {
-            BridgeError::ExportFailed(reply_error(&reply).unwrap_or_else(|| "export".into()))
-        })
-    }
+    })
+    .to_string()
 }
 
 /// What a delivery preset stamps into the dialogue, and what to call the file.
@@ -218,6 +223,143 @@ pub fn export_poll() -> BridgeExportState {
 #[frb(sync)]
 pub fn export_cancel() {
     let _ = crate::export::export_cancel();
+}
+
+/// One item in the export queue.
+///
+/// Everything here was true when the item was *added*: the document it renders
+/// was snapshotted then (docs/06 §7.1), and so was the comp's name. Editing the
+/// composition afterwards changes nothing about a queued export.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeExportQueueItem {
+    pub id: u32,
+    pub comp_name: String,
+    /// Where it writes. The interface shows the file's own name and keeps the
+    /// whole path for the tooltip.
+    pub path: String,
+    /// The delivery preset, empty for a custom export.
+    pub preset: String,
+    /// The format key — `h264`/`hevc`, or `png`/`tiff` for a sequence.
+    pub codec: String,
+    /// The range in comp frames, end exclusive. Both −1 when the item takes the
+    /// default: the work area as it stood at queue time, else the whole comp.
+    pub range_start_frame: i64,
+    pub range_end_frame: i64,
+    pub state: BridgeExportQueueState,
+}
+
+/// Where one queued item has got to.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BridgeExportQueueState {
+    /// Waiting its turn — nothing runs until the queue is started.
+    Waiting,
+    Running {
+        frame: u64,
+        /// Zero until the exporter has worked out how many there are.
+        total: u64,
+        /// The encoder actually chosen, which may not be the one asked for.
+        encoder: String,
+    },
+    Done,
+    Failed {
+        error: String,
+    },
+}
+
+impl CompositionReference {
+    /// Add this composition to the export queue, and start the queue when
+    /// `start` is set.
+    ///
+    /// The two footer actions are this one call: *Add to queue* leaves the
+    /// item waiting, *Export* sets it running. Either way the document is
+    /// snapshotted here, so the export renders what the composition was when
+    /// it was queued. `open_folder` is the dialogue's *Open folder* tick,
+    /// honoured as the item lands rather than by whatever window is watching.
+    #[frb(sync)]
+    pub fn queue_export(
+        &self,
+        spec: BridgeExportSpec,
+        path: String,
+        start: bool,
+        open_folder: bool,
+    ) -> Result<u32, BridgeError> {
+        if path.trim().is_empty() {
+            return Err(BridgeError::NoProjectPath);
+        }
+        let document = {
+            let state = self.project()?;
+            let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+            state.store.snapshot()
+        };
+        let comp_name = self.get_settings()?.name;
+        crate::export::queue_add(
+            document,
+            self.id,
+            comp_name,
+            &spec_json(&spec),
+            &path,
+            start,
+            open_folder,
+        )
+        .map_err(BridgeError::ExportFailed)
+    }
+}
+
+/// Every item in the queue, oldest first.
+///
+/// Asking is also what turns the queue over: the next item starts when the one
+/// before it finishes, on the same cadence the progress is read.
+#[frb(sync)]
+pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
+    crate::export::queue_list()
+        .into_iter()
+        .map(|row| BridgeExportQueueItem {
+            id: row.id,
+            comp_name: row.comp_name,
+            path: row.out_path,
+            preset: row.preset,
+            codec: row.codec,
+            range_start_frame: row.range.map_or(-1, |(a, _)| a as i64),
+            range_end_frame: row.range.map_or(-1, |(_, b)| b as i64),
+            state: match row.state {
+                crate::export::QueueRowState::Waiting => BridgeExportQueueState::Waiting,
+                crate::export::QueueRowState::Running {
+                    frame,
+                    total,
+                    encoder,
+                } => BridgeExportQueueState::Running {
+                    frame,
+                    total,
+                    encoder,
+                },
+                crate::export::QueueRowState::Done => BridgeExportQueueState::Done,
+                crate::export::QueueRowState::Failed(error) => {
+                    BridgeExportQueueState::Failed { error }
+                }
+            },
+        })
+        .collect()
+}
+
+/// Let the queue run: the next waiting item starts, and the rest follow it.
+#[frb(sync)]
+pub fn export_queue_start() {
+    crate::export::queue_start();
+}
+
+/// Cancel one item. A running export stops at its next frame and leaves no
+/// half-file; an item still waiting simply leaves the list.
+#[frb(sync)]
+pub fn export_queue_cancel(id: u32) {
+    crate::export::queue_cancel(id);
+}
+
+/// Forget one item, cancelling it first if it is the one running.
+#[frb(sync)]
+pub fn export_queue_remove(id: u32) {
+    crate::export::queue_remove(id);
 }
 
 #[frb(ignore)]

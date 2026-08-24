@@ -315,6 +315,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExportPreset dco_decode_bridge_export_preset(dynamic raw);
 
   @protected
+  BridgeExportQueueItem dco_decode_bridge_export_queue_item(dynamic raw);
+
+  @protected
+  BridgeExportQueueState dco_decode_bridge_export_queue_state(dynamic raw);
+
+  @protected
   BridgeExportSpec dco_decode_bridge_export_spec(dynamic raw);
 
   @protected
@@ -595,6 +601,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeEnabledWhen> dco_decode_list_bridge_enabled_when(dynamic raw);
+
+  @protected
+  List<BridgeExportQueueItem> dco_decode_list_bridge_export_queue_item(
+      dynamic raw);
 
   @protected
   List<BridgeImportArg> dco_decode_list_bridge_import_arg(dynamic raw);
@@ -1100,6 +1110,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeExportQueueItem sse_decode_bridge_export_queue_item(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExportQueueState sse_decode_bridge_export_queue_state(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeExportSpec sse_decode_bridge_export_spec(SseDeserializer deserializer);
 
   @protected
@@ -1412,6 +1430,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeEnabledWhen> sse_decode_list_bridge_enabled_when(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeExportQueueItem> sse_decode_list_bridge_export_queue_item(
       SseDeserializer deserializer);
 
   @protected
@@ -1971,6 +1993,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeExportPreset self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_export_queue_item(
+      BridgeExportQueueItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_export_queue_state(
+      BridgeExportQueueState self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_export_spec(
       BridgeExportSpec self, SseSerializer serializer);
 
@@ -2320,6 +2350,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_enabled_when(
       List<BridgeEnabledWhen> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_export_queue_item(
+      List<BridgeExportQueueItem> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_import_arg(
