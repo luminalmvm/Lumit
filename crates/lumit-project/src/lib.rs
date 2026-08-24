@@ -1962,6 +1962,157 @@ mod tests {
         buf
     }
 
+    /// **A project written before drivers existed is untouched by them**
+    /// (K-471 §4, and the note's first core invariant).
+    ///
+    /// The `graph` field is additive with a serde default and is skipped when
+    /// empty, so a pre-K-471 document opens with an empty graph, its
+    /// `project.json` carries no such key, and opening and re-saving reproduces
+    /// the same bytes. A wired layer then round-trips whole — drivers, wires and
+    /// canvas positions.
+    #[test]
+    fn an_untouched_project_gains_no_graph_and_re_saves_byte_for_byte() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut doc = doc_with_item();
+        let mut comp = lumit_core::model::Composition {
+            id: Uuid::now_v7(),
+            name: "Comp 1".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: lumit_core::time::FrameRate::new(25, 1).unwrap(),
+            duration: lumit_core::time::Duration(lumit_core::time::Rational::new(10, 1).unwrap()),
+            background: lumit_core::model::LinearColour::BLACK,
+            work_area: None,
+            layers: Vec::new(),
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let blur = lumit_core::fx::instantiate("blur").unwrap();
+        let blur_id = blur.id;
+        let mut layer = lumit_core::model::Layer {
+            id: Uuid::now_v7(),
+            name: "Solid".into(),
+            kind: lumit_core::model::LayerKind::Solid {
+                def: Uuid::now_v7(),
+            },
+            in_point: lumit_core::time::CompTime(lumit_core::time::Rational::ZERO),
+            out_point: lumit_core::time::CompTime(lumit_core::time::Rational::new(10, 1).unwrap()),
+            start_offset: lumit_core::time::CompTime(lumit_core::time::Rational::ZERO),
+            transform: Default::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            markers: Vec::new(),
+            volume_db: lumit_core::anim::Property::zero(),
+            audio_only: false,
+            retime: None,
+            interpolation: Default::default(),
+            parked_flow: None,
+            blend: Default::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            effects: vec![blur],
+            graph: LayerGraph::default(),
+            switches: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let layer_id = layer.id;
+        comp.layers.push(layer.clone());
+        doc.items
+            .push(lumit_core::model::ProjectItem::Composition(comp));
+
+        // 1. The pre-K-471 shape: no `graph` key anywhere in the file.
+        let a = dir.path().join("a.lum");
+        save(&doc, &a).unwrap();
+        let json = String::from_utf8(entry_bytes(&a, "project.json")).unwrap();
+        assert!(
+            !json.contains("\"graph\""),
+            "an untouched project must carry no graph key"
+        );
+
+        // 2. Open and re-save: the same bytes, so nothing was invented on load.
+        let (reopened, _) = open(&a).unwrap();
+        assert!(reopened
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                lumit_core::model::ProjectItem::Composition(c) => Some(c),
+                _ => None,
+            })
+            .flat_map(|c| c.layers.iter())
+            .all(|l| l.graph.is_empty()));
+        let b = dir.path().join("b.lum");
+        save(&reopened, &b).unwrap();
+        assert_eq!(
+            entry_bytes(&a, "project.json"),
+            entry_bytes(&b, "project.json"),
+            "opening and re-saving an untouched project must reproduce its bytes"
+        );
+
+        // 3. A wired layer round-trips whole.
+        let mut wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+        wiggle.custom_name = Some("The wobble".into());
+        let wiggle_id = wiggle.id;
+        layer.graph = LayerGraph {
+            nodes: vec![wiggle],
+            edges: vec![
+                Edge {
+                    from: OutputRef::Driver {
+                        node: wiggle_id,
+                        port: "value".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Effect(blur_id),
+                        port: "radius".into(),
+                    },
+                },
+                Edge {
+                    from: OutputRef::SourceMatte,
+                    to: InputRef::Matte { effect: blur_id },
+                },
+            ],
+            layout: vec![
+                (NodeRef::Source, [0.0, 0.0]),
+                (NodeRef::Driver(wiggle_id), [120.5, -40.25]),
+                (NodeRef::Out, [640.0, 0.0]),
+            ],
+        };
+        let wanted = layer.graph.clone();
+        let mut wired = doc.clone();
+        for item in &mut wired.items {
+            if let lumit_core::model::ProjectItem::Composition(c) = item {
+                c.layers = vec![layer.clone()];
+            }
+        }
+        let c = dir.path().join("c.lum");
+        save(&wired, &c).unwrap();
+        let (back, _) = open(&c).unwrap();
+        let got = back
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                lumit_core::model::ProjectItem::Composition(c) => Some(c),
+                _ => None,
+            })
+            .flat_map(|c| c.layers.iter())
+            .find(|l| l.id == layer_id)
+            .expect("the layer")
+            .graph
+            .clone();
+        assert_eq!(got, wanted, "the whole graph must survive the file");
+
+        // And a wired project re-saves byte for byte as well.
+        let d = dir.path().join("d.lum");
+        save(&back, &d).unwrap();
+        assert_eq!(
+            entry_bytes(&c, "project.json"),
+            entry_bytes(&d, "project.json")
+        );
+    }
+
     #[test]
     fn two_saves_of_the_same_doc_are_byte_identical(/* docs/10 §1 */) {
         // Insert several out-of-order unknown keys: the serialised order must be

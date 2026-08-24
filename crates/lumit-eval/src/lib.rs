@@ -1504,6 +1504,176 @@ mod tests {
         .unwrap()
     }
 
+    /// **The driver graph reaches the frame key** (K-471 §2.3).
+    ///
+    /// A wire substitutes a value where a keyframe would have been read, so a
+    /// frame drawn under one is a different picture and must have a different
+    /// name. Three things are checked, and each of them was a stale cached
+    /// frame waiting to happen:
+    ///
+    /// - a **wired** layer keys differently from the same layer unwired;
+    /// - two frames of a wired layer key differently even though every stored
+    ///   number holds still, because a driver's output moves with time;
+    /// - editing a driver's parameter renames the frame, while an edit that
+    ///   touches nothing the wire carries leaves it alone.
+    #[test]
+    fn a_driven_parameter_reaches_the_frame_key() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+            for p in &mut inst.params {
+                if p.id == id {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                    return;
+                }
+            }
+            panic!("no parameter {id}");
+        };
+
+        let mut blur = lumit_core::fx::instantiate("blur").unwrap();
+        set(&mut blur, "radius", 10.0);
+        let blur_id = blur.id;
+        let mut wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+        set(&mut wiggle, "amount", 8.0);
+        set(&mut wiggle, "frequency", 3.0);
+        let wiggle_id = wiggle.id;
+
+        let wired = LayerGraph {
+            nodes: vec![wiggle.clone()],
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: wiggle_id,
+                    port: "value".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(blur_id),
+                    port: "radius".into(),
+                },
+            }],
+            layout: Vec::new(),
+        };
+
+        let layer_with = |graph: LayerGraph| {
+            let mut l = text_layer("hello", 0.0, 5.0, 0.0);
+            l.effects = vec![blur.clone()];
+            l.graph = graph;
+            l
+        };
+
+        let doc = Document::new();
+        let plain = comp_with(vec![layer_with(LayerGraph::default())]);
+        let driven = comp_with(vec![layer_with(wired.clone())]);
+
+        assert_ne!(
+            key(&doc, &plain, 1.0),
+            key(&doc, &driven, 1.0),
+            "a wire changes the picture, so it must change the name"
+        );
+
+        // Every stored number is static, but the wobble is not: two frames of
+        // the driven layer must not share a name.
+        assert_ne!(
+            key(&doc, &driven, 1.0),
+            key(&doc, &driven, 1.5),
+            "a driven parameter moves with time even when nothing is keyframed"
+        );
+        // The undriven layer is the control: static parameters, same name.
+        assert_eq!(key(&doc, &plain, 1.0), key(&doc, &plain, 1.5));
+
+        // Editing the driver renames the frame.
+        let mut louder = wired.clone();
+        set(&mut louder.nodes[0], "amount", 20.0);
+        assert_ne!(
+            key(&doc, &driven, 1.0),
+            key(&doc, &comp_with(vec![layer_with(louder)]), 1.0),
+        );
+
+        // Moving the wire renames it too, though no stored value changed.
+        let mut elsewhere = wired.clone();
+        elsewhere.edges[0].to = InputRef::Param {
+            node: NodeRef::Effect(blur_id),
+            port: "mix".into(),
+        };
+        assert_ne!(
+            key(&doc, &driven, 1.0),
+            key(&doc, &comp_with(vec![layer_with(elsewhere)]), 1.0),
+        );
+
+        // And an edit the wire does not carry — a node's canvas position, and
+        // the layer's name — leaves the name alone.
+        let mut moved = wired.clone();
+        moved
+            .layout
+            .push((NodeRef::Driver(wiggle_id), [400.0, 12.0]));
+        let mut renamed = layer_with(moved);
+        renamed.name = "an entirely different name".into();
+        assert_eq!(
+            key(&doc, &driven, 1.0),
+            key(&doc, &comp_with(vec![renamed]), 1.0),
+            "where a node sits on the canvas is not a picture"
+        );
+
+        // A bypassed driver carries nothing, so the frame is the plain one
+        // again — but not by accident: it keys apart from the wired one.
+        let mut bypassed = wired.clone();
+        bypassed.nodes[0].enabled = false;
+        let off = comp_with(vec![layer_with(bypassed)]);
+        assert_ne!(key(&doc, &driven, 1.0), key(&doc, &off, 1.0));
+    }
+
+    /// §2.3's other half: a **temporal** driver declares how far either side of
+    /// the frame it reads, and that range is in the key — so widening Smooth's
+    /// window retires the frames smoothed with the narrow one.
+    #[test]
+    fn a_temporal_drivers_window_reaches_the_frame_key() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+            for p in &mut inst.params {
+                if p.id == id {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                    return;
+                }
+            }
+            panic!("no parameter {id}");
+        };
+
+        let blur = lumit_core::fx::instantiate("blur").unwrap();
+        let blur_id = blur.id;
+        let mut smooth = lumit_core::fx::instantiate("smooth").unwrap();
+        set(&mut smooth, "time", 0.2);
+        let smooth_id = smooth.id;
+
+        let graph_at = |time: f64| {
+            let mut node = smooth.clone();
+            set(&mut node, "time", time);
+            LayerGraph {
+                nodes: vec![node],
+                edges: vec![Edge {
+                    from: OutputRef::Driver {
+                        node: smooth_id,
+                        port: "value".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Effect(blur_id),
+                        port: "radius".into(),
+                    },
+                }],
+                layout: Vec::new(),
+            }
+        };
+        let comp_at = |time: f64| {
+            let mut l = text_layer("hello", 0.0, 5.0, 0.0);
+            l.effects = vec![blur.clone()];
+            l.graph = graph_at(time);
+            comp_with(vec![l])
+        };
+
+        let doc = Document::new();
+        assert_ne!(key(&doc, &comp_at(0.2), 1.0), key(&doc, &comp_at(0.8), 1.0));
+        assert_eq!(key(&doc, &comp_at(0.2), 1.0), key(&doc, &comp_at(0.2), 1.0));
+    }
+
     /// Same content, different instance ids and names → the same key. This
     /// is the Global Performance Cache lesson made a test: identity never
     /// feeds the hash, so a duplicated comp shares its original's cache.

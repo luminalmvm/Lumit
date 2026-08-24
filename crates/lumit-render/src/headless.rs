@@ -4314,6 +4314,51 @@ surfaces:
                 l.transform.rotation = Property::fixed(17.0);
                 (doc, comp_id, 0)
             }),
+            // A **driven parameter** (K-471): the top layer's blur radius comes
+            // off a Wiggle rather than off its keyframes, so both walks have to
+            // resolve the same driver graph at the same layer time and get the
+            // same number. A driver that read a clock, or that depended on
+            // which render ran first, would show up here as two different
+            // pictures — which is the whole of §2.2's determinism promise.
+            ("a wiggle-driven blur radius", |w, h, red, blue| {
+                use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (_, top) = matrix_top(&mut doc, comp_id, blue);
+
+                let blur = lumit_core::fx::instantiate("blur").unwrap();
+                let blur_id = blur.id;
+                let mut wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
+                for p in &mut wiggle.params {
+                    if p.id == "amount" {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(6.0));
+                    }
+                    if p.id == "frequency" {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(3.0));
+                    }
+                }
+                let wiggle_id = wiggle.id;
+
+                let comp = doc.comp_mut(comp_id).unwrap();
+                let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+                l.effects = vec![blur];
+                l.graph = LayerGraph {
+                    nodes: vec![wiggle],
+                    edges: vec![Edge {
+                        from: OutputRef::Driver {
+                            node: wiggle_id,
+                            port: "value".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Effect(blur_id),
+                            port: "radius".into(),
+                        },
+                    }],
+                    layout: Vec::new(),
+                };
+                // A frame partway in, so the wobble is somewhere other than its
+                // starting value.
+                (doc, comp_id, 7)
+            }),
             ("camera over a 3d layer", |w, h, red, blue| {
                 let (mut doc, comp_id, _) = matrix_base(w, h, red);
                 let (_, top) = matrix_top(&mut doc, comp_id, blue);
@@ -4356,6 +4401,99 @@ surfaces:
                 "{name}: the interactive and export paths must be bit-identical (K-031)"
             );
         }
+    }
+
+    /// **A wire reaches the picture** (K-471 §2.1).
+    ///
+    /// The matrix above proves the two walks agree; this proves there is
+    /// something to agree *about*. The same comp is rendered three times: with
+    /// no graph, with a Remap driving the blur radius to twenty, and with the
+    /// driver bypassed. The driven frame differs from the other two, and the
+    /// bypassed frame is the undriven one exactly — which is what says the
+    /// substitution happens where it claims to and stops when the `B` badge
+    /// says so.
+    #[test]
+    fn a_driven_radius_changes_the_picture_and_a_bypassed_driver_does_not() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+
+        let (cw, ch) = (32u32, 16u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        let build = |graph: Option<bool>| -> (Document, Uuid) {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let mut blur = lumit_core::fx::instantiate("blur").unwrap();
+            for p in &mut blur.params {
+                if p.id == "radius" {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(0.0));
+                }
+            }
+            let blur_id = blur.id;
+
+            let mut remap = lumit_core::fx::instantiate("remap").unwrap();
+            for p in &mut remap.params {
+                let v = match p.id.as_str() {
+                    "value" | "in_high" => 1.0,
+                    "in_low" | "out_low" => 0.0,
+                    "out_high" => 20.0,
+                    _ => continue,
+                };
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+            }
+            let remap_id = remap.id;
+
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.transform.rotation = Property::fixed(20.0);
+            l.effects = vec![blur];
+            if let Some(enabled) = graph {
+                remap.enabled = enabled;
+                l.graph = LayerGraph {
+                    nodes: vec![remap],
+                    edges: vec![Edge {
+                        from: OutputRef::Driver {
+                            node: remap_id,
+                            port: "value".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Effect(blur_id),
+                            port: "radius".into(),
+                        },
+                    }],
+                    layout: Vec::new(),
+                };
+            }
+            (doc, comp_id)
+        };
+
+        let render = |r: &mut HeadlessRenderer, graph: Option<bool>| -> Vec<u8> {
+            let (doc, comp_id) = build(graph);
+            let doc = DocumentStore::new(doc).snapshot();
+            r.render_rgba(&doc, comp_id, 0, 1.0)
+                .expect("the comp renders")
+                .0
+        };
+
+        let plain = render(&mut r, None);
+        let driven = render(&mut r, Some(true));
+        let bypassed = render(&mut r, Some(false));
+
+        assert_ne!(
+            plain, driven,
+            "a wire driving the radius to twenty must change the picture"
+        );
+        assert_eq!(
+            plain, bypassed,
+            "a bypassed driver hands the parameter back to its keyframes"
+        );
     }
 
     /// A retimed footage layer beneath an accumulation motion blur adjustment

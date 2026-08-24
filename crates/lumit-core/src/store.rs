@@ -1973,6 +1973,135 @@ mod tests {
         assert_eq!(store.revision(), r3, "a refused op moves nothing");
     }
 
+    /// K-471 §3: the whole-graph commit is exactly invertible — one undo puts
+    /// back the drivers *and* the wires, exactly as one undo puts back the whole
+    /// effect stack.
+    #[test]
+    fn set_layer_graph_undoes_nodes_and_edges_together() {
+        use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        let (store, comp, layer) = doc_with_layer();
+
+        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let blur_id = blur.id;
+        store
+            .commit(Op::SetLayerEffects {
+                comp,
+                layer,
+                effects: vec![blur],
+            })
+            .expect("the stack goes in");
+
+        let wiggle = crate::fx::instantiate("wiggle").expect("the catalogue knows it");
+        let wiggle_id = wiggle.id;
+        let wired = LayerGraph {
+            nodes: vec![wiggle],
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: wiggle_id,
+                    port: "value".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(blur_id),
+                    port: "radius".into(),
+                },
+            }],
+            layout: vec![(NodeRef::Driver(wiggle_id), [40.0, 12.0])],
+        };
+        store
+            .commit(Op::SetLayerGraph {
+                comp,
+                layer,
+                graph: Box::new(wired.clone()),
+            })
+            .expect("a well-formed graph is accepted");
+
+        let read = |store: &DocumentStore| -> LayerGraph {
+            store
+                .snapshot()
+                .comp(comp)
+                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
+                .expect("the layer")
+                .graph
+                .clone()
+        };
+        assert_eq!(read(&store), wired);
+
+        assert!(
+            store.undo().expect("undo applies").is_some(),
+            "one gesture, one undo step"
+        );
+        assert!(
+            read(&store).is_empty(),
+            "the undo must take the wires with the nodes"
+        );
+        assert!(store.redo().expect("redo applies").is_some());
+        assert_eq!(read(&store), wired, "and the redo brings both back");
+    }
+
+    /// §1.5: a graph that breaks a rule is refused, and the document it was
+    /// offered to is left exactly as it was — an edit that half-applied would
+    /// undo to a state that was never on screen.
+    #[test]
+    fn a_refused_graph_leaves_the_document_alone() {
+        use crate::graph::{Edge, GraphError, InputRef, LayerGraph, NodeRef, OutputRef};
+        let (store, comp, layer) = doc_with_layer();
+        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let blur_id = blur.id;
+        store
+            .commit(Op::SetLayerEffects {
+                comp,
+                layer,
+                effects: vec![blur],
+            })
+            .expect("the stack goes in");
+
+        // A wire whose source is a node this graph does not carry.
+        let broken = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: Uuid::now_v7(),
+                    port: "value".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(blur_id),
+                    port: "radius".into(),
+                },
+            }],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            store.commit(Op::SetLayerGraph {
+                comp,
+                layer,
+                graph: Box::new(broken),
+            }),
+            Err(crate::ops::OpError::InvalidGraph(GraphError::UnknownNode))
+        );
+        assert!(
+            store
+                .snapshot()
+                .comp(comp)
+                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
+                .expect("the layer")
+                .graph
+                .is_empty(),
+            "a refused commit changes nothing"
+        );
+        // Nothing went on the journal either: one undo walks back past the
+        // refusal to the stack commit before it.
+        store.undo().expect("undo applies");
+        assert!(
+            store
+                .snapshot()
+                .comp(comp)
+                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
+                .expect("the layer")
+                .effects
+                .is_empty(),
+            "the one undo must land on the stack commit, not on the refusal"
+        );
+    }
+
     /// A comp holding one layer, and its ids — the setting every lock test
     /// needs before it can lock anything.
     fn doc_with_layer() -> (DocumentStore, Uuid, Uuid) {

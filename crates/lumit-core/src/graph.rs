@@ -289,3 +289,293 @@ impl LayerGraph {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use crate::fx::instantiate;
+
+    /// A driver or effect instance to hang wires off.
+    fn inst(match_name: &str) -> EffectInstance {
+        instantiate(match_name).expect("the catalogue knows it")
+    }
+
+    fn param_edge(from: &EffectInstance, port: &str, to: NodeRef, socket: &str) -> Edge {
+        Edge {
+            from: OutputRef::Driver {
+                node: from.id,
+                port: port.to_owned(),
+            },
+            to: InputRef::Param {
+                node: to,
+                port: socket.to_owned(),
+            },
+        }
+    }
+
+    /// The shape every other test bends: a Wiggle driving a Gaussian blur's
+    /// radius.
+    fn wiggle_into_blur() -> (LayerGraph, Vec<EffectInstance>) {
+        let blur = inst("blur");
+        let wiggle = inst("wiggle");
+        let edge = param_edge(&wiggle, "value", NodeRef::Effect(blur.id), "radius");
+        (
+            LayerGraph {
+                nodes: vec![wiggle],
+                edges: vec![edge],
+                layout: vec![(NodeRef::Source, [0.0, 0.0])],
+            },
+            vec![blur],
+        )
+    }
+
+    #[test]
+    fn a_well_formed_graph_is_accepted() {
+        let (graph, effects) = wiggle_into_blur();
+        graph.validate(&effects).expect("a number into a number");
+    }
+
+    /// §1.5: a wire naming a node the layer does not have is refused, not
+    /// quietly dropped.
+    #[test]
+    fn a_wire_to_a_node_that_is_not_there_is_refused() {
+        let (mut graph, effects) = wiggle_into_blur();
+        graph.nodes.clear();
+        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownNode));
+
+        let (graph, _) = wiggle_into_blur();
+        assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
+    }
+
+    #[test]
+    fn a_wire_to_a_port_that_is_not_there_is_refused() {
+        let (mut graph, effects) = wiggle_into_blur();
+        let InputRef::Param { port, .. } = &mut graph.edges[0].to else {
+            unreachable!()
+        };
+        *port = "no_such_parameter".into();
+        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownPort));
+
+        let (mut graph, effects) = wiggle_into_blur();
+        let OutputRef::Driver { port, .. } = &mut graph.edges[0].from else {
+            unreachable!()
+        };
+        *port = "no_such_output".into();
+        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownPort));
+    }
+
+    /// Number accepts number and colour accepts colour (K-472 §6.1); the two
+    /// crossed over are refused in both directions.
+    #[test]
+    fn a_number_into_a_colour_is_refused_and_so_is_a_colour_into_a_number() {
+        let fill = inst("fill");
+        let wiggle = inst("wiggle");
+        let cycle = inst("colour_cycle");
+
+        let graph = LayerGraph {
+            nodes: vec![wiggle.clone()],
+            edges: vec![param_edge(
+                &wiggle,
+                "value",
+                NodeRef::Effect(fill.id),
+                "colour",
+            )],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            graph.validate(std::slice::from_ref(&fill)),
+            Err(GraphError::PortTypeMismatch)
+        );
+
+        let blur = inst("blur");
+        let graph = LayerGraph {
+            nodes: vec![cycle.clone()],
+            edges: vec![param_edge(
+                &cycle,
+                "colour",
+                NodeRef::Effect(blur.id),
+                "radius",
+            )],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            graph.validate(std::slice::from_ref(&blur)),
+            Err(GraphError::PortTypeMismatch)
+        );
+
+        // And the accepted pair, so the refusals above are about the types and
+        // not about the wiring.
+        let graph = LayerGraph {
+            nodes: vec![cycle.clone()],
+            edges: vec![param_edge(
+                &cycle,
+                "colour",
+                NodeRef::Effect(fill.id),
+                "colour",
+            )],
+            ..LayerGraph::default()
+        };
+        graph
+            .validate(std::slice::from_ref(&fill))
+            .expect("colour into colour");
+    }
+
+    /// A switch is not a socket, so a wire onto one names a port that does not
+    /// exist — the same answer a typo gets.
+    #[test]
+    fn a_wire_onto_a_switch_finds_no_socket() {
+        let remap = inst("remap");
+        let wiggle = inst("wiggle");
+        let graph = LayerGraph {
+            edges: vec![param_edge(
+                &wiggle,
+                "value",
+                NodeRef::Driver(remap.id),
+                "clamp",
+            )],
+            nodes: vec![wiggle, remap],
+            ..LayerGraph::default()
+        };
+        assert_eq!(graph.validate(&[]), Err(GraphError::UnknownPort));
+    }
+
+    #[test]
+    fn a_socket_refuses_a_second_wire() {
+        let (mut graph, effects) = wiggle_into_blur();
+        let second = inst("wiggle");
+        graph.edges.push(param_edge(
+            &second,
+            "value",
+            NodeRef::Effect(effects[0].id),
+            "radius",
+        ));
+        graph.nodes.push(second);
+        assert_eq!(graph.validate(&effects), Err(GraphError::InputAlreadyWired));
+    }
+
+    /// A driver feeding itself, and a pair feeding each other: both refused
+    /// before anything is swapped into the document.
+    #[test]
+    fn a_loop_among_drivers_is_refused() {
+        let a = inst("smooth");
+        let graph = LayerGraph {
+            edges: vec![param_edge(&a, "value", NodeRef::Driver(a.id), "value")],
+            nodes: vec![a],
+            ..LayerGraph::default()
+        };
+        assert_eq!(graph.validate(&[]), Err(GraphError::Cycle));
+
+        let a = inst("smooth");
+        let b = inst("remap");
+        let graph = LayerGraph {
+            edges: vec![
+                param_edge(&a, "value", NodeRef::Driver(b.id), "value"),
+                param_edge(&b, "value", NodeRef::Driver(a.id), "value"),
+            ],
+            nodes: vec![a, b],
+            ..LayerGraph::default()
+        };
+        assert_eq!(graph.validate(&[]), Err(GraphError::Cycle));
+    }
+
+    /// The same drivers wired in a line, which is not a loop — and declared in
+    /// the reverse of evaluation order, so the check cannot be relying on the
+    /// order they happen to sit in.
+    #[test]
+    fn a_chain_of_drivers_is_accepted() {
+        let a = inst("wiggle");
+        let b = inst("remap");
+        let c = inst("smooth");
+        let graph = LayerGraph {
+            edges: vec![
+                param_edge(&a, "value", NodeRef::Driver(b.id), "value"),
+                param_edge(&b, "value", NodeRef::Driver(c.id), "value"),
+            ],
+            nodes: vec![c, b, a],
+            ..LayerGraph::default()
+        };
+        graph.validate(&[]).expect("a line is not a loop");
+    }
+
+    /// §1.4: the layer's own source alpha is a Matte output, and an effect's
+    /// matte input takes it.
+    #[test]
+    fn the_source_matte_feeds_an_effects_matte_input() {
+        let blur = inst("blur");
+        let graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::SourceMatte,
+                to: InputRef::Matte { effect: blur.id },
+            }],
+            ..LayerGraph::default()
+        };
+        graph
+            .validate(std::slice::from_ref(&blur))
+            .expect("every effect with a matte row takes one");
+        assert!(graph.source_matte(blur.id));
+        assert!(!graph.source_matte(Uuid::now_v7()));
+
+        // An effect that carries no matte row at all has no socket to wire.
+        let set_matte = inst("set_matte");
+        let graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::SourceMatte,
+                to: InputRef::Matte {
+                    effect: set_matte.id,
+                },
+            }],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            graph.validate(std::slice::from_ref(&set_matte)),
+            Err(GraphError::UnknownPort)
+        );
+    }
+
+    /// Source and Out draw ports but hold no parameters, so naming one as a
+    /// parameter destination names nothing.
+    #[test]
+    fn the_derived_nodes_have_no_parameters_to_drive() {
+        let wiggle = inst("wiggle");
+        for node in [NodeRef::Source, NodeRef::Out] {
+            let graph = LayerGraph {
+                edges: vec![param_edge(&wiggle, "value", node, "anything")],
+                nodes: vec![wiggle.clone()],
+                ..LayerGraph::default()
+            };
+            assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
+        }
+    }
+
+    /// §4: the whole graph survives a trip through the file format — wires,
+    /// positions and all.
+    #[test]
+    fn a_graph_round_trips_through_json() {
+        let (mut graph, _) = wiggle_into_blur();
+        graph
+            .layout
+            .push((NodeRef::Driver(graph.nodes[0].id), [12.5, -3.0]));
+        graph.edges.push(Edge {
+            from: OutputRef::SourceMatte,
+            to: InputRef::Matte {
+                effect: Uuid::now_v7(),
+            },
+        });
+        let json = serde_json::to_string(&graph).expect("serialises");
+        let back: LayerGraph = serde_json::from_str(&json).expect("deserialises");
+        assert_eq!(back, graph);
+    }
+
+    /// §4 and K-471's promise: an empty graph writes nothing at all, so a layer
+    /// that never opened the Graph panel carries no `graph` key — which is what
+    /// makes an untouched document re-save byte for byte.
+    #[test]
+    fn an_empty_graph_is_absent_from_the_file() {
+        assert!(LayerGraph::default().is_empty());
+        assert_eq!(
+            serde_json::to_string(&LayerGraph::default()).expect("serialises"),
+            "{}"
+        );
+    }
+}
