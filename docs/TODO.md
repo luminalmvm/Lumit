@@ -381,6 +381,23 @@ fix. Also unbuilt: an **export**'s progress still has its own path
 
 ## Next - engine/bridge follow-ups
 
+**A control for an image sequence's frame rate** (K-439). The rate is stored,
+saved and read by everything that opens the run, but nothing can change it: an
+imported sequence plays at the 25 default. It wants a row in the Project panel's
+item menu beside *Relink…* — a rate field, one op, one undo step — plus its arb
+strings. The engine side is a `SetSequenceRate` op and a bridge setter; the model
+already carries the field (`FootageItem::sequence`).
+
+**Tracking a sequence** (K-415, K-439). `lumit_render::track` still opens footage
+by bare path, so a camera track over a run of stills analyses its first frame
+alone. It wants the same `MediaSource` the Viewer's decode already takes;
+`crates/lumit-bridge/src/api/track.rs` resolves the path it hands over.
+
+**A relinked run keeps its old name.** The Project panel names a sequence for its
+span — `frame[0001-0050].png` — and relinking rewrites the media reference but not
+the name, so a run that gained or lost frames while it was away shows a stale
+span. It wants the relink to rename a sequence item in the same batch.
+
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
 solve link and Convert to keyframes, all against an injected solve. Stage 2 landed
@@ -1039,8 +1056,8 @@ Grouped by the phase they belong to in [16-ROADMAP.md](16-ROADMAP.md). A pointer
 list, not a re-statement of the roadmap.
 
 - **Media engine ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §6).** The one-copy
-    D3D11→DX12 interop and VideoToolbox (K-033); proxy generation; image-sequence
-    footage; the resource governor; ProRes/DNxHR intermediate export (v1 is
+    D3D11→DX12 interop and VideoToolbox (K-033); proxy generation; the resource
+    governor; ProRes/DNxHR intermediate export (v1 is
     H.264/HEVC only); the 8-/32-bpc working-depth switch (v1 is fp16 only); OCIO
     v2 colour management and its UI.
 - **Audio - the largest gap** ([07-UI-SPEC.md](07-UI-SPEC.md) §10,

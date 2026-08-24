@@ -207,6 +207,15 @@ which needs no user direction on import because the folder to search is known: t
 beside it therefore comes up linked; anything genuinely absent imports offline with a row
 apiece, and hash verification waits on the fingerprints a save has not written yet.
 
+**An image sequence resolves to a frame, not to its folder** (K-439). A sequence footage item
+in a `.aep` points at the *folder* the run lives in — its file alias sets `target_is_folder`,
+and `fullpath` is the folder — so before any of the steps above run, a sequence item's path
+is looked inside for the first **numbered** file, which becomes the run's reference. Numbered
+rather than merely first, because the `desktop.ini` or `readme.txt` that a real render folder
+picks up sorts ahead of frame zero. A folder that is not there falls through to the ordinary
+steps and the item imports offline, where one relink onto any frame of the run brings it back
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2).
+
 ---
 
 ## 3. Mapping semantics
@@ -252,6 +261,7 @@ The centrepiece. Four grades:
 | AE feature | Grade | Notes |
 |---|---|---|
 | Project folder tree, footage items, interpretation | lossless | Loop count, alpha mode, fps override all carried |
+| Image sequences | mapped | Carried as one footage item (K-439, [03-DATA-MODEL.md](03-DATA-MODEL.md) §3.1). AE conforms a sequence by an application *preference* rather than by anything the project file holds, so the rate imports as Lumit's 25 default; the run's length and start come from the folder |
 | Comp settings (size, fps, duration, background) | lossless | |
 | Layer stack, in/out, start, label, switches | lossless | |
 | Transforms + temporal/spatial keyframes | lossless | K-025; includes hold, roving, separated dimensions |

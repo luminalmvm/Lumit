@@ -11953,3 +11953,77 @@ they are: step 3's, for the fingerprint search.
 Regression tests: "what nothing else found is looked for by name beside the project" and
 "path mapping relinks siblings under the same move" (`lumit-project`), and "relinking one
 clip rewrites the prefix for every other lost clip" (`lumit-bridge`).
+
+## K-439 — A folder of numbered stills is one footage item, at a rate the project sets
+
+**DECIDED 2026-08-24.** Image sequences, listed as future in
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §2 as a `SequenceItem`, land instead as a flag on
+`FootageItem` — which is what [01-GLOSSARY.md](01-GLOSSARY.md) already promised ("an asset
+referencing a media file on disk (video, image, image sequence)"). A separate item kind would
+have meant every `match` on `ProjectItem` growing an arm, and every one of them saying the
+same thing: treat it as footage. A sequence *is* footage; the only fact that distinguishes it
+is that its frames come from many files.
+
+**FFmpeg reads the run.** Its `image2` demuxer takes a printf pattern — `Depth%06d_depth.exr`
+— a start number and a frame rate, and hands back a video stream. So the whole feature is a
+naming question: turn one picked file into a pattern, a start and a length, and the existing
+probe, frame index, decode, decode cache, prefetch, thumbnail and slate paths carry it
+unchanged. Nothing in Lumit opens a still.
+
+**What the project stores is only the rate.** Where the run starts, how long it is and which
+files are in it are re-read from the folder on every open, because the files on disk are the
+truth about a sequence and a saved copy of them would only ever be a stale one — add ten
+frames overnight and the item is ten frames longer, with nothing to reconcile. The rate is
+the exception: stills carry no frame rate of their own, so somebody has to say, and the
+project is the only one who can. `FootageItem.media` keeps pointing at one real file (the
+run's first), so fingerprinting, saving, rebasing, `is_file` and relink all work on a path
+that exists — the pattern names nothing.
+
+**The default rate is 25.** Nothing in the specification said, and there was no better answer
+available: After Effects conforms a sequence by an application *preference*, not by anything
+the `.aep` carries, so any number read out of an imported project would be a guess. 25 is
+`FrameRate::FPS_25`, the project's own can't-fail fallback, and it is also `image2`'s own
+default — three reasons pointing one way. It is per item and settable; **the control for it
+is not built yet**, which is the one gap this entry knowingly leaves.
+
+**A gap ends the run; it is never bridged.** Given `0001…0100` with `0050` missing, picking
+`0007` imports `0001…0049` and picking `0060` imports `0051…0100`. Refusing outright would
+let one deleted frame reject a whole shot, and silently closing the hole would show the wrong
+picture at the wrong time without ever saying so. Clamping is the only one of the three that
+cannot lie about which frame you are looking at.
+
+**What is offered as a sequence, and what is not.** Only still-image extensions — a folder of
+`clip0001.mp4`…`clip0100.mp4` is a hundred clips, and gluing them together would be a
+destructive guess. A numbered still with no numbered neighbours stays the single still it is.
+The frame number is the *longest* digit run in the file stem, so `shot_v2_0043.exr` is frame
+43 of version 2 rather than frame 2, and a differently-padded neighbour is a different run,
+because `%04d` does not name `frame7.png`. A `%` anywhere in the path refuses the run
+outright: `image2` would read it as a field of its own.
+
+**The index is arithmetic, not a scan.** Every file is one packet and one keyframe, evenly
+spaced, and the count came off the directory — so two packet reads give where the clock
+starts and how far it steps, and the table is written from there. The usual packet scan would
+read every file's bytes: tens of gigabytes for a feature-length OpenEXR render, to produce a
+table this gives exactly. For the same reason a sequence's index is never written to the
+sidecar cache: it costs nothing to rebuild, and the sidecar is named after one file's
+fingerprint, which could not tell a run of 300 frames from the same run with 400 in it.
+
+**Relink resolves the picked file to its run's first frame before anything else reads it.** A
+picker opened on a folder of two thousand stills gives back whichever one was clicked, and
+the sibling sweep of K-438 works by asking what the old path and the new one share at the
+end — `frame0001.png` against `frame0042.png` share `.png` and nothing more, so "the folder
+moved" would come out as "everything up to half a frame number moved".
+
+**After Effects' own sequences map straight across.** The `.aep`'s file alias carries
+`target_is_folder`, and its `fullpath` is then the folder the run lives in; two extra `Utf8`
+chunks beside it carry the name either side of the frame number. Both name themselves rather
+than sitting at a byte offset, which is why they can be read while the rest of the
+interpretation still waits for a fixture with real footage in it ([11-AE-IMPORT.md](11-AE-IMPORT.md)
+§2.5). Because a folder is not a file, resolution gains one step for sequence items: look
+inside for the first *numbered* file, which skips the `desktop.ini` and `readme.txt` that
+would otherwise sort ahead of frame zero.
+
+Regression tests: detection, the gap clamp, the padding rule, the `%` refusal, decode order
+and the export/import round trip (`lumit-media`); the save round trip (`lumit-project`);
+import-once-per-run and relink-by-any-frame (`lumit-bridge`); the alias signals and the
+mapping (`lumit-import`); the folder-to-first-frame resolution (`lumit-project`).

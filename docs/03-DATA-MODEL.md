@@ -91,18 +91,21 @@ journalled, and does not move the store's revision, because moving a panel is no
 work (`DocumentStore::set_ui_state`). The frontend writes it just before a save.
 
 A `ProjectItem` (the intended **Asset**) is one of the following. **v1 ships
-`Footage`, `Folder`, `Composition`, `Solid`**; the audio/still/sequence kinds
-are future (audio is currently only a footage layer's stream, §5.2):
+`Footage`, `Folder`, `Composition`, `Solid`**; the audio and still kinds are
+future (audio is currently only a footage layer's stream, §5.2):
 
 | Asset | v1? | Contents |
 |---|---|---|
-| `Footage` (`FootageItem`) | yes | Media reference (§3); interpretation and proxy state are future |
+| `Footage` (`FootageItem`) | yes | Media reference (§3), and — for an image sequence — its rate (§3.1); other interpretation and proxy state are future |
 | `AudioItem` | future | Audio-only media reference |
 | `StillItem` | future | Single image |
-| `SequenceItem` | future | Image sequence (pattern, fps) |
 | `Composition` | yes | §4 |
 | `Folder` | yes | Ordered children ids |
 | `Solid` (`SolidDef`) | yes | Shared solid definition (colour, size) — solids are items so they dedupe |
+
+An image sequence was to be a `SequenceItem` of its own; it is a flag on
+`FootageItem` instead (K-439, §3.1). A separate kind would have meant every
+`match` on `ProjectItem` growing an arm that said "treat it as footage".
 
 ### 3. Media references and interpretation
 
@@ -115,8 +118,42 @@ struct MediaRef {
 }
 ```
 
+### 3.1 Image sequences
+
+A folder of numbered stills — `Depth000000_depth.exr`, `Depth000001_depth.exr`, … — is **one
+footage item** whose frames are the files in numeric order (K-439):
+
+```rust
+struct FootageItem {
+    // ...
+    sequence: Option<SequenceRef>,  // Some = this item is a run of stills
+}
+
+struct SequenceRef {
+    frame_rate: FrameRate,          // stills carry none of their own; default 25
+}
+```
+
+The rate is the **only** thing stored. Where the run starts, how long it is and which files
+are in it are re-read from the folder every time it is opened, because the files on disk are
+the truth about a sequence — add ten frames overnight and the item is ten frames longer, with
+nothing to reconcile. `media` keeps pointing at **one real file**, the run's first, so
+fingerprinting, saving, rebasing and relink all work on a path that exists.
+
+The run one file belongs to is the unbroken block of numbers around it: **a gap ends the
+run**, on the side the picked file is on, and is never bridged (K-439). Only still-image
+formats are offered as sequences — a folder of numbered `.mp4`s is a folder of clips — and a
+numbered still with no numbered neighbours stays a single still.
+
+Everything downstream is unchanged: FFmpeg's `image2` demuxer reads the run as a video
+stream, so the probe, the frame index, the decode, the decoded-frame cache, the decode-ahead
+thread, the Project panel thumbnail (the run's first frame) and the missing-media slate are
+the same code a video file goes through.
+
 **Future** — not in v1 yet:
 
+- a **control for a sequence's frame rate**. The field is stored, saved and settable by the
+  importer; there is no interface for changing it yet, so an imported run plays at 25;
 - a `FootageInterpretation` (frame-rate override, alpha mode, colour-space tag, loop count,
   timecode policy) — v1 treats every source as sRGB with no per-item overrides;
 (The **missing**-footage state is built: the automatic resolver runs on open, a lost file

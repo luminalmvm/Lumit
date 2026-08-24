@@ -832,6 +832,15 @@ The library of assets: footage items, audio items, comps, folders.
   into it would clip the very thing that was asked for. Pressing Create makes the comp and
   places every dropped item in it as a layer.
 
+**An image sequence imports as one row** (K-439, [03-DATA-MODEL.md](03-DATA-MODEL.md) §3.1).
+The file dialogue offers files, not folders, so picking any single still out of a folder of
+numbered ones imports the whole run — named for its span, `frame[0001-0050].png`, so the row
+says both that it is a run and where it stops. Picking more of the same run (which is what
+selecting a whole folder does) adds nothing further: the item that is already there is the
+answer. A numbered still with no numbered neighbours stays a single still, and a folder of
+numbered `.mp4`s stays a folder of clips. **Shipped**, apart from the rate control: a
+sequence plays at 25 until §3.2's dialogue exists to change it.
+
 ### 3.2 Interpretation dialogue
 
 Per footage item (context menu → *Interpret footage…*), stored in the project, never
@@ -842,6 +851,10 @@ touching the file (K-024):
 - **Alpha**: ignore / straight / premultiplied (with matte colour), plus a *guess* action.
 - **Colour space tag**: the footage's colour space for conversion into the working space.
 - **Loop**: loop count for stills/sequences and short loops.
+- **Sequence frame rate** (K-439): for an image sequence this is not an *override* — stills
+  carry no rate of their own, so the item's rate is the only rate there is. It defaults to 25
+  and is where an imported sequence's speed gets corrected. This is the one part of a
+  sequence the project stores; the run's start and length are re-read from the folder.
 - **Fields/pulldown**: deliberately out of scope for v1 (gaming footage is progressive);
   the dialogue reserves space for it.
 

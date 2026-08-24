@@ -5534,6 +5534,64 @@ There is nothing to poll and nothing to drain. Every panel that shows a fact
 about a footage file already asks for it when it draws; the worker only decides
 whether that question costs a file open or a look-up.
 
+### A folder of stills that behaves like a clip (K-439)
+
+A 3D application does not hand you a movie. It hands you a folder — two thousand
+files called `Depth000000_depth.exr`, `Depth000001_depth.exr`, and so on — which
+between them are one shot. Lumit brings the whole run in as **one footage item**:
+you pick any single file out of the picker, and the item that lands is the run.
+
+Working out *which* run is `crates/lumit-media/src/sequence.rs`. It takes the file
+name apart at its number — the longest run of digits before the extension, so
+`shot_v2_0043.exr` is frame 43 of version 2 rather than frame 2 — and then looks
+in the folder for every other file with the same name either side of the same-width
+number. The run is the **unbroken block** around the one you picked. If frame 50 is
+missing and you picked frame 7, you get 1 to 49; pick frame 60 and you get 51 to
+100. That is a deliberate choice: refusing outright would let one deleted file
+reject a whole shot, and quietly closing the hole would show you the wrong picture
+at the wrong time without ever telling you.
+
+**Lumit does not decode a single one of those files itself.** FFmpeg has been able
+to read numbered runs for decades: hand it `Depth%06d_depth.exr`, a start number
+and a frame rate and it gives back a video stream, exactly as if you had handed it
+an `.mp4`. So the whole feature is a naming job. Once the pattern is worked out,
+the probe, the frame table, the decode, the decoded-frame cache, the read-ahead
+thread, the Project panel's thumbnail and the missing-media colour bars are all
+the same code a video file goes through — there is no second path to keep honest.
+
+Two things about a sequence are worth knowing.
+
+**The project stores almost nothing about it.** Just the frame rate. Where the run
+starts, how long it is and which files are in it are read off the folder every time
+it is opened, because the files on disk are the truth — drop ten more frames in
+overnight and the item is ten frames longer, with nothing to reconcile and nothing
+that can go stale. The rate is the exception, because stills have no rate of their
+own: a photograph does not know it is a twenty-fifth of a second. Somebody has to
+say, and the only one who can is the project. It defaults to 25, and there is not
+yet a control for changing it.
+
+**The item still points at a real file** — the run's first frame. The pattern with
+the `%06d` in it names nothing on disk, so it could not be fingerprinted, saved,
+rebased or checked for existence. Everything that stats a path stats the first
+frame; only the moment of opening the media uses the pattern. That is also what
+makes relinking work: point at any frame of the run in its new home and Lumit
+resolves it back to that run's first frame before doing anything else, which is
+what lets the rest of your footage come back in the same sweep (K-438).
+
+The frame table is arithmetic rather than a scan. For a video, Lumit walks every
+packet in the file to learn which frame sits at which timestamp. For a sequence
+that would mean *reading every file* — tens of gigabytes for a feature-length
+OpenEXR render — to produce a table it can work out exactly: every file is one
+frame, evenly spaced, and how many there are was already counted off the folder.
+Two files are read to learn where the clock starts and how far it steps, and the
+rest is multiplication.
+
+After Effects projects bring their sequences with them. A `.aep` marks one by
+having its file reference point at a **folder** rather than a file, so on import
+Lumit looks inside that folder for the first numbered file and starts the run
+there — skipping the `desktop.ini` a Windows folder collects, which would
+otherwise sort ahead of frame zero.
+
 ### The renderer only opens the files the picture needs
 
 The renderer does its own probing, and it is a heavier one than the Project
