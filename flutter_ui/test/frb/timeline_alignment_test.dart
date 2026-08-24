@@ -24,6 +24,7 @@ import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
+import 'package:lumit_flutter/state/timeline_columns.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -386,13 +387,20 @@ void main() {
       expect(band.top, closeTo(waist, 0.5),
           reason: 'the band hangs from the waist of the ruler');
       expect(band.bottom, closeTo(ruler.bottom, 0.5),
-          reason: 'and reaches its floor, where the cache bar takes it on');
+          reason: 'and reaches its floor, which the cache bar is drawn on');
+
+      // The cache bar is *on* the band's row, at the ruler's floor — not a
+      // strip of its own beneath it (§12A.1).
+      final cache = tester.getRect(find.byType(TimelineCacheBar).first);
+      expect(cache.bottom, closeTo(ruler.bottom, 0.5));
+      expect(cache.top, greaterThan(band.top),
+          reason: 'the band paints behind it');
 
       final flag = tester.getRect(find
           .byKey(ValueKey<String>('tl-marker-${markersOf(p.comp).single.id}')));
       expect(flag.top, greaterThanOrEqualTo(waist - 0.5),
           reason: 'a marker lives in the lower half with the band');
-      expect(flag.bottom, closeTo(ruler.bottom, 0.5),
+      expect(flag.bottom, closeTo(cache.top, 0.5),
           reason: 'standing on the cache bar');
 
       final head = tester.getRect(find.byType(PlayheadMarker).first);
@@ -523,8 +531,8 @@ void main() {
     /// 9. **The mockups' heights are canonical** (K-451, docs/15 §12A.6). The
     /// panel's chrome is built to those logical pixels, not to approximations
     /// of them, so each one is measured here rather than trusted: a secondary
-    /// row is 18, a lane row 22, and the ruler — counting the cache bar under
-    /// it, which the table counts — is 36.
+    /// row is 18, a lane row 22, and the ruler — counting the cache bar drawn
+    /// on its floor, which the table counts — is 36.
     testWidgets('the panel is built to K-451 heights', (tester) async {
       final p = withComp();
       final layer = p.comp.addAdjustmentLayer();
@@ -532,9 +540,13 @@ void main() {
       await mount(tester, p);
 
       final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
-      final cache = tester.getRect(find.byType(CacheStrip).first);
-      expect(ruler.height + cache.height, closeTo(36, 0.5),
+      final cache = tester.getRect(find.byType(TimelineCacheBar).first);
+      expect(ruler.height, closeTo(36, 0.5),
           reason: 'the ruler is 36 with the cache bar counted inside it');
+      // And the cache bar is *on* the ruler's floor, not a strip beneath it
+      // (§12A.1): the work-area band is what it is drawn over.
+      expect(cache.bottom, closeTo(ruler.bottom, 0.5),
+          reason: 'the cache bar sits on the ruler floor, inside its 36');
 
       // The outline's two secondary rows — timecode/search/mode, then the
       // column header — stand between the top of the panel's table and its
@@ -546,7 +558,7 @@ void main() {
       expect(laneBar(tester, layer).height, closeTo(22, 0.5),
           reason: 'and so is its bar');
 
-      // The cache bar's own 3, which is what makes the clock above it 33.
+      // The cache bar's own 3, at the bottom of the ruler's lower row.
       expect(cache.height, closeTo(TimelineCacheBar.height, 0.5));
       expect(TimelineCacheBar.height, 3,
           reason: 'the cache bar is the mockup\'s 3px stripe');
@@ -638,31 +650,37 @@ void main() {
       }
     });
 
-    /// 11. **The switches column never stretches** (§12A.1, K-448): its seam
-    /// is not a handle, and a resize asked for anyway leaves it where it was.
-    testWidgets('the switches column is pinned to its minimum width',
+    /// 11. **Neither column of switches ever stretches** (§12A.1, K-448; Modes
+    /// joined Switches on the owner's word, 2026-08-24): the seam is not a
+    /// handle, and a resize asked for anyway leaves it where it was. Both are
+    /// rows of icons — a wider column buys blank space and nothing else.
+    testWidgets('the switch columns are pinned to their minimum width',
         (tester) async {
       final p = withComp();
       p.comp.addSolidLayer();
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final seam = find.byKey(const ValueKey('tl-seam-switches'));
-      expect(seam, findsOneWidget, reason: 'the rule is still drawn');
-      expect(
-        find.descendant(of: seam, matching: find.byType(GestureDetector)),
-        findsNothing,
-        reason: 'but there is nothing to take hold of',
-      );
+      // Modes is exactly its five switch cells, not half as wide again.
+      expect(renderGroupWidth, 5 * switchCellWidth);
 
-      final before =
-          tester.getRect(find.byKey(const ValueKey('tl-seam-switches')));
-      await tester.drag(seam, const Offset(60, 0));
-      await tester.pump();
-      expect(
-          tester.getRect(find.byKey(const ValueKey('tl-seam-switches'))).left,
-          closeTo(before.left, 0.5),
-          reason: 'a drag on it widens nothing');
+      for (final group in [TimelineGroup.switches, TimelineGroup.render]) {
+        final key = ValueKey<String>('tl-seam-${group.name}');
+        final seam = find.byKey(key);
+        expect(seam, findsOneWidget,
+            reason: '${group.name}: the rule is still drawn');
+        expect(
+          find.descendant(of: seam, matching: find.byType(GestureDetector)),
+          findsNothing,
+          reason: '${group.name}: but there is nothing to take hold of',
+        );
+
+        final before = tester.getRect(seam);
+        await tester.drag(seam, const Offset(60, 0));
+        await tester.pump();
+        expect(tester.getRect(find.byKey(key)).left, closeTo(before.left, 0.5),
+            reason: '${group.name}: a drag on it widens nothing');
+      }
     });
 
     /// 12. **The comp-wide switches live in the bottom bar** (§12A.1), after

@@ -13,6 +13,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -72,6 +73,32 @@ Future<void> main() async {
     BridgeScalar.static_(490),
     BridgeScalar.static_(840),
   ]);
+
+  // Fading up over the first second, so the Timeline has keyframe diamonds to
+  // show on a bar and the graph editor has a curve. Two keys, both at whole
+  // frames, so the sweep is the same picture every time it runs.
+  title.setTransform(
+    prop: BridgeTransformProp.opacity,
+    value: const BridgeScalar.keyframed([
+      BridgeKeyframe(
+        time: BridgeRational(num: 1, den: 1),
+        value: 0,
+        interpIn: BridgeSideInterp.linear(),
+        interpOut: BridgeSideInterp.linear(),
+      ),
+      BridgeKeyframe(
+        time: BridgeRational(num: 2, den: 1),
+        value: 100,
+        interpIn: BridgeSideInterp.linear(),
+        interpOut: BridgeSideInterp.linear(),
+      ),
+    ]),
+  );
+  // One comp marker on the ruler, two seconds in — the cue somebody would
+  // actually leave themselves, and what makes a marker flag visible in the
+  // sweep. Markers are moments, not spans: a comp marker has no duration to
+  // give it.
+  addMarkerFrb(comp, frame: 50, label: 'Drop');
 
   final layers = comp.getLayers();
   // The panels show a layer's own name, which starts as the file's. Names

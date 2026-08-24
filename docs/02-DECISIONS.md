@@ -12179,3 +12179,27 @@ their hit areas vertically would swallow the neighbouring strip's gestures (tab 
 above, header resize and reorder below). Those buttons keep their full room along the
 axis the row is aimed on, and the floor continues to govern everything outside such
 rows. The reasoning also lives where `_toolbarHeight` is declared.
+
+## K-453 — Both switch columns are pinned; the cache bar rides the ruler's floor
+
+**DECIDED 2026-08-24.** Three resting-state corrections, taken against the approved
+mockup at matched zoom, extending K-448 and K-451 rather than reversing them.
+
+**Modes joins Switches as a fixed-width column** (owner): it is five icon cells and
+nothing else, so it is exactly `5 × switchCellWidth`, its seam is not a drag handle, and
+it can no longer be widened. The Timeline fold-out's value cells still align to that
+span (docs/07 §4.3) — they are as wide as the column they sit under, which is the point
+of aligning them to it at all. The old 150 existed only to give those fields room, and
+paid for it with a blank third of a column in every row.
+
+**The cache bar is drawn inside the ruler's 36**, on the work-area band's row at the
+ruler's floor, with the band painting behind it and the marker flags standing on it —
+not as a 3px strip of its own beneath the ruler, which cut the band short of the lanes
+at exactly the place the eye follows it across.
+
+**The workspace tabs are mono-caps kickers with an accent underline** under the one in
+force, which is what §3.1's "active tab tick" has always meant. They had drifted to
+sentence-case words tinted in the accent: that spends the accent on text and leaves the
+strip with no tick at all. Round keeps its filled pill (K-394) and needs no tick under a
+fill. The Timeline's snap magnet loses its accent for the same reason — a tool toggle is
+not on §3.1's closed list, and it now reads as foreground on the button's own face.

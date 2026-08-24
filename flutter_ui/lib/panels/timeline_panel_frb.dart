@@ -165,15 +165,14 @@ const double _zoomGlyphLarge = 14;
 
 /// The time ruler's height: the toolbar and column header stay inside the
 /// outline (docs/07 §4.1), so the lane side gives their whole height to the
-/// ruler — minus the cache bar tucked under it. The three together come to the
-/// **36** the mockups give the ruler, which counts the cache bar inside it
-/// (K-451, docs/15 §12A.6). That is what makes the ruler **double height**
-/// (docs/15 §12A.1): the upper half is the clock, carrying
-/// the labels, the ticks and the playhead's head, and the lower half carries
-/// the markers and the work-area band. A taller bar is an easier playhead grab
-/// as well, but the two rows are the point.
-const double _rulerHeight =
-    _toolbarHeight + _headerHeight - TimelineCacheBar.height;
+/// ruler — the **36** the mockups give it (K-451, docs/15 §12A.6). The cache
+/// bar is drawn *inside* that 36, on the ruler's floor over the work-area
+/// band, rather than taking three pixels of its own beneath it. That is what
+/// makes the ruler **double height** (docs/15 §12A.1): the upper half is the
+/// clock, carrying the labels, the ticks and the playhead's head, and the
+/// lower half carries the markers, the work-area band and the cache. A taller
+/// bar is an easier playhead grab as well, but the two rows are the point.
+const double _rulerHeight = _toolbarHeight + _headerHeight;
 
 /// How near the end of a bar counts as grabbing its edge to trim rather than its
 /// middle to move.
@@ -2797,12 +2796,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               onMarkersChanged: () => setState(() {}),
                               onSeek: (f) => ui.scrubTo(
                                   f.clamp(0, frames == 0 ? 0 : frames - 1)),
-                            ),
-                            CacheStrip(
-                              comp: comp,
-                              axis: axis,
-                              revision: _cacheRevision!,
-                              work: graphWork,
+                              cache: TimelineCacheBar(
+                                comp: comp,
+                                axis: axis,
+                                revision: _cacheRevision!,
+                              ),
                             ),
                             Expanded(
                               child: Stack(
@@ -2890,7 +2888,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 showThumb: false,
                 header: [
                   Container(
-                    height: _rulerHeight + TimelineCacheBar.height,
+                    height: _rulerHeight,
                     color: t.timelineOutOfRange,
                   ),
                 ],
@@ -3034,7 +3032,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 showThumb: true,
                 header: [
                   Container(
-                    height: _rulerHeight + TimelineCacheBar.height,
+                    height: _rulerHeight,
                     color: t.timelineOutOfRange,
                   ),
                 ],
@@ -5172,6 +5170,15 @@ class _Toolbar extends StatelessWidget {
               ],
             ),
           ),
+          // How many frames there are in all, after the frame the playhead is
+          // on: `f48 / 250`, as the mockup writes it (§12A.1). Quieter again
+          // than the frame counter — the count is context for the number
+          // beside it, not a second reading — and outside the listener,
+          // because a comp's length does not move as the playhead does.
+          Text(
+            '/ ${model.durationFrames}',
+            style: t.mono.copyWith(fontSize: 10, color: t.textDisabled),
+          ),
           // The search well, stretched between the frame counter and the mode
           // tabs (§12A.1) — the mockup's own 10px margin either side.
           const SizedBox(width: 10),
@@ -6891,14 +6898,11 @@ class _LayerArea extends StatelessWidget {
                     onChanged();
                   },
                   onMarkersChanged: onChanged,
+                  // On the ruler's floor, over the work-area band, which is
+                  // where the interface spec puts it (docs/07 §3.2, §12A.1).
+                  cache: TimelineCacheBar(
+                      comp: comp, axis: axis, revision: cacheRevision),
                 ),
-                // Directly under the ruler and above the lanes, which is where the
-                // interface spec puts it (docs/07 §3.2).
-                CacheStrip(
-                    comp: comp,
-                    axis: axis,
-                    revision: cacheRevision,
-                    work: workAreaPixels),
                 // The rows scroll under the pinned ruler, in step with the
                 // outline; the thumb lives in the gutter beside this area, so it
                 // stays pinned to the viewport's edge rather than riding the
@@ -7990,12 +7994,18 @@ class _LaneBottomBar extends StatelessWidget {
                           child: HouseButton(
                             key: const ValueKey('tl-magnet'),
                             small: true,
-                            frameless: true,
+                            // **No accent**: §3.1's list is closed — the one
+                            // filled button, the playhead, the workspace tick
+                            // — and a snap toggle is not on it. On reads the
+                            // way every other toggle in this chrome reads:
+                            // the glyph at foreground strength on the
+                            // button's own face, off is frameless and muted.
+                            frameless: !magnet,
                             padding: const EdgeInsets.symmetric(horizontal: 4),
                             onPressed: onToggleMagnet,
                             child: lumitIcon(LumitIcon.magnet,
                                 size: iconSize,
-                                color: magnet ? t.accent : t.textMuted),
+                                color: magnet ? t.textPrimary : t.textMuted),
                           ),
                         ),
                         const SizedBox(width: 6),

@@ -13,6 +13,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/tools.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 
 import 'frb_test_support.dart';
 
@@ -66,11 +67,13 @@ void main() {
     testWidgets('every tool group has a button', (tester) async {
       await mount(tester);
       for (final group in toolBarOrder) {
-        expect(find.byKey(ValueKey<String>('tool-${group.name}')), findsOneWidget,
+        expect(
+            find.byKey(ValueKey<String>('tool-${group.name}')), findsOneWidget,
             reason: '$group has no way to be armed');
       }
       expect(toolBarOrder.toSet(), ToolGroup.values.toSet(),
-          reason: 'a tool group missing from the strip is a tool nobody can reach');
+          reason:
+              'a tool group missing from the strip is a tool nobody can reach');
     });
 
     testWidgets('clicking a button arms that group', (tester) async {
@@ -83,7 +86,8 @@ void main() {
       expect(p.uiState.tools.tool, ToolMode.pen);
     });
 
-    testWidgets('right-clicking opens the hidden tools, and picking one arms it'
+    testWidgets(
+        'right-clicking opens the hidden tools, and picking one arms it'
         ' and sticks to the button', (tester) async {
       final p = await mount(tester);
       final shape = find.byKey(const ValueKey('tool-shape'));
@@ -129,14 +133,17 @@ void main() {
       final bar = tester.getRect(find.byType(LumitToolBarFrb));
 
       for (final preset in WorkspacePreset.values) {
-        final label = find.text(preset.title);
-        expect(label, findsOneWidget, reason: '${preset.title} is on the strip');
+        // Set as a kicker, so what is on screen is the name in capitals.
+        final label = find.text(preset.title.toUpperCase());
+        expect(label, findsOneWidget,
+            reason: '${preset.title} is on the strip');
         final rect = tester.getRect(label);
         // Its own line height, not whatever is left over. Squeezed into the
         // padding it measured three pixels tall and read as nothing at all —
         // which is how four pressable blanks came to sit on the right of the
-        // bar. Ten is below a real line and far above a crushed one.
-        expect(rect.height, greaterThanOrEqualTo(10),
+        // bar. Eight is below a real line — the names are 9px kickers — and
+        // far above a crushed one.
+        expect(rect.height, greaterThanOrEqualTo(8),
             reason: '${preset.title} has room for its own words');
         expect(rect.top, greaterThanOrEqualTo(bar.top - 0.5));
         expect(rect.bottom, lessThanOrEqualTo(bar.bottom + 0.5),
@@ -173,6 +180,45 @@ void main() {
       expect(bar.right - withOptions.right, lessThan(40),
           reason: "the tool options push nothing off the bar's right end");
       expect(tester.takeException(), isNull);
+    });
+
+    /// **The workspace tabs are mono-caps kickers with an accent tick under
+    /// the one in force** (docs/15 §12A.1, §3.1 — these are what "the active
+    /// tab tick" means). They regressed to sentence-case words tinted in the
+    /// accent, which spent the accent on text and left the strip with no tick
+    /// at all.
+    testWidgets('the workspace tabs are kickers, ticked in the accent',
+        (tester) async {
+      final p = await mount(tester);
+      final t = LumitTheme.dark();
+
+      expect(find.text('EDIT'), findsOneWidget,
+          reason: 'the names are set as kickers, in capitals');
+      expect(find.text('Edit'), findsNothing);
+
+      Border? tickOf(WorkspacePreset preset) => (tester
+              .widget<Container>(find
+                  .descendant(
+                    of: find
+                        .byKey(ValueKey<String>('workspace-${preset.name}')),
+                    matching: find.byType(Container),
+                  )
+                  .last)
+              .decoration as BoxDecoration?)
+          ?.border as Border?;
+
+      expect(tickOf(WorkspacePreset.edit), isNull,
+          reason: 'nothing is ticked until a preset is chosen');
+
+      p.uiState.workspace.applyWorkspacePreset(WorkspacePreset.edit);
+      await tester.pumpAndSettle();
+
+      expect(tickOf(WorkspacePreset.edit)?.bottom.color, t.accent,
+          reason: 'the workspace in force wears the accent tick');
+      expect(tickOf(WorkspacePreset.audio), isNull,
+          reason: 'and only that one does');
+      expect(tester.widget<Text>(find.text('EDIT')).style?.color, t.textPrimary,
+          reason: 'the word itself stays grey — the tick is the state');
     });
 
     testWidgets('the workspace strip rearranges the panels', (tester) async {
@@ -264,7 +310,8 @@ void main() {
           reason: 'listed, so the gap is visible');
       expect(find.text('Not built'), findsWidgets);
 
-      await tester.tap(find.byKey(const ValueKey('tool-flyout-penMaskFeather')));
+      await tester
+          .tap(find.byKey(const ValueKey('tool-flyout-penMaskFeather')));
       await tester.pumpAndSettle();
       expect(p.uiState.tools.tool, ToolMode.select,
           reason: 'and inert, so picking it does nothing');

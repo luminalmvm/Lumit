@@ -11,8 +11,10 @@ import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/theme/theme.dart';
@@ -234,6 +236,25 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(p.uiState.playheadFrame.value, last);
+    });
+
+    /// **The frame counter says how many frames there are** (§12A.1): the
+    /// mockup's `f48 / 250`, the count quieter again than the number beside
+    /// it. It said only `f48`, which left the reader with no idea how far in
+    /// that was.
+    testWidgets('the frame counter carries the comp\'s total', (tester) async {
+      final p = withComp();
+      p.uiState.playheadFrame.value = 3;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final total = p.comp.durationFrames();
+      expect(find.text('f3'), findsOneWidget);
+      expect(find.text('/ $total'), findsOneWidget,
+          reason: 'the comp\'s whole length, after the frame in hand');
+      expect(tester.widget<Text>(find.text('/ $total')).style?.color,
+          LumitTheme.dark().textDisabled,
+          reason: 'and quieter than the frame number it follows');
     });
 
     /// §12A.1's order for the row above the outline: the two readouts at the
@@ -1925,6 +1946,36 @@ void main() {
           reason: 'and only that one');
     });
 
+    /// **The snap magnet's on-state is chrome, not accent** (§3.1): the accent
+    /// list is closed — one filled button, the playhead, the workspace tick —
+    /// and a tool toggle is not on it. On, the glyph reads at foreground
+    /// strength on the button's own face; off, it is frameless and muted.
+    testWidgets('the magnet lights in the foreground, never in the accent',
+        (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+      final t = LumitTheme.dark();
+      final magnet = find.byKey(const ValueKey('tl-magnet'));
+
+      ColorFilter? tint() => tester
+          .widget<SvgPicture>(
+              find.descendant(of: magnet, matching: find.byType(SvgPicture)))
+          .colorFilter;
+      bool frameless() => tester.widget<HouseButton>(magnet).frameless;
+
+      // On is the default.
+      expect(tint(), ColorFilter.mode(t.textPrimary, BlendMode.srcIn),
+          reason: 'the on glyph is text_primary');
+      expect(tint(), isNot(ColorFilter.mode(t.accent, BlendMode.srcIn)));
+      expect(frameless(), isFalse, reason: 'and it stands on its own face');
+
+      await tester.tap(magnet);
+      await tester.pumpAndSettle();
+      expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn),
+          reason: 'off is muted');
+      expect(frameless(), isTrue, reason: 'and frameless');
+    });
+
     /// Dragging a lane diamond moves the keyframe in time — one op — and the
     /// magnet decides whether it lands on a whole frame or between two
     /// (docs/07 §4.5).
@@ -2729,17 +2780,23 @@ void main() {
 
       double widthOf(String key) =>
           tester.getSize(find.byKey(ValueKey<String>(key))).width;
+      final identityBefore = widthOf('tl-colgroup-identity');
       final composeBefore = widthOf('tl-blend-$id');
+      // Modes is fixed at its five switch cells (owner, 2026-08-24), so the
+      // seam dragged here is the layer-name group's — the one with something
+      // inside it that gains from more room.
       final valueBefore = widthOf('tl-tf-opacity');
 
       await tester.drag(
-          find.byKey(const ValueKey('tl-seam-render')), const Offset(60, 0));
+          find.byKey(const ValueKey('tl-seam-identity')), const Offset(60, 0));
       await tester.pumpAndSettle();
 
-      expect(widthOf('tl-tf-opacity'), greaterThan(valueBefore),
-          reason: 'the render group grew, so its value cells did');
+      expect(widthOf('tl-colgroup-identity'), greaterThan(identityBefore),
+          reason: 'the group the seam follows grew');
       expect(widthOf('tl-blend-$id'), composeBefore,
           reason: 'every other group kept its width');
+      expect(widthOf('tl-tf-opacity'), valueBefore,
+          reason: 'and so did the value cells under the fixed Modes column');
     });
 
     /// The bottom bar takes a column group away and gives it back (K-448,
@@ -3058,7 +3115,9 @@ void main() {
       expect(rulerLabelStepSeconds(pixelsPerSecond: 100), 1);
       expect(rulerLabelStepSeconds(pixelsPerSecond: 20), 5);
       expect(rulerLabelStepSeconds(pixelsPerSecond: 2), 60);
-      expect(rulerLabelOf(5), '05s');
+      // Unpadded seconds, as the mockup's ruler reads them (K-451).
+      expect(rulerLabelOf(0), '0s');
+      expect(rulerLabelOf(5), '5s');
       expect(rulerLabelOf(0.5), '0.5s');
       expect(rulerLabelOf(60), '1:00s');
       expect(rulerLabelOf(90), '1:30s');

@@ -441,11 +441,12 @@ Sequence layer show thumbnails/waveforms.
 
 ### 6.3 Cache bar
 
-The cache bar is a thin stripe under the time ruler showing which frames are cached, per
+The cache bar is a thin stripe along the floor of the time ruler — on the work-area
+band's own row, with the band painting behind it — showing which frames are cached, per
 tier. Cached is *good news* — quiet and cool, never alarming.
 
-All three of Nebula's tiers ship (K-214, docs/06 §5.6). Every run draws as a 3px band beneath
-the ruler:
+All three of Nebula's tiers ship (K-214, docs/06 §5.6). Every run draws as a 3px band at
+the ruler's floor:
 
 | State | Token | Value | Meaning |
 |---|---|---|---|
@@ -803,7 +804,8 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   single filled action a surface is allowed (§3.1), running the File menu's own Export
   command rather than a second route to the same dialog. The row above the outline
   puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
-  far right.
+  far right. **The frame count says how far through**: the frame in hand, then the comp's
+  whole length after it — `f48 / 250`, the total quieter again than the number it follows.
 - **The column headers are kicker words, not icons**: Switches · # · Layer · Matte ·
   Blend · Parent · ms. A column header names a container, and §7.1 sets every container
   label as a kicker; the switch cells keep their marks, because those are the controls.
@@ -812,8 +814,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **The open composition tab carries no accent tick** — the seated surface colour alone
   marks it, as the mockup draws it. (The workspace tabs keep their accent underline;
   §3.1's "active tab tick" means those.)
-- **The switches column is fixed at its minimum width** — the toggles never stretch to
-  fill a wider column, so there is nothing to gain by widening it (K-448).
+- **The switches and Modes columns are fixed at their minimum width** — their toggles
+  never stretch to fill a wider column, so there is nothing to gain by widening either,
+  and neither seam is a drag handle (K-448; Modes added 2026-08-24 on the owner's word).
+  Modes is exactly its five switch cells; the fold-out's value cells align to that span,
+  so they are as wide as the column they sit under and no wider.
 - **Comp-wide toggles live in the bottom bar**, not the timecode row: shy, motion blur
   and the overflow menu sit beside the Parent column toggle after a divider, so the
   comp-wide switches read apart from the column-visibility toggles.
@@ -828,7 +833,9 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   point. Minor ticks subdivide as zoom grows until one tick is one frame, and no tick is
   drawn closer than **30px** to its neighbour — which is the mockup's own density at the
   resting zoom, three half-second ticks between labels two seconds apart (K-451).
-- **The cache bar sits beneath the ruler, coloured by resolution tier** (§6.3).
+- **The cache bar is drawn on the ruler's floor, coloured by resolution tier** (§6.3) —
+  on the work-area band's own row, inside the ruler's 36, not as a strip of its own
+  beneath it. The band paints behind it; the marker flags stand on it.
 - **A few pixels of padding sit either side of the ruler** in every timeline mode, so a
   keyframe or work-area handle on the first or last frame stays visible and grabbable.
 - **The work area is one band** in `animated`, from the ruler's handles down through the

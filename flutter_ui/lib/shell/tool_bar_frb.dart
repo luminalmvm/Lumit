@@ -572,8 +572,8 @@ class _FlyoutMarkPainter extends CustomPainter {
   bool shouldRepaint(_FlyoutMarkPainter old) => old.colour != colour;
 }
 
-/// The workspace switcher docs/07 §1.4 requires in the window chrome: the four
-/// shipped presets by name, the current one ticked in the accent.
+/// The workspace switcher docs/07 §1.4 requires in the window chrome: the
+/// shipped presets as mono-caps kickers, the current one ticked in the accent.
 class _WorkspaceStrip extends StatelessWidget {
   const _WorkspaceStrip();
 
@@ -583,9 +583,9 @@ class _WorkspaceStrip extends StatelessWidget {
     final ui = context.watch<LumitUiState>();
     final active = ui.workspace.activePreset;
     // Round's filled pill (K-394, §12.1): five names, one in force, which is
-    // exactly the segmented option the cue is about — and accent *text* is the
-    // "reads from a tint" it replaces. Sharp keeps the accent word: passing
-    // `active` there would give it a fill it has never had.
+    // exactly the segmented option the cue is about, and the fill replaces the
+    // tick. Sharp keeps the underline: passing `active` there would give the
+    // word a fill it has never had.
     final round = t.shape == ThemeShape.round;
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -604,11 +604,27 @@ class _WorkspaceStrip extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               active: round && preset == active,
               onPressed: () => ui.workspace.applyWorkspacePreset(preset),
-              child: Text(
-                preset.title,
-                style: preset == active
-                    ? t.body.copyWith(color: round ? t.surface0 : t.accent)
-                    : t.body.copyWith(color: t.textSecondary),
+              // Mono-caps kickers with an **accent tick under the one in
+              // force** (docs/15 §12A.1, §3.1 — the workspace tabs are what
+              // "the active tab tick" means). The word itself stays grey: the
+              // tick is the state, so the strip reads as five names with one
+              // underlined rather than as one coloured word. Under Round the
+              // filled pill above carries the state instead and there is no
+              // tick to draw under a fill.
+              child: Container(
+                padding: const EdgeInsets.only(bottom: 2),
+                decoration: preset == active && !round
+                    ? BoxDecoration(
+                        border: Border(bottom: BorderSide(color: t.accent)))
+                    : null,
+                child: Text(
+                  preset.title.toUpperCase(),
+                  style: preset == active
+                      ? (round
+                          ? t.kicker.copyWith(color: t.surface0)
+                          : t.kickerOn)
+                      : t.kicker,
+                ),
               ),
             ),
           ),

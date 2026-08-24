@@ -895,8 +895,9 @@ for. This has a regression test.
 
 ### 4.1 Time ruler region
 
-Top to bottom: **markers ribbon**, **time ruler**, **work area bar**, **cache bar**, then
-layer lanes.
+Top to bottom: the **time ruler**'s clock in its upper half; its lower half carrying the
+**markers ribbon**, the **work area bar** and — on the band's own row at the ruler's floor
+— the **cache bar**; then layer lanes.
 
 - **Markers ribbon**: comp markers (point or span) with labels; double-click creates one;
   drag to move; markers snap. **Beat markers** (generated via the Audio panel, §12) render

@@ -56,11 +56,13 @@ const double cellGap = 4;
 /// The five A/V switch cells.
 const double switchesGroupWidth = 5 * switchCellWidth;
 
-/// The render group's span. Wider than its five switch cells because the
-/// fold-out property rows put their value cells inside exactly this span
-/// (docs/07 §4.3): a 3-axis position needs the room. The switches themselves
-/// pack to the left in ordinary [switchCellWidth] cells.
-const double renderGroupWidth = 150;
+/// The render group's span: **its five switch cells and nothing more**
+/// (owner, 2026-08-24). It was 150 — half as wide again — to give the
+/// fold-out's value cells room, but the column itself is five icons, and the
+/// blank third of it read as a gap in the outline. The fold-out property rows
+/// still align their value cells to exactly this span (docs/07 §4.3); they are
+/// simply as wide as the column they sit under.
+const double renderGroupWidth = 5 * switchCellWidth;
 
 /// The compose group's cells. The matte cell's width covers the dropdown plus
 /// its two mode toggles even when unset, so the blend column never shifts as
@@ -104,21 +106,22 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
   TimelineGroup.timings: timingsGroupWidth,
 };
 
-/// **The switches column is fixed at its minimum width** (§12A.1, K-448): the
-/// toggles never stretch to fill a wider column, so widening it would only buy
-/// blank space, and the seam beside it is not draggable at all.
+/// **The two switch columns are fixed at their minimum width** (§12A.1,
+/// K-448; Modes added by the owner, 2026-08-24): their toggles never stretch
+/// to fill a wider column, so widening either would only buy blank space, and
+/// the seams beside them are not draggable at all.
 ///
-/// Only that one group. The others each have something inside them that gains
-/// from more room — a longer name, a longer blend-mode word, the fold-out's
-/// value fields.
-bool groupIsFixedWidth(TimelineGroup group) => group == TimelineGroup.switches;
+/// Only those two. The rest each have something inside them that gains from
+/// more room — a longer name, a longer blend-mode word, a render time.
+bool groupIsFixedWidth(TimelineGroup group) =>
+    group == TimelineGroup.switches || group == TimelineGroup.render;
 
 /// How narrow a group may be dragged: enough for the cells that cannot
 /// shrink — its icons, or a dropdown you can still read a name in.
 double minGroupWidth(TimelineGroup group) => switch (group) {
       TimelineGroup.switches => switchesGroupWidth,
       TimelineGroup.identity => 120,
-      TimelineGroup.render => 5 * switchCellWidth,
+      TimelineGroup.render => renderGroupWidth,
       TimelineGroup.compose => 180,
       // Enough for the widest number the readout writes ("12.34 s").
       TimelineGroup.timings => 56,

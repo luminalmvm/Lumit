@@ -931,8 +931,10 @@ class TimelineCacheBar extends StatefulWidget {
   final Listenable revision;
 
   /// Three logical pixels — the approved mockup's own stripe (K-451), and
-  /// docs/15 §6.3. It counts inside the ruler's 36 (§12A.6), so the clock
-  /// above it is 33.
+  /// docs/15 §6.3. It is drawn **on the ruler's floor**, inside its 36
+  /// (§12A.6), over the work-area band's own row rather than as a strip of its
+  /// own below it: the mockup draws the cached segments on the band, and a
+  /// separate strip cut the band three pixels short of the lanes.
   static const double height = 3;
 
   const TimelineCacheBar({
@@ -1017,66 +1019,6 @@ class _TimelineCacheBarState extends State<TimelineCacheBar> {
   }
 }
 
-/// The cache bar with the work-area band running **behind** it (docs/15
-/// §12A.1): the two-pixel strip between the ruler's floor and the lanes is
-/// still part of the band's height, and leaving it out cut the band in half at
-/// exactly the place the eye follows it across.
-///
-/// [work] is the band's edges in this axis's pixels, or null when the work area
-/// covers the whole comp and there is no band to draw.
-class CacheStrip extends StatelessWidget {
-  final CompositionReference comp;
-  final TimelineAxis axis;
-  final Listenable revision;
-  final (double, double)? work;
-
-  const CacheStrip({
-    super.key,
-    required this.comp,
-    required this.axis,
-    required this.revision,
-    required this.work,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    final band = work;
-    return Stack(
-      // The column's tight width goes straight through to the bar, which
-      // otherwise sizes to nothing: a `CustomPaint` given loose constraints
-      // and no child takes no space at all, and the bar would simply vanish.
-      fit: StackFit.passthrough,
-      children: [
-        // A work area covering the whole comp (K-203) is still a work area:
-        // the strip fills with the band rather than showing a gap in it, which
-        // is what the lane ground below does with the same news.
-        if (band == null)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: ColoredBox(
-                color: t.animated.withValues(alpha: workAreaLaneFillAlpha),
-              ),
-            ),
-          )
-        else
-          Positioned(
-            left: band.$1,
-            width: (band.$2 - band.$1).clamp(1.0, 1e6),
-            top: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: workAreaBand(t, fillAlpha: workAreaLaneFillAlpha),
-              ),
-            ),
-          ),
-        TimelineCacheBar(comp: comp, axis: axis, revision: revision),
-      ],
-    );
-  }
-}
-
 /// What the cache bar needs from the Timeline's frames-to-pixels mapping. Named
 /// separately so the painter can be tested without building a Timeline.
 abstract class CacheBarAxis {
@@ -1152,6 +1094,11 @@ class TimelineRuler extends StatefulWidget {
   /// so the rest of it redraws. Null in a ruler with no markers to edit.
   final VoidCallback? onMarkersChanged;
 
+  /// The cache bar, laid on the ruler's floor over the work-area band
+  /// (§12A.1): the band paints behind it because the band is part of the same
+  /// row. Null for a ruler with no cache to show.
+  final Widget? cache;
+
   const TimelineRuler({
     super.key,
     required this.comp,
@@ -1162,6 +1109,7 @@ class TimelineRuler extends StatefulWidget {
     required this.work,
     this.onWorkArea,
     this.onMarkersChanged,
+    this.cache,
   });
 
   @override
@@ -1408,10 +1356,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
                 // where, and a shape hung off to one side reads as marking the
                 // frame next door.
                 left: axis.xOf(_markerFrame(marker)) - MarkerFlag.width / 2,
-                // On the floor of the ruler, where the work-area band ends —
+                // Standing **on the cache bar** at the ruler's floor (§12A.1):
                 // markers and the band share the lower row, and a flag lifted
                 // off the edge read as floating over the lanes below.
-                bottom: 0,
+                bottom: TimelineCacheBar.height,
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
@@ -1446,6 +1394,17 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     ),
                   ),
                 ),
+              ),
+            // The cached segments, on the band's own row at the ruler's floor
+            // (§12A.1). Last, so they lie over the band — the band is what
+            // they are drawn *on*, not a strip beside them.
+            if (widget.cache != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: TimelineCacheBar.height,
+                child: IgnorePointer(child: widget.cache!),
               ),
           ],
         ),
@@ -1940,14 +1899,15 @@ const double clipEdgeWidth = 2;
 /// the bar's marks and any waveform rather than over them.
 const double clipNameAlpha = 0.8;
 
-/// A ruler label: seconds under a minute as `05s`, above as `01:00s` — the
-/// familiar editor idiom.
+/// A ruler label: seconds under a minute as `5s`, above as `1:00s` — the
+/// approved mockup's own form (K-451). The seconds are **not** zero-padded:
+/// the mockup's ruler reads `0s 2s 4s`, and a leading zero on every label made
+/// a row of times look like a row of timecodes.
 String rulerLabelOf(double seconds) {
   final whole = seconds.round();
   if (seconds < 60) {
-    final text = seconds == whole
-        ? whole.toString().padLeft(2, '0')
-        : seconds.toStringAsFixed(1);
+    final text =
+        seconds == whole ? whole.toString() : seconds.toStringAsFixed(1);
     return '${text}s';
   }
   final m = whole ~/ 60;
