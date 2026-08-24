@@ -3979,6 +3979,10 @@
   "@removeEffect": {
     "description": "Context-menu item: delete an effect from the layer."
   },
+  "removeExpression": "Remove expression",
+  "@removeExpression": {
+    "description": "Context-menu item on a property's expression editor: go back to a plain value, keeping the number the expression was showing."
+  },
   "rename": "Rename",
   "@rename": {
     "description": "Context-menu item."
