@@ -433,11 +433,14 @@ does not gate the four. Delete each phase here when it lands, as with everything
     `SetLayerGraph` and its refusals, the `Signature` split in the registry, the
     complete `PortType` (Points included), the six v1 drivers, driver resolve as
     parameter evaluation, `SourceMatte`, and the graph folded into the frame key.
-    Old projects load to an empty graph and re-save byte for byte. **WP2 to WP5
-    are pending**, in that order: the bridge (`graph_of_layer`,
-    `set_layer_graph`, the driver property path, the Drivers listing,
-    `BridgePortType`), the Graph panel, the Nodes workspace, the Node preview
-    panel. Two named gaps WP1 left behind, both recorded in
+    Old projects load to an empty graph and re-save byte for byte.
+    ~~WP2, the bridge~~ — **landed 2026-08-24**: `LayerReference::get_graph`
+    (the whole structure in one call), `get_graph_drivers`, `new_driver`,
+    `set_graph` (one `SetLayerGraph`, one undo step), `list_drivers`,
+    `BridgePortType`, the refusals as calm sentences, and the driver property
+    path spelled `<layer>/graph/<node>/<param>` (docs/17). **WP3 to WP5 are
+    pending**, in that order: the Graph panel, the Nodes workspace, the Node
+    preview panel. One named gap remains from WP1, recorded in
     docs/impl/node-graph.md:
     - **Audio level reads silence in the application.** The `AudioTap` seam is
       built and tested against a synthesised tone in `lumit-core`, but
@@ -445,9 +448,6 @@ does not gate the four. Delete each phase here when it lands, as with everything
       audio. The wiring belongs beside the playback scheduler's decoded stream
       (docs/09, docs/impl/playback-scheduler.md); it is in no work package's
       file list, so it needs assigning before the driver is offered as working.
-    - **The Drivers family is filtered out of `list_effects`.** A driver is in
-      the catalogue because the lookup needs it, but it is not an Add-effect
-      entry; WP2 gives the family its own listing and removes the filter.
 - **Phase 4 - the website**: lumitlab.com ported into the new styling - current
     content kept, wordmark top-left, the animation in a half-height hero, platform's
     own download button, screenshot sections and hover-play feature videos; type set

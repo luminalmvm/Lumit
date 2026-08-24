@@ -63,6 +63,7 @@ struct LayerGraph {
     nodes: Vec<EffectInstance>,        // drivers — same struct, Drivers registry (§1.3)
     edges: Vec<Edge>,                  // §1.4
     layout: Vec<(NodeRef, [f64; 2])>,  // canvas positions; missing entries auto-place
+    exposed: Vec<NodeRef>,             // the `E` badges (WP2; §1.4)
 }
 
 /// Names anything the canvas draws. Stack-derived nodes get stable synthetic refs.
@@ -148,8 +149,9 @@ the image chain's wires render the list.
   at the layer the effect is on" — the effect's own input at its point in the chain. One
   branch in `mattes_for`, and nothing downstream learns a new shape.
 - **Exposure** (the `E` badge) grows a node to show one hollow, type-coloured socket per
-  parameter. It is presentation state per node (a bool on the instance), not wiring;
-  a wired socket is shown regardless.
+  parameter. It is presentation state per node, not wiring; a wired socket is shown
+  regardless. **Built, 2026-08-24** as `LayerGraph::exposed`, a `Vec<NodeRef>` beside
+  `layout` rather than the bool on the instance this line first named — see WP2.
 - **Bypass** (`B`) is the existing `enabled` flag; a bypassed node draws its border dashed
   (both drawings).
 
@@ -249,12 +251,14 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
 
 ## 5. The bridge surface
 
-- **Read**: `graph_of_layer(layer) -> BridgeLayerGraph` — nodes (id, ref kind, name,
-  ports with id/name/type/wired, position, enabled, exposed), edges, and the stack order.
-  Fetched on selection and on document change, cached Dart-side; **never called in a
-  rebuild path** (the budget test expects 0).
-- **Write**: `set_layer_graph(...)`; stack gestures reuse `set_effects`; driver params
-  reuse the property calls.
+- **Read**: `LayerReference::get_graph() -> BridgeLayerGraph` (this note first called it
+  `graph_of_layer`) — the derived boxes (ref kind, match name, label, custom name,
+  enabled, ports with id/label/type/wired) and the stored `BridgeGraphWiring` (edges,
+  positions, exposure). Fetched on selection and on document change, cached Dart-side;
+  **never called in a rebuild path** (the budget test expects 0).
+- **Write**: `LayerReference::set_graph(drivers, wiring)`; stack gestures reuse
+  `set_effects`; driver params reuse the property calls, from the staged instances
+  `get_graph_drivers()` hands out.
 - **Catalogue**: the Drivers category rides the existing effect-catalogue listing.
 - **Port types cross as an enum**; Dart maps type → theme token. No colour crosses the
   bridge.
@@ -378,6 +382,40 @@ message and PR for Crowdin, K-303).
 **Tests**: `engine_labels_test.dart` green over the new tables; an frb test driving
 add-driver/connect/undo through the bridge; `bridge_call_budget_test.dart` unchanged at 0
 for rebuild paths.
+
+**Landed 2026-08-24.** The seam as shipped is `LayerReference::get_graph` (the whole
+structure in one call), `get_graph_drivers` (staged instances, as `get_effects` is for the
+stack), `new_driver` (uncommitted) and `set_graph(drivers, wiring)` (the one commit), plus
+`list_drivers()` and `BridgePortType`; docs/17 §"The layer graph" is the contract. Four
+things this note asked for came out differently, and each is the smaller change:
+
+- **`graph_of_layer` is `LayerReference::get_graph`**, a method on the handle, because
+  every other read is (docs/17 "references up"). The read model splits in two — derived
+  boxes that are never written back, and the stored `BridgeGraphWiring` that is — so the
+  read hands back exactly the object the write takes.
+- **Exposure lives in `LayerGraph::exposed`, not on the instance.** §1.4 said a bool on
+  `EffectInstance`, which would have meant a field on every effect in the document and a
+  literal touched in five crates, for state no pixel reads — and it still could not carry
+  a *derived* node. A `Vec<NodeRef>` beside `layout` is presentation state filed with the
+  other presentation state, absent from an untouched file, and absent from the frame key
+  for the same reason `layout` is.
+- **The Drivers family got its own listing rather than the `list_effects` filter simply
+  going.** Removing the filter would have put drivers in the Add-effect menu and the
+  effects browser, where dropping one adds a node that changes no pixel. `list_drivers()`
+  answers the canvas's question and `list_effects()` the stack's; one shared catalogue walk
+  builds both.
+- **A port declares its own English label** (`fx::Port { id, label, ty }`, shared by
+  `Signature::Data`'s outputs and the derived nodes' constants), so the K-303 walk finds
+  port words the same way it finds an effect's. Four were new — Image, Input, Output,
+  Layer out; the drivers' output words were already in the table as parameter labels.
+  The **property-path spelling is `<layer>/graph/<node>/<param>`**, as §3 proposed: the
+  fold paths name the layer's group in the second segment, and `graph` is what the field
+  is called.
+
+The one thing WP2 does **not** carry is a `values` list on a driver box: a driver's
+parameters come from `get_graph_drivers()`, cached at the same two moments the graph is
+(selection, document change), exactly as the Effects panel caches `get_effects` — so WP4's
+Node panel still costs no call in a rebuild.
 
 ### WP3 — Graph panel: view and wiring
 

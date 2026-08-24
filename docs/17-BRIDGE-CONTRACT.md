@@ -340,6 +340,68 @@ undo step like every other effect-stack edit. The **proportional drag itself is 
 seam at all**: scaling y as x is dragged is UI-time arithmetic for the life of a gesture, and
 the document's business is only which pairs are tied together.
 
+### The layer graph: derived boxes down one way, stored wiring both (K-471)
+
+`api::graph` is the Graph panel's whole surface, and it is shaped by the one rule the
+model rests on: **`Layer::effects` is still the only authority for the picture**
+([impl/node-graph.md](impl/node-graph.md) §1.1). So what crosses splits in two, and the
+split is the design:
+
+- **Derived, read only.** `LayerReference::get_graph()` answers a `BridgeLayerGraph`
+    whole: every box the canvas draws — the Source, one per effect **in stack order**, the
+    Layer out, then the drivers — each with the sockets it draws, its English label and its
+    bypass state. None of it is stored anywhere; it is worked out from the layer on each
+    ask, so there is nothing to write back and nothing to keep in step. Filtering `nodes`
+    to its `Effect` boxes *is* the effect stack, which is why the stack view can never be
+    made to lie: the graph has no second opinion to disagree with.
+- **Stored, read and written.** `BridgeGraphWiring` — the wires, the canvas positions, and
+    which boxes wear the `E` badge — comes back inside the same read, is edited, and is
+    handed straight to `LayerReference::set_graph(drivers, wiring)`, which commits one
+    `Op::SetLayerGraph`. Add a driver, connect, disconnect, drag a box, toggle exposure:
+    each gesture is one write and therefore one undo step, and auto-wire folds its edge
+    into the same commit as the add. There is deliberately **no per-wire call**.
+
+**One call, not one per node** (K-183). `get_graph` is asked on selection and on document
+change and held in Dart; the budget test forbids it in a rebuild path, and nothing about a
+box needs a second question.
+
+**Drivers ride every path an effect already has.** A driver *is* an `EffectInstance`, so
+`LayerReference::get_graph_drivers()` hands out `BridgeEffectInstance` staged copies
+exactly as `get_effects` does for the stack, and `set_value` / `set_custom_name` /
+`set_enabled` stage onto them with `set_graph` as the commit — keyframes, the stopwatch,
+expressions and the graph editor all work on a driver row unchanged. `new_driver(name)`
+mints one **without committing**, because dropping a node is rarely the whole gesture.
+The **property path** the Timeline and the fold rows address a driver's parameter by is
+`<layer>/graph/<node>/<param>`, beside the existing `<layer>/effects/<effect>/<param>`:
+the second segment names the group on the layer, as `transform`, `masks`, `effects` and
+`audio` already do, and `graph` is what the layer's own field is called. It is a frontend
+path — nothing about it crosses the bridge — but it is spelled here so the two panels that
+will draw a driver row agree, and `effectIdOfPath` cannot mistake one for the other.
+
+**A refusal is a calm sentence, not a broken document** (§1.5 of the note). A wire to a
+missing node or port, a type mismatch, a second wire on one socket, or a loop among the
+drivers each arrives as `OpError::InvalidGraph` carrying the engine's own words, and the
+document is left exactly as it was. Refusal rather than degradation, because unlike a
+dangling matte none of those states can be reached by deleting some *other* entity.
+The sentence is pinned by the Rust tests, not read in Dart: a **sync** call's
+`BridgeError` crosses opaque, as every op on this seam's does, so the panel's own job is
+to decline a mismatched drop *before* committing — both sockets carry their type in the
+read model, which is the same "evaluate it locally against what you already hold" rule
+the greying rules follow. The engine's refusal is the backstop, not the message channel.
+
+**Port types cross; colours never do.** `BridgePortType` has the model's seven variants and
+the frontend maps each to a `port.*` theme token (K-472 §6.1) — five colours for seven
+types. A port also carries its **English label**, declared beside the port in the engine
+(`fx::Port`) rather than worked out from its id at the seam, so it rides the K-303 chain
+like every other engine word: `fx-labels.txt` lists it and `engine_labels_test.dart` fails
+without its entry.
+
+**The Drivers family has a listing of its own**, `list_drivers()`, in the same shape as
+`list_effects()` and with the same category heading beside it. Two listings rather than one
+filtered by the frontend, because the distinction is the engine's: a driver makes a value,
+not a picture, so it belongs in the graph canvas's search and never in the Add-effect menu,
+where it would add a node that changes no pixel.
+
 ### The camera track: an event down, readings up (K-417)
 
 `api::track` is the Camera track effect's whole surface, and it is shaped by one fact: the

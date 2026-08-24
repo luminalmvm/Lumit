@@ -1841,9 +1841,17 @@
   "@fxHueShift": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxImage": "Image",
+  "@fxImage": {
+    "description": "Graph panel \u2014 the name of a socket that carries a picture."
+  },
   "fxInFront": "In front",
   "@fxInFront": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxInput": "Input",
+  "@fxInput": {
+    "description": "Graph panel \u2014 the name of the socket a box takes its picture in by."
   },
   "fxIntensity": "Intensity",
   "@fxIntensity": {
@@ -1872,6 +1880,10 @@
   "fxLeftAndRight": "Left and right",
   "@fxLeftAndRight": {
     "description": "Effect controls — a Pinning option on Turbulent displace."
+  },
+  "fxLayerOut": "Layer out",
+  "@fxLayerOut": {
+    "description": "Graph panel \u2014 the name of the box where a layer's finished picture leaves."
   },
   "fxLength": "Length",
   "@fxLength": {
@@ -2372,6 +2384,10 @@
   "fxMidtones": "Midtones",
   "@fxMidtones": {
     "description": "Effect controls — a Curves knot, the curve's output at input 0.5."
+  },
+  "fxOutput": "Output",
+  "@fxOutput": {
+    "description": "Graph panel \u2014 the name of the socket a box hands its picture on by."
   },
   "fxOutputBlack": "Output black",
   "@fxOutputBlack": {
