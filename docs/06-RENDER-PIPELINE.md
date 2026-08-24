@@ -995,12 +995,40 @@ not a setting it applies, so there is nowhere left for a signal that was never d
 stretched. This conversion is a pure CPU pass and is where the channels and alpha settings
 act.
 
-**Colour space.** The export's final transform is a setting, not an assumption: the built-in
-working-space → sRGB/Rec.709 encode, and a **named** output space from the project's OCIO
-config (§3.3, K-489/K-490) — the export binds the named transform's baked artefact into the
-same display blit the Viewer runs, so preview equals export because they are the same
-dispatch. A name no loaded config answers is refused rather than approximated (K-479), and a
-file written through an OCIO name carries no container colour tag rather than a wrong one.
+**Colour space.** The export's final transform is a setting, not an assumption. Five
+**built-in** spaces are offered (K-498): **sRGB / Rec.709** — the Viewer's own encode and the
+default, a pass-through that touches no pixel; **Linear** — Rec.709 primaries with no
+transfer function, for a file going back into a compositor; **Rec.709** — BT.709-6 primaries
+and its OETF (BT.1886 is the display half of that pair); **Rec.2020** — BT.2020-2's wide
+primaries and transfer; and **Display P3** — the SMPTE EG 432-1 primaries on D65 with the
+sRGB curve. All five are D65-white, so a conversion is one primaries matrix and one curve and
+no white-point adaptation. The matrices are derived in code from the published chromaticities
+rather than transcribed, and checked against the standards' own printed matrices. The
+transform runs at the **pack stage**, on straight (un-multiplied) colour, because a transfer
+curve is per-channel and non-linear; the coverage goes back on afterwards where the file is
+premultiplied.
+
+Beside them, a **named** output space from the project's OCIO config (§3.3, K-489/K-490) —
+the export binds the named transform's baked artefact into the same display blit the Viewer
+runs, so preview equals export because they are the same dispatch. A name no loaded config
+answers is refused rather than approximated (K-479).
+
+**The file says what it is.** The capability table carries which spaces a format can *state*:
+an `.mp4` writes all five into its `colr`/`nclx` box (the ISO/IEC 23091-2 code points for
+primaries, transfer and matrix, at limited range), and a still sequence states none, so a
+still is offered only the space an untagged file is universally taken to be. A space the
+container could not name is **refused**, not written unlabelled — a wide-gamut file that says
+nothing is read as sRGB and comes back looking wrong, which is the same class of mistake
+K-479 exists to prevent.
+
+**Resize.** Where the delivered frame is not the cropped composition's own size, the picture
+is contain-fitted and centred on black, and the filter is a choice (K-498): **Fast** is
+bilinear — four nearest source pixels, weighted by distance, what every Lumit export has
+always used and still the default so a file exported today matches the same export yesterday
+— and **High** is separable Lanczos-3 whose window is widened by the shrink factor, so every
+source pixel inside an output pixel's footprint contributes to it. That widening is the whole
+difference: a fine check pattern shrunk 4:1 becomes an even grey under High (its analytic
+answer) rather than a moiré. Both run in `f64` in a fixed order, so both are deterministic.
 
 **Crop and the region of interest.** An export can take pixels off each edge — `T · L · B · R`
 in **pixels at composition size** (K-419) — applied to the composited frame before any resize,

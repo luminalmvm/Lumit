@@ -9045,3 +9045,54 @@ none of them will need the plumbing rebuilt, because the socket, the wire and th
 stream's shape are settled now. The full plan lives in docs/impl/points-stream.md, and
 the effect's own design — every slider, formula and budget — in
 docs/impl/particulate.md.
+
+## 24. What the export writes, and how big: colour spaces and resampling, in plain terms
+
+**What a colour space actually is — two things, not one.** Section 22 said a pixel's
+numbers do not say what colour they are. Here is what a colour space adds to them. First,
+**primaries**: which exact red, green and blue the three numbers are amounts of. Two files
+can both say "full red" and mean visibly different reds, because their red lights are
+different. Second, a **transfer function**: the curve that turns a stored number into an
+amount of light. Numbers are not proportional to light in a delivery file — they are bent,
+so that the codes are spent where the eye can see the difference, and the screen bends them
+back. A colour space is one choice of each. Nothing else.
+
+**Why five and not one.** Lumit's compositor works in linear light and hands the export a
+frame already encoded the way an ordinary screen wants it — that is the Viewer's picture,
+and it is what every Lumit export used to write, full stop. But delivery specs ask for other
+things. A broadcast house asks for **Rec. 709** proper. A wide-gamut master wants **Rec.
+2020**, whose red, green and blue are far more saturated, so it can hold colours 709 simply
+cannot mix. Apple's world wants **Display P3**. And a file going straight back into another
+compositor wants **Linear** — no curve at all, numbers proportional to light, because a
+curve is only something the next program has to undo. So there are five, and the one you get
+if you do not choose is the one you always got.
+
+**How a conversion works.** Undo the incoming curve to get back to light. Multiply the three
+light values by a small 3×3 table that says "this much of *our* red, green and blue makes the
+same colour as that much of *theirs*". Apply the destination's curve. That table is worked
+out in the code from the two spaces' published red/green/blue coordinates, rather than typed
+in from a book — typed digits are how a colour bug gets in and stays for years — and the
+tests check the worked-out table against the numbers the standards themselves print.
+
+**The file has to say which one it is.** This is the part that matters more than the maths.
+A player handed a Rec. 2020 file with no label assumes ordinary sRGB, plays it wrongly, and
+the picture comes back looking washed out or lurid — and nobody can tell from the file that
+anything is wrong. So an `.mp4` writes three small numbers into the container naming its
+primaries, its curve and its matrix. A folder of PNGs has nowhere dependable to put them, so
+Lumit does not offer the other four spaces for stills at all: the setting is greyed with a
+reason, and an export that asks anyway is refused before a frame is drawn. Refusing is the
+house rule (K-479) — a file that quietly is not what you asked for is a mistake you find out
+about from somebody else, after you have sent it.
+
+**Resampling: what "High" and "Fast" actually do.** When the exported frame is smaller than
+the composition, several source pixels have to become one. **Fast** looks at the four pixels
+nearest to where the new pixel's centre lands and mixes them by distance. That is quick, and
+for a gentle shrink it is fine. But shrink by four and it is still only ever looking at four
+of the sixteen pixels it is meant to be summarising — the other twelve are simply not
+consulted, and fine detail turns into a shimmering interference pattern instead of an
+average. **High** uses a wider, better-shaped window (Lanczos-3) *and* widens that window in
+proportion to the shrink, so every source pixel that falls inside the new pixel's footprint
+gets a say. A fine checkerboard shrunk 4:1 should be an even grey; High gives you that grey,
+and the test in the engine checks it against exactly that arithmetic. Fast stays the default
+because changing it would silently alter what every existing export writes, and an export
+that quietly changed is the thing this whole part of the program is built to avoid.

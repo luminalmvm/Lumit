@@ -140,19 +140,145 @@ fn sample_bilinear<C: Channel>(src: &[C], w: u32, h: u32, x: f64, y: f64) -> [C;
     out
 }
 
+/// Which filter the export's resize samples with.
+///
+/// In plain terms: shrinking a picture has to decide what happens to the
+/// detail that no longer fits. *Fast* reads the four nearest pixels and mixes
+/// them, which is quick and is what Lumit has always done. *High* uses a
+/// Lanczos-3 window whose reach grows with the shrink, so every source pixel
+/// that lands inside an output pixel actually contributes to it — the
+/// difference between a shrunken fine check pattern turning into an even grey
+/// (correct) and into a moiré (what point sampling gives you).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum Resample {
+    /// Bilinear: the four nearest source pixels, weighted by distance. The
+    /// behaviour every Lumit export has had, kept as the default so a file
+    /// exported today is byte-identical to the same export yesterday.
+    #[default]
+    Fast,
+    /// Lanczos-3 (`sinc(x)·sinc(x/3)`, |x| < 3), separable, with the window
+    /// widened by the shrink factor on a downscale so the filter covers the
+    /// whole source footprint of each output pixel.
+    High,
+}
+
+/// One output sample's source taps: the first source index (which may be
+/// negative or run past the edge — reads clamp) and the normalised weights.
+struct Taps {
+    first: i64,
+    weights: Vec<f64>,
+}
+
+/// The Lanczos-3 kernel. `sinc(x)·sinc(x/3)` for |x| < 3, zero outside.
+fn lanczos3(x: f64) -> f64 {
+    const A: f64 = 3.0;
+    if x == 0.0 {
+        return 1.0;
+    }
+    if x.abs() >= A {
+        return 0.0;
+    }
+    let px = std::f64::consts::PI * x;
+    (px.sin() / px) * ((px / A).sin() / (px / A))
+}
+
+/// Tap tables for one axis: `src` source samples resampled to `dst` outputs.
+///
+/// The window is widened by the shrink factor (`src/dst` when that exceeds 1),
+/// which is what makes a downscale average rather than point-sample. Weights
+/// are normalised, so a flat input stays exactly flat and total energy is
+/// preserved. Taps that fall outside the source clamp to the edge sample —
+/// the same edge rule [`sample_bilinear`] uses — so the border does not darken.
+fn lanczos_taps(src: u32, dst: u32) -> Vec<Taps> {
+    let ratio = f64::from(src) / f64::from(dst);
+    let filter_scale = ratio.max(1.0);
+    let support = 3.0 * filter_scale;
+    (0..dst)
+        .map(|i| {
+            let centre = (f64::from(i) + 0.5) * ratio - 0.5;
+            let first = (centre - support).ceil() as i64;
+            let last = (centre + support).floor() as i64;
+            let mut weights: Vec<f64> = (first..=last)
+                .map(|s| lanczos3((s as f64 - centre) / filter_scale))
+                .collect();
+            let sum: f64 = weights.iter().sum();
+            if sum.abs() > f64::EPSILON {
+                for w in &mut weights {
+                    *w /= sum;
+                }
+            } else {
+                // Degenerate (cannot happen for a > 0 support, but a zero sum
+                // would divide by nothing): fall back to the nearest sample.
+                weights.clear();
+                weights.push(1.0);
+                return Taps {
+                    first: centre.round() as i64,
+                    weights,
+                };
+            }
+            Taps { first, weights }
+        })
+        .collect()
+}
+
+/// Separable Lanczos-3 resample of RGBA `src` into a fresh `dst_w × dst_h`
+/// buffer of raw f64 channel values (not yet quantised).
+fn lanczos_resample<C: Channel>(
+    src: &[C],
+    src_w: u32,
+    src_h: u32,
+    dst_w: u32,
+    dst_h: u32,
+) -> Vec<f64> {
+    let xt = lanczos_taps(src_w, dst_w);
+    let yt = lanczos_taps(src_h, dst_h);
+    // Horizontal pass: dst_w x src_h, still in source rows.
+    let mut mid = vec![0.0f64; (dst_w as usize) * (src_h as usize) * 4];
+    for y in 0..src_h as usize {
+        let row = y * (src_w as usize) * 4;
+        for (x, t) in xt.iter().enumerate() {
+            let out = (y * (dst_w as usize) + x) * 4;
+            for (k, w) in t.weights.iter().enumerate() {
+                let sx = (t.first + k as i64).clamp(0, i64::from(src_w) - 1) as usize;
+                let si = row + sx * 4;
+                for c in 0..4 {
+                    mid[out + c] += src[si + c].to_f64() * w;
+                }
+            }
+        }
+    }
+    // Vertical pass.
+    let mut out = vec![0.0f64; (dst_w as usize) * (dst_h as usize) * 4];
+    for (y, t) in yt.iter().enumerate() {
+        for x in 0..dst_w as usize {
+            let oi = (y * (dst_w as usize) + x) * 4;
+            for (k, w) in t.weights.iter().enumerate() {
+                let sy = (t.first + k as i64).clamp(0, i64::from(src_h) - 1) as usize;
+                let si = (sy * (dst_w as usize) + x) * 4;
+                for c in 0..4 {
+                    out[oi + c] += mid[si + c] * w;
+                }
+            }
+        }
+    }
+    out
+}
+
 /// Resize RGBA `src` (`src_w × src_h`) into a fresh `dst_w × dst_h` frame,
 /// contain-fitted and centred on opaque black (letterbox). Used by the export
-/// resolution presets; bilinear sampling, so it up- and down-scales. Returns
-/// opaque black if `src` is too short for its stated size.
+/// resolution presets; `how` picks the filter, and both up- and downscale.
+/// Returns opaque black if `src` is too short for its stated size.
 ///
 /// Generic over the channel width, so an eight-bit and a sixteen-bit export
-/// letterbox through the identical arithmetic (docs/06 §7.4).
+/// letterbox through the identical arithmetic (docs/06 §7.4). Both filters run
+/// in `f64` in a fixed order, so the result is deterministic (docs/06 §7.3).
 pub fn letterbox_resize<C: Channel>(
     src: &[C],
     src_w: u32,
     src_h: u32,
     dst_w: u32,
     dst_h: u32,
+    how: Resample,
 ) -> Vec<C> {
     let mut out = vec![C::from_f64(0.0); (dst_w as usize) * (dst_h as usize) * 4];
     for px in out.chunks_exact_mut(4) {
@@ -162,13 +288,31 @@ pub fn letterbox_resize<C: Channel>(
     if w == 0 || h == 0 || src.len() < (src_w as usize) * (src_h as usize) * 4 {
         return out;
     }
-    for y in 0..h {
-        let sy = (f64::from(y) + 0.5) * f64::from(src_h) / f64::from(h) - 0.5;
-        for x in 0..w {
-            let sx = (f64::from(x) + 0.5) * f64::from(src_w) / f64::from(w) - 0.5;
-            let px = sample_bilinear(src, src_w, src_h, sx, sy);
-            let di = (((oy + y) * dst_w + (ox + x)) * 4) as usize;
-            out[di..di + 4].copy_from_slice(&px);
+    match how {
+        Resample::Fast => {
+            for y in 0..h {
+                let sy = (f64::from(y) + 0.5) * f64::from(src_h) / f64::from(h) - 0.5;
+                for x in 0..w {
+                    let sx = (f64::from(x) + 0.5) * f64::from(src_w) / f64::from(w) - 0.5;
+                    let px = sample_bilinear(src, src_w, src_h, sx, sy);
+                    let di = (((oy + y) * dst_w + (ox + x)) * 4) as usize;
+                    out[di..di + 4].copy_from_slice(&px);
+                }
+            }
+        }
+        Resample::High => {
+            let fit = lanczos_resample(src, src_w, src_h, w, h);
+            for y in 0..h {
+                for x in 0..w {
+                    let si = (((y * w) + x) * 4) as usize;
+                    let di = (((oy + y) * dst_w + (ox + x)) * 4) as usize;
+                    for c in 0..4 {
+                        // Lanczos rings past the ends of the range; `from_f64`
+                        // is the one place a channel is clamped and rounded.
+                        out[di + c] = C::from_f64(fit[si + c]);
+                    }
+                }
+            }
         }
     }
     out
@@ -352,7 +496,7 @@ mod tests {
         // top row is red and the bottom row is the black bar.
         let red = [255u8, 0, 0, 255];
         let src: Vec<u8> = red.iter().copied().cycle().take(4 * 2 * 4).collect();
-        let out = letterbox_resize(&src, 4, 2, 2, 2);
+        let out = letterbox_resize(&src, 4, 2, 2, 2, Resample::Fast);
         assert_eq!(&out[0..4], &red); // (0,0) red
         assert_eq!(&out[4..8], &red); // (1,0) red
         assert_eq!(&out[8..12], &[0, 0, 0, 255]); // (0,1) black bar
@@ -364,9 +508,75 @@ mod tests {
         let blue = [0u8, 0, 255, 255];
         let src: Vec<u8> = blue.iter().copied().cycle().take(2 * 2 * 4).collect();
         // Same aspect (square → square) fills the whole target with blue.
-        let out = letterbox_resize(&src, 2, 2, 8, 8);
+        let out = letterbox_resize(&src, 2, 2, 8, 8, Resample::Fast);
         for px in out.chunks_exact(4) {
             assert_eq!(px, &blue);
         }
+    }
+
+    /// An 8×8 black/white checker box-downscaled to 2×2 has one analytic
+    /// answer: every output pixel covers exactly sixteen source pixels, eight
+    /// of each, so the mean is half scale. Lanczos-3 with the window widened
+    /// by the shrink factor lands on it, because every source pixel inside an
+    /// output pixel's footprint actually gets a weight.
+    #[test]
+    fn high_downscales_a_checker_to_its_mean() {
+        let mut src = Vec::with_capacity(8 * 8 * 4);
+        for y in 0..8u32 {
+            for x in 0..8u32 {
+                let v = if (x + y) % 2 == 0 { 255u8 } else { 0 };
+                src.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let hi = letterbox_resize(&src, 8, 8, 2, 2, Resample::High);
+        for px in hi.chunks_exact(4) {
+            for c in &px[..3] {
+                assert!(
+                    (i32::from(*c) - 128).abs() <= 12,
+                    "Lanczos downscale of a checker should be near mid grey, got {c}"
+                );
+            }
+            assert_eq!(px[3], 255);
+        }
+    }
+
+    /// Energy in, energy out: a ramp downscaled 4:1 keeps its mean, because
+    /// every tap row is normalised to sum to one.
+    #[test]
+    fn high_preserves_total_energy() {
+        let (w, h) = (32u32, 32u32);
+        let mut src = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                let v = ((x * 7 + y * 3) % 256) as u8;
+                src.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let mean = |px: &[u8]| -> f64 {
+            let n = px.len() / 4;
+            px.chunks_exact(4).map(|p| f64::from(p[0])).sum::<f64>() / n as f64
+        };
+        let out = letterbox_resize(&src, w, h, 8, 8, Resample::High);
+        assert!(
+            (mean(&src) - mean(&out)).abs() < 2.0,
+            "mean drifted: {} -> {}",
+            mean(&src),
+            mean(&out)
+        );
+    }
+
+    /// A flat field stays exactly flat through the high filter too — the
+    /// normalisation makes ringing impossible where there is nothing to ring.
+    #[test]
+    fn high_preserves_a_solid_colour_and_repeats() {
+        let blue = [0u8, 0, 255, 255];
+        let src: Vec<u8> = blue.iter().copied().cycle().take(2 * 2 * 4).collect();
+        let a = letterbox_resize(&src, 2, 2, 8, 8, Resample::High);
+        for px in a.chunks_exact(4) {
+            assert_eq!(px, &blue);
+        }
+        // Deterministic: the same input gives the same bytes, every time.
+        let b = letterbox_resize(&src, 2, 2, 8, 8, Resample::High);
+        assert_eq!(a, b);
     }
 }

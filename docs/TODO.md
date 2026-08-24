@@ -572,7 +572,19 @@ container metadata, the named preset store, the auto bitrate, the render setting
 disk cache, effects, solo switches) and the *when done* hook are all on
 `lumit_render::export::ExportSpec`, all across the seam on `BridgeExportSpec`, and all on
 the dialog's one scrolling page, with a per-format capability table refusing what a format
-cannot carry. What is left:
+cannot carry. The picture's two remaining dead rows are backed as well (K-498): the resize
+picks its filter (Fast bilinear, High Lanczos-3), and the colour space is a family of five
+built-ins the container is stamped with. What is left:
+
+- **The resampler face and the colour-space list do not cross the seam yet** (K-498).
+  `ExportSpec::resample` and the four new `ColourSpace` variants are on the engine's type;
+  `BridgeExportSpec` still carries only the colour space's *name* and no resample field, so
+  `to_export_spec` fills the filter from `ExportSpec::default()` (Fast) and the dialog's
+  Resize row stays drawn dead. The dialog stage needs: a `resample` field on
+  `BridgeExportSpec` (`"fast"`/`"high"`), and `export_colour_spaces(format)` answering the
+  capability table's list as `(stored name, label)` pairs so the Colour row's dropdown is
+  the engine's answer rather than a second opinion. Both labels — the five space names and
+  the two filter names — are engine strings and need `app_en.arb` keys when they land.
 
 - **The *Still* output type is withdrawn** (K-485): a still is an image sequence of one
   frame, which the span already says, so the fourth chip the drawing offered is gone rather

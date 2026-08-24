@@ -13405,38 +13405,53 @@ pixel each — 33 MB the pair at 1080p, 133 MB at 4K — transient, during a six
 export only. An eight-bit export allocates nothing new, and no cache, preview or playback
 path widens.
 
-## K-499 — The Keys rows carry the Layers editing anatomy, and the layer number returns
+## K-498 — The export's picture family: five built-in colour spaces the file states, and a resize that picks its filter
 
-**DECIDED 2026-08-25.** The owner's correction of the shipped Keys mode, taken under
-K-458's own carve-out (the owner personally overrules a drawing): the approved Keys
-drawing's read-only property rows are superseded. A Keys-mode **property row matches a
-Layers fold row** — stopwatch, the ◄ ◆ ► navigator once animating, and an editable value
-well (scrub-drag, click-to-type, the shared row machinery of docs/07 §4.3) — keeping the
-drawing's `Group · Name` naming and the value text in `animated`. The **layer row regains
-the layer number**: twirl · number · dot · name · property count, the same identity
-cluster K-461 gives Layers mode. Supersedes docs/15 §12A.1a's "read-only value labels"
-bullet and that part of K-455's wording; the flat list, the filters and everything else
-in §12A.1a stand. docs/impl/timeline-interaction.md §3.2 carries the exact anatomy.
+**DECIDED 2026-08-25**, completing the two picture rows K-485 drew dead. The Resize row's
+filter face and the Colour section's one-item list are both real settings now, and building
+them settled four things.
 
-## K-500 — The timeline selection model: a marquee from any ground, additive Shift, a property's name selects its keys
+**A colour space is primaries plus a curve, and there are five.** *sRGB / Rec. 709* stays
+the default and is a genuine pass-through — the compositor already hands the export that
+encode, so naming it runs no arithmetic at all and a file exported today is byte-for-byte
+the file yesterday's Lumit wrote. Beside it: **Linear** (Rec.709 primaries, no transfer),
+**Rec. 709** (BT.709-6 primaries and OETF — BT.1886 is the display half of that pair, and a
+*file* carries the OETF), **Rec. 2020** (BT.2020-2) and **Display P3** (SMPTE EG 432-1
+primaries on D65 with the sRGB curve). All five are D65, so a conversion is one 3×3 matrix
+and one curve with no white-point adaptation anywhere. **The matrices are derived from the
+published chromaticities in code, not transcribed**, and checked against BT.709's, BT.2020's
+and BT.2087's own printed matrices: a mistyped digit in a colour matrix is a defect that
+survives for years because nothing looks broken, and a derivation cannot be mistyped.
 
-**DECIDED 2026-08-25**, from the timeline-interaction audit the owner commissioned
-("interaction is everything to the user and we want it slick"). Extends K-196 and K-203;
-docs/impl/timeline-interaction.md §2 is the binding spec. The rulings:
+**The transform belongs at the pack stage, on straight colour.** A transfer curve is
+per-channel and non-linear, so it cannot see premultiplied numbers and give the right
+answer; the coverage is divided out, the colour converted, and the coverage put back where
+the file is premultiplied. This is also the one place the export already un-multiplies, so
+no new pass exists.
 
-- **A marquee can start on any ground** — empty lane space, a shut layer's row beside its
-  bar, a Keys-mode layer band, the area below the stack. Only a control that uses the
-  drag itself (a bar's strip, a key's grab, a block handle) takes the gesture first; a
-  Keys-mode layer band selects on tap and passes drags through. Plain marquee replaces;
-  `Shift`/`Ctrl` held at drag start adds to the standing selection, in the lanes as in
-  the graph.
-- **Keys mode opens with every listed layer twirled open** — its own default twirl state,
-  not Layers mode's shut-by-default set. A sheet of shut bands shows nothing.
-- **Clicking a property's name selects the property and all of its keys** (extending
-  K-196, which selected the property alone); `Ctrl`-click toggles them in the key
-  selection, `Shift`-click extends the run of rows. The stopwatch stays the animate
-  toggle and never selects.
-- **Selection and block marks draw in `text_primary`, never the accent** — K-439's closed
-  list applied to the marquee box, the graph's selected keys and the tangent handles.
-- Two or more selected keys are the block wherever the selection came from — marquee,
-  clicks or a property name — in Layers mode and Keys alike (K-458's tools, one overlay).
+**The file states what it is, and a format that cannot state it is refused.** The capability
+table gains a colour-space row: an `.mp4` writes all five into its `colr`/`nclx` box (the
+ISO/IEC 23091-2 code points for primaries, transfer and matrix, at limited range), and a
+still sequence states none, so a still is offered only the space an untagged file is
+universally taken to be. A wide-gamut file that carries no label is read as sRGB and comes
+back looking wrong, with nothing in the file to show why — the same class of mistake K-479's
+refusal rule exists to prevent, so it is refused the same way rather than written unlabelled.
+**OCIO is unchanged**: `ColourSpace::Ocio` still refuses rather than approximating, and
+OCIO-the-config-format remains recorded future work (docs/TODO.md, K-489/K-490).
+
+**The export resize picks its filter, and the default is the honest one.** *Fast* is bilinear
+— what every Lumit export has always used — and *High* is separable Lanczos-3 with the window
+**widened by the shrink factor**, which is the part that matters: an un-widened kernel at 4:1
+still consults four of the sixteen source pixels it is meant to be summarising. The analytic
+case pins it — an eight-by-eight checker box-downscaled to 2×2 has one right answer, the
+mean, and High lands on it. **Fast stays the serde default**, named for what it is rather
+than flattered as "High": changing the default would silently alter what every stored preset
+and every existing export writes, which is the one thing this part of the program exists to
+prevent. The dialog's own default is the dialog's to choose when it takes the row.
+
+The **seam is unchanged by this entry**. `BridgeExportSpec` still carries a `colour_space`
+string, which now round-trips through `ColourSpace::stored_name` / `from_stored_name` — the
+built-ins have stable lower-case keys (`linear`, `rec709`, `rec2020`, `display-p3`, and the
+empty string for the default), an unknown name is still an OCIO space, and `to_export_spec`
+fills the new `resample` field from `ExportSpec::default()`. Exposing the resampler and the
+space list to the dialog is one addition in one place.

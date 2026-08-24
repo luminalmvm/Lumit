@@ -37,6 +37,94 @@ impl VideoCodec {
     }
 }
 
+/// What a container is stamped with so the file states its own colour
+/// (docs/06 §7.4). Three numbers, all from ISO/IEC 23091-2 (the same registry
+/// H.264's VUI, HEVC's VUI and the mp4 `colr`/`nclx` box all draw on): which
+/// primaries the code values mix, which transfer function encodes the light,
+/// and which matrix takes RGB to the YCbCr the codec actually stores.
+///
+/// In plain terms: a video file is just numbers, and without this the player
+/// has to guess what they mean. Guessing wrong is how a delivered file comes
+/// back looking washed out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ColourTags {
+    /// sRGB: Rec.709 primaries, the IEC 61966-2-1 curve. The default, and what
+    /// an untagged file is universally taken to be.
+    #[default]
+    Srgb,
+    /// Rec.709 primaries, linear light — no transfer function at all.
+    Linear,
+    /// Rec.709 throughout: primaries, transfer and matrix.
+    Bt709,
+    /// Rec.2020 (non-constant luminance) throughout.
+    Bt2020,
+    /// Display P3: SMPTE ST 432-1 primaries, the sRGB curve, a Rec.709 matrix.
+    DisplayP3,
+    /// Say nothing. Only reached where the space has no registered code.
+    Unspecified,
+}
+
+impl ColourTags {
+    /// `(colour_primaries, transfer_characteristics, matrix_coefficients)` as
+    /// the ISO/IEC 23091-2 code points FFmpeg's `AVCOL_*` enumerations mirror.
+    fn av(self) -> (i32, i32, i32) {
+        match self {
+            ColourTags::Srgb => (
+                ffi::AVCOL_PRI_BT709,
+                ffi::AVCOL_TRC_IEC61966_2_1,
+                ffi::AVCOL_SPC_BT709,
+            ),
+            ColourTags::Linear => (
+                ffi::AVCOL_PRI_BT709,
+                ffi::AVCOL_TRC_LINEAR,
+                ffi::AVCOL_SPC_BT709,
+            ),
+            ColourTags::Bt709 => (
+                ffi::AVCOL_PRI_BT709,
+                ffi::AVCOL_TRC_BT709,
+                ffi::AVCOL_SPC_BT709,
+            ),
+            ColourTags::Bt2020 => (
+                ffi::AVCOL_PRI_BT2020,
+                ffi::AVCOL_TRC_BT2020_10,
+                ffi::AVCOL_SPC_BT2020_NCL,
+            ),
+            ColourTags::DisplayP3 => (
+                ffi::AVCOL_PRI_SMPTE432,
+                ffi::AVCOL_TRC_IEC61966_2_1,
+                ffi::AVCOL_SPC_BT709,
+            ),
+            ColourTags::Unspecified => (
+                ffi::AVCOL_PRI_UNSPECIFIED,
+                ffi::AVCOL_TRC_UNSPECIFIED,
+                ffi::AVCOL_SPC_UNSPECIFIED,
+            ),
+        }
+    }
+}
+
+/// Stamp one encoder context with a colour statement. Shared by the video and
+/// the still-sequence paths so a `.mp4` and a `.png` of the same export cannot
+/// disagree about what they contain.
+///
+/// The range is always **limited** (`AVCOL_RANGE_MPEG`): that is what a
+/// YCbCr delivery codec writes, and saying so beats leaving it unset.
+fn set_colour_tags(ctx: &mut AVCodecContext, tags: ColourTags) {
+    let (pri, trc, spc) = tags.av();
+    // SAFETY: `as_mut_ptr` yields the context this wrapper exclusively owns (no
+    // FFmpeg call is running concurrently), and all four are plain enum fields
+    // that `avcodec_open2` reads later — the same route
+    // [`set_rate_and_profile`] takes for the fields rsmpeg has no setter for.
+    #[allow(unsafe_code)]
+    unsafe {
+        let raw = ctx.as_mut_ptr();
+        (*raw).color_primaries = pri;
+        (*raw).color_trc = trc;
+        (*raw).colorspace = spc;
+        (*raw).color_range = ffi::AVCOL_RANGE_MPEG;
+    }
+}
+
 /// Everything the video stream needs to open.
 #[derive(Debug, Clone)]
 pub struct VideoSettings {
@@ -49,6 +137,8 @@ pub struct VideoSettings {
     pub bit_rate: Option<i64>,
     /// VBR peak in bits/second (docs/06 §7.5 preset table's "peak").
     pub max_rate: Option<i64>,
+    /// What the container states this stream's colour to be.
+    pub colour: ColourTags,
 }
 
 /// How many bits each colour channel carries in the written file
@@ -358,7 +448,10 @@ pub struct ImageSequenceEncoder {
 impl ImageSequenceEncoder {
     /// Open a sequence at `path` (e.g. `shot.png` — the numbered pattern is
     /// derived beside it), sized `width`×`height`, stamped at `fps_num/fps_den`,
-    /// carrying `depth` bits per channel.
+    /// carrying `depth` bits per channel and stating `colour`.
+    // Eight plain values, each of which the caller genuinely chooses; a struct
+    // to carry them would be the same eight names one indirection further away.
+    #[allow(clippy::too_many_arguments)]
     pub fn open(
         path: &Path,
         format: ImageFormat,
@@ -367,6 +460,7 @@ impl ImageSequenceEncoder {
         fps_num: i32,
         fps_den: i32,
         depth: BitDepth,
+        colour: ColourTags,
     ) -> Result<Self, MediaError> {
         let pattern = sequence_pattern(path);
         let cpath = CString::new(pattern.to_str().ok_or(MediaError::BadPath)?)
@@ -392,6 +486,7 @@ impl ImageSequenceEncoder {
         });
         let pix_fmt = format.pix_fmt(depth);
         ctx.set_pix_fmt(pix_fmt);
+        set_colour_tags(&mut ctx, colour);
         ctx.open(None)?;
 
         {
@@ -816,6 +911,7 @@ fn build_video_ctx(
     // survive.
     let profile = (v.codec == VideoCodec::H264).then_some(ffi::AV_PROFILE_H264_HIGH as i32);
     set_rate_and_profile(&mut ctx, profile, v.max_rate);
+    set_colour_tags(&mut ctx, v.colour);
     ctx.open(None)?;
     Ok(ctx)
 }
@@ -1271,6 +1367,7 @@ mod tests {
             fps_den: 1,
             bit_rate: None,
             max_rate: None,
+            colour: ColourTags::Srgb,
         }
     }
 
@@ -1605,9 +1702,17 @@ mod tests {
     fn a_png_sequence_writes_one_numbered_file_per_frame() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("shot.png");
-        let mut enc =
-            ImageSequenceEncoder::open(&path, ImageFormat::Png, 32, 18, 30, 1, BitDepth::Eight)
-                .unwrap();
+        let mut enc = ImageSequenceEncoder::open(
+            &path,
+            ImageFormat::Png,
+            32,
+            18,
+            30,
+            1,
+            BitDepth::Eight,
+            ColourTags::Srgb,
+        )
+        .unwrap();
         for shade in [0u8, 128, 255] {
             enc.write_rgba(&vec![shade; 32 * 18 * 4]).unwrap();
         }
@@ -1630,9 +1735,17 @@ mod tests {
     fn a_tiff_sequence_writes_readable_frames() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("plate.tiff");
-        let mut enc =
-            ImageSequenceEncoder::open(&path, ImageFormat::Tiff, 16, 16, 24, 1, BitDepth::Eight)
-                .unwrap();
+        let mut enc = ImageSequenceEncoder::open(
+            &path,
+            ImageFormat::Tiff,
+            16,
+            16,
+            24,
+            1,
+            BitDepth::Eight,
+            ColourTags::Srgb,
+        )
+        .unwrap();
         enc.write_rgba(&vec![64u8; 16 * 16 * 4]).unwrap();
         enc.finish().unwrap();
         let bytes = std::fs::read(sequence_frame_path(&path, 1)).unwrap();
@@ -1926,8 +2039,17 @@ mod tests {
             ("wide.tiff", ImageFormat::Tiff),
         ] {
             let path = dir.path().join(name);
-            let mut enc =
-                ImageSequenceEncoder::open(&path, format, w, h, 24, 1, BitDepth::Sixteen).unwrap();
+            let mut enc = ImageSequenceEncoder::open(
+                &path,
+                format,
+                w,
+                h,
+                24,
+                1,
+                BitDepth::Sixteen,
+                ColourTags::Srgb,
+            )
+            .unwrap();
             enc.write_rgba(&frame).unwrap();
             // An eight-bit-sized buffer is the wrong size now, and says so.
             assert!(enc.write_rgba(&vec![0u8; (w * h * 4) as usize]).is_err());

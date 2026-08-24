@@ -355,11 +355,11 @@ pub(crate) fn to_export_spec(
         } else {
             AlphaMode::Premultiplied
         },
-        colour_space: if spec.colour_space.is_empty() {
-            ColourSpace::SrgbRec709
-        } else {
-            ColourSpace::Ocio(spec.colour_space.clone())
-        },
+        colour_space: ColourSpace::from_stored_name(&spec.colour_space),
+        // The seam has no resample face yet: the drawing's Resize row still
+        // shows one filter, so the engine's own default — bilinear, what every
+        // export has always used — stands until the dialog carries the choice.
+        resample: lumit_core::pixels::Resample::default(),
         crop: spec_crop(spec, comp_w, comp_h),
         metadata,
         render: RenderOptions {
@@ -428,10 +428,7 @@ fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExp
         },
         alpha_channel: spec.channels == Channels::RgbAlpha,
         straight_alpha: spec.alpha == AlphaMode::Straight,
-        colour_space: match &spec.colour_space {
-            ColourSpace::SrgbRec709 => String::new(),
-            ColourSpace::Ocio(name) => name.clone(),
-        },
+        colour_space: spec.colour_space.stored_name(),
         crop_top: spec.crop.top,
         crop_left: spec.crop.left,
         crop_bottom: spec.crop.bottom,
