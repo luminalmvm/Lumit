@@ -238,6 +238,13 @@ pub enum Op {
         layer: Uuid,
         shy: bool,
     },
+    /// Toggle a layer's guide switch (K-497): a guide layer draws in the
+    /// Viewer and is skipped by every walk that produces a file.
+    SetLayerGuide {
+        comp: Uuid,
+        layer: Uuid,
+        guide: bool,
+    },
     /// Toggle a layer's lock (TL2): a locked layer's bar, trims and order are
     /// held still in the timeline.
     SetLayerLocked {
@@ -483,6 +490,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerAudible { comp, layer, .. }
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
+        | Op::SetLayerGuide { comp, layer, .. }
         | Op::SetLayerMotionBlur { comp, layer, .. }
         | Op::SetLayerAcceptsLights { comp, layer, .. }
         | Op::SetLayerCollapse { comp, layer, .. }
@@ -975,6 +983,20 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 solo: previous,
+            })
+        }
+        Op::SetLayerGuide { comp, layer, guide } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.switches.guide, *guide);
+            Ok(Op::SetLayerGuide {
+                comp: *comp,
+                layer: *layer,
+                guide: previous,
             })
         }
         Op::SetLayerShy { comp, layer, shy } => {

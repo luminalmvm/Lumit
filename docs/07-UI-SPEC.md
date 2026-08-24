@@ -1148,7 +1148,10 @@ from Lumit's own icon set** (K-440) wherever the set has the mark — visible/hi
 audio/muted, solo, lock/unlocked, and the twirl; the rest keep their Iconoir glyph until
 the set grows one. **Shy** is a real switch on the layer: it
 hides the row from this list while the toolbar's shy filter is on, and never changes what
-renders. **Lock** holds the layer still where the gestures live — bar move/trim, razor,
+renders. **Guide** is the opposite pair (K-497): the layer draws in the Viewer as it always
+did and no file Lumit writes contains it, at any depth and whatever the solos say. Its cell
+belongs in the switches group beside shy, and its op (`SetLayerGuide`) and switch are in the
+engine waiting for it. **Lock** holds the layer still where the gestures live — bar move/trim, razor,
 rename, reorder and delete all refuse — though property-row edits are not yet guarded
 (docs/TODO.md). The flow cell awaits per-layer optical flow in the engine; a Precomp
 shows collapse there and other kinds leave it empty. Quality and
@@ -2074,8 +2077,8 @@ Export window. Export never blocks editing; the queue runs in the background.
 - **A control the chosen format cannot honour is disabled, never hidden and never live**
   (K-479's capability table): an `.mp4` has no alpha channel and no sixteenth bit, an image
   sequence has no sound and no bitrate, a `.wav` has no picture at all. The same face
-  carries the two rows no *subsystem* backs — guide layers and proxies — each with a short
-  reason on hover. Whatever the engine would refuse is said **in the footer, before
+  carries the one row no *subsystem* backs — proxies — with a short reason on hover; *render
+  guide layers* is a live tick the day the seam carries it (K-497 built the subsystem). Whatever the engine would refuse is said **in the footer, before
   anything is queued**, and the two actions stay inert until it is answered.
 - **Progress**: overall queue progress in the window and on the OS taskbar icon; per-item
   progress bars; completion raises a non-blocking notification with *Reveal in folder*.

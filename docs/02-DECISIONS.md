@@ -13405,6 +13405,59 @@ pixel each — 33 MB the pair at 1080p, 133 MB at 4K — transient, during a six
 export only. An eight-bit export allocates nothing new, and no cache, preview or playback
 path widens.
 
+## K-497 — Guide layers: a per-layer switch the Viewer honours and no file carries, and guide-ness beats solo
+
+**DECIDED 2026-08-25**, building the subsystem K-479's export drawing was waiting on
+(the *render guide layers* row it drew dead). A **guide layer** is a layer marked *for
+reference only*: a match photograph, a grid, a title-safe rectangle, an animatic. The
+Viewer draws it like any other layer; nothing that produces a file contains it.
+
+**The switch is in the document model**, `Switches::guide` beside `visible`, `solo`,
+`shy` and `fx` — `#[serde(default)]` off, so every project written before today loads
+and delivers byte-for-byte as it did. `Op::SetLayerGuide` is one op, so one click is one
+undo step, and a locked layer refuses it: what a layer delivers is the work, not the
+Timeline's housekeeping (unlike shy and the label, which the lock still accepts).
+
+**Delivery drops guide layers on the export's own snapshot, not with a second flag
+threaded through every walk.** `apply_render_overrides` — the function that already
+clears `fx` for *effects off* and `solo` for *solo ignored*, throughout the document and
+therefore at every depth — leaves each guide layer neither visible, nor audible, nor
+soloed in the throwaway copy the export renders from. One rewrite, and the draw-list
+builder, the decode planner, the occlusion cull and the frame key all agree the layer is
+not there. That is what K-479's needs-subsystem paragraph asked for — *a precomp rendered
+into a parent must skip its own guide layers too* — reached the cheaper way: a delivery
+bool passed down `build_comp_draws_at` would have skipped the draw while the planner
+still decoded the footage and the frame key still named a picture the file does not
+contain. The project is never touched (docs/06 §7.2), and the Viewer never takes this
+path, so it keeps drawing them.
+
+**A guide layer is silent in the file too**, which is why the bridge now builds the
+export's audio inputs from the delivery snapshot rather than from the project. *Solo
+ignored* reaches the mixdown by the same change; before it, clearing the solos affected
+the picture and not the sound.
+
+**A soloed guide layer is still absent from the file.** Solo governs *which of these
+layers am I looking at*; guide-ness governs *whether this layer is in the file at all*.
+They answer different questions, so soloing a guide layer changes the Viewer and changes
+nothing about the delivery — and because the delivery snapshot clears the solo along with
+the layer, a comp whose only soloed layer is a guide layer delivers as though that layer
+were not there, rather than delivering an empty frame. The alternative — solo overriding
+guide-ness — would mean a switch flipped to *look at this* silently changing what a client
+receives, which is the class of surprise the capability table exists to prevent.
+
+**The export may ask for them anyway**: `RenderOptions::render_guides`, default `false`
+(what a guide layer *is*), `true` for the one export that wants the reference in the
+picture. The dialog's tick is interface work over the seam and is owed; the engine
+default stands until it arrives. A document with no guide layer is never copied to skip
+nothing, so an ordinary export pays nothing for the feature.
+
+**AE's guide flag is now Lumit's** (docs/11 §5): the capture already read it and the
+importer used to report *guide layers have no equivalent — imported visible*. It maps
+1:1, and that report reason is gone. docs/11's table already promised lossless.
+
+The Timeline's own switch column and glyph (docs/07 §4) are the remaining piece and are
+interface work: the op and the switch are here for it.
+
 ## K-498 — The export's picture family: five built-in colour spaces the file states, and a resize that picks its filter
 
 **DECIDED 2026-08-25**, completing the two picture rows K-485 drew dead. The Resize row's

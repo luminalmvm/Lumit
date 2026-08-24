@@ -795,25 +795,25 @@ fn the_layer_kinds_lumit_has_map_and_the_rest_keep_their_slot() {
     )));
 }
 
-/// **A guide layer, a draft quality and preserve-underlying-transparency are
-/// all reported rather than dropped in silence.**
+/// **A guide layer crosses over; a draft quality and preserve-underlying-
+/// transparency are reported rather than dropped in silence.**
 ///
-/// Three switches with no Lumit counterpart. Each changes what a comp looks
-/// like, so each is a row.
+/// AE's guide flag is Lumit's own switch (K-497). The other two have no Lumit
+/// counterpart, and each changes what a comp looks like, so each is a row.
 #[test]
 fn the_switches_with_no_counterpart_are_reported() {
     let (doc, report) = mapped("edges.lum-bundle");
     let guide = layer(comp(&doc, "Edges"), "Guide");
 
-    assert!(guide.switches.visible, "a guide layer imports visible");
+    assert!(guide.switches.guide, "AE's guide flag is Lumit's");
+    assert!(
+        guide.switches.visible,
+        "a guide layer still draws in the Viewer"
+    );
     assert!(guide.switches.shy && guide.switches.locked && guide.switches.solo);
     assert!(guide.switches.three_d && guide.switches.collapse && guide.switches.motion_blur);
     assert!(!guide.switches.fx, "AE's fx switch is Lumit's");
 
-    assert!(reported(&report, |r| matches!(
-        r,
-        Reason::GuideLayerNotSupported
-    )));
     assert!(reported(&report, |r| matches!(
         r,
         Reason::LayerQualityIgnored { quality } if quality == "WIREFRAME"

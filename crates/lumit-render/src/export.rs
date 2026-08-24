@@ -1013,6 +1013,11 @@ pub struct RenderOptions {
     /// when one is soloed for working on — an export of a soloed comp is
     /// almost never what was wanted, but it must be *askable*, not assumed.
     pub honour_solo: bool,
+    /// Deliver the guide layers too (K-497). Off — the default — is what a
+    /// guide layer *is*: reference-only, drawn in the Viewer and absent from
+    /// the file, at every depth. On overrides that for the one export that
+    /// wants the reference in the picture.
+    pub render_guides: bool,
 }
 
 impl Default for RenderOptions {
@@ -1022,15 +1027,26 @@ impl Default for RenderOptions {
             disk_cache: DiskCachePolicy::default(),
             effects: true,
             honour_solo: true,
+            render_guides: false,
         }
     }
 }
 
 impl RenderOptions {
-    /// Whether these options change anything about the document at all.
+    /// Whether these options change anything about the document *by
+    /// themselves*. Guide layers are not here: skipping them is the default,
+    /// so whether it changes this document depends on the document — see
+    /// [`apply_render_overrides`].
     pub fn changes_document(&self) -> bool {
         !self.effects || !self.honour_solo
     }
+}
+
+/// Whether any comp in `doc` holds a guide layer (K-497).
+fn has_guide_layer(doc: &Document) -> bool {
+    doc.items.iter().any(|item| {
+        matches!(item, ProjectItem::Composition(c) if c.layers.iter().any(|l| l.switches.guide))
+    })
 }
 
 /// Apply the document-shaped render options to the export's own snapshot —
@@ -1043,7 +1059,13 @@ impl RenderOptions {
 /// nothing. The copy is thrown away when the export finishes and never
 /// reaches the project (docs/06 §7.2: baking is invisible).
 pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Document>> {
-    if !opts.changes_document() {
+    // Guide layers leave the delivery the same way (K-497): not by a second
+    // flag threaded through every walk, but by leaving this snapshot — so the
+    // draw builder, the decode planner, the occlusion cull and the frame key
+    // all agree, at every depth, that the layer is not there. The Viewer never
+    // takes this path, so it keeps drawing them.
+    let drop_guides = !opts.render_guides && has_guide_layer(doc);
+    if !opts.changes_document() && !drop_guides {
         return None;
     }
     let mut copy = Document::clone(doc);
@@ -1052,6 +1074,16 @@ pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Opti
             continue;
         };
         for layer in &mut comp.layers {
+            if drop_guides && layer.switches.guide {
+                // Reference-only means the whole layer: no picture, no sound,
+                // and no solo — guide-ness governs the file, solo governs
+                // which layers are looked at, so a soloed guide layer is still
+                // absent and the solos it left behind still stand.
+                layer.switches.visible = false;
+                layer.switches.audible = false;
+                layer.switches.solo = false;
+                continue;
+            }
             if !opts.effects {
                 layer.switches.fx = false;
             }
@@ -2915,6 +2947,247 @@ mod tests {
         assert!(!layer.switches.fx && layer.switches.solo);
     }
 
+    /// A two-level document for the guide-layer tests: an outer comp holding
+    /// a (non-collapsed) Precomp of [`solid_doc`]'s comp plus a guide layer of
+    /// its own, and a second guide layer inside the nested comp. Answers the
+    /// outer comp, the outer guide layer and the nested one.
+    fn nested_guide_doc() -> (Arc<Document>, Uuid, Uuid, Uuid) {
+        use lumit_core::model::{Composition, LayerKind, LinearColour};
+        use lumit_core::time::{Duration as CompDuration, FrameRate, Rational};
+        let (doc, inner_id) = solid_doc(32, 16);
+        let mut doc = Document::clone(&doc);
+
+        // The nested comp gains a guide layer above its solid.
+        let inner_guide = Uuid::now_v7();
+        // Half-opaque, so a guide layer over the whole frame does not occlude
+        // what is under it — the occlusion cull would hide the nested comp
+        // from the draw list and the test would prove nothing.
+        let mut template = doc.comp(inner_id).unwrap().layers[0].clone();
+        template.transform.opacity = lumit_core::anim::Property::fixed(50.0);
+        let template = template;
+        for item in &mut doc.items {
+            if let ProjectItem::Composition(c) = item {
+                if c.id == inner_id {
+                    let mut g = template.clone();
+                    g.id = inner_guide;
+                    g.name = "Inner guide".into();
+                    g.switches.guide = true;
+                    c.layers.insert(0, g);
+                }
+            }
+        }
+
+        // The outer comp: a guide layer over the nested comp.
+        let outer_guide = Uuid::now_v7();
+        let mut precomp = template.clone();
+        precomp.transform.opacity = lumit_core::anim::Property::fixed(100.0);
+        precomp.id = Uuid::now_v7();
+        precomp.name = "Nested".into();
+        precomp.kind = LayerKind::Precomp { comp: inner_id };
+        let mut guide = template.clone();
+        guide.id = outer_guide;
+        guide.name = "Outer guide".into();
+        guide.switches.guide = true;
+        let outer_id = Uuid::now_v7();
+        doc.items.push(ProjectItem::Composition(Composition {
+            id: outer_id,
+            name: "Outer".into(),
+            width: 32,
+            height: 16,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: CompDuration(Rational::new(5, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![guide, precomp],
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        }));
+        (Arc::new(doc), outer_id, outer_guide, inner_guide)
+    }
+
+    /// The nested comp of [`nested_guide_doc`].
+    fn nested_comp_of(doc: &Arc<Document>, outer: Uuid) -> Uuid {
+        doc.comp(outer)
+            .unwrap()
+            .layers
+            .iter()
+            .find_map(|l| match l.kind {
+                lumit_core::model::LayerKind::Precomp { comp } => Some(comp),
+                _ => None,
+            })
+            .unwrap()
+    }
+
+    /// A guide layer leaves the delivery snapshot at every depth (K-497): the
+    /// outer one and the one inside the nested comp both stop drawing and stop
+    /// sounding, and the project itself is untouched.
+    #[test]
+    fn a_guide_layer_leaves_the_delivery_at_every_depth() {
+        let (doc, outer_id, outer_guide, inner_guide) = nested_guide_doc();
+        let inner_id = nested_comp_of(&doc, outer_id);
+        let delivery = apply_render_overrides(&doc, &RenderOptions::default())
+            .expect("a guide layer is a document change even at the defaults");
+
+        let find = |d: &Document, comp: Uuid, layer: Uuid| {
+            d.comp(comp)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == layer)
+                .unwrap()
+                .switches
+        };
+        for (comp, layer) in [(outer_id, outer_guide), (inner_id, inner_guide)] {
+            let s = find(&delivery, comp, layer);
+            assert!(!s.visible, "a guide layer draws nothing into the file");
+            assert!(!s.audible, "nor does it sound in it");
+            assert!(s.guide, "it is still marked a guide layer");
+            // The project keeps its guide layer exactly as it was.
+            assert!(find(&doc, comp, layer).visible);
+        }
+
+        // The layers that are not guides are untouched.
+        assert!(delivery.comp(inner_id).unwrap().layers[1].switches.visible);
+        assert!(delivery.comp(outer_id).unwrap().layers[1].switches.visible);
+    }
+
+    /// *Render guide layers* is the export's override (K-497): with it on the
+    /// snapshot is left alone, and a document with no guide layer is never
+    /// copied either way.
+    #[test]
+    fn the_render_guides_override_delivers_them_after_all() {
+        let (doc, ..) = nested_guide_doc();
+        let on = RenderOptions {
+            render_guides: true,
+            ..RenderOptions::default()
+        };
+        assert!(
+            apply_render_overrides(&doc, &on).is_none(),
+            "rendering the guides changes nothing, so nothing is cloned"
+        );
+
+        let (plain, _comp) = solid_doc(32, 16);
+        assert!(
+            apply_render_overrides(&plain, &RenderOptions::default()).is_none(),
+            "a document with no guide layer is not copied to skip nothing"
+        );
+    }
+
+    /// Guide-ness governs the file, solo governs which layers are looked at
+    /// (K-497): a soloed guide layer is still absent from the delivery, and it
+    /// takes its solo with it — so the comp delivers as though the guide layer
+    /// were not there, rather than delivering nothing at all.
+    #[test]
+    fn a_soloed_guide_layer_is_still_absent_from_the_file() {
+        let (doc, outer_id, outer_guide, _inner) = nested_guide_doc();
+        let mut seeded = Document::clone(&doc);
+        for item in &mut seeded.items {
+            if let ProjectItem::Composition(c) = item {
+                if c.id == outer_id {
+                    for l in &mut c.layers {
+                        if l.id == outer_guide {
+                            l.switches.solo = true;
+                        }
+                    }
+                }
+            }
+        }
+        let seeded = Arc::new(seeded);
+        assert!(
+            lumit_core::model::any_picture_solo(seeded.comp(outer_id).unwrap()),
+            "the guide layer is the comp's only solo"
+        );
+
+        let delivery = apply_render_overrides(&seeded, &RenderOptions::default()).unwrap();
+        let comp = delivery.comp(outer_id).unwrap();
+        assert!(
+            !lumit_core::model::any_picture_solo(comp),
+            "the guide layer's solo left with it, so the rest of the comp delivers"
+        );
+        let guide = comp.layers.iter().find(|l| l.id == outer_guide).unwrap();
+        assert!(
+            !guide.switches.visible,
+            "solo does not deliver a guide layer"
+        );
+        assert!(comp.layers[1].switches.visible, "the nested comp delivers");
+    }
+
+    /// The draw list is where it shows: the Viewer's walk draws a guide layer
+    /// at both depths, and the delivery walk — the same builder over the
+    /// delivery snapshot — draws neither (K-497).
+    #[test]
+    fn the_viewer_draws_guide_layers_and_the_delivery_walk_does_not() {
+        let (doc, outer_id, outer_guide, inner_guide) = nested_guide_doc();
+        let pixels = std::collections::HashMap::new();
+
+        let drawn = |d: &Arc<Document>| -> (bool, bool) {
+            let comp = d.comp(outer_id).unwrap().clone();
+            let mut visited = vec![outer_id];
+            let draws = crate::build::build_comp_draws(d, &comp, 0.0, &pixels, &mut visited);
+            let outer = draws.iter().any(|dr| dr.layer == outer_guide);
+            let inner = draws.iter().any(|dr| match &dr.source {
+                crate::draw::DrawSource::Nested { draws, .. } => {
+                    draws.iter().any(|n| n.layer == inner_guide)
+                }
+                _ => false,
+            });
+            (outer, inner)
+        };
+
+        assert_eq!(drawn(&doc), (true, true), "the Viewer draws them");
+        let delivery = apply_render_overrides(&doc, &RenderOptions::default()).unwrap();
+        assert_eq!(
+            drawn(&delivery),
+            (false, false),
+            "a delivery walk skips them, inside the nested comp too"
+        );
+    }
+
+    /// K-031 with a guide layer present: the file an export writes is the file
+    /// it would have written had the guide layer never been in the document —
+    /// byte for byte, at both depths.
+    #[test]
+    fn an_export_writes_the_same_file_as_if_the_guide_layers_were_not_there() {
+        let (with_guides, outer_id, outer_guide, inner_guide) = nested_guide_doc();
+        let inner_id = nested_comp_of(&with_guides, outer_id);
+        let mut without = Document::clone(&with_guides);
+        for item in &mut without.items {
+            if let ProjectItem::Composition(c) = item {
+                c.layers
+                    .retain(|l| l.id != outer_guide && l.id != inner_guide);
+            }
+        }
+        assert_eq!(without.comp(inner_id).unwrap().layers.len(), 1);
+        let without = Arc::new(without);
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut sp = spec(
+            ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
+            32,
+            16,
+        );
+        sp.range = Some((0, 1));
+        let one = dir.path().join("with.png");
+        let two = dir.path().join("without.png");
+        let Some(first) = run_now(&with_guides, outer_id, &one, &sp) else {
+            return;
+        };
+        first.expect("the guide export runs");
+        run_now(&without, outer_id, &two, &sp)
+            .expect("an adapter was there a moment ago")
+            .expect("the plain export runs");
+
+        let read = |p: &std::path::Path| {
+            std::fs::read(lumit_media::encode::sequence_frame_path(p, 1)).unwrap()
+        };
+        assert_eq!(
+            read(&one),
+            read(&two),
+            "a guide layer changes nothing about the delivered file"
+        );
+    }
+
     /// The render settings' own defaults: an export renders at full quality
     /// with everything on and no disk cache (docs/06 §7.3 — export never
     /// degrades), and the export tier is the preview's own machinery.
@@ -2926,6 +3199,10 @@ mod tests {
         assert!(!opts.quality.draft, "an export never drafts");
         assert_eq!(opts.disk_cache, DiskCachePolicy::Off);
         assert!(opts.effects && opts.honour_solo);
+        assert!(
+            !opts.render_guides,
+            "a guide layer is reference-only unless the export says otherwise"
+        );
         assert!(!opts.changes_document());
 
         // A half-resolution export is the preview's own tier, not a new one.

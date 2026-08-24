@@ -8744,6 +8744,21 @@ constant per codec — the constant chosen so that 1920×1080 at 60 comes out at
 field blank is a third answer meaning "let the encoder decide", which is what it has always
 meant.
 
+**A guide layer is one you can see but never deliver.** Tick a layer's **guide** switch and
+it stays exactly as it is in the Viewer — a reference photograph, a grid, a title-safe
+rectangle, an animatic to match to — but no file Lumit writes ever contains it. That is not
+a rule the export path applies to the top layer of the composition and forgets about
+underneath: when an export begins, Lumit takes its private photograph of the project and, in
+that copy, every guide layer at every depth loses its picture, its sound and its solo — so
+the piece that decides what to draw, the piece that decides which footage to decode, and the
+piece that names the finished frame all agree the layer is not there. Inside a precomp, too:
+a comp used as a layer in another comp delivers without its own guide layers. The Viewer
+never takes that path, so it goes on drawing them. Solo does not rescue one: solo says *which
+of these layers am I looking at*, and guide says *this one is not in the file* — two
+different questions, so soloing a guide layer changes what you see and nothing about what is
+written. An export can ask for them anyway with one tick, for the rare frame you want the
+reference in.
+
 **Presets** are a name over that whole settings record. The built-in ones — *Master* and the
 delivery presets — cannot be edited or deleted, because a preset name has to mean the same
 thing on everybody's machine. Your own are saved into one small file in Lumit's data folder,

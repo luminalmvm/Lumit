@@ -2008,6 +2008,68 @@ mod tests {
         assert_eq!(layer.transform.scale_x.value_at(0.0), 100.0);
     }
 
+    /// **The guide switch is one undo step, and an older project has none**
+    /// (K-497). A layer saved before the switch existed loads with it off, so
+    /// every existing project delivers exactly what it delivered before; a
+    /// guide layer saved now says so on the way back in.
+    #[test]
+    fn the_guide_switch_commits_undoes_and_round_trips() {
+        let (store, comp, layer) = doc_with_layer();
+        let guide_of = |s: &DocumentStore| {
+            s.snapshot()
+                .comp(comp)
+                .expect("the comp is there")
+                .layers
+                .iter()
+                .find(|l| l.id == layer)
+                .expect("the layer is there")
+                .switches
+                .guide
+        };
+        assert!(!guide_of(&store), "a new layer is not a guide layer");
+        store
+            .commit(Op::SetLayerGuide {
+                comp,
+                layer,
+                guide: true,
+            })
+            .expect("the guide switch commits");
+        assert!(guide_of(&store));
+        store.undo().expect("one click, one undo step");
+        assert!(!guide_of(&store));
+
+        // A locked layer refuses it: what a guide layer delivers is the work,
+        // not the Timeline's housekeeping.
+        lock(&store, comp, layer, true);
+        assert_eq!(
+            store.commit(Op::SetLayerGuide {
+                comp,
+                layer,
+                guide: true,
+            }),
+            Err(OpError::LayerLocked)
+        );
+
+        // Old JSON has no `guide` key at all.
+        let old = r#"{
+            "id": "018f0e9a-0000-7000-8000-000000000001",
+            "name": "clip.mp4",
+            "kind": { "Footage": { "item": "018f0e9a-0000-7000-8000-000000000002" } },
+            "in_point": [0, 1],
+            "out_point": [10, 1],
+            "start_offset": [0, 1],
+            "switches": { "visible": true, "audible": true, "locked": false }
+        }"#;
+        let old: crate::model::Layer = serde_json::from_str(old).unwrap();
+        assert!(!old.switches.guide, "an old project has no guide layers");
+
+        let mut marked = old.clone();
+        marked.switches.guide = true;
+        let text = serde_json::to_string(&marked).unwrap();
+        let back: crate::model::Layer = serde_json::from_str(&text).unwrap();
+        assert!(back.switches.guide, "the switch survives a save and load");
+    }
+
     #[test]
     fn invalid_ops_leave_document_untouched() {
         let store = DocumentStore::new(Document::new());

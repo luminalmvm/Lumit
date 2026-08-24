@@ -159,8 +159,6 @@ pub enum Reason {
     /// An audio layer, which Lumit carries as an ordinary Footage layer
     /// (docs/01 §2 — the audio channel of footage).
     AudioLayerAsFootage,
-    /// A guide layer: Lumit has no guide switch, so the layer imports visible.
-    GuideLayerNotSupported,
     /// "Preserve underlying transparency" has no Lumit switch yet.
     PreserveTransparencyNotSupported,
     /// Draft/wireframe layer quality: Lumit renders one quality.
@@ -318,9 +316,6 @@ impl std::fmt::Display for Reason {
             ),
             Self::AudioLayerAsFootage => {
                 write!(f, "imported as a footage layer carrying its audio")
-            }
-            Self::GuideLayerNotSupported => {
-                write!(f, "guide layers have no equivalent — imported visible")
             }
             Self::PreserveTransparencyNotSupported => write!(
                 f,

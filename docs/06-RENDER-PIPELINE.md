@@ -1041,10 +1041,13 @@ falls back to whatever was typed.
 **quality tier** (the preview's own Full/Half/Third/Quarter machinery — export takes Full and
 never drafts, §7.3), the **disk-cache policy** (off during export by default: a single pass
 through the timeline would evict the frames the user is actually working with), whether
-**effects** run, and whether **solo switches** are honoured (K-105). The last two act on the
-export's own document snapshot and never reach the project (§7.2). **Guide layers and proxies
-are not among them**: neither concept exists in the document model, so neither can be
-overridden at export — see [TODO.md](TODO.md).
+**effects** run, whether **solo switches** are honoured (K-105), and whether **guide layers**
+are delivered (K-497 — off by default, which is what a guide layer is). All three act on the
+export's own document snapshot and never reach the project (§7.2): the snapshot's guide layers
+are left neither visible nor audible nor soloed, at every depth, so the draw builder, the
+decode planner and the frame key all agree the layer is not there while the Viewer, which
+never takes this path, keeps drawing it. **Proxies are not among them**: the concept does not
+exist in the document model, so it cannot be overridden at export — see [TODO.md](TODO.md).
 
 **When done.** An export finishing can do nothing, play a short sound, or show the file in the
 file browser. The sound is a bundled file; when there is none, the hook is silent rather than

@@ -835,12 +835,12 @@ fn the_blend_mode_spread_arrives_and_dissolve_falls_back_with_a_row() {
     )));
 }
 
-/// **§5 row: the switch states, and the four with no counterpart.**
+/// **§5 row: the switch states, and the two with no counterpart.**
 ///
-/// Shy, solo, lock and motion blur cross straight over. Draft quality, the
-/// guide flag and "preserve underlying transparency" have no Lumit switch, and
-/// each changes what a comp looks like, so each is a row rather than a silent
-/// drop.
+/// Shy, solo, lock, motion blur and the guide flag (K-497) cross straight
+/// over. Draft quality and "preserve underlying transparency" have no Lumit
+/// switch, and each changes what a comp looks like, so each is a row rather
+/// than a silent drop.
 #[test]
 fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
     let c = fixture();
@@ -854,10 +854,13 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
     assert!(layer(c, "fx host").switches.fx);
 
     assert!(
-        layer(c, "guide").switches.visible,
-        "a guide layer is visible"
+        layer(c, "guide").switches.guide,
+        "AE's guide flag is Lumit's guide switch"
     );
-    assert!(reported(|r| matches!(r, Reason::GuideLayerNotSupported)));
+    assert!(
+        layer(c, "guide").switches.visible,
+        "a guide layer still draws in the Viewer"
+    );
     assert!(reported(|r| matches!(
         r,
         Reason::LayerQualityIgnored { quality } if quality == "DRAFT"
@@ -1123,7 +1126,9 @@ fn the_report_counts_what_it_says_and_names_both_placeholders() {
         report.summary(),
         Summary {
             imported: 62,
-            adjusted: 59,
+            // One fewer Adjusted row since K-497: the guide flag is a switch
+            // Lumit has now, so it crosses over instead of being reported.
+            adjusted: 58,
             placeholders: 2,
             skipped: 1,
         }

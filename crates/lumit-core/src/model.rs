@@ -849,6 +849,12 @@ pub struct Switches {
     /// renders, which is why the evaluator does not read it.
     #[serde(default)]
     pub shy: bool,
+    /// Guide (K-497): the layer is *for reference only*. The Viewer draws it
+    /// like any other layer; a walk that produces a file skips it, wherever it
+    /// sits — including inside a precomp rendered into a parent — and
+    /// regardless of solo. Off by default, so old projects deliver unchanged.
+    #[serde(default)]
+    pub guide: bool,
     /// Accepts lights (K-361): the layer is shaded by the comp's Light layers.
     /// Defaults on, so placing a light lights the scene without hunting for a
     /// switch — but a comp with no lights shades nothing either way, so 2D
@@ -899,6 +905,7 @@ impl Default for Switches {
             solo: false,
             motion_blur: false,
             shy: false,
+            guide: false,
             accepts_lights: true,
         }
     }

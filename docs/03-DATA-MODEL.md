@@ -201,6 +201,7 @@ struct Switches {
     three_d: bool,                     // 2.5D: position in z, honour the active camera
     collapse: bool,                    // Precomp layers: transform concatenation (docs/06 §1.4)
     shy: bool,                         // docs/07 §4.2: hidden from the layer list; never changes pixels
+    guide: bool,                       // K-497: reference only — the Viewer draws it, no file carries it
     accepts_lights: bool,              // K-361: the comp's Light layers shade this one (default on)
 }
 // Future switches (K-168, deferred): `quality` (Draft|Full — needs a bicubic

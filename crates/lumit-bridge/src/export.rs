@@ -374,6 +374,10 @@ pub(crate) fn to_export_spec(
             },
             effects: spec.effects,
             honour_solo: spec.honour_solo,
+            // The dialogue has no *render guide layers* tick yet (K-497): the
+            // engine's default — a guide layer is reference-only — stands
+            // until the seam carries the override.
+            render_guides: false,
         },
         // The two ticks are one enum in the engine, and showing the folder is
         // the louder of the two — the queue honours both flags itself.
@@ -834,6 +838,14 @@ mod driving {
         // Build the audio inputs through the headless seam (K-175), then hand
         // off to the exporter, which drives the same render walk the Viewer
         // uses on its own thread and device (K-017, K-031).
+        //
+        // The inputs are gathered from the *delivery* snapshot (K-497), not the
+        // project: a guide layer is reference-only, so its sound is no more
+        // delivered than its picture — and "solo ignored" reaches the mixdown
+        // for the same reason. The exporter applies the same overrides again
+        // to the same document, which is a no-op the second time.
+        let delivery = lumit_render::export::apply_render_overrides(doc, &spec.render);
+        let doc = delivery.as_ref().unwrap_or(doc);
         let inputs = crate::render::with_export_inputs(doc, comp)
             .ok_or("export: the GPU pipeline is unavailable")?;
         let handle = lumit_render::export::start(

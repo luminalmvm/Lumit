@@ -597,19 +597,14 @@ built-ins the container is stamped with. What is left:
   which is what happens: the export renderer is a fresh `HeadlessRenderer` with no disk
   tier at all. *Read-only* becomes a real choice the day the export path gains one.
 
-**Guide layers and proxies — needs a subsystem, not an export setting** (K-469). The Export
-drawing puts both among the render settings, and both are left out because neither concept
-exists anywhere in Lumit. They are document features first and export overrides second, and
-faking either at export would be worse than the empty row:
+**Proxies — needs a subsystem, not an export setting** (K-469). The Export drawing puts
+proxies among the render settings, and the row is left out because the concept exists
+nowhere in Lumit. It is a document feature first and an export override second, and faking
+it at export would be worse than the empty row. (Guide layers, the other half of this
+paragraph, landed as K-497: the switch, the delivery snapshot, the AE mapping and the
+export override are all in. What is left of that one is interface — the Timeline switch
+column and glyph, and the dialog's *render guide layers* tick over the seam.)
 
-- **Guide layers.** A guide layer is a layer marked *for reference only*: it draws in the
-  Viewer like any other layer, and it is skipped by every render that produces a file. The
-  subsystem is a per-layer switch in the document model (beside `visible`, `solo` and `fx`
-  in `Switches`), honoured by the draw-list builder under a "this walk is for delivery"
-  flag rather than by the export path alone — a precomp rendered into a parent must skip
-  its own guide layers too. It needs its own Timeline switch column and glyph, its own AE
-  import mapping (AE has the same flag), and a rule for what a *soloed* guide layer means.
-  Only then is "render guide layers" an export override worth drawing.
 - **Proxies.** A proxy is a low-resolution stand-in for a footage item — the file the
   Viewer decodes while you work, with the full-resolution original swapped back in for
   delivery. The subsystem is a second media reference on the footage item (path,
@@ -621,9 +616,10 @@ faking either at export would be worse than the empty row:
   proxy whose dimensions or duration disagree with the original. Only then is "use
   proxies / use full resolution" an export override worth drawing.
 
-Both rows **are** on the page now, disabled and with a reason on hover (K-485), because the
-drawing shows them and an honest dead control says more than an absent one. Two more sit
-beside them for the same reason and want the same kind of work: **motion blur** and
+The proxies row **is** on the page now, disabled and with a reason on hover (K-485), because
+the drawing shows it and an honest dead control says more than an absent one; the guide-layer
+row beside it is waiting only for the seam to carry `RenderOptions::render_guides`. Two more
+sit beside them for the same reason and want the same kind of work: **motion blur** and
 **Retime blend** at export are comp-wide settings with no export override in
 `RenderOptions` — an export renders what the composition renders — and giving them one
 means an override that survives into nested comps, exactly as *effects off* and *solo

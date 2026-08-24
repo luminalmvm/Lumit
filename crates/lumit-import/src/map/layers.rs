@@ -347,17 +347,10 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
     }
 }
 
-/// The layer's switches. Lumit has no draft/wireframe quality and no guide
-/// flag, so both are reported rather than dropped in silence.
+/// The layer's switches. Lumit has no draft/wireframe quality, so that one is
+/// reported rather than dropped in silence; the guide flag maps 1:1 (K-497).
 fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer) -> Switches {
     let s = ae.switches.clone().unwrap_or_default();
-    if s.guide == Some(true) {
-        conv.report.row(
-            path.clone(),
-            Outcome::Adjusted,
-            Reason::GuideLayerNotSupported,
-        );
-    }
     if let Some(quality) = s.quality.as_deref().filter(|q| *q != "BEST") {
         conv.report.row(
             path.clone(),
@@ -384,6 +377,7 @@ fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer) -> Switches {
         solo: s.solo.unwrap_or(false),
         motion_blur: s.motion_blur.unwrap_or(false),
         shy: s.shy.unwrap_or(false),
+        guide: s.guide.unwrap_or(false),
         accepts_lights: true,
     }
 }
