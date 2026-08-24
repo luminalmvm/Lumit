@@ -1164,7 +1164,7 @@ migration path). Either way they all share one pattern:
   left**. **The column and the gap are the drawing's own** (K-469): Settings computes
   190 and 12 in rows of 30 (K-465), New composition 110 and 12 in rows of 30, Export 100
   and 10 in rows of 28. Each is pinned by its own metrics test. **Recovery has no rows at
-  all** (K-487): one sentence and three buttons, so its only measurement is its width;
+  all** (K-488): one sentence and three buttons, so its only measurement is its width;
 - **kicker-titled groups, drawn as that dialog's drawing draws them** (K-469): a settings
   page separates them with a rule and 6px of air above each group after the first and no
   card around any of them; the Export dialog fences each in a hairline box with the kicker
@@ -1176,7 +1176,7 @@ migration path). Either way they all share one pattern:
   footer whose actions will not fit one line stacks them** instead of eliding their words
   — §12A.6's ladder step 2, each action at the footer's full width, the order unchanged so
   the filled one is still last (the bottom). The band is then 10 above, the buttons 8
-  apart, 10 below: 108 for three, over the hairline (K-487);
+  apart, 10 below: 108 for three, over the hairline (K-488);
 - **buttons are sized by their content**, not paired to one width (K-469 supersedes K-448's
   bullet): 12px either side of an outlined label, 16 either side of the filled one, both
   24 tall. Both approved drawings draw a pair that way.
@@ -1194,7 +1194,7 @@ be set would only be arranging a refusal, and one that hid the row would leave t
 wondering where it went. The same face is used for the rows no *subsystem* backs — **guide
 layers** and **proxies** ([TODO.md](TODO.md)) — each with a short reason on hover.
 
-**The Export dialog's preset controls are a strip of their own** (K-486). A preset sets and
+**The Export dialog's preset controls are a strip of their own** (K-487). A preset sets and
 saves *every* section of the dialog, so it is chrome over the whole page rather than a row
 inside Output: a band under the tab row and above the scrolling body, at the dialog's full
 width — 14 either side, 8 above a 22px control and 8 below it, over its own hairline, so
@@ -1320,8 +1320,8 @@ a plain constant in the code rather than a token with two equal values.
 | Welcome: the footer strip, and the outlined links in it | 28 / 24 | 28 / 24 |
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
-| Export: the preset strip, at rest (K-486) | 38 | 38 |
-| Recovery: the window itself, and its stacked footer (K-487) | 350 wide, footer 108 | 350 wide, footer 108 |
+| Export: the preset strip, at rest (K-487) | 38 | 38 |
+| Recovery: the window itself, and its stacked footer (K-488) | 350 wide, footer 108 | 350 wide, footer 108 |
 | Dialog value wells and dropdowns | 22 | 22 |
 | Settings: the window itself (K-465) | 760×520 | 760×520 |
 | Settings: sidebar, and one page's entry in it | 160 wide, 24 tall | 160 wide, 24 tall |

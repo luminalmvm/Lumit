@@ -1,5 +1,5 @@
 // The recovery dialogue measured against the pattern the Export and New
-// composition drawings share (K-444, K-469, K-487).
+// composition drawings share (K-444, K-469, K-488).
 //
 // **Why this file exists.** `shell_frb_test`'s Recovery group is about what the
 // dialogue *does* — what each button answers, what it reaches. This one is
@@ -81,7 +81,7 @@ void main() {
       final footer = band(tester, 'recover-footer');
       expect(title.width, recoveryDialogWidth,
           reason: 'the dialogue frames itself at 350 — two-thirds of the 520 '
-              'it was (K-487)');
+              'it was (K-488)');
       expect(title.height, dialogTitleStrip + 1,
           reason: '§12A.4: a dialog title strip is 30, over a hairline');
       expect(
@@ -91,7 +91,7 @@ void main() {
               dialogFooterStackGap * 2 +
               1,
           reason: '10 above, three 24px buttons 8 apart, 10 below, over the '
-              'footer\'s own hairline (K-487)');
+              'footer\'s own hairline (K-488)');
       expect(footer.width, recoveryDialogWidth);
     });
 
@@ -108,7 +108,7 @@ void main() {
 
     /// 3. **The body is one sentence** — the owner's own words, asking a
     /// question and punctuated as one. No rows, no source picker: the buttons
-    /// are the choice (K-487).
+    /// are the choice (K-488).
     testWidgets('the body is the question and nothing else', (tester) async {
       await open(tester);
 
@@ -117,14 +117,14 @@ void main() {
               'you like to restore them?'),
           findsOneWidget);
       expect(find.byType(MenuRow), findsNothing,
-          reason: 'the source-choice rows went with K-487');
+          reason: 'the source-choice rows went with K-488');
       expect(find.byKey(const ValueKey('recover-summary')), findsNothing,
           reason: 'three buttons take the footer; the count went to nothing');
     });
 
     /// 4. **The footer carries the three answers in the owner's order**, one
     /// above the next, each 24 tall and each at the footer's full width — the
-    /// ladder's step 2 rather than three elided words (§12A.6, K-487). The
+    /// ladder's step 2 rather than three elided words (§12A.6, K-488). The
     /// filled one is last, which in a column means the bottom.
     testWidgets('the three buttons stack in order', (tester) async {
       await open(tester);

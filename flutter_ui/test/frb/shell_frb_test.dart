@@ -578,7 +578,7 @@ void main() {
       expect(listAutosaves(project: path), hasLength(1));
     });
 
-    /// Each button is its own answer (K-487), and the close mark is none of
+    /// Each button is its own answer (K-488), and the close mark is none of
     /// them — the shape changed, what the dialogue can answer did not.
     ///
     /// *Restore all changes* is the case driven here because replaying the

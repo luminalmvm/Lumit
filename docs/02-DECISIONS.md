@@ -13124,7 +13124,7 @@ should not change until you do.
 that is the second shared target this entry declined, and it should arrive as its own
 decision with a measured reason, not as a quiet upgrade of this path.
 
-## K-486 — The export preset controls are a strip of their own, above the scroll
+## K-487 — The export preset controls are a strip of their own, above the scroll
 
 **DECIDED 2026-08-24** (owner ruling, on the *Save as…* button clipping its own word).
 
@@ -13158,7 +13158,7 @@ With the strip's 502 after its label column, a 220 list and two content-width bu
 pins the band, the shared left edge with the rows below, and the button's own width against
 its label — a clipped button is a button narrower than its word, and that now fails.
 
-## K-487 — The recovery dialogue asks once: one sentence, three buttons, and they stack
+## K-488 — The recovery dialogue asks once: one sentence, three buttons, and they stack
 
 **DECIDED 2026-08-24** (owner ruling, rewriting the dialogue the crash journal raises).
 

@@ -337,7 +337,7 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// 6d. **The preset strip is chrome, not a row** (K-486). A preset sets
+    /// 6d. **The preset strip is chrome, not a row** (K-487). A preset sets
     /// and saves every section of this dialog, so it sits in a band of its own
     /// under the tab row and above the scrolling body — full width, 8 above a
     /// 22px control and 8 below it, over a hairline.

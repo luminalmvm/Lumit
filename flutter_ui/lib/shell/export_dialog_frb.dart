@@ -2,7 +2,7 @@
 //
 // **The shape is the approved drawing's.** A frame of 640: a kicker title
 // strip naming the composition, a row of section tabs, the preset strip
-// (K-486 — a preset sets and saves every section, so it is chrome over the
+// (K-487 — a preset sets and saves every section, so it is chrome over the
 // whole page rather than a row inside Output), and a body of titled
 // groups — Output, Composition, Time, Picture, Colour, Audio, Metadata — whose
 // rows are a label in a fixed column with the control beside it, two to a line
@@ -98,7 +98,7 @@ const double exportSizeWell = 64;
 
 /// The preset strip: its own band under the tab row, 8 above a 22px control
 /// and 8 below it, over a hairline — chrome above the scroll, exactly as the
-/// tab row is (the owner's ruling; K-486).
+/// tab row is (the owner's ruling; K-487).
 ///
 /// A second line of the same 22 and 8 appears while a preset is being named,
 /// which is why this is the *resting* height rather than the band's only one.
@@ -107,7 +107,7 @@ const double exportPresetStripGap = 8;
 
 /// The preset list itself. 220 in the 502 the strip has after its label column
 /// leaves the two buttons their content width and 146 of air after them, so
-/// neither *Edit* nor *Save as…* is ever cut (K-486).
+/// neither *Edit* nor *Save as…* is ever cut (K-487).
 const double exportPresetDropdown = 220;
 
 /// A crop inset's well — four of them and their T · L · B · R marks fit the
@@ -740,7 +740,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       );
 
   /// **The preset strip: chrome above the scroll, not a row inside Output**
-  /// (K-486). A preset sets and saves every section of this dialog, so it
+  /// (K-487). A preset sets and saves every section of this dialog, so it
   /// belongs to the whole page rather than to one group of it — and the strip
   /// gives *Save as…* its content width, which is what the 173px column it
   /// used to share never could.

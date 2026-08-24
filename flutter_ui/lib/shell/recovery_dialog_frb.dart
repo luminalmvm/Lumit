@@ -4,7 +4,7 @@
 // saved file does not contain: rotating autosaves, and a crash journal of edits
 // made since the last save.
 //
-// **The three buttons are the choice** (K-487). The dialogue used to ask twice:
+// **The three buttons are the choice** (K-488). The dialogue used to ask twice:
 // pick a source in the body, then press *Recover* in the footer. It asks once
 // now — one sentence, and three ways to answer it along the bottom, in the
 // order they lose the most first: *Don't restore changes* opens the saved file
@@ -41,7 +41,7 @@ enum RecoveryChoice { journal, autosave, discard }
 
 /// The frame this dialogue takes.
 ///
-/// **Measured, not chosen** (K-487). The row was tried first, as the owner
+/// **Measured, not chosen** (K-488). The row was tried first, as the owner
 /// asked. In Hanken Grotesk at 11 the three labels are 108.5, 116.5 and — the
 /// filled one being a 9px mono kicker tracked 0.12em (§12A.4) — 123.1, which
 /// with 12 either side of the two outlined buttons and 16 either side of the

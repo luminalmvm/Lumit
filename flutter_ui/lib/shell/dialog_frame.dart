@@ -43,7 +43,7 @@ const double dialogFooterGap = 12;
 ///
 /// A footer whose actions will not fit on one line drops them to a column
 /// instead of eliding their words — §12A.6's ladder, step 2, applied to a
-/// footer (K-487). Three buttons come to 10 above, 24 · 8 · 24 · 8 · 24, and
+/// footer (K-488). Three buttons come to 10 above, 24 · 8 · 24 · 8 · 24, and
 /// 10 below.
 const double dialogFooterStackGap = 8;
 const double dialogFooterPad = 10;
@@ -311,7 +311,7 @@ Widget dialogRow(
 ///
 /// [stacked] drops the actions to a column, each at the footer's full width,
 /// for a dialog too narrow to seat them in a line — §12A.6's ladder step 2
-/// (K-487). The order is unchanged, so the filled action is still last, which
+/// (K-488). The order is unchanged, so the filled action is still last, which
 /// in a column means the bottom.
 Widget dialogFooter(
   LumitTheme t, {
