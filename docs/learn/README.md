@@ -21,6 +21,7 @@ First the map, then the language you need, then the area you are changing.
 | [06-FRONTEND.md](06-FRONTEND.md) | `flutter_ui/`: shell, panels, state, theme, strings |
 | [07-BUILD-SHIP.md](07-BUILD-SHIP.md) | Building, testing, CI gates, packaging, translations |
 | [08-WEBSITES.md](08-WEBSITES.md) | `web/` and `web-docs/`: how to update lumitlab.com and the docs site |
+| [09-DOING-IT-YOURSELF.md](09-DOING-IT-YOURSELF.md) | The runbook: every routine command, what success looks like, and how it fails |
 | [RUST.md](RUST.md) | Rust, taught from Lumit's own code |
 | [FLUTTER.md](FLUTTER.md) | Dart and Flutter, taught from Lumit's own code |
 | [WGSL.md](WGSL.md) | GPU thinking and WGSL, taught from Lumit's own shaders |

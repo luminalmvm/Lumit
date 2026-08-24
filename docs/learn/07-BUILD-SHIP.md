@@ -1,6 +1,9 @@
 # Build, test, ship
 
 How the repo turns into a running app, a green CI, a release, and a translated UI.
+This page is the shape of it; [09-DOING-IT-YOURSELF.md](09-DOING-IT-YOURSELF.md) is
+the runbook, with each routine's exact commands, what success looks like, and how it
+usually fails.
 
 ## The dev loop
 
