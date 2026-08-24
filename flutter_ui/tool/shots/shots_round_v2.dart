@@ -18,6 +18,7 @@
 //   flutter run -d windows -t tool/shots/shots_round_v2.dart
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
@@ -44,13 +45,16 @@ Future<void> main() async {
 
   final comp = project.newComposition(
     name: 'Opening titles',
-    settings: const BridgeCompSettings(
+    settings: BridgeCompSettings(
       name: 'Opening titles',
       width: 1920,
       height: 1080,
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: 10, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     ),
   );
 

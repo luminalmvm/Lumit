@@ -28,6 +28,7 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -54,13 +55,16 @@ Future<void> main() async {
 
   final comp = project.newComposition(
     name: 'Opening titles',
-    settings: const BridgeCompSettings(
+    settings: BridgeCompSettings(
       name: 'Opening titles',
       width: 1920,
       height: 1080,
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: 10, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     ),
   );
 
@@ -101,7 +105,8 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(7);

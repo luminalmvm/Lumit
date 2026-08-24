@@ -19,6 +19,7 @@
 //   flutter run -d windows -t tool/shots/shots_6.dart
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
@@ -39,6 +40,9 @@ BridgeCompSettings _settings(String name, int seconds) => BridgeCompSettings(
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: seconds, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     );
 
 Future<void> main() async {
@@ -119,7 +123,8 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(7);

@@ -172,7 +172,8 @@ Future<void> main() async {
   }
   ui.playheadFrame.value = 48;
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
 
   // Size the window before anything is photographed: the shots want a real
   // working window, not the runner's 1280×720 default.

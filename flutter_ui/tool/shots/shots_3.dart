@@ -13,6 +13,7 @@
 // the title sequence sweep 2 stages.
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
@@ -49,13 +50,16 @@ Future<void> main() async {
 
   final comp = project.newComposition(
     name: 'Rough cut',
-    settings: const BridgeCompSettings(
+    settings: BridgeCompSettings(
       name: 'Rough cut',
       width: 1920,
       height: 1080,
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: 10, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     ),
   );
 
@@ -146,7 +150,8 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 60;
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(6);
@@ -164,7 +169,9 @@ Future<void> main() async {
 
   Rect panelBox() {
     final ruler = boxOf('tl-ruler')!;
-    return Rect.fromLTRB(2, ruler.top - 28 - paneCardInset,
+    return Rect.fromLTRB(
+        2,
+        ruler.top - 28 - paneCardInset,
         ruler.right + 4 + paneCardInset,
         boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset);
   }

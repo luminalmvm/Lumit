@@ -17,6 +17,7 @@
 //   flutter run -d windows -t tool/shots/shots_5.dart
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
@@ -37,13 +38,16 @@ Future<void> main() async {
 
   final comp = project.newComposition(
     name: 'Opening titles',
-    settings: const BridgeCompSettings(
+    settings: BridgeCompSettings(
       name: 'Opening titles',
       width: 1920,
       height: 1080,
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: 10, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     ),
   );
 
@@ -92,9 +96,11 @@ Future<void> main() async {
   // and committed in one `setEffects`, which is the shape every stack edit has.
   final stack = gameplay.getEffects();
   stack[0].setValue(
-      id: 'stops', value: const BridgeEffectValue.float(BridgeScalar.static_(0.6)));
+      id: 'stops',
+      value: const BridgeEffectValue.float(BridgeScalar.static_(0.6)));
   stack[1].setValue(
-      id: 'radius', value: const BridgeEffectValue.float(BridgeScalar.static_(48)));
+      id: 'radius',
+      value: const BridgeEffectValue.float(BridgeScalar.static_(48)));
   stack[1].setValue(
       id: 'intensity',
       value: const BridgeEffectValue.float(BridgeScalar.static_(1.6)));
@@ -131,7 +137,8 @@ Future<void> main() async {
   // The arrangement these pages are about.
   ui.workspace.applyWorkspacePreset(WorkspacePreset.effects);
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(7);

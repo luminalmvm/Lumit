@@ -45,8 +45,8 @@ const fixtures = 'C:/tmp/lumit-shots';
 /// (K-394), which is what Settings ▸ Appearance ▸ Shape sets. The manual is
 /// shot in the look it documents, so this is set once for a whole pass rather
 /// than sweep by sweep.
-final shotShape = ThemeShape.values.asNameMap()[
-        Platform.environment['LUMIT_SHOTS_SHAPE'] ?? ''] ??
+final shotShape = ThemeShape.values
+        .asNameMap()[Platform.environment['LUMIT_SHOTS_SHAPE'] ?? ''] ??
     ThemeShape.sharp;
 
 /// How far above a docked panel's content its tab strip starts, in logical

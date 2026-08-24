@@ -45,6 +45,7 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -76,13 +77,16 @@ BridgeKeyframe _key(int frame, double value,
           BridgeBezierSide(speed: outSpeed, influence: influence)),
     );
 
-const _settings = BridgeCompSettings(
+final _settings = BridgeCompSettings(
   name: 'Opening titles',
   width: 1920,
   height: 1080,
   fpsNum: 25,
   fpsDen: 1,
   duration: BridgeRational(num: 10, den: 1),
+  background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+  shutterAngle: 180,
+  motionBlurSamples: 16,
 );
 
 late LumitState state;
@@ -118,7 +122,8 @@ Future<void> main() async {
 
 Future<void> _stageTitles() async {
   final project = state.project!;
-  final comp = project.newComposition(name: 'Opening titles', settings: _settings);
+  final comp =
+      project.newComposition(name: 'Opening titles', settings: _settings);
 
   for (final file in ['Music.wav', 'Gameplay.mp4', 'Title card.mp4']) {
     comp.addFootageLayer(
@@ -204,7 +209,8 @@ Future<void> _blendKeysAndWaveform() async {
   state.newProject();
   await pause(1.5);
   final project = state.project!;
-  final comp = project.newComposition(name: 'Opening titles', settings: _settings);
+  final comp =
+      project.newComposition(name: 'Opening titles', settings: _settings);
 
   final logoItem = project.importFootage(path: '$fixtures/Logo.png');
   comp.addFootageLayer(
@@ -347,13 +353,16 @@ Future<void> _speedRamp() async {
   final project = state.project!;
   final comp = project.newComposition(
     name: 'Rough cut',
-    settings: const BridgeCompSettings(
+    settings: BridgeCompSettings(
       name: 'Rough cut',
       width: 1920,
       height: 1080,
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: 10, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     ),
   );
 
@@ -417,7 +426,9 @@ Future<void> _speedRamp() async {
   await captureUi(
     'speed-ramp.png',
     scale: 2,
-    crop: Rect.fromLTRB(2, ruler.top - 28 - paneCardInset,
+    crop: Rect.fromLTRB(
+        2,
+        ruler.top - 28 - paneCardInset,
         ruler.right + 4 + paneCardInset,
         boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset),
   );
@@ -430,7 +441,8 @@ Future<void> _speedRamp() async {
 /// itself — the list is as tall as its rows, and Round's rows are taller than
 /// Sharp's, so a band of fixed numbers cut the last modes off.
 Rect _blendCrop(String cardId) {
-  final list = openPopup()!.expandToInclude(boxOf('tl-blend-$cardId')!.inflate(12));
+  final list =
+      openPopup()!.expandToInclude(boxOf('tl-blend-$cardId')!.inflate(12));
   return Rect.fromLTRB(2, list.top, boxOf('tl-ruler')!.left + 40, list.bottom);
 }
 

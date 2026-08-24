@@ -18,6 +18,7 @@
 // whole windows somewhere harmless, for checking what the crops are aimed at.
 
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -42,13 +43,16 @@ Future<void> main() async {
 
   final comp = project.newComposition(
     name: 'Opening titles',
-    settings: const BridgeCompSettings(
+    settings: BridgeCompSettings(
       name: 'Opening titles',
       width: 1920,
       height: 1080,
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: 10, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     ),
   );
 
@@ -97,7 +101,8 @@ Future<void> main() async {
   ui.playheadFrame.value = 48;
   ui.setSelection([title]);
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(6);
@@ -116,8 +121,7 @@ Future<void> main() async {
   Rect stage() {
     final area = boxOf('viewer-stage')!;
     final size = comp.getSize();
-    final scale =
-        math.min(area.width / size.width, area.height / size.height);
+    final scale = math.min(area.width / size.width, area.height / size.height);
     final drawn = Size(size.width * scale, size.height * scale);
     return Rect.fromLTWH(
       area.left + (area.width - drawn.width) / 2,
@@ -330,8 +334,8 @@ Future<void> main() async {
   card.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
   title.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
   gameplay.setMatte(
-    matte: BridgeMatte(
-        layer: title.internallayerId, luma: false, inverted: false),
+    matte:
+        BridgeMatte(layer: title.internallayerId, luma: false, inverted: false),
   );
   ui.model.refresh();
   ui.setSelection([gameplay]);
@@ -359,21 +363,29 @@ Future<void> main() async {
   card.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
   title.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
   final strokes = [
-    ('Brush 1', const BridgeColourRgba(r: 0.98, g: 0.78, b: 0.24, a: 1), [
-      (520.0, 700.0),
-      (640.0, 620.0),
-      (780.0, 660.0),
-      (920.0, 560.0),
-      (1080.0, 610.0),
-      (1240.0, 520.0),
-    ]),
-    ('Brush 2', const BridgeColourRgba(r: 0.35, g: 0.72, b: 0.98, a: 1), [
-      (560.0, 860.0),
-      (700.0, 830.0),
-      (860.0, 852.0),
-      (1020.0, 812.0),
-      (1180.0, 840.0),
-    ]),
+    (
+      'Brush 1',
+      const BridgeColourRgba(r: 0.98, g: 0.78, b: 0.24, a: 1),
+      [
+        (520.0, 700.0),
+        (640.0, 620.0),
+        (780.0, 660.0),
+        (920.0, 560.0),
+        (1080.0, 610.0),
+        (1240.0, 520.0),
+      ]
+    ),
+    (
+      'Brush 2',
+      const BridgeColourRgba(r: 0.35, g: 0.72, b: 0.98, a: 1),
+      [
+        (560.0, 860.0),
+        (700.0, 830.0),
+        (860.0, 852.0),
+        (1020.0, 812.0),
+        (1180.0, 840.0),
+      ]
+    ),
   ];
   for (final (name, colour, points) in strokes) {
     gameplay.addStroke(
@@ -433,9 +445,9 @@ Future<void> main() async {
   // line of type across the front of a shot about depth reads as a mistake.
   title.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
   card.setTransform(
-      prop: BridgeTransformProp.opacity, value: const BridgeScalar.static_(100));
-  for (final (layer, x, y, z, scale)
-      in [
+      prop: BridgeTransformProp.opacity,
+      value: const BridgeScalar.static_(100));
+  for (final (layer, x, y, z, scale) in [
     (gameplay, 640.0, 620.0, 0.0, 52.0),
     (card, 1240.0, 430.0, -520.0, 52.0),
     (badge, 860.0, 470.0, -950.0, 46.0),

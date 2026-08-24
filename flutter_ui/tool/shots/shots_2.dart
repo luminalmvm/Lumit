@@ -19,6 +19,7 @@
 // whole windows somewhere harmless, for checking what the crops are aimed at.
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
@@ -53,13 +54,16 @@ Future<void> main() async {
 
   final comp = project.newComposition(
     name: 'Opening titles',
-    settings: const BridgeCompSettings(
+    settings: BridgeCompSettings(
       name: 'Opening titles',
       width: 1920,
       height: 1080,
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: 10, den: 1),
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     ),
   );
 
@@ -157,7 +161,8 @@ Future<void> main() async {
   ui.setSelectedComp(comp);
   ui.playheadFrame.value = 48;
 
-  runApp(shotRoot(LumitAppNew(state, ui)));
+  // The sweeps photograph the shell; the welcome screen has its own sweep.
+  runApp(shotRoot(LumitAppNew(state, ui, welcome: false)));
   await pause(2);
   await sizeWindow(1720, 1000);
   await pause(6);
@@ -181,7 +186,9 @@ Future<void> main() async {
   /// outline runs to the window's left edge.
   Rect panelBox() {
     final ruler = boxOf('tl-ruler')!;
-    return Rect.fromLTRB(2, ruler.top - 28 - paneCardInset,
+    return Rect.fromLTRB(
+        2,
+        ruler.top - 28 - paneCardInset,
         ruler.right + 4 + paneCardInset,
         boxOf('tl-zoom-slider')!.bottom + 8 + paneCardInset);
   }
@@ -331,7 +338,8 @@ Future<void> main() async {
   // Only a few seconds of it: the engine banks this composition in well under
   // a minute, and a bar that has finished is not a bar filling.
   await pause(4);
-  final held = comp.cachedFrames(frames: BigInt.from(250), scale: ui.viewerScale);
+  final held =
+      comp.cachedFrames(frames: BigInt.from(250), scale: ui.viewerScale);
   // ignore: avoid_print
   print('CACHE ${held.where((t) => t != 0).length} of ${held.length} '
       'at scale ${ui.viewerScale}');
