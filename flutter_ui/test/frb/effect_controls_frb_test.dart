@@ -18,7 +18,7 @@ import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
-    show effectLabelOf, EffectParamRowFrb;
+    show effectLabelOf, EffectParamRowFrb, EffectPointRowFrb;
 import 'package:lumit_flutter/icons/lumit_icon.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
@@ -1306,6 +1306,155 @@ void main() {
         ),
         reason: 'picking a mask writes that mask, as a MaskPath value',
       );
+    });
+
+    // -----------------------------------------------------------------------
+    // The unit rider and the vector-pair chain (K-443, docs/15 §12A.3).
+    // -----------------------------------------------------------------------
+
+    /// Every numeric row says what its number *is*, in the mockup's own plain
+    /// mono — and it says it off the **declaration**, which is the whole point:
+    /// an id-keyed table could not tell Radial blur's per-cent `centre_x` from
+    /// the dozen effects whose `centre_x` is px@comp, and it got them all
+    /// wrong in the same direction.
+    testWidgets('a numeric row draws its declared unit beside the value',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final t =
+          ThemeScope.of(tester.element(find.byType(EffectControlsPanelFrb)))
+              .theme;
+      final px = tester.widget<Text>(find.text('px'));
+      expect(px.style!.fontFamily, LumitTheme.monoFontFamily,
+          reason: 'the rider is plain mono, not a kicker');
+      expect(px.style!.fontSize, 10);
+      expect(px.style!.color, t.textMuted);
+      expect(px.style!.letterSpacing, isNull,
+          reason: 'it states a fact; it does not name a container');
+
+      // Radius is px@comp, Mix is a per cent, Blend is a dropdown with no
+      // number and therefore no unit at all.
+      expect(find.text('px'), findsOneWidget);
+      expect(find.text('%'), findsOneWidget);
+    });
+
+    /// The same parameter id, two units, two effects — the case the deleted
+    /// map got wrong.
+    testWidgets('centre_x reads px on one effect and % on another',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'mirror');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+      expect(find.text('px'), findsWidgets,
+          reason: "Mirror's Centre is px@comp");
+
+      final second = withLayer();
+      second.layer.addEffect(name: 'radial_blur');
+      second.uiState.model.refresh();
+      await mount(tester, second, transform: false);
+      final centre = find.ancestor(
+        of: find.text('Centre'),
+        matching: find.byType(EffectPointRowFrb),
+      );
+      expect(
+        find.descendant(of: centre, matching: find.text('%')),
+        findsOneWidget,
+        reason: "Radial blur's Centre is a per cent of the frame",
+      );
+      expect(
+        find.descendant(of: centre, matching: find.text('px')),
+        findsNothing,
+      );
+    });
+
+    /// A point is two wells with a chain between them, and the chain is a real
+    /// undoable edit on the instance — not a Dart-side flag.
+    testWidgets('a point pair chains and unchains, undoably', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'lens_flare');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      final chain = find.byKey(ValueKey<String>('fx-pair-link-$id-light_x'));
+      expect(chain, findsOneWidget, reason: 'the pair draws a chain');
+      expect(p.layer.getInfo().effects.single.linkedPairs, isEmpty,
+          reason: 'a pair starts separate, which is every older project');
+
+      await tester.tap(chain);
+      await tester.pumpAndSettle();
+      expect(p.layer.getInfo().effects.single.linkedPairs, ['light']);
+
+      // One undo step, like every other effect-stack edit.
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expect(p.layer.getInfo().effects.single.linkedPairs, isEmpty);
+    });
+
+    /// Linked means proportional: dragging one well scales the other by the
+    /// same factor, and typing does too — the chain is about the two numbers,
+    /// not about which gesture moved one of them.
+    testWidgets('a chained pair scales its other half by the same factor',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'lens_flare');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      double valueOf(String param) {
+        final v = p.layer
+            .getInfo()
+            .effects
+            .single
+            .values
+            .firstWhere((e) => e.id == param)
+            .value;
+        return ((v as BridgeEffectValue_Float).field0 as BridgeScalar_Static)
+            .field0;
+      }
+
+      // Put both halves somewhere with a ratio worth keeping.
+      final stack = p.layer.getEffects();
+      stack.single
+        ..setValue(
+            id: 'light_x',
+            value: const BridgeEffectValue.float(BridgeScalar.static_(100)))
+        ..setValue(
+            id: 'light_y',
+            value: const BridgeEffectValue.float(BridgeScalar.static_(50)));
+      p.layer.setEffects(effects: stack);
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      // A value well types when it is clicked into: the field is a scrub
+      // control until then.
+      Future<void> typeX(String value) async {
+        await tester.tap(find.byKey(ValueKey<String>('fx-float-$id-light_x')));
+        await tester.pump();
+        await tester.enterText(find.byType(EditableText).first, value);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+      }
+
+      // Unchained, x moves alone.
+      await typeX('200');
+      expect(valueOf('light_x'), 200);
+      expect(valueOf('light_y'), 50, reason: 'a separate pair moves alone');
+
+      // Chained, y follows by the factor x moved by.
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-pair-link-$id-light_x')));
+      await tester.pumpAndSettle();
+      await typeX('400');
+      expect(valueOf('light_x'), 400);
+      expect(valueOf('light_y'), 100,
+          reason: 'x doubled, so y doubled — the ratio is what is kept');
     });
 
     // Without the built library there is nothing to test against; the harness

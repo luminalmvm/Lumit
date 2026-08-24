@@ -912,11 +912,27 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   The hop cycles within the panel. This is a binding behaviour of every value field, not
   a styling note.
 - The stopwatch is **square under Sharp**.
-- **Vector pairs are two equal wells with a link glyph between them**; unlinking splits them
-  into two rows.
-- **Units are plain mono, never caps** (§7.1).
+- **Vector pairs are two equal wells with a link glyph between them.** **Shipped:** which
+  parameters *are* a pair comes from the declaration (`list_pairs`), and which pairs are
+  **chained** is remembered on the effect instance — empty means every pair separate, which
+  is what every older project means, and toggling one is one undo step like every other
+  effect edit. **Linked means proportional**: dragging or typing one well scales the other
+  by the same factor, and that arithmetic lives in the panel for the life of the gesture,
+  deliberately not in the model. Two cases leave the sibling alone rather than guessing — a
+  value of **nought** has no factor at all, and a **keyframed** sibling would need a decision
+  about what "scale a curve" means before it could be written.
+- **Units are plain mono, never caps** (§7.1): mono at 10, muted, no tracking, in the gap
+  beside the value. **Shipped:** the unit comes from the parameter's own declaration, so
+  `centre_x` reads `%` on Radial blur and `px` on the dozen effects whose centre is px@comp
+  — a distinction the frontend's own id-keyed table could not draw, and got wrong for all of
+  them in the same direction. A parameter whose number genuinely has no unit draws no rider,
+  and neither does a control carrying no number. A **pair** draws one rider for the two, after
+  both wells: x and y are two halves of one measurement.
 - **Position-type parameters get a crosshair point picker** — pick the point on the Viewer —
-  exactly as colour parameters have an eyedropper.
+  exactly as colour parameters have an eyedropper. Which pairs those are is the declaration's
+  answer too: a pair in `px@comp` writes fraction x comp size, a pair in per cent writes
+  fraction x 100, and a pair measured in anything else is not a position and gets no
+  crosshair.
 - The per-effect **Mix row** carries blend mode and matte channel; the **Matte row** carries
   an invert.
 

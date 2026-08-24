@@ -442,26 +442,10 @@ does not gate the four. Delete each phase here when it lands, as with everything
 
 ## Next - engine/bridge follow-ups
 
-**The Effect controls' unit rider and its vector-pair link** (K-443,
-docs/15-DESIGN.md §12A.3). The redesigned rows draw the unit beside every value, and a
-point is two equal wells with a chain between them. **The engine half has landed**:
-every declared parameter carries a `Unit` — `Px` (px@comp), `Percent`, `Degrees`,
-`Seconds`, `Frames`, or `Raw` for a number that genuinely has none — with `Unit::Unset`
-as the derive's default for the numeric kinds so
-`every_parameter_declares_a_deliberate_unit` fails the build on one that never decided;
-`EffectSchema::pairs()` names the `_x`/`_y` pairs, which used to be read off the ids at
-the seam; and `EffectInstance::linked_pairs` records which of them are chained (empty =
-all unlinked, which is every older project, written to the file only when set, toggled
-through `set_pair_linked` and committed as the stack's own `Op::SetLayerEffects`, so it
-is one undo step like every other effect edit). **Bridge owes:** the unit on
-`BridgeParamInfo`, the pair list beside `listParameters`, and a `set_pair_linked` on the
-effect reference. **The panel owes:** the rider (§12A.3's plain mono), the chain glyph,
-the proportional drag itself — UI-time arithmetic, deliberately not in the model — and
-the deletion of `pickablePointParams` in `effect_param_row_frb.dart`, whose id-keyed map
-could not tell Radial blur's per-cent Centre from the four effects whose `centre_x` is
-px@comp. One straggler noticed on the way and left alone: the Lens flare's
-`ghost_softness` is documented as a fraction of the frame *diagonal*, which K-419
-outlawed for distances; converting it changes pictures, so it wants its own change.
+**The Lens flare's `ghost_softness` is a fraction of the frame diagonal**, which K-419
+outlawed for distances (docs/08 §2.3: every distance is px@comp). Noticed while every
+parameter was learning its unit (K-443) and left alone there: converting it changes
+pictures, so it wants a change of its own with its own before-and-after.
 
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the

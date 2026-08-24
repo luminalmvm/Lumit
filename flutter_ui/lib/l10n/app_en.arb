@@ -5132,6 +5132,16 @@
     "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
     "type": "text"
   },
+  "tipLinkPair": "Link",
+  "@tipLinkPair": {
+    "description": "Tooltip on the chain between an effect point's x and y fields while they are separate. Clicking ties them, so dragging one scales the other by the same factor.",
+    "type": "text"
+  },
+  "tipUnlinkPair": "Unlink",
+  "@tipUnlinkPair": {
+    "description": "Tooltip on the chain between an effect point's x and y fields while they are tied together. Clicking lets each move on its own again.",
+    "type": "text"
+  },
   "tipMissingOnly": "Missing footage only",
   "@tipMissingOnly": {
     "description": "Tooltip on the Project panel's filter when it is off. Under five words."
@@ -5858,6 +5868,31 @@
   "unitPixels": "pixels",
   "@unitPixels": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
+  },
+  "unitSymbolDegrees": "°",
+  "@unitSymbolDegrees": {
+    "description": "The unit rider beside an effect parameter's value when the number is an angle. A symbol, not a word — it sits in a narrow column beside the number.",
+    "type": "text"
+  },
+  "unitSymbolFrames": "frames",
+  "@unitSymbolFrames": {
+    "description": "The unit rider beside an effect parameter's value when the number is a count of frames at the composition's rate. Lower case.",
+    "type": "text"
+  },
+  "unitSymbolPercent": "%",
+  "@unitSymbolPercent": {
+    "description": "The unit rider beside an effect parameter's value when the number is a percentage. A symbol, not a word — it sits in a narrow column beside the number.",
+    "type": "text"
+  },
+  "unitSymbolPx": "px",
+  "@unitSymbolPx": {
+    "description": "The unit rider beside an effect parameter's value when the number is a distance in pixels at composition size. Abbreviated because it sits in a narrow column beside the number.",
+    "type": "text"
+  },
+  "unitSymbolSeconds": "s",
+  "@unitSymbolSeconds": {
+    "description": "The unit rider beside an effect parameter's value when the number is a length of time in seconds. Abbreviated because it sits in a narrow column beside the number.",
+    "type": "text"
   },
   "unsavedChanges": "Unsaved changes",
   "@unsavedChanges": {

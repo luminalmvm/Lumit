@@ -51,6 +51,50 @@ import 'package:syntax_highlight/syntax_highlight.dart';
 /// How wide one value cell is.
 const double effectCellWidth = 78;
 
+/// The gap between a value well and whatever rides beside it — the mockup's
+/// own 6 (§12A.3).
+const double effectRiderGap = 6;
+
+/// What a parameter's declared unit reads as beside its value (K-443,
+/// §12A.3), or `null` for a number that genuinely has none.
+///
+/// Read off the *declaration*, never off the parameter's id: `centre_x` is a
+/// per cent of the frame on Radial blur and pixels at composition size on a
+/// dozen other effects, which is precisely what the id-keyed table this
+/// replaced could not tell apart.
+String? unitRiderText(BridgeUnit unit) => switch (unit) {
+      BridgeUnit.px => l10n.unitSymbolPx,
+      BridgeUnit.percent => l10n.unitSymbolPercent,
+      BridgeUnit.degrees => l10n.unitSymbolDegrees,
+      BridgeUnit.seconds => l10n.unitSymbolSeconds,
+      BridgeUnit.frames => l10n.unitSymbolFrames,
+      BridgeUnit.raw => null,
+    };
+
+/// How the rider is set: plain mono at 10, muted, no tracking (§12A.3's own
+/// computed style). It is a fact about the number beside it, not a label
+/// naming anything, so it is deliberately not a kicker.
+TextStyle unitRiderStyle(LumitTheme t) =>
+    t.mono.copyWith(fontSize: 10, color: t.textMuted);
+
+/// `control` with its unit beside it, or `control` alone for a parameter whose
+/// number has no unit.
+Widget withUnitRider(LumitTheme t, BridgeUnit unit, Widget control) {
+  final text = unitRiderText(unit);
+  if (text == null) return control;
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      // Flexible so a narrow panel shrinks the well rather than overflowing
+      // the row — the rider is three characters and the well is the part with
+      // room to give.
+      Flexible(child: control),
+      const SizedBox(width: effectRiderGap),
+      Text(text, style: unitRiderStyle(t)),
+    ],
+  );
+}
+
 /// One parameter: its label, and the control its kind asks for.
 ///
 /// Takes the effect's *id* and this parameter's *value* rather than the opaque
@@ -215,8 +259,10 @@ class EffectParamRowFrb extends StatelessWidget {
       ),
     );
 
-    final control =
-        _greyed(_withRiders(t, id, _control(context, t, id, value, frame)));
+    // The unit goes on the control itself, inside the riders: `100 %` then the
+    // Blend dropdown, never `100` then Blend then `%`.
+    final control = _greyed(_withRiders(t, id,
+        withUnitRider(t, param.unit, _control(context, t, id, value, frame))));
 
     // **An Action is a button, and a button says its own name** (K-417). Drawn
     // in the value column with the name column left empty, rather than as a
@@ -1206,17 +1252,20 @@ class EffectPointRowFrb extends StatelessWidget {
       onLive;
   final bool twoColumn;
 
-  /// Whether the pair may take the position dropper, and in what unit it
-  /// writes: null = no dropper; false = % of frame (fraction × 100, the
-  /// legacy Radial blur centre); true = comp PIXELS (fraction × comp size,
-  /// read from the comp at CLICK time — never in a rebuild, K-184 — which is
-  /// the K-260 convention every new point pair uses).
-  final bool? pickPixels;
-
   /// Whether the pair is editable, per the effect's greying rules — the same
   /// affordance [EffectParamRowFrb.enabled] draws, over a row that happens to
   /// carry two parameters.
   final bool enabled;
+
+  /// Whether the two are **chained** (K-443): dragging or typing one scales
+  /// the other by the same factor. The document holds which pairs are tied
+  /// ([BridgeEffectInstanceInfo.linkedPairs]); the scaling itself is done here
+  /// while the gesture is live, and deliberately not in the model.
+  final bool linked;
+
+  /// Tie or untie the pair. Null where nothing can write — the Timeline's
+  /// fold-out today — which is what makes the chain absent rather than dead.
+  final VoidCallback? onToggleLink;
 
   const EffectPointRowFrb({
     super.key,
@@ -1231,9 +1280,28 @@ class EffectPointRowFrb extends StatelessWidget {
     required this.onWrite,
     required this.onLive,
     this.twoColumn = false,
-    this.pickPixels,
     this.enabled = true,
+    this.linked = false,
+    this.onToggleLink,
   });
+
+  /// Whether the pair takes the **position dropper**, and in what unit a pick
+  /// writes — read off the declaration (K-443), never off the parameter's id.
+  ///
+  /// `null` is no dropper. `Px` writes comp PIXELS (fraction × comp size, read
+  /// at CLICK time, never in a rebuild — K-184, K-260), and `Percent` writes
+  /// fraction × 100, which is what Radial blur's Centre has always been. Every
+  /// other unit gets no crosshair: a point picked off the picture is a
+  /// *position*, and no arrangement of degrees or seconds is one.
+  ///
+  /// This replaced a Dart map from parameter id to "pixels or per cent", which
+  /// could not tell Radial blur's per-cent `centre_x` from the dozen effects
+  /// whose `centre_x` is px@comp — so all of them wrote per cent.
+  bool? get _pickPixels => switch (xParam.unit) {
+        BridgeUnit.px => true,
+        BridgeUnit.percent => false,
+        _ => null,
+      };
 
   BridgeScalar? _scalar(BridgeEffectValue? v) => switch (v) {
         BridgeEffectValue_Float(:final field0) => field0,
@@ -1292,6 +1360,42 @@ class EffectPointRowFrb extends StatelessWidget {
     Widget greyed(Widget child) =>
         enabled ? child : IgnorePointer(child: child);
 
+    // **The chain, while it is on.** Scaling the sibling is UI-time
+    // arithmetic for the life of the gesture — the document's business is only
+    // *which* pairs are tied (K-443), so nothing below reaches the engine
+    // except the two writes it would have made anyway.
+    //
+    // The factor comes off the well being dragged: `next / before`. Two cases
+    // leave the sibling alone rather than guessing. A value of **nought** has
+    // no factor at all — every number is nought times something — so a pair
+    // dragged off zero separates instead of staying stuck there. And a
+    // **keyframed** sibling is left alone too: scaling it means rewriting a
+    // whole curve, which is a bigger decision than a chain glyph, and one
+    // nobody has made.
+    //
+    // ponytail: proportional writes cover the static case, which is every
+    // point pair nobody has animated. A keyed sibling wants a decision about
+    // what "scale a curve" means before it can be written.
+    double? siblingValue(BridgeParamInfo other, double factor) {
+      if (!linked) return null;
+      final scalar = other.id == xParam.id ? sx : sy;
+      if (scalar is! BridgeScalar_Static) return null;
+      return scalar.field0 * factor;
+    }
+
+    void writeChannel(BridgeParamInfo param, double next,
+        {required bool live}) {
+      final write = live ? onLive : onWrite;
+      write(id, param.id, BridgeEffectValue.float(BridgeScalar.static_(next)));
+      final scalar = param.id == xParam.id ? sx : sy;
+      if (scalar is! BridgeScalar_Static || scalar.field0 == 0) return;
+      final other = param.id == xParam.id ? yParam : xParam;
+      final scaled = siblingValue(other, next / scalar.field0);
+      if (scaled == null) return;
+      write(
+          id, other.id, BridgeEffectValue.float(BridgeScalar.static_(scaled)));
+    }
+
     Widget field(BridgeParamInfo param, BridgeScalar? scalar) {
       if (scalar == null) return Text('—', style: t.small);
       final kind = param.kind;
@@ -1327,24 +1431,49 @@ class EffectPointRowFrb extends StatelessWidget {
           max: kind.hardMax ?? 1000000,
           speed: speed,
           decimals: 2,
-          onChanged: (v) => onWrite(id, param.id,
-              BridgeEffectValue.float(BridgeScalar.static_(v.toDouble()))),
-          onChangeLive: (v) => onLive(id, param.id,
-              BridgeEffectValue.float(BridgeScalar.static_(v.toDouble()))),
-          onChangeEnd: (v) => onWrite(id, param.id,
-              BridgeEffectValue.float(BridgeScalar.static_(v.toDouble()))),
+          // Typing keeps the ratio too, not only dragging: the chain is about
+          // the two numbers, not about which gesture moved one of them.
+          onChanged: (v) => writeChannel(param, v.toDouble(), live: false),
+          onChangeLive: (v) => writeChannel(param, v.toDouble(), live: true),
+          onChangeEnd: (v) => writeChannel(param, v.toDouble(), live: false),
         ),
       );
     }
 
+    final pickPixels = _pickPixels;
     final control = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         field(xParam, sx),
-        const SizedBox(width: 6),
+        // The chain, **between** the two wells, which is where the mockup puts
+        // it: it belongs to neither half and to both.
+        if (onToggleLink != null) ...[
+          const SizedBox(width: effectRiderGap),
+          LumitTooltip(
+            message: linked ? l10n.tipUnlinkPair : l10n.tipLinkPair,
+            child: GestureDetector(
+              key: ValueKey<String>('fx-pair-link-$id-${xParam.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggleLink,
+              child: LumitIcon(
+                linked ? LumitIcons.link : LumitIcons.unlink,
+                size: 10,
+                colour: linked ? t.textPrimary : t.textMuted,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(width: effectRiderGap),
         field(yParam, sy),
+        // **One rider for the pair**, after both wells, as the mockup draws
+        // it: x and y are two halves of one measurement, and stating the unit
+        // twice would read as two.
+        if (unitRiderText(xParam.unit) case final unit?) ...[
+          const SizedBox(width: effectRiderGap),
+          Text(unit, style: unitRiderStyle(t)),
+        ],
         if (pickPixels != null) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: effectRiderGap),
           _DropperButton(
             id: 'fx-$id-${xParam.id}',
             glyph: LumitIcons.pointPicker,
@@ -1354,12 +1483,13 @@ class EffectPointRowFrb extends StatelessWidget {
               reads: DropperReads.position,
               label: stem,
               onPick: (sample) {
-                // Pixel pairs write fraction × comp size (K-260); the legacy
-                // %-pairs write fraction × 100. The size is read here, at
-                // click time — a pick is an edit, not a rebuild (K-184).
+                // A `Px` pair writes fraction × comp size (K-260); a `Percent`
+                // pair writes fraction × 100. Which of the two it is comes
+                // from the declaration. The size is read here, at click time —
+                // a pick is an edit, not a rebuild (K-184).
                 double x = sample.xFrac * 100;
                 double y = sample.yFrac * 100;
-                if (pickPixels == true) {
+                if (pickPixels) {
                   try {
                     final size = comp.getSize();
                     x = sample.xFrac * size.width;
@@ -1368,6 +1498,9 @@ class EffectPointRowFrb extends StatelessWidget {
                     return; // the comp has gone; drop the pick
                   }
                 }
+                // Both halves at once, so a pick is never scaled by the chain:
+                // it is a position, and a position is stated rather than
+                // nudged.
                 onWrite(id, xParam.id,
                     BridgeEffectValue.float(BridgeScalar.static_(x)));
                 onWrite(id, yParam.id,
@@ -1402,18 +1535,6 @@ class EffectPointRowFrb extends StatelessWidget {
   }
 }
 
-/// The `_x` parameters whose pair takes the position dropper, mapped to the
-/// unit it writes: true = comp pixels (the K-260 convention), false = % of
-/// frame (the legacy Radial blur centre, until it migrates).
-const Map<String, bool> pickablePointParams = {
-  'light_x': true,
-  'centre_x': false,
-  // Depth of field's Focus point (K-313): px@comp, and the reason the control
-  // exists at all — clicking the thing you want sharp beats reading a depth
-  // value off the Depth map view and typing it in.
-  'focus_point_x': true,
-};
-
 /// The effect schema, fetched once per session and then answered from here.
 ///
 /// `listEffects` serialises every built-in's declaration and `listParameters`
@@ -1441,6 +1562,29 @@ final Map<String, List<BridgeEnabledWhen>> _enabledWhenSchema = {};
 /// groups: which rows go quiet while another control has taken them over.
 List<BridgeEnabledWhen> cachedListEnabledWhen(String effect) =>
     _enabledWhenSchema[effect] ??= listEnabledWhen(effect: effect);
+
+final Map<String, List<BridgeParamPair>> _pairSchema = {};
+
+/// An effect's **vector pairs** (K-443) — the `_x`/`_y` runs the panel folds
+/// into one point row — memoised like the rest of the schema, and for the same
+/// reason: it never changes, and a fetch per card per rebuild is the traffic
+/// the budget test forbids.
+///
+/// Read from the declaration rather than worked out from the ids here. The
+/// convention is the same one either way; having the engine state it is what
+/// lets the panel, the link flag on the instance and the render agree about
+/// what a pair *is* without three copies of the rule.
+List<BridgeParamPair> cachedListPairs(String effect) =>
+    _pairSchema[effect] ??= listPairs(effect: effect);
+
+/// The stem the pair beginning at `xId` is keyed under, or null when that
+/// parameter does not begin one.
+String? pairStemOf(String effect, String xId) {
+  for (final pair in cachedListPairs(effect)) {
+    if (pair.x == xId) return pair.stem;
+  }
+  return null;
+}
 
 /// Which of `effect`'s parameters are currently NOT editable, given the values
 /// the panel is showing.

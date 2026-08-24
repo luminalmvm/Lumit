@@ -623,6 +623,33 @@ class _EffectSection extends StatelessWidget {
     }
   }
 
+  /// Chain or unchain a vector pair (K-443).
+  ///
+  /// Staged onto a fresh handle and committed with the stack, exactly as a
+  /// rename is: one `SetLayerEffects`, one undo step, the shape every effect
+  /// edit has. The **proportional drag itself never comes here** — that is
+  /// arithmetic the row does while a gesture is live, and the document's
+  /// business is only which pairs are tied together.
+  void _togglePairLink(String stem) {
+    final stack = layer.getEffects();
+    for (final instance in stack) {
+      if (instance.id() != info.id) continue;
+      // The engine answers whether anything moved, so a toggle that would
+      // undo to itself commits nothing.
+      if (!instance.setPairLinked(
+          stem: stem, linked: !info.linkedPairs.contains(stem))) {
+        return;
+      }
+      try {
+        layer.setEffects(effects: stack);
+      } catch (_) {
+        // The stack changed under us; re-reading is the recovery.
+      }
+      break;
+    }
+    onStackChanged();
+  }
+
   /// Put every parameter back to the value its schema declares, and drop any
   /// curve on it — one op, so one undo step for the whole reset.
   ///
@@ -879,6 +906,7 @@ class _EffectSection extends StatelessWidget {
             param.kind is BridgeParamKind_Float &&
             next.kind is BridgeParamKind_Float;
         if (isPair) {
+          final stem = pairStemOf(info.name, param.id);
           out.add(EffectPointRowFrb(
             key: ValueKey<String>('fx-row-$id-${param.id}-pair'),
             effectId: id,
@@ -897,7 +925,11 @@ class _EffectSection extends StatelessWidget {
             // declares them.
             enabled:
                 !disabled.contains(param.id) || !disabled.contains(next.id),
-            pickPixels: pickablePointParams[param.id],
+            // The chain (K-443). The stem is the schema's key for the pair,
+            // and which pairs are tied is on the instance, so both come out of
+            // data the card already holds — no call rides this rebuild.
+            linked: stem != null && info.linkedPairs.contains(stem),
+            onToggleLink: stem == null ? null : () => _togglePairLink(stem),
           ));
           i += 2;
         } else {
