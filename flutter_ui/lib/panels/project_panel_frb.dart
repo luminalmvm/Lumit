@@ -24,8 +24,9 @@
 // double-clicking empty space imports. Missing footage wears the mockup's
 // `missing` badge, and that badge *is* the relink control — clicking it opens
 // the file picker, which is where the old inline "Relink…" button's job went.
-// The "show only missing" filter moved onto the bottom bar's count, where the
-// mockup writes `10 items · 1 missing`.
+// The "show only missing" filter moved onto the bottom bar's count, which
+// reads `1 missing · 10 items`: the owner's order, with the total hard right
+// where the eye looks for it and the broken half beside it.
 //
 // **What the panel reads and when.** The handles *are* the identity: a row
 // holds an `ItemReference` and calls `rename`/`delete`/`moveToRoot` straight on
@@ -152,6 +153,18 @@ const List<int> projectFilterLabels = [1, 4, 2, 3, 8];
 
 /// The gap between every element in a row, headers included.
 const double projectRowGap = 8;
+
+/// What a glyph in this panel draws at (K-456). The set is still drawn on the
+/// 16 grid — that is the drawing grid, not the display size — and each panel
+/// renders it at the size its own mockup computed: **13 in the tree's rows,
+/// 14 on the bottom bar**. The slight softening of a 1.5-unit stroke at these
+/// sizes is the mockup's own look, and is accepted as such.
+///
+/// The twirl's slot takes the row size too, so the twirl, the type glyph and
+/// the name stay one cluster: shrinking one of the two and not the other would
+/// leave the names 3px out of the mockup's columns.
+const double projectRowIconSize = 13;
+const double projectFooterIconSize = 14;
 
 /// A row's own inset. The header's left is 10 rather than 8: the heading words
 /// stand a touch in from the twirls below them, as the mockup draws it.
@@ -1005,7 +1018,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// **Import lives here** although the mockup draws only Folder and
   /// Composition — it is a command the panel has always carried and the mockup
   /// gave it no other home, so it takes the mockup's own icon-and-kicker shape
-  /// rather than being dropped. The count's `· n missing` half is the
+  /// rather than being dropped. The count's `n missing ·` half is the
   /// "show only missing" filter, which the mockup likewise has no row for.
   Widget _footer(LumitTheme t,
       {required int items, required int missing, required double width}) {
@@ -1066,12 +1079,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             ),
           ),
           const Spacer(),
-          // The count never pushes the bar wider than the panel: it is the
-          // flexible text the width ladder's first step truncates (§12A.6).
-          Flexible(
-            child: Text(l10n.projectItemCount(items),
-                style: count, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
+          // The missing half reads *before* the total, so the bar ends on the
+          // item count (the owner's order). The two stay separate strings: a
+          // translator sees each phrase whole, and the order is the layout's
+          // business rather than something spliced into a sentence.
           if (missing > 0)
             LumitTooltip(
               message: active ? l10n.tipShowEverything : l10n.tipMissingOnly,
@@ -1080,7 +1091,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                 behavior: HitTestBehavior.opaque,
                 onTap: () => setState(() => _missingOnly = !_missingOnly),
                 child: Text(
-                  ' · ${l10n.projectMissingCount(missing)}',
+                  '${l10n.projectMissingCount(missing)} · ',
                   style:
                       count.copyWith(color: active ? t.warning : t.textMuted),
                   maxLines: 1,
@@ -1088,6 +1099,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                 ),
               ),
             ),
+          // The count never pushes the bar wider than the panel: it is the
+          // flexible text the width ladder's first step truncates (§12A.6).
+          Flexible(
+            child: Text(l10n.projectItemCount(items),
+                style: count, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
     );
@@ -1110,7 +1127,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            lumitIcon(icon, size: iconSize, color: t.textMuted),
+            lumitIcon(icon, size: projectFooterIconSize, color: t.textMuted),
             if (label != null) ...[
               const SizedBox(width: _footerIconGap),
               Text(
@@ -1890,7 +1907,7 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
   /// and every row keeps the slot whether or not it has one, so a child still
   /// lines up one indent step right of the folder holding it.
   Widget _twirl(LumitTheme t) => SizedBox(
-        width: iconSize,
+        width: projectRowIconSize,
         child: item is! ItemReference_Folder
             ? null
             : GestureDetector(
@@ -1901,7 +1918,7 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
                   widget.folderOpen
                       ? LumitIcon.twirlOpen
                       : LumitIcon.twirlClosed,
-                  size: iconSize,
+                  size: projectRowIconSize,
                   color: t.textMuted,
                 ),
               ),
@@ -1924,7 +1941,7 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
     final (icon, tint) = _iconFor(item, t);
     return lumitIcon(
       widget.missing ? LumitIcon.unlink : icon,
-      size: iconSize,
+      size: projectRowIconSize,
       color: widget.missing
           ? t.warning
           : widget.label != 0

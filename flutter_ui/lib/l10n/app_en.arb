@@ -3984,7 +3984,7 @@
   },
   "projectMissingCount": "{count, plural, =1{1 missing} other{{count} missing}}",
   "@projectMissingCount": {
-    "description": "Second half of the Project panel's bottom-bar count, after the item total: how many files cannot be found. Clicking it filters the panel to just those.",
+    "description": "First half of the Project panel's bottom-bar count, printed before the item total and separated from it by a middle dot: how many files cannot be found. Clicking it filters the panel to just those.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -4006,7 +4006,7 @@
   },
   "projectItemCount": "{count, plural, =1{1 item} other{{count} items}}",
   "@projectItemCount": {
-    "description": "Project panel info line for a folder: how many things it holds.",
+    "description": "How many things the Project panel holds: the preview card's line for a folder, and the total at the far right of the panel's bottom bar.",
     "placeholders": {
       "count": {
         "type": "int"

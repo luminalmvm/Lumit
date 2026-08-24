@@ -263,7 +263,13 @@ enum LumitIcon {
 /// the whole set reads as smeared and unevenly weighted. That is the "crunch",
 /// and no amount of anti-aliasing fixes it — anti-aliasing is what is *doing*
 /// it. The cure is drawing at a size whose stroke a pixel can hold. Lumit's own
-/// set is drawn on a 16-unit grid instead, which is why 16 is its floor.
+/// set is drawn on a 16-unit grid instead, which is why this is the default.
+///
+/// **It is a default, not a law** (K-456, superseding K-209's fixed 16): a
+/// panel whose approved mockup computes a smaller glyph renders it at the
+/// mockup's size and passes that size here — the Project panel's 13 in a row
+/// and 14 on its bottom bar. The stroke softens a little there, and that is
+/// the mockups' own look.
 const double iconSize = 16;
 const double iconSizeTransport = 20;
 

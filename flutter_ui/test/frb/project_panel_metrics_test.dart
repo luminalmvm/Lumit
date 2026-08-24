@@ -177,6 +177,50 @@ void main() {
           reason: 'the fps column is the mockup\'s 22');
     });
 
+    /// 3b. **The glyphs are the mockup's sizes, and the row cluster with
+    /// them** (K-456: the 16 grid is what a glyph is drawn on, not what it
+    /// displays at). A row's twirl slot and type mark are 13 square, so a name
+    /// starts at 8 + 13 + 8 + 13 + 8 = 50, and a child sits one indent step
+    /// further in. The bottom bar's controls draw at 14.
+    testWidgets('glyphs are 13 in a row and 14 on the bottom bar',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 360);
+      await settleFrb(tester, minRounds: 6);
+
+      // A folder's twirl is the one glyph in a row with a key of its own.
+      final twirl = find.byWidgetPredicate((w) =>
+          w is GestureDetector &&
+          w.key is ValueKey<String> &&
+          (w.key! as ValueKey<String>).value.startsWith('project-twirl-'));
+      expect(twirl, findsWidgets);
+      expect(tester.getRect(twirl.first).size,
+          const Size(projectRowIconSize, projectRowIconSize),
+          reason: 'the mockup draws a row\'s glyph 13 square');
+
+      // Twirl slot, type mark and the two 8px gaps put a top-level name at 50.
+      const nameLeft = projectRowPadding +
+          projectRowIconSize +
+          projectRowGap +
+          projectRowIconSize +
+          projectRowGap;
+      expect(nameLeft, 50, reason: 'the mockup\'s own name column');
+      expect(tester.getRect(find.text('Compositions')).left,
+          closeTo(nameLeft, 0.01),
+          reason: 'the row cluster holds the mockup\'s name column');
+      expect(tester.getRect(find.text('Scene')).left,
+          closeTo(nameLeft + projectIndentPerDepth, 0.01),
+          reason: 'a child is one indent step further in');
+
+      // The bottom bar's controls are a size up, as its mockup computes them.
+      expect(
+          tester
+              .getRect(find.byKey(const ValueKey<String>('project-new-folder')))
+              .height,
+          projectFooterIconSize,
+          reason: 'the bottom bar draws its glyphs at 14');
+    });
+
     /// 4. **The faces are the mockup's.** Column headings are kickers — Geist
     /// Mono at 9 with 1.08px of tracking, muted; the values under them are
     /// plain mono at 10, also muted (§7.1's mono-for-numbers rule).
@@ -314,6 +358,38 @@ void main() {
           reason: 'the count is factual, not a container label');
       expect(count.data, contains('3 items'),
           reason: 'the folder, the comp inside it, and the clip');
+    });
+
+    /// 8a. **The count reads `1 missing · 10 items`.** The total is the bar's
+    /// last word — hard right, where the eye looks for it — and the missing
+    /// half sits to its left, still the "show only missing" control.
+    testWidgets('the missing half reads before the item total', (tester) async {
+      final p = freshProject();
+      p.state.project!.newComposition(name: 'Scene');
+      p.state.project!.importFootage(path: 'C:/nowhere/gone.mp4');
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(
+        tester,
+        until: () =>
+            find.byKey(const ValueKey('missing-toggle')).evaluate().isNotEmpty,
+      );
+
+      final footer = find.byKey(const ValueKey<String>('project-footer'));
+      final missing =
+          find.descendant(of: footer, matching: find.textContaining('missing'));
+      final items =
+          find.descendant(of: footer, matching: find.textContaining('items'));
+      expect(missing, findsOneWidget);
+      expect(items, findsOneWidget);
+      expect(tester.widget<Text>(missing).data, startsWith('1 missing'),
+          reason: 'the two halves stay two strings, ordered by the layout');
+      expect(tester.getRect(missing).right,
+          lessThanOrEqualTo(tester.getRect(items).left),
+          reason: 'missing first, then the total at the bar\'s far right');
     });
 
     /// 8b. **The Path column is quieter than its neighbours.** It is the one

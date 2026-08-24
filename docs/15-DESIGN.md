@@ -361,8 +361,12 @@ crosses over the day its glyph exists, and no panel changes. The set's grammar i
   glyph's own border, so the label stays readable.
 - Layer-type glyphs in the Timeline are tinted with the layer-type family (§6.1).
 - Pixel honesty carries over from K-209: a 1.5px stroke is offset so it lands on pixel
-  centres rather than straddling boundaries at 100% scaling, and 16px is a floor, not a
-  preference.
+  centres rather than straddling boundaries at 100% scaling. **The 16 is the drawing grid,
+  not the display size** (K-456, superseding K-209's fixed 16 where a mockup renders
+  smaller): every glyph is still drawn on the 16 grid, and each panel renders it at the
+  size its own approved mockup computed — in the Project panel, 13 in the tree's rows and
+  14 on the bottom bar. The slight softening of the stroke at a non-native size is the
+  mockups' own look and is accepted as such.
 - Rules that stand from the beginning: monochrome only (bar the Channels indicator above),
   no filled multi-colour icons, and **no emoji or bare symbol characters in UI ever** — a
   glyph is either from the icon set or deliberately painter-drawn (keyframe diamonds on
@@ -981,8 +985,13 @@ carries. The rules worth writing down:
   badge reports a state, so it is deliberately **not** a kicker.
 - **The search well is an inset well** (§2.1), the row's full width, at the standard 20.
 - **The bottom bar carries the new-item controls at the left** — icon plus a 0.08em kicker
-  word — **and a factual count at the right** (`10 items · 1 missing`) in mono at 0.06em,
-  sentence case, never capitals: it is a statement, not a container label.
+  word — **and a factual count at the right** (`1 missing · 10 items`) in mono at 0.06em,
+  sentence case, never capitals: it is a statement, not a container label. The item total
+  sits hard right, where the eye looks for it, and the missing half reads to its left —
+  and that half is the "show only missing" filter. The two are separate strings laid out
+  in that order, never one sentence with fragments spliced into it.
+- **Glyphs render at 13 in the rows and 14 on the bottom bar** (K-456, §5): the 16 grid is
+  what they are drawn on, and the mockup's computed sizes are what they display at.
 - **Width degrades in this order**: the preview card goes first (the docked mockup has
   none at 260), then Path, then Items, then fps, then Size; below the panel's minimum the
   tree scrolls sideways under the strip that has always been drawn for it. The bottom
@@ -1050,6 +1059,8 @@ a plain constant in the code rather than a token with two equal values.
 | Project panel: state badges (`in use`, `missing`) | 14 | 14 |
 | Project panel: horizontal scrollbar strip (a 4px track inset 8 either side) | 6 | 6 |
 | Project panel: bottom bar (new-item controls and the item count) | 20 | 20 |
+| Project panel: glyphs — the twirl and type marks in a row (K-456) | 13 | 13 |
+| Project panel: glyphs — the bottom bar's new-item controls (K-456) | 14 | 14 |
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
 | Dialog value wells and dropdowns | 22 | 22 |
