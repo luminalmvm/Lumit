@@ -102,7 +102,13 @@ Future<void> main() async {
   await sizeWindow(1720, 1000);
   await pause(5);
 
-  Rect panel() => boxOfType(TimelinePanelFrb)!.inflate(dockTabInset);
+  // Inflate for the tab strip, then clamp inside the window: a crop that
+  // pokes past the frame is an ffmpeg refusal and a silent full-window shot.
+  Rect panel() {
+    final b = boxOfType(TimelinePanelFrb)!.inflate(dockTabInset);
+    return Rect.fromLTRB(b.left.clamp(0, 1720), b.top.clamp(0, 1000),
+        b.right.clamp(0, 1720), b.bottom.clamp(0, 1000));
+  }
 
   // 1 — Layers mode, everything shut: summary diamonds on both bars.
   await captureUi('layers-shut.png', crop: panel());
@@ -110,6 +116,11 @@ Future<void> main() async {
   // 2 — the Title layer twirled open: two lanes of shaped marks.
   final id = title.internallayerId;
   await tapKey('tl-twirl-$id');
+  await pause(1);
+  // The lanes live under the groups: Transform for the shaped marks,
+  // Effects for the Glow's rows.
+  await tapKey('tl-twirl-$id/transform');
+  await tapKey('tl-twirl-$id/effects');
   await pause(1);
   await captureUi('layers-open.png', crop: panel());
 
