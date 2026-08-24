@@ -440,6 +440,19 @@ pub fn export_presets_path() -> Option<PathBuf> {
     Some(dirs.data_dir().join("export-presets.json"))
 }
 
+/// The file name of the sound an export plays when it finishes, if the
+/// *When done → make a noise* hook is set (docs/07 §11).
+pub const EXPORT_DONE_SOUND: &str = "export-done.wav";
+
+/// Where that sound lives in the application's own data area — the second
+/// place looked in, after a copy beside the executable, so a user can supply
+/// one without touching an installed build. `None` when the platform has no
+/// home directory; the hook is then simply silent.
+pub fn export_done_sound_path() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.data_dir().join("sounds").join(EXPORT_DONE_SOUND))
+}
+
 /// Bytes hashed from each of the head and tail of a file for its fingerprint.
 /// 64 KiB catches format headers, codec tables and trailing indexes cheaply;
 /// files smaller than two samples are hashed whole (the windows would overlap).
@@ -2093,6 +2106,7 @@ mod tests {
                 (NodeRef::Driver(wiggle_id), [120.5, -40.25]),
                 (NodeRef::Out, [640.0, 0.0]),
             ],
+            ..Default::default()
         };
         let wanted = layer.graph.clone();
         let mut wired = doc.clone();

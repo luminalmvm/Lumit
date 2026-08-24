@@ -455,7 +455,11 @@ impl Crop {
     pub fn apply(self, frame: &[u8], w: u32, h: u32, bytes_per_px: usize) -> Vec<u8> {
         let (x, y, out_w, out_h) = self.window(w, h);
         let src_row = (w as usize).saturating_mul(bytes_per_px);
-        if self.is_none() || frame.len() < src_row.saturating_mul(h as usize) {
+        // Nothing to crop, an empty frame, or a buffer smaller than the frame
+        // it claims to be: hand it back whole. No panics in engine crates
+        // (docs/14 §4), and a caller bug must show as a full-size frame rather
+        // than a crash halfway through an export.
+        if self.is_none() || w == 0 || h == 0 || frame.len() < src_row.saturating_mul(h as usize) {
             return frame.to_vec();
         }
         let dst_row = (out_w as usize) * bytes_per_px;
@@ -649,13 +653,11 @@ pub enum WhenDone {
 /// directory (a user's own). `None` when neither exists — the hook is silent
 /// rather than faulty when no sound has been supplied.
 pub fn done_sound_path() -> Option<PathBuf> {
-    const NAME: &str = "export-done.wav";
-    let beside_exe = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join("sounds").join(NAME)));
-    let in_data = lumit_project::presets_dir()
-        .and_then(|dir| dir.parent().map(|d| d.join("sounds").join(NAME)));
-    [beside_exe, in_data]
+    let beside_exe = std::env::current_exe().ok().and_then(|exe| {
+        exe.parent()
+            .map(|dir| dir.join("sounds").join(lumit_project::EXPORT_DONE_SOUND))
+    });
+    [beside_exe, lumit_project::export_done_sound_path()]
         .into_iter()
         .flatten()
         .find(|p| p.is_file())
@@ -1882,6 +1884,9 @@ mod tests {
         // whole rather than panicking mid-export.
         assert_eq!(Crop::NONE.apply(&frame, 4, 3, 1), frame);
         assert_eq!(one_off_each_side.apply(&[1, 2, 3], 4, 3, 1), vec![1, 2, 3]);
+        // Regression: a zero-sized frame used to index past an empty buffer.
+        assert!(one_off_each_side.apply(&[], 0, 0, 4).is_empty());
+        assert!(one_off_each_side.apply(&[], 4, 0, 4).is_empty());
     }
 
     /// The region of interest crosses as fractions (K-362) and becomes pixel
