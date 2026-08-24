@@ -448,6 +448,14 @@ trim. Needs the clip's source bounds over the bridge — the same pair
 `BarBounds` already carries for a layer — after which the lane's ghost is one
 more Positioned per clip.
 
+**A comp marker's duration** (docs/15-DESIGN.md §12A.1).
+The approved timeline design draws a marker as a pill that can carry a span —
+a bar running from the marker's frame for its duration — but `BridgeMarker`
+and the engine's marker model know only a moment: frame and label. Needs a
+duration (in frames, default zero) on the engine marker, over the bridge, and
+in the project format; the ruler already positions the pill, so the span is
+one more sized box once the number exists.
+
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
 solve link and Convert to keyframes, all against an injected solve. Stage 2 landed
