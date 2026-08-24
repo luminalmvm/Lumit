@@ -199,6 +199,7 @@ pub fn stress_document(p: &StressParams) -> Document {
     Document {
         id: uid(0, 0),
         items,
+        item_labels: Default::default(),
         auto_folders: AutoFolders::default(),
         // The default, on, like any new project (K-274).
         anti_aliasing: Default::default(),
