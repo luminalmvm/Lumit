@@ -8475,5 +8475,17 @@
         "type": "int"
       }
     }
+  },
+  "panelNodePreview": "Node preview",
+  "@panelNodePreview": {
+    "description": "The name of the panel showing the picture at whichever box is picked in the Graph panel — the effect chain rendered up to that point. A panel name, so a noun phrase."
+  },
+  "nodePreviewNoSelection": "Pick a node in the Graph panel.",
+  "@nodePreviewNoSelection": {
+    "description": "Empty-state line in the Node preview panel when no box has been picked on the graph canvas, so there is no point in the chain to show the picture at."
+  },
+  "nodePreviewNoPicture": "A driver makes a value, not a picture.",
+  "@nodePreviewNoPicture": {
+    "description": "Empty-state line in the Node preview panel when the picked box is a driver — a box that produces a number, colour or other value rather than an image — so there is nothing to show a picture of."
   }
 }

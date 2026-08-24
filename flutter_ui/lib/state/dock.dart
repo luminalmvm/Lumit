@@ -30,7 +30,14 @@ enum Panel {
   /// The parameter rows of whichever box the Graph panel has picked (K-471) —
   /// the Nodes workspace's lower-right column. The Effect controls panel lists
   /// the whole stack; this one answers "what is selected", drivers included.
-  node;
+  node,
+
+  /// The picture **at** whichever box the Graph panel has picked (K-448) — the
+  /// chain rendered up to that point, read-only, beside the Viewer rather than
+  /// instead of it. It opens in the Effects workspace's right-hand sidebar,
+  /// tabbed behind rather than fronted: it answers a question you go looking
+  /// for, and the arrangement should not change until you do.
+  nodePreview;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -43,6 +50,7 @@ enum Panel {
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,
         Panel.node => l10n.panelNode,
+        Panel.nodePreview => l10n.panelNodePreview,
         Panel.debug => l10n.panelDebug
       };
 }
@@ -193,6 +201,11 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       // Effect controls promoted to its own column beside the Project panel;
       // Effects & presets expanded right with Scopes tabbed behind; the
       // Timeline slightly shorter than Edit.
+      //
+      // The Node preview (K-448) rides that right-hand column as a further
+      // tab, behind rather than fronted: this is the workspace it opens in,
+      // and "openable in a sidebar" is a tab you reach for, not a pane that
+      // takes width from the Viewer before anyone has asked for it.
       WorkspacePreset.effects => DockSplit(
           DockAxis.vertical,
           [
@@ -208,6 +221,7 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                 DockTabs([
                   DockPane(Panel.effectsAndPresets),
                   DockPane(Panel.scopes),
+                  DockPane(Panel.nodePreview),
                   DockPane(Panel.debug),
                 ]),
               ],

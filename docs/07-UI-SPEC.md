@@ -106,9 +106,10 @@ the panel arrangement is the local user's own.
 
 ### 1.6 Shipped workspace presets
 
-Structure only, with two exceptions: **Retiming**'s panel inventory differs because the
-Easing panel is in no other arrangement (K-349), and **Nodes**' (K-445, K-471) because the
-Graph and Node panels are in no other.
+Structure only, with three exceptions: **Retiming**'s panel inventory differs because the
+Easing panel is in no other arrangement (K-349), **Nodes**' (K-445, K-471) because the
+Graph and Node panels are in no other, and **Effects**' (K-448) because the Node preview
+opens there and nowhere else.
 
 - **Edit** (default): Project panel left, fronted, with Effect Controls and Hierarchy tabbed
   behind it; Viewer centre; **right column Effects & Presets, fronted**, with Scopes and the
@@ -118,7 +119,12 @@ Graph and Node panels are in no other.
   across the upper band.
 - **Effects**: Effect Controls promoted to its own left column beside the Project panel;
   Effects & Presets expanded on the right with Scopes tabbed behind; Timeline slightly
-  shorter than Edit.
+  shorter than Edit. The **Node preview panel** (K-448, K-486) rides that right-hand
+  column as a further tab, **behind rather than fronted**: this is the workspace it opens
+  in, and "openable in a sidebar" means a tab you reach for, not a pane that takes width
+  from the Viewer before anyone has asked for it. It shows the picture *at* whichever box
+  the Graph panel has picked — the chain rendered up to that point — and is in no other
+  arrangement.
 - **Colour**: Scopes given a wide right-hand column showing waveform and vectorscope
   simultaneously (two panels stacked); Effect Controls left; Effects & Presets tabbed away;
   Viewer centre-dominant.

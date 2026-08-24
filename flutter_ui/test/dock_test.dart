@@ -39,26 +39,56 @@ void main() {
     expect((root.children[1] as DockPane).panel, Panel.timeline);
   });
 
-  /// Every panel appears at most once, and all but three appear.
+  /// Every panel appears at most once, and all but four appear.
   ///
   /// This used to read "every panel, exactly once", and the exceptions are
-  /// named one by one on purpose: a fourth wanting the same exemption must be
+  /// named one by one on purpose: a fifth wanting the same exemption must be
   /// added here rather than this loosening to "some panels are missing".
   ///
-  /// Three panels are deliberately not in the default arrangement, and all for
+  /// Four panels are deliberately not in the default arrangement, and all for
   /// the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
   /// Retiming (K-349); the **Graph** and **Node** panels to Nodes (K-445,
-  /// K-471). All three are one tick away in the Window menu.
+  /// K-471); the **Node preview** opens in the Effects workspace's sidebar
+  /// (K-448). All four are one tick away in the Window menu.
   test(
       'no panel appears twice in the default workspace, and only Easing, '
-      'Graph and Node are absent', () {
+      'Graph, Node and Node preview are absent', () {
     final panels = panelsIn(defaultLayout());
     expect(panels.toSet().length, panels.length);
     expect(
         panels.toSet(),
         Panel.values.toSet()
-          ..removeAll([Panel.easing, Panel.graph, Panel.node]));
+          ..removeAll([
+            Panel.easing,
+            Panel.graph,
+            Panel.node,
+            Panel.nodePreview,
+          ]));
+  });
+
+  /// K-448: the Node preview opens in a **sidebar of the Effects workspace**,
+  /// tabbed behind rather than fronted. Behind, because it answers a question
+  /// you go looking for; present, because "openable in a sidebar" has to mean
+  /// somewhere in particular or it means the Window menu and nothing else.
+  test('the Effects workspace carries the Node preview, tabbed behind', () {
+    final root = presetLayout(WorkspacePreset.effects);
+    final upper = root.children[0] as DockSplit;
+    final sidebar = upper.children[3] as DockTabs;
+    expect(
+      [for (final c in sidebar.children) c.panel],
+      [
+        Panel.effectsAndPresets,
+        Panel.scopes,
+        Panel.nodePreview,
+        Panel.debug,
+      ],
+    );
+    expect(sidebar.active, 0,
+        reason: 'the sidebar still opens on Effects & presets');
+    expect(panelVisible(presetLayout(WorkspacePreset.edit), Panel.nodePreview),
+        isFalse,
+        reason: 'and it is in no other arrangement');
   });
 
   test('serialisation round-trips the tree', () {
