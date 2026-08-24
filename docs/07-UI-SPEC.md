@@ -139,7 +139,11 @@ Graph and Node panels are in no other.
   drawing governs the layout; the panel rules are 15-DESIGN §12A.7 and the model is
   [impl/node-graph.md](impl/node-graph.md). The **Node preview panel** (K-448) is not in
   this preset — it opens in a sidebar of the Effects workspace, beside rather than
-  replacing this preset's small viewer.
+  replacing this preset's small viewer. It is also the one preset whose root splits
+  **across** rather than down, because the Timeline runs under the graph column only:
+  shares 0.76/0.24 across, the graph column 0.82 Graph to 0.18 Timeline, the right column
+  0.80 Viewer to 0.20 Node. It carries no Project panel, which is the drawing's own
+  inventory — wiring a layer is work you arrive at with the layer already chosen.
 
 ### 1.7 The toolbar (K-216)
 

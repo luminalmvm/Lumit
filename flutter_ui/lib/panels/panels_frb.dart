@@ -17,6 +17,7 @@ import 'effect_controls_panel_frb.dart';
 import 'effects_presets_panel_frb.dart';
 import 'graph_panel.dart';
 import 'hierarchy_panel_frb.dart';
+import 'node_panel.dart';
 import 'project_panel_frb.dart';
 import 'scopes_panel_frb.dart';
 import 'timeline_panel_frb.dart';
@@ -32,5 +33,6 @@ Widget buildPanelBodyFrb(BuildContext context, Panel panel) => switch (panel) {
       Panel.hierarchy => const HierarchyPanelFrb(),
       Panel.easing => const EasingPanelFrb(),
       Panel.graph => const GraphPanelFrb(),
+      Panel.node => const NodePanelFrb(),
       Panel.debug => const DebugPanel(),
     };

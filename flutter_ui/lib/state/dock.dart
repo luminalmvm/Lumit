@@ -25,7 +25,12 @@ enum Panel {
   /// The layer's effect stack drawn as nodes and wires, plus the drivers wired
   /// into its parameters (K-471). A second *view* of the same document, not a
   /// second document.
-  graph;
+  graph,
+
+  /// The parameter rows of whichever box the Graph panel has picked (K-471) —
+  /// the Nodes workspace's lower-right column. The Effect controls panel lists
+  /// the whole stack; this one answers "what is selected", drivers included.
+  node;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -37,6 +42,7 @@ enum Panel {
         Panel.hierarchy => l10n.panelHierarchy,
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,
+        Panel.node => l10n.panelNode,
         Panel.debug => l10n.panelDebug
       };
 }
@@ -153,12 +159,18 @@ DockSplit defaultLayout() => DockSplit(
 /// Audio preset stands in with a taller Timeline (whose waveform lanes are the
 /// v1 audio surface) until the Audio panel itself is built.
 ///
-/// Retiming is the one preset that changes the inventory rather than only the
-/// arrangement (K-349): the Easing panel is not in the others, because a panel
+/// Retiming and Nodes are the two presets that change the inventory rather
+/// than only the arrangement (K-349, K-471): the Easing panel is in no other
+/// arrangement, and neither are the Graph and Node panels, because a panel
 /// nobody asked for should not appear in an arrangement they already know.
+///
+/// The order is the strip's order, which is the drawing's: Nodes sits third,
+/// beside Effects, because both are about what an effect does rather than
+/// where a layer sits.
 enum WorkspacePreset {
   edit,
   effects,
+  nodes,
   colour,
   audio,
   retiming;
@@ -166,6 +178,7 @@ enum WorkspacePreset {
   String get title => switch (this) {
         WorkspacePreset.edit => l10n.workspaceEdit,
         WorkspacePreset.effects => l10n.workspaceEffects,
+        WorkspacePreset.nodes => l10n.workspaceNodes,
         WorkspacePreset.colour => l10n.workspaceColour,
         WorkspacePreset.audio => l10n.workspaceAudio,
         WorkspacePreset.retiming => l10n.workspaceRetiming,
@@ -203,6 +216,29 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
             DockPane(Panel.timeline),
           ],
           [0.72, 0.28],
+        ),
+      // Nodes (K-445, K-471): the graph as the main surface, and the one
+      // preset whose root splits **across** rather than down — the Timeline
+      // runs under the Graph panel only, not under the small viewer, which is
+      // what the approved Nodes-workspace drawing shows. Shares are that
+      // drawing's own proportions: 0.76/0.24 across, the graph column 0.82
+      // graph to 0.18 Timeline (the short strip), the right column 0.80
+      // Viewer — whole bar kept — to 0.20 Node panel.
+      WorkspacePreset.nodes => DockSplit(
+          DockAxis.horizontal,
+          [
+            DockSplit(
+              DockAxis.vertical,
+              [DockPane(Panel.graph), DockPane(Panel.timeline)],
+              [0.82, 0.18],
+            ),
+            DockSplit(
+              DockAxis.vertical,
+              [DockPane(Panel.viewer), DockPane(Panel.node)],
+              [0.80, 0.20],
+            ),
+          ],
+          [0.76, 0.24],
         ),
       // Scopes given a wide right-hand column; Effect controls left;
       // Effects & presets tabbed away; Viewer centre-dominant.

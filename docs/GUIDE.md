@@ -8835,11 +8835,15 @@ already exist rather than needing the plumbing rebuilt around them.
 
 **Where you meet all this.** The Graph panel follows the selected layer, like Effect
 controls. The **Nodes workspace** makes the graph the main surface, with a small viewer
-beside it and a short timeline underneath. The **Node preview panel** is a second, locked
-viewer that shows what the picture looks like at one chosen box — halfway down the stack,
-say — without soloing or bypassing anything. None of these is the engine's internal
-"evaluation graph" (§1's compiler still builds that in private); what you are looking at
-is always your own document.
+beside it and a short timeline underneath. The **Node panel** sits under that viewer and
+lists the settings of whichever box you last clicked — the same rows Effect controls
+draws, but for one box at a time, and for drivers too, which have no place in an effect
+list. Click a driver on the canvas and its Amount and Frequency are right there; click an
+effect and you get its own rows, with the driven ones saying so. The **Node preview
+panel** is a second, locked viewer that shows what the picture looks like at one chosen
+box — halfway down the stack, say — without soloing or bypassing anything. None of these
+is the engine's internal "evaluation graph" (§1's compiler still builds that in
+private); what you are looking at is always your own document.
 
 ## 21. The wordmark and the empty shell, in plain terms
 

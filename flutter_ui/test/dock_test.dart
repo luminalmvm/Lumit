@@ -39,25 +39,26 @@ void main() {
     expect((root.children[1] as DockPane).panel, Panel.timeline);
   });
 
-  /// Every panel appears at most once, and all but Easing appear.
+  /// Every panel appears at most once, and all but three appear.
   ///
-  /// This used to read "every panel, exactly once". Easing is the exception on
-  /// purpose (K-349): it belongs to the Retiming arrangement and to whoever
-  /// asks for it from the Window menu, and putting it in the default layout
-  /// would rearrange the first-run screen for a panel most projects never need.
-  /// If a *second* panel ever wants the same exemption, name it here rather
-  /// than loosening this to "some panels are missing".
-  /// Two panels are deliberately not in the default arrangement, and both for
+  /// This used to read "every panel, exactly once", and the exceptions are
+  /// named one by one on purpose: a fourth wanting the same exemption must be
+  /// added here rather than this loosening to "some panels are missing".
+  ///
+  /// Three panels are deliberately not in the default arrangement, and all for
   /// the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
-  /// Retiming (K-349) and the **Graph** panel to Nodes (K-445, K-471); both
-  /// are one tick away in the Window menu.
-  test('no panel appears twice in the default workspace, and only Easing and '
-      'Graph are absent', () {
+  /// Retiming (K-349); the **Graph** and **Node** panels to Nodes (K-445,
+  /// K-471). All three are one tick away in the Window menu.
+  test(
+      'no panel appears twice in the default workspace, and only Easing, '
+      'Graph and Node are absent', () {
     final panels = panelsIn(defaultLayout());
     expect(panels.toSet().length, panels.length);
-    expect(panels.toSet(),
-        Panel.values.toSet()..removeAll([Panel.easing, Panel.graph]));
+    expect(
+        panels.toSet(),
+        Panel.values.toSet()
+          ..removeAll([Panel.easing, Panel.graph, Panel.node]));
   });
 
   test('serialisation round-trips the tree', () {
@@ -114,7 +115,8 @@ void main() {
     });
 
     test('the last panel standing cannot be hidden', () {
-      final root = DockSplit(DockAxis.vertical, [DockPane(Panel.viewer)], [1.0]);
+      final root =
+          DockSplit(DockAxis.vertical, [DockPane(Panel.viewer)], [1.0]);
       setPanelVisible(root, Panel.viewer, false);
       expect(panelsIn(root), [Panel.viewer],
           reason: 'an empty dock has no way back');
@@ -168,6 +170,86 @@ void main() {
       final root = defaultLayout();
       setPanelVisible(root, Panel.easing, true);
       expect(panelVisible(root, Panel.easing), isTrue);
+    });
+  });
+
+  /// The Nodes preset (K-445, K-471) to the approved Nodes-workspace drawing:
+  /// the Graph panel large with a short Timeline under it, a small Viewer
+  /// upper right and the Node panel beneath that. The shares are the drawing's
+  /// own proportions, pinned here because "roughly like the picture" is not a
+  /// test.
+  group('the Nodes preset', () {
+    test('splits across, not down: the Timeline is under the graph only', () {
+      final root = presetLayout(WorkspacePreset.nodes);
+      expect(root.axis, DockAxis.horizontal,
+          reason: 'the small viewer keeps its full height beside the graph '
+              'column, so the Timeline cannot span the window');
+      expect(root.shares, [0.76, 0.24]);
+
+      final graphColumn = root.children[0] as DockSplit;
+      expect(graphColumn.axis, DockAxis.vertical);
+      expect([for (final c in graphColumn.children) (c as DockPane).panel],
+          [Panel.graph, Panel.timeline]);
+      expect(graphColumn.shares, [0.82, 0.18],
+          reason: 'the drawing shows a short Timeline strip, not a tall one');
+
+      final rightColumn = root.children[1] as DockSplit;
+      expect(rightColumn.axis, DockAxis.vertical);
+      expect([for (final c in rightColumn.children) (c as DockPane).panel],
+          [Panel.viewer, Panel.node]);
+      expect(rightColumn.shares, [0.80, 0.20]);
+    });
+
+    test('the Timeline is the ordinary one, simply given less room', () {
+      // A pane, not a tab group and not some second widget: the panel is
+      // shared with every other arrangement, and only its share differs.
+      final nodes = presetLayout(WorkspacePreset.nodes);
+      final short = (nodes.children[0] as DockSplit).children[1];
+      expect(short, isA<DockPane>());
+      expect((short as DockPane).panel, Panel.timeline);
+      expect(
+        (nodes.children[0] as DockSplit).shares[1],
+        lessThan(presetLayout(WorkspacePreset.edit).shares[1]),
+        reason: "shorter than Edit's, which is what 'short' means here",
+      );
+    });
+
+    test('is the only shipped arrangement holding the Graph and Node panels',
+        () {
+      for (final preset in WorkspacePreset.values) {
+        for (final panel in [Panel.graph, Panel.node]) {
+          expect(
+            panelVisible(presetLayout(preset), panel),
+            preset == WorkspacePreset.nodes,
+            reason: '${preset.name} should '
+                '${preset == WorkspacePreset.nodes ? '' : 'not '}'
+                'hold ${panel.name}',
+          );
+        }
+      }
+      expect(panelVisible(defaultLayout(), Panel.node), isFalse,
+          reason: 'first run is unchanged by the panel existing');
+    });
+
+    test('sits third on the strip, beside Effects', () {
+      // The strip is generated from the enum's order, and the drawing puts
+      // Nodes between Effects and Colour.
+      expect(WorkspacePreset.values.map((p) => p.name), [
+        'edit',
+        'effects',
+        'nodes',
+        'colour',
+        'audio',
+        'retiming',
+      ]);
+    });
+
+    test('the Node panel is still reachable from the Window menu', () {
+      // The menu ticks `Panel.values`, so a panel in no arrangement must still
+      // be one `setPanelVisible` can place.
+      final root = defaultLayout();
+      setPanelVisible(root, Panel.node, true);
+      expect(panelVisible(root, Panel.node), isTrue);
     });
   });
 }

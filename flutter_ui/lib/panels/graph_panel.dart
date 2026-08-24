@@ -312,7 +312,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// it, the K-344 pattern. Seeded from the document on each read.
   Map<String, Offset> _positions = {};
 
-  BridgeNodeRef? _selected;
+  /// The picked box. Mirrored into [LumitUiState.graphNode] on every write, so
+  /// the Node panel — which is a different pane of the dock, and may not even
+  /// be in the arrangement — follows the pick without this panel having to
+  /// know it is there. A getter pair rather than a `_select` method because
+  /// every site that already assigns the field then keeps working unchanged.
+  BridgeNodeRef? _selectedNode;
+
+  BridgeNodeRef? get _selected => _selectedNode;
+
+  set _selected(BridgeNodeRef? node) {
+    _selectedNode = node;
+    _ui?.graphNode.value = node;
+  }
+
   Offset _pan = Offset.zero;
   double _zoom = 1;
 

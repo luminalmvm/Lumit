@@ -24,6 +24,16 @@ void main() {
     Future<({LumitState state, LumitUiState uiState})> mount(
         WidgetTester tester) async {
       final p = freshProject();
+      // Wide enough that the strip is not scrolled off: the buttons are
+      // pressed by key, and a widget scrolled out of view cannot be tapped.
+      // The **view** has to be told, not only the MediaQuery: the tools sit in
+      // a horizontal scroll view, and what they are laid out against is the
+      // real surface, which otherwise stays at the 800x600 default and hides
+      // the last few tools behind the workspace strip.
+      const size = Size(1400, 300);
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(hostPanel(
         child: const Align(
           alignment: Alignment.topLeft,
@@ -31,9 +41,7 @@ void main() {
         ),
         state: p.state,
         uiState: p.uiState,
-        // Wide enough that the strip is not scrolled off: the buttons are
-        // pressed by key, and a widget scrolled out of view cannot be tapped.
-        size: const Size(1400, 300),
+        size: size,
       ));
       await tester.pump();
       return p;
@@ -230,6 +238,36 @@ void main() {
       await tester.pump();
 
       expect(p.uiState.workspace.activePreset, WorkspacePreset.effects);
+    });
+
+    /// The Nodes tab (K-445, K-471) is generated from the enum like the rest —
+    /// no strip of its own — and the arrangement it applies is the one with
+    /// the Graph and Node panels in it.
+    testWidgets('the Nodes tab is on the strip and switches to its workspace',
+        (tester) async {
+      final p = await mount(tester);
+      final t = LumitTheme.dark();
+      expect(find.text('NODES'), findsOneWidget,
+          reason: 'a new preset joins the strip by existing');
+
+      await tester.tap(find.byKey(const ValueKey('workspace-nodes')));
+      await tester.pumpAndSettle();
+
+      expect(p.uiState.workspace.activePreset, WorkspacePreset.nodes);
+      expect(panelsIn(p.uiState.workspace.dock),
+          [Panel.graph, Panel.timeline, Panel.viewer, Panel.node]);
+      final tick = ((tester
+                  .widget<Container>(find
+                      .descendant(
+                        of: find.byKey(const ValueKey('workspace-nodes')),
+                        matching: find.byType(Container),
+                      )
+                      .last)
+                  .decoration as BoxDecoration?)
+              ?.border as Border?)
+          ?.bottom
+          .color;
+      expect(tick, t.accent, reason: 'the workspace in force wears the tick');
     });
 
     /// The tool options area (K-225): After Effects shows the settings the

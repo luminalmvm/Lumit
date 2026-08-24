@@ -8454,5 +8454,26 @@
   "tipExportAfterV1": "After version one",
   "@tipExportAfterV1": {
     "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
+  },
+  "workspaceNodes": "Nodes",
+  "@workspaceNodes": {
+    "description": "The name of a panel arrangement, tuned for wiring: the Graph panel large with a short Timeline under it, a small Viewer and the Node panel down the right. On the workspace strip at the right-hand end of the toolbar, shown in capitals. A noun for the kind of work."
+  },
+  "panelNode": "Node",
+  "@panelNode": {
+    "description": "The name of the panel listing the parameter rows of whichever box is picked in the Graph panel. A panel name, so a noun, singular: it shows one node at a time."
+  },
+  "nodeNoSelection": "Pick a node in the Graph panel.",
+  "@nodeNoSelection": {
+    "description": "Empty-state line in the Node panel when no box has been picked on the graph canvas, so there are no parameters to list."
+  },
+  "nodeDrivenCount": "{count} driven",
+  "@nodeDrivenCount": {
+    "description": "Node panel header, right-hand end: how many of the shown node's parameters have a driver wired to them, so their value comes from the wire rather than from their own keyframes. Shown only when there is at least one. Lower case after the number.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

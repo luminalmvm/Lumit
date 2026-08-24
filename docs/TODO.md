@@ -438,9 +438,16 @@ does not gate the four. Delete each phase here when it lands, as with everything
     (the whole structure in one call), `get_graph_drivers`, `new_driver`,
     `set_graph` (one `SetLayerGraph`, one undo step), `list_drivers`,
     `BridgePortType`, the refusals as calm sentences, and the driver property
-    path spelled `<layer>/graph/<node>/<param>` (docs/17). **WP3 to WP5 are
-    pending**, in that order: the Graph panel, the Nodes workspace, the Node
-    preview panel. One named gap remains from WP1, recorded in
+    path spelled `<layer>/graph/<node>/<param>` (docs/17).
+    ~~WP3, the Graph panel~~ — **landed 2026-08-24**: the panel to its drawing,
+    the wire colours as the theme's `PortColours`, and the *driven* state on an
+    Effect-controls row.
+    ~~WP4, the Nodes workspace~~ — **landed 2026-08-24**: the preset (the Graph
+    panel large with the ordinary Timeline short beneath it, the small Viewer
+    and the new **Node panel** down the right), its tab on the workspace strip,
+    and the graph's pick carried through the shell so the Node panel follows
+    it. **WP5 is pending**: the Node preview panel. One named gap remains from
+    WP1, recorded in
     docs/impl/node-graph.md:
     - **Audio level reads silence in the application.** The `AudioTap` seam is
       built and tested against a synthesised tone in `lumit-core`, but

@@ -36,6 +36,7 @@ import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
 import 'package:lumit_flutter/src/rust/api/import.dart' show BridgeImportReport;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
@@ -1038,6 +1039,16 @@ class LumitUiState extends ChangeNotifier {
   /// commands, the Timeline's fold-out. The *primary* of the selection below.
   ValueNotifier<LayerReference?> selectedLayer = ValueNotifier(null);
 
+  /// Which box the Graph panel has picked (K-471), or null for none.
+  ///
+  /// Session state at the shell level for the same reason the armed tool is:
+  /// it is set in one panel and read in another — the Node panel draws the
+  /// picked box's parameter rows — and neither should have to be mounted for
+  /// the other to work. An *effect* box also fronts itself in the ordinary
+  /// effect selection (K-300); this notifier is what carries the boxes that
+  /// selection cannot name, the drivers among them.
+  final ValueNotifier<BridgeNodeRef?> graphNode = ValueNotifier(null);
+
   /// What Copy put down, for Paste to pick up (K-275). One tray for the
   /// session, shared by the Edit menu and the panels.
   ///
@@ -1634,6 +1645,7 @@ class LumitUiState extends ChangeNotifier {
     selectedLayer.removeListener(_syncSelection);
     selectedLayer.dispose();
     selectedLayers.dispose();
+    graphNode.dispose();
     activePanel.dispose();
     paletteRequest.dispose();
     consoleRequest.dispose();
