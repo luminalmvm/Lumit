@@ -20,7 +20,12 @@ enum Panel {
   scopes,
   debug,
   hierarchy,
-  easing;
+  easing,
+
+  /// The layer's effect stack drawn as nodes and wires, plus the drivers wired
+  /// into its parameters (K-471). A second *view* of the same document, not a
+  /// second document.
+  graph;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -31,6 +36,7 @@ enum Panel {
         Panel.scopes => l10n.panelScopes,
         Panel.hierarchy => l10n.panelHierarchy,
         Panel.easing => l10n.panelEasing,
+        Panel.graph => l10n.panelGraph,
         Panel.debug => l10n.panelDebug
       };
 }

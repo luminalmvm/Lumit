@@ -21,6 +21,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
@@ -387,6 +388,59 @@ void main() {
         counter.total,
         0,
         reason: 'hovering re-read the engine:\n${counter.ranking()}',
+      );
+    });
+
+    /// The Graph panel's whole canvas is arithmetic over one held read
+    /// (K-183, docs/impl/node-graph.md §5): `getGraph` is asked when the
+    /// selection or the document changes, and nothing about a box needs a
+    /// second question. Moving the pointer over the canvas — over boxes, over
+    /// sockets, over empty ground — must therefore cost nothing at all.
+    testWidgets('hovering the Graph panel\'s canvas asks the engine nothing',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer();
+      layer.addEffect(name: 'blur');
+      p.uiState.selectedLayer.value = layer;
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        child: const GraphPanelFrb(),
+        size: const Size(900, 600),
+      ));
+      await settleFrb(tester, minRounds: 4);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await tester.pump();
+
+      counter
+        ..reset()
+        ..counting = true;
+      for (var pass = 0; pass < 2; pass++) {
+        for (final spot in [
+          tester.getCenter(
+              find.byKey(const ValueKey<String>('graph-node-source'))),
+          tester
+              .getCenter(find.byKey(const ValueKey<String>('graph-node-out'))),
+          tester.getCenter(find.byKey(const ValueKey<String>('graph-legend'))),
+          const Offset(700, 500),
+        ]) {
+          await mouse.moveTo(spot);
+          await tester.pump();
+        }
+      }
+      counter.counting = false;
+
+      expect(
+        counter.total,
+        0,
+        reason: 'the canvas re-read the engine on a hover:\n'
+            '${counter.ranking()}',
       );
     });
 

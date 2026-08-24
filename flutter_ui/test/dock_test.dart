@@ -47,11 +47,17 @@ void main() {
   /// would rearrange the first-run screen for a panel most projects never need.
   /// If a *second* panel ever wants the same exemption, name it here rather
   /// than loosening this to "some panels are missing".
-  test('no panel appears twice in the default workspace, and only Easing is '
-      'absent', () {
+  /// Two panels are deliberately not in the default arrangement, and both for
+  /// the same reason (docs/07 §1.6): a panel nobody asked for should not
+  /// appear in an arrangement they already know. **Easing** belongs to
+  /// Retiming (K-349) and the **Graph** panel to Nodes (K-445, K-471); both
+  /// are one tick away in the Window menu.
+  test('no panel appears twice in the default workspace, and only Easing and '
+      'Graph are absent', () {
     final panels = panelsIn(defaultLayout());
     expect(panels.toSet().length, panels.length);
-    expect(panels.toSet(), Panel.values.toSet()..remove(Panel.easing));
+    expect(panels.toSet(),
+        Panel.values.toSet()..removeAll([Panel.easing, Panel.graph]));
   });
 
   test('serialisation round-trips the tree', () {

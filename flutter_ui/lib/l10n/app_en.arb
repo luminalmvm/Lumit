@@ -7760,15 +7760,6 @@
       }
     }
   },
-  "waveformFrequency": "Frequency",
-  "@waveformFrequency": {
-    "description": "One choice for how a waveform is drawn: split into bass, middle and treble bands stacked on each other."
-  },
-  "waveformPlain": "Plain",
-  "@waveformPlain": {
-    "description": "One choice for how a waveform is drawn: a single wave, with no frequency bands."
-  },
-  "waveformCentre": "Centre",
   "viewerReadoutNoComp": "{time} · {source} · {zoom}",
   "@viewerReadoutNoComp": {
     "description": "The Viewer bar's reading, third and shortest form, used when the bar is too narrow for the composition's name as well: the time shown, the composition's pixel size, and the magnification. Every part is a number, so only the separators are translatable.",
@@ -7802,6 +7793,15 @@
       }
     }
   },
+  "waveformFrequency": "Frequency",
+  "@waveformFrequency": {
+    "description": "One choice for how a waveform is drawn: split into bass, middle and treble bands stacked on each other."
+  },
+  "waveformPlain": "Plain",
+  "@waveformPlain": {
+    "description": "One choice for how a waveform is drawn: a single wave, with no frequency bands."
+  },
+  "waveformCentre": "Centre",
   "@waveformCentre": {
     "description": "One choice for where a waveform sits in its row: centred about silence, swinging both ways."
   },
@@ -8081,5 +8081,74 @@
         "type": "String"
       }
     }
+  },
+  "panelGraph": "Graph",
+  "@panelGraph": {
+    "description": "The name of the panel drawing a layer's effect stack as boxes joined by wires, with the drivers wired into its parameters. A panel name, so a noun."
+  },
+  "graphNoLayer": "Select a layer in the Timeline.",
+  "@graphNoLayer": {
+    "description": "Empty-state line in the Graph panel when no layer is selected, so there is no graph to draw."
+  },
+  "graphAutoWire": "Auto-wire",
+  "@graphAutoWire": {
+    "description": "Graph panel toolbar: the label beside the switch that decides whether a node added from the search is joined up to the wire that was in hand."
+  },
+  "graphHeal": "Heal",
+  "@graphHeal": {
+    "description": "Graph panel toolbar: the label beside the switch that decides whether deleting a box also removes the wires on it."
+  },
+  "graphFrameAll": "Frame all",
+  "@graphFrameAll": {
+    "description": "Graph panel toolbar: tooltip on the button that zooms the canvas so every box is on screen."
+  },
+  "graphZoom": "{percent}%",
+  "@graphZoom": {
+    "description": "Graph panel toolbar: the canvas zoom readout, a percentage.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "graphTypes": "Types",
+  "@graphTypes": {
+    "description": "Graph panel: the heading of the legend strip along the bottom of the canvas, which says what each wire colour carries."
+  },
+  "graphTypeImage": "image · matte",
+  "@graphTypeImage": {
+    "description": "Graph panel legend: the two kinds of picture a blue wire carries, an image and a matte. Lower case, joined by a middle dot."
+  },
+  "graphTypeNumber": "number",
+  "@graphTypeNumber": {
+    "description": "Graph panel legend: what an amber wire carries. Lower case."
+  },
+  "graphTypeColour": "colour",
+  "@graphTypeColour": {
+    "description": "Graph panel legend: what a magenta wire carries. Lower case."
+  },
+  "graphTypeGeometry": "shape · points",
+  "@graphTypeGeometry": {
+    "description": "Graph panel legend: the two kinds of geometry a teal wire carries, an outline and a stream of points. Lower case, joined by a middle dot."
+  },
+  "graphTypeAudio": "audio",
+  "@graphTypeAudio": {
+    "description": "Graph panel legend: what a green wire carries. Lower case."
+  },
+  "graphSearchKey": "Tab",
+  "@graphSearchKey": {
+    "description": "Graph panel: the key that opens the node search, named in the corner of the search popover. A keyboard key, so it keeps the name printed on the key."
+  },
+  "graphSearchAdds": "Adds a driver node",
+  "@graphSearchAdds": {
+    "description": "Graph panel node search, footer line when no wire is in hand: picking an entry adds that box to the canvas."
+  },
+  "graphSearchWires": "Connects the dragged wire where it fits",
+  "@graphSearchWires": {
+    "description": "Graph panel node search, footer line while a wire is being dragged: the new box is joined to the wire at the first socket that carries the same kind of value."
+  },
+  "graphDriven": "driven",
+  "@graphDriven": {
+    "description": "Effect controls: the word on a parameter row whose value comes from a driver wired to it in the Graph panel rather than from its own keyframes. Lower case."
   }
 }

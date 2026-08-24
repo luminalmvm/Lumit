@@ -8744,8 +8744,11 @@ A layer's effects have always been a list: the picture goes in at the top, each 
 changes it in turn, and what comes out at the bottom is what you see. The Graph panel
 (K-471) does not replace that list — it *draws* it, as boxes joined left to right by
 wires. Same effects, same order, just laid out so you can see the picture's path. Reorder
-the boxes on the canvas and you have reordered the list; the Effect controls panel shows
-the change at once, because there is only one list and these are two windows onto it.
+the list anywhere — in Effect controls, in the Timeline — and the boxes move with it at
+once, because there is only one list and these are two windows onto it. (Dragging a box
+about the canvas moves the *box*, not its place in the list. Where a box sits is saved
+with the project, so a graph you have arranged stays arranged; the order the picture
+travels in is the list's business, and the list is the one place it is set.)
 
 **What the graph adds is the driver.** A driver is a box that makes no picture at all —
 it makes a *number* (or a colour). Wiggle makes a number that wobbles. Audio level
@@ -8768,6 +8771,19 @@ arrangement of boxes the plain list view would have to lie about.
 through it: one colour for pictures and mattes, one for numbers, one for colours, one for
 shapes and points, one for sound. You can read a graph's plumbing without clicking
 anything — a wire will only plug into a socket of its own colour.
+
+**Two letters and two switches.** A box carries an **E** and a **B**. `E` is *expose*: an
+effect has dozens of parameters and drawing a socket for every one of them would make the
+canvas unreadable, so a box normally shows only the picture's own sockets and whatever is
+already wired. Pressing `E` opens it up and shows the lot; pressing it again folds it
+back. `B` is *bypass* — the same switch the effect's card in Effect controls has, and a
+bypassed box draws its outline as a dashed line so you can see at a glance which one is
+sitting the frame out. In the panel's own strip along the top are two switches. **Auto-wire**:
+let a wire go over empty canvas, pick a driver from the list that appears, and the wire
+is joined to the new box for you. **Heal**: when you delete a box, the wires that were on
+it go with it. Turn Heal off and a box with wires still on it is left alone until you
+unplug it yourself — for people who would rather nothing disappeared that they did not
+name. The `Tab` key opens that same list of drivers anywhere on the canvas.
 
 **Points** are the fifth kind of thing a wire will one day carry: not a picture but a
 crowd of positions — where every particle of a particle system is this frame, how fast
