@@ -650,6 +650,47 @@ Widget _dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
       ],
     );
 
+/// The **in-row** dropdown's height and label size (§12A.6's table, K-451):
+/// the pickers that sit inside a 22px Timeline row — matte, blend and parent —
+/// are 16 tall with a 10px label, as the approved mockup draws them. A dialog's
+/// or a toolbar's dropdown is a different thing in a taller row and keeps the
+/// standard face below.
+const double inRowDropdownHeight = 16;
+const double inRowDropdownTextSize = 10;
+
+/// The closed face of every bare dropdown, in its two sizes.
+///
+/// **Vertical 1 rather than the button default's 3**, so a label's descenders
+/// are not clipped in a property row. The sum is tighter than it looks: a row
+/// gives the button 18, the decoration's border insets the child by 1 top and
+/// bottom, and body text at 11 carries a line box of about 13.3 — so the
+/// padding has 3.4 to spend and 3 does not fit. At 1 the label has 14 to sit in
+/// and centres there with room for the tails on p, q and g. Horizontal is the
+/// button's own, so nothing moves sideways.
+///
+/// **[dense] is the in-row face**: the height is stated rather than left to the
+/// text, because the mockup's 16 is a measurement and not a consequence — 1px
+/// of border each way leaves the 10px label 14 to centre in, which is the same
+/// room the standard face gives an 11px one.
+Widget _dropdownButton({
+  required bool dense,
+  required VoidCallback? onPressed,
+  required Widget face,
+}) {
+  final button = HouseButton(
+    padding: EdgeInsets.symmetric(horizontal: 8, vertical: dense ? 0 : 1),
+    onPressed: onPressed,
+    dropdown: true,
+    child: dense
+        ? DefaultTextStyle.merge(
+            style: const TextStyle(fontSize: inRowDropdownTextSize),
+            child: face,
+          )
+        : face,
+  );
+  return dense ? SizedBox(height: inRowDropdownHeight, child: button) : button;
+}
+
 /// A dropdown drawn as a bare label + caret; the open list floats on the
 /// standard menu surface (`bare_dropdown` in the Rust settings window).
 class BareDropdown<T> extends StatelessWidget {
@@ -674,6 +715,10 @@ class BareDropdown<T> extends StatelessWidget {
   /// [_dropdownFace].
   final Widget? face;
 
+  /// The in-row face: 16 tall with a 10px label, for a picker that sits inside
+  /// a Timeline row rather than in a dialog or a bar (§12A.6, K-451).
+  final bool dense;
+
   const BareDropdown({
     super.key,
     required this.value,
@@ -682,25 +727,16 @@ class BareDropdown<T> extends StatelessWidget {
     required this.onChanged,
     this.group,
     this.face,
+    this.dense = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return HouseButton(
-      // Vertical 1 rather than the button default's 3, so a label's descenders
-      // are not clipped in a property row. The sum is tighter than it looks: a
-      // row gives the button 18, the decoration's border insets the child by 1
-      // top and bottom, and body text at 11 carries a line box of about 13.3 —
-      // so the padding has 3.4 to spend and 3 does not fit. At 1 the label has
-      // 14 to sit in and centres there with room for the tails on p, q and g.
-      // Shrinking the text instead would not have done it: 10 still asks for
-      // 12.1, which clears 3 by nothing at all. Horizontal is the button's own,
-      // so nothing moves sideways.
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+    return _dropdownButton(
+      dense: dense,
       onPressed: onChanged == null ? null : () => _open(context, t),
-      dropdown: true,
-      child: _dropdownFace(t, label(value), face: face),
+      face: _dropdownFace(t, label(value), face: face),
     );
   }
 
@@ -967,27 +1003,23 @@ class BareLazyDropdown<T> extends StatelessWidget {
   final List<(T, String)> Function() options;
   final ValueChanged<T> onChanged;
 
+  /// The in-row face: 16 tall with a 10px label, for a picker that sits inside
+  /// a Timeline row rather than in a dialog or a bar (§12A.6, K-451).
+  final bool dense;
+
   const BareLazyDropdown({
     super.key,
     required this.label,
     required this.options,
     required this.onChanged,
+    this.dense = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return HouseButton(
-      // Vertical 1 rather than the button default's 3, so a label's descenders
-      // are not clipped in a property row. The sum is tighter than it looks: a
-      // row gives the button 18, the decoration's border insets the child by 1
-      // top and bottom, and body text at 11 carries a line box of about 13.3 —
-      // so the padding has 3.4 to spend and 3 does not fit. At 1 the label has
-      // 14 to sit in and centres there with room for the tails on p, q and g.
-      // Shrinking the text instead would not have done it: 10 still asks for
-      // 12.1, which clears 3 by nothing at all. Horizontal is the button's own,
-      // so nothing moves sideways.
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+    return _dropdownButton(
+      dense: dense,
       onPressed: () async {
         final box = context.findRenderObject()! as RenderBox;
         final origin = box.localToGlobal(Offset.zero);
@@ -1016,8 +1048,7 @@ class BareLazyDropdown<T> extends StatelessWidget {
         );
         if (picked != null) onChanged(picked.$1);
       },
-      dropdown: true,
-      child: _dropdownFace(t, label),
+      face: _dropdownFace(t, label),
     );
   }
 }

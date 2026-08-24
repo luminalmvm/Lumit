@@ -491,6 +491,8 @@ class ParentPickerFrb extends StatelessWidget {
       width: width,
       child: BareLazyDropdown(
         key: ValueKey<String>('tl-parent-${layer.internallayerId}'),
+        // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).
+        dense: true,
         label: info.parent == null ? l10n.none : (info.parentName ?? l10n.none),
         options: () => [
           (null, l10n.none),
@@ -573,6 +575,8 @@ class MattePickerFrb extends StatelessWidget {
             width: matte == null ? width : (width - 28).clamp(40.0, width),
             child: BareLazyDropdown<UuidValue?>(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
+              // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).
+              dense: true,
               label: sourceName,
               // Built when the menu opens, never per rebuild — which is what
               // lets it probe (K-194). A matte gates this layer with another
@@ -1821,7 +1825,7 @@ double rulerLabelStepSeconds({required double pixelsPerSecond}) {
 }
 
 /// The minor-tick step for a ruler, in seconds: the finest division that still
-/// gives each tick a few pixels, and **never finer than one frame** — so
+/// gives each tick room to be read, and **never finer than one frame** — so
 /// zooming in subdivides the ruler step by step until one tick is one frame,
 /// and no further (docs/15 §12A.1). Exposed for its test.
 ///
@@ -1835,7 +1839,17 @@ double rulerMinorStepSeconds({
   required double labelStep,
   required double fps,
 }) {
-  const minPixels = 6.0;
+  // **Thirty pixels, not six** (K-451, the approved mockup). The mockup's ruler
+  // at the resting zoom labels every two seconds 140px apart and puts three
+  // minor ticks between them — a half-second apart, at 35px. Six pixels was a
+  // floor on *legibility*, and at 70 pixels a second it let the ladder fall two
+  // rungs further, to a tick every fifth of a second: a comb rather than a
+  // ruler. Thirty is the density the mockup draws, and it is a floor rather
+  // than a fixed subdivision, so the ladder still refines as the zoom deepens —
+  // full zoom shows twenty frames across the lanes (35px a frame), which clears
+  // this and lands the finest rung, one tick per frame, exactly where it was
+  // always meant to arrive.
+  const minPixels = 30.0;
   final frame = fps > 0 ? 1 / fps : 0.0;
   final ladder = <double>[
     if (frame > 0) ...[frame, frame * 2, frame * 5, frame * 10],

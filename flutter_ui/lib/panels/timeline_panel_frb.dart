@@ -6557,6 +6557,8 @@ class _OutlineRowState extends State<_OutlineRow> {
       width: width,
       child: BareDropdown<int>(
         key: ValueKey<String>('tl-blend-${layer.internallayerId}'),
+        // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).
+        dense: true,
         value: current < modes.length ? current : 0,
         options: [for (var i = 0; i < modes.length; i++) i],
         label: (i) => engineLabel(modes[i]),
@@ -8332,9 +8334,13 @@ class _BarState extends State<_Bar> {
                           child: ColoredBox(color: t.labelColour(info.label)),
                         ),
                       ),
-                      // The layer's name, on its bar (§6.1): mono, quiet
-                      // enough to sit under the marks and the waveform, clear
-                      // of the leading edge.
+                      // The layer's name, on its bar (§6.1, §7.1): **Hanken at
+                      // 10**, the mockup's own size (K-451), quiet enough to
+                      // sit under the marks and the waveform and clear of the
+                      // leading edge. It was mono at 11 — but a layer's name is
+                      // something the *user* named, and §7.1 sets those in
+                      // sentence-case Hanken; the mono row keeps the axis
+                      // numbers and units, which are numbers.
                       Positioned(
                         left: clipEdgeWidth + 4,
                         right: 2,
@@ -8347,8 +8353,7 @@ class _BarState extends State<_Bar> {
                               info.name,
                               key: ValueKey<String>(
                                   'tl-bar-name-${widget.entry.layer.internallayerId}'),
-                              style: t.mono.copyWith(
-                                fontSize: 11,
+                              style: t.small.copyWith(
                                 color: t.textPrimary
                                     .withValues(alpha: clipNameAlpha),
                               ),

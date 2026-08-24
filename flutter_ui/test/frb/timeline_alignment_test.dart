@@ -15,6 +15,7 @@
 // would only be measuring today's implementation.
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,8 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
@@ -583,6 +586,56 @@ void main() {
       ));
       expect(dot.width, closeTo(6, 0.5));
       expect(dot.height, closeTo(6, 0.5));
+    });
+
+    /// 10b. **The bar's label is Hanken at 10** (§7.1, K-451) — the mockup's
+    /// own size, and the face §7.1 gives everything the *user* named. It was
+    /// mono at 11, which is the row the axis numbers keep.
+    testWidgets('a bar\'s label is set in Hanken at 10', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final label = tester
+          .renderObject<RenderParagraph>(
+              find.byKey(ValueKey<String>('tl-bar-name-${idOf(layer)}')))
+          .text
+          .style!;
+      expect(label.fontSize, 10);
+      expect(label.fontFamily, LumitTheme.fontFamily,
+          reason: 'a layer\'s own name is sentence-case Hanken, not mono');
+    });
+
+    /// 10c. **The pickers inside a row are 16 with a 10px label** (§12A.6's
+    /// table, K-451): matte, blend and parent are cells in a 22px row, not
+    /// dialog controls, and the mockup draws all three at the shorter face.
+    testWidgets('the matte, blend and parent pickers are 16 tall',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final row = outlineRow(tester, layer);
+      for (final cell in ['matte', 'blend', 'parent']) {
+        final picker =
+            find.byKey(ValueKey<String>('tl-$cell-${layer.internallayerId}'));
+        expect(tester.getRect(picker).height, closeTo(inRowDropdownHeight, 0.5),
+            reason: 'the $cell picker is the mockup\'s 16, not the 18 a '
+                'dialog\'s dropdown stands at');
+        expect(tester.getRect(picker).center.dy, closeTo(row.center.dy, 0.5),
+            reason: 'and is centred in its 22px row');
+        expect(
+            tester
+                .renderObject<RenderParagraph>(
+                    find.descendant(of: picker, matching: find.byType(Text)))
+                .text
+                .style!
+                .fontSize,
+            inRowDropdownTextSize,
+            reason: 'with the mockup\'s 10px label');
+      }
     });
 
     /// 11. **The switches column never stretches** (§12A.1, K-448): its seam

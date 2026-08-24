@@ -3074,8 +3074,11 @@ void main() {
           fps: fps);
 
       // Wide open: one tick a frame, and the ladder has no rung below it —
-      // whatever the rate, and however much further the zoom goes.
-      expect(minor(150), closeTo(1 / 25, 1e-9));
+      // whatever the rate, and however much further the zoom goes. Full zoom
+      // shows twenty frames across the lanes, which is about 35px a frame, so
+      // the finest rung is reached inside the zoom the panel offers.
+      expect(minor(35 * 25), closeTo(1 / 25, 1e-9),
+          reason: 'a frame 35px wide is one tick, as full zoom draws it');
       expect(minor(100000), closeTo(1 / 25, 1e-9),
           reason: 'a frame is the floor however far the zoom goes');
       expect(minor(100000, fps: 60), closeTo(1 / 60, 1e-9));
@@ -3093,8 +3096,8 @@ void main() {
         expect(step, greaterThanOrEqualTo(1 / 25 - 1e-9),
             reason: 'and never finer than a frame');
         if (step < labels) {
-          expect(step * px, greaterThanOrEqualTo(6.0),
-              reason: 'a drawn tick has room to be seen');
+          expect(step * px, greaterThanOrEqualTo(30.0),
+              reason: 'a drawn tick keeps the mockup\'s room beside it');
         }
         last = step;
       }
@@ -3112,6 +3115,18 @@ void main() {
         final labels = rulerLabelStepSeconds(pixelsPerSecond: px);
         expect(minor(px), lessThan(labels),
             reason: 'the ruler subdivides at the resting zoom ($px px/s)');
+      }
+
+      // And it subdivides **at the mockup's density** (K-451): 70 px/s labels
+      // every two seconds, with a tick on each half second between them —
+      // three ticks 35px apart, not the comb a finer rung would draw. The rate
+      // does not decide it: the ladder's rungs below a half second differ by
+      // fps, and none of them has the room.
+      for (final fps in [24.0, 25.0, 30.0, 60.0]) {
+        expect(rulerLabelStepSeconds(pixelsPerSecond: 70), 2,
+            reason: 'the resting zoom labels every two seconds');
+        expect(minor(70, fps: fps), closeTo(0.5, 1e-9),
+            reason: 'half-second minor ticks at the resting zoom ($fps fps)');
       }
     });
 

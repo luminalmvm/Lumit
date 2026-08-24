@@ -545,9 +545,9 @@ chrome sits above 13px except dialog body emphasis**:
 |---|---|---|
 | 9–11px (**9 shipped**, +0.12em, regular) | Geist Mono, caps, `text_muted` | **Kickers — every container label**: panel titles, properties section headers, column headers, tab labels, dialog titles, attribution. The shipped value is the approved mockups' own `.kick` (K-451) |
 | 9px | Geist Mono, caps, +0.12em, `surface_0` on the `accent` fill | **The filled primary action's label** — the one filled button a surface is allowed (§3.1, §12A.4). A kicker in every respect but its colour, which the fill under it decides |
-| 10px | Hanken Grotesk | Secondary notes and hints (`small`); field captions — never for anything the user has to act on |
+| 10px | Hanken Grotesk | Secondary notes and hints (`small`); field captions — never for anything the user has to act on; **layer bar labels** and the labels of the in-row pickers beside them (matte, blend, parent), both the approved mockups' own size (K-451) |
 | 11px | Hanken Grotesk | Panel body copy, property names, menus, buttons |
-| 11px | Geist Mono | Layer bar labels, axis numbers, units |
+| 11px | Geist Mono | Axis numbers, units |
 | 13px | Geist Mono | Property values, timecode fields, frame numbers, speed percentages |
 | 13–14px | Hanken Grotesk Medium | Dialog body emphasis — the one thing in chrome above 13px |
 | 24px+ | Hanken Grotesk | About box, onboarding, empty states only — outside chrome |
@@ -825,7 +825,9 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **The ruler is double height**: times and the playhead head in the upper half; markers and
   the work area in the lower. A marker is an upward triangle sitting on the cache bar, half
   inside its backdrop pill and half outside to its left; the pill starts at the triangle's
-  point. Minor ticks subdivide as zoom grows until one tick is one frame.
+  point. Minor ticks subdivide as zoom grows until one tick is one frame, and no tick is
+  drawn closer than **30px** to its neighbour — which is the mockup's own density at the
+  resting zoom, three half-second ticks between labels two seconds apart (K-451).
 - **The cache bar sits beneath the ruler, coloured by resolution tier** (§6.3).
 - **A few pixels of padding sit either side of the ruler** in every timeline mode, so a
   keyframe or work-area handle on the first or last frame stays visible and grabbable.
@@ -917,6 +919,7 @@ when a panel is too short, its content scrolls.
 | Secondary rows: timecode/search/mode row, column headers, filter rows, panel bottom bars | 18 |
 | Outline and lane rows | 22 |
 | Clip bars within a lane row | 16 |
+| In-row pickers (the Timeline's matte, blend and parent cells), label at 10px | 16 |
 | Property and effect-parameter rows | 26 |
 | Effect section headings | 24 |
 | Timeline ruler (times above, markers and work area below) | 36 |
