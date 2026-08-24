@@ -783,7 +783,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           return _Cells(size: _noValue, fps: _noValue, path: path);
         }
         final info = _mediaInfo[id];
-        if (info == null || info.videoCodec == null) return _Cells(path: path);
+        if (info == null) return _Cells(path: path);
+        if (info.videoCodec == null) {
+          // A sound file's cells, as the mockup writes them: the rate where a
+          // picture would state its size, and the channel layout — shortened
+          // to fit the FPS column — where a picture would state its rate.
+          if (info.audioCodec == null) return _Cells(path: path);
+          return _Cells(
+            size: _sampleRateText(info.sampleRate),
+            fps: switch (info.channels) {
+              1 => l10n.audioMonoShort,
+              2 => l10n.audioStereoShort,
+              final n => l10n.audioChannels(n),
+            },
+            path: path,
+          );
+        }
         return _Cells(
           size: '${info.width}×${info.height}',
           // A still has no rate to state (K-246). It probes with a video

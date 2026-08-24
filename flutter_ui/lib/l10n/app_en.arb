@@ -3893,7 +3893,11 @@
   "audioChannels": "{count} ch",
   "@audioChannels": {
     "description": "A sound's channel count in the Project panel's preview card, for layouts with no everyday name — 6 ch, 8 ch. Abbreviated because it sits in a line of facts.",
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "audioMono": "mono",
   "@audioMono": {
@@ -3904,6 +3908,14 @@
   "@audioStereo": {
     "description": "A two-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
     "type": "text"
+  },
+  "audioMonoShort": "mo",
+  "@audioMonoShort": {
+    "description": "The Project panel list's channel-layout cell for a mono sound file — the FPS column is narrow, so this is the two-letter form of 'mono'."
+  },
+  "audioStereoShort": "st",
+  "@audioStereoShort": {
+    "description": "The Project panel list's channel-layout cell for a stereo sound file — the FPS column is narrow, so this is the two-letter form of 'stereo'."
   },
   "label": "Label",
   "@label": {
@@ -3944,7 +3956,11 @@
   "projectMissingCount": "{count, plural, =1{1 missing} other{{count} missing}}",
   "@projectMissingCount": {
     "description": "Second half of the Project panel's bottom-bar count, after the item total: how many files cannot be found. Clicking it filters the panel to just those.",
-    "placeholders": { "count": { "type": "int" } }
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "projectEmpty": "No items yet — import footage or create a composition",
   "@projectEmpty": {
@@ -6802,7 +6818,11 @@
   "aeCouldNotImport": "There is no Lumit bundle at {path}",
   "@aeCouldNotImport": {
     "description": "Status line notice after the File menu's After Effects import was pointed at a folder or file that is neither an After Effects project nor a Lumit bundle.",
-    "placeholders": { "path": { "type": "String" } }
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
   },
   "aeReportTitle": "Import report",
   "@aeReportTitle": {
@@ -6812,10 +6832,18 @@
   "@aeSummary": {
     "description": "Summary line at the top of the import report window. Four counts of what the import did, separated by middle dots.",
     "placeholders": {
-      "imported": { "type": "int" },
-      "adjusted": { "type": "int" },
-      "placeholders": { "type": "int" },
-      "skipped": { "type": "int" }
+      "imported": {
+        "type": "int"
+      },
+      "adjusted": {
+        "type": "int"
+      },
+      "placeholders": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
     }
   },
   "aeFilterAll": "All",
@@ -6857,22 +6885,38 @@
   "aeCompFrameRateGuessed": "no frame rate arrived — imported at {used} fps",
   "@aeCompFrameRateGuessed": {
     "description": "Import report row reason, lower case. The composition's frame rate was absent, so a default was used.",
-    "placeholders": { "used": { "type": "String" } }
+    "placeholders": {
+      "used": {
+        "type": "String"
+      }
+    }
   },
   "aeCompDurationGuessed": "no duration arrived — imported {used} seconds long",
   "@aeCompDurationGuessed": {
     "description": "Import report row reason, lower case. The composition's duration was absent, so a default was used.",
-    "placeholders": { "used": { "type": "String" } }
+    "placeholders": {
+      "used": {
+        "type": "String"
+      }
+    }
   },
   "aePixelAspectIgnored": "pixel aspect ratio {par} has no equivalent — imported with square pixels",
   "@aePixelAspectIgnored": {
     "description": "Import report row reason, lower case. Lumit compositions have square pixels; After Effects' non-square ratio is recorded but not applied.",
-    "placeholders": { "par": { "type": "String" } }
+    "placeholders": {
+      "par": {
+        "type": "String"
+      }
+    }
   },
   "aeCompStartIgnored": "the composition's timecode started at {start} seconds — imported starting at zero",
   "@aeCompStartIgnored": {
     "description": "Import report row reason, lower case. After Effects can start a composition's timecode somewhere other than zero; Lumit's begin at zero.",
-    "placeholders": { "start": { "type": "String" } }
+    "placeholders": {
+      "start": {
+        "type": "String"
+      }
+    }
   },
   "aeNestedPreserveBoth": "preserve frame rate and resolution when nested has no equivalent — nested comps follow the parent",
   "@aeNestedPreserveBoth": {
@@ -6889,17 +6933,29 @@
   "aeProjectBlendingDiffers": "the project blended at {bits} bits without linear blending — Lumit composites in scene-linear light, so blends can shift slightly",
   "@aeProjectBlendingDiffers": {
     "description": "Import report row reason, lower case. The After Effects project used different colour arithmetic from Lumit's.",
-    "placeholders": { "bits": { "type": "String" } }
+    "placeholders": {
+      "bits": {
+        "type": "String"
+      }
+    }
   },
   "aeRendererUnrecognised": "the {renderer} renderer's features do not import — layers arrive flat",
   "@aeRendererUnrecognised": {
     "description": "Import report row reason, lower case. The composition used an After Effects renderer whose extras have no Lumit counterpart.",
-    "placeholders": { "renderer": { "type": "String" } }
+    "placeholders": {
+      "renderer": {
+        "type": "String"
+      }
+    }
   },
   "aeMediaMissing": "the file at {path} was missing in After Effects too",
   "@aeMediaMissing": {
     "description": "Import report row reason, lower case. After Effects itself had already lost this footage file.",
-    "placeholders": { "path": { "type": "String" } }
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
   },
   "aeMediaNotFound": "the file is not on this machine — imported offline, ready to relink",
   "@aeMediaNotFound": {
@@ -6916,12 +6972,20 @@
   "aeLayerKindUnsupported": "layer kind {aeKind} has no equivalent — imported as a null so parenting survives",
   "@aeLayerKindUnsupported": {
     "description": "Import report row reason, lower case. A null layer is an invisible transform-only layer; keeping one preserves anything parented to it.",
-    "placeholders": { "aeKind": { "type": "String" } }
+    "placeholders": {
+      "aeKind": {
+        "type": "String"
+      }
+    }
   },
   "aeLayerSourceMissing": "the source item {id} is not in the capture — imported as a null so parenting survives",
   "@aeLayerSourceMissing": {
     "description": "Import report row reason, lower case. The layer named an After Effects item the bundle does not contain.",
-    "placeholders": { "id": { "type": "String" } }
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
   },
   "aeLayerSpanRepaired": "the layer's in and out points did not make a span — imported one frame long",
   "@aeLayerSpanRepaired": {
@@ -6942,12 +7006,20 @@
   "aeLayerQualityIgnored": "layer quality {quality} has no equivalent — imported at full quality",
   "@aeLayerQualityIgnored": {
     "description": "Import report row reason, lower case. After Effects can draw a layer draft or wireframe; Lumit renders one quality.",
-    "placeholders": { "quality": { "type": "String" } }
+    "placeholders": {
+      "quality": {
+        "type": "String"
+      }
+    }
   },
   "aeStretchAsRetime": "time stretch {percent}% imported as the equivalent Retime",
   "@aeStretchAsRetime": {
     "description": "Import report row reason, lower case. Retime is Lumit's retiming system and is a product term — leave it as written.",
-    "placeholders": { "percent": { "type": "String" } }
+    "placeholders": {
+      "percent": {
+        "type": "String"
+      }
+    }
   },
   "aeFlowEngineDiffers": "Pixel Motion imported as flow interpolation — a different flow engine, so in-betweens differ",
   "@aeFlowEngineDiffers": {
@@ -6956,22 +7028,38 @@
   "aeParentMissing": "the parent layer {index} is not in this composition — imported unparented",
   "@aeParentMissing": {
     "description": "Import report row reason, lower case. The layer named a parent that is not in the same composition.",
-    "placeholders": { "index": { "type": "String" } }
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
   },
   "aeMatteTargetMissing": "the matte layer {index} is not in this composition — imported with no matte",
   "@aeMatteTargetMissing": {
     "description": "Import report row reason, lower case. A matte gates one layer's alpha with another layer's.",
-    "placeholders": { "index": { "type": "String" } }
+    "placeholders": {
+      "index": {
+        "type": "String"
+      }
+    }
   },
   "aeBlendModeUnavailable": "blend mode {aeMode} has no equivalent — imported as Normal",
   "@aeBlendModeUnavailable": {
     "description": "Import report row reason, lower case. The After Effects blend mode's own name is substituted; Normal is Lumit's plain composite.",
-    "placeholders": { "aeMode": { "type": "String" } }
+    "placeholders": {
+      "aeMode": {
+        "type": "String"
+      }
+    }
   },
   "aeBlendModeClassic": "{aeMode} imported as its modern counterpart",
   "@aeBlendModeClassic": {
     "description": "Import report row reason, lower case. After Effects keeps older Classic versions of a few blend modes.",
-    "placeholders": { "aeMode": { "type": "String" } }
+    "placeholders": {
+      "aeMode": {
+        "type": "String"
+      }
+    }
   },
   "aeShapeContentsNotMapped": "shape contents are not imported yet — the layer keeps its place and draws nothing",
   "@aeShapeContentsNotMapped": {
@@ -6984,7 +7072,11 @@
   "aeLightKindApproximated": "a {aeKind} light has no equivalent — imported as the nearest kind",
   "@aeLightKindApproximated": {
     "description": "Import report row reason, lower case. After Effects has light kinds Lumit does not.",
-    "placeholders": { "aeKind": { "type": "String" } }
+    "placeholders": {
+      "aeKind": {
+        "type": "String"
+      }
+    }
   },
   "aeSpatialTangentsFlattened": "the motion path's spatial tangents are not carried — each axis animates on its own",
   "@aeSpatialTangentsFlattened": {
@@ -7001,22 +7093,41 @@
   "aePropertyUnreadable": "After Effects could not read {matchName} itself, so there was nothing to import",
   "@aePropertyUnreadable": {
     "description": "Import report row reason, lower case. The placeholder is an After Effects internal property name; leave it as written.",
-    "placeholders": { "matchName": { "type": "String" } }
+    "placeholders": {
+      "matchName": {
+        "type": "String"
+      }
+    }
   },
   "aeChunkUnreadable": "a record in the project file ({chunk}) could not be read and was skipped",
   "@aeChunkUnreadable": {
     "description": "Import report row reason, lower case. Only the direct .aep route raises it. The placeholder is the four-letter name of a record inside the file; leave it as written.",
-    "placeholders": { "chunk": { "type": "String" } }
+    "placeholders": {
+      "chunk": {
+        "type": "String"
+      }
+    }
   },
   "aeMaskModeUnavailable": "mask mode {aeMode} is not built yet — imported as Add",
   "@aeMaskModeUnavailable": {
     "description": "Import report row reason, lower case. Add is one of Lumit's mask combine modes.",
-    "placeholders": { "aeMode": { "type": "String" } }
+    "placeholders": {
+      "aeMode": {
+        "type": "String"
+      }
+    }
   },
   "aeMaskFeatherAxesDiffer": "feather {x} × {y} has one width in Lumit — imported at their average",
   "@aeMaskFeatherAxesDiffer": {
     "description": "Import report row reason, lower case. After Effects softens a mask edge by different amounts horizontally and vertically.",
-    "placeholders": { "x": { "type": "String" }, "y": { "type": "String" } }
+    "placeholders": {
+      "x": {
+        "type": "String"
+      },
+      "y": {
+        "type": "String"
+      }
+    }
   },
   "aeMaskRotoBezierFlattened": "a RotoBezier mask's curves are computed by After Effects — imported as its polygon",
   "@aeMaskRotoBezierFlattened": {
@@ -7025,37 +7136,86 @@
   "aeEffectPlaceholder": "{matchName} imported as a placeholder — every parameter is kept and it renders nothing",
   "@aeEffectPlaceholder": {
     "description": "Import report row reason, lower case. The placeholder is the After Effects effect's internal name; leave it as written.",
-    "placeholders": { "matchName": { "type": "String" } }
+    "placeholders": {
+      "matchName": {
+        "type": "String"
+      }
+    }
   },
   "aeEffectParamNotCarried": "{effect}'s {param} has no equivalent — the effect imported without it",
   "@aeEffectParamNotCarried": {
     "description": "Import report row reason, lower case. Names an effect and one of its controls.",
-    "placeholders": { "effect": { "type": "String" }, "param": { "type": "String" } }
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "param": {
+        "type": "String"
+      }
+    }
   },
   "aeEffectParamApproximated": "{effect}'s {param} imported as {importedAs}",
   "@aeEffectParamApproximated": {
     "description": "Import report row reason, lower case. Names an effect, one of its controls, and the nearest thing Lumit had.",
-    "placeholders": { "effect": { "type": "String" }, "param": { "type": "String" }, "importedAs": { "type": "String" } }
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "param": {
+        "type": "String"
+      },
+      "importedAs": {
+        "type": "String"
+      }
+    }
   },
   "aeEffectDiffers": "{effect} imported, and {detail}",
   "@aeEffectDiffers": {
     "description": "Import report row reason, lower case. The effect mapped whole and evaluates differently; detail is a short clause from the engine, still English.",
-    "placeholders": { "effect": { "type": "String" }, "detail": { "type": "String" } }
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "detail": {
+        "type": "String"
+      }
+    }
   },
   "aeEffectSpeedAsKeyframes": "{effect}'s {param} read the clock — imported as keyframes running at the same rate",
   "@aeEffectSpeedAsKeyframes": {
     "description": "Import report row reason, lower case. A control that advanced by itself became ordinary keyframes.",
-    "placeholders": { "effect": { "type": "String" }, "param": { "type": "String" } }
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "param": {
+        "type": "String"
+      }
+    }
   },
   "aeEffectSuggestion": "{matchName} imported as a placeholder — {instead} does this job in Lumit",
   "@aeEffectSuggestion": {
     "description": "Import report row reason, lower case. An After Effects effect deliberately not mapped, naming the Lumit feature that replaces it.",
-    "placeholders": { "matchName": { "type": "String" }, "instead": { "type": "String" } }
+    "placeholders": {
+      "matchName": {
+        "type": "String"
+      },
+      "instead": {
+        "type": "String"
+      }
+    }
   },
   "aeEffectParamRebased": "{effect}'s {param} was measured in After Effects' units — imported as the same length in Lumit's",
   "@aeEffectParamRebased": {
     "description": "Import report row reason, lower case. Nothing was approximated: the same length is spelled with a different number.",
-    "placeholders": { "effect": { "type": "String" }, "param": { "type": "String" } }
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      },
+      "param": {
+        "type": "String"
+      }
+    }
   },
   "trackNotAnalysed": "Not analysed yet",
   "@trackNotAnalysed": {
@@ -7068,7 +7228,14 @@
   "trackFollowing": "Following frame {done} of {total}",
   "@trackFollowing": {
     "description": "Camera track status line while the shot is being analysed. Both numbers are frame counts.",
-    "placeholders": { "done": { "type": "int" }, "total": { "type": "int" } }
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
   },
   "trackSolvingCamera": "Solving the camera",
   "@trackSolvingCamera": {
@@ -7081,7 +7248,14 @@
   "trackSolvedSummary": "{points} points, {error} px average error",
   "@trackSolvedSummary": {
     "description": "Camera track status line when a solve is in hand. {error} is a number already formatted to two decimals; px is pixels.",
-    "placeholders": { "points": { "type": "int" }, "error": { "type": "String" } }
+    "placeholders": {
+      "points": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
   },
   "trackFailedUnreadable": "The media could not be read",
   "@trackFailedUnreadable": {
