@@ -36,6 +36,9 @@ CompositionReference _stampComp(ProjectReference project, String name,
       fpsNum: was.fpsNum,
       fpsDen: was.fpsDen,
       duration: duration ?? was.duration,
+      background: was.background,
+      shutterAngle: was.shutterAngle,
+      motionBlurSamples: was.motionBlurSamples,
     ),
   );
   comp.addSolidLayer();
@@ -250,6 +253,9 @@ void main() {
           fpsNum: settings.fpsNum,
           fpsDen: settings.fpsDen,
           // 4000 frames at the comp's 60 fps.
+          background: settings.background,
+          shutterAngle: settings.shutterAngle,
+          motionBlurSamples: settings.motionBlurSamples,
           duration: const BridgeRational(num: 200, den: 3),
         ),
       );
@@ -650,6 +656,9 @@ void main() {
           fpsNum: was.fpsNum,
           fpsDen: was.fpsDen,
           duration: was.duration,
+          background: was.background,
+          shutterAngle: was.shutterAngle,
+          motionBlurSamples: was.motionBlurSamples,
         ),
       );
       comp.addSolidLayer();

@@ -223,6 +223,16 @@ pub struct BridgeCompSettings {
     pub fps_num: u32,
     pub fps_den: u32,
     pub duration: BridgeRational,
+    /// The comp's background, scene-linear RGBA — the drawing's Background row
+    /// (K-469). It rides in the settings block because `SetCompSettings`
+    /// carries it anyway: without it here the op had to be handed the colour
+    /// the comp already had, purely so the dialog could not change it.
+    pub background: [f32; 4],
+    /// The master shutter's angle in degrees, and how many sub-frame samples a
+    /// blurred layer is drawn at (K-120) — the drawing's Motion blur section.
+    /// The shutter's *phase* is not in the dialog and is left as it stands.
+    pub shutter_angle: f64,
+    pub motion_blur_samples: u32,
 }
 
 impl BridgeCompSettings {
@@ -240,6 +250,11 @@ impl BridgeCompSettings {
             fps_num: 60,
             fps_den: 1,
             duration: BridgeRational { num: 30, den: 1 },
+            // Black, and the model's own shutter — one place decides what a
+            // comp is, and this is it.
+            background: [0.0, 0.0, 0.0, 1.0],
+            shutter_angle: lumit_core::model::MotionBlur::default().shutter_angle,
+            motion_blur_samples: lumit_core::model::MotionBlur::default().samples,
         }
     }
 
@@ -357,6 +372,9 @@ impl CompositionReference {
                 num: comp.duration.0.num(),
                 den: comp.duration.0.den(),
             },
+            background: comp.background.0,
+            shutter_angle: comp.motion_blur.shutter_angle,
+            motion_blur_samples: comp.motion_blur.samples,
         })
     }
 
@@ -422,8 +440,8 @@ impl CompositionReference {
     ///
     /// Dimensions are clamped to 16..=16384 and the duration to at least one frame,
     /// so a dialog cannot commit a comp that is zero pixels wide or zero frames
-    /// long. The background colour is preserved: it is not part of this dialog, and
-    /// `SetCompSettings` carries the whole settings block.
+    /// long. The shutter needs an op of its own, so the two are folded into one
+    /// undo group: the dialog was one press of one button (K-469).
     ///
     /// Changing only the frame rate changes only the frame rate: the duration
     /// crosses as seconds, so the comp keeps its real length and every layer keeps
@@ -434,9 +452,19 @@ impl CompositionReference {
         let comp = self.composition()?;
         let (frame_rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
 
+        let motion_blur = lumit_core::model::MotionBlur {
+            // The dialog does not ask whether the master switch is on, or what
+            // the shutter's phase is; both are left exactly as they stand.
+            shutter_angle: settings.shutter_angle,
+            samples: settings.motion_blur_samples.max(1),
+            ..comp.motion_blur
+        };
+
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store
+        proj.store.begin_undo_group();
+        let applied = proj
+            .store
             .commit(lumit_core::Op::SetCompSettings {
                 comp: self.id,
                 name: settings.name,
@@ -444,10 +472,23 @@ impl CompositionReference {
                 height: settings.height.clamp(16, 16384),
                 frame_rate,
                 duration,
-                background: comp.background,
+                background: lumit_core::model::LinearColour(settings.background),
             })
-            .map_err(BridgeError::OpError)?;
-        Ok(())
+            .map_err(BridgeError::OpError)
+            .and_then(|_| {
+                if motion_blur == comp.motion_blur {
+                    return Ok(());
+                }
+                proj.store
+                    .commit(lumit_core::Op::SetCompMotionBlur {
+                        comp: self.id,
+                        motion_blur,
+                    })
+                    .map(|_| ())
+                    .map_err(BridgeError::OpError)
+            });
+        proj.store.end_undo_group();
+        applied
     }
 
     /// This composition's background colour, scene-linear RGBA (docs/07 §2.2

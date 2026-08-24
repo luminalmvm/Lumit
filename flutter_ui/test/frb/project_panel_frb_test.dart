@@ -145,7 +145,7 @@ void main() {
             find.byKey(const ValueKey('comp-apply')).evaluate().isNotEmpty,
       );
 
-      expect(find.text('New composition'), findsWidgets);
+      expect(find.text('NEW COMPOSITION'), findsWidgets);
       expect(find.byKey(const ValueKey('rename-field')), findsNothing,
           reason: 'a second click on footage is not a rename any more');
 
@@ -378,7 +378,7 @@ void main() {
         until: () =>
             find.byKey(const ValueKey('comp-apply')).evaluate().isNotEmpty,
       );
-      expect(find.text('New composition'), findsWidgets,
+      expect(find.text('NEW COMPOSITION'), findsWidgets,
           reason: 'the second click opens the dialogue with no arena delay');
       expect(asked, 0,
           reason: 'a double-click on a row is never an empty-area import');
@@ -458,7 +458,7 @@ void main() {
         until: () =>
             find.byKey(const ValueKey('comp-apply')).evaluate().isNotEmpty,
       );
-      expect(find.text('New composition'), findsWidgets,
+      expect(find.text('NEW COMPOSITION'), findsWidgets,
           reason: 'a click on the selected row opens it at once');
       await tester.tap(find.byKey(const ValueKey('comp-cancel')));
       await tester.pumpAndSettle();
@@ -560,7 +560,7 @@ void main() {
             find.byKey(const ValueKey('comp-apply')).evaluate().isNotEmpty,
       );
 
-      expect(find.text('New composition'), findsWidgets,
+      expect(find.text('NEW COMPOSITION'), findsWidgets,
           reason: 'a drop asks for the settings, exactly as the click does');
       await tester.tap(find.byKey(const ValueKey('comp-apply')));
       await tester.pumpAndSettle();
@@ -1120,7 +1120,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('project-new-comp')));
       await tester.pump();
       // The button asks before it commits (K-180): nothing exists until Create.
-      expect(find.text('New composition'), findsWidgets);
+      expect(find.text('NEW COMPOSITION'), findsWidgets);
       expect(p.state.project!.getItems(), isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('comp-apply')));

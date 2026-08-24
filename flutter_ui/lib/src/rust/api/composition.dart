@@ -135,6 +135,18 @@ class BridgeCompSettings {
   final int fpsDen;
   final BridgeRational duration;
 
+  /// The comp's background, scene-linear RGBA — the drawing's Background row
+  /// (K-469). It rides in the settings block because `SetCompSettings`
+  /// carries it anyway: without it here the op had to be handed the colour
+  /// the comp already had, purely so the dialog could not change it.
+  final F32Array4 background;
+
+  /// The master shutter's angle in degrees, and how many sub-frame samples a
+  /// blurred layer is drawn at (K-120) — the drawing's Motion blur section.
+  /// The shutter's *phase* is not in the dialog and is left as it stands.
+  final double shutterAngle;
+  final int motionBlurSamples;
+
   const BridgeCompSettings({
     required this.name,
     required this.width,
@@ -142,6 +154,9 @@ class BridgeCompSettings {
     required this.fpsNum,
     required this.fpsDen,
     required this.duration,
+    required this.background,
+    required this.shutterAngle,
+    required this.motionBlurSamples,
   });
 
   /// What a comp gets when nobody chose: 1920×1080, 60 fps, 30 seconds.
@@ -159,7 +174,10 @@ class BridgeCompSettings {
       height.hashCode ^
       fpsNum.hashCode ^
       fpsDen.hashCode ^
-      duration.hashCode;
+      duration.hashCode ^
+      background.hashCode ^
+      shutterAngle.hashCode ^
+      motionBlurSamples.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -171,7 +189,10 @@ class BridgeCompSettings {
           height == other.height &&
           fpsNum == other.fpsNum &&
           fpsDen == other.fpsDen &&
-          duration == other.duration;
+          duration == other.duration &&
+          background == other.background &&
+          shutterAngle == other.shutterAngle &&
+          motionBlurSamples == other.motionBlurSamples;
 }
 
 /// A composition's pixel dimensions.
@@ -1008,8 +1029,8 @@ class CompositionReference {
   ///
   /// Dimensions are clamped to 16..=16384 and the duration to at least one frame,
   /// so a dialog cannot commit a comp that is zero pixels wide or zero frames
-  /// long. The background colour is preserved: it is not part of this dialog, and
-  /// `SetCompSettings` carries the whole settings block.
+  /// long. The shutter needs an op of its own, so the two are folded into one
+  /// undo group: the dialog was one press of one button (K-469).
   ///
   /// Changing only the frame rate changes only the frame rate: the duration
   /// crosses as seconds, so the comp keeps its real length and every layer keeps

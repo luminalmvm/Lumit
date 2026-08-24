@@ -8896,8 +8896,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeCompSettings dco_decode_bridge_comp_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return BridgeCompSettings(
       name: dco_decode_String(arr[0]),
       width: dco_decode_u_32(arr[1]),
@@ -8905,6 +8905,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       fpsNum: dco_decode_u_32(arr[3]),
       fpsDen: dco_decode_u_32(arr[4]),
       duration: dco_decode_bridge_rational(arr[5]),
+      background: dco_decode_f_32_array_4(arr[6]),
+      shutterAngle: dco_decode_f_64(arr[7]),
+      motionBlurSamples: dco_decode_u_32(arr[8]),
     );
   }
 
@@ -11350,13 +11353,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_fpsNum = sse_decode_u_32(deserializer);
     var var_fpsDen = sse_decode_u_32(deserializer);
     var var_duration = sse_decode_bridge_rational(deserializer);
+    var var_background = sse_decode_f_32_array_4(deserializer);
+    var var_shutterAngle = sse_decode_f_64(deserializer);
+    var var_motionBlurSamples = sse_decode_u_32(deserializer);
     return BridgeCompSettings(
         name: var_name,
         width: var_width,
         height: var_height,
         fpsNum: var_fpsNum,
         fpsDen: var_fpsDen,
-        duration: var_duration);
+        duration: var_duration,
+        background: var_background,
+        shutterAngle: var_shutterAngle,
+        motionBlurSamples: var_motionBlurSamples);
   }
 
   @protected
@@ -14186,6 +14195,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.fpsNum, serializer);
     sse_encode_u_32(self.fpsDen, serializer);
     sse_encode_bridge_rational(self.duration, serializer);
+    sse_encode_f_32_array_4(self.background, serializer);
+    sse_encode_f_64(self.shutterAngle, serializer);
+    sse_encode_u_32(self.motionBlurSamples, serializer);
   }
 
   @protected

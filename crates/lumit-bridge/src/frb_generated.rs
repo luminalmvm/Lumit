@@ -9388,6 +9388,9 @@ impl SseDecode for crate::api::composition::BridgeCompSettings {
         let mut var_fpsNum = <u32>::sse_decode(deserializer);
         let mut var_fpsDen = <u32>::sse_decode(deserializer);
         let mut var_duration = <crate::api::effect::BridgeRational>::sse_decode(deserializer);
+        let mut var_background = <[f32; 4]>::sse_decode(deserializer);
+        let mut var_shutterAngle = <f64>::sse_decode(deserializer);
+        let mut var_motionBlurSamples = <u32>::sse_decode(deserializer);
         return crate::api::composition::BridgeCompSettings {
             name: var_name,
             width: var_width,
@@ -9395,6 +9398,9 @@ impl SseDecode for crate::api::composition::BridgeCompSettings {
             fps_num: var_fpsNum,
             fps_den: var_fpsDen,
             duration: var_duration,
+            background: var_background,
+            shutter_angle: var_shutterAngle,
+            motion_blur_samples: var_motionBlurSamples,
         };
     }
 }
@@ -12833,6 +12839,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::composition::BridgeCompSettin
             self.fps_num.into_into_dart().into_dart(),
             self.fps_den.into_into_dart().into_dart(),
             self.duration.into_into_dart().into_dart(),
+            self.background.into_into_dart().into_dart(),
+            self.shutter_angle.into_into_dart().into_dart(),
+            self.motion_blur_samples.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -15484,6 +15493,9 @@ impl SseEncode for crate::api::composition::BridgeCompSettings {
         <u32>::sse_encode(self.fps_num, serializer);
         <u32>::sse_encode(self.fps_den, serializer);
         <crate::api::effect::BridgeRational>::sse_encode(self.duration, serializer);
+        <[f32; 4]>::sse_encode(self.background, serializer);
+        <f64>::sse_encode(self.shutter_angle, serializer);
+        <u32>::sse_encode(self.motion_blur_samples, serializer);
     }
 }
 

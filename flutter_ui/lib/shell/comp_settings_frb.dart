@@ -1,11 +1,17 @@
 // The Composition settings dialog, and its twin the New composition dialog.
 //
-// One body serves both, because they ask the same four questions — name, size,
-// frame rate, duration — and only differ in what happens when you press the
-// button at the bottom. Reached from the menu bar's Composition ▸ Composition
-// settings…, from the Project panel's context menu on a comp, and from the
-// Project panel's New composition button (including when footage is dropped on
-// it, which prefills the fields from the media — docs/07 §3.1).
+// One body serves both, because they ask the same questions and differ only in
+// what happens when you press the button at the bottom. Reached from the menu
+// bar's Composition ▸ Composition settings…, from the Project panel's context
+// menu on a comp, and from the Project panel's New composition button
+// (including when footage is dropped on it, which prefills the fields from the
+// media — docs/07 §3.1).
+//
+// **The shape is the approved drawing's** (K-469), and it is the *same* popup
+// the export dialog is built from: a kicker title strip, label-left rows in a
+// 110px column with 12 after it, kicker-titled sections separated by a rule,
+// and a footer carrying Cancel and the single filled action. `dialog_frame.dart`
+// holds the pieces; this file holds the questions.
 //
 // **The frame rate is one number, and the duration is a length of time.** Both
 // are deliberate:
@@ -24,6 +30,8 @@
 //   layer kept its own seconds — which looked exactly like the layers speeding
 //   up or slowing down.
 
+import 'dart:typed_data';
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -34,11 +42,33 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 
-/// The label column. Shared with the caption under the Duration field, which is
-/// indented by exactly this so it lines up with the box it describes.
-const double _labelWidth = 86;
+/// The frame the drawing gives this dialog, and its row — a 110px label column
+/// with 12 after it, in rows of 30. Not the Export dialog's (K-458, K-469:
+/// each drawing measures its own).
+const double compDialogWidth = 520;
+const double compLabelColumn = 110;
+const double compRowGap = 12;
+const double compRowHeight = 30;
+
+/// A section: the rule above it, the 4 of air the drawing leaves under that,
+/// and the kicker band over the rows.
+const double compSectionKicker = 24;
+const double compSectionTop = 4;
+
+/// The widths the drawing gives this dialog's wells and its rate list.
+const double compSizeWell = 80;
+const double compDurationWell = 120;
+const double compSamplesWell = 60;
+const double compRateList = 90;
+
+/// The background swatch, and the room between the shutter angle and the
+/// sample count beside it.
+const Size compSwatch = Size(20, 16);
+const double compShutterGap = 50;
 
 /// The frame rates worth one click. The `1001` denominators are the NTSC family,
 /// which is the whole reason the rate crosses the bridge as a pair.
@@ -52,6 +82,19 @@ const List<(String, int, int)> _ratePresets = [
   ('59.94', 60000, 1001),
   ('60', 60, 1),
   ('120', 120, 1),
+];
+
+/// The whole frames the drawing's Preset list offers: a name, a size and a
+/// rate. The names are proper nouns of the trade and are not translated; the
+/// row reads "HD 1080p · 25" through one arb pattern.
+const List<(String, int, int, int, int)> _compPresets = [
+  ('HD 1080p', 1920, 1080, 25, 1),
+  ('HD 1080p', 1920, 1080, 30, 1),
+  ('HD 1080p', 1920, 1080, 60, 1),
+  ('HD 720p', 1280, 720, 25, 1),
+  ('UHD 4K', 3840, 2160, 25, 1),
+  ('Cinema 2K', 2048, 1080, 24, 1),
+  ('Vertical 1080', 1080, 1920, 30, 1),
 ];
 
 /// Edit an existing comp. Returns true when settings were applied, so the caller
@@ -90,7 +133,7 @@ Future<CompositionReference?> showNewCompositionFrb({
   /// Settings ▸ Interface ▸ Editing ▸ *Video arrives as a Sequence layer*
   /// (K-246), forwarded to the engine for each item placed below. Taken as an
   /// argument rather than read from the workspace here, because this file is
-  /// a dialogue and knows nothing about where settings live.
+  /// a dialog and knows nothing about where settings live.
   bool asSequence = false,
 }) async {
   // Probed before the dialog opens rather than inside it: `mediaInfo` reads the
@@ -111,6 +154,9 @@ Future<CompositionReference?> showNewCompositionFrb({
       // The longest item wins: a comp shorter than something dropped into it
       // would clip the very thing that was asked for.
       duration: _longer(initial.duration, info.duration),
+      background: initial.background,
+      shutterAngle: initial.shutterAngle,
+      motionBlurSamples: initial.motionBlurSamples,
     );
   }
   if (!context.mounted) return null;
@@ -129,6 +175,9 @@ Future<CompositionReference?> showNewCompositionFrb({
         fpsNum: initial.fpsNum,
         fpsDen: initial.fpsDen,
         duration: initial.duration,
+        background: initial.background,
+        shutterAngle: initial.shutterAngle,
+        motionBlurSamples: initial.motionBlurSamples,
       ),
       onConfirm: (settings) {
         final comp =
@@ -173,6 +222,9 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
   late final TextEditingController _duration;
   late int _width;
   late int _height;
+  late List<double> _background;
+  late double _shutterAngle;
+  late int _samples;
 
   /// Keep the shape when one side is edited. On by default, because resizing a
   /// comp to a shape it was never meant to be is nearly always a slip.
@@ -192,6 +244,9 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         text: timecodeOfDuration(s.duration, s.fpsNum, s.fpsDen));
     _width = s.width;
     _height = s.height;
+    _background = List<double>.from(s.background);
+    _shutterAngle = s.shutterAngle;
+    _samples = s.motionBlurSamples;
   }
 
   @override
@@ -212,6 +267,22 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         .firstOrNull;
   }
 
+  /// The whole-frame preset the fields currently say, or null when they say
+  /// something of their own.
+  (String, int, int, int, int)? get _compPreset {
+    final rate = parseRate(_fps.text);
+    if (rate == null) return null;
+    for (final preset in _compPresets) {
+      if (preset.$2 == _width &&
+          preset.$3 == _height &&
+          preset.$4 == rate.$1 &&
+          preset.$5 == rate.$2) {
+        return preset;
+      }
+    }
+    return null;
+  }
+
   void _confirm() {
     final rate =
         parseRate(_fps.text) ?? (widget.initial.fpsNum, widget.initial.fpsDen);
@@ -230,6 +301,9 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       fpsNum: rate.$1,
       fpsDen: rate.$2,
       duration: duration,
+      background: F32Array4(Float32List.fromList(_background)),
+      shutterAngle: _shutterAngle,
+      motionBlurSamples: _samples,
     ));
   }
 
@@ -252,167 +326,359 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return FloatSurface(
-      width: 344,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              widget.title,
-              style: t.bodyPrimary,
-              textAlign: TextAlign.center,
-            ),
-          ),
-          _row(
-            t,
-            l10n.name,
-            Expanded(
-              child: HouseTextField(
-                key: const ValueKey('comp-name'),
-                controller: _name,
-                width: double.infinity,
-                onSubmitted: (_) => _confirm(),
-              ),
-            ),
-          ),
-          _row(t, l10n.size, _sizeRow(t)),
-          _row(t, l10n.frameRate, _rateRow(t)),
-          _row(
-            t,
-            l10n.duration,
-            Expanded(
-              child: HouseTextField(
-                key: const ValueKey('comp-duration'),
-                controller: _duration,
-                width: double.infinity,
-                onSubmitted: (_) => _confirm(),
-              ),
-            ),
-          ),
-          Padding(
-            // Indented to the field column, not the label column: it explains
-            // the box above it, so it lines up with that box.
-            padding:
-                const EdgeInsets.only(left: _labelWidth, top: 4, bottom: 10),
-            child: Text(l10n.durationFormatNote, style: t.caption),
-          ),
-          Row(
+    return DialogFrame(
+      width: compDialogWidth,
+      children: [
+        dialogTitleBar(
+          t,
+          title: widget.title,
+          onClose: widget.onCancel,
+          keyPrefix: 'comp',
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              dialogPadding, dialogPadding, dialogPadding, 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              HouseButton(
-                key: const ValueKey('comp-apply'),
-                // The window's default action (K-319): focused on open so
-                // Enter applies; a field being typed in keeps Enter for its
-                // own submit, which calls the same confirm.
-                primary: true,
-                autofocus: true,
-                onPressed: _confirm,
-                child: Text(widget.confirm),
+              _row(
+                t,
+                l10n.name,
+                SizedBox(
+                  height: dialogControlHeight,
+                  child: HouseTextField(
+                    key: const ValueKey('comp-name'),
+                    controller: _name,
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    fill: t.surface0,
+                    onSubmitted: (_) => _confirm(),
+                  ),
+                ),
               ),
-              const SizedBox(width: 8),
-              HouseButton(
-                key: const ValueKey('comp-cancel'),
-                onPressed: widget.onCancel,
-                child: Text(l10n.cancel),
-              ),
+              _row(t, l10n.exportPreset, _presetRow(t)),
             ],
           ),
-        ],
-      ),
+        ),
+        _section(t, l10n.compGroupFrame, [
+          _row(t, l10n.size, _sizeRow(t)),
+          _row(t, l10n.frameRate, _rateRow(t)),
+          _row(t, l10n.duration, _durationRow(t)),
+          _row(t, l10n.compBackground, _backgroundRow(t)),
+        ]),
+        _section(t, l10n.compGroupMotionBlur, [
+          _row(t, l10n.compShutterAngle, _shutterRow(t)),
+        ]),
+        dialogFooter(
+          t,
+          keyPrefix: 'comp',
+          actions: [
+            HouseButton(
+              key: const ValueKey('comp-cancel'),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              onPressed: widget.onCancel,
+              child: Text(l10n.cancel),
+            ),
+            HouseButton(
+              key: const ValueKey('comp-apply'),
+              // The window's default action (K-319): focused on open so Enter
+              // applies; a field being typed in keeps Enter for its own submit,
+              // which calls the same confirm.
+              primary: true,
+              autofocus: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              onPressed: _confirm,
+              child: Text(widget.confirm),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _sizeRow(LumitTheme t) => Expanded(
-        child: Row(
-          children: [
-            Expanded(
-              child: DragValueField(
-                key: const ValueKey('comp-width'),
-                value: _width,
-                min: 16,
-                max: 16384,
-                fill: t.surface0,
-                onChanged: (v) => _setSize(width: v.toInt()),
-              ),
+  // ---- the rows ------------------------------------------------------------
+
+  Widget _presetRow(LumitTheme t) {
+    final current = _compPreset;
+    return dialogDropdown<(String, int, int, int, int)?>(
+      t,
+      id: 'comp-preset',
+      value: current,
+      options: [null, ..._compPresets],
+      label: (preset) => preset == null
+          ? l10n.custom
+          : l10n.compPresetLabel(preset.$1, _formatRate(preset.$4, preset.$5)),
+      onChanged: (preset) {
+        if (preset == null) return;
+        setState(() {
+          _width = preset.$2;
+          _height = preset.$3;
+          _fps.text = _formatRate(preset.$4, preset.$5);
+        });
+      },
+    );
+  }
+
+  Widget _sizeRow(LumitTheme t) => Row(
+        children: [
+          SizedBox(
+            width: compSizeWell,
+            height: dialogControlHeight,
+            child: DragValueField(
+              key: const ValueKey('comp-width'),
+              value: _width,
+              min: 16,
+              max: 16384,
+              fill: t.surface0,
+              onChanged: (v) => _setSize(width: v.toInt()),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text('×', style: t.small),
-            ),
-            Expanded(
-              child: DragValueField(
-                key: const ValueKey('comp-height'),
-                value: _height,
-                min: 16,
-                max: 16384,
-                fill: t.surface0,
-                onChanged: (v) => _setSize(height: v.toInt()),
-              ),
-            ),
-            const SizedBox(width: 6),
-            LumitTooltip(
-              message: _locked ? l10n.tipAspectLocked : l10n.tipAspectUnlocked,
-              child: HouseButton(
-                key: const ValueKey('comp-size-lock'),
-                small: true,
-                onPressed: () => setState(() => _locked = !_locked),
-                child: lumitIcon(
-                  _locked ? LumitIcon.lock : LumitIcon.unlock,
-                  size: iconSize,
-                  color: _locked ? t.accent : t.textMuted,
+          ),
+          // The drawing's chain link between the two sides: the shape is kept
+          // while it is joined, and each side is its own while it is not.
+          LumitTooltip(
+            message: _locked ? l10n.tipAspectLocked : l10n.tipAspectUnlocked,
+            child: GestureDetector(
+              key: const ValueKey('comp-size-lock'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => _locked = !_locked),
+              child: SizedBox(
+                width: 24,
+                height: dialogControlHeight,
+                child: Center(
+                  child: lumitIcon(
+                    _locked ? LumitIcon.lock : LumitIcon.unlock,
+                    size: 12,
+                    color: _locked ? t.textPrimary : t.textMuted,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 6),
-            Text(
-              aspectRatioLabel(_width, _height),
-              key: const ValueKey('comp-aspect'),
-              style: t.small,
+          ),
+          SizedBox(
+            width: compSizeWell,
+            height: dialogControlHeight,
+            child: DragValueField(
+              key: const ValueKey('comp-height'),
+              value: _height,
+              min: 16,
+              max: 16384,
+              fill: t.surface0,
+              onChanged: (v) => _setSize(height: v.toInt()),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 6),
+          Text(l10n.unitSymbolPx, style: dialogMono(t)),
+          const Spacer(),
+          Text(
+            aspectRatioLabel(_width, _height),
+            key: const ValueKey('comp-aspect'),
+            style: dialogMono(t),
+          ),
+        ],
       );
 
-  Widget _rateRow(LumitTheme t) => Expanded(
-        child: Row(
-          children: [
-            Expanded(
-              child: HouseTextField(
-                key: const ValueKey('comp-fps'),
-                controller: _fps,
-                width: double.infinity,
-                onSubmitted: (_) => _confirm(),
+  Widget _rateRow(LumitTheme t) => Row(
+        children: [
+          SizedBox(
+            width: compSizeWell,
+            height: dialogControlHeight,
+            child: HouseTextField(
+              key: const ValueKey('comp-fps'),
+              controller: _fps,
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              fill: t.surface0,
+              onSubmitted: (_) => _confirm(),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(l10n.unitFps, style: dialogMono(t)),
+          const Spacer(),
+          dialogDropdown<String>(
+            t,
+            id: 'comp-fps-presets',
+            // A rate of one's own reads as "Custom" rather than as an empty
+            // invitation: the list is where you *change* the rate, and what it
+            // shows is what the field beside it currently says.
+            value: _presetLabel ?? l10n.custom,
+            options: [..._ratePresets.map((p) => p.$1)],
+            label: (s) => s,
+            onChanged: (picked) => setState(() => _fps.text = picked),
+            width: compRateList,
+          ),
+        ],
+      );
+
+  Widget _durationRow(LumitTheme t) {
+    final rate =
+        parseRate(_fps.text) ?? (widget.initial.fpsNum, widget.initial.fpsDen);
+    final frames = framesOfTimecode(_duration.text, rate.$1, rate.$2);
+    final seconds = rate.$1 == 0 ? 0.0 : (frames ?? 0) * rate.$2 / rate.$1;
+    return Row(
+      children: [
+        SizedBox(
+          width: compDurationWell,
+          height: dialogControlHeight,
+          child: HouseTextField(
+            key: const ValueKey('comp-duration'),
+            controller: _duration,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            fill: t.surface0,
+            onSubmitted: (_) => _confirm(),
+          ),
+        ),
+        const SizedBox(width: 6),
+        // The drawing's reading, which is also the note the old dialog spent a
+        // whole line on: what the timecode above means, said in frames and
+        // seconds rather than explained in a sentence.
+        Flexible(
+          child: Text(
+            l10n.compDurationReading(
+                '${frames ?? 0}', seconds.toStringAsFixed(1)),
+            key: const ValueKey('comp-duration-reading'),
+            style: dialogMono(t),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _backgroundRow(LumitTheme t) => Row(
+        children: [
+          GestureDetector(
+            key: const ValueKey('comp-background'),
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) => _pickBackground(details.globalPosition),
+            child: Container(
+              width: compSwatch.width,
+              height: compSwatch.height,
+              decoration: BoxDecoration(
+                color: _backgroundColour,
+                border: Border.all(color: t.hairline),
+                borderRadius: BorderRadius.circular(dialogGroupRadius),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: Text('fps', style: t.small),
-            ),
-            BareDropdown<String>(
-              key: const ValueKey('comp-fps-presets'),
-              // A rate of one's own reads as "Custom" rather than as an empty
-              // invitation: the list is where you *change* the rate, and what it
-              // shows is what the field beside it currently says.
-              value: _presetLabel ?? l10n.custom,
-              options: [..._ratePresets.map((p) => p.$1)],
-              label: (s) => s,
-              onChanged: (picked) => setState(() => _fps.text = picked),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Text(_backgroundHex, style: dialogMono(t)),
+        ],
       );
 
-  Widget _row(LumitTheme t, String label, Widget field) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            SizedBox(width: _labelWidth, child: Text(label, style: t.small)),
-            field,
-          ],
-        ),
+  Widget _shutterRow(LumitTheme t) => Row(
+        children: [
+          SizedBox(
+            width: compSizeWell,
+            height: dialogControlHeight,
+            child: DragValueField(
+              key: const ValueKey('comp-shutter-angle'),
+              value: _shutterAngle,
+              min: 0,
+              max: 720,
+              decimals: 1,
+              fill: t.surface0,
+              onChanged: (v) => setState(() => _shutterAngle = v.toDouble()),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(l10n.unitSymbolDegrees, style: dialogMono(t)),
+          const SizedBox(width: compShutterGap),
+          Text(l10n.compSamples, style: t.body),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: compSamplesWell,
+            height: dialogControlHeight,
+            child: DragValueField(
+              key: const ValueKey('comp-samples'),
+              value: _samples,
+              min: 1,
+              max: 256,
+              fill: t.surface0,
+              onChanged: (v) => setState(() => _samples = v.toInt()),
+            ),
+          ),
+        ],
       );
+
+  // ---- the pieces ----------------------------------------------------------
+
+  Widget _row(LumitTheme t, String label, Widget control) => dialogRow(
+        t,
+        label,
+        control,
+        labelColumn: compLabelColumn,
+        gap: compRowGap,
+        minHeight: compRowHeight,
+      );
+
+  /// A named group of rows: a rule, the drawing's 4 of air, a kicker band, and
+  /// the rows under it. The Settings pages' shape rather than the Export
+  /// dialog's box — this drawing separates its sections with a line (K-469).
+  Widget _section(LumitTheme t, String title, List<Widget> rows) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(height: 1, color: t.hairline),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                dialogPadding, compSectionTop, dialogPadding, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: compSectionKicker,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(title.toUpperCase(), style: t.kicker),
+                    ),
+                  ),
+                ),
+                ...rows,
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Color get _backgroundColour => Color.fromARGB(
+        255,
+        (_background[0].clamp(0.0, 1.0) * 255).round(),
+        (_background[1].clamp(0.0, 1.0) * 255).round(),
+        (_background[2].clamp(0.0, 1.0) * 255).round(),
+      );
+
+  String get _backgroundHex {
+    String two(int i) => (_background[i].clamp(0.0, 1.0) * 255)
+        .round()
+        .toRadixString(16)
+        .padLeft(2, '0');
+    return '#${two(0)}${two(1)}${two(2)}';
+  }
+
+  /// The colour is chosen here and written when the dialog is, like every other
+  /// field: nothing this dialog asks about lands before its button is pressed.
+  void _pickBackground(Offset position) {
+    final t = ThemeScope.of(context).theme;
+    showColourPicker(
+      context: context,
+      position: position,
+      initial: PickedColour.of(_backgroundColour),
+      presets: t.backgroundPresets,
+      onCommit: (picked) => setState(() {
+        _background = [
+          picked.r.toDouble(),
+          picked.g.toDouble(),
+          picked.b.toDouble(),
+          1.0,
+        ];
+      }),
+    );
+  }
 }
 
 /// A rate as one number: `60`, `23.976`. Trailing zeros are dropped, so the

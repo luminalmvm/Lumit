@@ -230,11 +230,18 @@ impl ProjectReference {
             height: settings.height.clamp(16, 16384),
             frame_rate,
             duration,
-            background: LinearColour::BLACK,
+            // The dialog's own answers (K-469): the Background row and the
+            // Motion blur section decide these at creation, and a settings
+            // block that was never filled in carries the defaults anyway.
+            background: LinearColour(settings.background),
             work_area: None,
             layers: Vec::new(),
             markers: Vec::new(),
-            motion_blur: MotionBlur::default(),
+            motion_blur: MotionBlur {
+                shutter_angle: settings.shutter_angle,
+                samples: settings.motion_blur_samples.max(1),
+                ..MotionBlur::default()
+            },
             extra: serde_json::Map::new(),
         };
         let comp_id = comp.id;

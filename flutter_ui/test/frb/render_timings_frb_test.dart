@@ -39,6 +39,9 @@ void main() {
           fpsNum: was.fpsNum,
           fpsDen: was.fpsDen,
           duration: was.duration,
+          background: was.background,
+          shutterAngle: was.shutterAngle,
+          motionBlurSamples: was.motionBlurSamples,
         ),
       );
       comp.addSolidLayer();

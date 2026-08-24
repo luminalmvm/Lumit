@@ -426,6 +426,48 @@ fn import_and_new_composition_land_in_the_item_tree() {
     assert_eq!(comp.get_size().expect("size").width, 1920);
 }
 
+/// The settings block carries the whole of the dialog's drawing (K-469): the
+/// background the Background row sets and the shutter the Motion blur section
+/// sets, applied with everything else as **one** undo step.
+///
+/// Without the grouping the shutter is its own journal entry, so one press of
+/// Save takes two Ctrl+Z to put back — which is the bug this asserts against.
+#[test]
+fn composition_settings_carry_the_background_and_the_shutter_as_one_step() {
+    let (project, ..) = project_with_folder();
+    let comp = add_comp(&project, "Scene");
+
+    let before = comp.get_settings().expect("settings");
+    assert_eq!(before.shutter_angle, 180.0, "the model's own default shutter");
+
+    comp.set_settings(BridgeCompSettings {
+        name: "Scene".into(),
+        width: 1920,
+        height: 1080,
+        fps_num: 25,
+        fps_den: 1,
+        duration: BridgeRational { num: 10, den: 1 },
+        background: [0.25, 0.0, 0.5, 1.0],
+        shutter_angle: 90.0,
+        motion_blur_samples: 32,
+    })
+    .expect("applied");
+
+    let after = comp.get_settings().expect("settings");
+    assert_eq!(after.background, [0.25, 0.0, 0.5, 1.0]);
+    assert_eq!(after.shutter_angle, 90.0);
+    assert_eq!(after.motion_blur_samples, 32);
+
+    // One press of Save, one Ctrl+Z: the shutter and the rest come back
+    // together, not one after the other.
+    project.undo().expect("undone");
+    let undone = comp.get_settings().expect("settings");
+    assert_eq!(undone.background, before.background);
+    assert_eq!(undone.shutter_angle, 180.0);
+    assert_eq!(undone.motion_blur_samples, before.motion_blur_samples);
+    assert_eq!(undone.fps_num, before.fps_num, "and so does the rate");
+}
+
 /// Composition settings must round-trip exactly, including a non-integer frame
 /// rate. 29.97 fps is 30000/1001; if the pair went through a float anywhere it
 /// would not come back, which is why the settings type carries num and den rather
@@ -445,6 +487,9 @@ fn composition_settings_round_trip_including_a_drop_frame_rate() {
         fps_num: 30000,
         fps_den: 1001,
         duration: BridgeRational { num: 8, den: 1 },
+        background: [0.0, 0.0, 0.0, 1.0],
+        shutter_angle: 180.0,
+        motion_blur_samples: 16,
     })
     .expect("applied");
 
@@ -518,6 +563,9 @@ fn composition_settings_clamp_the_absurd_and_refuse_a_zero_rate() {
         fps_num: 30,
         fps_den: 1,
         duration: BridgeRational { num: 0, den: 1 },
+        background: [0.0, 0.0, 0.0, 1.0],
+        shutter_angle: 180.0,
+        motion_blur_samples: 16,
     })
     .expect("applied");
 
@@ -533,6 +581,9 @@ fn composition_settings_clamp_the_absurd_and_refuse_a_zero_rate() {
             fps_num: 0,
             fps_den: 1,
             duration: BridgeRational { num: 10, den: 1 },
+            background: [0.0, 0.0, 0.0, 1.0],
+            shutter_angle: 180.0,
+            motion_blur_samples: 16,
         }),
         Err(BridgeError::InvalidFrameRate)
     ));
@@ -5359,6 +5410,9 @@ fn switching_retime_off_re_hangs_the_layer_on_its_source() {
                 fps_num: 60,
                 fps_den: 1,
                 duration: rational(5, 1),
+                background: [0.0, 0.0, 0.0, 1.0],
+                shutter_angle: 180.0,
+                motion_blur_samples: 16,
             }),
         )
         .expect("comp");
@@ -5457,6 +5511,9 @@ fn a_flattened_retime_is_removed_rather_than_freezing_the_layer() {
                 fps_num: 60,
                 fps_den: 1,
                 duration: BridgeRational { num: 5, den: 1 },
+                background: [0.0, 0.0, 0.0, 1.0],
+                shutter_angle: 180.0,
+                motion_blur_samples: 16,
             }),
         )
         .expect("comp");
@@ -5944,6 +6001,9 @@ fn a_tracked_layer() -> (
                 // half-minute comp would be fifty keyframes' worth of test for
                 // no extra claim.
                 duration: BridgeRational { num: 2, den: 1 },
+                background: [0.0, 0.0, 0.0, 1.0],
+                shutter_angle: 180.0,
+                motion_blur_samples: 16,
             }),
         )
         .expect("comp");

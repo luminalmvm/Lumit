@@ -12659,3 +12659,36 @@ format list (under Type, filtered by it).
 
 **Export defaults are not a Settings page here.** The queue's engine half stores nothing
 between sessions; the Settings drawing's Export page stays where docs/TODO.md left it.
+
+## K-470 — The composition dialog is the export dialog's twin, and its settings block carries the background and the shutter
+
+**DECIDED 2026-08-24.** The New composition / Composition settings dialog is rebuilt to its
+own approved drawing, which is the same popup K-469 settles at another size: a kicker title
+strip, rows of **30** in a **110px** label column with **12** after it, kicker-titled
+sections separated by a rule, and a footer carrying Cancel beside the single filled action.
+docs/07 §13.3 and 15-DESIGN §12A.4 carry it.
+
+**The drawing asks two questions the dialog never asked**, and both are answered by the
+settings block rather than by calls of their own:
+
+- **Background** — the colour behind everything in the comp. It rides in
+  `BridgeCompSettings` because `SetCompSettings` carried it anyway: the op was being handed
+  the colour the comp already had, purely so the dialog could not change it.
+- **Motion blur** — the master shutter's angle and its sample count (K-120). The shutter's
+  *phase* and the master on/off switch stay out: the switch is the Timeline's master button,
+  and the phase has no drawn home.
+
+**Applying is one undo step**, which needed saying because the shutter is a second op:
+`set_settings` folds both into one undo group, so one press of Save is one Ctrl+Z. A **new**
+composition takes the same block, so a comp is created with the background and shutter the
+dialog was left on rather than with the defaults and a correction afterwards.
+
+**The drawing's chain link replaces the lock button** between the two size fields — the same
+toggle, drawn as the drawing draws it — and **the duration's explanatory sentence is gone**,
+replaced by the drawing's factual reading beside the field (`750 frames · 30.0 s`). That is
+§12A.4's rule in miniature: a row states what it is, and reports where there is something to
+report, but never explains itself.
+
+**A Preset list is added**: whole formats, a size and a rate together (`HD 1080p · 25`),
+reading *Custom* whenever the fields say something of their own. The list is the frontend's,
+like the rate presets beside it — a table of standard formats is not an engine decision.

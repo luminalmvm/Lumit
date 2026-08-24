@@ -7887,5 +7887,49 @@
   "menuExportQueue": "Export queue…",
   "@menuExportQueue": {
     "description": "Window menu: opens the export queue window."
+  },
+  "compGroupFrame": "Frame",
+  "@compGroupFrame": {
+    "description": "New composition / Composition settings dialog: the section naming the size, rate, length and background."
+  },
+  "compGroupMotionBlur": "Motion blur",
+  "@compGroupMotionBlur": {
+    "description": "New composition / Composition settings dialog: the section naming the shutter every blurred layer is drawn through."
+  },
+  "compShutterAngle": "Shutter angle",
+  "@compShutterAngle": {
+    "description": "New composition / Composition settings dialog: row label: how much of a frame the shutter is open for, in degrees."
+  },
+  "compSamples": "Samples",
+  "@compSamples": {
+    "description": "New composition / Composition settings dialog: label beside the shutter angle: how many sub-frame samples a blurred layer is drawn at."
+  },
+  "compBackground": "Background",
+  "@compBackground": {
+    "description": "New composition / Composition settings dialog: row label: the colour behind everything in the composition."
+  },
+  "compDurationReading": "{frames} frames · {seconds} s",
+  "@compDurationReading": {
+    "description": "New composition / Composition settings dialog: a factual reading beside the duration: what the timecode comes to.",
+    "placeholders": {
+      "frames": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "compPresetLabel": "{name} · {rate}",
+  "@compPresetLabel": {
+    "description": "New composition / Composition settings dialog: one entry in the preset list: a format name (not translated) and its frame rate.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "String"
+      }
+    }
   }
 }

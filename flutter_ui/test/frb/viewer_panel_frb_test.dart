@@ -339,6 +339,9 @@ void main() {
           height: 90,
           fpsNum: was.fpsNum,
           fpsDen: was.fpsDen,
+          background: was.background,
+          shutterAngle: was.shutterAngle,
+          motionBlurSamples: was.motionBlurSamples,
           duration: const BridgeRational(num: 1, den: 10),
         ),
       );
@@ -384,6 +387,9 @@ void main() {
           fpsNum: 30000,
           fpsDen: 1001,
           duration: settings.duration,
+          background: settings.background,
+          shutterAngle: settings.shutterAngle,
+          motionBlurSamples: settings.motionBlurSamples,
         ),
       );
       await mount(tester, p);

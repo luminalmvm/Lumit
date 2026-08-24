@@ -6,11 +6,15 @@
 // reach the engine as the exact pair, and a duration typed as a wall-clock time
 // has to survive a rate change untouched — that is the whole of the fix.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/shell/comp_settings_frb.dart';
+import 'package:lumit_flutter/shell/dialog_frame.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/state/timecode.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
@@ -213,13 +217,19 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('60'), findsWidgets, reason: 'the default rate');
-      expect(find.text('Custom'), findsNothing,
+      // Scoped to the rate list: the Preset row above it says Custom for its
+      // own reasons — a size and a rate that match no whole format (K-469).
+      Finder customRate() => find.descendant(
+            of: find.byKey(const ValueKey('comp-fps-presets')),
+            matching: find.text('Custom'),
+          );
+      expect(customRate(), findsNothing,
           reason: '60 is a preset, so it is named');
 
       await tester.enterText(find.byKey(const ValueKey('comp-fps')), '600');
       await tester.pump();
 
-      expect(find.text('Custom'), findsOneWidget,
+      expect(customRate(), findsOneWidget,
           reason: 'and it follows the field as it is typed into');
     });
 
@@ -250,4 +260,154 @@ void main() {
       expect(comp.getSettings().name, before.name);
     });
   });
+
+  /// The dialog measured against its own drawing (K-469). It is the same popup
+  /// the export dialog is built from, at its own width and with its own row:
+  /// a 110px label column, 12 after it, rows of 30.
+  group('New composition metrics (frb)', () {
+    setUpAll(initEngineForTests);
+
+    Future<void> open(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final p = freshProject();
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => GestureDetector(
+            key: const ValueKey('open'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showNewCompositionFrb(
+                context: context, project: p.state.project!),
+            child: const SizedBox(width: 200, height: 40),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1000, 800),
+      ));
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pumpAndSettle();
+    }
+
+    Rect band(WidgetTester tester, String key) =>
+        tester.getRect(find.byKey(ValueKey<String>(key)));
+
+    testWidgets('the dialog is the drawing\'s frame', (tester) async {
+      await open(tester);
+
+      final title = band(tester, 'comp-title-strip');
+      final footer = band(tester, 'comp-footer');
+      expect(title.width, compDialogWidth,
+          reason: 'the drawing frames this dialog at 520 wide');
+      expect(title.height, dialogTitleStrip + 1,
+          reason: '§12A.4: a dialog title strip is 30, over a hairline');
+      expect(footer.height, dialogFooterHeight,
+          reason: '10 above a 24px button and 10 below it, over a hairline');
+      expect(find.text('NEW COMPOSITION'), findsOneWidget,
+          reason: 'the title is a kicker — mono capitals');
+
+      await tester.tap(find.byKey(const ValueKey('comp-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a row is 110 and 12, in 30', (tester) async {
+      await open(tester);
+
+      final label = tester.getRect(find
+          .ancestor(of: find.text('Name'), matching: find.byType(SizedBox))
+          .first);
+      expect(label.width, compLabelColumn,
+          reason: "this drawing's label column is 110, not Export's 100");
+      final well = band(tester, 'comp-name');
+      expect(well.height, dialogControlHeight,
+          reason: '§12A.6: a well in a dialog is 22');
+      expect(well.left - label.right, compRowGap,
+          reason: 'the control stands 12 after the label column');
+
+      await tester.tap(find.byKey(const ValueKey('comp-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the drawing\'s sections and their rows are all here',
+        (tester) async {
+      await open(tester);
+
+      expect(find.text('FRAME'), findsOneWidget);
+      expect(find.text('MOTION BLUR'), findsOneWidget);
+      for (final key in [
+        'comp-preset',
+        'comp-width',
+        'comp-height',
+        'comp-size-lock',
+        'comp-aspect',
+        'comp-fps',
+        'comp-fps-presets',
+        'comp-duration',
+        'comp-duration-reading',
+        'comp-background',
+        'comp-shutter-angle',
+        'comp-samples',
+      ]) {
+        expect(find.byKey(ValueKey<String>(key)), findsOneWidget,
+            reason: '$key is on the drawing');
+      }
+
+      await tester.tap(find.byKey(const ValueKey('comp-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The two sections the drawing added are real edits, not decoration: a
+    /// shutter set here reaches the composition it makes (K-120, K-469).
+    testWidgets('the shutter the dialog sets is the comp\'s own',
+        (tester) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final p = freshProject();
+      CompositionReference? made;
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => GestureDetector(
+            key: const ValueKey('open'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () async => made = await showNewCompositionFrb(
+                context: context, project: p.state.project!),
+            child: const SizedBox(width: 200, height: 40),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1000, 800),
+      ));
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pumpAndSettle();
+
+      // Scrubbed the way a mouse does it: a plain drag is one unit a pixel.
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('comp-samples'))),
+        kind: PointerDeviceKind.mouse,
+      );
+      await gesture.moveBy(const Offset(2, 0));
+      await tester.pump();
+      await gesture.moveBy(const Offset(8, 0));
+      await tester.pump();
+      await gesture.moveBy(const Offset(8, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(
+          (tester.widget(find.byKey(const ValueKey('comp-samples')))
+                  as DragValueField)
+              .value,
+          greaterThan(16),
+          reason: 'the field took the scrub');
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      expect(made, isNotNull, reason: 'the dialog made the comp');
+      expect(made!.getSettings().motionBlurSamples, greaterThan(16),
+          reason: 'the sample count the dialog was left on is the comp\'s');
+    });
+  }, skip: !engineAvailable);
 }

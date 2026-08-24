@@ -3443,6 +3443,9 @@ void main() {
           height: settings.height,
           fpsNum: settings.fpsNum,
           fpsDen: settings.fpsDen,
+          background: settings.background,
+          shutterAngle: settings.shutterAngle,
+          motionBlurSamples: settings.motionBlurSamples,
           duration: const BridgeRational(num: 5, den: 1),
         ),
       );

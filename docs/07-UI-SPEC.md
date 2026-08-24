@@ -2190,11 +2190,15 @@ small image over each choice, remain the destination (polish tracked in TODO).
 ### 13.3 The composition settings dialogue (K-180)
 
 One window serves both **New composition** (Create) and **Composition settings** (Save); they
-ask the same four questions and differ only in what the button does. It is reached from the
+ask the same questions and differ only in what the button does. It is reached from the
 Composition menu, the Project panel's footer button, a right-click on a comp row, and a drop of
-footage on that button (§3.1).
+footage on that button (§3.1). It is built to the shared dialog pattern
+([15-DESIGN.md](15-DESIGN.md) §12A.4, K-469): a kicker title strip, rows of 30 in a 110px
+label column, two kicker-titled sections, and Cancel beside the single filled action.
 
 - **Name.**
+- **Preset**: the whole formats worth one click — a size and a rate together (`HD 1080p · 25`)
+  — reading *Custom* whenever the fields say something of their own.
 - **Size**: width × height, with an aspect-ratio lock (on by default — editing one side carries
   the other) and the shape shown beside it in its smallest whole numbers (`40 : 17`).
 - **Frame rate**: **one number**, in fps. `600` and `23.976` are both typed as they read; a
@@ -2207,6 +2211,16 @@ footage on that button (§3.1).
   typed rate — never a frame count: a count means nothing without the rate it was counted at,
   and writing one back at a *changed* rate is what used to make the comp longer or shorter
   under layers that had not moved (K-180).
+
+- **Background**: the colour behind everything in the comp, chosen from the ordinary colour
+  picker and written with the rest when the button is pressed — the same property the Viewer's
+  view menu edits (§2.2), reached from the dialog that decides what a composition *is*.
+- **Motion blur**: the master shutter's **angle** in degrees and the number of sub-frame
+  **samples** a blurred layer is drawn at (K-120). The shutter's phase and the master on/off
+  switch are not here: the switch is the Timeline's, and the phase has no drawn home yet.
+
+Every field lands together, as **one undo step**, including the two that need ops of their own
+(K-469).
 
 **Changing the frame rate MUST change only the frame rate.** The comp keeps its length, every
 layer keeps its timing, and nothing plays faster or slower — the comp is simply shown at more
