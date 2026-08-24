@@ -190,6 +190,18 @@ one question the document already knows the answer to:
     "Folder N", and `parent` files it. The ops commit as one `Op::Batch`, which is what makes
     the folder and its filing arrive and leave together; a `parent` that no longer names a
     folder leaves it at the root rather than erroring.
+- `ItemReference::move_to_folder(folder)` / `ItemReference::move_to_root()` — the panel's
+    two filing gestures: a drag onto a folder row, **Move to folder** on the row menu, and
+    **Move to root**. The composition is the engine's (`ops::move_to_folder_ops`) and it is
+    one `Op::Batch`, so an item leaves its old folder in the same undo step it joins the new
+    one — an item listed by two folders would draw twice in the panel. Filing something where
+    it already sits commits nothing at all rather than an undo step that changed nothing. Two
+    refusals, both calm: an item or folder that no longer exists is `InvalidItem`, and a
+    folder asked to move inside itself or its own descendant is `FolderCycle` — that move
+    would take the whole branch off the panel root with nothing left to drag it back by.
+    **Filing several items together is the frontend's `beginUndoGroup`/`endUndoGroup` round
+    the calls**, not a plural entry point: the seam stays one item per call, and the group is
+    what makes a multi-selection one undo step.
 - `FootageReference::file_path()` — the Path column: the relative path a saved project
     actually carries (K-173), falling back to the absolute one when a project has never been
     saved. **Display data, and it touches no disk** — `get_status` is the question about the

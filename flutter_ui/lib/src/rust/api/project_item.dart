@@ -64,6 +64,20 @@ sealed class ItemReference with _$ItemReference {
         that: this,
       );
 
+  /// File the item into `folder`: out of whatever folder listed it, onto the
+  /// end of that one, as one undo step. The panel's drag onto a folder row
+  /// and its **Move to folder** menu entry both land here.
+  ///
+  /// The composition is the engine's ([`lumit_core::ops::move_to_folder_ops`]),
+  /// and so are the refusals: an item or folder that no longer exists is
+  /// [`BridgeError::InvalidItem`], and a folder asked to move inside itself or
+  /// its own descendant is [`BridgeError::FolderCycle`] — that move would take
+  /// the branch off the panel root with nothing left to drag it back by.
+  /// Filing something where it already sits is a calm no-op rather than an
+  /// undo step that changed nothing.
+  void moveToFolder({required UuidValue folder}) => BridgeLib.instance.api
+      .crateApiProjectItemItemReferenceMoveToFolder(that: this, folder: folder);
+
   /// Move the item back to the panel root: remove it from every folder that
   /// lists it, as one undo step. Already at the root is a calm no-op.
   void moveToRoot() =>

@@ -179,6 +179,54 @@ fn move_to_root_unfiles_the_item_and_is_a_no_op_when_already_there() {
     filed.move_to_root().expect("no-op the second time too");
 }
 
+/// The other direction: filing a loose item into a folder, which is what the
+/// panel's drag onto a folder row and its **Move to folder** menu do. One undo
+/// step, and an unknown folder is a calm error rather than a panic.
+#[test]
+fn move_to_folder_files_the_item_and_refuses_an_unknown_folder() {
+    let (project, folder, _filed, loose) = project_with_folder();
+    let ItemReference::Folder(folder_ref) = &folder else {
+        panic!("the fixture built a folder");
+    };
+
+    loose.move_to_folder(folder_ref.id()).expect("filed");
+    let children = folder_ref.get_children().expect("children");
+    assert_eq!(
+        children.len(),
+        2,
+        "the item it held, plus the one just filed"
+    );
+    assert!(
+        children[1].equals(&loose),
+        "a filed item lands at the end of the folder"
+    );
+    assert_eq!(
+        project.get_items().expect("roots").len(),
+        1,
+        "just the folder is left at the root"
+    );
+
+    // One undo step, whole.
+    project.undo().expect("undone");
+    assert_eq!(project.get_items().expect("roots").len(), 2);
+
+    // A folder that is not there, and an id that is not a folder: calm errors.
+    assert!(matches!(
+        loose.move_to_folder(uuid::Uuid::now_v7()),
+        Err(BridgeError::InvalidItem)
+    ));
+    assert!(matches!(
+        loose.move_to_folder(loose.item_id()),
+        Err(BridgeError::InvalidItem)
+    ));
+
+    // A folder into itself is the cycle refusal, and it says so in its own words.
+    assert!(matches!(
+        folder.move_to_folder(folder_ref.id()),
+        Err(BridgeError::FolderCycle)
+    ));
+}
+
 /// Relinking points the item at the picked file and, crucially, is refused when
 /// there is nothing to point at — a silent success would leave the user thinking
 /// a broken item had been fixed.

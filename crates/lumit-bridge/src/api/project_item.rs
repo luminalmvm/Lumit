@@ -147,6 +147,40 @@ impl ItemReference {
         }
     }
 
+    /// File the item into `folder`: out of whatever folder listed it, onto the
+    /// end of that one, as one undo step. The panel's drag onto a folder row
+    /// and its **Move to folder** menu entry both land here.
+    ///
+    /// The composition is the engine's ([`lumit_core::ops::move_to_folder_ops`]),
+    /// and so are the refusals: an item or folder that no longer exists is
+    /// [`BridgeError::InvalidItem`], and a folder asked to move inside itself or
+    /// its own descendant is [`BridgeError::FolderCycle`] — that move would take
+    /// the branch off the panel root with nothing left to drag it back by.
+    /// Filing something where it already sits is a calm no-op rather than an
+    /// undo step that changed nothing.
+    #[frb(sync)]
+    pub fn move_to_folder(&self, folder: Uuid) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let id = self.item_id();
+
+        let ops = {
+            let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            let doc = p.store.snapshot();
+            if doc.item(id).is_none() || doc.folder(folder).is_none() {
+                return Err(BridgeError::InvalidItem);
+            }
+            lumit_core::ops::move_to_folder_ops(&doc, id, folder).ok_or(BridgeError::FolderCycle)?
+        };
+
+        match ops.len() {
+            // It is already there.
+            0 => Ok(()),
+            1 => self.commit(ops.into_iter().next().ok_or(BridgeError::InvalidItem)?),
+            // One undo step for the whole move, however many folders it touched.
+            _ => self.commit(lumit_core::Op::Batch { ops }),
+        }
+    }
+
     fn project(&self) -> Result<Arc<RwLock<LumitBridgeState>>, BridgeError> {
         let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
         let project = projects

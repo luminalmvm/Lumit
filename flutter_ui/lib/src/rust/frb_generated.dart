@@ -90,7 +90,7 @@ class BridgeLib
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1200171323;
+  int get rustContentHash => 1565601240;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -465,6 +465,9 @@ abstract class BridgeLibApi extends BaseApi {
   bool crateApiProjectItemItemReferenceIsUsed({required ItemReference that});
 
   int crateApiProjectItemItemReferenceLabel({required ItemReference that});
+
+  void crateApiProjectItemItemReferenceMoveToFolder(
+      {required ItemReference that, required UuidValue folder});
 
   void crateApiProjectItemItemReferenceMoveToRoot(
       {required ItemReference that});
@@ -3838,13 +3841,40 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
+  void crateApiProjectItemItemReferenceMoveToFolder(
+      {required ItemReference that, required UuidValue folder}) {
+    return handler.executeSync(SyncTask(
+      callFfi: () {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_box_autoadd_item_reference(that, serializer);
+        sse_encode_Uuid(folder, serializer);
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 101)!;
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData:
+            sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
+      ),
+      constMeta: kCrateApiProjectItemItemReferenceMoveToFolderConstMeta,
+      argValues: [that, folder],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiProjectItemItemReferenceMoveToFolderConstMeta =>
+      const TaskConstMeta(
+        debugName: "item_reference_move_to_folder",
+        argNames: ["that", "folder"],
+      );
+
+  @override
   void crateApiProjectItemItemReferenceMoveToRoot(
       {required ItemReference that}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_item_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 101)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 102)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -3869,7 +3899,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_item_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 102)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 103)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -3896,7 +3926,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_item_reference(that, serializer);
         sse_encode_String(name, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 103)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 104)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -3923,7 +3953,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_item_reference(that, serializer);
         sse_encode_u_8(label, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 104)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 105)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -3947,7 +3977,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 105)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 106)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_key_conflict,
@@ -3973,7 +4003,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(json, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 106, port: port_);
+            funcId: 107, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_keymap_group,
@@ -3997,7 +4027,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 107)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 108)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_keymap_group,
@@ -4022,7 +4052,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_bridge_keymap_preset(preset, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 108, port: port_);
+            funcId: 109, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_keymap_group,
@@ -4048,7 +4078,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_bridge_key_context(context, serializer);
         sse_encode_String(chord, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 109)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 110)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_String,
@@ -4077,7 +4107,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_String(action, serializer);
         sse_encode_String(chord, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 110, port: port_);
+            funcId: 111, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_keymap_group,
@@ -4104,7 +4134,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_bridge_key_context(context, serializer);
         sse_encode_String(action, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 111, port: port_);
+            funcId: 112, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_keymap_group,
@@ -4128,7 +4158,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(query, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 112)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 113)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_key_binding,
@@ -4150,7 +4180,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 113)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 114)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_key_shadow,
@@ -4173,7 +4203,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 114)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 115)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -4199,7 +4229,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_bridge_key_context(context, serializer);
         sse_encode_String(action, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 115, port: port_);
+            funcId: 116, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_keymap_group,
@@ -4224,7 +4254,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_String(name, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 116)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 117)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4251,7 +4281,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_mask(mask, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 117)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 118)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4278,7 +4308,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_shape_item(item, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 118)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 119)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4305,7 +4335,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_stroke(stroke, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 119)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 120)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4340,7 +4370,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_32(buckets, serializer);
         sse_encode_bool(multiwave, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 120, port: port_);
+            funcId: 121, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_audio_peaks,
@@ -4376,7 +4406,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(id, serializer);
         sse_encode_box_autoadd_bridge_rational(time, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 121)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 122)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4413,7 +4443,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_32(buckets, serializer);
         sse_encode_bool(multiwave, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 122, port: port_);
+            funcId: 123, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_audio_peaks,
@@ -4451,7 +4481,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_Uuid(clip, serializer);
         sse_encode_u_32(maxEdge, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 123, port: port_);
+            funcId: 124, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_bridge_rendered_frame,
@@ -4477,7 +4507,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 124)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 125)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4503,7 +4533,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 125)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 126)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4530,7 +4560,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_list_Uuid(effects, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 126)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 127)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -4555,7 +4585,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 127)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 128)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -4582,7 +4612,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_opt_Uuid(clip, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 128)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 129)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -4609,7 +4639,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_i_64(frame, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 129)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 130)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4634,7 +4664,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 130)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 131)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4661,7 +4691,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(clip, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 131)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 132)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4688,7 +4718,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_i_64(frame, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 132)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 133)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4714,7 +4744,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 133)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 134)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4741,7 +4771,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(id, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 134)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 135)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4768,7 +4798,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(id, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 135)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 136)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -4794,7 +4824,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 136)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 137)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_layer_reference,
@@ -4821,7 +4851,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_layer_reference(layer, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 137)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 138)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -4845,7 +4875,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 138)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 139)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_32,
@@ -4871,7 +4901,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 139)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 140)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_bridge_scalar,
@@ -4897,7 +4927,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 140)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 141)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_clip,
@@ -4923,7 +4953,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 141)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 142)!;
       },
       codec: SseCodec(
         decodeSuccessData:
@@ -4950,7 +4980,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 142)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 143)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -4976,7 +5006,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 143)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 144)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_scalar,
@@ -5002,7 +5032,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 144)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 145)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_flow_params,
@@ -5028,7 +5058,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 145)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 146)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_layer_info,
@@ -5054,7 +5084,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 146)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 147)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_retime_interp,
@@ -5080,7 +5110,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 147)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 148)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_layer_kind,
@@ -5105,7 +5135,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 148)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 149)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_8,
@@ -5131,7 +5161,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 149)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 150)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_marker,
@@ -5157,7 +5187,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 150)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 151)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_mask,
@@ -5183,7 +5213,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 151)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 152)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_bridge_matte,
@@ -5208,7 +5238,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 152)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 153)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -5234,7 +5264,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 153)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 154)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_stroke,
@@ -5260,7 +5290,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 154)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 155)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_Uuid,
@@ -5286,7 +5316,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 155)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 156)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_bridge_scalar,
@@ -5312,7 +5342,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 156)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 157)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_shape_item,
@@ -5338,7 +5368,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 157)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 158)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_item_reference,
@@ -5364,7 +5394,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 158)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 159)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_span,
@@ -5390,7 +5420,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 159)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 160)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_layer_switches,
@@ -5416,7 +5446,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 160)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 161)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_box_autoadd_bridge_text_document,
@@ -5442,7 +5472,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 161)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 162)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_transform,
@@ -5468,7 +5498,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 162)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 163)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_scalar,
@@ -5495,7 +5525,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 163, port: port_);
+            funcId: 164, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -5520,7 +5550,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 164)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 165)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -5547,7 +5577,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_String(text, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 165)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 166)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5579,7 +5609,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_Uuid(id, serializer);
         sse_encode_box_autoadd_bridge_rational(from, serializer);
         sse_encode_box_autoadd_bridge_rational(to, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 166)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 167)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -5609,7 +5639,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_String(text, serializer);
         sse_encode_i_64(atFrame, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 167)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 168)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5636,7 +5666,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_String(text, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 168)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 169)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5664,7 +5694,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
             effect, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 169)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 170)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5691,7 +5721,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_String(name, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 170)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 171)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5718,7 +5748,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_usize(newIndex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 171)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 172)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5749,7 +5779,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
             effect, serializer);
         sse_encode_i_64(newIndex, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 172)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 173)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5776,7 +5806,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_bridge_reveal_kind(kind, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 173)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 174)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_reveal_groups,
@@ -5803,7 +5833,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_String(name, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 174)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 175)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -5830,7 +5860,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_u_32(index, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 175)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 176)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5857,7 +5887,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_scalar(zoom, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 176)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 177)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5887,7 +5917,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(clip, serializer);
         sse_encode_box_autoadd_bridge_scalar(value, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 177)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 178)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5919,7 +5949,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_Uuid(clip, serializer);
         sse_encode_f_64(percent, serializer);
         sse_encode_f_64(endPercent, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 178)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 179)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5950,7 +5980,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
             effect, serializer);
         sse_encode_bool(enabled, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 179)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 180)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -5979,7 +6009,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
             effects, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 180)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 181)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6006,7 +6036,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_bool(on_, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 181)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 182)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6033,7 +6063,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_scalar(value, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 182)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 183)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6060,7 +6090,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_flow_params(params, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 183)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 184)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6088,7 +6118,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_bridge_retime_interp(interpolation, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 184)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 185)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6115,7 +6145,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_u_8(label, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 185)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 186)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6142,7 +6172,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_list_bridge_marker(markers, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 186)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 187)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6172,7 +6202,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_mask(mask, serializer);
         sse_encode_opt_box_autoadd_bridge_rational(at, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 187)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 188)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6202,7 +6232,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(id, serializer);
         sse_encode_list_bridge_keyframe(keys, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 188)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 189)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -6229,7 +6259,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_opt_box_autoadd_bridge_matte(matte, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 189)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 190)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6256,7 +6286,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_opt_Uuid(parent, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 190)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 191)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6283,7 +6313,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_scalar(value, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 191)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 192)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6310,7 +6340,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_list_bridge_shape_item(contents, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 192)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 193)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6337,7 +6367,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_span(span, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 193)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 194)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6364,7 +6394,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_stroke(stroke, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 194)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 195)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6394,7 +6424,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_bridge_layer_switch(switch_, serializer);
         sse_encode_bool(on_, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 195)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 196)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6421,7 +6451,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_text_document(document, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 196)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 197)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6457,7 +6487,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_f_64(anchorY, serializer);
         sse_encode_f_64(positionX, serializer);
         sse_encode_f_64(positionY, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 197)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 198)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6494,7 +6524,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_bridge_transform_prop(prop, serializer);
         sse_encode_box_autoadd_bridge_scalar(value, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 198)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 199)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6524,7 +6554,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_list_bridge_transform_prop(props, serializer);
         sse_encode_list_bridge_scalar(values, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 199)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 200)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6551,7 +6581,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_box_autoadd_bridge_scalar(value, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 200)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 201)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6581,7 +6611,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(clip, serializer);
         sse_encode_i_64(toFrame, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 201)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 202)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6608,7 +6638,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_i_64(frame, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 202)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 203)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6638,7 +6668,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_layer_reference(that, serializer);
         sse_encode_Uuid(id, serializer);
         sse_encode_box_autoadd_bridge_rational(time, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 203)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 204)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6664,7 +6694,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 204)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 205)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -6696,7 +6726,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_Uuid(clip, serializer);
         sse_encode_i_64(startFrame, serializer);
         sse_encode_i_64(endFrame, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 205)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 206)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -6721,7 +6751,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(project, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 206)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 207)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_autosave,
@@ -6743,7 +6773,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 207)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 208)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_String,
@@ -6766,7 +6796,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 208)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 209)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_effect_info,
@@ -6790,7 +6820,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(effect, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 209)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 210)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_enabled_when,
@@ -6814,7 +6844,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(effect, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 210)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 211)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_param_pair,
@@ -6838,7 +6868,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(effect, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 211)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 212)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_param_group,
@@ -6862,7 +6892,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(effect, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 212)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 213)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_param_info,
@@ -6885,7 +6915,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 213)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 214)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_preset_info,
@@ -6907,7 +6937,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 214)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 215)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_memory_report,
@@ -6929,7 +6959,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 215)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 216)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_playback_tier,
@@ -6951,7 +6981,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 216)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 217)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_String,
@@ -6976,7 +7006,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 217)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 218)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_32,
@@ -7002,7 +7032,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 218)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 219)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_32,
@@ -7033,7 +7063,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_String(projectPath, serializer);
         sse_encode_u_32(keep, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 219)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 220)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -7059,7 +7089,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 220)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 221)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7085,7 +7115,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 221)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 222)!;
       },
       codec: SseCodec(
         decodeSuccessData:
@@ -7111,7 +7141,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 222)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 223)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7137,7 +7167,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 223)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 224)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7163,7 +7193,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 224)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 225)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_item_reference,
@@ -7189,7 +7219,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 225)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 226)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_history,
@@ -7216,7 +7246,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_String(path, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 226)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 227)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_footage_reference,
@@ -7242,7 +7272,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 227)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 228)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bool,
@@ -7272,7 +7302,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_String(name, serializer);
         sse_encode_opt_box_autoadd_bridge_comp_settings(settings, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 228)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 229)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_composition_reference,
@@ -7302,7 +7332,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_String(name, serializer);
         sse_encode_opt_Uuid(parent, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 229)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 230)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_folder_reference,
@@ -7328,7 +7358,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 230)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 231)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -7354,7 +7384,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 231)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 232)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_String,
@@ -7379,7 +7409,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 232)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 233)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7406,7 +7436,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_String(projectPath, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 233)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 234)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_recovery,
@@ -7434,7 +7464,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_String(path, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 234, port: port_);
+            funcId: 235, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_String,
@@ -7461,7 +7491,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_u_32(samples, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 235)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 236)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7489,7 +7519,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_opt_box_autoadd_bridge_project_cache_location(
             location, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 236)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 237)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7516,7 +7546,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_opt_String(uiState, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 237)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 238)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7544,7 +7574,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_StreamSink_worker_response_Sse(onReponse, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 238)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 239)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7570,7 +7600,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 239)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 240)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_opt_String,
@@ -7595,7 +7625,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 240)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 241)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7619,7 +7649,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 241)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 242)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_playback_tier,
@@ -7641,7 +7671,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 242)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 243)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_64,
@@ -7664,7 +7694,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 243)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 244)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7690,7 +7720,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_bridge_scalar(scalar, serializer);
         sse_encode_box_autoadd_bridge_rational(time, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 244)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 245)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_f_64,
@@ -7722,7 +7752,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_bridge_rational(start, serializer);
         sse_encode_box_autoadd_bridge_rational(end, serializer);
         sse_encode_i_64(samples, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 245)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 246)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_prim_f_64_strict,
@@ -7751,7 +7781,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_box_autoadd_bridge_scalar(scalar, serializer);
         sse_encode_box_autoadd_bridge_rational(time, serializer);
         sse_encode_box_autoadd_layer_reference(layer, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 246)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 247)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_f_64,
@@ -7775,7 +7805,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_u_64(bytes, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 247)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 248)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_cache_stats,
@@ -7801,7 +7831,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(camera, serializer);
         sse_encode_opt_Uuid(tracked, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 248)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 249)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7827,7 +7857,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_u_64(bytes, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 249)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 250)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_disk_cache_stats,
@@ -7853,7 +7883,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_bridge_cache_location(location, serializer);
         sse_encode_String(folder, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 250)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 251)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_disk_cache_stats,
@@ -7877,7 +7907,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_bool(on_, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 251)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 252)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7902,7 +7932,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_u_64(bytes, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 252)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 253)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_vram_cache_stats,
@@ -7927,7 +7957,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_solid_reference(that, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 253)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 254)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_solid_def,
@@ -7954,7 +7984,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_solid_reference(that, serializer);
         sse_encode_box_autoadd_bridge_solid_def(definition, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 254)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 255)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -7978,7 +8008,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 255)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 256)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_64,
@@ -8001,7 +8031,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 256)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 257)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -8024,7 +8054,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(layer, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 257)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 258)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_track_status,
@@ -8049,7 +8079,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_layer_reference(layer, serializer);
         sse_encode_i_64(frame, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 258)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 259)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_track_point,
@@ -8071,7 +8101,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 259)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 260)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_u_64,
@@ -8094,7 +8124,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 260)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 261)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_viewer_transport,
@@ -8117,7 +8147,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 261)!;
+        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 262)!;
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_vram_cache_stats,

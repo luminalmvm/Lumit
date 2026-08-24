@@ -40,6 +40,10 @@ pub enum BridgeError {
     InvalidComp,
     InvalidItem,
     InvalidLayer,
+    /// A folder was asked to move inside itself, or inside one of its own
+    /// descendants. Refused rather than applied: that branch would leave the
+    /// panel root with nothing left to drag it back by.
+    FolderCycle,
     /// A media path could not be resolved, or a relink found nothing to point at.
     MediaPathUnresolved,
     /// A frame rate of zero, or one whose frame count cannot be expressed.
@@ -163,6 +167,9 @@ impl fmt::Display for BridgeError {
                     f,
                     "This project has never been saved, so a path is required"
                 )
+            }
+            BridgeError::FolderCycle => {
+                write!(f, "A folder cannot be filed inside itself")
             }
             BridgeError::MediaPathUnresolved => write!(f, "Nothing to relink at that path"),
             BridgeError::InvalidParam => write!(f, "No such effect parameter"),

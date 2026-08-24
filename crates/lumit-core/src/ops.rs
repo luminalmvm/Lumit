@@ -1371,6 +1371,78 @@ pub fn new_folder_ops(doc: &Document, name: &str, parent: Option<Uuid>) -> (Uuid
     (id, ops)
 }
 
+/// The ops that file `item` into `folder` — the Project panel's drag onto a
+/// folder row, and its **Move to folder** menu entry (K-451, docs/07 §3.1).
+///
+/// # In plain terms
+///
+/// Filing something is "take it out of wherever it was, put it at the end of
+/// this folder". Both halves are [`Op::SetFolderChildren`] — one per folder
+/// whose list actually changes — and the caller commits them together, which is
+/// what makes a move one undo step however many folders were involved.
+///
+/// `None` is the refusal, and there are three of them: an item or a folder that
+/// no longer exists, a folder asked to hold itself, and a folder asked to move
+/// inside its own descendant — which would cut that whole branch off the panel
+/// root with no way back to it.
+///
+/// An item already sitting at the end of `folder` gives an empty list: nothing
+/// changed, so nothing is committed and no undo step appears.
+#[must_use]
+pub fn move_to_folder_ops(doc: &Document, item: Uuid, folder: Uuid) -> Option<Vec<Op>> {
+    if item == folder || doc.item(item).is_none() {
+        return None;
+    }
+    doc.folder(folder)?;
+    if folder_descends_from(doc, folder, item) {
+        return None;
+    }
+
+    Some(
+        doc.items
+            .iter()
+            .filter_map(|i| match i {
+                ProjectItem::Folder(f) => Some(f),
+                _ => None,
+            })
+            .filter_map(|f| {
+                let mut children: Vec<Uuid> =
+                    f.children.iter().copied().filter(|c| *c != item).collect();
+                if f.id == folder {
+                    children.push(item);
+                }
+                (children != f.children).then_some(Op::SetFolderChildren {
+                    folder: f.id,
+                    children,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Whether `folder` sits anywhere inside `ancestor` — the cycle guard
+/// [`move_to_folder_ops`] refuses on.
+///
+/// Walks children rather than parents, and remembers where it has been: a
+/// document that already holds a cycle (one written by an older build, or by
+/// hand) must make this answer, not spin.
+fn folder_descends_from(doc: &Document, folder: Uuid, ancestor: Uuid) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    let mut queue = vec![ancestor];
+    while let Some(id) = queue.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        if let Some(f) = doc.folder(id) {
+            if f.children.contains(&folder) {
+                return true;
+            }
+            queue.extend(f.children.iter().copied());
+        }
+    }
+    false
+}
+
 /// The next unused "Folder N" — the default name [`new_folder_ops`] gives.
 ///
 /// Counts up past the names already taken rather than off the number of

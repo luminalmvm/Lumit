@@ -488,6 +488,135 @@ mod tests {
         assert!(store.snapshot().root_items().contains(&id));
     }
 
+    /// A solid at the panel root, to have something that is not a folder to
+    /// file. Any item kind would do; a solid is the cheapest to build.
+    fn loose_item(store: &DocumentStore) -> Uuid {
+        let id = Uuid::now_v7();
+        store
+            .commit(Op::AddItem {
+                index: store.snapshot().items.len(),
+                item: Box::new(ProjectItem::Solid(SolidDef {
+                    id,
+                    name: "White solid".into(),
+                    colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+                    width: 1920,
+                    height: 1080,
+                    extra: serde_json::Map::new(),
+                })),
+            })
+            .unwrap();
+        id
+    }
+
+    fn make_folder(store: &DocumentStore, name: &str) -> Uuid {
+        let (id, ops) = crate::ops::new_folder_ops(&store.snapshot(), name, None);
+        store.commit(Op::Batch { ops }).unwrap();
+        id
+    }
+
+    /// Filing an item into a folder, and refiling it from one folder into
+    /// another (K-451): the panel's drag onto a folder row, and its **Move to
+    /// folder** menu. Both are one undo step, and a refile takes the item out
+    /// of its old folder in the same step it lands in the new one — an item
+    /// listed by two folders at once would draw twice in the panel.
+    #[test]
+    fn filing_an_item_into_a_folder_is_one_undoable_step() {
+        let store = DocumentStore::new(Document::new());
+        let footage = make_folder(&store, "Footage");
+        let audio = make_folder(&store, "Audio");
+        let item = loose_item(&store);
+
+        let ops = crate::ops::move_to_folder_ops(&store.snapshot(), item, footage)
+            .expect("a real item into a real folder");
+        store.commit(Op::Batch { ops }).unwrap();
+        assert_eq!(
+            store.snapshot().folder(footage).unwrap().children,
+            vec![item]
+        );
+        assert!(!store.snapshot().root_items().contains(&item));
+
+        let ops = crate::ops::move_to_folder_ops(&store.snapshot(), item, audio)
+            .expect("refiling is the same call");
+        store.commit(Op::Batch { ops }).unwrap();
+        assert_eq!(store.snapshot().folder(audio).unwrap().children, vec![item]);
+        assert!(
+            store
+                .snapshot()
+                .folder(footage)
+                .unwrap()
+                .children
+                .is_empty(),
+            "it leaves the old folder in the same step it joins the new one"
+        );
+
+        store.undo().unwrap();
+        assert_eq!(
+            store.snapshot().folder(footage).unwrap().children,
+            vec![item],
+            "one undo takes the whole refile back, both folders together"
+        );
+        store.undo().unwrap();
+        assert!(store.snapshot().root_items().contains(&item));
+    }
+
+    /// Filing something where it already sits changes nothing, so there is
+    /// nothing to commit — a dropped item that never moved must not leave an
+    /// undo step behind.
+    #[test]
+    fn filing_an_item_where_it_already_is_composes_no_ops() {
+        let store = DocumentStore::new(Document::new());
+        let footage = make_folder(&store, "Footage");
+        let item = loose_item(&store);
+        let ops = crate::ops::move_to_folder_ops(&store.snapshot(), item, footage).unwrap();
+        store.commit(Op::Batch { ops }).unwrap();
+
+        assert_eq!(
+            crate::ops::move_to_folder_ops(&store.snapshot(), item, footage),
+            Some(Vec::new())
+        );
+    }
+
+    /// The three refusals: an unknown folder, a folder into itself, and a
+    /// folder into its own descendant — that last one would take the whole
+    /// branch off the panel root with nothing left to drag it back by.
+    #[test]
+    fn a_folder_cannot_be_filed_inside_itself_or_its_own_descendant() {
+        let store = DocumentStore::new(Document::new());
+        let outer = make_folder(&store, "Shoots");
+        let (inner, ops) = crate::ops::new_folder_ops(&store.snapshot(), "Day one", Some(outer));
+        store.commit(Op::Batch { ops }).unwrap();
+        let (deep, ops) = crate::ops::new_folder_ops(&store.snapshot(), "Camera A", Some(inner));
+        store.commit(Op::Batch { ops }).unwrap();
+        let doc = store.snapshot();
+
+        assert_eq!(crate::ops::move_to_folder_ops(&doc, outer, outer), None);
+        assert_eq!(crate::ops::move_to_folder_ops(&doc, outer, inner), None);
+        assert_eq!(
+            crate::ops::move_to_folder_ops(&doc, outer, deep),
+            None,
+            "a descendant however far down is still a descendant"
+        );
+        assert_eq!(
+            crate::ops::move_to_folder_ops(&doc, outer, Uuid::now_v7()),
+            None,
+            "no folder by that id"
+        );
+        assert_eq!(
+            crate::ops::move_to_folder_ops(&doc, Uuid::now_v7(), outer),
+            None,
+            "no item by that id"
+        );
+        assert_eq!(
+            crate::ops::move_to_folder_ops(&doc, inner, deep),
+            None,
+            "the branch below the moved folder counts too"
+        );
+        assert!(
+            crate::ops::move_to_folder_ops(&doc, deep, outer).is_some(),
+            "the other direction is an ordinary move"
+        );
+    }
+
     /// A blank name takes the next unused "Folder N", counting past the names
     /// already taken rather than off the number of folders — so renaming one
     /// away cannot make the next press of the button collide with a name in use.
