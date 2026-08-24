@@ -34,9 +34,11 @@ void main() {
       expect(k.fontFamily, LumitTheme.monoFontFamily);
       expect(k.fontSize, inInclusiveRange(9, 11));
       // Tracking is stated in ems by the spec and in logical pixels by
-      // Flutter, so it is the ratio that has to land in the band.
+      // Flutter, so it is the ratio that has to land in the band — with a
+      // float epsilon on each end, because dividing the one by the other puts
+      // an exact 0.12em (1.08px at 9) a bit-error outside it.
       final em = k.letterSpacing! / k.fontSize!;
-      expect(em, inInclusiveRange(0.08, 0.12));
+      expect(em, inInclusiveRange(0.08 - 1e-9, 0.12 + 1e-9));
       expect(k.color, t.textMuted);
     });
 

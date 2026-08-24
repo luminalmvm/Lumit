@@ -104,6 +104,15 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
   TimelineGroup.timings: timingsGroupWidth,
 };
 
+/// **The switches column is fixed at its minimum width** (§12A.1, K-448): the
+/// toggles never stretch to fill a wider column, so widening it would only buy
+/// blank space, and the seam beside it is not draggable at all.
+///
+/// Only that one group. The others each have something inside them that gains
+/// from more room — a longer name, a longer blend-mode word, the fold-out's
+/// value fields.
+bool groupIsFixedWidth(TimelineGroup group) => group == TimelineGroup.switches;
+
 /// How narrow a group may be dragged: enough for the cells that cannot
 /// shrink — its icons, or a dropdown you can still read a name in.
 double minGroupWidth(TimelineGroup group) => switch (group) {

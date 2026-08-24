@@ -31,13 +31,28 @@ import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
-/// The open compositions, as tabs. Clicking one fronts it; its × closes the
-/// tab (docs/07 §4: one tab per *open* comp — the comp itself stays in the
-/// project, and fronting it from the Project panel opens it again).
+/// The Timeline's **panel header strip** (§12A.1, §12A.6: 22 tall): the panel's
+/// own kicker, then the open compositions as tabs running the full width, then
+/// the single filled Export action at the far right.
+///
+/// Clicking a tab fronts it; its × closes the tab (docs/07 §4: one tab per
+/// *open* comp — the comp itself stays in the project, and fronting it from the
+/// Project panel opens it again).
 class CompTabsFrb extends StatelessWidget {
   final LumitState state;
   final LumitUiState uiState;
-  const CompTabsFrb({super.key, required this.state, required this.uiState});
+
+  /// The Export command, run by the header's filled button. Handed in rather
+  /// than reached for here: the panel already knows how the menu and the
+  /// command palette start an export, and this button must start *that* one.
+  final VoidCallback onExport;
+
+  const CompTabsFrb({
+    super.key,
+    required this.state,
+    required this.uiState,
+    required this.onExport,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -68,49 +83,86 @@ class CompTabsFrb extends StatelessWidget {
     return Container(
       height: 22,
       color: t.surface2,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+      child: Row(
         children: [
-          for (var i = 0; i < comps.length; i++)
-            DragTarget<UuidValue>(
-              onWillAcceptWithDetails: (d) => d.data != comps[i].$1.internalid,
-              onAcceptWithDetails: (d) =>
-                  uiState.moveComp(d.data, comps[i].$1.internalid),
-              builder: (context, candidate, _) => Draggable<UuidValue>(
-                data: comps[i].$1.internalid,
-                feedback: Container(
-                  height: 22,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  color: t.surface2,
-                  child: Center(child: Text(comps[i].$2, style: t.small)),
+          // The panel's own name, ahead of the tabs (§12A.1). A kicker like
+          // every other panel title (§7.1), and lit because the Timeline is
+          // the container these tabs belong to rather than one of them.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text(l10n.panelTimeline.toUpperCase(), style: t.kickerOn),
+          ),
+          Expanded(child: _strip(context, t, comps, selected)),
+          // The single filled action this surface is allowed (§3.1, §12A.1):
+          // the same Export the File menu and the command palette run, one
+          // click from the composition it would write.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: HouseButton(
+              key: const ValueKey('tl-export'),
+              small: true,
+              primary: true,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              onPressed: onExport,
+              // `primary` sets the label's own style — kicker in `surface_0`
+              // on the accent fill (§7.1) — so only the capitals are ours.
+              child: Text(l10n.exportAction.toUpperCase()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The tabs themselves, scrolling sideways when there are more than fit.
+  Widget _strip(
+    BuildContext context,
+    LumitTheme t,
+    List<(CompositionReference, String)> comps,
+    UuidValue? selected,
+  ) {
+    return ListView(
+      scrollDirection: Axis.horizontal,
+      children: [
+        for (var i = 0; i < comps.length; i++)
+          DragTarget<UuidValue>(
+            onWillAcceptWithDetails: (d) => d.data != comps[i].$1.internalid,
+            onAcceptWithDetails: (d) =>
+                uiState.moveComp(d.data, comps[i].$1.internalid),
+            builder: (context, candidate, _) => Draggable<UuidValue>(
+              data: comps[i].$1.internalid,
+              feedback: Container(
+                height: 22,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                color: t.surface2,
+                child: Center(child: Text(comps[i].$2, style: t.small)),
+              ),
+              childWhenDragging: const SizedBox.shrink(),
+              child: _CompTab(
+                key: ValueKey<String>('tl-tab-${comps[i].$1.internalid}'),
+                name: comps[i].$2,
+                active: selected == comps[i].$1.internalid,
+                dropping: candidate.isNotEmpty,
+                onTap: () => uiState.setSelectedComp(comps[i].$1),
+                onMenu: (position) => showCompTabMenuFrb(
+                  context: context,
+                  comp: comps[i].$1,
+                  position: position,
+                  onChanged: uiState.model.refresh,
                 ),
-                childWhenDragging: const SizedBox.shrink(),
-                child: _CompTab(
-                  key: ValueKey<String>('tl-tab-${comps[i].$1.internalid}'),
-                  name: comps[i].$2,
-                  active: selected == comps[i].$1.internalid,
-                  dropping: candidate.isNotEmpty,
-                  onTap: () => uiState.setSelectedComp(comps[i].$1),
-                  onMenu: (position) => showCompTabMenuFrb(
-                    context: context,
-                    comp: comps[i].$1,
-                    position: position,
-                    onChanged: uiState.model.refresh,
-                  ),
-                  closeKey: ValueKey<String>(
-                      'tl-tab-close-${comps[i].$1.internalid}'),
-                  onClose: () => uiState.closeComp(
-                    comps[i].$1.internalid,
-                    // The nearest remaining neighbour fronts: the one to the
-                    // left, or the next one when the first tab closes.
-                    fallback:
-                        comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
-                  ),
+                closeKey:
+                    ValueKey<String>('tl-tab-close-${comps[i].$1.internalid}'),
+                onClose: () => uiState.closeComp(
+                  comps[i].$1.internalid,
+                  // The nearest remaining neighbour fronts: the one to the
+                  // left, or the next one when the first tab closes.
+                  fallback:
+                      comps.length == 1 ? null : comps[i == 0 ? 1 : i - 1].$1,
                 ),
               ),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 }
@@ -294,26 +346,24 @@ class _CompTab extends StatelessWidget {
         decoration: BoxDecoration(
           // Round fills the fronted tab with the accent (K-394, §12.1); Sharp
           // seats the fronted tab in the panel's own surface, so the tab and
-          // the comp under it read as one thing, with the accent rule beneath.
+          // the comp under it read as one thing.
           color: dropping
               ? t.accent.withValues(alpha: 0.18)
               : (active ? (round ? t.accent : t.surface1) : null),
-          // Uniform under Round, because a BoxDecoration refuses a corner
-          // radius on a border that is only one side. Transparent and the same
-          // 2 px either way, so the label sits where it always did and the
-          // capsule's curved ends never crowd it.
+          // **No accent tick** (§12A.1): the seated surface colour alone marks
+          // the open composition, exactly as the mockup draws it. The accent's
+          // "active tab tick" (§3.1) is the workspace tabs', not these.
           //
-          // Sharp carries a hairline down each seam as well as the accent tick
-          // (§12A.1): the strip runs the full width of the panel header, and
-          // without a rule the inactive tabs run together into one grey band.
+          // Sharp carries a hairline down each seam: the strip runs the full
+          // width of the panel header, and without a rule the inactive tabs run
+          // together into one grey band. The fronted tab is ruled on both
+          // sides, so the seated block reads as a block.
           border: round
               ? Border.all(color: t.accent.withValues(alpha: 0), width: 2)
               : Border(
+                  left: BorderSide(
+                      color: active ? t.hairline : const Color(0x00000000)),
                   right: BorderSide(color: t.hairline),
-                  bottom: BorderSide(
-                    color: active ? t.accent : const Color(0x00000000),
-                    width: 2,
-                  ),
                 ),
           borderRadius:
               round ? BorderRadius.circular(t.tokens.controlRadius) : null,
@@ -322,28 +372,31 @@ class _CompTab extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Center(
+              // Body, not `small`: a composition's name is the *user's* text
+              // (§7.1), and the mockup sets both states at 11. Only the colour
+              // tells the fronted tab from the rest.
               child: Text(
                 name,
                 style: !active
-                    ? t.small
+                    ? t.body.copyWith(color: t.textMuted)
                     : round
                         ? t.bodyPrimary.copyWith(color: t.surface0)
                         : t.bodyPrimary,
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
             GestureDetector(
               key: closeKey,
               behavior: HitTestBehavior.opaque,
               onTap: onClose,
               child: SizedBox(
-                width: 14,
+                width: 12,
                 height: 22,
                 child: Center(
                   // Muted, unless it is sitting on Round's filled accent —
                   // where muted grey is barely there. Same flip as the label.
                   child: Text('×',
-                      style: t.small.copyWith(
+                      style: t.body.copyWith(
                           color: round && active ? t.surface0 : t.textMuted)),
                 ),
               ),
@@ -873,8 +926,10 @@ class TimelineCacheBar extends StatefulWidget {
   final CacheBarAxis axis;
   final Listenable revision;
 
-  /// Two logical pixels, per docs/15 §6.3.
-  static const double height = 2;
+  /// Three logical pixels — the approved mockup's own stripe (K-451), and
+  /// docs/15 §6.3. It counts inside the ruler's 36 (§12A.6), so the clock
+  /// above it is 33.
+  static const double height = 3;
 
   const TimelineCacheBar({
     super.key,
@@ -1220,7 +1275,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
           widget.onSeek(axis.frameAt(d.localPosition.dx)),
       child: Container(
         height: widget.height,
-        color: t.surface2,
+        // **The lane ground, not a strip of its own** (K-451): the mockup
+        // draws the whole lane pane — ruler, cache bar and lanes — on one
+        // colour, so the clock reads as the top of the time area rather than
+        // as a bar bolted above it.
+        color: t.timelineOutOfRange,
         child: Stack(
           children: [
             Positioned.fill(
@@ -1667,20 +1726,23 @@ class PlayheadMarker extends StatelessWidget {
   /// Half the head's width — how far left of the frame the marker starts.
   static const double halfWidth = 5;
 
-  /// How tall the head is. It sits at the very top of the ruler, with the
-  /// labels: in the lower half the work-area band would sit over it.
-  static const double headHeight = 8;
+  /// How tall the head is — the mockup's own 6 (K-451). It sits at the very
+  /// top of the ruler, with the labels: in the lower half the work-area band
+  /// would sit over it.
+  static const double headHeight = 6;
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return IgnorePointer(
       child: SizedBox(
-        width: halfWidth * 2 + 1,
+        // Ten across, so the 1px stem lands on the frame rather than half a
+        // pixel past it.
+        width: halfWidth * 2,
         child: Column(
           children: [
             CustomPaint(
-              size: const Size(halfWidth * 2 + 1, headHeight),
+              size: const Size(halfWidth * 2, headHeight),
               painter: _PlayheadHeadPainter(head: t.accent, notch: t.surface0),
             ),
             Expanded(
@@ -1815,16 +1877,18 @@ BoxDecoration workAreaBand(LumitTheme t, {required double fillAlpha}) =>
 /// The band's two edges, at half strength (§12A.1).
 Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 
-/// What a marker's label is set in: mono at 9, per §12A.1 — a marker's label
-/// is a cue read at a glance beside a clock, and it sets in the same face the
-/// clock does.
+/// What a marker's label is set in: mono at 8, the mockup's own size (K-451) —
+/// a marker's label is a cue read at a glance beside a clock, and it sets in
+/// the same face the clock does, one step quieter so the pill stays a pill
+/// inside the ruler's 12px lower row.
 TextStyle markerLabelStyle(LumitTheme t) =>
-    t.mono.copyWith(fontSize: 9, color: t.textPrimary, height: 1);
+    t.mono.copyWith(fontSize: 8, color: t.textPrimary, height: 1);
 
 /// The band's fill over the ruler's surface, and over the lane ground. Two
 /// values because the two grounds are not the same value; one band either way.
+/// Both are the mockup's own alphas (K-451).
 const double workAreaRulerFillAlpha = 0.10;
-const double workAreaLaneFillAlpha = 0.06;
+const double workAreaLaneFillAlpha = 0.04;
 
 /// How a layer bar — and every clip inside a Sequence layer — fills, as a
 /// share of its label colour (§12A.1, K-441).
@@ -1835,6 +1899,20 @@ const double workAreaLaneFillAlpha = 0.06;
 /// value here is applied to the token, never written as a second hex, so a
 /// recoloured layer recolours its bar and its clips in any theme.
 const double clipFillAlpha = 0.38;
+
+/// A bar's corner radius under Sharp: **none**, as the mockup draws it
+/// (K-451). Round keeps its stadium ends (K-394, §12.1) — that is the shape's
+/// whole difference — and this is the other end of the same choice. It was 2,
+/// which rounded nothing visibly and softened every bar end by a pixel.
+const double sharpClipRadius = 0;
+
+/// An outline or lane row (§12A.6's table, K-451).
+const double laneRowHeight = 22;
+
+/// A bar's own height inside a lane row, and the ground left above it
+/// (the same table: a lane row is 22, a clip bar within it 16).
+const double clipBarHeight = 16;
+const double clipBarInset = (laneRowHeight - clipBarHeight) / 2;
 
 /// The same fill on a selected bar. Brighter as well as lighter, so selection
 /// beats every label colour in the palette (§6.1).
@@ -1918,7 +1996,9 @@ class _RulerTicksPainter extends CustomPainter {
 
     for (var s = 0.0; s <= seconds; s += step) {
       final x = axis.xOf(s * fps);
-      canvas.drawLine(Offset(x, mid - 8), Offset(x, mid), paint);
+      // Seven pixels of labelled tick against the minor ticks' four — the
+      // mockup's own pair (K-451).
+      canvas.drawLine(Offset(x, mid - 7), Offset(x, mid), paint);
       final text = TextPainter(
         text: TextSpan(text: rulerLabelOf(s), style: label),
         textDirection: TextDirection.ltr,
@@ -1926,7 +2006,7 @@ class _RulerTicksPainter extends CustomPainter {
       // Labels sit just right of their tick, at the top of the upper half; the
       // last one may clip out at the comp's end rather than jumping inside,
       // which would misplace it.
-      text.paint(canvas, Offset(x + 3, 2));
+      text.paint(canvas, Offset(x + 4, 4));
     }
   }
 

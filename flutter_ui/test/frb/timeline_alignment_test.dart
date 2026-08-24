@@ -542,6 +542,95 @@ void main() {
           reason: 'an outline row is 22');
       expect(laneBar(tester, layer).height, closeTo(22, 0.5),
           reason: 'and so is its bar');
+
+      // The cache bar's own 3, which is what makes the clock above it 33.
+      expect(cache.height, closeTo(TimelineCacheBar.height, 0.5));
+      expect(TimelineCacheBar.height, 3,
+          reason: 'the cache bar is the mockup\'s 3px stripe');
+
+      // The panel header strip: the kicker, the comp tabs and Export, all at
+      // 22 (§12A.6).
+      expect(tester.getRect(find.byType(CompTabsFrb)).height, closeTo(22, 0.5),
+          reason: 'the panel header strip is 22');
+      expect(tester.getRect(find.byKey(const ValueKey('tl-export'))).height,
+          lessThanOrEqualTo(22.5),
+          reason: 'and the filled Export action fits inside it');
+    });
+
+    /// 10. **The pieces inside a row are the mockup's, not approximations of
+    /// them** (K-451): a bar is 16 in a 22 row and centred in it, the layer's
+    /// label colour is a 6px dot, and the number beside it stands in an 18px
+    /// column.
+    testWidgets('a lane row draws a 16px bar centred in its 22',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final row = laneBar(tester, layer);
+      final bar = tester
+          .getRect(find.byKey(ValueKey<String>('tl-bar-body-${idOf(layer)}')));
+      expect(bar.height, closeTo(clipBarHeight, 0.5),
+          reason: 'a clip bar within a lane row is 16 (§12A.6)');
+      expect(bar.center.dy, closeTo(row.center.dy, 0.5),
+          reason: 'and is centred in the row, ground above and below');
+
+      // The label colour is a bullet, not a swatch.
+      final dot = tester.getRect(find.descendant(
+        of: find.byKey(ValueKey<String>('tl-label-${idOf(layer)}')),
+        matching: find.byType(DecoratedBox),
+      ));
+      expect(dot.width, closeTo(6, 0.5));
+      expect(dot.height, closeTo(6, 0.5));
+    });
+
+    /// 11. **The switches column never stretches** (§12A.1, K-448): its seam
+    /// is not a handle, and a resize asked for anyway leaves it where it was.
+    testWidgets('the switches column is pinned to its minimum width',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final seam = find.byKey(const ValueKey('tl-seam-switches'));
+      expect(seam, findsOneWidget, reason: 'the rule is still drawn');
+      expect(
+        find.descendant(of: seam, matching: find.byType(GestureDetector)),
+        findsNothing,
+        reason: 'but there is nothing to take hold of',
+      );
+
+      final before =
+          tester.getRect(find.byKey(const ValueKey('tl-seam-switches')));
+      await tester.drag(seam, const Offset(60, 0));
+      await tester.pump();
+      expect(
+          tester.getRect(find.byKey(const ValueKey('tl-seam-switches'))).left,
+          closeTo(before.left, 0.5),
+          reason: 'a drag on it widens nothing');
+    });
+
+    /// 12. **The comp-wide switches live in the bottom bar** (§12A.1), after
+    /// the column toggles and behind a divider — and every command they carry
+    /// is the one it always was.
+    testWidgets('shy, motion blur and the overflow sit in the bottom bar',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final bar =
+          tester.getRect(find.byKey(const ValueKey('tl-column-compose')));
+      for (final key in ['tl-hide-shy', 'tl-mb-master', 'tl-more']) {
+        final found = tester.getRect(find.byKey(ValueKey<String>(key)));
+        expect(found.center.dy, closeTo(bar.center.dy, 1),
+            reason: '$key rides in the bottom bar with the column toggles');
+        expect(found.left, greaterThan(bar.right),
+            reason: '$key sits after the Parent toggle');
+      }
     });
   });
 }

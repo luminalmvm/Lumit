@@ -130,17 +130,9 @@
   "@colourOutsideRange": {
     "description": "Note in the colour picker when a value is brighter or darker than a screen can show."
   },
-  "columnAv": "A/V",
-  "@columnAv": {
-    "description": "Timeline column heading over the audio and video switches. An abbreviation of audio/video — keep it short."
-  },
   "columnBlend": "Blend",
   "@columnBlend": {
     "description": "Timeline column heading."
-  },
-  "columnCompose": "Matte · Blend · Parent",
-  "@columnCompose": {
-    "description": "Timeline column heading, over the three composing columns. The middle dot is a separator."
   },
   "columnLayer": "Layer",
   "@columnLayer": {
@@ -150,13 +142,21 @@
   "@columnMatte": {
     "description": "Timeline column heading."
   },
+  "columnModes": "Modes",
+  "@columnModes": {
+    "description": "Timeline column heading, over the per-layer render modes (flow, effects, motion blur, 3D). Also the label of that column's show/hide toggle in the Timeline's bottom bar."
+  },
+  "columnNumber": "#",
+  "@columnNumber": {
+    "description": "Timeline column heading over the layer numbers. The number sign, or whatever stands for 'number' in this language — one or two characters, it sits in an 18px column."
+  },
   "columnParent": "Parent",
   "@columnParent": {
     "description": "Timeline column heading."
   },
   "columnSwitches": "Switches",
   "@columnSwitches": {
-    "description": "Timeline column heading, over the per-layer on/off controls."
+    "description": "Timeline column heading, over the per-layer visibility, audio, solo and lock switches. Also the label of that column's show/hide toggle in the Timeline's bottom bar."
   },
   "compositionSettings": "Composition settings",
   "@compositionSettings": {
@@ -5214,7 +5214,7 @@
   },
   "tipToggleColumns": "Show or hide {column}",
   "@tipToggleColumns": {
-    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading — A/V, Switches, or Matte · Blend · Parent.",
+    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading — Switches, Modes, or Parent.",
     "placeholders": {
       "column": {
         "type": "String"

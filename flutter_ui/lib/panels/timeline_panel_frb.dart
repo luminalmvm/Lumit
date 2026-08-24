@@ -39,6 +39,7 @@ import '../icons/icons.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show exportFrb;
 import '../shell/splash.dart';
 import '../state/comp_model.dart';
 import '../state/comp_time.dart';
@@ -95,8 +96,18 @@ double sampledScalar(BridgeScalar scalar, BridgeRational time) {
       sampleScalar(scalar: scalar, time: time);
 }
 
-/// One layer row's height.
-const double _rowHeight = 22;
+/// One layer row's height (K-451, via [laneRowHeight] so the bars inside it
+/// and the row itself are one number).
+const double _rowHeight = laneRowHeight;
+
+/// The layer-number column: the mockup's own 18 (K-451), shared by the column
+/// header's `#` and the muted mono number under it so the two stack.
+const double _numberCellWidth = 18;
+
+/// The label-colour dot beside a layer's name — the mockup's own 6px bullet
+/// (K-451), drawn round whatever the shape is: this is a colour swatch, not a
+/// control, and Sharp's square corners have nothing to say about a bullet.
+const double _labelDotSize = 6;
 
 /// The outline's two header rows: the toolbar (timecode, search, the view
 /// buttons) and the column-group header under it.
@@ -279,11 +290,13 @@ class LayerRow {
 
 /// What a column group is called — in its header, and on the bottom bar's
 /// toggle for it (K-448), which must name the same thing the header does.
+/// **The same words the column headers carry** (§12A.1): Switches, Modes,
+/// Parent — the mockup's own bottom-bar row.
 String columnGroupLabel(TimelineGroup group) => switch (group) {
-      TimelineGroup.switches => l10n.columnAv,
+      TimelineGroup.switches => l10n.columnSwitches,
       TimelineGroup.identity => l10n.columnLayer,
-      TimelineGroup.render => l10n.columnSwitches,
-      TimelineGroup.compose => l10n.columnCompose,
+      TimelineGroup.render => l10n.columnModes,
+      TimelineGroup.compose => l10n.columnParent,
       TimelineGroup.timings => l10n.tipRenderTime,
     };
 
@@ -902,8 +915,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     TimelineGroup.compose,
   ];
 
-  /// Widen (or narrow) one group, never below what its cells need.
+  /// Widen (or narrow) one group, never below what its cells need — and not at
+  /// all for a fixed-width group (the switches, §12A.1).
   void _resizeGroup(TimelineGroup group, double delta) => setState(() {
+        if (groupIsFixedWidth(group)) return;
         final next = ((_groupWidths[group] ?? 0) + delta)
             .clamp(minGroupWidth(group), 900.0);
         _groupWidths = {..._groupWidths, group: next};
@@ -2338,6 +2353,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         CompTabsFrb(
           state: Provider.of<LumitState>(context, listen: false),
           uiState: ui,
+          // The File menu's own command, not a second route to the dialog:
+          // one function decides what "export" means (K-303's reason applies
+          // to commands as much as to strings).
+          onExport: () => exportFrb(context),
         ),
         Expanded(
           // Dropping footage from the Project panel adds it as a layer, and
@@ -2589,7 +2608,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             // side gives their height to a taller, easier
                             // to grab time ruler (docs/07 §4.1).
                             _Toolbar(
-                              comp: comp,
                               model: ui.model,
                               playhead: ui.playheadFrame,
                               onSeek: ui.scrubTo,
@@ -2598,13 +2616,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 _graph = !_graph;
                                 _publishEasingClaim();
                               }),
-                              razor: _razorArmed(ui),
-                              onToggleRazor: () => _toggleRazor(ui),
-                              hideShy: _hideShy,
-                              onToggleHideShy: () =>
-                                  setState(() => _hideShy = !_hideShy),
                               onSearch: (v) => setState(() => _search = v),
-                              onChanged: ui.model.refresh,
                             ),
                             _ColumnHeader(
                               order: groupOrder,
@@ -2674,7 +2686,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     showThumb: _graph,
                     header: [
                       Container(height: _toolbarHeight, color: t.surface1),
-                      Container(height: _headerHeight, color: t.surface2),
+                      Container(height: _headerHeight, color: t.surface1),
                     ],
                   ),
                 ],
@@ -2725,6 +2737,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             onToggle: (group) => setState(() {
               if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
             }),
+            comp: comp,
+            model: ui.model,
+            playhead: ui.playheadFrame,
+            razor: _razorArmed(ui),
+            onToggleRazor: () => _toggleRazor(ui),
+            hideShy: _hideShy,
+            onToggleHideShy: () => setState(() => _hideShy = !_hideShy),
+            onChanged: ui.model.refresh,
           ),
         ],
       ),
@@ -2871,7 +2891,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 header: [
                   Container(
                     height: _rulerHeight + TimelineCacheBar.height,
-                    color: t.surface2,
+                    color: t.timelineOutOfRange,
                   ),
                 ],
               ),
@@ -3015,7 +3035,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 header: [
                   Container(
                     height: _rulerHeight + TimelineCacheBar.height,
-                    color: t.surface2,
+                    color: t.timelineOutOfRange,
                   ),
                 ],
               ),
@@ -5066,10 +5086,7 @@ class BarEndMarksPainter extends CustomPainter {
 /// layer/work-area/marker commands the old full-width toolbar carried) between
 /// the well and the segments.
 class _Toolbar extends StatelessWidget {
-  final CompositionReference comp;
-
-  /// The read model, for the master motion-blur state and the exact rate —
-  /// no bridge calls in a build (K-184).
+  /// The read model, for the exact rate — no bridge calls in a build (K-184).
   final CompModel model;
 
   /// Listened to, not read: only the two readouts redraw as it moves.
@@ -5081,38 +5098,32 @@ class _Toolbar extends StatelessWidget {
 
   final bool graph;
   final VoidCallback onToggleGraph;
-  final bool razor;
-  final VoidCallback onToggleRazor;
-  final bool hideShy;
-  final VoidCallback onToggleHideShy;
   final ValueChanged<String> onSearch;
-  final VoidCallback onChanged;
 
   const _Toolbar({
-    required this.comp,
     required this.model,
     required this.playhead,
     required this.onSeek,
     required this.graph,
     required this.onToggleGraph,
-    required this.razor,
-    required this.onToggleRazor,
-    required this.hideShy,
-    required this.onToggleHideShy,
     required this.onSearch,
-    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final (fpsNum, fpsDen) = model.fpsExact;
-    final mbOn = model.motionBlurEnabled;
     final lastFrame = model.durationFrames - 1;
     return Container(
       height: _toolbarHeight,
-      color: t.surface1,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      // The panel's own surface, ruled off from the column header below it —
+      // the mockup draws both secondary rows on the panel ground with a
+      // hairline under each, not as a raised strip.
+      decoration: BoxDecoration(
+        color: t.surface1,
+        border: Border(bottom: BorderSide(color: t.hairline)),
+      ),
+      padding: const EdgeInsets.only(left: 10, right: 6),
       child: Row(
         children: [
           // The clock face and the frame count, both zero-based: frame 0 is
@@ -5136,7 +5147,7 @@ class _Toolbar extends StatelessWidget {
                   // The clock is the row's first fact and reads at full
                   // strength; the frame count beside it is the same moment
                   // said again, so it stays muted (§12A.1).
-                  style: t.mono.copyWith(color: t.textPrimary),
+                  style: t.mono.copyWith(fontSize: 11, color: t.textPrimary),
                   parse: (text) => framesOfTimecode(text, fpsNum, fpsDen),
                   onCommit: onSeek,
                   minFrame: 0,
@@ -5151,7 +5162,7 @@ class _Toolbar extends StatelessWidget {
                   // comp that grows past a power of ten does not start to
                   // twitch before the next rebuild.
                   widthChars: 2 + '${lastFrame < 0 ? 0 : lastFrame}'.length,
-                  style: t.mono.copyWith(color: t.textMuted),
+                  style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
                   parse: _frameOfTyped,
                   onCommit: onSeek,
                   minFrame: 0,
@@ -5161,38 +5172,11 @@ class _Toolbar extends StatelessWidget {
               ],
             ),
           ),
+          // The search well, stretched between the frame counter and the mode
+          // tabs (§12A.1) — the mockup's own 10px margin either side.
           const SizedBox(width: 10),
           Expanded(child: LayerSearchFrb(onChanged: onSearch, width: 1e9)),
-          const SizedBox(width: 8),
-          _iconButton(
-            context,
-            keyName: 'tl-mb-master',
-            icon: LumitIcon.motionBlur,
-            on: mbOn,
-            tip:
-                mbOn ? l10n.tipMasterMotionBlurOn : l10n.tipMasterMotionBlurOff,
-            onPressed: () {
-              comp.setMotionBlurEnabled(on_: !mbOn);
-              onChanged();
-            },
-          ),
-          _iconButton(
-            context,
-            keyName: 'tl-hide-shy',
-            icon: LumitIcon.shy,
-            on: hideShy,
-            tip: hideShy ? l10n.tipShyHidden : l10n.tipHideShy,
-            onPressed: onToggleHideShy,
-          ),
-          HouseButton(
-            key: const ValueKey('tl-more'),
-            small: true,
-            frameless: true,
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            onPressed: () => _showMoreMenu(context),
-            child: Text('⋯', style: t.small),
-          ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 10),
           // The two modes, at the far right of the row (§12A.1). Kicker
           // segments rather than icons: "Layers" and "Graph" are the names of
           // two shapes of the same panel, and a word says which one is in
@@ -5253,117 +5237,133 @@ class _Toolbar extends StatelessWidget {
     if (trimmed.startsWith('f')) trimmed = trimmed.substring(1);
     return int.tryParse(trimmed.trim());
   }
+}
 
-  Widget _iconButton(
-    BuildContext context, {
-    required String keyName,
-    required LumitIcon icon,
-    required bool on,
-    required String tip,
-    required VoidCallback onPressed,
-  }) {
-    final t = ThemeScope.of(context).theme;
-    return LumitTooltip(
-      message: tip,
-      child: HouseButton(
-        key: ValueKey<String>(keyName),
-        small: true,
-        frameless: true,
-        // No vertical padding: a 16px glyph plus the button's own 1px edge is
-        // the whole of an 18px secondary row (K-451), and 2px more spilled it.
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        onPressed: onPressed,
-        child:
-            lumitIcon(icon, size: iconSize, color: on ? t.accent : t.textMuted),
-      ),
-    );
-  }
+/// One comp-wide switch in the bottom bar: an icon that lights in `accent`
+/// while it is on.
+Widget _compToggleButton(
+  BuildContext context, {
+  required String keyName,
+  required LumitIcon icon,
+  required bool on,
+  required String tip,
+  required VoidCallback onPressed,
+}) {
+  final t = ThemeScope.of(context).theme;
+  return LumitTooltip(
+    message: tip,
+    child: HouseButton(
+      key: ValueKey<String>(keyName),
+      small: true,
+      frameless: true,
+      // No vertical padding: a 16px glyph plus the button's own 1px edge is
+      // the whole of an 18px bottom bar (K-451), and 2px more spilled it.
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      onPressed: onPressed,
+      child:
+          lumitIcon(icon, size: iconSize, color: on ? t.accent : t.textMuted),
+    ),
+  );
+}
 
-  /// The commands that used to line the full-width toolbar, one menu deep:
-  /// adding layers, the razor, the work area, markers and beat detection.
-  Future<void> _showMoreMenu(BuildContext context) async {
-    final t = ThemeScope.of(context).theme;
-    final box = context.findRenderObject();
-    if (box is! RenderBox) return;
-    final playheadNow = playhead.value;
-    final picked = await showMenuAt<String>(
-      context: context,
-      position: box.localToGlobal(Offset(box.size.width - 190, 24)),
-      width: 190,
-      rows: (close) => [
-        MenuRow(
-            key: const ValueKey('tl-add-layer'),
-            onPressed: () => close('new-layer'),
-            child: Text(l10n.newLayer)),
-        MenuRow(
-            key: const ValueKey('tl-razor'),
-            onPressed: () => close('razor'),
-            child: Text(razor ? l10n.disarmRazor : l10n.armRazor,
-                style: razor ? t.body.copyWith(color: t.accent) : null)),
-        MenuRow(
-            key: const ValueKey('tl-work-in'),
-            onPressed: () => close('work-in'),
-            child: Text(l10n.workAreaStart)),
-        MenuRow(
-            key: const ValueKey('tl-work-out'),
-            onPressed: () => close('work-out'),
-            child: Text(l10n.workAreaEnd)),
-        MenuRow(
-            key: const ValueKey('tl-clear-work-area'),
-            onPressed: () => close('work-clear'),
-            child: Text(l10n.workAreaClear)),
-        MenuRow(
-            key: const ValueKey('tl-markers'),
-            onPressed: () => close('markers'),
-            child: Text(l10n.menuMarkers)),
-        MenuRow(
-            key: const ValueKey('tl-detect-beats'),
-            onPressed: () => close('beats'),
-            child: Text(l10n.menuDetectBeats)),
-      ],
-    );
-    if (!context.mounted) return;
-    switch (picked) {
-      case 'new-layer':
-        await _showLayerMenu(context, comp, onChanged);
-      case 'razor':
-        onToggleRazor();
-      case 'work-in' || 'work-out':
-        comp.setWorkArea(
-          span: workAreaWith(
-            comp: comp,
-            current: comp.getWorkArea(),
-            wanted: playheadNow,
-            isStart: picked == 'work-in',
-          ),
-        );
-        onChanged();
-      case 'work-clear':
-        comp.setWorkArea(span: null);
-        onChanged();
-      case 'markers':
-        await showMarkerEditorFrb(
-          context: context,
+/// The commands that used to line the full-width toolbar, one menu deep:
+/// adding layers, the razor, the work area, markers and beat detection.
+///
+/// It rides in the panel's bottom bar with the other comp-wide switches
+/// (§12A.1); it was in the timecode row until the redesign, and every command
+/// and key in it is the one it always was.
+Future<void> _showMoreMenu(
+  BuildContext context, {
+  required CompositionReference comp,
+  required ValueListenable<int> playhead,
+  required bool razor,
+  required VoidCallback onToggleRazor,
+  required VoidCallback onChanged,
+}) async {
+  final t = ThemeScope.of(context).theme;
+  final box = context.findRenderObject();
+  if (box is! RenderBox) return;
+  final playheadNow = playhead.value;
+  final picked = await showMenuAt<String>(
+    context: context,
+    // Anchored on the button. Opening from a *bottom* bar, the popup's own
+    // layout pulls it back up on screen rather than running off below —
+    // which is why the anchor no longer guesses at an offset.
+    position: box.localToGlobal(Offset.zero),
+    width: 190,
+    rows: (close) => [
+      MenuRow(
+          key: const ValueKey('tl-add-layer'),
+          onPressed: () => close('new-layer'),
+          child: Text(l10n.newLayer)),
+      MenuRow(
+          key: const ValueKey('tl-razor'),
+          onPressed: () => close('razor'),
+          child: Text(razor ? l10n.disarmRazor : l10n.armRazor,
+              style: razor ? t.body.copyWith(color: t.accent) : null)),
+      MenuRow(
+          key: const ValueKey('tl-work-in'),
+          onPressed: () => close('work-in'),
+          child: Text(l10n.workAreaStart)),
+      MenuRow(
+          key: const ValueKey('tl-work-out'),
+          onPressed: () => close('work-out'),
+          child: Text(l10n.workAreaEnd)),
+      MenuRow(
+          key: const ValueKey('tl-clear-work-area'),
+          onPressed: () => close('work-clear'),
+          child: Text(l10n.workAreaClear)),
+      MenuRow(
+          key: const ValueKey('tl-markers'),
+          onPressed: () => close('markers'),
+          child: Text(l10n.menuMarkers)),
+      MenuRow(
+          key: const ValueKey('tl-detect-beats'),
+          onPressed: () => close('beats'),
+          child: Text(l10n.menuDetectBeats)),
+    ],
+  );
+  if (!context.mounted) return;
+  switch (picked) {
+    case 'new-layer':
+      await _showLayerMenu(context, comp, onChanged);
+    case 'razor':
+      onToggleRazor();
+    case 'work-in' || 'work-out':
+      comp.setWorkArea(
+        span: workAreaWith(
           comp: comp,
-          playheadFrame: playheadNow,
-        );
-        onChanged();
-      case 'beats':
-        // Seconds-long on a long comp, so it runs off-thread and the markers
-        // appear when it finishes; a comp with no audio, or a machine with no
-        // pipeline, says so by doing nothing rather than by an alarm. The card
-        // is up for those seconds so the silence is not mistaken for a command
-        // that did not land, and it comes down either way.
-        showBusyWhile(
-          context.read<LumitState>().busy,
-          l10n.detectingBeats,
-          comp
-              .detectBeats(sensitivityPercent: 50)
-              .then<void>((_) => onChanged(), onError: (_) {}),
-        );
-      case _:
-        return;
-    }
+          current: comp.getWorkArea(),
+          wanted: playheadNow,
+          isStart: picked == 'work-in',
+        ),
+      );
+      onChanged();
+    case 'work-clear':
+      comp.setWorkArea(span: null);
+      onChanged();
+    case 'markers':
+      await showMarkerEditorFrb(
+        context: context,
+        comp: comp,
+        playheadFrame: playheadNow,
+      );
+      onChanged();
+    case 'beats':
+      // Seconds-long on a long comp, so it runs off-thread and the markers
+      // appear when it finishes; a comp with no audio, or a machine with no
+      // pipeline, says so by doing nothing rather than by an alarm. The card
+      // is up for those seconds so the silence is not mistaken for a command
+      // that did not land, and it comes down either way.
+      showBusyWhile(
+        context.read<LumitState>().busy,
+        l10n.detectingBeats,
+        comp
+            .detectBeats(sensitivityPercent: 50)
+            .then<void>((_) => onChanged(), onError: (_) {}),
+      );
+    case _:
+      return;
   }
 }
 
@@ -5484,30 +5484,41 @@ const Widget _rowSeam = SizedBox(width: groupDividerWidth);
 /// that resizes the group to its left (docs/07 §4.2). Everything else keeps
 /// its width, so a drag here widens or narrows the whole outline.
 class _GroupSeam extends StatelessWidget {
-  final ValueChanged<double> onResize;
+  /// Null for a group whose width is fixed: the rule still draws, but the seam
+  /// is not a handle and does not offer a resize cursor.
+  final ValueChanged<double>? onResize;
   const _GroupSeam({super.key, required this.onResize});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final rule = SizedBox(
+      width: groupDividerWidth,
+      child: Center(
+        child: Container(width: 1, height: 14, color: t.hairlineStrong),
+      ),
+    );
+    final resize = onResize;
+    if (resize == null) return rule;
     return MouseRegion(
       cursor: SystemMouseCursors.resizeColumn,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onHorizontalDragUpdate: (d) => onResize(d.delta.dx),
-        child: SizedBox(
-          width: groupDividerWidth,
-          child: Center(
-            child: Container(width: 1, height: 14, color: t.hairlineStrong),
-          ),
-        ),
+        onHorizontalDragUpdate: (d) => resize(d.delta.dx),
+        child: rule,
       ),
     );
   }
 }
 
-/// The column-group header (docs/07 §4.2): one icon per column, grouped into
-/// the four clusters, each cluster draggable as a unit to reorder them.
+/// The column-group header (docs/07 §4.2): **one kicker word per column**,
+/// grouped into the clusters, each cluster draggable as a unit to reorder them.
+///
+/// Words, not icons (§12A.1, K-451). A column header names a container, and
+/// §7.1 sets every container label as a kicker; a row of small glyphs made the
+/// reader work out what each column *was* from the same marks the cells below
+/// already carry. The switch cells still wear their icons — those are the
+/// controls; this is the legend.
 class _ColumnHeader extends StatelessWidget {
   final List<TimelineGroup> order;
   final Map<TimelineGroup, double> widths;
@@ -5528,7 +5539,12 @@ class _ColumnHeader extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return Container(
       height: _headerHeight,
-      color: t.surface2,
+      // The panel's own ground with a rule under it, like the timecode row
+      // above — the mockup draws no raised strip here.
+      decoration: BoxDecoration(
+        color: t.surface1,
+        border: Border(bottom: BorderSide(color: t.hairline)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         children: [
@@ -5538,7 +5554,11 @@ class _ColumnHeader extends StatelessWidget {
             if (i > 0)
               _GroupSeam(
                 key: ValueKey<String>('tl-seam-${order[i - 1].name}'),
-                onResize: (delta) => onResize(order[i - 1], delta),
+                // Null for a fixed-width group: the rule is still drawn, so
+                // the grouping reads, but there is nothing to take hold of.
+                onResize: groupIsFixedWidth(order[i - 1])
+                    ? null
+                    : (delta) => onResize(order[i - 1], delta),
               ),
             _draggable(context, t, order[i]),
           ],
@@ -5577,89 +5597,66 @@ class _ColumnHeader extends StatelessWidget {
 
   String _labelOf(TimelineGroup group) => columnGroupLabel(group);
 
-  /// The header cells, in the same widths the rows use, so each icon stands
+  /// The header cells, in the same widths the rows use, so each word stands
   /// over its column. Indicators only — clicking a header does nothing; the
   /// switches live on the rows (docs/07 §4.2). Each carries a hover hint
-  /// naming its column.
+  /// naming its column, which for a truncated word is how the whole of it is
+  /// still read.
   Widget _cells(LumitTheme t, TimelineGroup group, double width) {
-    Widget icon(LumitIcon i, String tip) => LumitTooltip(
-          message: tip,
-          child:
-              Center(child: lumitIcon(i, size: iconSize, color: t.textMuted)),
-        );
-    Widget cell(LumitIcon i, String tip) =>
-        SizedBox(width: switchCellWidth, child: icon(i, tip));
-    // The same legend drawn from Lumit's own set (K-440), for the columns the
-    // set already has a mark for.
-    Widget markCell(String mark, String tip) => SizedBox(
-          width: switchCellWidth,
-          child: LumitTooltip(
-            message: tip,
-            child: Center(
-                child:
-                    glyph.LumitIcon(mark, size: iconSize, colour: t.textMuted)),
-          ),
-        );
-    // The compose titles carry the dropdown's own text inset, so each sits
-    // directly over the text in the cell below it.
-    Widget title(String text, String tip, double width) => SizedBox(
-          width: width,
+    /// One kicker over a column, left-aligned on the column's own edge.
+    Widget title(String text, String tip, double cellWidth,
+            {double inset = 0}) =>
+        SizedBox(
+          width: cellWidth,
           child: LumitTooltip(
             message: tip,
             child: Align(
               alignment: Alignment.centerLeft,
               child: Padding(
-                padding: const EdgeInsets.only(left: dropdownTextInset),
-                child: Text(text, style: t.small),
+                padding: EdgeInsets.only(left: inset),
+                child: Text(text.toUpperCase(),
+                    style: t.kicker,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
               ),
             ),
           ),
         );
     return switch (group) {
-      TimelineGroup.switches => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            markCell(LumitIcons.visible, l10n.switchVisible),
-            markCell(LumitIcons.audio, l10n.switchAudible),
-            markCell(LumitIcons.solo, l10n.switchSolo),
-            markCell(LumitIcons.lock, l10n.switchLock),
-            cell(LumitIcon.shy, l10n.switchShy),
-          ],
-        ),
+      // One word over the whole cluster rather than five marks over five
+      // cells: the switches themselves say which is which, down the rows.
+      TimelineGroup.switches =>
+        title(l10n.columnSwitches, l10n.columnSwitches, width),
       TimelineGroup.identity => Row(
           children: [
-            const SizedBox(width: 16), // the twirl column has no header icon
-            SizedBox(
-                width: 16, child: icon(LumitIcon.label, l10n.tipLabelColour)),
-            const SizedBox(width: 4),
+            // The twirl and the label chip have no heading of their own.
+            const SizedBox(width: 16 + 16 + 4),
+            title(l10n.columnNumber, l10n.columnNumber, _numberCellWidth),
             Expanded(
-              child: Text(l10n.columnLayer,
-                  style: t.small, overflow: TextOverflow.ellipsis),
+              child: Text(l10n.columnLayer.toUpperCase(),
+                  style: t.kicker,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
             ),
           ],
         ),
-      // The switches pack left in ordinary cells; the rest of the group's
-      // span is the fold-out's value column, not spare icon room.
-      TimelineGroup.render => Row(
-          children: [
-            cell(LumitIcon.flow, l10n.switchFlow),
-            cell(LumitIcon.fx, l10n.switchEffects),
-            cell(LumitIcon.motionBlur, l10n.switchMotionBlur),
-            cell(LumitIcon.cube3d, l10n.switchThreeD),
-            cell(LumitIcon.aperture, l10n.switchAcceptsLights),
-          ],
-        ),
+      TimelineGroup.render => title(l10n.columnModes, l10n.columnModes, width),
       // The render-time column's header is its switch — see timeline_timings.
       TimelineGroup.timings => const TimingsHeaderCell(),
       TimelineGroup.compose => () {
           final (matte, blend, parent) = composeCellWidths(width);
+          // The compose titles carry the dropdown's own text inset, so each
+          // sits directly over the text in the cell below it.
           return Row(
             children: [
-              title(l10n.columnMatte, l10n.tipMatte, matte),
+              title(l10n.columnMatte, l10n.tipMatte, matte,
+                  inset: dropdownTextInset),
               const SizedBox(width: cellGap),
-              title(l10n.columnBlend, l10n.tipBlendMode, blend),
+              title(l10n.columnBlend, l10n.tipBlendMode, blend,
+                  inset: dropdownTextInset),
               const SizedBox(width: cellGap),
-              title(l10n.columnParent, l10n.tipParent, parent),
+              title(l10n.columnParent, l10n.tipParent, parent,
+                  inset: dropdownTextInset),
             ],
           );
         }(),
@@ -6221,10 +6218,13 @@ class _OutlineRowState extends State<_OutlineRow> {
           child: _ownClick(_labelSwatch(context, t, id, info.label)),
         ),
         const SizedBox(width: 4),
+        // The layer number: **mono**, because it is a number (§7.1's rule has
+        // no exceptions), muted, and in the same 18px cell the header's `#`
+        // stands in.
         SizedBox(
-          width: 20,
-          child:
-              Text('${index + 1}', style: t.small.copyWith(color: t.textMuted)),
+          width: _numberCellWidth,
+          child: Text('${index + 1}',
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
         ),
         // The name is also the stack handle: drag it up or down to reorder
         // the layer (docs/07 §4.7). A locked layer holds its place.
@@ -6470,12 +6470,16 @@ class _OutlineRowState extends State<_OutlineRow> {
         width: 16,
         height: _rowHeight,
         child: Center(
+          // A 6px **dot** (K-451: the mockup's own diameter). It was a 10px
+          // rounded square, which read as a swatch competing with the name
+          // beside it; the mockup marks the layer with a bullet, and a bullet
+          // is what a label colour is for.
           child: Container(
-            width: 10,
-            height: 10,
+            width: _labelDotSize,
+            height: _labelDotSize,
             decoration: BoxDecoration(
               color: t.labelColour(label),
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              borderRadius: BorderRadius.circular(_labelDotSize / 2),
             ),
           ),
         ),
@@ -7644,14 +7648,36 @@ class _ColumnToggles extends StatelessWidget {
     required this.groups,
     required this.hidden,
     required this.onToggle,
+    required this.comp,
+    required this.model,
+    required this.playhead,
+    required this.razor,
+    required this.onToggleRazor,
+    required this.hideShy,
+    required this.onToggleHideShy,
+    required this.onChanged,
   });
+
+  /// What the comp-wide switches act on, and the read model they read their
+  /// state from (K-184: no bridge call in a build).
+  final CompositionReference comp;
+  final CompModel model;
+
+  /// Read when a command in the ⋯ menu is picked, never per rebuild.
+  final ValueListenable<int> playhead;
+  final bool razor;
+  final VoidCallback onToggleRazor;
+  final bool hideShy;
+  final VoidCallback onToggleHideShy;
+  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final mbOn = model.motionBlurEnabled;
     return Container(
       height: _laneBottomBarHeight,
-      color: t.surface1,
+      color: t.surface2,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       // Scrolls sideways when the outline is narrow — the same answer the
       // toolbar and the lane bar give; an overflow stripe is a layout fault.
@@ -7676,6 +7702,54 @@ class _ColumnToggles extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
+            // **The two groups read apart** (§12A.1): everything left of this
+            // rule says which *columns* the outline draws; everything right of
+            // it is comp-wide — shy, master motion blur, and the overflow of
+            // commands. They shared the timecode row until the redesign, where
+            // a column toggle and a document switch sat shoulder to shoulder
+            // with nothing to say they were different kinds of thing.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Container(width: 1, height: 10, color: t.hairlineStrong),
+            ),
+            _compToggleButton(
+              context,
+              keyName: 'tl-hide-shy',
+              icon: LumitIcon.shy,
+              on: hideShy,
+              tip: hideShy ? l10n.tipShyHidden : l10n.tipHideShy,
+              onPressed: onToggleHideShy,
+            ),
+            _compToggleButton(
+              context,
+              keyName: 'tl-mb-master',
+              icon: LumitIcon.motionBlur,
+              on: mbOn,
+              tip: mbOn
+                  ? l10n.tipMasterMotionBlurOn
+                  : l10n.tipMasterMotionBlurOff,
+              onPressed: () {
+                comp.setMotionBlurEnabled(on_: !mbOn);
+                onChanged();
+              },
+            ),
+            Builder(
+              builder: (menuContext) => HouseButton(
+                key: const ValueKey('tl-more'),
+                small: true,
+                frameless: true,
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                onPressed: () => _showMoreMenu(
+                  menuContext,
+                  comp: comp,
+                  playhead: playhead,
+                  razor: razor,
+                  onToggleRazor: onToggleRazor,
+                  onChanged: onChanged,
+                ),
+                child: Text('⋯', style: t.small),
+              ),
+            ),
           ],
         ),
       ),
@@ -7773,7 +7847,9 @@ class _LaneBottomBar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return Container(
       height: _laneBottomBarHeight,
-      color: t.surface1,
+      // A panel bottom bar, and so `surface_2` — the same value the panel
+      // header wears at the other end of the panel (K-451).
+      color: t.surface2,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -8077,9 +8153,11 @@ class _BarState extends State<_Bar> {
         ? (widget.axis.xOf(minIn), widget.axis.xOf(maxOut))
         : null;
 
-    // The bar fills the row's whole height rather than floating inside an
-    // inset, so a layer reads as a solid band; the lane area's own hairline
-    // overlay draws the row seam over it (K-190).
+    // **16 inside a 22 row** (§12A.6's table, K-451), centred: three pixels of
+    // lane ground above and below, so a stack of bars reads as a stack rather
+    // than as one continuous slab, and the row seams the lane overlay draws
+    // (K-190) fall on empty ground instead of through a bar's edge. The bar
+    // used to fill the row's whole height.
     return SizedBox(
       height: _rowHeight,
       // **Both children are keyed.** The ghost comes and goes as the bar is
@@ -8098,8 +8176,8 @@ class _BarState extends State<_Bar> {
                   'tl-bar-ghost-${widget.entry.layer.internallayerId}'),
               left: ghost.$1,
               width: (ghost.$2 - ghost.$1).clamp(1.0, 1e6),
-              top: 0,
-              bottom: 0,
+              top: clipBarInset,
+              height: clipBarHeight,
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
@@ -8115,7 +8193,7 @@ class _BarState extends State<_Bar> {
                     // far as its source goes, and a rectangle round a capsule
                     // would read as a second object rather than the same one.
                     borderRadius: BorderRadius.circular(
-                        round ? t.tokens.controlRadius : 2),
+                        round ? t.tokens.controlRadius : sharpClipRadius),
                   ),
                 ),
               ),
@@ -8125,8 +8203,8 @@ class _BarState extends State<_Bar> {
                 'tl-bar-body-${widget.entry.layer.internallayerId}'),
             left: left,
             width: width,
-            top: 0,
-            bottom: 0,
+            top: clipBarInset,
+            height: clipBarHeight,
             // Selection on the raw DOWN, outside the gesture arena: the
             // bar's tap otherwise waits for the move/trim drag recognisers
             // to concede before the Effect controls learn the layer.
@@ -8236,7 +8314,7 @@ class _BarState extends State<_Bar> {
                     // they had. That is deliberate — a curved end would take
                     // pixels off the corner of a target already only 8 px wide.
                     borderRadius: BorderRadius.circular(
-                        round ? t.tokens.controlRadius : 2),
+                        round ? t.tokens.controlRadius : sharpClipRadius),
                   ),
                   child: Stack(
                     children: [

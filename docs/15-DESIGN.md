@@ -444,7 +444,7 @@ Sequence layer show thumbnails/waveforms.
 The cache bar is a thin stripe under the time ruler showing which frames are cached, per
 tier. Cached is *good news* — quiet and cool, never alarming.
 
-All three of Nebula's tiers ship (K-214, docs/06 §5.6). Every run draws as a 2px band beneath
+All three of Nebula's tiers ship (K-214, docs/06 §5.6). Every run draws as a 3px band beneath
 the ruler:
 
 | State | Token | Value | Meaning |
@@ -489,7 +489,7 @@ status line's cache meter, where each tier already has its own bar.
   cache bar at the floor of the ruler's lower row and centred on the frame it marks, so its
   point aims at the clock above. What it says rides in a **backdrop pill** in `surface_4`,
   12px tall, starting at the triangle's point and running right — the triangle's left half
-  stands clear of it, its right half is inside — with the label in **mono at 9px** in
+  stands clear of it, its right half is inside — with the label in **mono at 8px** in
   `text_primary`, rather than as loose text over the ticks. **One marker per frame** — a
   second dropped on an occupied frame replaces the first, since two flags on one moment are
   two things to click and one place.
@@ -543,8 +543,8 @@ chrome sits above 13px except dialog body emphasis**:
 
 | Size | Face | Use |
 |---|---|---|
-| 9–11px | Geist Mono, caps, +0.08–0.12em, `text_muted` | **Kickers — every container label**: panel titles, properties section headers, column headers, tab labels, dialog titles, attribution |
-| 10px | Geist Mono, caps, +0.08–0.12em, `surface_0` on the `accent` fill | **The filled primary action's label** — the one filled button a surface is allowed (§3.1, §12A.4). A kicker in every respect but its colour, which the fill under it decides |
+| 9–11px (**9 shipped**, +0.12em, regular) | Geist Mono, caps, `text_muted` | **Kickers — every container label**: panel titles, properties section headers, column headers, tab labels, dialog titles, attribution. The shipped value is the approved mockups' own `.kick` (K-451) |
+| 9px | Geist Mono, caps, +0.12em, `surface_0` on the `accent` fill | **The filled primary action's label** — the one filled button a surface is allowed (§3.1, §12A.4). A kicker in every respect but its colour, which the fill under it decides |
 | 10px | Hanken Grotesk | Secondary notes and hints (`small`); field captions — never for anything the user has to act on |
 | 11px | Hanken Grotesk | Panel body copy, property names, menus, buttons |
 | 11px | Geist Mono | Layer bar labels, axis numbers, units |
@@ -798,9 +798,17 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   filter** (`U`): on, the outline shows only keyframed properties across all layers; All
   restores the full twirl-down lists. Block selection, end-handle stretch and the Ease
   popover are Layers behaviours, not a mode of their own.
-- **Composition tabs run the full width of the panel header.** The row above the outline
+- **Composition tabs run the full width of the panel header**, between the panel's own
+  `TIMELINE` kicker at the far left and **one filled `EXPORT`** at the far right — the
+  single filled action a surface is allowed (§3.1), running the File menu's own Export
+  command rather than a second route to the same dialog. The row above the outline
   puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
   far right.
+- **The column headers are kicker words, not icons**: Switches · # · Layer · Matte ·
+  Blend · Parent · ms. A column header names a container, and §7.1 sets every container
+  label as a kicker; the switch cells keep their marks, because those are the controls.
+  The bottom bar's toggles carry the same words as the headings they show and hide.
+- **A layer number column** sits between the label dot and the name, in muted mono.
 - **The open composition tab carries no accent tick** — the seated surface colour alone
   marks it, as the mockup draws it. (The workspace tabs keep their accent underline;
   §3.1's "active tab tick" means those.)
@@ -912,12 +920,20 @@ when a panel is too short, its content scrolls.
 | Property and effect-parameter rows | 26 |
 | Effect section headings | 24 |
 | Timeline ruler (times above, markers and work area below) | 36 |
+| Cache bar (counted inside the ruler's 36, so the clock above it is 33) | 3 |
 | Value wells in panels | 20 |
 | Dialog title strip and dialog rows | 30 |
 | Dialog page-tab row | 26 |
 | Dialog value wells and dropdowns | 22 |
 | Status bar | 18 |
 | Graph-side horizontal scrollbar | 7 |
+
+**The pieces inside a row are the mockups' too**, and are pinned by
+`timeline_alignment_test`: a layer's label colour is a **6px dot**, its number stands in an
+**18px column** set in muted mono at 10, the keyframe diamond on a shut layer's row is **4px
+across** (half the 8px one a property's own lane draws), a labelled ruler tick is **7px** tall
+against a minor tick's **4**, and under Sharp a bar's ends are **square** — the stadium ends are
+Round's, and are the whole of that shape's difference here.
 
 **When width runs out, things give way in this order** — earlier steps must be exhausted
 before later ones, and nothing ever paints outside its box:

@@ -1820,6 +1820,13 @@ void main() {
           reason: 'the summary is half the scale of the lane it summarises');
       expect(lane.colour, LumitTheme.dark().animated,
           reason: 'and both are animated');
+
+      // The sizes themselves, not only their ratio: a diamond that shrank at
+      // both ends would keep the ratio and lose the mark. A property's own
+      // key is 8 across (half 4) and the mockup's summary diamond is 4
+      // (half 2) — the same pair the redesign draws (K-451).
+      expect(lane.half, 4.0, reason: 'a lane diamond is 8 across');
+      expect(painter.half, 2.0, reason: 'a summary diamond is 4');
     });
 
     /// Keyframes draw as diamonds on the lane (docs/07 §4.3), and a marquee
@@ -2769,6 +2776,35 @@ void main() {
       expect(switches, findsOneWidget, reason: 'and it comes back');
     });
 
+    /// **The column headers are words, not icons** (§12A.1, K-451) — and the
+    /// bottom bar's toggles say the same words, because a toggle that named a
+    /// column differently from the column's own heading would be naming two
+    /// things.
+    testWidgets('the column headers are kicker words', (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      await mount(tester, p);
+
+      // The mockup's own row: Switches · # · Layer · Matte · Blend · Parent.
+      for (final word in [
+        'SWITCHES',
+        '#',
+        'LAYER',
+        'MATTE',
+        'BLEND',
+        'PARENT',
+      ]) {
+        expect(find.text(word), findsWidgets, reason: '$word heads a column');
+      }
+
+      // Every header is a kicker (§7.1), muted, in the mono face.
+      final t = LumitTheme.dark();
+      final layerHead = tester.widget<Text>(find.text('LAYER').first);
+      expect(layerHead.style!.fontFamily, LumitTheme.monoFontFamily);
+      expect(layerHead.style!.color, t.textMuted);
+      expect(layerHead.style!.fontSize, t.kicker.fontSize);
+    });
+
     /// **The bottom bar's zoom is a slider** (owner, 2026-08-06), between a
     /// small landscape glyph and a large one. Its left end is the whole
     /// composition; dragging right widens the time axis, and a slider zoom has
@@ -3065,6 +3101,18 @@ void main() {
 
       // No room for anything at all: the labelled ticks stand alone.
       expect(minor(0.01), rulerLabelStepSeconds(pixelsPerSecond: 0.01));
+
+      // **At the resting zoom, minor ticks are drawn** (§12A.1, and the
+      // mockup, which shows them between the labelled seconds). At zoom 1 a
+      // composition fits the lane area, so a ten-second comp across roughly
+      // 700px is 70 pixels a second — and the subdivision has to land there,
+      // not only deep in a zoom. The whole band around that is checked, so a
+      // slightly different panel width cannot silently empty the ruler.
+      for (final px in [40.0, 70.0, 120.0]) {
+        final labels = rulerLabelStepSeconds(pixelsPerSecond: px);
+        expect(minor(px), lessThan(labels),
+            reason: 'the ruler subdivides at the resting zoom ($px px/s)');
+      }
     });
 
     /// What a grab does to the waveform's preview of the span — the mapping

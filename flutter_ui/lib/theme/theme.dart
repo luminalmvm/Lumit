@@ -815,13 +815,20 @@ class LumitTheme {
   TextStyle get kicker => TextStyle(
         fontFamily: monoFontFamily,
         fontFamilyFallback: monoFontFamilyFallback,
-        fontSize: 10,
-        // +0.10em, the middle of §7.1's 0.08–0.12 band. Flutter measures
-        // tracking in logical pixels, so an em is the font size.
-        letterSpacing: 10 * 0.10,
+        // 9px at +0.12em, regular weight — **the approved mockups' own
+        // `.kick`** (K-451: the mockups' metrics are canonical), and the
+        // bottom of §7.1's 9–11px / 0.08–0.12em band rather than its middle.
+        // It was 10px at +0.10em in Medium, which read a size heavier than
+        // every kicker the mockups draw. Flutter measures tracking in logical
+        // pixels, so an em is the font size.
+        fontSize: 9,
+        // 1.08 written out, not `9 * 0.12`: the product is 0.12000000000000001
+        // in binary floating point, which lands a hair outside the band the
+        // spec states and the primitives test checks.
+        letterSpacing: 1.08,
         color: textMuted,
         decoration: TextDecoration.none,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w400,
       );
 
   /// The kicker of the container that is *in force* — the fronted dock tab, the

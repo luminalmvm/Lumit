@@ -56,6 +56,61 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    /// The panel header strip (§12A.1): the panel's kicker, the comp tabs, and
+    /// the single filled Export at the far right — which runs the File menu's
+    /// own command rather than a second route to the same dialog.
+    testWidgets('the header names the panel and carries Export',
+        (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+
+      final header = tester.getRect(find.byType(CompTabsFrb));
+      final kicker = tester.getRect(find.text('TIMELINE'));
+      final export = tester.getRect(find.byKey(const ValueKey('tl-export')));
+      final tab = tester
+          .getRect(find.byKey(ValueKey<String>('tl-tab-${p.comp.internalid}')));
+
+      expect(kicker.right, lessThanOrEqualTo(tab.left + 0.5),
+          reason: 'the kicker comes before the tabs');
+      expect(export.left, greaterThan(tab.right),
+          reason: 'and Export is at the far right of the strip');
+      expect(export.right, lessThanOrEqualTo(header.right + 0.5));
+
+      await tester.tap(find.byKey(const ValueKey('tl-export')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('export-close')), findsOneWidget,
+          reason: 'it opens the export dialogue the File menu opens');
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The open composition is marked by the seated surface alone (§12A.1) —
+    /// **no accent tick**. The accent's "active tab" job is the workspace
+    /// tabs', not these.
+    testWidgets('the open comp tab carries no accent tick', (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+
+      final t = LumitTheme.dark();
+      final tab = tester.widget<Container>(find
+          .descendant(
+            of: find.byKey(ValueKey<String>('tl-tab-${p.comp.internalid}')),
+            matching: find.byType(Container),
+          )
+          .first);
+      final decoration = tab.decoration! as BoxDecoration;
+      expect(decoration.color, t.surface1,
+          reason: 'the fronted tab is seated in the panel\'s own surface');
+      final border = decoration.border! as Border;
+      expect(border.bottom.width, 0,
+          reason: 'and wears nothing along its bottom edge');
+      expect([border.left.color, border.right.color, border.bottom.color],
+          isNot(contains(t.accent)),
+          reason: 'nothing on this tab is drawn in the accent');
+      expect(border.left.color, t.hairline,
+          reason: 'only the seams either side of it');
+    });
+
     testWidgets('the comp tabs show the open comps and front one',
         (tester) async {
       final p = withComp();

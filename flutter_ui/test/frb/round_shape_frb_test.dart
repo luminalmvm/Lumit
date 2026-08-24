@@ -12,6 +12,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/theme/theme.dart';
@@ -140,8 +141,9 @@ void main() {
 
     /// A layer bar draws stadium ends under Round: the control radius is the
     /// sentinel that clamps to half the bar's own height, so the same read
-    /// gives a capsule whatever the row height turns out to be. Sharp keeps
-    /// the 2 px it always had.
+    /// gives a capsule whatever the row height turns out to be. Sharp draws
+    /// square ends — the mockup's own bar (K-451); the 2 px it had before
+    /// rounded nothing visibly and softened every bar end by a pixel.
     BorderRadius barRadius(WidgetTester tester) {
       final fill = find.byWidgetPredicate((w) =>
           w is Container &&
@@ -161,7 +163,7 @@ void main() {
       expect(barRadius(tester), BorderRadius.circular(t.tokens.controlRadius));
 
       await mount(tester, const TimelinePanelFrb(), ThemeShape.sharp);
-      expect(barRadius(tester), BorderRadius.circular(2));
+      expect(barRadius(tester), BorderRadius.circular(sharpClipRadius));
     });
   });
 }

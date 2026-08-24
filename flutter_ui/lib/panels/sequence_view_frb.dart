@@ -426,8 +426,9 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
               // this box and reads localPosition.dx across the full width, so
               // the edge-grab zones are the ones they always were, curve or
               // no curve. Deliberate: the ends are the smallest targets here.
-              borderRadius: BorderRadius.circular(
-                  t.shape == ThemeShape.round ? t.tokens.controlRadius : 2),
+              borderRadius: BorderRadius.circular(t.shape == ThemeShape.round
+                  ? t.tokens.controlRadius
+                  : sharpClipRadius),
             ),
             alignment: Alignment.center,
             clipBehavior: Clip.hardEdge,
