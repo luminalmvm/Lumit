@@ -582,7 +582,9 @@ mono while focused.
   interactive region to ≥32px. Keyframes render at 9px but hit-test at 32px with
   nearest-wins disambiguation; adjacent slop regions split at their midpoint.
 - Row and chrome heights are **§12A.6's table** (K-451), which supersedes the 28px/24px rows
-  written here before the redesign: an outline or lane row is 22, a secondary row 18. The
+  written here before the redesign: an outline or lane row is 23 and a secondary row 19
+  under Regular, 22 and 18 under Compact (K-454 — read the height off the table's two
+  columns, never off this sentence). The
   floors above still govern what sits *inside* those rows — bars, keyframes, curve handles
   and the cache bar keep their ≥24px visual and ≥32px hit extent along the axis they are
   aimed at. A chrome row shorter than the floor is the mockup's height, not a licence to
