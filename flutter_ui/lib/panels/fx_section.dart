@@ -71,11 +71,11 @@ const double fxKeyframeGutter = 18;
 /// tick-box row (14 px checkbox) came out four to eight pixels shorter than a
 /// number row (22 px stopwatch strip) or a choice row (a dropdown's button
 /// face), and a stack of parameters visibly stepped in and out. One fixed
-/// height for the content box settles it, and the height is the tick-box row's
-/// — the shortest of them, and the one the owner asked everything to match.
+/// height for the content box settles it.
 ///
 /// It is the *content* box: the section adds its own 2 px above and below and
-/// the hairline under the row, so a row occupies 23 px on the panel.
+/// the hairline under the row, so a row occupies the **26 px** the mockups
+/// make canonical (K-451, docs/15 §12A.6) — 21 + 2 + 2 + 1.
 ///
 /// Controls taller than this than sit inside it rather than pushing it out —
 /// their padding is squeezed by the constraint, never their text. The one
@@ -85,7 +85,13 @@ const double fxKeyframeGutter = 18;
 ///
 /// Not shared with the Timeline: its lanes have their own heights, and its
 /// fold-out rows take the other branch of these row widgets entirely.
-const double fxRowHeight = 18;
+const double fxRowHeight = 21;
+
+/// A section heading's height (K-451, docs/15 §12A.6): **24**, fixed, so a
+/// stack of effects steps at one pitch whatever each heading carries. Its
+/// padding comes out of that, leaving 20 for the switch, the twirl, the kicker
+/// and the heading's own actions.
+const double fxHeadingHeight = 24;
 
 /// One twirl-open section: Source, Transform, or one effect.
 class FxSection extends StatelessWidget {
@@ -261,8 +267,9 @@ class FxSection extends StatelessWidget {
             ? null
             : (details) => onContextMenu!(details.globalPosition),
         child: Container(
+          height: fxHeadingHeight,
           color: selected ? t.selectionFill : t.surface2,
-          padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
+          padding: const EdgeInsets.fromLTRB(8, 2, 6, 2),
           child: Row(
             children: [
               SizedBox(

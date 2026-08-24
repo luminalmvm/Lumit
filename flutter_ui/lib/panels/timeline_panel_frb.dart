@@ -100,7 +100,19 @@ const double _rowHeight = 22;
 
 /// The outline's two header rows: the toolbar (timecode, search, the view
 /// buttons) and the column-group header under it.
-const double _toolbarHeight = 26;
+///
+/// Both are **secondary rows**, which the mockups fix at 18 (K-451, docs/15
+/// §12A.6) — and 18 + 18 less the cache bar is exactly the 36 the same table
+/// gives the ruler, which is what makes the two halves of the panel meet.
+///
+/// **This is where the hit floor gives way** (§7.2): the buttons in these rows
+/// are 18 tall, under the 32 nothing interactive is supposed to hit-test below.
+/// They are not given the floor by slop, because there is nowhere to take it
+/// from — 7px above is the composition tab strip and 7px below is the column
+/// header's own drag-to-reorder and resize seams, so an expanded target here
+/// would swallow a neighbour's gesture rather than add one. Across, where a
+/// row like this is actually aimed, they keep their room.
+const double _toolbarHeight = 18;
 
 /// The lane side's bottom bar (zoom, magnet, the horizontal scrollbar).
 ///
@@ -111,8 +123,17 @@ const double _toolbarHeight = 26;
 /// the bottom of a long stack — reported as "the lane area can scroll up more
 /// than the layer area". Reserving it keeps both viewports the same height,
 /// which is what keeps `maxScrollExtent` the same on both.
-const double _laneBottomBarHeight = 20;
-const double _headerHeight = 20;
+///
+/// A panel bottom bar, and so 18 (K-451).
+const double _laneBottomBarHeight = 18;
+
+/// The column-group header: a secondary row, and so 18 (K-451).
+const double _headerHeight = 18;
+
+/// The horizontal scrollbar that rides in the bottom bar — 7 (K-451, docs/15
+/// §12A.6, where it is named for the graph side; the lanes' bar carries the
+/// same one, so the two modes do not swap bar shapes on the switch).
+const double _hScrollbarHeight = 7;
 
 /// Half a keyframe diamond's width on a property's own lane.
 const double _keyHalf = 4;
@@ -133,8 +154,10 @@ const double _zoomGlyphLarge = 14;
 
 /// The time ruler's height: the toolbar and column header stay inside the
 /// outline (docs/07 §4.1), so the lane side gives their whole height to the
-/// ruler — minus the cache bar tucked under it. That is what makes the ruler
-/// **double height** (docs/15 §12A.1): the upper half is the clock, carrying
+/// ruler — minus the cache bar tucked under it. The three together come to the
+/// **36** the mockups give the ruler, which counts the cache bar inside it
+/// (K-451, docs/15 §12A.6). That is what makes the ruler **double height**
+/// (docs/15 §12A.1): the upper half is the clock, carrying
 /// the labels, the ticks and the playhead's head, and the lower half carries
 /// the markers and the work-area band. A taller bar is an easier playhead grab
 /// as well, but the two rows are the point.
@@ -5165,6 +5188,7 @@ class _Toolbar extends StatelessWidget {
             key: const ValueKey('tl-more'),
             small: true,
             frameless: true,
+            padding: const EdgeInsets.symmetric(horizontal: 5),
             onPressed: () => _showMoreMenu(context),
             child: Text('⋯', style: t.small),
           ),
@@ -5215,7 +5239,7 @@ class _Toolbar extends StatelessWidget {
         key: ValueKey<String>(keyName),
         small: true,
         frameless: !active,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         onPressed: onPressed,
         child: Text(label.toUpperCase(), style: active ? t.kickerOn : t.kicker),
       ),
@@ -5245,7 +5269,9 @@ class _Toolbar extends StatelessWidget {
         key: ValueKey<String>(keyName),
         small: true,
         frameless: true,
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        // No vertical padding: a 16px glyph plus the button's own 1px edge is
+        // the whole of an 18px secondary row (K-451), and 2px more spilled it.
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         onPressed: onPressed,
         child:
             lumitIcon(icon, size: iconSize, color: on ? t.accent : t.textMuted),
@@ -5408,7 +5434,9 @@ class _GutterScrollbar extends StatelessWidget {
                 onHorizontalDragUpdate:
                     axis == Axis.horizontal ? (d) => dragBy(d.delta.dx) : null,
                 child: Container(
-                  margin: const EdgeInsets.all(3),
+                  margin: axis == Axis.horizontal
+                      ? const EdgeInsets.symmetric(horizontal: 3)
+                      : const EdgeInsets.all(3),
                   decoration: BoxDecoration(
                     color: t.hairlineStrong,
                     borderRadius: BorderRadius.circular(3),
@@ -5428,8 +5456,13 @@ class _GutterScrollbar extends StatelessWidget {
                         child: thumb)
                     : Positioned(
                         left: offset,
-                        top: 0,
-                        bottom: 0,
+                        // The mockups' 7px bar (K-451, docs/15 §12A.6),
+                        // centred in whatever bar carries it — not a thumb
+                        // grown from the bar's own height, which is how it
+                        // came out 14 and read as a second toolbar.
+                        top: ((constraints.maxHeight - _hScrollbarHeight) / 2)
+                            .clamp(0.0, constraints.maxHeight),
+                        height: _hScrollbarHeight,
                         width: extent,
                         child: thumb),
               ],
@@ -7633,8 +7666,7 @@ class _ColumnToggles extends StatelessWidget {
                   key: ValueKey<String>('tl-column-${group.name}'),
                   small: true,
                   frameless: true,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   onPressed: () => onToggle(group),
                   child: Text(
                     columnGroupLabel(group).toUpperCase(),
@@ -7725,7 +7757,9 @@ class _LaneBottomBar extends StatelessWidget {
           key: ValueKey<String>(keyName),
           small: true,
           frameless: true,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          // 18px bottom bar (K-451): one pixel of the button's own edge is
+          // all the room a 10px label leaves above and below it.
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           onPressed: onPressed,
           child: Text(label,
               style: TextStyle(
@@ -7879,8 +7913,7 @@ class _LaneBottomBar extends StatelessWidget {
                             key: const ValueKey('tl-magnet'),
                             small: true,
                             frameless: true,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
                             onPressed: onToggleMagnet,
                             child: lumitIcon(LumitIcon.magnet,
                                 size: iconSize,

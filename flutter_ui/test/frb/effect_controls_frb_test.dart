@@ -1106,6 +1106,48 @@ void main() {
         }
       });
 
+      /// **The mockups' heights are canonical** (K-451, docs/15 §12A.6). A
+      /// parameter row occupies 26 whatever control it carries, a section
+      /// heading 24, and a value well 20 — measured rather than trusted,
+      /// because a stack whose rows step in and out is exactly the fault the
+      /// fixed content box was introduced to settle.
+      testWidgets('rows, headings and wells are built to K-451 heights',
+          (tester) async {
+        await mountBlur(tester, withLayer(), animated: false);
+
+        // The pitch from one row to the next is what a row actually spends on
+        // the panel: its content box, the section's 2px either side, and the
+        // hairline under it.
+        final rows = tester
+            .widgetList<EffectParamRowFrb>(find.byType(EffectParamRowFrb));
+        expect(rows.length, greaterThan(1),
+            reason: 'Gaussian blur has a Radius and a Mix to measure between');
+        final tops = [
+          for (var i = 0; i < rows.length; i++)
+            tester.getRect(find.byType(EffectParamRowFrb).at(i)).top,
+        ]..sort();
+        expect(tops[1] - tops[0], closeTo(26, 0.5),
+            reason: 'a parameter row occupies 26');
+
+        // The heading's own box: the nearest Container above its kicker.
+        expect(
+          tester
+              .getRect(find
+                  .ancestor(
+                    of: heading('Gaussian blur'),
+                    matching: find.byType(Container),
+                  )
+                  .first)
+              .height,
+          closeTo(24, 0.5),
+          reason: 'an effect section heading is 24',
+        );
+
+        expect(tester.getRect(find.byType(DragValueField).first).height,
+            closeTo(20, 0.5),
+            reason: 'a value well in a panel is 20');
+      });
+
       /// The stopwatch is one of `animated`'s closed job list (§3.1) — never
       /// the accent, which the redesign spends on the filled action and the
       /// playhead.

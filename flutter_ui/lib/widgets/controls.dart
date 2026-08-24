@@ -1381,10 +1381,16 @@ class HouseTextField extends StatefulWidget {
   /// click on it still lands in the field behind it.
   final Widget? leading;
 
+  /// The well's own inset. Overridden by the one caller that has to fit a
+  /// **secondary row** (K-451: 18 px — the Timeline's timecode/search/mode
+  /// row), where the default 3 px above and below would burst it.
+  final EdgeInsets padding;
+
   const HouseTextField({
     super.key,
     required this.controller,
     this.width = 200,
+    this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
     this.onSubmitted,
     this.submitOnLostFocus = false,
     this.onTapOutside,
@@ -1588,7 +1594,7 @@ class _HouseTextFieldState extends State<HouseTextField>
 
     return Container(
       width: widget.width,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      padding: widget.padding,
       decoration: BoxDecoration(
         color: t.surface0,
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
@@ -2054,6 +2060,12 @@ double scrubFactor() => HardwareKeyboard.instance.isShiftPressed
         ? 0.1
         : 1;
 
+/// A value well's height in a panel: **20** (K-451, docs/15 §12A.6). Fixed
+/// rather than grown from the number inside it, because the mockups' heights
+/// are canonical and a well that measured its own font drifted with the face.
+/// Dialog wells are 22 and set their own; they do not come through here yet.
+const double wellHeight = 20;
+
 /// The **value well** (docs/15-DESIGN.md §2.1/§3.1, K-439): drag horizontally
 /// to adjust, click to type, right-click for Reset / Copy / Paste.
 ///
@@ -2319,6 +2331,7 @@ class _DragValueFieldState extends State<DragValueField>
     if (_editing) {
       return SizedBox(
         width: 72,
+        height: wellHeight,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: t.surface0,
@@ -2333,7 +2346,7 @@ class _DragValueFieldState extends State<DragValueField>
           child: TextSelectionGestureDetectorBuilder(delegate: this)
               .buildGestureDetector(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
               child: EditableText(
                 key: textFieldKey,
                 controller: _controller,
@@ -2420,7 +2433,8 @@ class _DragValueFieldState extends State<DragValueField>
           widget.onDragCancel?.call();
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          height: wellHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             // The inset stays the inset in every state: a well does not lift
             // under the pointer, because then it would stop being a recess
@@ -2440,16 +2454,20 @@ class _DragValueFieldState extends State<DragValueField>
                             : t.hairline,
                 width: 1),
           ),
-          child: Text(
-            _format(widget.value),
-            textAlign: TextAlign.right,
-            style: t.mono.copyWith(
-              fontSize: 13,
-              color: _dragging
-                  ? t.accent
-                  : widget.keyed
-                      ? t.animated
-                      : t.textPrimary,
+          child: Align(
+            alignment: Alignment.centerRight,
+            widthFactor: 1,
+            child: Text(
+              _format(widget.value),
+              textAlign: TextAlign.right,
+              style: t.mono.copyWith(
+                fontSize: 13,
+                color: _dragging
+                    ? t.accent
+                    : widget.keyed
+                        ? t.animated
+                        : t.textPrimary,
+              ),
             ),
           ),
         ),

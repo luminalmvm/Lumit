@@ -387,6 +387,11 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
       key: const ValueKey('tl-search'),
       controller: _controller,
       width: widget.width,
+      // The well fills the secondary row it sits in rather than floating
+      // inside it: that row is 18 (K-451) and the 16px search glyph plus the
+      // well's own hairline is already all of it, so there is no room above
+      // and below to spend.
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       hint: l10n.searchLayers,
       // The well says "editable"; the glyph says *what* it edits — the field
       // stretches the width of the outline (§12A.1), and a bare well that wide

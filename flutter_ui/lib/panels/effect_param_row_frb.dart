@@ -1387,17 +1387,17 @@ class EffectPointRowFrb extends StatelessWidget {
         control: greyed(control),
       );
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          if (keyframes != null) greyed(keyframes),
-          const SizedBox(width: 4),
-          Expanded(child: label),
-          const SizedBox(width: 10),
-          greyed(control),
-        ],
-      ),
+    // No padding of its own: the Timeline's fold-out row is 22 (K-451) and a
+    // 20px value well fills all but its hairline, so two pixels either side
+    // pushed the wells out of the row.
+    return Row(
+      children: [
+        if (keyframes != null) greyed(keyframes),
+        const SizedBox(width: 4),
+        Expanded(child: label),
+        const SizedBox(width: 10),
+        greyed(control),
+      ],
     );
   }
 }
