@@ -445,18 +445,61 @@ does not gate the four. Delete each phase here when it lands, as with everything
 **The Project panel's mockup owes five engine answers** (K-451, docs/07-UI-SPEC.md
 §3.1, docs/15-DESIGN.md §12A.3a). The panel is built to the approved drawing; these
 five pieces of it are drawn there and cannot be honestly filled in yet, so they are
-simply absent rather than faked. Each is a small bridge addition:
-(1) **a "make a folder" call** - the bottom bar's Folder button has no command to run,
-so it is not there; (2) **a footage item's file path**, for the Path column the
-mockup puts at the right of the list; (3) **whether a footage item is used in any
-composition**, for the `in use` badge - a Dart-side walk of every comp's layers is
-both view logic and a swarm of calls, so it must be one engine answer;
-(4) **a label colour per project item**, for the asset colour tags that tint the row
-icon and for the colour-chip filter beside the search well; (5) **codec and audio
-layout on `BridgeMediaInfo`** (it reports size, rate and duration only), for the
-preview card's second fact line - which also gives the panel a truthful still-image
-versus video distinction, today inferred only from a zero picture width meaning
-"sound".
+simply absent rather than faked.
+
+**The engine half of all five has landed.** What remains is the bridge seam and the
+panel itself - one frb method each, then the drawing the mockup already specifies:
+
+1. **A "make a folder" call.** `lumit_core::ops::new_folder_ops(doc, name, parent)`
+   answers the two decisions (the next unused "Folder N" for a blank name, filing
+   inside a parent or leaving it at the root) and hands back the folder's id plus the
+   ops; the caller commits them as one `Op::Batch`, which is what makes it one undo
+   step. **Bridge owes:** a `ProjectReference::new_folder` beside `new_composition`,
+   and the bottom bar's Folder button wired to it.
+2. **A footage item's file path.** `MediaRef::display_path()` - the relative path a
+   saved project actually carries, falling back to the absolute one when a project has
+   never been saved. Display data, no probing. **Bridge owes:** a `file_path` getter on
+   `FootageReference`, and the Path column.
+3. **Used in any composition.** `Document::item_is_used(id)` - one pass over the comps'
+   layers, stopping at the first hit, counting Footage, Solid, Precomp and each Sequence
+   clip's own source. No cache: a document of 100 comps of 100 layers answers for all
+   1,100 of its items well inside a frame (the measurement is a test). **Bridge owes:**
+   an `is_used` getter on `ItemReference`, and the `in use` badge.
+4. **A label colour per project item.** `Document::item_labels`, a map of item id to the
+   same palette index a layer's chip uses, with `Op::SetItemLabel` to write it and
+   `Document::item_label(id)` to read it. Saved with the project, absent when nothing is
+   tagged, and every older `.lum` opens untagged. **Bridge owes:** a label getter and a
+   `set_label` on `ItemReference`, then the row-icon tint and the colour-chip filter
+   beside the search well.
+5. **Codec and audio layout in media info.** The probe result already carried the codec
+   name per stream and the sound's channel count and sample rate; what it lacked was an
+   honest still-versus-video answer, so `MediaProbe::runs_as_video()` (and
+   `has_picture()`) now live on it - the rule `add_footage_layer` used to keep to
+   itself, so the panel and the timeline cannot disagree about what a file is.
+   **Bridge owes:** codec, channels, sample rate and a still flag on `BridgeMediaInfo`,
+   and the preview card's second fact line. The zero-picture-width inference goes with
+   it.
+
+**The Effect controls' unit rider and its vector-pair link** (K-443,
+docs/15-DESIGN.md §12A.3). The redesigned rows draw the unit beside every value, and a
+point is two equal wells with a chain between them. **The engine half has landed**:
+every declared parameter carries a `Unit` — `Px` (px@comp), `Percent`, `Degrees`,
+`Seconds`, `Frames`, or `Raw` for a number that genuinely has none — with `Unit::Unset`
+as the derive's default for the numeric kinds so
+`every_parameter_declares_a_deliberate_unit` fails the build on one that never decided;
+`EffectSchema::pairs()` names the `_x`/`_y` pairs, which used to be read off the ids at
+the seam; and `EffectInstance::linked_pairs` records which of them are chained (empty =
+all unlinked, which is every older project, written to the file only when set, toggled
+through `set_pair_linked` and committed as the stack's own `Op::SetLayerEffects`, so it
+is one undo step like every other effect edit). **Bridge owes:** the unit on
+`BridgeParamInfo`, the pair list beside `listParameters`, and a `set_pair_linked` on the
+effect reference. **The panel owes:** the rider (§12A.3's plain mono), the chain glyph,
+the proportional drag itself — UI-time arithmetic, deliberately not in the model — and
+the deletion of `pickablePointParams` in `effect_param_row_frb.dart`, whose id-keyed map
+could not tell Radial blur's per-cent Centre from the four effects whose `centre_x` is
+px@comp. One straggler noticed on the way and left alone: the Lens flare's
+`ghost_softness` is documented as a fraction of the frame *diagonal*, which K-419
+outlawed for distances; converting it changes pictures, so it wants its own change.
 
 **Cache bar coloured by resolution tier** (K-441, docs/15-DESIGN.md §6.3, §12A.1).
 The bar is meant to say not just "cached" but "cached at what size", with full,

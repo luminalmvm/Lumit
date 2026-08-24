@@ -61,6 +61,13 @@ Rules:
   name (`"anti_aliasing": "x4"`). Absent — as it is in any `.lum` written before the field
   existed — it reads as the default rather than failing, which is the serde-default rule
   every additive field here follows.
+- **Colour tags ride beside the items, not on them** (K-451): `item_labels` maps an item's
+  id to an index into the same label palette a layer's chip uses
+  (`"item_labels": { "0191…": 5 }`), 0 — the absence of an entry — meaning untagged. A map
+  rather than a field on each of the four kinds of item, because it is one organisational
+  byte that is almost always the default; ordered by id, so two saves of the same project
+  stay byte-identical. Absent when nothing is tagged, so a project nobody has tagged gains
+  no line for it and an older `.lum` opens with every item untagged.
 - **Unknown-field preservation is mandatory**: a reader keeps any keys it does not
   understand and writes them back out. This is what lets shared projects and newer/older
   Lumit versions coexist (K-065) and lets Placeholder effects round-trip

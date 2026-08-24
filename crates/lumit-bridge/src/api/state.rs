@@ -359,6 +359,9 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         Op::AddItem { .. }
         | Op::RemoveItem { .. }
         | Op::RenameItem { .. }
+        // A colour tag tints the item's row icon and feeds the panel's filter
+        // chips, so the panel has to hear about it (K-451).
+        | Op::SetItemLabel { .. }
         | Op::SetMediaRef { .. }
         | Op::SetFolderChildren { .. }
         | Op::SetAutoFolder { .. }

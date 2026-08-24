@@ -332,6 +332,193 @@ mod tests {
         assert!(store.snapshot().cache_location.is_none());
     }
 
+    fn folder_named(doc: &Document, id: Uuid) -> String {
+        doc.folder(id).expect("the folder exists").name.clone()
+    }
+
+    /// The Project panel's Folder button (K-451): one op batch, one undo step,
+    /// and with no parent named the folder lands at the panel root.
+    #[test]
+    fn making_a_folder_is_one_undoable_step() {
+        let store = DocumentStore::new(Document::new());
+        let (id, ops) = crate::ops::new_folder_ops(&store.snapshot(), "Renders", None);
+        store.commit(Op::Batch { ops }).unwrap();
+
+        assert_eq!(folder_named(&store.snapshot(), id), "Renders");
+        assert!(
+            store.snapshot().root_items().contains(&id),
+            "with no parent it sits at the panel root"
+        );
+
+        store.undo().unwrap();
+        assert!(store.snapshot().folder(id).is_none(), "one step, not two");
+        store.redo().unwrap();
+        assert_eq!(folder_named(&store.snapshot(), id), "Renders");
+    }
+
+    /// A parent files the new folder inside it, and the whole thing is still
+    /// one undo step — the folder and its filing arrive and leave together.
+    #[test]
+    fn a_folder_can_be_made_inside_another() {
+        let store = DocumentStore::new(Document::new());
+        let (outer, ops) = crate::ops::new_folder_ops(&store.snapshot(), "Shoots", None);
+        store.commit(Op::Batch { ops }).unwrap();
+        let (inner, ops) = crate::ops::new_folder_ops(&store.snapshot(), "Day one", Some(outer));
+        store.commit(Op::Batch { ops }).unwrap();
+
+        assert_eq!(
+            store.snapshot().folder(outer).unwrap().children,
+            vec![inner],
+            "the new folder is filed inside its parent"
+        );
+        assert!(!store.snapshot().root_items().contains(&inner));
+
+        store.undo().unwrap();
+        assert!(store.snapshot().folder(inner).is_none());
+        assert!(
+            store.snapshot().folder(outer).unwrap().children.is_empty(),
+            "undoing takes the filing back with the folder"
+        );
+    }
+
+    /// A parent that has since been deleted is not an error: the folder lands
+    /// at the root, which is where the panel would have drawn it anyway.
+    #[test]
+    fn an_unknown_parent_leaves_the_new_folder_at_the_root() {
+        let store = DocumentStore::new(Document::new());
+        let (id, ops) =
+            crate::ops::new_folder_ops(&store.snapshot(), "Renders", Some(Uuid::now_v7()));
+        assert_eq!(ops.len(), 1, "nothing to file it into");
+        store.commit(Op::Batch { ops }).unwrap();
+        assert!(store.snapshot().root_items().contains(&id));
+    }
+
+    /// A blank name takes the next unused "Folder N", counting past the names
+    /// already taken rather than off the number of folders — so renaming one
+    /// away cannot make the next press of the button collide with a name in use.
+    #[test]
+    fn a_blank_folder_name_takes_the_next_unused_number() {
+        let store = DocumentStore::new(Document::new());
+        for expected in ["Folder 1", "Folder 2", "Folder 3"] {
+            let (id, ops) = crate::ops::new_folder_ops(&store.snapshot(), "   ", None);
+            store.commit(Op::Batch { ops }).unwrap();
+            assert_eq!(folder_named(&store.snapshot(), id), expected);
+        }
+
+        let first = store.snapshot().root_items()[0];
+        store
+            .commit(Op::RenameItem {
+                id: first,
+                name: "Renders".into(),
+            })
+            .unwrap();
+        let (id, ops) = crate::ops::new_folder_ops(&store.snapshot(), "", None);
+        store.commit(Op::Batch { ops }).unwrap();
+        assert_eq!(
+            folder_named(&store.snapshot(), id),
+            "Folder 1",
+            "the default fills the gap a rename left rather than colliding"
+        );
+    }
+
+    /// **An item's colour tag is an ordinary op** (K-451): undoable, journalled
+    /// and saved with the project like a layer's label. Untagged is the absence
+    /// of an entry rather than an entry saying zero, so tagging an item and
+    /// untagging it again leaves the document exactly as it was found — which
+    /// is what keeps a project nobody has tagged free of a line for it.
+    #[test]
+    fn a_project_items_colour_tag_is_an_undoable_op() {
+        let store = DocumentStore::new(Document::new());
+        let folder = Folder {
+            id: Uuid::now_v7(),
+            name: "Renders".into(),
+            children: Vec::new(),
+            extra: serde_json::Map::new(),
+        };
+        let id = folder.id;
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Folder(folder)),
+            })
+            .unwrap();
+        assert_eq!(store.snapshot().item_label(id), 0, "untagged to start");
+
+        store.commit(Op::SetItemLabel { id, label: 4 }).unwrap();
+        assert_eq!(store.snapshot().item_label(id), 4);
+
+        store.commit(Op::SetItemLabel { id, label: 0 }).unwrap();
+        assert_eq!(store.snapshot().item_label(id), 0);
+        assert!(
+            store.snapshot().item_labels.is_empty(),
+            "untagging removes the entry rather than storing a zero"
+        );
+
+        store.undo().unwrap();
+        assert_eq!(store.snapshot().item_label(id), 4, "undo brings it back");
+        store.undo().unwrap();
+        assert_eq!(store.snapshot().item_label(id), 0);
+        store.redo().unwrap();
+        assert_eq!(store.snapshot().item_label(id), 4);
+    }
+
+    /// A tag on an item that does not exist would sit in the map for ever, so
+    /// the op refuses rather than recording it.
+    #[test]
+    fn tagging_an_unknown_item_is_refused() {
+        let store = DocumentStore::new(Document::new());
+        assert_eq!(
+            store.commit(Op::SetItemLabel {
+                id: Uuid::now_v7(),
+                label: 3
+            }),
+            Err(crate::ops::OpError::UnknownItem)
+        );
+        assert!(store.snapshot().item_labels.is_empty());
+    }
+
+    /// The tag survives the item being deleted and undeleted: `RemoveItem`'s
+    /// inverse puts the item back, and it comes back wearing its colour.
+    #[test]
+    fn a_tag_survives_delete_and_undo() {
+        let store = DocumentStore::new(Document::new());
+        let folder = Folder {
+            id: Uuid::now_v7(),
+            name: "Renders".into(),
+            children: Vec::new(),
+            extra: serde_json::Map::new(),
+        };
+        let id = folder.id;
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Folder(folder)),
+            })
+            .unwrap();
+        store.commit(Op::SetItemLabel { id, label: 7 }).unwrap();
+        store.commit(Op::RemoveItem { id }).unwrap();
+        store.undo().unwrap();
+        assert_eq!(store.snapshot().item_label(id), 7);
+    }
+
+    /// Old projects have no tags at all, and reading one back must not fail on
+    /// a field it has never heard of (docs/10 §1.1's serde-default rule). An
+    /// untagged document also writes no line for them.
+    #[test]
+    fn a_project_without_tags_loads_untagged_and_writes_no_line() {
+        let store = DocumentStore::new(Document::new());
+        assert!(
+            !json(&store.snapshot()).contains("item_labels"),
+            "an untagged project gains no line for tags"
+        );
+
+        let mut older: serde_json::Value = serde_json::from_str(&json(&store.snapshot())).unwrap();
+        older.as_object_mut().unwrap().remove("item_labels");
+        let doc: Document = serde_json::from_value(older).unwrap();
+        assert!(doc.item_labels.is_empty());
+        assert_eq!(doc.item_label(Uuid::now_v7()), 0);
+    }
+
     fn t(n: i64, d: i64) -> CompTime {
         CompTime(Rational::new(n, d).unwrap())
     }

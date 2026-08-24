@@ -56,6 +56,13 @@ pub enum Op {
         id: Uuid,
         name: String,
     },
+    /// Set a project item's colour tag (K-451): an index into the same label
+    /// palette a layer's chip uses, 0 = untagged. Undoable like any other edit;
+    /// it changes no pixel.
+    SetItemLabel {
+        id: Uuid,
+        label: u8,
+    },
     /// Insert a layer at a stack index (0 = top) of a comp.
     AddLayer {
         comp: Uuid,
@@ -556,6 +563,28 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::RenameItem {
                 id: *id,
                 name: previous,
+            })
+        }
+        Op::SetItemLabel { id, label } => {
+            // The item has to exist: a tag on nothing would sit in the map for
+            // ever, and the panel would have asked about a row that is not
+            // there.
+            if doc.item(*id).is_none() {
+                return Err(OpError::UnknownItem);
+            }
+            let previous = doc.item_label(*id);
+            // Untagged is the absence of an entry, not an entry saying zero —
+            // so tagging an item and untagging it again leaves the document
+            // exactly as it was found, and a project nobody has tagged still
+            // saves with no line for it.
+            if *label == 0 {
+                doc.item_labels.remove(id);
+            } else {
+                doc.item_labels.insert(*id, *label);
+            }
+            Ok(Op::SetItemLabel {
+                id: *id,
+                label: previous,
             })
         }
         Op::AddLayer { comp, index, layer } => {
@@ -1293,6 +1322,75 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             })
         }
     }
+}
+
+/// The ops that make a folder — the Project panel's bottom-bar **Folder**
+/// button (K-451, docs/07 §3.1) — plus the new folder's id.
+///
+/// # In plain terms
+///
+/// Making a folder is two decisions and one op: what it is called, where it
+/// goes, and then the ordinary [`Op::AddItem`] every project item is born from.
+/// The decisions are here, beside the ops, so that a folder made from the
+/// button, from a menu and from a test all come out the same — the engine
+/// decides, and the interface only asks (docs/17-BRIDGE-CONTRACT.md).
+///
+/// A blank name takes the next unused "Folder N". `parent` files the new folder
+/// inside an existing one; `None` — and a parent that no longer exists — leaves
+/// it at the panel root, which is where imported footage lands too.
+///
+/// **Nothing is committed here.** The caller commits the list as one
+/// [`Op::Batch`], and that is what makes the whole thing one undo step: the
+/// folder and its filing arrive and leave together.
+#[must_use]
+pub fn new_folder_ops(doc: &Document, name: &str, parent: Option<Uuid>) -> (Uuid, Vec<Op>) {
+    let id = Uuid::now_v7();
+    let name = if name.trim().is_empty() {
+        next_folder_name(doc)
+    } else {
+        name.to_owned()
+    };
+
+    let mut ops = vec![Op::AddItem {
+        index: doc.items.len(),
+        item: Box::new(ProjectItem::Folder(crate::model::Folder {
+            id,
+            name,
+            children: Vec::new(),
+            extra: serde_json::Map::new(),
+        })),
+    }];
+    if let Some(folder) = parent.and_then(|p| doc.folder(p)) {
+        let mut children = folder.children.clone();
+        children.push(id);
+        ops.push(Op::SetFolderChildren {
+            folder: folder.id,
+            children,
+        });
+    }
+    (id, ops)
+}
+
+/// The next unused "Folder N" — the default name [`new_folder_ops`] gives.
+///
+/// Counts up past the names already taken rather than off the number of
+/// folders: a project holding "Folder 1" and "Renders" must not offer
+/// "Folder 2" only to collide the moment "Folder 1" is renamed away.
+#[must_use]
+fn next_folder_name(doc: &Document) -> String {
+    let taken: std::collections::HashSet<&str> = doc
+        .items
+        .iter()
+        .filter(|i| matches!(i, ProjectItem::Folder(_)))
+        .map(ProjectItem::name)
+        .collect();
+    (1..)
+        .map(|n| format!("Folder {n}"))
+        .find(|candidate| !taken.contains(candidate.as_str()))
+        // `1..` is unbounded and `taken` is finite, so this always answers; the
+        // fallback is here because nothing in an engine crate may panic
+        // (docs/14 §4).
+        .unwrap_or_else(|| "Folder".to_owned())
 }
 
 /// The four playhead-relative span edits behind the `[` / `]` / `Alt+[` / `Alt+]`

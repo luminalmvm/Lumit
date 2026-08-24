@@ -78,6 +78,29 @@ pub struct MediaRef {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+impl MediaRef {
+    /// The path to *show* for this reference — the Project panel's Path column
+    /// (docs/07 §3.1, docs/15 §12A.3a).
+    ///
+    /// The relative path, which is the one a saved project actually carries
+    /// (K-173), falling back to the absolute path when there is no relative one
+    /// — a project that has never been saved has nothing to be relative to, and
+    /// showing the file's real location then is more use than showing nothing.
+    ///
+    /// Display data, and only that: it says where the reference *points*, not
+    /// whether anything is there. Resolving it against the project folder and
+    /// deciding whether the file exists is [`crate::model`]'s business no more
+    /// than probing is — `lumit_project::resolve_media` answers that.
+    #[must_use]
+    pub fn display_path(&self) -> &str {
+        if self.relative_path.is_empty() {
+            &self.absolute_path
+        } else {
+            &self.relative_path
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FootageItem {
     pub id: Uuid,
@@ -1696,6 +1719,34 @@ fn descend_into_comp(doc: &Document, id: Uuid, found: &mut Vec<Uuid>, walked: &m
     collect_comp_footage(doc, nested, found, walked);
 }
 
+/// Whether `layer` names project item `id` as its source — one layer's
+/// contribution to [`Document::item_is_used`].
+///
+/// Written as an exhaustive match so a new [`LayerKind`] cannot quietly place
+/// an item the `in use` badge then fails to notice: the compiler asks.
+#[must_use]
+fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
+    match &layer.kind {
+        LayerKind::Footage { item } => *item == id,
+        LayerKind::Solid { def } => *def == id,
+        LayerKind::Precomp { comp } => *comp == id,
+        LayerKind::Sequence { clips } => clips.iter().any(|c| match c.source {
+            crate::sequence::ClipSource::Footage(item) => item == id,
+            crate::sequence::ClipSource::Comp(comp) => comp == id,
+        }),
+        // Nothing from the Project panel: a drawn layer carries its own art, a
+        // camera is a viewpoint, a light is something other layers see, an
+        // adjustment layer works on the composite below it, a null draws
+        // nothing.
+        LayerKind::Text { .. }
+        | LayerKind::Shape { .. }
+        | LayerKind::Camera { .. }
+        | LayerKind::Light { .. }
+        | LayerKind::Adjustment
+        | LayerKind::Null => false,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ProjectItem {
     Footage(FootageItem),
@@ -1754,6 +1805,31 @@ pub struct Document {
     /// Where new solids/comps are filed (see [`AutoFolders`]).
     #[serde(default)]
     pub auto_folders: AutoFolders,
+    /// Project items' colour tags, by item id (K-451, docs/15 §12A.3a): an
+    /// index into the same label palette a layer's chip uses, 0 = untagged.
+    ///
+    /// # In plain terms
+    ///
+    /// The Project panel lets an item be tagged with a colour, which tints its
+    /// row icon and gives the filter chips beside the search well something to
+    /// filter on. It is organisation, never anything the picture sees.
+    ///
+    /// **A map beside the items rather than a field on each of them**, which is
+    /// where a layer keeps its own label. A colour tag is one byte and purely
+    /// organisational, and there are four kinds of project item — putting it on
+    /// all four would have written `label: 0` at every place any of them is
+    /// built, in the engine and in a hundred and thirty tests, to store a value
+    /// that is almost always the default. Absent means untagged, so a project
+    /// nobody has tagged gains no line for it and every older `.lum` reads as
+    /// untagged rather than failing — the serde-default rule docs/10 §1.1 gives
+    /// every additive field.
+    ///
+    /// A `BTreeMap` so save output is ordered by id and two saves of the same
+    /// document are byte-identical (docs/10 §1). An entry for an item that has
+    /// since been deleted is harmless and deliberately kept: undoing the delete
+    /// brings the item back still wearing its colour.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub item_labels: std::collections::BTreeMap<Uuid, u8>,
     /// How hard the renderer works at the edges of transformed layers
     /// (K-274, docs/impl/anti-aliasing.md).
     ///
@@ -1882,6 +1958,7 @@ impl Document {
             id: Uuid::now_v7(),
             items: Vec::new(),
             auto_folders: AutoFolders::default(),
+            item_labels: std::collections::BTreeMap::new(),
             anti_aliasing: AntiAliasing::default(),
             cache_location: None,
             ui_state: None,
@@ -1923,6 +2000,50 @@ impl Document {
             Some(ProjectItem::Folder(f)) => Some(f),
             _ => None,
         }
+    }
+
+    /// This item's colour tag: an index into the label palette, 0 = untagged
+    /// (see [`Document::item_labels`]). An item nobody has tagged — and every
+    /// item in a project saved before tags existed — answers 0.
+    #[must_use]
+    pub fn item_label(&self, id: Uuid) -> u8 {
+        self.item_labels.get(&id).copied().unwrap_or(0)
+    }
+
+    /// Whether any composition places `id` as a layer — the Project panel's
+    /// `in use` badge (docs/07 §3.1, docs/15 §12A.3a).
+    ///
+    /// # In plain terms
+    ///
+    /// "Is this asset actually in anything?" A composition counts as used when
+    /// it is placed inside another composition, exactly as footage and a solid
+    /// do; a composition nothing nests is simply not used, however much is in
+    /// it.
+    ///
+    /// **Direct placement only, deliberately.** The badge says "a layer
+    /// somewhere names this", not "some render might reach it": the two agree
+    /// for footage anyway (a nested comp's own footage is used by that comp's
+    /// layers, which this sees), and answering the transitive question would
+    /// make the badge come and go as an unrelated comp was nested elsewhere.
+    /// [`comp_footage_items`] is the transitive walk, and it exists for the
+    /// renderer, which does need it.
+    ///
+    /// Layers are counted whatever their switches say — a hidden layer still
+    /// places the asset — and a Sequence layer's clips count, each naming its
+    /// own footage or comp. The same document always gives the same answer.
+    ///
+    /// One pass over the layer list, stopping at the first hit and allocating
+    /// nothing, so a panel of rows asking one each is a walk per row rather
+    /// than a cached table to keep honest across every edit. Measured on a
+    /// document far past any real one — 100 compositions of 100 layers, every
+    /// one of its 1,100 items asked — the whole sweep is well inside a frame;
+    /// a cache would be machinery bought with nothing.
+    #[must_use]
+    pub fn item_is_used(&self, id: Uuid) -> bool {
+        self.items.iter().any(|item| match item {
+            ProjectItem::Composition(c) => c.layers.iter().any(|l| layer_names_item(l, id)),
+            _ => false,
+        })
     }
 
     /// Ids that sit at the Project panel root: every item not referenced as
@@ -2898,5 +3019,189 @@ mod tests {
         );
         apply(&mut doc, &inv).unwrap();
         assert!(!doc.comp(comp_id).unwrap().layers[0].switches.solo);
+    }
+
+    fn bare_footage(name: &str, relative: &str, absolute: &str) -> FootageItem {
+        FootageItem {
+            id: Uuid::now_v7(),
+            name: name.into(),
+            media: MediaRef {
+                relative_path: relative.into(),
+                absolute_path: absolute.into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// The Path column shows the path the saved project actually carries
+    /// (K-173: the absolute one is never written), and falls back to the
+    /// absolute one only when there is no relative path to show — an imported
+    /// file in a project that has never been saved.
+    #[test]
+    fn a_media_reference_shows_its_relative_path_and_falls_back_to_the_absolute() {
+        let both = bare_footage("a.mp4", "footage/a.mp4", "D:/shoot/a.mp4");
+        assert_eq!(both.media.display_path(), "footage/a.mp4");
+
+        let unsaved = bare_footage("a.mp4", "", "D:/shoot/a.mp4");
+        assert_eq!(unsaved.media.display_path(), "D:/shoot/a.mp4");
+
+        let neither = bare_footage("a.mp4", "", "");
+        assert_eq!(neither.media.display_path(), "");
+    }
+
+    /// The `in use` badge: footage, a solid and a nested composition all count
+    /// as used the moment a layer names them, and an item nothing names does
+    /// not — whatever else the project holds.
+    #[test]
+    fn an_item_is_used_when_some_comps_layer_names_it() {
+        let footage = bare_footage("a.mp4", "a.mp4", "");
+        let used_footage = footage.id;
+        let idle_footage = bare_footage("b.mp4", "b.mp4", "");
+        let idle_id = idle_footage.id;
+
+        let solid = SolidDef {
+            id: Uuid::now_v7(),
+            name: "White".into(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width: 64,
+            height: 64,
+            extra: serde_json::Map::new(),
+        };
+        let solid_id = solid.id;
+
+        let mut inner = bare_comp("Inner");
+        let inner_id = inner.id;
+        inner
+            .layers
+            .push(bare_layer(LayerKind::Footage { item: used_footage }));
+
+        let mut outer = bare_comp("Outer");
+        outer
+            .layers
+            .push(bare_layer(LayerKind::Precomp { comp: inner_id }));
+        outer
+            .layers
+            .push(bare_layer(LayerKind::Solid { def: solid_id }));
+        // A drawn layer names no project item at all.
+        outer.layers.push(bare_layer(LayerKind::Adjustment));
+
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Footage(footage));
+        doc.items.push(ProjectItem::Footage(idle_footage));
+        doc.items.push(ProjectItem::Solid(solid));
+        doc.items.push(ProjectItem::Composition(inner));
+        doc.items.push(ProjectItem::Composition(outer));
+
+        assert!(doc.item_is_used(used_footage));
+        assert!(doc.item_is_used(solid_id));
+        assert!(
+            doc.item_is_used(inner_id),
+            "a comp placed as a layer is used"
+        );
+        assert!(!doc.item_is_used(idle_id), "nothing places this footage");
+        assert!(
+            !doc.item_is_used(doc.items[4].id()),
+            "the outer comp is in nothing, however much is in it"
+        );
+        assert!(!doc.item_is_used(Uuid::now_v7()), "an id nobody knows");
+    }
+
+    /// A Sequence layer's clips place items too — each clip names its own
+    /// footage or composition, and the badge must see them.
+    #[test]
+    fn a_sequence_clip_counts_as_placing_its_source() {
+        let footage = bare_footage("a.mp4", "a.mp4", "");
+        let item = footage.id;
+        let mut source = bare_comp("Source");
+        let source_id = source.id;
+        source.layers.push(bare_layer(LayerKind::Adjustment));
+
+        let mut cut = bare_comp("Cut");
+        cut.layers.push(bare_layer(LayerKind::Sequence {
+            clips: vec![
+                crate::sequence::Clip::new(
+                    crate::sequence::ClipSource::Footage(item),
+                    Rational::new(0, 1).unwrap(),
+                    Rational::new(1, 1).unwrap(),
+                    Rational::new(0, 1).unwrap(),
+                    Rational::new(1, 1).unwrap(),
+                ),
+                crate::sequence::Clip::new(
+                    crate::sequence::ClipSource::Comp(source_id),
+                    Rational::new(1, 1).unwrap(),
+                    Rational::new(1, 1).unwrap(),
+                    Rational::new(0, 1).unwrap(),
+                    Rational::new(1, 1).unwrap(),
+                ),
+            ],
+        }));
+
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Footage(footage));
+        doc.items.push(ProjectItem::Composition(source));
+        doc.items.push(ProjectItem::Composition(cut));
+
+        assert!(doc.item_is_used(item));
+        assert!(doc.item_is_used(source_id));
+    }
+
+    /// A hidden layer, or one the playhead is never inside, still *places* the
+    /// asset: the badge says what the project contains, not what is on screen.
+    #[test]
+    fn a_hidden_layer_still_uses_its_item() {
+        let footage = bare_footage("a.mp4", "a.mp4", "");
+        let item = footage.id;
+        let mut comp = bare_comp("Comp 1");
+        let mut layer = bare_layer(LayerKind::Footage { item });
+        layer.switches.visible = false;
+        comp.layers.push(layer);
+
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Footage(footage));
+        doc.items.push(ProjectItem::Composition(comp));
+
+        assert!(doc.item_is_used(item));
+    }
+
+    /// The measurement behind [`Document::item_is_used`] having no cache
+    /// (K-451): a document far past any real one, every item asked, and the
+    /// whole sweep well inside a frame. If this ever stops being true the
+    /// answer is a table invalidated on edits — not a slower panel.
+    #[test]
+    fn asking_every_item_of_a_huge_project_is_cheap() {
+        let mut doc = Document::new();
+        let mut footage_ids = Vec::new();
+        for n in 0..1_000 {
+            let f = bare_footage(&format!("{n}.mp4"), &format!("{n}.mp4"), "");
+            footage_ids.push(f.id);
+            doc.items.push(ProjectItem::Footage(f));
+        }
+        for c in 0..100 {
+            let mut comp = bare_comp(&format!("Comp {c}"));
+            for l in 0..100 {
+                comp.layers.push(bare_layer(LayerKind::Footage {
+                    item: footage_ids[(c * 100 + l) % footage_ids.len()],
+                }));
+            }
+            doc.items.push(ProjectItem::Composition(comp));
+        }
+
+        let started = std::time::Instant::now();
+        let used = doc
+            .items
+            .iter()
+            .filter(|i| doc.item_is_used(i.id()))
+            .count();
+        let elapsed = started.elapsed();
+
+        assert_eq!(used, 1_000, "every footage item is placed; no comp is");
+        // Generous against a loaded CI machine; the point is the order of
+        // magnitude, not the number.
+        assert!(
+            elapsed < std::time::Duration::from_millis(250),
+            "a whole-panel sweep took {elapsed:?} — time to cache after all"
+        );
     }
 }

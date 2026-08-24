@@ -1378,7 +1378,7 @@ impl CompositionReference {
             let Some(info) = crate::probe::ensure_probed(&path) else {
                 return true;
             };
-            info.video.is_some()
+            info.has_picture()
         }
 
         #[cfg(not(feature = "media"))]
@@ -1403,14 +1403,9 @@ impl CompositionReference {
             let Some(info) = crate::probe::ensure_probed(&path) else {
                 return false;
             };
-            let Some(video) = info.video.as_ref() else {
-                return false;
-            };
-            let fps = video.fps();
-            // Half a frame's slack, so a one-frame still cannot creep over the
-            // line on a rounded duration.
-            let one_frame = if fps > 0.0 { 1.0 / fps } else { 0.0 };
-            info.duration_seconds > one_frame * 1.5
+            // The rule itself lives on the probe result (K-451), so the Project
+            // panel's still-versus-video readout and this drop cannot disagree.
+            info.runs_as_video()
         }
 
         #[cfg(not(feature = "media"))]

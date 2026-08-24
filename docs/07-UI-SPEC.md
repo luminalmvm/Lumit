@@ -819,14 +819,16 @@ The library of assets: footage items, audio items, comps, folders.
   tags** tint the item icon's strokes rather than adding a dot; the **path** column sits at
   the right of the list; and the preview card carries name, size, rate, duration and codec.
   **Shipped:** the bar carries Composition and **Import** — Import because it is a command
-  the panel has always had and the mockup gave it no other home. **Folder waits on the
-  engine**: there is no "make a folder" call across the bridge yet, and a button that
-  cannot do anything is worse than one that is not there. Likewise **not yet shipped for
-  want of engine data**: the item's file **path** (nothing exposes it), the `in use` badge
-  (nothing reports whether a clip is used in a comp), the asset **colour tags** and the
-  colour-tag filter chips beside the search well (items carry no label colour), and the
-  preview card's **codec and audio layout** line (the media probe reports size, rate and
-  duration only).
+  the panel has always had and the mockup gave it no other home.
+  **Five pieces now wait on the bridge rather than on the engine**: the bottom bar's
+  Folder button, the item's file path column, the `in use` badge, the asset colour tags
+  with their filter chips beside the search well, and the preview card's codec-and-audio
+  line. The engine answers all five — `ops::new_folder_ops`,
+  `MediaRef::display_path`, `Document::item_is_used`, `Document::item_labels` with
+  `SetItemLabel`, and `MediaProbe::runs_as_video` beside the codec and channel facts the
+  probe already carried — and each needs one method across the seam before the mockup's
+  drawing of it can be filled in (docs/TODO.md). Until then they are absent rather than
+  faked: a button that cannot do anything is worse than one that is not there.
 - A persistent **search field** filters the tree live (name, type, extension). `Ctrl+F`
   focuses it when the panel has focus.
 - Selecting an item shows a header readout: thumbnail, dimensions, fps, duration, codec,

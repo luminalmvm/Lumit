@@ -42,6 +42,48 @@ pub struct MediaProbe {
     pub audio: Option<AudioInfo>,
 }
 
+impl MediaProbe {
+    /// Whether this file carries a picture at all — a video stream, still image
+    /// or otherwise (K-435). A music file answers false.
+    #[must_use]
+    pub fn has_picture(&self) -> bool {
+        self.video.is_some()
+    }
+
+    /// Whether this file's picture actually **runs**: a video stream lasting
+    /// more than a single frame (K-246).
+    ///
+    /// # In plain terms
+    ///
+    /// "Is this a video, or a still?" A still image probes with a video stream
+    /// too — one frame of it — so the question cannot be whether the stream is
+    /// there; it is whether the stream lasts. That is the distinction the
+    /// Project panel needs to say *still* rather than infer sound from a
+    /// picture no pixels wide, and the same one that decides whether dropping
+    /// the file into a composition makes a Sequence layer to cut or a plain
+    /// Footage layer (`add_footage_layer`).
+    ///
+    /// Both askers go through here so they cannot disagree — a panel calling a
+    /// file a still while the timeline cut it as a clip is exactly the kind of
+    /// split two copies of this rule would produce.
+    ///
+    /// Half a frame's slack, so a one-frame still cannot creep over the line on
+    /// a rounded duration. Audio-only answers false. A container that declares
+    /// no rate leaves no frame length to measure against, so the test falls
+    /// back to "does it last at all" — which still calls a single still image
+    /// (duration 0) a still, and still calls a stream that plays for a minute a
+    /// video.
+    #[must_use]
+    pub fn runs_as_video(&self) -> bool {
+        let Some(video) = self.video.as_ref() else {
+            return false;
+        };
+        let fps = video.fps();
+        let one_frame = if fps > 0.0 { 1.0 / fps } else { 0.0 };
+        self.duration_seconds > one_frame * 1.5
+    }
+}
+
 fn codec_name(id: ffi::AVCodecID) -> String {
     rsmpeg::avcodec::AVCodec::find_decoder(id)
         .map(|c| c.name().to_string_lossy().into_owned())
@@ -119,6 +161,95 @@ mod tests {
     use crate::index::tests_support::{
         audio_with_cover, fixture, garbage_file, truncated_copy, zero_byte_file,
     };
+
+    fn probe_of(
+        duration_seconds: f64,
+        video: Option<VideoInfo>,
+        audio: Option<AudioInfo>,
+    ) -> MediaProbe {
+        MediaProbe {
+            duration_seconds,
+            container: "test".into(),
+            video,
+            audio,
+        }
+    }
+
+    fn video(fps_num: i32, fps_den: i32, codec: &str) -> VideoInfo {
+        VideoInfo {
+            width: 1920,
+            height: 1080,
+            fps_num,
+            fps_den,
+            codec: codec.into(),
+        }
+    }
+
+    /// **A still is a still, not a sound with no width** (K-451). The Project
+    /// panel's second fact line asks the probe result what the file is, and it
+    /// has to answer honestly for all three shapes of media — a still image
+    /// probes with a video stream of exactly one frame, so the question is
+    /// whether the picture *lasts*, never whether the stream is there.
+    #[test]
+    fn a_still_a_video_and_a_sound_are_told_apart() {
+        let still = probe_of(0.0, Some(video(25, 1, "png")), None);
+        assert!(still.has_picture(), "a still image carries a picture");
+        assert!(!still.runs_as_video(), "one frame is not something to cut");
+
+        let clip = probe_of(12.0, Some(video(30000, 1001, "h264")), Some(stereo()));
+        assert!(clip.has_picture());
+        assert!(clip.runs_as_video());
+
+        let music = probe_of(180.0, None, Some(stereo()));
+        assert!(
+            !music.has_picture(),
+            "sound is not a picture no pixels wide"
+        );
+        assert!(!music.runs_as_video());
+    }
+
+    fn stereo() -> AudioInfo {
+        AudioInfo {
+            sample_rate: 48_000,
+            channels: 2,
+            codec: "aac".into(),
+        }
+    }
+
+    /// Half a frame's slack, so a one-frame still cannot creep over the line on
+    /// a rounded duration — and the frame after it plainly does.
+    #[test]
+    fn the_still_line_sits_half_a_frame_past_one_frame() {
+        let one_frame = probe_of(1.0 / 25.0, Some(video(25, 1, "png")), None);
+        assert!(!one_frame.runs_as_video());
+        let two_frames = probe_of(2.0 / 25.0, Some(video(25, 1, "h264")), None);
+        assert!(two_frames.runs_as_video());
+    }
+
+    /// A container that declares no rate leaves no frame length to measure
+    /// against, so the test falls back to "does it last at all": a single
+    /// undated still is still a still, and a stream that plays for a minute is
+    /// still a video. This is the behaviour `add_footage_layer` shipped with
+    /// (K-246) and it must not change with the rule moving here.
+    #[test]
+    fn a_stream_with_no_declared_rate_falls_back_to_lasting_at_all() {
+        assert!(!probe_of(0.0, Some(video(0, 0, "png")), None).runs_as_video());
+        assert!(probe_of(60.0, Some(video(0, 0, "vp9")), None).runs_as_video());
+    }
+
+    /// The panel's second fact line needs a codec name and the sound's shape;
+    /// the probe result already carries both, per stream. This pins them so a
+    /// later tidy-up cannot quietly drop what the panel reads.
+    #[test]
+    fn the_probe_result_names_the_codec_and_the_sounds_shape() {
+        let clip = probe_of(12.0, Some(video(30000, 1001, "h264")), Some(stereo()));
+        assert_eq!(clip.video.as_ref().unwrap().codec, "h264");
+        let audio = clip.audio.as_ref().unwrap();
+        assert_eq!(
+            (audio.codec.as_str(), audio.channels, audio.sample_rate),
+            ("aac", 2, 48_000)
+        );
+    }
 
     /// Regression (tester report): an audio file with embedded cover art
     /// exposes the artwork as a video stream (attached-picture disposition).
