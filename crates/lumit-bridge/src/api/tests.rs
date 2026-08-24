@@ -6148,7 +6148,9 @@ fn a_tracked_layer() -> (
         notes: Vec::new(),
     };
     let media = footage.id();
-    lumit_render::track::publish(media, 25.0, solve);
+    // Fifty frames solved out of a fifty-frame clip: a whole track, so the
+    // partial reading below has something honest to be measured against.
+    lumit_render::track::publish(media, 25.0, 50, solve);
     (project, comp, layer, media)
 }
 
@@ -6295,4 +6297,77 @@ fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {
     // A layer with no Camera track has no analysis to read.
     let solid = comp.add_solid_layer().expect("a solid");
     assert_eq!(track_status(solid).stage, BridgeTrackStage::Idle);
+}
+
+/// A **partial** track crosses as the span it solved against the clip it did
+/// not finish, and a camera linked to it holds past the end of that span
+/// (K-417's hold, K-440).
+///
+/// The two claims belong together: the range the status row draws is the same
+/// range the link clamps into, and a test that checked only one of them would
+/// let them drift apart.
+#[test]
+fn a_partial_track_reports_its_span_and_the_camera_holds_past_it() {
+    use crate::api::track::{
+        add_solved_camera, camera_link, track_status, BridgeLinkState, BridgeTrackStage,
+    };
+    use lumit_track::{CameraSolve, PoseSource, ScenePoint, SolveSegment, SolvedPose};
+
+    let (_project, _comp, layer, media) = a_tracked_layer();
+
+    // The same shot, but followed only as far as frame nineteen of fifty — what
+    // the job publishes when the tracking fails part-way (docs/impl/tracking.md
+    // §5d).
+    let solve = CameraSolve {
+        poses: (0..20)
+            .map(|frame| SolvedPose {
+                frame,
+                rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                position: [frame as f64, 0.0, 0.0],
+                segment: 0,
+                focal_px: 100.0,
+                mean_reprojection_px: 0.1,
+                source: PoseSource::Keyframe,
+            })
+            .collect(),
+        segments: vec![SolveSegment {
+            first_frame: 0,
+            last_frame: 19,
+            focal_px: 100.0,
+            ramp: false,
+        }],
+        points: vec![ScenePoint {
+            track: 7,
+            position: [10.0, 20.0, 100.0],
+        }],
+        keyframes: vec![0, 19],
+        mean_reprojection_px: 0.25,
+        notes: Vec::new(),
+    };
+    lumit_render::track::publish(media, 25.0, 50, solve);
+
+    let status = track_status(layer);
+    assert_eq!(
+        status.stage,
+        BridgeTrackStage::Done,
+        "a partial solve is a solve"
+    );
+    assert_eq!(status.frames, 20, "the span that carries a camera");
+    assert_eq!(
+        status.clip_frames, 50,
+        "against the clip that was not finished"
+    );
+
+    // The bar and the badge read the same range. Inside it the camera is
+    // derived; past it the last derived motion is held, which is K-417's rule
+    // meeting a range that now ends early.
+    let camera = add_solved_camera(layer).expect("a linked camera");
+    assert_eq!(camera_link(camera, 0).state, BridgeLinkState::Derived);
+    assert_eq!(camera_link(camera, 19).state, BridgeLinkState::Derived);
+    assert_eq!(
+        camera_link(camera, 20).state,
+        BridgeLinkState::Held,
+        "one frame past the solved span is already held"
+    );
+    assert_eq!(camera_link(camera, 49).state, BridgeLinkState::Held);
 }

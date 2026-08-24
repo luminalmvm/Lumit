@@ -143,6 +143,16 @@ class ProjectReference {
   ///
   /// The bare file name becomes the relative path; saving rebases it against the
   /// project folder (K-173).
+  ///
+  /// **A still that has numbered neighbours imports as one image sequence**
+  /// (K-439), not as one item per file: picking `frames0001.png` out of a
+  /// folder of two thousand brings in the whole run, named for its span and
+  /// pointed at its first file. Two guards keep that from surprising anyone —
+  /// only still-image formats are considered at all (a folder of numbered mp4s
+  /// is a folder of clips), and a numbered file with no numbered neighbours
+  /// stays the single still it is. Picking a *second* file of a run that is
+  /// already in the project hands back the item that is already there, so
+  /// selecting the whole folder still imports it once.
   FootageReference importFootage({required String path}) =>
       BridgeLib.instance.api
           .crateApiProjectProjectReferenceImportFootage(that: this, path: path);

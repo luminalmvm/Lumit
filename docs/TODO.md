@@ -1133,6 +1133,20 @@ the per-frame error. Forty-three tests, all synthetic, no assets.
      decision entry.
    - **2D track exports** (docs/08 §7's Tracker row): keyframed transform and
      corner-pin data from a track group, riding the same store.
+ - **A zoom inside a moving shot is not detected, and a multi-frame rack can
+   never be a cut** (note's Open questions, measured 2026-08-24 from a real
+   7135-frame train POV that went wrong the moment the shot scoped in).
+   `detect_zoom` merges every adjacent "hot" pair into one run and only calls an
+   **isolated** hot pair a cut, so (a) a lens rack over several frames is always
+   a `Ramp`, and (b) forward camera motion — which grows every patch in the
+   frame every frame — makes the whole clip one run, inside which a genuine
+   1.4x scope-in is one sample in a median of thousands and vanishes. The shot
+   then gets one focal for two lens settings and the camera path is wrong from
+   the rack onwards, with nothing said. Ordered behind the focal-curve item
+   below, because finding the boundary is only half the answer: a multi-frame
+   rack is a ramp whichever way it is detected. The cheap partial answer
+   meanwhile is to **surface `SolveNote`** — `ZoomRamp` is already produced and
+   already right, and nothing carries it across the bridge.
  - **The zoom ramp is one focal, not a curve** (note §4's deviation 7). A
    segment containing a detected zoom ramp is flagged and reported as
    `SolveNote::ZoomRamp`, and its focal is a single number over the whole run

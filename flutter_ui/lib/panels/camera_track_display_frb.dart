@@ -48,6 +48,82 @@ String trackFailureSentence(BridgeTrackFailure failure) => switch (failure) {
       BridgeTrackFailure.noSolve => l10n.trackFailedNoSolve,
     };
 
+/// The sentence for one reading of the analysis.
+///
+/// Pulled out of `build` so it can be asserted directly: what a status *says*
+/// is a decision about wording, and testing it through a mounted widget would
+/// be testing the mounting.
+String trackStatusSentence(BridgeTrackStatus? status) => switch (status?.stage) {
+      null || BridgeTrackStage.idle => l10n.trackNotAnalysed,
+      BridgeTrackStage.queued => l10n.trackWaiting,
+      BridgeTrackStage.tracking =>
+        l10n.trackFollowing(status!.done, status.total),
+      BridgeTrackStage.solving => l10n.trackSolvingCamera,
+      BridgeTrackStage.cancelled => l10n.trackStopped,
+      BridgeTrackStage.failed => status!.failure == null
+          ? l10n.trackFailedNoSolve
+          : trackFailureSentence(status.failure!),
+      // A **partial** track says how far it got instead of how good it is. The
+      // span is the fact that changes what the user does next — the rest of the
+      // shot has no camera and needs a second pass or a different approach —
+      // and the bar above the line is already showing it.
+      BridgeTrackStage.done => status!.frames < status.clipFrames
+          ? l10n.trackSolvedPartial(status.frames, status.clipFrames)
+          : l10n.trackSolvedSummary(
+              status.points,
+              status.meanError.toStringAsFixed(2),
+            ),
+    };
+
+/// How much of the clip carries a solved camera, as one thin bar.
+///
+/// **In plain terms.** A track can stop part-way: the lens racks, the frame
+/// whites out, the specks stop crossing from one frame to the next. When that
+/// happens the analysis stops there rather than inventing the rest, and this is
+/// how far it got — the solved span at one end, the part with no camera at the
+/// other. A whole track fills the bar, which is how a partial one is legible at
+/// a glance without reading anything.
+///
+/// **Two weights in a row rather than a painter.** The bar is a ratio of two
+/// integers and nothing else — no ticks, no labels, no hit testing — so the
+/// layout does the arithmetic and there is no paint code to keep in step with
+/// the theme.
+class TrackSpanBar extends StatelessWidget {
+  /// Frames of the clip that carry a solved camera. Always a prefix: the
+  /// analysis follows the source from its first frame and can only stop early.
+  final int analysed;
+
+  /// Frames the clip has.
+  final int total;
+
+  const TrackSpanBar({
+    super.key,
+    required this.analysed,
+    required this.total,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final done = analysed.clamp(0, total);
+    final rest = total - done;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: SizedBox(
+        height: 3,
+        child: Row(
+          children: [
+            if (done > 0)
+              Expanded(flex: done, child: ColoredBox(color: t.accent)),
+            if (rest > 0)
+              Expanded(flex: rest, child: ColoredBox(color: t.surface3)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The line under the Camera track's buttons.
 class CameraTrackDisplayFrb extends StatefulWidget {
   /// The layer the effect sits on — what a press is fired against and what the
@@ -150,27 +226,23 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final status = _status;
-    final line = switch (status?.stage) {
-      null || BridgeTrackStage.idle => l10n.trackNotAnalysed,
-      BridgeTrackStage.queued => l10n.trackWaiting,
-      BridgeTrackStage.tracking => l10n.trackFollowing(
-          status!.done,
-          status.total,
-        ),
-      BridgeTrackStage.solving => l10n.trackSolvingCamera,
-      BridgeTrackStage.cancelled => l10n.trackStopped,
-      BridgeTrackStage.failed => status!.failure == null
-          ? l10n.trackFailedNoSolve
-          : trackFailureSentence(status.failure!),
-      BridgeTrackStage.done => l10n.trackSolvedSummary(
-          status!.points,
-          status.meanError.toStringAsFixed(2),
-        ),
-    };
+    final line = trackStatusSentence(status);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
+          // Above the line, because it is the thing the line is about: there
+          // is nothing to say about a span until there is a span.
+          if (status != null && status.clipFrames > 0)
+            TrackSpanBar(
+              key: const ValueKey('fx-camera-track-span'),
+              analysed: status.frames,
+              total: status.clipFrames,
+            ),
+          Row(
+            children: [
           Expanded(
             child: Text(
               line,
@@ -184,19 +256,21 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb> {
           // re-analysing the shot moves it too.
           if (status?.stage == BridgeTrackStage.done)
             fxTextAction(
-              context,
-              label: l10n.trackCreateCamera,
-              tip: l10n.tipTrackCreateCamera,
-              keyName: 'fx-camera-track-create-camera',
-              onPressed: () {
-                try {
-                  addSolvedCamera(tracked: widget.layer);
-                } catch (_) {
-                  // The layer went away; nothing to add it beside.
-                }
-                widget.onChanged();
-              },
-            ),
+                  context,
+                  label: l10n.trackCreateCamera,
+                  tip: l10n.tipTrackCreateCamera,
+                  keyName: 'fx-camera-track-create-camera',
+                  onPressed: () {
+                    try {
+                      addSolvedCamera(tracked: widget.layer);
+                    } catch (_) {
+                      // The layer went away; nothing to add it beside.
+                    }
+                    widget.onChanged();
+                  },
+                ),
+            ],
+          ),
         ],
       ),
     );

@@ -6356,6 +6356,54 @@ shows the newest frame the clock has reached, stops the sound after one late
 picture and restarts it after eight on-time ones. Stopping returns the playhead
 to where playback began (K-254); a scrub is the exception.
 
+### When a camera track stops part-way (K-440)
+
+Camera tracking works by following hundreds of small, distinctive specks of the
+picture from frame to frame, and then asking what camera motion would explain
+all of that sliding at once. Everything rests on the first half: a speck that is
+followed from frame 40 into frame 41 is what *ties those two frames together*.
+Take away every such speck at one boundary and the two halves of the shot become
+two unrelated shots — there is nothing left that appears in both, so there is
+nothing to work out how the camera moved between them.
+
+That happens in real footage. The frame whites out; the lens racks so fast that
+every patch smears; a cut lands in the middle of the clip; the shot goes through
+a tunnel. Lumit used to carry on regardless — it decoded the rest of the file,
+and placed a camera on frames it had followed nothing through, because the code
+that fills in a frame with no measurement of its own simply copies its
+neighbour. The result looked like a finished answer and was not one.
+
+Now the analysis **stops** at that boundary and solves the part that worked.
+Three things are worth knowing about how it decides.
+
+**What it counts is what crossed, not what is alive.** After every frame, some
+specks have died and the detector immediately goes looking for new ones in the
+gaps they left — that is what keeps a long shot dense, and it means the number
+of specks being followed is back to normal within a single frame however badly
+the shot failed. So the number that matters is not "how many am I following" but
+"how many of the ones I am following came here from the last frame", and it is
+the second one Lumit watches.
+
+**The number it stops at is not a preference.** Working out the geometry between
+two frames needs seven matched specks at the absolute minimum, and eight before
+there is one spare to check the answer with. Below eight the arithmetic does not
+exist — not "is poor", does not exist — so that is the line. It is deliberately
+a hard floor and nothing cleverer: a shot that degrades badly without ever
+crossing it still solves badly, and the average error already reported is what
+says so.
+
+**A partial answer is a real answer.** The span that was followed is solved
+properly, kept, and cached like any other, so re-opening the project does not
+re-analyse it. The effect's card shows a thin bar of how much of the clip
+carries a camera, with the line under it saying how far it got in words rather
+than quoting an accuracy over frames it never saw. A Camera layer pointed at a
+partial solve follows it inside that span and, past the end, holds the last
+pose it worked out — the same holding it already did for a camera that runs on
+past the end of its shot. What to do about it is a normal editing decision: mask
+out whatever ruined the shot and analyse again, try a higher feature density, or
+cut the shot where the track stops and treat the two halves as two shots, which
+is what they are.
+
 ### Why the picture goes soft while you drag a value (K-383)
 
 Some effects are expensive in a very particular way. Depth of field and Lens

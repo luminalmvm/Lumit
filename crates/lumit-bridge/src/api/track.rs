@@ -100,7 +100,16 @@ pub struct BridgeTrackStatus {
     /// points and frames it holds. Zero until there is a solve to describe.
     pub mean_error: f64,
     pub points: u32,
+    /// How many frames of the clip carry a solved camera. The span always
+    /// starts at the clip's first frame — the analysis tracks the source from
+    /// its beginning and can only stop early, never start late — so this and
+    /// `clip_frames` are the whole of the bar the panel draws.
     pub frames: u32,
+    /// How many frames the clip has. `frames < clip_frames` is a **partial**
+    /// track: the shot could not be followed all the way through, and what was
+    /// solved is the part before it stopped carrying
+    /// ([`lumit_render::track::Solved::is_partial`]).
+    pub clip_frames: u32,
 }
 
 impl BridgeTrackStatus {
@@ -113,6 +122,7 @@ impl BridgeTrackStatus {
             mean_error: 0.0,
             points: 0,
             frames: 0,
+            clip_frames: 0,
         }
     }
 }
@@ -200,6 +210,7 @@ pub fn track_status(layer: LayerReference) -> BridgeTrackStatus {
         status.mean_error = solved.solve.mean_reprojection_px;
         status.points = u32::try_from(solved.solve.points.len()).unwrap_or(u32::MAX);
         status.frames = u32::try_from(solved.solve.poses.len()).unwrap_or(u32::MAX);
+        status.clip_frames = u32::try_from(solved.clip_frames).unwrap_or(u32::MAX);
     }
     status
 }

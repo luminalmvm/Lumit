@@ -9482,8 +9482,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeTrackStatus dco_decode_bridge_track_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return BridgeTrackStatus(
       stage: dco_decode_bridge_track_stage(arr[0]),
       done: dco_decode_u_32(arr[1]),
@@ -9492,6 +9492,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       meanError: dco_decode_f_64(arr[4]),
       points: dco_decode_u_32(arr[5]),
       frames: dco_decode_u_32(arr[6]),
+      clipFrames: dco_decode_u_32(arr[7]),
     );
   }
 
@@ -11874,6 +11875,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_meanError = sse_decode_f_64(deserializer);
     var var_points = sse_decode_u_32(deserializer);
     var var_frames = sse_decode_u_32(deserializer);
+    var var_clipFrames = sse_decode_u_32(deserializer);
     return BridgeTrackStatus(
         stage: var_stage,
         done: var_done,
@@ -11881,7 +11883,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         failure: var_failure,
         meanError: var_meanError,
         points: var_points,
-        frames: var_frames);
+        frames: var_frames,
+        clipFrames: var_clipFrames);
   }
 
   @protected
@@ -14358,6 +14361,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_f_64(self.meanError, serializer);
     sse_encode_u_32(self.points, serializer);
     sse_encode_u_32(self.frames, serializer);
+    sse_encode_u_32(self.clipFrames, serializer);
   }
 
   @protected

@@ -527,6 +527,43 @@ impl TrackSet {
         )
     }
 
+    /// Drop everything after `last_frame`, leaving a set that describes only
+    /// the span up to and including it.
+    ///
+    /// What a run that stopped part-way hands on. The frames after a tracking
+    /// failure do not carry a poorer answer, they carry no answer: leaving them
+    /// in would have keyframe selection reach for a pair nothing spans and the
+    /// solve place cameras on frames nothing measured. A track that ends up
+    /// with no points at all is dropped; one that is cut short is
+    /// [`TrackState::Ended`], because that is now where it stops. Ids and their
+    /// order are otherwise untouched.
+    pub fn truncate(&mut self, last_frame: i64) {
+        for t in &mut self.tracks {
+            // Points are in ascending frame order, so the ones to keep are a
+            // prefix and the count of them is the whole of the arithmetic.
+            let keep = t
+                .points
+                .iter()
+                .take_while(|p| p.frame <= last_frame)
+                .count();
+            if keep == t.points.len() {
+                continue;
+            }
+            t.points.truncate(keep);
+            // `steps[i]` measures the motion out of `points[i]`, so a track
+            // with `n` points has `n - 1` steps — the invariant `split_track`
+            // keeps for the same reason.
+            t.steps.truncate(keep.saturating_sub(1));
+            // Ended, because that is now where it stops — but never over
+            // `Moving`, which is a verdict about the track rather than about
+            // its extent, and losing it would put a mover back in the solve.
+            if t.state == TrackState::Live {
+                t.state = TrackState::Ended;
+            }
+        }
+        self.tracks.retain(|t| !t.points.is_empty());
+    }
+
     /// Cut a track in two after `after_frame`, handing the suffix a fresh id.
     ///
     /// The original keeps its id and every point up to and including
@@ -607,6 +644,9 @@ pub struct Tracker {
     scratch: Scratch,
     tracks: Vec<Track>,
     live: Vec<LiveTrack>,
+    /// Survivors of the last [`Tracker::advance`], counted before re-detection
+    /// refills the buckets — see [`Tracker::carried_count`].
+    carried: usize,
     next_id: u32,
     last_frame: Option<i64>,
     size: Option<(usize, usize)>,
@@ -624,6 +664,7 @@ impl Tracker {
             scratch: Scratch::default(),
             tracks: Vec::new(),
             live: Vec::new(),
+            carried: 0,
             next_id: 0,
             last_frame: None,
             size: None,
@@ -642,6 +683,24 @@ impl Tracker {
     #[must_use]
     pub fn live_count(&self) -> usize {
         self.live.len()
+    }
+
+    /// How many tracks **carried across** the frame just pushed: the survivors
+    /// of the step out of the frame before it, counted before re-detection
+    /// refilled the emptied buckets. Zero before the second frame, which
+    /// nothing carried into.
+    ///
+    /// This, and not [`Tracker::live_count`], is the measure of whether the
+    /// chain of correspondence is intact. Live count recovers within one frame
+    /// however badly a shot fails — detection seeds fresh features into
+    /// whatever buckets emptied, and a dim or blurred frame is not refused
+    /// features because the quality floor is relative to that frame's own best
+    /// (§2). So live count says how many specks are being followed; only this
+    /// says how many of them tie this frame to the last one, which is the only
+    /// thing any later phase can use.
+    #[must_use]
+    pub fn carried_count(&self) -> usize {
+        self.carried
     }
 
     /// Take the next frame. `frame` is the source frame index; frames must be
@@ -705,6 +764,10 @@ impl Tracker {
 
         self.cur.fill(plane.luma, plane.w, plane.h, levels);
         self.advance(frame, seed);
+        // Read here, between the carry and the re-detection: after
+        // `seed_features` the emptied buckets are full again and the collapse
+        // is invisible.
+        self.carried = self.live.len();
         std::mem::swap(&mut self.prev, &mut self.cur);
         self.last_frame = Some(frame);
         self.seed_features(frame, false);

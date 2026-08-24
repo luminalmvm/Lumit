@@ -1048,15 +1048,28 @@ class LayerReference {
       .crateApiLayerLayerReferenceAddStroke(that: this, stroke: stroke);
 
   /// The layer's source audio summarised across `[start_seconds,
-  /// end_seconds)` of the **source's own clock**, in `buckets` buckets
+  /// end_seconds)` of the **layer's own clock**, in `buckets` buckets
   /// (K-280, superseding the fixed 2 048 of K-172).
   ///
-  /// Source time, not comp time, is what makes a trim or a drag free: the
-  /// peaks belong to the file, so the Timeline's lane maps them through the
-  /// live in/out/offset each paint and the transients travel with the bar. The
-  /// *window* is what makes the resolution follow the zoom — a lane showing
-  /// two seconds asks for two seconds, and gets a bucket per pixel column of
-  /// them, however far in the Timeline is zoomed.
+  /// Layer time, not comp time, is what makes a trim or a drag free: the
+  /// window is fixed to where the layer starts its source, so the Timeline's
+  /// lane maps it through the live in/out/offset each paint and the
+  /// transients travel with the bar. The *window* is what makes the
+  /// resolution follow the zoom — a lane showing two seconds asks for two
+  /// seconds, and gets a bucket per pixel column of them, however far in the
+  /// Timeline is zoomed.
+  ///
+  /// **A retimed layer's wave stretches with its map** (K-436). Layer time
+  /// and source time are the same line only while the layer plays at speed
+  /// 1; once it has a Retime ([`lumit_core::model::Layer::source_time_at`])
+  /// they are not, and buckets taken evenly in source time would put the
+  /// transients in the wrong columns — a half-speed layer's wave would fill
+  /// half its bar and stop. So each bucket's edges are mapped through that
+  /// map here, exactly as a Sequence clip's are through its own
+  /// ([`Self::clip_audio_peaks`]): the lane still draws bucket `i` at column
+  /// `i`, and a slow passage is drawn wide because it *is* wide. An
+  /// un-retimed layer maps through the identity and takes the straight,
+  /// one-pass path it always did.
   ///
   /// `multiwave` asks for the three-band stack (bass, middle, treble) instead
   /// of the single full-range wave.

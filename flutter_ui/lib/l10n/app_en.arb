@@ -6944,6 +6944,11 @@
     "description": "Camera track status line when a solve is in hand. {error} is a number already formatted to two decimals; px is pixels.",
     "placeholders": { "points": { "type": "int" }, "error": { "type": "String" } }
   },
+  "trackSolvedPartial": "Analysed {frames} of {total} frames — the shot could not be followed further",
+  "@trackSolvedPartial": {
+    "description": "Camera track status line when the analysis stopped part-way through the clip: the first {frames} frames carry a solved camera and the rest of the clip does not. Both numbers are frame counts.",
+    "placeholders": { "frames": { "type": "int" }, "total": { "type": "int" } }
+  },
   "trackFailedUnreadable": "The media could not be read",
   "@trackFailedUnreadable": {
     "description": "Camera track status line when the analysis was refused: the file would not open, or carries no video."

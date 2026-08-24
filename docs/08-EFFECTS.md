@@ -5222,6 +5222,17 @@ together are the one number that says whether the solve is any good. A refusal i
 sentence in the same line, and nothing about the shot has changed. **Create camera** sits
 beside it once there is a solve to follow.
 
+**A track may cover part of its clip, and says which part** (K-440). Not every shot can be
+followed to its end — the lens racks, the frame whites out, a cut lands mid-clip — and where
+the specks stop crossing from one frame to the next there is nothing after that point that
+can be related to anything before it. The analysis **stops there**, solves the span that
+worked and keeps it: a thin bar above the status line shows that span against the rest of the
+clip, and the line says how far it got instead of quoting an error over frames it never saw.
+A camera linked to a partial solve derives inside the span and **holds** the last derived
+pose outside it, which is K-417's rule meeting a range that ends early. Re-analysing after
+masking the offending region, or with a different Feature density, is the way past it; a
+partial answer is honest, usable and cached like any other.
+
 What the solve is *for* is the **solve link** on a Camera layer
 ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.6): the camera points at this layer and derives its
 placement per frame, rather than being handed a copy. Create camera makes one; while it is

@@ -89,6 +89,71 @@ void main() {
           reason: 'and neither press is an edit');
     });
 
+    /// A reading of the status, written down: the engine cannot be made to
+    /// produce a partial solve from Dart (it is the answer to a minutes-long
+    /// analysis of a real file), and what this side does with one is the claim.
+    BridgeTrackStatus solved({required int frames, required int clipFrames}) =>
+        BridgeTrackStatus(
+          stage: BridgeTrackStage.done,
+          done: 0,
+          total: 0,
+          meanError: 0.42,
+          points: 300,
+          frames: frames,
+          clipFrames: clipFrames,
+        );
+
+    testWidgets('a partial track says how far it got, and draws the span',
+        (tester) async {
+      // The line: a whole track reports its quality, a partial one reports its
+      // reach — the fact that decides what the user does next.
+      expect(trackStatusSentence(solved(frames: 50, clipFrames: 50)),
+          contains('300 points'));
+      final partial = trackStatusSentence(solved(frames: 20, clipFrames: 50));
+      expect(partial, contains('20'));
+      expect(partial, contains('50'));
+      expect(partial, isNot(contains('300 points')),
+          reason: 'a partial track leads with its span, not its point count');
+
+      // The bar: two weights in one row, and they are the two frame counts.
+      final p = withTrackedLayer();
+      await tester.pumpWidget(hostPanel(
+        child: const TrackSpanBar(analysed: 20, total: 50),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      final weights = tester
+          .widgetList<Expanded>(find.byType(Expanded))
+          .map((e) => e.flex)
+          .toList();
+      expect(weights, [20, 30],
+          reason: 'the analysed span and the remainder, in clip frames');
+      final fills = tester
+          .widgetList<ColoredBox>(find.byType(ColoredBox))
+          .map((b) => b.color)
+          .toSet();
+      expect(fills.length, 2,
+          reason: 'the analysed span is not drawn like the rest of the clip');
+
+      // A whole track fills the bar, so there is no second colour to read.
+      // Torn down first: `hostPanel` mounts its child as an `Overlay` entry,
+      // which is built once and would keep showing the bar above.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(hostPanel(
+        child: const TrackSpanBar(analysed: 50, total: 50),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      expect(
+          tester
+              .widgetList<Expanded>(find.byType(Expanded))
+              .map((e) => e.flex)
+              .toList(),
+          [50]);
+    });
+
     testWidgets('the failure sentence is chosen here, not sent by the engine',
         (tester) async {
       // Every reason has words. The switch is exhaustive over the generated

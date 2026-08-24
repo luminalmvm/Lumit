@@ -1605,6 +1605,15 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
   line is *sampled* while the job moves and left alone when it does not; it is never a
   progress bar, because the Viewer's is the one progress bar (§2.5).
 
+  **A finished answer that covers part of its clip draws the part it covers** (K-440). Where
+  a job's answer is about a *span* of the media rather than the whole of it — today, a camera
+  track that stopped where the shot stopped being followable — a thin bar sits **above** that
+  line and shows the analysed span against the rest of the clip, in theme colours, with the
+  line saying how far it got in words. This is not the progress bar §2.5 reserves and does
+  not contradict it: it appears only once the work is *over*, it does not move, and what it
+  measures is the answer's extent rather than the work's completeness. A whole answer fills
+  it, which is what makes a partial one legible without reading anything.
+
   **Two parameters can share one row.** Two conventions fold, and both exist because the
   pair is one idea and reads worse split in half: an `_x`/`_y` Float neighbour pair draws as
   one **point row** with a shared stem label and a crosshair pick; and a **Layer** picker

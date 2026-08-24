@@ -164,9 +164,12 @@ the frames in the old folder simply stop being addressed.
 `<32-byte blake3>.ltrk`, where the hash is over the media's fingerprint (size + head/tail
 hash), the analysis settings the Camera track effect was carrying, the mask geometry it was
 given, and this tier's own format version. The file is a seven-byte magic (`LUMTRK\0`), a
-little-endian `u16` version, then a bincode record of that key, the media's frame rate, and
-the solve: a pose per source frame, the focal per segment, the point cloud, the keyframes
-and the solve's notes. A file whose magic does not match, whose version is **newer than this
+little-endian `u16` version, then a bincode record of that key, the media's frame rate, the
+**clip's own frame count**, and the solve: a pose per source frame, the focal per segment,
+the point cloud, the keyframes and the solve's notes. The clip's length is stored because the
+solve's poses describe only the span that was followed, and a track that stopped part-way
+(K-440) has to read back from the cache as the partial thing it is rather than as a whole
+one — version 2 of this tier, and version 1 files are simply never asked for. A file whose magic does not match, whose version is **newer than this
 build** (the same refuse-newer rule `manifest.json` follows in §1), whose body will not
 parse, or whose stored key is not the one being asked for, is ignored and re-analysed —
 every refusal costs one analysis and nothing else.

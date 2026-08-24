@@ -10216,6 +10216,7 @@ impl SseDecode for crate::api::track::BridgeTrackStatus {
         let mut var_meanError = <f64>::sse_decode(deserializer);
         let mut var_points = <u32>::sse_decode(deserializer);
         let mut var_frames = <u32>::sse_decode(deserializer);
+        let mut var_clipFrames = <u32>::sse_decode(deserializer);
         return crate::api::track::BridgeTrackStatus {
             stage: var_stage,
             done: var_done,
@@ -10224,6 +10225,7 @@ impl SseDecode for crate::api::track::BridgeTrackStatus {
             mean_error: var_meanError,
             points: var_points,
             frames: var_frames,
+            clip_frames: var_clipFrames,
         };
     }
 }
@@ -13984,6 +13986,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::track::BridgeTrackStatus {
             self.mean_error.into_into_dart().into_dart(),
             self.points.into_into_dart().into_dart(),
             self.frames.into_into_dart().into_dart(),
+            self.clip_frames.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -15710,6 +15713,7 @@ impl SseEncode for crate::api::track::BridgeTrackStatus {
         <f64>::sse_encode(self.mean_error, serializer);
         <u32>::sse_encode(self.points, serializer);
         <u32>::sse_encode(self.frames, serializer);
+        <u32>::sse_encode(self.clip_frames, serializer);
     }
 }
 

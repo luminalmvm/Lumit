@@ -687,6 +687,105 @@ links an existing Camera layer, the layer-transform-aware cloud placement, and t
 cloud's own affordances — a count, a filter, deleting a point, hiding points behind
 the shot, and setting the ground plane and origin from a selection.
 
+## 5d. A partial track, as built
+
+`crates/lumit-render/src/track.rs`, with the two things it needed from
+`crates/lumit-track/src/lib.rs` (2026-08-24, K-440). Until this, a shot that
+stopped being followable part-way was analysed to its end regardless: the run
+carried on decoding frames nothing crossed, the solve placed cameras on them
+anyway, and the interface reported the result as a whole answer. This is the
+half that makes a partial track honest.
+
+**The signal is the carried count, and it is the solver's own minimum.**
+`Tracker::carried_count()` is the number of tracks that survived the step *into*
+the frame just pushed, read between the carry and the re-detection. It is not
+`live_count`, and the difference is the whole point: re-detection refills
+whatever buckets emptied, and the detector's quality floor is relative to each
+frame's own best, so the live count recovers within one frame however completely
+a shot fails. Live count says how many specks are being followed; carried count
+says how many of them tie this frame to the last one, which is the only thing
+any later phase can use. The job stops when it falls below **eight** — the
+smallest correspondence set that can be *verified* rather than merely fitted,
+the minimal sample for the 7-point fundamental being seven. That is a statement
+about the arithmetic rather than a threshold anyone tuned: below it the chain of
+correspondence is severed at that frame, and nothing after it can be related to
+anything before it however well it tracks among itself.
+
+**It finalises rather than discards.** The frames up to the boundary are a real
+shot with a real camera move in them, so the tracks are cut to the last frame
+that carried (`TrackSet::truncate`) and the whole of phase 2 and phase 3 runs
+over that span exactly as it would over a whole clip. Cutting rather than
+leaving the tail in matters: keyframe selection returns a short final pair rather
+than leaving a gap (§3's deviation 8), so a set that runs on past the failure
+would have the solve stand on a pair nothing spans. A track cut short is left
+`Ended` unless it was already `Moving`, which is a verdict about the track rather
+than about its extent — overwriting it would put a mover back into a later
+solve.
+
+**What says it is partial is the clip's length, not a flag on the solve.** After
+the truncation the `CameraSolve` is a complete answer *about its span* — there is
+nothing partial inside it. The partiality is the relation between that span and
+the clip, so `Solved` (and the sidecar record, at format version 2) carries the
+clip's own frame count and `Solved::is_partial()` is one comparison. The span is
+always a prefix, because the job follows the source from its first frame and can
+only ever stop early, so the pair of numbers is also the whole of what the
+interface draws.
+
+Four things are worth recording as decisions under that:
+
+1. **The two ways a run ends early are one case downstream.** Frames that stop
+   decoding (`LumaFrames::luma` answering `None`, which already existed) and
+   tracking that fails are reported identically: the solve covers what was
+   followed and the clip says how much more there was. They mean the same thing
+   to the store, to the link and to the panel, and giving them separate
+   readings would have been two spellings of "this is as far as it got".
+2. **A partial solve is `Done`, not a failure.** `Progress` gained no variant.
+   A refusal is a shot with *no* answer in it; this one has an answer, and the
+   status row's job is to say how far it reaches, not to colour it as a fault.
+   The failure reasons crossing to Dart (§5c's third deviation) are unchanged.
+3. **It is cached like any other solve.** The sidecar keeps a partial answer
+   under the same key, because it *is* the honest answer for that file at those
+   settings, and re-deriving it would take the same minutes to stop in the same
+   place. The format version went to 2 so a version 1 record — which could not
+   say how long its clip was — is simply never asked for.
+4. **The hold needed no new mechanism, and that was worth checking.** K-417's
+   hold is a clamp into the store's solved range (§5a's second deviation), and
+   the range now ends where the track does, so a camera linked to a partial
+   solve derives inside the span and holds the last derived pose outside it with
+   no code changed at all. It is asserted twice — in the engine over a real
+   analysis, and across the bridge over a written-down one — precisely because
+   "it already works" is the kind of claim that stops being true silently.
+
+**The surface.** `BridgeTrackStatus` gained `clip_frames` beside `frames`;
+`frames < clip_frames` is the partial reading (docs/17). The panel draws a thin
+bar above the status line — the analysed span in the accent, the rest of the clip
+in a surface tone, two weights in one row and no painter — and the line says
+"Analysed *n* of *m* frames — the shot could not be followed further" in place of
+the point count and error, because how far it reaches is the fact that decides
+what the user does next. docs/07 §6 records why that bar does not contradict the
+one-progress-bar rule: it appears only once the work is over, it does not move,
+and it measures the answer's extent rather than the work's completeness.
+
+**Stage 5d's tests** are two in `lumit-track` (the carried count falling to zero
+on a frame nothing crossed while the live count recovers one frame later; a
+truncated set keeping its step-per-gap invariant, its ended states and nothing
+past the cut), one in `lumit-render` (a synthetic shot that runs into featureless
+frames: the run stops where the carrying stops, the solve covers exactly the span
+that worked and still recovers the focal, the store reads partial, and the linked
+camera derives at the last solved frame and holds through the tail), one in
+`lumit-bridge` (the span and the clip crossing, and the badge reading Derived
+inside and Held outside), and one in Flutter (the partial sentence leading with
+its span rather than its point count, and the bar's two weights being the two
+frame counts). The sidecar's round-trip test now also pins the clip length, so a
+cached partial solve cannot read back as a whole one.
+
+**Why the tail is featureless rather than merely dim** in that fixture: the
+verification a track ends on is normalised correlation, which is blind to gain
+and lift by construction, so a picture that fades down in contrast is followed
+happily and *should* be. Only a frame with no structure at all severs the chain —
+the gradient normal matrix is singular and every KLT solve refuses — which is
+both the deterministic thing to write and a real thing footage does.
+
 ## 5. Test plan
 
 - **Synthetic first, real second.** Phase 1: rendered test sequences (a textured
@@ -806,3 +905,40 @@ the shot, and setting the ground plane and origin from a selection.
 - Object rigid-pose solve (track group → 6-DoF against the solved camera) is phase
   4+ and needs its own note section when reached; 2D export ships first.
 - Lens distortion beyond k1/k2 (anamorphic) — revisit against real footage.
+- **A zoom inside a shot that is also moving forward is not detected at all, and
+  a zoom that takes more than one frame pair can never be a cut.** Measured on
+  `detect_zoom` (2026-08-24), from a real failure: a train POV of 7135 frames
+  that solved acceptably until the shot scoped in and was wrong from there on.
+  Two mechanisms, both in the run-merging at the top of the detector, and each
+  sufficient on its own:
+  - **A cut must be an isolated hot pair** (`end == frame`). A real lens rack
+    takes a handful of frames, so its pairs are hot in a row and the whole run
+    is classified `Ramp`. Measured: a 1.4× scope-in spread over four pairs comes
+    back as one `Ramp` and no cut.
+  - **Forward motion makes every pair hot**, because everything in the frame
+    grows as the camera closes on it. A creep of 0.006 log-scale per pair — a
+    slow dolly — is above `ramp_threshold` (0.004) on every pair of the shot, so
+    the `while` loop swallows the *entire clip* into one boundary. Measured: the
+    same creep with a genuine 1.4× single-pair scope-in planted in the middle
+    returns one whole-shot `Ramp` whose median log-scale (0.0058) is
+    indistinguishable from the creep alone (0.0058) — the scope-in is one sample
+    in a median of thousands and disappears.
+  The consequence is the one the owner saw. With no boundary there is one
+  segment, and §4's deviation 2 gives the whole shot **one focal**; a shot
+  carrying two lens settings is then fitted to a focal right for neither, and
+  §4's deviation 3 already records that a focal well out bends every relative
+  rotation with it. The solve does not refuse — it returns a camera path that is
+  wrong from the rack onwards, with `SolveNote::ZoomRamp` set and nothing
+  surfacing it.
+  **This is not a small fix and should not be attempted as one.** Detecting the
+  cut inside a run means judging a pair against its neighbours rather than
+  against zero, and the `scale_only` cross-check that stops a lunge reading as a
+  scope-in has to keep working while it does; and even with the boundary found,
+  a *multi-frame* rack is a ramp, and a ramp still gets one averaged focal until
+  the focal knots this note already owes (§4's deviation 7) exist in the bundle.
+  The honest order is: solve the ramp's focal as a curve, then make the detector
+  able to find a change of lens inside a moving shot. Until then the tracker's
+  own reading of a shot like this should at least be *said* — `SolveNote` does
+  not cross the bridge, and a line saying "the lens moved during this shot and
+  the solve gave it one focal" is a day's work that would have answered this
+  question without anyone reading this file.

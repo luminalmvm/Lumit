@@ -10,7 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `project`, `resolve_path`
+// These functions are ignored because they are not marked as `pub`: `project`, `resolve_path`, `resolve_source`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `eq`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -79,13 +79,26 @@ class FootageReference {
       );
 
   /// Point this footage item at `path`, and fix every *other* missing item
-  /// whose file name turns up in the same folder — one undo step for the lot.
+  /// that moved the same way — one undo step for the lot.
   ///
   /// The sibling sweep is the behaviour that makes relinking a moved project
   /// bearable: footage almost always moves as a folder, so relinking one clip
-  /// by hand should not mean relinking forty. A sibling is only touched when it
-  /// currently fails to resolve *and* a file of its name exists beside the
-  /// picked one, so a healthy item is never repointed.
+  /// by hand should not mean relinking forty. It works two ways, in order.
+  ///
+  /// **The path rewrite** (docs/10 §2) is the one that carries a whole tree.
+  /// Where the file went tells you where its folder went: everything the old
+  /// path and the new one share at the end did not move, and the prefix in
+  /// front of it did. Every other lost item whose stored path begins with that
+  /// old prefix is looked for under the new one — so relinking one clip four
+  /// folders deep brings back the forty-seven others in forty-seven *different*
+  /// subfolders, which is exactly the shape of an edit's footage.
+  ///
+  /// **Beside the picked file**, by name, is the fallback for the flatter case
+  /// — a folder of clips whose paths share nothing useful.
+  ///
+  /// A sibling is only touched when it currently fails to resolve *and* the
+  /// file the rewrite predicts actually exists, so a healthy item is never
+  /// repointed and a guess is never saved.
   void relink({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceRelink(that: this, path: path);
 

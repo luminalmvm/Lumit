@@ -1411,6 +1411,113 @@ fn a_track_that_stops_agreeing_is_split_at_the_change() {
     );
 }
 
+/// The carried count is the survivor count, and it says what the live count
+/// cannot: a frame nothing crossed into reads zero even though the tracker is
+/// following as many specks as ever a moment later (K-440).
+#[test]
+fn the_carried_count_falls_where_the_live_count_recovers() {
+    let mut tracker = Tracker::new(TrackSettings::default());
+    let c = centre();
+    let motions = [
+        Motion::identity(c),
+        Motion::translate(c, 1.5, -1.0),
+        Motion::translate(c, 3.0, -2.0),
+    ];
+    for (i, m) in motions.iter().enumerate() {
+        let f = render(m, None);
+        tracker
+            .push(i as i64, FramePlane::new(&f, W, H).unwrap(), None)
+            .unwrap();
+    }
+    // Nothing carries into the first frame by definition; after that the shot
+    // is being followed properly.
+    let following = tracker.carried_count();
+    assert!(
+        following > 50,
+        "only {following} tracks carried across an ordinary frame"
+    );
+
+    // A frame with no structure in it: every KLT solve refuses, so nothing
+    // crosses. The live count is back within one frame — detection seeds fresh
+    // features into the emptied buckets, and the quality floor is relative to
+    // the frame's own best — which is exactly why the live count cannot be the
+    // signal a job stops on.
+    let blank = vec![0.5f32; W * H];
+    tracker
+        .push(3, FramePlane::new(&blank, W, H).unwrap(), None)
+        .unwrap();
+    assert_eq!(
+        tracker.carried_count(),
+        0,
+        "something crossed a frame with nothing in it"
+    );
+
+    // And back to the picture: the chain is severed, so what follows is a new
+    // set of tracks that nothing before the blank frame can be related to.
+    let after = render(&motions[2], None);
+    tracker
+        .push(4, FramePlane::new(&after, W, H).unwrap(), None)
+        .unwrap();
+    let live = tracker.live_count();
+    assert!(
+        live > following / 2,
+        "the live count is {live}, so it never recovered and this test proves nothing"
+    );
+    let set = tracker.finish();
+    assert!(
+        set.correspondences(2, 4).is_empty(),
+        "a track survived a frame it could not have been followed through"
+    );
+}
+
+/// A truncated set describes exactly the span it was cut to, and stays a
+/// well-formed one: the invariant every later phase reads (a step per gap
+/// between points) survives the cut, and nothing is left holding a frame past
+/// it (K-440).
+#[test]
+fn truncating_leaves_only_the_span_that_was_kept() {
+    let mut set = synthetic_shot(12, 40, usize::MAX, [0.0; 3], 0);
+    let full = set.tracks().len();
+    assert_eq!(set.frame_range(), Some((0, 11)));
+
+    set.truncate(7);
+    assert_eq!(set.frame_range(), Some((0, 7)), "the cut did not take");
+    assert_eq!(
+        set.tracks().len(),
+        full,
+        "these tracks all start at zero, so none of them should have gone"
+    );
+    for t in set.tracks() {
+        assert!(
+            t.last_frame() <= 7,
+            "track {} still reaches frame {}",
+            t.id,
+            t.last_frame()
+        );
+        assert_eq!(
+            t.steps.len() + 1,
+            t.points.len(),
+            "track {} lost the step-per-gap invariant",
+            t.id
+        );
+        assert_eq!(
+            t.state,
+            TrackState::Ended,
+            "a track cut short stops there, and says so"
+        );
+    }
+    // The correspondences the solve reads are still there up to the cut, and
+    // simply absent past it.
+    assert!(set.correspondences(6, 7).len() > 10);
+    assert!(set.correspondences(7, 8).is_empty());
+
+    // Cutting to before anything happened leaves nothing rather than empty
+    // husks: a track with no points is not a track.
+    set.truncate(-1);
+    assert!(set.tracks().is_empty());
+    assert_eq!(set.frame_range(), None);
+}
+
 #[test]
 fn a_refused_split_leaves_the_store_alone() {
     let mut set = synthetic_shot(6, 40, usize::MAX, [0.0; 3], 0);
