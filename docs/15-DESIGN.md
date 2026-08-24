@@ -828,9 +828,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 
 ### 12A.1 Timeline (K-441)
 
-- **Modes are Layers, Keys and Graph** (K-455). Keys is the dope sheet built to the approved
-  Keys drawing — another way of seeing a comp's keyframes, adding no editing behaviour
-  Layers lacks. Layers mode carries an **Animated
+- **Modes are Layers, Keys and Graph** (K-455, K-458). Keys is the dope sheet built to the
+  approved Keys drawing — the whole of it, editing tools included (K-458): the
+  block-selection box with stretch handles and its `n keys · n f` badge, the Ease
+  popover, and the bottom bar's Interpolation / Reverse / Copy / Paste-at-playhead
+  strip. Layers mode carries an **Animated
   filter** (`U`): on, the outline shows only keyframed properties across all layers; All
   restores the full twirl-down lists. Block selection, end-handle stretch and the Ease
   popover are Layers behaviours, not a mode of their own.
@@ -914,9 +916,13 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **A key's shape is its interpolation** (§6.2's rule, brought out of the graph): diamond
   linear, square hold, circle bezier. Keys draw larger here than on a Layers lane — they
   are the subject of the view.
-- **The mode adds no editing behaviour Layers lacks** (K-455). Selecting a key, dragging
-  one in time, snapping, the marquee and the undo step are the lanes' own machinery,
-  running under a different arrangement.
+- **The mode carries its drawing's editing tools** (K-458, superseding K-455's
+  restriction): the block-selection box with stretch handles and its `n keys · n f`
+  badge, the Ease popover on a selection, and the bottom bar's Interpolation /
+  Reverse / Copy / Paste-at-playhead strip. Selecting a key, dragging one in time,
+  snapping, the marquee and the undo step remain the lanes' own shared machinery,
+  running under a different arrangement; the block tools live in the same machinery
+  so Layers gains them wherever K-441 already names them as Layers behaviours.
 
 ### 12A.2 Graph mode (K-442)
 
