@@ -78,13 +78,18 @@ const double identityGap = outlineGap;
 /// The five A/V switch cells.
 const double switchesGroupWidth = 5 * switchCellWidth;
 
-/// The render group's span: **its five switch cells and nothing more**
-/// (owner, 2026-08-24). It was 150 — half as wide again — to give the
-/// fold-out's value cells room, but the column itself is five icons, and the
-/// blank third of it read as a gap in the outline. The fold-out property rows
+/// The render group's span: **its four switch cells and nothing more**
+/// (owner, 2026-08-24). It was 150 — over twice as wide — to give the
+/// fold-out's value cells room, but the column itself is four icons, and the
+/// blank remainder read as a gap in the outline. The fold-out property rows
 /// still align their value cells to exactly this span (docs/07 §4.3); they are
 /// simply as wide as the column they sit under.
-const double renderGroupWidth = 5 * switchCellWidth;
+///
+/// **Four, not five** (K-483, superseding K-453's five): the accepts-lights
+/// switch left the column on the owner's ruling — a fifth mark nobody could
+/// name, on a setting that does nothing in the comps that have no lights. The
+/// setting lives on, in the layer's right-click menu (K-361).
+const double renderGroupWidth = 4 * switchCellWidth;
 
 /// The compose group's cells — **the mockup's own dropdown widths** (K-461):
 /// 84 for the matte and blend faces, 64 for the parent's. They were 118 / 112 /

@@ -7146,14 +7146,10 @@ class _OutlineRowState extends State<_OutlineRow> {
           _switch(context, id, '3d', LumitIcon.cube3d, switches.threeD,
               BridgeLayerSwitch.threeD,
               tip: l10n.switchThreeD),
-          // Accepts lights (K-361). The light's own icon, because that is what
-          // the switch is about; it does nothing in a comp with no lights, so
-          // it costs a glance rather than a decision.
-          _switch(context, id, 'lit', LumitIcon.aperture,
-              switches.acceptsLights, BridgeLayerSwitch.acceptsLights,
-              tip: switches.acceptsLights
-                  ? l10n.switchAcceptsLightsOn
-                  : l10n.switchAcceptsLightsOff),
+          // No accepts-lights cell (K-483): the switch left this column on the
+          // owner's ruling — an unnameable fifth mark, borrowing the Viewer
+          // bar's Exposure glyph, on a setting that does nothing in a comp with
+          // no lights. It lives in the layer's right-click menu instead.
         ],
       ),
     );
@@ -7421,6 +7417,7 @@ class _OutlineRowState extends State<_OutlineRow> {
     // A locked layer keeps Duplicate — copying is not editing — but its own
     // order and existence are held still until it is unlocked.
     final locked = widget.entry.info.switches.locked;
+    final lit = widget.entry.info.switches.acceptsLights;
     final picked = await showMenuAt<String>(
       context: context,
       position: position,
@@ -7429,6 +7426,22 @@ class _OutlineRowState extends State<_OutlineRow> {
         MenuRow(
             onPressed: () => close('duplicate'),
             child: Text(l10n.menuDuplicate)),
+        // **Accepts lights (K-361) is a setting, and this is where it is set.**
+        // It had a cell in the Modes column and left it on the owner's ruling:
+        // a fifth mark in a row of switches, on something that does nothing at
+        // all in a comp with no Light layers. A ticked menu entry says the same
+        // thing in words, on the rows that want it, and costs the outline
+        // nothing. Not gated on the lock, exactly as the switch cells are not.
+        MenuRow(
+          key: const ValueKey('tl-row-accepts-lights'),
+          onPressed: () => close('accepts-lights'),
+          child: Row(
+            children: [
+              SizedBox(width: 16, child: lit ? const Text('✓') : null),
+              Expanded(child: Text(l10n.switchAcceptsLights)),
+            ],
+          ),
+        ),
         if (!locked) ...[
           if (index > 0)
             MenuRow(
@@ -7491,6 +7504,8 @@ class _OutlineRowState extends State<_OutlineRow> {
         layer.delete();
       case 'clear-markers':
         layer.setMarkers(markers: const []);
+      case 'accepts-lights':
+        layer.setSwitch(switch_: BridgeLayerSwitch.acceptsLights, on_: !lit);
       case 'to-sequence':
         layer.convertToSequenced();
       case 'from-sequence':

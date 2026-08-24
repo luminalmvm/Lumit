@@ -6219,8 +6219,12 @@ and it can never end up in an exported file.
 ### Lights that actually light things (K-361)
 
 A Light layer used to be something the Lens flare read. Now it is also
-something your **footage** reads: turn on a layer's **Accepts lights** switch —
-it is on by default — and the composition's lights fall across it.
+something your **footage** reads: turn on a layer's **Accepts lights** setting —
+it is on by default — and the composition's lights fall across it. You will
+find it by right-clicking the layer in the Timeline; it is a ticked line in that
+menu. It used to be a small icon in the Timeline's Modes column, which is a lot
+of permanent screen furniture for something most compositions never touch, so
+the owner had it moved (K-483).
 
 Point a big area light at a piece of footage from slightly off to one side and
 you get the thing this is for: a soft gradient raking across the shot, brighter

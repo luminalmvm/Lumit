@@ -920,9 +920,12 @@ LumitIcon iconForKind(BridgeLayerKind kind) => switch (kind) {
       // An Audio layer (K-435) wears the speaker the audible switch wears, so
       // a row that only makes sound says so in the same glyph twice.
       BridgeLayerKind.audio => LumitIcon.audio,
-      // An adjustment layer is a comp-sized effect container, drawn as a solid —
-      // the same choice layer_style.dart and the egui frontend make.
-      BridgeLayerKind.solid || BridgeLayerKind.adjustment => LumitIcon.solid,
+      BridgeLayerKind.solid => LumitIcon.solid,
+      // An adjustment layer is a comp-sized effect container, and the set has
+      // its own mark for one — a half-filled circle. It used to borrow the
+      // solid's fill-colour glyph, which said "one flat colour" over a layer
+      // that has no colour of its own at all.
+      BridgeLayerKind.adjustment => LumitIcon.adjustment,
       BridgeLayerKind.nullLayer => LumitIcon.nullLayer,
     };
 

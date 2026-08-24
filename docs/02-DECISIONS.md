@@ -12942,3 +12942,32 @@ in the drawing's pill (K-465), replacing the Short/Off picker: with one length t
 nothing to pick. Off means no tooltip anywhere, and it always did — `LumitTooltip` reads
 the flag from the theme scope and hands back the bare control, so the rule holds at the
 one place every tooltip in the application passes through rather than at any call site.
+
+## K-483 — Accepts lights leaves the Modes column for the layer menu; the column is four cells
+
+**DECIDED 2026-08-24.** Owner ruling. Supersedes K-453's "five icon cells and nothing
+else" for the Modes column, and nothing else in it. It does not touch K-361, which built
+the setting and is untouched by where it is set.
+
+**The switch had a cell and it goes.** The owner saw the fifth mark in the Modes column,
+asked what it was, and ruled that it absolutely needs removing. It was drawn with the
+Exposure glyph, because the set has no lamp — a mark that means one thing on the Viewer's
+bar and something else in an outline row is a mark nobody can read. And the setting under
+it does nothing at all in a composition with no Light layers, which is nearly all of them:
+a permanent column of a control that is usually inert is the outline paying rent for a
+feature it is not being used for. `renderGroupWidth` is therefore `4 × switchCellWidth`,
+and the column is flow-or-collapse · fx · motion blur · 3D.
+
+**The setting survives, in the layer's right-click menu**, as a ticked entry (docs/07 §4.2).
+That menu was already the layer's own list of what can be done to it, it has room, and a
+ticked word says what an unnameable glyph could not. It is not gated on the lock, exactly
+as the switch cells are not. The column was the only route before this, so the menu entry
+is the whole of the setting's reachability and is tested as such.
+
+**The fifth cell is not backfilled, and here is why.** The owner asked whether an
+adjustment-layer toggle could take the freed cell. It cannot yet: `LayerKind::Adjustment`
+(`crates/lumit-core/src/model.rs`) is a layer **kind**, not a per-layer flag — there is no
+`BridgeLayerSwitch` member for it and no kind-setting op over the seam, so a cell drawn
+today would be a switch that writes nothing. The column stays at four until the engine
+grows the op; the shape of it is a `convert_to_sequenced`-style undoable op flipping
+`LayerKind::Solid` ⇄ `LayerKind::Adjustment`, not a new bool in the model.

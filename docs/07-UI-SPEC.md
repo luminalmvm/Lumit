@@ -1139,7 +1139,9 @@ rename, reorder and delete all refuse — though property-row edits are not yet 
 shows collapse there and other kinds leave it empty. Quality and
 preserve-underlying-transparency still await their backing machinery (K-168);
 hide-per-workspace and the optional in/out/duration columns remain open. Right-clicking a
-layer row opens the **layer menu** — duplicate, reorder, delete.
+layer row opens the **layer menu** — duplicate, reorder, delete, and the ticked **Accepts
+lights** entry (K-361), which is where that setting lives now that it has no cell in the
+Modes column (K-483). The Modes group is therefore four cells wide, not five.
 
 **The render-time column (K-276, [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.1)**
 shows what each layer's own picture cost in the frame at the playhead, and — on a layer

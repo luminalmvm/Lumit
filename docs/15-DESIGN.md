@@ -419,8 +419,9 @@ kind to its token and glyph.
 | Camera layer | `layer.camera` | `#806f4a` (dry gold) | ✓ |
 
 Three further kinds exist today without a token of their own: the **Adjustment layer**
-borrows `layer.solid` (neutral) and the Solid glyph, since it renders no source of its own
-(when it earns a distinct identity the natural value is `#8c6b58`, kraft-brown); the
+borrows `layer.solid` (neutral), since it renders no source of its own — but it draws the
+set's own `Adjustment` glyph, the half-filled circle, rather than the Solid's fill-colour
+mark (when it earns a distinct colour the natural value is `#8c6b58`, kraft-brown); the
 **Shape layer** (K-237) and **Null layer** (K-206) likewise borrow — their reserved values
 below stand for when each earns its token.
 

@@ -4217,6 +4217,50 @@ void main() {
       expect(layer.getSwitches().threeD, isTrue);
     });
 
+    /// **Accepts lights has no cell in the Modes column** (owner's ruling): the
+    /// column is four switches, and the setting (K-361) is reached from the
+    /// layer's own right-click menu, ticked when it is on.
+    testWidgets('accepts lights left the Modes column for the row menu',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      expect(find.byKey(ValueKey<String>('tl-lit-$id')), findsNothing,
+          reason: 'no fifth cell in the Modes column');
+
+      Future<void> openMenu() async {
+        await tester.tapAt(
+          tester.getCenter(find.byKey(ValueKey<String>('tl-row-$id'))),
+          buttons: kSecondaryButton,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      // On by default, so the entry opens ticked.
+      expect(layer.getSwitches().acceptsLights, isTrue);
+      await openMenu();
+      final entry = find.byKey(const ValueKey('tl-row-accepts-lights'));
+      expect(entry, findsOneWidget);
+      expect(
+          find.descendant(of: entry, matching: find.text('✓')), findsOneWidget,
+          reason: 'the entry says which way the setting is set');
+      await tester.tap(entry);
+      await tester.pumpAndSettle();
+      expect(layer.getSwitches().acceptsLights, isFalse,
+          reason: 'and picking it writes the switch to the document');
+
+      // Off now, so the tick is gone and picking it again puts it back.
+      await openMenu();
+      final again = find.byKey(const ValueKey('tl-row-accepts-lights'));
+      expect(
+          find.descendant(of: again, matching: find.text('✓')), findsNothing);
+      await tester.tap(again);
+      await tester.pumpAndSettle();
+      expect(layer.getSwitches().acceptsLights, isTrue);
+    });
+
     /// The toolbar's readouts: the timecode counts frames at the comp's own
     /// rate and the frame count is zero-based, so frame 0 is 00:00:00:00.
     testWidgets('the timecode and frame readouts follow the playhead',

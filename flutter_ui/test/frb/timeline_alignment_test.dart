@@ -928,7 +928,7 @@ void main() {
       expect(at('twirl').left - at('shy').right, closeTo(outlineGap, 0.5),
           reason: 'the seam between the switches and the identity cluster is '
               'one gap, where it had been 7');
-      expect(at('matte').left - at('lit').right, closeTo(outlineGap, 0.5),
+      expect(at('matte').left - at('3d').right, closeTo(outlineGap, 0.5),
           reason: 'as is the seam between the modes and the pickers — the '
               'name\'s own trailing 4 is gone with it');
       expect(at('blend').left - at('matte').right, closeTo(outlineGap, 0.5),
@@ -1090,8 +1090,9 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      // Modes is exactly its five switch cells, not half as wide again.
-      expect(renderGroupWidth, 5 * switchCellWidth);
+      // Modes is exactly its switch cells and no more. Four of them since the
+      // accepts-lights switch left the column for the row menu (owner).
+      expect(renderGroupWidth, 4 * switchCellWidth);
 
       for (final group in [TimelineGroup.switches, TimelineGroup.render]) {
         final key = ValueKey<String>('tl-seam-${group.name}');

@@ -10,6 +10,9 @@ import 'dart:typed_data';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/icons/icons.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
+import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
@@ -1115,11 +1118,21 @@ void main() {
           .byKey(ValueKey<String>('tl-bar-body-${sequenced.internallayerId}'));
       expect(bar, findsOneWidget);
       final box = tester.getRect(bar);
-      // Near the start of the bar: a Sequence layer's own span is the comp's,
-      // but the clip inside it is only as long as its (unreadable) media makes
-      // it, so a point a third of the way along the *bar* can be past the end
-      // of the clip — where there is nothing to cut.
-      final inside = Offset(box.left + 8, box.center.dy);
+      // **The middle of the clip, worked out in frames.** A Sequence layer's
+      // own span is the comp's, but the clip inside it is only as long as its
+      // (unreadable) media makes it, so a point a third of the way along the
+      // *bar* can be past the end of the clip — where there is nothing to cut.
+      // This used to be a flat `left + 8`, which is a pixel count standing in
+      // for a frame: the day the outline narrowed by one column the lane grew
+      // by the same amount, those 8 pixels bought fewer frames, and the razor
+      // landed on the clip's first frame, where a cut is a no-op. Frames do not
+      // move when a column does.
+      final clip = sequenced.getClips().single;
+      final middle = (clip.startFrame.toInt() + clip.endFrame.toInt()) / 2;
+      final inside = Offset(
+        box.left + box.width * middle / p.comp.durationFrames(),
+        box.center.dy,
+      );
       await tester.tapAt(inside);
       await tester.pump();
       expect(p.comp.getLayers().single.getClips(), hasLength(1),
@@ -1187,6 +1200,30 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tl-detect-beats')));
       await tester.pumpAndSettle();
       expect(p.comp.getMarkers(), isEmpty);
+    });
+
+    /// **An Adjustment layer wears the set's own Adjustment glyph**, not the
+    /// Solid's fill-colour mark. It borrowed the solid's for as long as the set
+    /// was thought to owe a drawing here; the drawing was already in the set,
+    /// unused. A solid is one flat colour and an adjustment layer has no colour
+    /// of its own at all, so the two must not read as the same kind of row.
+    testWidgets('an adjustment layer draws the Adjustment glyph',
+        (tester) async {
+      expect(iconForKind(BridgeLayerKind.adjustment), LumitIcon.adjustment);
+      expect(iconForKind(BridgeLayerKind.solid), LumitIcon.solid,
+          reason: 'and a solid keeps its own');
+
+      // And the glyph actually resolves: an icon the own-set switch misses
+      // falls through to an empty box rather than raising, so the mapping
+      // above is only half the claim.
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: lumitIcon(LumitIcon.adjustment,
+            size: iconSize, color: const Color(0xffffffff)),
+      ));
+      final drawn =
+          tester.widget<glyph.LumitIcon>(find.byType(glyph.LumitIcon));
+      expect(drawn.glyph, LumitIcons.adjustment);
     });
   }, skip: !engineAvailable);
 }

@@ -89,9 +89,13 @@ enum LumitIcon {
   import,
   newComposition,
 
-  /// A Solid (and an Adjustment layer). **No glyph in the new set yet** — its
-  /// project marks are folder, composition, footage, still, sequence and audio,
-  /// none of which is a solid colour.
+  /// A Solid. **No glyph in the new set yet** — its project marks are folder,
+  /// composition, footage, still, sequence and audio, and none of those is a
+  /// solid colour: `Still` is a photograph in a frame, which would say
+  /// "an image file" over a layer that is one flat colour.
+  ///
+  /// An Adjustment layer used to share this mark; it has its own now
+  /// ([adjustment]).
   solid,
   sequence,
   text,
@@ -258,6 +262,12 @@ enum LumitIcon {
   previousFrame,
   nextFrame,
   toEnd,
+
+  /// An Adjustment layer: the set's half-filled circle, the mark for "this
+  /// changes what is under it". It had been drawn as [solid], because the set
+  /// was read as owing a drawing here — but the drawing was already in the
+  /// set, unused, and a solid colour is not what an adjustment layer is.
+  adjustment,
 }
 
 /// The size an icon draws at (15-DESIGN §5: 16px for panels, 20px for the
@@ -381,6 +391,7 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.newComposition => LumitIcons.newComposition,
       LumitIcon.footage || LumitIcon.film => LumitIcons.footage,
       LumitIcon.sequence => LumitIcons.sequence,
+      LumitIcon.adjustment => LumitIcons.adjustment,
       _ => null,
     };
 
