@@ -2,8 +2,9 @@
 //
 // Every built-in effect under its category heading, filtered by a search field,
 // with the selected layer's `.lumfx` save and load beneath. An effect applies by
-// double-click or by dragging it onto the Effect controls panel — the drag
-// carries an `EffectDragData`, which is the only thing that produces one.
+// double-click — to every selected layer, as the Effect menu does (K-217) — or by
+// dragging it onto the Effect controls panel, which carries an `EffectDragData`
+// and lands on that panel's one layer.
 //
 // The list comes from `listEffects`, which is the engine's own schema order, so
 // the panel never holds a copy of what effects exist. Adding a built-in to the
@@ -170,12 +171,18 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     );
   }
 
-  /// Apply to the selected layer. With none selected there is nothing to apply
-  /// to, and silently doing nothing is better than guessing at a layer.
+  /// Apply to **every** selected layer, as the Effect menu and the effects
+  /// console do (K-217). This panel used to reach for the primary layer alone,
+  /// so the same effect on the same selection landed on three layers from the
+  /// menu and on one from here — the sort of difference that is read as the
+  /// selection having been lost rather than as two paths disagreeing.
+  ///
+  /// With nothing selected there is nowhere for the effect to go, and silently
+  /// doing nothing is better than guessing at a layer.
   void _apply(LumitUiState ui, String name) {
-    final layer = ui.selectedLayer.value;
-    if (layer == null) return;
-    layer.addEffect(name: name);
+    for (final layer in ui.selectedLayers.value) {
+      layer.addEffect(name: name);
+    }
     setState(() {});
   }
 
