@@ -723,6 +723,8 @@ struct ShapeItem {
     trim_start: Property,             // per cent of the path's own arc length
     trim_end: Property,               // per cent; at or below start draws nothing
     trim_offset: Property,            // degrees; 360 is once round a closed path
+    dashes: Vec<Property>,            // dash, gap, dash, gap … in layer pixels
+    dash_offset: Property,            // layer pixels
 }
 ```
 
@@ -757,6 +759,17 @@ of a write-on looks like.
 
 An item whose trim is the whole path is rasterised **from its bezier**, not from a polyline of it,
 so the untrimmed case draws exactly the pixels it drew before there were modifiers.
+
+**Dashes** (K-452) cut the **outline** into pieces: `dashes` is a list of lengths in layer pixels,
+alternating dash, gap, dash, gap, and `dash_offset` says how far along the path the pattern starts.
+An empty list is a solid outline and is absent from the file. An odd-length list repeats itself to
+make an even one (the SVG rule) — the only reading that does not leave a dash with no gap after it.
+The pieces are cut by the same length measurement a trim uses, so the two agree about where "ten
+along" is, and each piece is drawn by the same brush run the whole outline is. A pattern so fine
+that the path would need more than 4096 pieces is drawn **solid**: at that density it is a solid
+line to the eye, and cutting it would cost a frame to draw something indistinguishable.
+
+The order is **trim, then dash**: the dashes run along whatever the trim left.
 
 **Future:** nested groups, wiggle paths, joins and caps other than round, and animated paths.
 

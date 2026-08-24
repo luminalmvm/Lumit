@@ -6871,6 +6871,22 @@ off the end and nothing is drawn.
 Setting the end below the start draws nothing at all. That is not an error: it is
 what the first frame of a write-on looks like.
 
+### Dashing a shape's outline
+
+An outlined shape carries **Dash**, **Gap** and **Dash offset** rows beneath it,
+in pixels. Dash is how long each mark is, Gap is the space after it, and the two
+repeat along the path for as long as the path lasts. Offset slides the whole
+pattern along, so keying it makes marching ants.
+
+The rows show up only on a shape that actually has an outline — a fill-only
+shape has nothing to dash — and both start at zero, which means solid. Typing a
+Dash is what turns the dashes on; there is no separate switch to find.
+
+One deliberate limit: if the dash and gap are so small that the path would be cut
+into thousands of pieces, the outline is simply drawn solid. At that size the
+dashes would be invisible anyway, and cutting them would cost a frame's worth of
+work to draw something you could not tell from a line.
+
 ### What the lock switch does
 
 Locking a layer means **no edits until unlocked** — not just the obvious ones

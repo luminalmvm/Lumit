@@ -738,6 +738,13 @@ class BridgeShapeItem {
   final BridgeScalar trimEnd;
   final BridgeScalar trimOffset;
 
+  /// **Dashes** (K-452): the outline's dash and gap lengths in layer pixels,
+  /// alternating — dash, gap, dash, gap. Empty is a solid outline.
+  /// `dash_offset` is how far along the path the pattern starts, in the same
+  /// pixels.
+  final List<BridgeScalar> dashes;
+  final BridgeScalar dashOffset;
+
   const BridgeShapeItem({
     required this.id,
     required this.name,
@@ -750,6 +757,8 @@ class BridgeShapeItem {
     required this.trimStart,
     required this.trimEnd,
     required this.trimOffset,
+    required this.dashes,
+    required this.dashOffset,
   });
 
   @override
@@ -764,7 +773,9 @@ class BridgeShapeItem {
       opacity.hashCode ^
       trimStart.hashCode ^
       trimEnd.hashCode ^
-      trimOffset.hashCode;
+      trimOffset.hashCode ^
+      dashes.hashCode ^
+      dashOffset.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -781,7 +792,9 @@ class BridgeShapeItem {
           opacity == other.opacity &&
           trimStart == other.trimStart &&
           trimEnd == other.trimEnd &&
-          trimOffset == other.trimOffset;
+          trimOffset == other.trimOffset &&
+          dashes == other.dashes &&
+          dashOffset == other.dashOffset;
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.

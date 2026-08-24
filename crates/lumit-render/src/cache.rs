@@ -557,6 +557,8 @@ mod tests {
             trim_start: lumit_core::anim::Property::zero(),
             trim_end: lumit_core::anim::Property::fixed(100.0),
             trim_offset: lumit_core::anim::Property::zero(),
+            dashes: Vec::new(),
+            dash_offset: lumit_core::anim::Property::zero(),
             extra: serde_json::Map::new(),
         };
 

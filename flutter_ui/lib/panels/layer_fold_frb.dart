@@ -135,7 +135,17 @@ final class FoldShapeRow extends LayerFoldRow {
 
 /// Which of a shape item's animatable numbers a [FoldShapeValueRow] carries
 /// (K-451). The trim's three are the first of them.
-enum ShapeValue { trimStart, trimEnd, trimOffset }
+/// [dash] and [gap] are the first pair of the item's dash list (K-452), which
+/// is where a dashed outline is set from: writing either into an item that has
+/// no list makes one.
+enum ShapeValue { trimStart, trimEnd, trimOffset, dash, gap, dashOffset }
+
+/// Which of a shape item's numbers are the dashes' — shown only under an item
+/// that actually has an outline to dash.
+bool isDashValue(ShapeValue value) => switch (value) {
+      ShapeValue.dash || ShapeValue.gap || ShapeValue.dashOffset => true,
+      _ => false,
+    };
 
 /// One of a shape item's numbers on a row of its own under it (K-451). A row
 /// rather than another control on the item's own row, for the reason
@@ -359,7 +369,17 @@ String shapeValueLabel(ShapeValue value) => switch (value) {
       ShapeValue.trimStart => l10n.shapeTrimStart,
       ShapeValue.trimEnd => l10n.shapeTrimEnd,
       ShapeValue.trimOffset => l10n.shapeTrimOffset,
+      ShapeValue.dash => l10n.shapeDash,
+      ShapeValue.gap => l10n.shapeGap,
+      ShapeValue.dashOffset => l10n.shapeDashOffset,
     };
+
+/// The first pair of an item's dash list, or a still zero where it has none —
+/// which is what a solid outline reads as.
+BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
+    index < item.dashes.length
+        ? item.dashes[index]
+        : const BridgeScalar.static_(0);
 
 /// Which of a shape item's animatable numbers [value] names (K-451).
 BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
@@ -367,6 +387,9 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
       ShapeValue.trimStart => item.trimStart,
       ShapeValue.trimEnd => item.trimEnd,
       ShapeValue.trimOffset => item.trimOffset,
+      ShapeValue.dash => _dashAt(item, 0),
+      ShapeValue.gap => _dashAt(item, 1),
+      ShapeValue.dashOffset => item.dashOffset,
     };
 
 /// [item] with the one number [value] names replaced.
@@ -384,6 +407,15 @@ BridgeShapeItem shapeWithScalar(
       trimStart: value == ShapeValue.trimStart ? to : item.trimStart,
       trimEnd: value == ShapeValue.trimEnd ? to : item.trimEnd,
       trimOffset: value == ShapeValue.trimOffset ? to : item.trimOffset,
+      // Writing a dash or a gap into an item that has neither makes the pair:
+      // there is no separate "add dashes" gesture, and a list of one would
+      // only be read as a pair anyway.
+      dashes: switch (value) {
+        ShapeValue.dash => [to, _dashAt(item, 1)],
+        ShapeValue.gap => [_dashAt(item, 0), to],
+        _ => item.dashes,
+      },
+      dashOffset: value == ShapeValue.dashOffset ? to : item.dashOffset,
     );
 
 /// A key's position on the comp's frame axis, computed Dart-side from its
@@ -716,6 +748,10 @@ List<LayerFoldRow> layerFoldRows({
         // stroke (K-449, K-451), and in the order they read: where the art
         // begins, where it ends, and how far the pair is slid along.
         for (final value in ShapeValue.values) {
+          // The dashes' rows belong to the outline, so they appear only where
+          // there is one to dash — three dead rows on a fill-only shape would
+          // be three promises the item cannot keep.
+          if (isDashValue(value) && item.stroke == null) continue;
           rows.add(FoldShapeValueRow(item, value, depth: 3));
         }
       }

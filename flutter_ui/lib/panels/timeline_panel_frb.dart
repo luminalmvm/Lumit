@@ -4482,6 +4482,8 @@ class _ShapeItemRow extends StatelessWidget {
         trimStart: i.trimStart,
         trimEnd: i.trimEnd,
         trimOffset: i.trimOffset,
+        dashes: i.dashes,
+        dashOffset: i.dashOffset,
       );
 
   /// Write the contents back with this item changed, or dropped.
@@ -4875,12 +4877,17 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
 
   String get _rowKey => 'tl-shape-${widget.value.name}-${widget.item.id}';
 
-  /// The trim's two ends are a per cent of the path's own length; the offset is
-  /// degrees, and degrees go round.
-  bool get _isAngle => widget.value == ShapeValue.trimOffset;
-  double get _min => _isAngle ? -3600 : 0;
-  double get _max => _isAngle ? 3600 : 100;
-  String get _suffix => _isAngle ? '°' : '%';
+  /// The trim's two ends are a per cent of the path's own length; its offset is
+  /// degrees, because degrees go round; the dashes are lengths in layer pixels.
+  (double, double, String) get _units => switch (widget.value) {
+        ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
+        ShapeValue.trimOffset => (-3600, 3600, '°'),
+        ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
+        ShapeValue.dashOffset => (-1000, 1000, ' px'),
+      };
+  double get _min => _units.$1;
+  double get _max => _units.$2;
+  String get _suffix => _units.$3;
 
   @override
   void dispose() {

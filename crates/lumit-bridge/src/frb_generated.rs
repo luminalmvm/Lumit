@@ -10013,6 +10013,8 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_trimStart = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_trimEnd = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_dashes = <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
+        let mut var_dashOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeShapeItem {
             id: var_id,
             name: var_name,
@@ -10025,6 +10027,8 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             trim_start: var_trimStart,
             trim_end: var_trimEnd,
             trim_offset: var_trimOffset,
+            dashes: var_dashes,
+            dash_offset: var_dashOffset,
         };
     }
 }
@@ -13751,6 +13755,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.trim_start.into_into_dart().into_dart(),
             self.trim_end.into_into_dart().into_dart(),
             self.trim_offset.into_into_dart().into_dart(),
+            self.dashes.into_into_dart().into_dart(),
+            self.dash_offset.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -15633,6 +15639,8 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_start, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_end, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
+        <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.dashes, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.dash_offset, serializer);
     }
 }
 

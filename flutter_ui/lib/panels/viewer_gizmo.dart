@@ -493,6 +493,8 @@ List<BridgeShapeItem>? shapeContentsWithPointsMoved(
       trimStart: item.trimStart,
       trimEnd: item.trimEnd,
       trimOffset: item.trimOffset,
+      dashes: item.dashes,
+      dashOffset: item.dashOffset,
     ));
   }
   return touched ? contents : null;

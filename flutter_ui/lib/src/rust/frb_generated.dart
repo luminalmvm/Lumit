@@ -9320,8 +9320,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -9334,6 +9334,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       trimStart: dco_decode_bridge_scalar(arr[8]),
       trimEnd: dco_decode_bridge_scalar(arr[9]),
       trimOffset: dco_decode_bridge_scalar(arr[10]),
+      dashes: dco_decode_list_bridge_scalar(arr[11]),
+      dashOffset: dco_decode_bridge_scalar(arr[12]),
     );
   }
 
@@ -11715,6 +11717,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_trimStart = sse_decode_bridge_scalar(deserializer);
     var var_trimEnd = sse_decode_bridge_scalar(deserializer);
     var var_trimOffset = sse_decode_bridge_scalar(deserializer);
+    var var_dashes = sse_decode_list_bridge_scalar(deserializer);
+    var var_dashOffset = sse_decode_bridge_scalar(deserializer);
     return BridgeShapeItem(
         id: var_id,
         name: var_name,
@@ -11726,7 +11730,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         opacity: var_opacity,
         trimStart: var_trimStart,
         trimEnd: var_trimEnd,
-        trimOffset: var_trimOffset);
+        trimOffset: var_trimOffset,
+        dashes: var_dashes,
+        dashOffset: var_dashOffset);
   }
 
   @protected
@@ -14280,6 +14286,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.trimStart, serializer);
     sse_encode_bridge_scalar(self.trimEnd, serializer);
     sse_encode_bridge_scalar(self.trimOffset, serializer);
+    sse_encode_list_bridge_scalar(self.dashes, serializer);
+    sse_encode_bridge_scalar(self.dashOffset, serializer);
   }
 
   @protected

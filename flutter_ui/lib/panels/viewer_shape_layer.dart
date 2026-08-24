@@ -427,6 +427,9 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),
             trimOffset: const BridgeScalar.static_(0),
+            // Solid, until somebody dashes it (K-452).
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
           ),
         ],
       );

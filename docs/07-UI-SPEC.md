@@ -510,6 +510,10 @@ there is something to say.
 - Each item's **animatable numbers get a row each** under it, as a mask's and a stroke's do
   (K-451): Trim start, Trim end and Trim offset. A row rather than another control on the item's
   own row, because a property without a row has nowhere to put the stopwatch that animates it.
+- **Dash, Gap and Dash offset** appear under an item that has an **outline**, and only then
+  (K-452): three dead rows on a fill-only shape would be three promises the item cannot keep.
+  Writing either Dash or Gap on an item with no dash list makes the pair, so there is no separate
+  "add dashes" gesture to find.
 - **All five shape tools drag out** between two opposite corners of the shape's box —
   whichever way round the drag went — with `Shift` keeping the box square. Rectangle and
   rounded rectangle fill the box; ellipse is inscribed in it; polygon and star are the regular

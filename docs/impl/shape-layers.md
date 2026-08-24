@@ -113,6 +113,20 @@ The layer's **natural size is still the untrimmed box**, for the reason a paint
 stroke's bounds give: a box that shrank as a write-on played would make the layer
 breathe, and every cache keyed on its size would churn.
 
+**Dashes.** The same cut again: the outline is already a polyline being handed
+to the paint rasteriser, so dashing it is walking the pattern along its length
+and handing over several runs instead of one. Two things worth knowing:
+
+* **The ceiling is deliberate.** A dash pattern is a length, and a path can be a
+  million units long, so the piece count is unbounded in principle. Past 4096
+  pieces the outline is drawn **solid** rather than truncated — at that density
+  it is a solid line to the eye, so the wrong answer nobody can see beats the
+  wrong answer that stops half way along.
+* **There is no "add dashes" gesture.** Writing Dash or Gap on an item that has
+  no list makes the pair. The alternative was a menu item whose only job was to
+  put two zeros in a list, and a row that reads zero until you type in it says
+  the same thing with nothing to find.
+
 ## The trap to expect
 
 The wireframe and hit-testing (K-217) read a layer's *content size* to draw its

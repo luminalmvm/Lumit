@@ -94,6 +94,26 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub trim_offset: Property,
+    /// **Dashes** (K-452): the outline's dash and gap lengths in layer pixels,
+    /// alternating — dash, gap, dash, gap — and `dash_offset` is how far along
+    /// the path the pattern starts, in the same pixels.
+    ///
+    /// Empty is a **solid** outline, which is what every stroke was before there
+    /// were dashes, and is absent from the file. An odd-length list repeats
+    /// itself to make an even one, which is the SVG rule and the only reading
+    /// that does not leave a dash with no gap after it.
+    #[serde(
+        default,
+        with = "crate::mask::still_or_keyed_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub dashes: Vec<Property>,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub dash_offset: Property,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -118,6 +138,8 @@ impl ShapeItem {
             trim_start: Property::zero(),
             trim_end: crate::paint::full(),
             trim_offset: Property::zero(),
+            dashes: Vec::new(),
+            dash_offset: Property::zero(),
             extra: serde_json::Map::new(),
         }
     }
@@ -163,6 +185,23 @@ impl ShapeItem {
             // is the window running out of path, which is what clamping says.
             crate::paint::trimmed(&points, start + shift, end + shift)
         })
+    }
+
+    /// The dash pattern at `t` in layer pixels, evened out — empty when the
+    /// outline is solid, which is the ordinary case.
+    ///
+    /// An odd-length list is repeated (the SVG rule): `[10]` is ten on, ten off,
+    /// not ten on and nothing said about the rest. A pattern whose lengths are
+    /// all zero is no pattern at all.
+    fn dash_pattern_at(&self, t: f64) -> Vec<f64> {
+        let mut pattern: Vec<f64> = self.dashes.iter().map(|p| p.value_at(t).max(0.0)).collect();
+        if pattern.iter().all(|&d| d <= 0.0) {
+            return Vec::new();
+        }
+        if !pattern.len().is_multiple_of(2) {
+            pattern.extend_from_within(..);
+        }
+        pattern
     }
 
     /// The item's bounding box in layer coordinates, its outline included, or
@@ -302,8 +341,19 @@ pub fn rasterise_contents(
                     .collect(),
                 None => flatten_path(&shifted),
             };
-            if points.len() >= 2 {
-                let brush = crate::paint::PaintStroke {
+            // Dashes cut the outline into pieces, each of which is a brush run
+            // of its own (K-452). A solid outline is one piece, which is the
+            // same single run it always was.
+            let pattern = item.dash_pattern_at(t);
+            let pieces = if pattern.is_empty() {
+                vec![points]
+            } else {
+                dashed(&points, &pattern, item.dash_offset.value_at(t))
+            };
+            let brushes: Vec<crate::paint::PaintStroke> = pieces
+                .into_iter()
+                .filter(|p| p.len() >= 2)
+                .map(|points| crate::paint::PaintStroke {
                     id: item.id,
                     name: item.name.clone(),
                     points,
@@ -328,17 +378,17 @@ pub fn rasterise_contents(
                     blend: crate::model::BlendMode::Normal,
                     clone_offset: (0.0, 0.0),
                     extra: serde_json::Map::new(),
-                };
-                crate::paint::apply_strokes(
-                    &mut rgba,
-                    w,
-                    h,
-                    max_x - min_x,
-                    max_y - min_y,
-                    std::slice::from_ref(&brush),
-                    0.0,
-                );
-            }
+                })
+                .collect();
+            crate::paint::apply_strokes(
+                &mut rgba,
+                w,
+                h,
+                max_x - min_x,
+                max_y - min_y,
+                &brushes,
+                0.0,
+            );
         }
     }
     rgba
@@ -426,6 +476,60 @@ fn rotated(points: &[(f64, f64)], shift: f64) -> Vec<(f64, f64)> {
     // The join is one shared point, not two: the tail ends where the head
     // begins.
     out.extend_from_slice(&head[1..]);
+    out
+}
+
+/// The most pieces one dashed outline is cut into.
+///
+/// A pattern fine enough to need more than this is, at any size a stroke is
+/// drawn at, a solid line to the eye — and cutting it into a hundred thousand
+/// pieces would cost a frame to draw something indistinguishable from one
+/// piece. Past the ceiling the outline is drawn **solid** rather than truncated,
+/// because a stroke that stopped half way along would be a visible wrong answer
+/// where a solid one is an invisible one.
+const MAX_DASHES: usize = 4096;
+
+/// `points` cut into its dashes: the "on" pieces of `pattern` (dash, gap, dash,
+/// gap, in the polyline's own units), started `offset` along the path.
+///
+/// The cutting is the same length-measured cut a trim makes, so a dash and a
+/// trim agree about where "ten units along" is.
+fn dashed(points: &[(f64, f64)], pattern: &[f64], offset: f64) -> Vec<Vec<(f64, f64)>> {
+    let whole = || vec![points.to_vec()];
+    let cycle: f64 = pattern.iter().sum();
+    if pattern.is_empty() || cycle <= 0.0 || points.len() < 2 {
+        return whole();
+    }
+    let total: f64 = points
+        .windows(2)
+        .map(|p| ((p[1].0 - p[0].0).powi(2) + (p[1].1 - p[0].1).powi(2)).sqrt())
+        .sum();
+    if total <= 0.0 || (total / cycle) * pattern.len() as f64 > MAX_DASHES as f64 {
+        return whole();
+    }
+
+    let mut out = Vec::new();
+    // Start inside the cycle *before* the path, so the first dash can be part
+    // way through when the offset says so.
+    let mut at = -offset.rem_euclid(cycle);
+    let mut i = 0usize;
+    while at < total {
+        let length = pattern[i % pattern.len()];
+        let end = at + length;
+        // Even entries are dashes, odd ones gaps — the SVG and AE convention.
+        if i.is_multiple_of(2) && length > 0.0 && end > 0.0 && at < total {
+            let piece = crate::paint::trimmed(
+                points,
+                at.max(0.0) / total * 100.0,
+                end.min(total) / total * 100.0,
+            );
+            if piece.len() >= 2 {
+                out.push(piece);
+            }
+        }
+        at = end;
+        i += 1;
+    }
     out
 }
 
@@ -748,6 +852,122 @@ mod tests {
         assert!(!json.contains("trim"), "nothing about a trim: {json}");
         let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
         assert_eq!(back.trim_end.value_at(0.0), 100.0, "the default comes back");
+    }
+
+    fn outlined(item: &ShapeItem, t: f64) -> Vec<u8> {
+        rasterise_contents(std::slice::from_ref(item), 40, 40, 0.0, 0.0, 40.0, 40.0, t)
+    }
+
+    /// A dashed outline is on, off, on, off along its own length — so it puts
+    /// down less ink than the solid one and more than none.
+    #[test]
+    fn a_dashed_outline_leaves_gaps_in_itself() {
+        let mut solid = item(square(5.0, 5.0, 30.0));
+        solid.fill = None;
+        solid.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+        solid.stroke_width = 2.0;
+
+        let mut dashed_item = solid.clone();
+        dashed_item.dashes = vec![Property::fixed(6.0), Property::fixed(6.0)];
+
+        let (a, b) = (
+            ink(&outlined(&solid, 0.0)),
+            ink(&outlined(&dashed_item, 0.0)),
+        );
+        assert!(b > 0, "something is drawn");
+        assert!(b < a, "and less of it than solid: {b} of {a}");
+    }
+
+    #[test]
+    fn a_dash_of_nothing_is_a_solid_outline() {
+        let mut it = item(square(5.0, 5.0, 30.0));
+        it.fill = None;
+        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+        it.stroke_width = 2.0;
+        let solid = outlined(&it, 0.0);
+
+        // An empty list, and a list of zeros, are both "no dashes".
+        assert!(it.dash_pattern_at(0.0).is_empty());
+        it.dashes = vec![Property::zero(), Property::zero()];
+        assert!(it.dash_pattern_at(0.0).is_empty());
+        assert_eq!(outlined(&it, 0.0), solid, "byte for byte the solid one");
+    }
+
+    #[test]
+    fn an_odd_dash_list_repeats_itself() {
+        let mut it = item(square(0.0, 0.0, 10.0));
+        it.dashes = vec![Property::fixed(4.0)];
+        assert_eq!(it.dash_pattern_at(0.0), vec![4.0, 4.0], "four on, four off");
+        it.dashes = vec![
+            Property::fixed(4.0),
+            Property::fixed(2.0),
+            Property::fixed(1.0),
+        ];
+        assert_eq!(it.dash_pattern_at(0.0), vec![4.0, 2.0, 1.0, 4.0, 2.0, 1.0]);
+    }
+
+    #[test]
+    fn the_dashes_are_cut_by_length_and_the_offset_slides_them() {
+        // A straight line 100 long: 10 on, 10 off gives five dashes of ten.
+        let line: Vec<(f64, f64)> = vec![(0.0, 0.0), (100.0, 0.0)];
+        let pieces = dashed(&line, &[10.0, 10.0], 0.0);
+        assert_eq!(pieces.len(), 5);
+        assert_eq!(pieces[0], vec![(0.0, 0.0), (10.0, 0.0)]);
+        assert_eq!(pieces[1], vec![(20.0, 0.0), (30.0, 0.0)]);
+
+        // An offset of five slides the pattern back along the path, so the
+        // first dash is the tail of one that began before the line did.
+        let slid = dashed(&line, &[10.0, 10.0], 5.0);
+        assert_eq!(slid[0], vec![(0.0, 0.0), (5.0, 0.0)]);
+        assert_eq!(slid[1], vec![(15.0, 0.0), (25.0, 0.0)]);
+
+        // A whole cycle of offset is no offset at all.
+        assert_eq!(dashed(&line, &[10.0, 10.0], 20.0), pieces);
+    }
+
+    #[test]
+    fn a_pattern_too_fine_to_see_is_drawn_solid_rather_than_cut_to_pieces() {
+        let line: Vec<(f64, f64)> = vec![(0.0, 0.0), (1_000_000.0, 0.0)];
+        let pieces = dashed(&line, &[1.0, 1.0], 0.0);
+        assert_eq!(pieces.len(), 1, "one solid piece, not half a million");
+        assert_eq!(pieces[0], line);
+    }
+
+    #[test]
+    fn a_keyed_dash_is_read_on_the_layers_clock() {
+        let mut it = item(square(5.0, 5.0, 30.0));
+        it.fill = None;
+        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+        it.stroke_width = 2.0;
+        let key = |secs: i64, value: f64| crate::anim::Keyframe {
+            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+            value,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        };
+        let mut gap = Property::fixed(0.0);
+        gap.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 20.0)]);
+        it.dashes = vec![Property::fixed(6.0), gap];
+        assert!(
+            ink(&outlined(&it, 1.0)) < ink(&outlined(&it, 0.0)),
+            "a gap that opens takes ink away as it plays"
+        );
+    }
+
+    #[test]
+    fn an_undashed_item_is_absent_from_the_file() {
+        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
+        assert!(!json.contains("dash"), "nothing about dashes: {json}");
+        let mut it = item(square(0.0, 0.0, 4.0));
+        it.dashes = vec![Property::fixed(6.0), Property::fixed(3.0)];
+        let json = serde_json::to_string(&it).expect("json");
+        assert!(
+            json.contains("[6.0,3.0]"),
+            "bare numbers while still: {json}"
+        );
+        let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
+        assert_eq!(back.dashes.len(), 2);
+        assert_eq!(back.dashes[1].value_at(0.0), 3.0);
     }
 
     #[test]

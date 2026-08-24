@@ -3418,6 +3418,8 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         trim_start: BridgeScalar::Static(0.0),
         trim_end: BridgeScalar::Static(100.0),
         trim_offset: BridgeScalar::Static(0.0),
+        dashes: Vec::new(),
+        dash_offset: BridgeScalar::Static(0.0),
     }
 }
 
@@ -3528,6 +3530,34 @@ fn a_shapes_trim_round_trips_and_is_clamped() {
     assert_eq!(
         keys[1].value, 100.0,
         "and every key is clamped, not just one"
+    );
+}
+
+/// A dashed outline crosses as a list of lengths, and a negative length is a
+/// number with no meaning rather than a shorter dash (K-452).
+#[test]
+fn a_shapes_dashes_round_trip_and_are_clamped() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].dashes = vec![BridgeScalar::Static(8.0), BridgeScalar::Static(-4.0)];
+    contents[0].dash_offset = BridgeScalar::Static(-3.0);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        got.dashes,
+        vec![BridgeScalar::Static(8.0), BridgeScalar::Static(0.0)],
+        "the dash keeps its length and the negative gap lands at zero"
+    );
+    assert_eq!(
+        got.dash_offset,
+        BridgeScalar::Static(-3.0),
+        "the offset slides both ways"
     );
 }
 

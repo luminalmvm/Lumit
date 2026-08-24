@@ -115,6 +115,12 @@ pub struct BridgeShapeItem {
     pub trim_start: BridgeScalar,
     pub trim_end: BridgeScalar,
     pub trim_offset: BridgeScalar,
+    /// **Dashes** (K-452): the outline's dash and gap lengths in layer pixels,
+    /// alternating — dash, gap, dash, gap. Empty is a solid outline.
+    /// `dash_offset` is how far along the path the pattern starts, in the same
+    /// pixels.
+    pub dashes: Vec<BridgeScalar>,
+    pub dash_offset: BridgeScalar,
 }
 
 impl BridgeShapeItem {
@@ -132,6 +138,12 @@ impl BridgeShapeItem {
             trim_start: BridgeScalar::read_at(&item.trim_start, offset),
             trim_end: BridgeScalar::read_at(&item.trim_end, offset),
             trim_offset: BridgeScalar::read_at(&item.trim_offset, offset),
+            dashes: item
+                .dashes
+                .iter()
+                .map(|d| BridgeScalar::read_at(d, offset))
+                .collect(),
+            dash_offset: BridgeScalar::read_at(&item.dash_offset, offset),
         }
     }
 
@@ -160,6 +172,15 @@ impl BridgeShapeItem {
             trim_start: clamped_property(&self.trim_start, offset, 0.0, 100.0)?,
             trim_end: clamped_property(&self.trim_end, offset, 0.0, 100.0)?,
             trim_offset: clamped_property(&self.trim_offset, offset, -360_000.0, 360_000.0)?,
+            // Lengths in layer pixels: a negative dash is not a shorter dash,
+            // it is a number with no meaning, so zero is where it lands. The
+            // offset may be negative — it slides both ways.
+            dashes: self
+                .dashes
+                .iter()
+                .map(|d| clamped_property(d, offset, 0.0, 100_000.0))
+                .collect::<Result<_, _>>()?,
+            dash_offset: clamped_property(&self.dash_offset, offset, -100_000.0, 100_000.0)?,
             extra: serde_json::Map::new(),
         })
     }

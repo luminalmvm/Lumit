@@ -1351,6 +1351,8 @@ void main() {
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),
             trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
           ),
         ],
       );
@@ -1388,6 +1390,62 @@ void main() {
       await tester.pumpAndSettle();
       expect(layer.getShapeContents().single.trimEnd,
           const BridgeScalar.static_(40));
+
+      // This item has no outline, so it has no dashes to set.
+      expect(find.text('Dash'), findsNothing);
+    });
+
+    /// The dashes belong to the outline: their rows appear under an item that
+    /// has one, and writing either half makes the pair (K-452).
+    testWidgets('a stroked shape item carries the dash rows', (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      final layer = p.comp.addShapeLayer(
+        name: 'Outline',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Outline',
+            vertices: [
+              corner(0, 0),
+              corner(60, 0),
+              corner(60, 40),
+              corner(0, 40),
+            ],
+            closed: true,
+            fill: null,
+            stroke: const BridgeColourRgba(r: 0, g: 1, b: 0, a: 1),
+            strokeWidth: 3,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      expect(find.text('Dash'), findsOneWidget);
+      expect(find.text('Gap'), findsOneWidget);
+      expect(find.text('Dash offset'), findsOneWidget);
+
+      final item = layer.getShapeContents().single;
+      expect(item.dashes, isEmpty, reason: 'solid until it is dashed');
+      final field = find.byKey(ValueKey<String>('tl-shape-dash-${item.id}'));
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '8');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.dashes,
+          const [BridgeScalar.static_(8), BridgeScalar.static_(0)],
+          reason: 'writing one half makes the pair');
     });
 
     /// A shape layer's art gets the same rename as a mask: it too arrives named
@@ -1413,6 +1471,8 @@ void main() {
             trimStart: const BridgeScalar.static_(0),
             trimEnd: const BridgeScalar.static_(100),
             trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
           ),
         ],
       );

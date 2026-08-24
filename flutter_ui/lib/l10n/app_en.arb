@@ -5655,6 +5655,18 @@
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "shapeDash": "Dash",
+  "@shapeDash": {
+    "description": "Timeline row under a shape layer's art: how long each dash of its outline is, in pixels."
+  },
+  "shapeDashOffset": "Dash offset",
+  "@shapeDashOffset": {
+    "description": "Timeline row under a shape layer's art: how far along the path the dash pattern starts, in pixels."
+  },
+  "shapeGap": "Gap",
+  "@shapeGap": {
+    "description": "Timeline row under a shape layer's art: how long the space between two dashes of its outline is, in pixels."
+  },
   "shapeTrimStart": "Trim start",
   "@shapeTrimStart": {
     "description": "Timeline row under a shape layer's art: how far along the path's own length the art begins, as a percentage."

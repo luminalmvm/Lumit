@@ -133,7 +133,7 @@ pub(crate) mod still_or_keyed {
 /// The same bare-number-while-still encoding as [`still_or_keyed`], for the
 /// per-vertex feather list (K-445). A list of plain numbers is what a mask
 /// nobody has keyed writes, so a `.lum` stays readable by eye.
-mod still_or_keyed_vec {
+pub(crate) mod still_or_keyed_vec {
     use super::{Animation, Property};
     use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serializer};
 

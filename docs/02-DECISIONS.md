@@ -12691,3 +12691,47 @@ Regression tests: in `lumit-core`, `an_untrimmed_shape_is_drawn_from_its_curve_a
 `a_keyed_trim_is_read_on_the_layers_clock`, `an_untrimmed_item_is_absent_from_the_file`; in the
 bridge, `a_shapes_trim_round_trips_and_is_clamped`; in Flutter, the Contents twirl-down test.
 New strings: `shapeTrimStart`, `shapeTrimEnd`, `shapeTrimOffset`.
+
+## K-452 — A shape's outline dashes by length, and a pattern too fine to see is drawn solid
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-451, whose shape it
+takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and
+§7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+`dashes: Vec<Property>` is a list of lengths in **layer pixels**, alternating dash, gap, dash,
+gap; `dash_offset: Property` says how far along the path the pattern starts. Empty is a solid
+outline and is absent from the file, so an undashed shape writes the bytes it always wrote and
+every frame cached for one stays valid.
+
+**A list, not a pair.** After Effects allows several dash/gap pairs and so does SVG, and an
+importer will meet both. Storing the list costs nothing — it is the same `Vec<Property>` a mask's
+per-vertex feather is (K-445) — where storing a pair would have to grow into one later.
+
+**An odd list repeats itself**, the SVG rule: `[10]` is ten on, ten off. The alternative readings
+are a dash with nothing said about the gap after it, or an error for a file that has a perfectly
+clear meaning.
+
+**A pattern too fine to see is drawn solid.** The piece count is length over cycle, which is
+unbounded: a path a million units long with a one-unit dash is half a million brush runs and a lost
+frame. Past 4096 pieces the outline is drawn as **one** piece. Truncating instead — drawing the
+first 4096 and stopping — would leave an outline that visibly stops half way along; at that density
+solid is a wrong answer nobody can see, which is the better of the two.
+
+**The dashes run along whatever the trim left**: the order is trim, then dash (§7.2.1). The cutting
+is K-449's `trimmed` again, so a dash and a trim cannot disagree about where "ten along" is, and
+each surviving piece is drawn by the same paint-rasteriser brush run the whole outline is — one
+widened-path implementation, still.
+
+**There is no "add dashes" gesture.** The Dash and Gap rows appear under any item that has an
+outline, read zero while there is no list, and writing either one makes the pair. A menu item whose
+whole job was to put two zeros in a list would be a thing to find where a row that reads zero says
+the same thing in the open. The rows are hidden on a fill-only item, because three rows that
+cannot affect the picture are three promises the item cannot keep.
+
+Regression tests: in `lumit-core`, `a_dashed_outline_leaves_gaps_in_itself`,
+`a_dash_of_nothing_is_a_solid_outline`, `an_odd_dash_list_repeats_itself`,
+`the_dashes_are_cut_by_length_and_the_offset_slides_them`,
+`a_pattern_too_fine_to_see_is_drawn_solid_rather_than_cut_to_pieces`,
+`a_keyed_dash_is_read_on_the_layers_clock`, `an_undashed_item_is_absent_from_the_file`; in the
+bridge, `a_shapes_dashes_round_trip_and_are_clamped`; in Flutter, `a stroked shape item carries
+the dash rows`. New strings: `shapeDash`, `shapeGap`, `shapeDashOffset`.
