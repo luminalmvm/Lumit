@@ -52,7 +52,7 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('open-settings')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('settings-page-keymap')));
+      await tester.tap(find.byKey(const ValueKey('settings-page-shortcuts')));
       await tester.pumpAndSettle();
       return p;
     }
@@ -67,10 +67,12 @@ void main() {
       await tester.scrollUntilVisible(
         finder,
         80,
-        scrollable: find.descendant(
-          of: find.byKey(const ValueKey('settings-body-keymap')),
-          matching: find.byType(Scrollable),
-        ).first,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('settings-body-shortcuts')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
       );
       await tester.pumpAndSettle();
     }
@@ -82,7 +84,9 @@ void main() {
       await openKeymapPage(tester);
 
       // The first group, and its first rows, are on screen as the page opens.
-      expect(find.text('Anywhere'), findsOneWidget);
+      // A group's name is a section kicker now (K-465), and a kicker's capitals
+      // are the style rather than the string.
+      expect(find.text('ANYWHERE'), findsOneWidget);
       expect(find.text('Play or pause'), findsOneWidget);
       // The chord cell shows the chord as this platform reads it.
       expect(find.text('Space'), findsOneWidget);
@@ -91,8 +95,9 @@ void main() {
 
       // Further down, the table is still grouped: the Timeline's own heading
       // and one of its rows.
-      await reveal(tester, find.text('Timeline'));
-      expect(find.text('Timeline'), findsOneWidget);
+      await reveal(tester, find.text('TIMELINE'));
+      expect(find.text('TIMELINE'), findsOneWidget,
+          reason: 'the kicker, not the sidebar entry of the same name');
       await reveal(tester, find.text('Duplicate the layer'));
       expect(find.text('Duplicate the layer'), findsOneWidget);
     });
@@ -123,8 +128,7 @@ void main() {
         'file.save',
       );
 
-      final cell = find.byKey(
-          const ValueKey('keymap-chord-global-file.save'));
+      final cell = find.byKey(const ValueKey('keymap-chord-global-file.save'));
       await reveal(tester, cell);
       await tester.tap(cell);
       await tester.pumpAndSettle();
@@ -164,8 +168,8 @@ void main() {
     /// Reset is per row: the shipped chord comes back and nothing else moves.
     testWidgets('reset puts a row back to the shipped chord', (tester) async {
       final p = await openKeymapPage(tester);
-      final cell = find.byKey(const ValueKey(
-          'keymap-chord-global-layer.retime.enable'));
+      final cell =
+          find.byKey(const ValueKey('keymap-chord-global-layer.retime.enable'));
       await reveal(tester, cell);
       await tester.tap(cell);
       await tester.pumpAndSettle();
@@ -189,10 +193,8 @@ void main() {
       ));
       await settleFrb(
         tester,
-        until: () => p.uiState.keymap.groups
-            .expand((g) => g.bindings)
-            .any((b) =>
-                b.action == 'layer.retime.enable' && b.chord == 'Mod+Alt+T'),
+        until: () => p.uiState.keymap.groups.expand((g) => g.bindings).any(
+            (b) => b.action == 'layer.retime.enable' && b.chord == 'Mod+Alt+T'),
       );
 
       expect(
@@ -236,8 +238,7 @@ void main() {
         chord: 'Mod+Z',
       ));
       await tester.pumpWidget(const SizedBox.shrink());
-      await settleFrb(
-          tester,
+      await settleFrb(tester,
           until: () =>
               keymapShadows().any((s) => s.action.contains('Zoom time in')));
 
@@ -254,7 +255,8 @@ void main() {
       await openKeymapPage(tester);
 
       expect(find.byKey(const ValueKey('keymap-shadows')), findsOneWidget);
-      expect(find.textContaining('something else in one panel'), findsOneWidget);
+      expect(
+          find.textContaining('something else in one panel'), findsOneWidget);
       expect(find.textContaining('Undo'), findsWidgets,
           reason: 'the note names what it took the chord from');
       expect(find.byKey(const ValueKey('keymap-conflicts')), findsNothing,
@@ -324,7 +326,7 @@ void main() {
     testWidgets('search filters the table by what it shows', (tester) async {
       await openKeymapPage(tester);
       await tester.enterText(
-          find.byKey(const ValueKey('keymap-search')), 'command palette');
+          find.byKey(const ValueKey('settings-search')), 'command palette');
       await tester.pumpAndSettle();
 
       expect(find.text('Open the command palette'), findsOneWidget);

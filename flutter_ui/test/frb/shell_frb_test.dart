@@ -80,7 +80,8 @@ void main() {
           findsOneWidget);
 
       // The engine's own readouts and buttons live on Performance (K-193).
-      await tester.tap(find.byKey(const ValueKey('settings-page-performance')));
+      await tester
+          .tap(find.byKey(const ValueKey('settings-page-previewAndCache')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('settings-tier')), findsOneWidget);
       expect(find.byKey(const ValueKey('settings-cache-used')), findsOneWidget);
@@ -109,8 +110,15 @@ void main() {
       // look for.
       final unaccounted =
           find.byKey(const ValueKey('settings-memory-unaccounted'));
+      // The page's own scrollable, named rather than taken as the first in the
+      // tree: the title strip's search field carries one of its own (K-465).
       await tester.scrollUntilVisible(unaccounted, 200,
-          scrollable: find.byType(Scrollable).first);
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('settings-body-previewAndCache')),
+                matching: find.byType(Scrollable),
+              )
+              .first);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('settings-memory-process')),
           findsOneWidget);
@@ -149,11 +157,13 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('open-settings')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('settings-page-performance')));
+      await tester
+          .tap(find.byKey(const ValueKey('settings-page-previewAndCache')));
       await tester.pumpAndSettle();
       // The page is a lazy list and the disk tier is the last group on it, so
       // it has to be scrolled to before it exists at all.
-      await tester.drag(find.byKey(const ValueKey('settings-body-performance')),
+      await tester.drag(
+          find.byKey(const ValueKey('settings-body-previewAndCache')),
           const Offset(0, -400));
       await tester.pumpAndSettle();
 
@@ -216,9 +226,11 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('open-settings')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('settings-page-performance')));
+      await tester
+          .tap(find.byKey(const ValueKey('settings-page-previewAndCache')));
       await tester.pumpAndSettle();
-      await tester.drag(find.byKey(const ValueKey('settings-body-performance')),
+      await tester.drag(
+          find.byKey(const ValueKey('settings-body-previewAndCache')),
           const Offset(0, -400));
       await tester.pumpAndSettle();
 
@@ -293,7 +305,7 @@ void main() {
       expect(find.byKey(const ValueKey('settings-scheme')), findsNothing);
       expect(find.byKey(const ValueKey('settings-cache-budget')), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('settings-page-interface')));
+      await tester.tap(find.byKey(const ValueKey('settings-page-timeline')));
       await tester.pumpAndSettle();
       expect(
           find.byKey(const ValueKey('settings-reset-workspace')), findsNothing);
@@ -305,6 +317,143 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('settings-transform-in-fx')));
       await tester.pumpAndSettle();
       expect(p.uiState.workspace.interface.transformInEffectControls, isTrue);
+    });
+
+    /// **Nothing was lost in the rebuild** (K-465). The window was taken apart
+    /// and put back to a new drawing with six pages instead of five, and every
+    /// control it hosted has to still be somewhere. This walks the pages and
+    /// names them: a setting dropped on the way would fail here rather than be
+    /// found missing by whoever wanted it.
+    testWidgets('every setting the window hosts is on one of its pages',
+        (tester) async {
+      const pages = <String, List<String>>{
+        'general': [
+          'settings-language',
+          'settings-reset-workspace',
+          'settings-auto-update',
+          'settings-check-updates',
+        ],
+        'appearance': [
+          'settings-scheme',
+          'settings-theme-swatches',
+          'settings-shape-sharp',
+          'settings-shape-round',
+          'settings-customise',
+          'settings-theme-duplicate',
+          'settings-theme-rename',
+          'settings-theme-delete',
+          'settings-theme-import',
+          'settings-theme-export',
+          'settings-ui-scale',
+          'settings-ui-scale-value',
+          'settings-tooltips',
+          'settings-animation',
+          'settings-compact',
+          'settings-themed-scopes',
+          'settings-themed-surround',
+          'settings-multiwave',
+          'settings-waveform-from-bottom',
+        ],
+        'timeline': [
+          'settings-retime-speed-lens',
+          'settings-retime-in-seconds',
+          'settings-video-as-sequence',
+          'settings-paste-at-original-time',
+          'settings-playhead-stays',
+          'settings-transform-in-fx',
+          'settings-easing-in-popup',
+        ],
+        'viewer': [
+          'settings-smooth-zoomed-viewer',
+          'settings-show-tone-map',
+        ],
+        'previewAndCache': [
+          'settings-playback-mode',
+          'settings-tier-reset',
+          'settings-cache-budget',
+          'settings-cache-clear',
+          'settings-vram-budget',
+          'settings-vram-clear',
+          'settings-disk-budget',
+          'settings-disk-location',
+          'settings-disk-scope',
+          'settings-disk-clear',
+        ],
+        'shortcuts': [
+          'keymap-preset-lumit',
+          'keymap-preset-ae',
+          'keymap-import',
+          'keymap-export',
+        ],
+      };
+
+      final p = freshProject();
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => HouseButton(
+            key: const ValueKey('open-settings'),
+            onPressed: () => showSettingsWindowFrb(context),
+            child: const Text('Open'),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('open-settings')));
+      await tester.pumpAndSettle();
+
+      for (final page in pages.entries) {
+        await tester
+            .tap(find.byKey(ValueKey<String>('settings-page-${page.key}')));
+        await tester.pumpAndSettle();
+        for (final control in page.value) {
+          expect(find.byKey(ValueKey<String>(control)), findsOneWidget,
+              reason: '$control belongs to the ${page.key} page');
+        }
+      }
+
+      // And the frame's own three, on every page.
+      expect(find.byKey(const ValueKey('settings-search')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-reset-page')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-close')), findsOneWidget);
+    });
+
+    /// The search hides the rows whose names do not match, and says so when it
+    /// has hidden all of them.
+    testWidgets('the title strip\'s search filters the page', (tester) async {
+      final p = freshProject();
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => HouseButton(
+            key: const ValueKey('open-settings'),
+            onPressed: () => showSettingsWindowFrb(context),
+            child: const Text('Open'),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('open-settings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('settings-page-appearance')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const ValueKey('settings-search')), 'accent');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('settings-accent-hex')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-scheme')), findsNothing,
+          reason: 'a row whose name does not match is hidden');
+
+      await tester.enterText(
+          find.byKey(const ValueKey('settings-search')), 'zzz');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('settings-no-matches')), findsOneWidget);
     });
 
     testWidgets('the appearance controls change the shell theme',

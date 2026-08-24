@@ -70,7 +70,8 @@ void main() {
   /// opens roomy — the mockups' room is the decision, not an opt-in.
   test('rows are roomy unless a settings file asks for Compact', () {
     expect(InterfaceSettings().compact, isFalse);
-    expect(InterfaceSettings.fromJson(const {'ui_scale': 1.25}).compact, isFalse,
+    expect(
+        InterfaceSettings.fromJson(const {'ui_scale': 1.25}).compact, isFalse,
         reason: 'a file written before the field existed gets the roomy rows');
     final tight = InterfaceSettings()..compact = true;
     expect(InterfaceSettings.fromJson(tight.toJson()).compact, isTrue);
@@ -100,6 +101,49 @@ void main() {
     expect(DensityTokens.compact.ruler, 36);
   });
 
+  /// The rebuild's own guard (K-465): the Settings window was taken apart and
+  /// put back to a new drawing, and the one thing that must not have happened
+  /// is a setting quietly going missing. Every field of the interface settings
+  /// is moved off its default here and read back, so a field dropped from the
+  /// form — or from `toJson` — fails this rather than being noticed by a user
+  /// whose preference stopped surviving a restart.
+  test('every interface setting survives the file', () {
+    final all = InterfaceSettings(
+      language: 'de',
+      uiScale: 1.25,
+      showTooltips: false,
+      transformInEffectControls: true,
+      retimeOpensToSpeed: true,
+      retimeInSeconds: true,
+      videoAsSequenceLayer: true,
+      playheadStaysOnStop: true,
+      pasteLayersAtOriginalTime: true,
+      multiwaveWaveforms: false,
+      waveformsFromBottom: true,
+      showToneMap: true,
+      easingInPopup: true,
+      compact: true,
+    );
+    final back = InterfaceSettings.fromJson(all.toJson());
+    expect(back.language, 'de');
+    expect(back.uiScale, 1.25);
+    expect(back.showTooltips, isFalse);
+    expect(back.transformInEffectControls, isTrue);
+    expect(back.retimeOpensToSpeed, isTrue);
+    expect(back.retimeInSeconds, isTrue);
+    expect(back.videoAsSequenceLayer, isTrue);
+    expect(back.playheadStaysOnStop, isTrue);
+    expect(back.pasteLayersAtOriginalTime, isTrue);
+    expect(back.multiwaveWaveforms, isFalse);
+    expect(back.waveformsFromBottom, isTrue);
+    expect(back.showToneMap, isTrue);
+    expect(back.easingInPopup, isTrue);
+    expect(back.compact, isTrue);
+    // Every field is one of the above: a new one added without a line here is
+    // a setting nothing checks survives the file.
+    expect(all.toJson().keys.length, 14);
+  });
+
   test('the Retime seconds preference round-trips', () {
     final i = InterfaceSettings(retimeInSeconds: true);
     expect(InterfaceSettings.fromJson(i.toJson()).retimeInSeconds, isTrue);
@@ -113,7 +157,8 @@ void main() {
       () {
     expect(InterfaceSettings().playheadStaysOnStop, isFalse);
     expect(
-        InterfaceSettings.fromJson(const {'ui_scale': 1.25}).playheadStaysOnStop,
+        InterfaceSettings.fromJson(const {'ui_scale': 1.25})
+            .playheadStaysOnStop,
         isFalse);
     final on = InterfaceSettings()..playheadStaysOnStop = true;
     expect(InterfaceSettings.fromJson(on.toJson()).playheadStaysOnStop, isTrue);

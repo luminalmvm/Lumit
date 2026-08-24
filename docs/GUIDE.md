@@ -7308,6 +7308,29 @@ behind it.
   advances no clock, and awaiting an engine call inside `runAsync` that was not
   started there deadlocks (K-233).
 
+### Two marks for one yes-or-no: the tick box and the switch
+
+Lumit draws an on/off setting two ways, and which one you see is decided by the
+drawing of the surface you are looking at rather than by what the setting does.
+
+- **`HouseCheckbox`** is the little square you tick — a 9px outlined box with a
+  block in it when it is on. It is the mark inside a *panel*, where a column of
+  them reads as a list of things that are either true or not.
+- **`HouseToggle`** is the switch you flick — a 22×12 pill with a knob that
+  slides from one end to the other, amber when it is on. It is the mark in the
+  *Settings window*, because that is what the approved drawing puts there
+  (K-465).
+
+Neither is the accent colour. The accent is Lumit's one loud colour and the
+design rules ration it to the single filled button on a surface, to focus, and
+to whatever is currently chosen; a page of a dozen switches would spend it a
+dozen times over and it would stop meaning anything. The switch's "on" is the
+same amber that marks a property with keyframes on it, which is the only other
+stateful colour the chrome has.
+
+Both answer the keyboard: Tab reaches them, Space flips them, and a focused one
+draws a ring rather than moving by a pixel.
+
 ### The clock readouts (`widgets/time_readout.dart`)
 
 **The problem, in plain terms.** Text is drawn as wide as it needs to be. `f9`

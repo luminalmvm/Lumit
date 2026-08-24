@@ -7493,5 +7493,186 @@
   "welcomeWhatsNew": "What's new",
   "@welcomeWhatsNew": {
     "description": "Welcome screen: the outlined button at the bottom right that opens the release notes page in the machine's own browser."
+  },
+  "searchSettings": "Search settings",
+  "@searchSettings": {
+    "description": "Placeholder in the search box in the Settings window's title strip; it hides the setting rows that do not match."
+  },
+  "settingsAccent": "Accent",
+  "@settingsAccent": {
+    "description": "Settings window, Appearance: the name of the row of accent-colour swatches."
+  },
+  "settingsAnchor": "Anchor",
+  "@settingsAnchor": {
+    "description": "Settings window, Appearance: the name of the row choosing whether a waveform is centred or stands on the floor of its row."
+  },
+  "settingsAppliesOnRelease": "applies on release",
+  "@settingsAppliesOnRelease": {
+    "description": "Settings window, Appearance: a note beside the interface scale slider saying the new scale is taken when the handle is let go. Lower case on purpose — it is an aside, not a label."
+  },
+  "settingsChangesApplyImmediately": "Changes apply immediately",
+  "@settingsChangesApplyImmediately": {
+    "description": "Settings window: the line in the footer saying there is nothing to confirm — every setting takes effect as it is changed."
+  },
+  "settingsGroupKeymap": "Keymap",
+  "@settingsGroupKeymap": {
+    "description": "Settings window, Shortcuts: the heading over the preset and import/export rows. A keymap is the whole set of keyboard shortcuts."
+  },
+  "settingsGroupPicture": "Picture",
+  "@settingsGroupPicture": {
+    "description": "Settings window, Viewer: the heading over the settings that change how the image itself is shown."
+  },
+  "settingsGroupWaveforms": "Waveforms",
+  "@settingsGroupWaveforms": {
+    "description": "Settings window, Appearance: the heading over the settings that decide how an audio waveform is drawn."
+  },
+  "settingsKeymapFile": "Keymap file",
+  "@settingsKeymapFile": {
+    "description": "Settings window, Shortcuts: the name of the row whose buttons read a keymap from a file and write one out."
+  },
+  "settingsNoMatches": "No setting matches that.",
+  "@settingsNoMatches": {
+    "description": "Settings window: shown in place of a page when the search box has hidden every row on it."
+  },
+  "settingsPagePreviewAndCache": "Preview and cache",
+  "@settingsPagePreviewAndCache": {
+    "description": "Settings window: name of a page in the sidebar — playback quality and the three frame caches."
+  },
+  "settingsPageShortcuts": "Shortcuts",
+  "@settingsPageShortcuts": {
+    "description": "Settings window: name of a page in the sidebar — the table of keyboard shortcuts."
+  },
+  "settingsPreset": "Preset",
+  "@settingsPreset": {
+    "description": "Settings window, Shortcuts: the name of the row whose buttons load a whole set of shortcuts at once."
+  },
+  "settingsResetPage": "Reset page",
+  "@settingsResetPage": {
+    "description": "Settings window: the footer button that puts every setting on the page being shown back to the value Lumit ships with."
+  },
+  "settingsScale": "Scale",
+  "@settingsScale": {
+    "description": "Settings window, Appearance: the name of the row setting how large the interface is drawn, as a percentage."
+  },
+  "settingsScopesUseThemeColour": "Scopes use theme colour",
+  "@settingsScopesUseThemeColour": {
+    "description": "Settings window, Appearance: the name of the switch that draws the Scopes panel in the theme's colours rather than the standard broadcast ones."
+  },
+  "settingsShape": "Shape",
+  "@settingsShape": {
+    "description": "Settings window, Appearance: the name of the row choosing between square and rounded corners throughout the interface."
+  },
+  "settingsStyle": "Style",
+  "@settingsStyle": {
+    "description": "Settings window, Appearance: the name of the row choosing how an audio waveform is drawn."
+  },
+  "settingsSurround": "Surround",
+  "@settingsSurround": {
+    "description": "Settings window, Appearance: the name of the row choosing the colour of the area around the picture in the Viewer."
+  },
+  "surroundNeutral": "Neutral",
+  "@surroundNeutral": {
+    "description": "One choice for the Viewer's surround: a plain grey, which is what a grade has to be judged against."
+  },
+  "surroundThemeColour": "Theme colour",
+  "@surroundThemeColour": {
+    "description": "One choice for the Viewer's surround: the theme's own surface colour rather than the neutral grey."
+  },
+  "tipTransportEnd": "Go to end",
+  "@tipTransportEnd": {
+    "description": "Tooltip on the Viewer transport's last button, an icon with no words: it takes the playhead to the composition's last frame."
+  },
+  "tipTransportNext": "Next frame",
+  "@tipTransportNext": {
+    "description": "Tooltip on the Viewer transport's step-forward button, an icon with no words: it moves the playhead on by one frame."
+  },
+  "tipTransportPause": "Pause",
+  "@tipTransportPause": {
+    "description": "Tooltip on the Viewer transport's play button while playback is running, an icon with no words: pressing it stops."
+  },
+  "tipTransportPlay": "Play",
+  "@tipTransportPlay": {
+    "description": "Tooltip on the Viewer transport's play button while playback is stopped, an icon with no words: pressing it starts."
+  },
+  "tipTransportPrevious": "Previous frame",
+  "@tipTransportPrevious": {
+    "description": "Tooltip on the Viewer transport's step-back button, an icon with no words: it moves the playhead back by one frame."
+  },
+  "tipTransportStart": "Go to start",
+  "@tipTransportStart": {
+    "description": "Tooltip on the Viewer transport's first button, an icon with no words: it takes the playhead to the composition's first frame."
+  },
+  "tipViewerSnapshotCompare": "Snapshot — hold to compare",
+  "@tipViewerSnapshotCompare": {
+    "description": "Tooltip on the Viewer bar's snapshot mark once a snapshot exists. One mark, two gestures: a click photographs the picture again, and holding the button puts the stored photograph back over the live picture for as long as it is held."
+  },
+  "tooltipsShort": "Short",
+  "@tooltipsShort": {
+    "description": "One choice for tooltips: on, and a word or two long. The other choice is Off."
+  },
+  "viewerColourToneMap": "Tone mapping",
+  "@viewerColourToneMap": {
+    "description": "Entry in the Viewer header's colour-pipeline menu, with a tick beside it when it is on. It folds very bright values back under 1 so they can be seen rather than clipping flat. Preview only, so it never changes an export."
+  },
+  "viewerOverlayBackground": "Composition background…",
+  "@viewerOverlayBackground": {
+    "description": "Entry in the Viewer bar's view menu, with a swatch of the current colour beside it. It opens the colour picker for what the composition is drawn onto; the ellipsis says a picker follows."
+  },
+  "viewerOverlayClearRegion": "Clear region of interest",
+  "@viewerOverlayClearRegion": {
+    "description": "Entry in the Viewer bar's view menu, replacing viewerOverlayRegion once a region has been swept out: picking it renders the whole frame again."
+  },
+  "viewerOverlayLayerControls": "Layer controls",
+  "@viewerOverlayLayerControls": {
+    "description": "Entry in the Viewer bar's view menu, with a tick beside it when they are on: the boxes, handles and hover highlight drawn over the selected layer."
+  },
+  "viewerOverlayRegion": "Region of interest",
+  "@viewerOverlayRegion": {
+    "description": "Entry in the Viewer bar's view menu: picking it arms the next drag on the picture to sweep out a rectangle, and only that rectangle is rendered for preview."
+  },
+  "viewerQualityPlayback": "Playback",
+  "@viewerQualityPlayback": {
+    "description": "Heading over the second group in the Viewer header's quality menu: the two playback behaviours, one that keeps time and lets the picture go soft, one that shows every frame however long it takes."
+  },
+  "viewerQualityResolution": "Preview resolution",
+  "@viewerQualityResolution": {
+    "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
+  },
+  "viewerReadout": "{comp} · {time} · {source} → {preview} · {zoom}",
+  "@viewerReadout": {
+    "description": "The reading at the right-hand end of the Viewer's bottom bar, set in mono: which composition is on screen, the time shown, the composition's own pixel size, the pixel size the preview was actually made at, and the magnification it is drawn at. Every part is a number or a name, so only the separators are translatable.",
+    "placeholders": {
+      "comp": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      },
+      "preview": {
+        "type": "String"
+      },
+      "zoom": {
+        "type": "String"
+      }
+    }
+  },
+  "waveformFrequency": "Frequency",
+  "@waveformFrequency": {
+    "description": "One choice for how a waveform is drawn: split into bass, middle and treble bands stacked on each other."
+  },
+  "waveformPlain": "Plain",
+  "@waveformPlain": {
+    "description": "One choice for how a waveform is drawn: a single wave, with no frequency bands."
+  },
+  "waveformCentre": "Centre",
+  "@waveformCentre": {
+    "description": "One choice for where a waveform sits in its row: centred about silence, swinging both ways."
+  },
+  "waveformBottom": "Bottom",
+  "@waveformBottom": {
+    "description": "One choice for where a waveform sits in its row: standing on the floor of the row and reaching up."
   }
 }

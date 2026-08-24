@@ -1,28 +1,35 @@
 // The Settings window, on the flutter_rust_bridge API.
 //
-// **The shape (K-193).** A sidebar of pages down the left, one page at a time
-// on the right: a page is a stack of named *sections*, and a section is a card
-// of rows. Every row reads the same way — what it is, a line saying what it
-// does, and its control on the right edge — which is the arrangement the egui
-// shell used and the one the owner asked to come back. It replaces a single
-// scrolling column of five groups that had grown past the height of a window.
+// **The shape (K-465, superseding K-193's five pages).** The approved drawing
+// frames it as a window 760×520: a kicker title strip carrying a search field
+// and a close mark, a 160px sidebar of pages down the left, the page itself on
+// the right, and a footer saying that changes apply immediately with Reset page
+// and Close at its far end. A page is a stack of *sections* — a kicker, a rule
+// above it, and rows under it — and a row is a label in a fixed 190px column
+// with its control beside it. There are no cards and no help sentences: the
+// drawing has room for neither, and what a setting does is said by its name.
+//
+// **The pages are the drawing's.** General, Appearance, Timeline, Viewer,
+// Preview and cache, Shortcuts. The drawing lists three more — Audio, Autosave,
+// Export — and they are not here, because there is nothing to put on them: the
+// engine has no autosave interval, no audio device and no export defaults to
+// offer yet, and an empty page is a promise the window cannot keep. They arrive
+// with the settings they would hold.
 //
 // **What lives where.** Appearance is Dart's own: the theme is the frontend's
-// and the engine has no opinion about it. Interface is likewise a set of
-// working preferences, persisted in the workspace file. Performance is mostly
-// a readout of the engine with a button — the cache budgets are the numbers
-// here that change engine behaviour, and even those are not part of the
-// document, so nothing in this window is undoable.
+// and the engine has no opinion about it. Timeline and Viewer are working
+// preferences, persisted in the workspace file. Preview and cache is mostly a
+// readout of the engine with a button — the cache budgets are the numbers here
+// that change engine behaviour, and even those are not part of the document, so
+// nothing in this window is undoable.
 //
-// **Keymap (K-199)** is the one page that is not a settings form: it is a
+// **Shortcuts (K-199)** is the one page that is not a settings form: it is a
 // table of every shortcut, grouped by where it is live, with the action on the
 // left and its chord on the right — click a chord and press the keys you want.
 // It edits the engine's keymap, not a copy, so what the table shows is what the
-// keyboard does.
-//
-// Pages the settings do not have yet (Export defaults, colour management —
-// docs/TODO.md) are not listed: an empty page is a promise the window cannot
-// keep.
+// keyboard does. The title strip's search is its search too: on every other
+// page the field hides the rows whose names do not match, and on this one it
+// asks the engine the same question.
 
 import 'dart:async';
 import 'dart:io';
@@ -38,6 +45,8 @@ import 'package:lumit_flutter/src/rust/api/shell.dart';
 import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
@@ -66,13 +75,60 @@ const double _minBudgetMib = 64;
 /// clamps to what it can actually allocate either way.
 const double _unknownMemoryMib = 16384;
 
+// ---- the drawing's measurements ---------------------------------------------
+//
+// Every one of these is read off the approved drawing's own computed styles,
+// not chosen: `settings_metrics_test` pins them, and a value that disagrees
+// with the drawing is a defect (§12A.6).
+
+/// The size the window opens at: the drawing's own frame (K-465). The corner
+/// grip takes it from here, and where it is left is remembered (K-242).
+const Size settingsWindowSize = Size(760, 520);
+
+/// Below this the sidebar and the widest setting row stop fitting side by side.
+const Size settingsMinSize = Size(560, 380);
+
+/// The title strip, and the footer under the page. §12A.4's dialog title strip
+/// is 30; the footer is 8 above a 26px button and 8 below it, over a hairline.
+const double settingsTitleStrip = 30;
+const double settingsFooterHeight = 43;
+const double settingsFooterButton = 26;
+
+/// The sidebar, and one page's entry in it.
+const double settingsSidebarWidth = 160;
+const double settingsNavRow = 24;
+
+/// The tick down the left edge of the page being shown, and the inset the
+/// label gives up to it.
+const double settingsNavTick = 2;
+
+/// The search well in the title strip.
+const double settingsSearchWidth = 174;
+const double settingsSearchHeight = 20;
+
+/// The close mark, at the size the drawing renders it (K-456).
+const double settingsCloseGlyph = 12;
+
+/// The two dropdown widths the drawing uses: a wide face for a phrase, a
+/// narrow one for a single word.
+const double _ddWide = 180;
+const double _ddNarrow = 120;
+
+/// The scale row's track and its well.
+const double _scaleTrack = 160;
+const double _scaleWell = 70;
+
+/// One accent swatch.
+const double _swatch = 14;
+
 /// One page in the sidebar.
 enum SettingsPage {
   general,
   appearance,
-  interface,
-  keymap,
-  performance;
+  timeline,
+  viewer,
+  previewAndCache,
+  shortcuts;
 
   /// The name in the sidebar. A getter rather than a constructor argument
   /// because an enum constant is built once, at start-up, and the language can
@@ -80,27 +136,19 @@ enum SettingsPage {
   String get label => switch (this) {
         SettingsPage.general => l10n.settingsPageGeneral,
         SettingsPage.appearance => l10n.settingsPageAppearance,
-        SettingsPage.interface => l10n.settingsPageInterface,
-        SettingsPage.keymap => l10n.settingsPageKeymap,
-        SettingsPage.performance => l10n.settingsPagePerformance,
+        SettingsPage.timeline => l10n.panelTimeline,
+        SettingsPage.viewer => l10n.panelViewer,
+        SettingsPage.previewAndCache => l10n.settingsPagePreviewAndCache,
+        SettingsPage.shortcuts => l10n.settingsPageShortcuts,
       };
 }
-
-/// The size the window opens at the first time (K-242). Bigger than the 700×460
-/// it was fixed at, because that was sized for the smallest laptop and left the
-/// Keymap table scrolling four rows at a time on anything larger; the corner
-/// grip takes it from here, and where it is left is remembered.
-const Size _settingsSize = Size(880, 640);
-
-/// Below this the sidebar and the widest setting row stop fitting side by side.
-const Size _settingsMinSize = Size(560, 380);
 
 Future<void> showSettingsWindowFrb(BuildContext context) =>
     showLumitModal<void>(
       context: context,
       id: 'settings',
-      initialSize: _settingsSize,
-      minSize: _settingsMinSize,
+      initialSize: settingsWindowSize,
+      minSize: settingsMinSize,
       builder: (close) => _SettingsWindow(onClose: () => close(null)),
     );
 
@@ -121,9 +169,12 @@ enum CacheScope { everywhere, thisProject }
 class _SettingsWindowState extends State<_SettingsWindow> {
   SettingsPage _page = SettingsPage.general;
 
-  /// The Performance page's engine readouts, captured in one sweep so
+  /// What the title strip's search field holds. Empty shows everything.
+  String _query = '';
+
+  /// The Preview and cache page's engine readouts, captured in one sweep so
   /// `build()` never crosses the bridge (the standing rebuild-path rule —
-  /// these were ~8 calls per rebuild, re-triggered by every checkbox
+  /// these were ~8 calls per rebuild, re-triggered by every switch
   /// `setState` anywhere in the window). Refreshed on page entry, once a
   /// second while the page is up, and by any control that changes what
   /// they report.
@@ -148,14 +199,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         own: _project(context)?.cacheLocation(),
       );
 
-  /// Front [page]. Performance polls on entry and keeps a slow tick while it
-  /// is up, so its readouts stay live without a bridge call in `build()`.
+  /// Front [page]. Preview and cache polls on entry and keeps a slow tick while
+  /// it is up, so its readouts stay live without a bridge call in `build()`.
   void _showPage(SettingsPage page) {
     setState(() {
       _page = page;
-      if (page == SettingsPage.performance) _pollPerf();
+      if (page == SettingsPage.previewAndCache) _pollPerf();
+      // The keymap filters engine-side, so the shared search has to be handed
+      // over when the page it belongs to comes forward.
+      if (page == SettingsPage.shortcuts) _keymapState()?.query = _query;
     });
-    if (page == SettingsPage.performance) {
+    if (page == SettingsPage.previewAndCache) {
       _perfTimer ??= Timer.periodic(
           const Duration(seconds: 1), (_) => setState(_pollPerf));
     } else {
@@ -164,12 +218,86 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     }
   }
 
-  /// An engine-changing control on the Performance page: apply, then read the
-  /// page's numbers back in the same frame so the rows show the answer.
+  KeymapState? _keymapState() =>
+      Provider.of<LumitUiState>(context, listen: false).keymap;
+
+  /// An engine-changing control on the Preview and cache page: apply, then read
+  /// the page's numbers back in the same frame so the rows show the answer.
   void _perfEdit(VoidCallback apply) => setState(() {
         apply();
         _pollPerf();
       });
+
+  // ---- the search ----------------------------------------------------------
+
+  /// Whether a row called [title] survives the search. Rows are matched on
+  /// their own names only: a search that also read the section kickers would
+  /// keep every row under "Theme" for the word *theme*, which is a page, not a
+  /// result.
+  bool _matches(String title) =>
+      _query.isEmpty || title.toLowerCase().contains(_query.toLowerCase());
+
+  /// A row, or nothing when the search has hidden it.
+  Widget? _row(LumitTheme t, String title, Widget control,
+          {String description = ''}) =>
+      _matches(title) ? settingsRow(t, title, description, control) : null;
+
+  /// A switch row — the drawing's pill, not a checkbox: the same answer, in the
+  /// shape the Settings drawing gives it.
+  Widget? _flag(
+    LumitTheme t,
+    String key,
+    String title, {
+    required bool value,
+    required ValueChanged<bool> set,
+  }) =>
+      _row(
+        t,
+        title,
+        HouseToggle(
+          key: ValueKey<String>(key),
+          value: value,
+          onChanged: (on) => setState(() => set(on)),
+        ),
+      );
+
+  /// A dropdown at the drawing's height, in one of its two widths.
+  Widget _dropdown<T>({
+    required String key,
+    required T value,
+    required List<T> options,
+    required String Function(T) label,
+    required ValueChanged<T> onChanged,
+    String? Function(T)? group,
+    double width = _ddNarrow,
+  }) =>
+      SizedBox(
+        width: width,
+        height: settingsControlHeight,
+        child: BareDropdown<T>(
+          key: ValueKey<String>(key),
+          value: value,
+          options: options,
+          label: label,
+          group: group,
+          onChanged: onChanged,
+        ),
+      );
+
+  /// A page: its sections, in order, with the ones the search emptied dropped
+  /// and the first survivor left without a rule above it.
+  List<Widget> _sections(
+    LumitTheme t,
+    List<(String, List<Widget?>)> sections,
+  ) {
+    final out = <Widget>[];
+    for (final (title, rows) in sections) {
+      final kept = rows.whereType<Widget>().toList();
+      if (kept.isEmpty) continue;
+      out.add(settingsSection(t, title, kept, first: out.isEmpty));
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -178,44 +306,115 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
     // No width or height of its own: the window frame around it is what has the
     // size, so the corner grip can change it (K-242).
-    return FloatSurface(
-      child: SizedBox.expand(
+    //
+    // Not a `FloatSurface`: that is the *menu* surface — `surface3` with 6px of
+    // padding round its rows — and the drawing gives this window the page's own
+    // `surface1` right out to a hairline edge. The edge is a foreground
+    // decoration so that it is painted *over* the outermost pixel rather than
+    // insetting everything by one: the drawing's 760 is the room inside the
+    // frame, not the room inside the frame less its border.
+    return Container(
+      decoration: BoxDecoration(
+        color: t.surface1,
+        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+        boxShadow: t.floatShadow,
+      ),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+        border: Border.all(color: t.hairline),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(t.tokens.floatRadius),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                      child: Text(l10n.settingsTitle, style: t.bodyPrimary)),
-                  HouseButton(
-                    key: const ValueKey('settings-close'),
-                    small: true,
-                    onPressed: widget.onClose,
-                    child: Text(l10n.done),
-                  ),
-                ],
-              ),
-            ),
+            _titleStrip(t),
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SizedBox(width: 150, child: _sidebar(t)),
-                  Container(width: 1, color: t.hairline),
+                  SizedBox(
+                    width: settingsSidebarWidth,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: _sidebar(t)),
+                        Container(width: 1, color: t.hairline),
+                      ],
+                    ),
+                  ),
                   Expanded(child: _pageBody(t, ui)),
                 ],
               ),
             ),
+            _footer(t, ui),
           ],
         ),
       ),
     );
   }
 
+  // ---- the frame -----------------------------------------------------------
+
+  Widget _titleStrip(LumitTheme t) => Container(
+        key: const ValueKey('settings-title-strip'),
+        height: settingsTitleStrip + 1,
+        decoration: BoxDecoration(
+          color: t.surface2,
+          border: Border(bottom: BorderSide(color: t.hairline)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: [
+            Text(l10n.settingsTitle.toUpperCase(), style: t.kickerOn),
+            const Spacer(),
+            SizedBox(
+              width: settingsSearchWidth,
+              height: settingsSearchHeight,
+              child: HouseTextField(
+                key: const ValueKey('settings-search'),
+                controller: _searchController(),
+                width: double.infinity,
+                // The well fills the row rather than floating in it: the
+                // drawing renders it exactly 20 tall, and the default 3px above
+                // and below would burst that.
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                // `surface2`, the strip's own ground: this well sits on the
+                // title strip rather than in a panel, and the drawing computes
+                // it the same shade rather than a recess.
+                fill: t.surface2,
+                hint: l10n.searchSettings,
+              ),
+            ),
+            const SizedBox(width: 12),
+            _closeMark(t),
+          ],
+        ),
+      );
+
+  Widget _closeMark(LumitTheme t) => LumitTooltip(
+        message: l10n.close,
+        child: GestureDetector(
+          key: const ValueKey('settings-close'),
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onClose,
+          child: SizedBox(
+            width: settingsCloseGlyph + 8,
+            height: settingsTitleStrip,
+            child: Center(
+              child: glyph.LumitIcon(
+                LumitIcons.close,
+                size: settingsCloseGlyph,
+                colour: t.textMuted,
+                semanticLabel: l10n.close,
+              ),
+            ),
+          ),
+        ),
+      );
+
   Widget _sidebar(LumitTheme t) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.only(top: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -225,125 +424,253 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 behavior: HitTestBehavior.opaque,
                 onTap: () => _showPage(page),
                 child: Container(
-                  margin: const EdgeInsets.symmetric(vertical: 2),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  height: settingsNavRow,
+                  alignment: Alignment.centerLeft,
+                  padding: EdgeInsets.only(
+                      left: _page == page ? 14 - settingsNavTick : 14,
+                      right: 14),
                   decoration: BoxDecoration(
-                    color: _page == page ? t.accent : null,
-                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                    color: _page == page ? t.surface2 : null,
+                    // The tick, not a fill: the page in force is marked by an
+                    // accent edge down its left, which is the one job §3.1
+                    // leaves the accent on a list of names.
+                    border: _page == page
+                        ? Border(
+                            left: BorderSide(
+                                color: t.accent, width: settingsNavTick))
+                        : null,
                   ),
-                  child: Center(
-                    child: Text(
-                      page.label,
-                      // The selected page has always been an accent fill; what
-                      // Round adds is K-394's label flip on top of one (§12.1).
-                      style: _page != page
-                          ? t.body
-                          : t.shape == ThemeShape.round
-                              ? t.bodyPrimary.copyWith(color: t.surface0)
-                              : t.bodyPrimary,
-                    ),
-                  ),
+                  child: Text(page.label,
+                      style: _page == page ? t.bodyPrimary : t.body),
                 ),
               ),
           ],
         ),
       );
 
-  Widget _pageBody(LumitTheme t, LumitUiState ui) => ListView(
-        key: ValueKey<String>('settings-body-${_page.name}'),
-        padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Text(_page.label, style: t.bodyPrimary),
-          ),
-          ...switch (_page) {
-            SettingsPage.general => _general(t, ui),
-            SettingsPage.appearance => _appearance(t, ui),
-            SettingsPage.interface => _interface(t, ui),
-            SettingsPage.keymap => _keymap(t, ui),
-            SettingsPage.performance => _performance(t, ui),
-          },
-        ],
-      );
-
-  // ---- the pages -----------------------------------------------------------
-
-  /// One checkbox row: every flag in this window reads the same way — title,
-  /// a line saying what it does, a [HouseCheckbox] on the right.
-  Widget _flag(
-    LumitTheme t,
-    String key,
-    String title,
-    String help, {
-    required bool value,
-    required ValueChanged<bool> set,
-  }) =>
-      settingsRow(
-        t,
-        title,
-        help,
-        HouseCheckbox(
-          key: ValueKey<String>(key),
-          value: value,
-          onChanged: (on) => setState(() => set(on)),
+  Widget _footer(LumitTheme t, LumitUiState ui) => Container(
+        key: const ValueKey('settings-footer'),
+        height: settingsFooterHeight,
+        decoration: BoxDecoration(
+          color: t.surface2,
+          border: Border(top: BorderSide(color: t.hairline)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        child: Row(
+          children: [
+            Text(
+              l10n.settingsChangesApplyImmediately,
+              // A kicker's face at a kicker's size, but neither shouted nor
+              // tracked as wide: the drawing sets this line in sentence case at
+              // half the tracking, because it is a sentence and not a label.
+              style: t.kicker.copyWith(letterSpacing: 0.54),
+            ),
+            const Spacer(),
+            SizedBox(
+              height: settingsFooterButton,
+              child: HouseButton(
+                key: const ValueKey('settings-reset-page'),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                onPressed: () => _resetPage(ui),
+                child: Text(l10n.settingsResetPage),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: settingsFooterButton,
+              child: HouseButton(
+                key: const ValueKey('settings-close-button'),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                onPressed: widget.onClose,
+                child: Text(l10n.close),
+              ),
+            ),
+          ],
         ),
       );
 
-  List<Widget> _general(LumitTheme t, LumitUiState ui) => [
-        settingsSection(t, l10n.settingsGroupWorkspace, [
-          settingsRow(
-            t,
-            l10n.settingsPanelLayout,
-            l10n.settingsHelpPanelLayout,
-            HouseButton(
-              key: const ValueKey('settings-reset-workspace'),
-              small: true,
-              onPressed: () => setState(ui.resetLayout),
-              child: Text(l10n.menuResetWorkspace, style: t.small),
+  Widget _pageBody(LumitTheme t, LumitUiState ui) {
+    final sections = switch (_page) {
+      SettingsPage.general => _general(t, ui),
+      SettingsPage.appearance => _appearance(t, ui),
+      SettingsPage.timeline => _timeline(t, ui),
+      SettingsPage.viewer => _viewer(t, ui),
+      SettingsPage.previewAndCache => _performance(t, ui),
+      SettingsPage.shortcuts => _keymap(t, ui),
+    };
+    return RawScrollbar(
+      controller: _scroll,
+      thumbVisibility: true,
+      trackVisibility: true,
+      thickness: 6,
+      radius: const Radius.circular(3),
+      thumbColor: t.surface4,
+      trackColor: t.surface2,
+      trackRadius: const Radius.circular(3),
+      padding: const EdgeInsets.fromLTRB(0, 8, 2, 8),
+      child: ListView(
+        key: ValueKey<String>('settings-body-${_page.name}'),
+        controller: _scroll,
+        padding: EdgeInsets.zero,
+        children: [
+          ...sections,
+          if (sections.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(l10n.settingsNoMatches,
+                  key: const ValueKey('settings-no-matches'),
+                  style: t.small.copyWith(color: t.textMuted)),
             ),
-          ),
-        ]),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  /// Put the page back the way it ships. What "the way it ships" means is
+  /// knowable in Dart for every page but Preview and cache, where the cache
+  /// budgets are the engine's own defaults and it offers no way to ask for
+  /// them back — so that page resets the two things it can, the playback mode
+  /// and the quality tier, and leaves the budgets where the user put them.
+  void _resetPage(LumitUiState ui) {
+    final workspace = ui.workspace;
+    final settings = workspace.interface;
+    final shipped = InterfaceSettings();
+    switch (_page) {
+      case SettingsPage.general:
+        workspace.setAutoUpdate(true);
+        ui.setLanguage(null);
+      case SettingsPage.appearance:
+        workspace.setScheme(LumitColorScheme.dark);
+        workspace.setAccent(null);
+        ui.setShape(ThemeShape.sharp);
+        workspace.setAnimationLevel(AnimationLevel.all);
+        workspace.setThemedScopes(false);
+        workspace.setThemedViewerSurround(false);
+        settings.uiScale = shipped.uiScale;
+        settings.showTooltips = shipped.showTooltips;
+        settings.multiwaveWaveforms = shipped.multiwaveWaveforms;
+        settings.waveformsFromBottom = shipped.waveformsFromBottom;
+        settings.compact = shipped.compact;
+        workspace.recompose();
+        workspace.save();
+      case SettingsPage.timeline:
+        settings.retimeOpensToSpeed = shipped.retimeOpensToSpeed;
+        settings.retimeInSeconds = shipped.retimeInSeconds;
+        settings.videoAsSequenceLayer = shipped.videoAsSequenceLayer;
+        settings.pasteLayersAtOriginalTime = shipped.pasteLayersAtOriginalTime;
+        settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
+        settings.transformInEffectControls = shipped.transformInEffectControls;
+        settings.easingInPopup = shipped.easingInPopup;
+        workspace.settingsChanged();
+      case SettingsPage.viewer:
+        workspace.setSmoothZoomedViewer(false);
+        settings.showToneMap = shipped.showToneMap;
+        workspace.settingsChanged();
+        ui.pushViewerLook();
+      case SettingsPage.previewAndCache:
+        _perfEdit(() {
+          workspace.performance.playback = PlaybackMode.adaptive;
+          workspace.settingsChanged();
+          resetRealtime();
+        });
+      case SettingsPage.shortcuts:
+        unawaited(_resetKeymap(ui.keymap));
+    }
+    setState(() {});
+  }
+
+  Future<void> _resetKeymap(KeymapState km) async {
+    await km.loadPreset(BridgeKeymapPreset.lumit);
+    if (mounted) setState(() {});
+  }
+
+  // ---- the pages -----------------------------------------------------------
+
+  List<Widget> _general(LumitTheme t, LumitUiState ui) => _sections(t, [
+        (
+          l10n.settingsGroupDisplay,
+          [
+            _row(
+              t,
+              l10n.settingsLanguage,
+              _dropdown<String?>(
+                key: 'settings-language',
+                // Null first: following the machine is the default, and the one
+                // choice that is not a language in the list.
+                value: ui.workspace.interface.language,
+                options: [null, ...languageNames.keys],
+                width: _ddWide,
+                // Each language names itself, so this list reads the same
+                // whichever language Lumit is currently in — somebody who picked
+                // one they cannot read can still find their way back.
+                label: (tag) => tag == null
+                    ? l10n.languageFollowSystem
+                    : languageNames[tag]!,
+                onChanged: (tag) => setState(() => ui.setLanguage(tag)),
+              ),
+            ),
+          ],
+        ),
+        (
+          l10n.settingsGroupWorkspace,
+          [
+            _row(
+              t,
+              l10n.settingsPanelLayout,
+              HouseButton(
+                key: const ValueKey('settings-reset-workspace'),
+                small: true,
+                onPressed: () => setState(ui.resetLayout),
+                child: Text(l10n.menuResetWorkspace, style: t.small),
+              ),
+            ),
+          ],
+        ),
         // The same updater the Help menu drives, seen from the other side
         // (K-296): one service, two views, so they can never disagree about
         // whether a check is running or an update is waiting.
-        settingsSection(t, l10n.settingsGroupUpdates, [
-          _flag(t, 'settings-auto-update', l10n.settingsAutomaticUpdates,
-              l10n.settingsHelpAutomaticUpdates,
-              value: ui.workspace.autoUpdate, set: ui.workspace.setAutoUpdate),
-          // The whole row watches the service, not just its button: the line
-          // under the title is the part that says what was found, and a stale
-          // sentence beside a live button would be worse than either alone.
-          ListenableBuilder(
-            listenable: ui.updates,
-            builder: (context, _) => settingsRow(
-              t,
-              l10n.settingsThisVersion,
-              _updateStatusLine(ui),
-              HouseButton(
-                key: const ValueKey('settings-check-updates'),
-                small: true,
-                onPressed: ui.updates.busy
-                    ? null
-                    : () => pressUpdateRow(
-                          context,
-                          updates: ui.updates,
-                          notice: context.read<LumitState>().postNotice,
-                          projectIsDirty: () =>
-                              context.read<LumitState>().project?.isDirty() ??
-                              false,
-                          saveProject: () =>
-                              saveProjectFrb(context.read<LumitState>(), ui),
-                        ),
-                child: Text(ui.updates.menuLabel, style: t.small),
+        (
+          l10n.settingsGroupUpdates,
+          [
+            _flag(t, 'settings-auto-update', l10n.settingsAutomaticUpdates,
+                value: ui.workspace.autoUpdate,
+                set: ui.workspace.setAutoUpdate),
+            // The whole row watches the service, not just its button: the line
+            // under it is the part that says what was found, and a stale
+            // sentence beside a live button would be worse than either alone.
+            if (_matches(l10n.settingsThisVersion))
+              ListenableBuilder(
+                listenable: ui.updates,
+                builder: (context, _) => settingsRow(
+                  t,
+                  l10n.settingsThisVersion,
+                  _updateStatusLine(ui),
+                  HouseButton(
+                    key: const ValueKey('settings-check-updates'),
+                    small: true,
+                    onPressed: ui.updates.busy
+                        ? null
+                        : () => pressUpdateRow(
+                              context,
+                              updates: ui.updates,
+                              notice: context.read<LumitState>().postNotice,
+                              projectIsDirty: () =>
+                                  context
+                                      .read<LumitState>()
+                                      .project
+                                      ?.isDirty() ??
+                                  false,
+                              saveProject: () => saveProjectFrb(
+                                  context.read<LumitState>(), ui),
+                            ),
+                    child: Text(ui.updates.menuLabel, style: t.small),
+                  ),
+                ),
               ),
-            ),
-          ),
-        ]),
-        // About used to sit here. It is Help ▸ About Lumit now (K-244):
-        // Settings is for what you change, and a version number is not that.
-      ];
+          ],
+        ),
+      ]);
 
   /// What this build is, read over the bridge once: the row rebuilds with
   /// every update-service notification, and the installed version cannot
@@ -364,32 +691,34 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         _ => _installed,
       };
 
-  List<Widget> _appearance(LumitTheme t, LumitUiState ui) => [
-        settingsSection(t, l10n.settingsGroupTheme, [
-          settingsRow(
+  List<Widget> _appearance(LumitTheme t, LumitUiState ui) {
+    final settings = ui.workspace.interface;
+    return _sections(t, [
+      (
+        l10n.settingsGroupTheme,
+        [
+          _row(
             t,
             l10n.settingsColourScheme,
-            l10n.settingsHelpColourScheme,
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
-                  width: 150,
-                  child: BareDropdown<ThemeChoice>(
-                    key: const ValueKey('settings-scheme'),
-                    value: ui.workspace.themeChoice,
-                    options: ui.workspace.themeChoices,
-                    label: (c) => c.label,
-                    // Dark, Light, then the user's own (K-202): seven built-ins
-                    // and a growing list of custom themes is a long flat menu,
-                    // and light/dark is the first thing anyone is choosing by.
-                    group: (c) => c.group,
-                    onChanged: (c) => setState(() => ui.workspace.choose(c)),
-                  ),
+                _dropdown<ThemeChoice>(
+                  key: 'settings-scheme',
+                  value: ui.workspace.themeChoice,
+                  options: ui.workspace.themeChoices,
+                  width: _ddWide,
+                  label: (c) => c.label,
+                  // Dark, Light, then the user's own (K-202): seven built-ins
+                  // and a growing list of custom themes is a long flat menu,
+                  // and light/dark is the first thing anyone is choosing by.
+                  group: (c) => c.group,
+                  onChanged: (c) => setState(() => ui.workspace.choose(c)),
                 ),
                 const SizedBox(width: 8),
                 // What the selection actually looks like, beside its name
-                // (K-298).
+                // (K-298). The drawing leaves the rest of the row empty and
+                // this is what it is for.
                 ThemeSwatchStrip(
                   key: const ValueKey('settings-theme-swatches'),
                   theme: ui.workspace.theme,
@@ -397,13 +726,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ],
             ),
           ),
-          settingsRow(
+          _row(t, l10n.settingsShape, _shapeChips(t, ui)),
+          _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
+          _row(
             t,
             l10n.settingsCustomColours,
-            ui.workspace.customThemeName == null
-                ? l10n.settingsHelpCustomColours
-                : l10n.settingsHelpEditingTheme(
-                    '${ui.workspace.customThemeName}'),
             HouseButton(
               key: const ValueKey('settings-customise'),
               small: true,
@@ -413,69 +740,245 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               },
               child: Text(l10n.customiseEllipsis, style: t.small),
             ),
+            description: ui.workspace.customThemeName == null
+                ? ''
+                : l10n.settingsHelpEditingTheme(
+                    '${ui.workspace.customThemeName}'),
           ),
-          _themeShelf(t, ui),
-          settingsRow(
+          _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
+              description: _themeMessage ?? ''),
+        ],
+      ),
+      (
+        l10n.settingsPageInterface,
+        [
+          _row(t, l10n.settingsScale, _scaleRow(t, ui)),
+          _row(
             t,
-            l10n.settingsCorners,
-            l10n.settingsHelpCorners,
-            SizedBox(
-              width: 130,
-              child: BareDropdown<ThemeShape>(
-                key: const ValueKey('settings-shape'),
-                value: ui.shape,
-                options: ThemeShape.values,
-                label: (s) => s == ThemeShape.sharp
-                    ? l10n.cornersSharp
-                    : l10n.cornersRound,
-                onChanged: (s) => setState(() => ui.setShape(s)),
-              ),
+            l10n.settingsTooltips,
+            _dropdown<bool>(
+              key: 'settings-tooltips',
+              value: settings.showTooltips,
+              options: const [true, false],
+              label: (on) => on ? l10n.tooltipsShort : l10n.off,
+              onChanged: (on) => setState(() {
+                settings.showTooltips = on;
+                ui.workspace.settingsChanged();
+              }),
             ),
           ),
-          settingsRow(
+          _row(
             t,
             l10n.settingsMotion,
-            l10n.settingsHelpMotion,
-            SizedBox(
-              width: 130,
-              child: BareDropdown<AnimationLevel>(
-                key: const ValueKey('settings-animation'),
-                value: ui.workspace.animationLevel,
-                options: AnimationLevel.values,
-                label: (a) => switch (a) {
-                  AnimationLevel.all => l10n.motionFull,
-                  AnimationLevel.minimal => l10n.motionMinimal,
-                  AnimationLevel.none => l10n.none,
-                },
-                onChanged: (a) =>
-                    setState(() => ui.workspace.setAnimationLevel(a)),
-              ),
+            _dropdown<AnimationLevel>(
+              key: 'settings-animation',
+              value: ui.workspace.animationLevel,
+              options: AnimationLevel.values,
+              label: (a) => switch (a) {
+                AnimationLevel.all => l10n.motionFull,
+                AnimationLevel.minimal => l10n.motionMinimal,
+                AnimationLevel.none => l10n.none,
+              },
+              onChanged: (a) =>
+                  setState(() => ui.workspace.setAnimationLevel(a)),
             ),
           ),
-        ]),
-        settingsSection(t, l10n.settingsGroupScopes, [
-          _flag(t, 'settings-themed-scopes', l10n.settingsUseThemeColours,
-              l10n.settingsHelpUseThemeColours,
+          // `recompose`, not `settingsChanged`: density lives on the built
+          // theme (K-454), so the theme has to be rebuilt before anything is
+          // told to redraw. `recompose` notifies; `save` is still ours to call.
+          _flag(t, 'settings-compact', l10n.settingsCompact,
+              value: settings.compact, set: (on) {
+            settings.compact = on;
+            ui.workspace.recompose();
+            ui.workspace.save();
+          }),
+        ],
+      ),
+      (
+        l10n.settingsGroupViewer,
+        [
+          _flag(t, 'settings-themed-scopes', l10n.settingsScopesUseThemeColour,
               value: ui.workspace.themedScopes,
               set: ui.workspace.setThemedScopes),
-        ]),
-        settingsSection(t, l10n.settingsGroupViewer, [
-          _flag(
-              t,
-              'settings-themed-surround',
-              l10n.settingsSurroundTakesThemeColours,
-              l10n.settingsHelpSurroundTakesThemeColours,
+          _row(
+            t,
+            l10n.settingsSurround,
+            _dropdown<bool>(
+              key: 'settings-themed-surround',
               value: ui.workspace.themedViewerSurround,
-              set: ui.workspace.setThemedViewerSurround),
-          _flag(
-              t,
-              'settings-smooth-zoomed-viewer',
-              l10n.settingsSmoothThePictureWhenZoomed,
-              l10n.settingsHelpSmoothThePictureWhenZoomed,
-              value: ui.workspace.smoothZoomedViewer,
-              set: ui.workspace.setSmoothZoomedViewer),
-        ]),
-      ];
+              options: const [false, true],
+              label: (themed) =>
+                  themed ? l10n.surroundThemeColour : l10n.surroundNeutral,
+              onChanged: (themed) =>
+                  setState(() => ui.workspace.setThemedViewerSurround(themed)),
+            ),
+          ),
+        ],
+      ),
+      (
+        l10n.settingsGroupWaveforms,
+        [
+          _row(
+            t,
+            l10n.settingsStyle,
+            _dropdown<bool>(
+              key: 'settings-multiwave',
+              value: settings.multiwaveWaveforms,
+              options: const [true, false],
+              label: (stack) =>
+                  stack ? l10n.waveformFrequency : l10n.waveformPlain,
+              onChanged: (stack) => setState(() {
+                settings.multiwaveWaveforms = stack;
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
+          _row(
+            t,
+            l10n.settingsAnchor,
+            _dropdown<bool>(
+              key: 'settings-waveform-from-bottom',
+              value: settings.waveformsFromBottom,
+              options: const [false, true],
+              label: (bottom) =>
+                  bottom ? l10n.waveformBottom : l10n.waveformCentre,
+              onChanged: (bottom) => setState(() {
+                settings.waveformsFromBottom = bottom;
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
+        ],
+      ),
+    ]);
+  }
+
+  /// Sharp or Round, as the drawing draws it: two kicker chips side by side,
+  /// the one in force outlined. Not an accent fill — §3.1 spends the accent on
+  /// the tick beside the page name, and a second accent in the same window
+  /// would make neither of them mean anything.
+  Widget _shapeChips(LumitTheme t, LumitUiState ui) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final shape in ThemeShape.values) ...[
+            if (shape != ThemeShape.values.first) const SizedBox(width: 2),
+            SizedBox(
+              height: settingsControlHeight,
+              child: HouseButton(
+                key: ValueKey<String>('settings-shape-${shape.name}'),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                frameless: ui.shape != shape,
+                onPressed: () => setState(() => ui.setShape(shape)),
+                child: Text(
+                  (shape == ThemeShape.sharp
+                          ? l10n.cornersSharp
+                          : l10n.cornersRound)
+                      .toUpperCase(),
+                  style: ui.shape == shape ? t.kickerOn : t.kicker,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+
+  /// The five one-click accents, and the hex of whatever the accent actually
+  /// is — which is not always one of the five, because the theme editor can
+  /// set any colour at all and a custom theme carries its own.
+  Widget _accentSwatches(LumitTheme t, LumitUiState ui) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final colour in LumitTheme.accentPresets) ...[
+            if (colour != LumitTheme.accentPresets.first)
+              const SizedBox(width: 4),
+            GestureDetector(
+              key: ValueKey<String>('settings-accent-${_hex(colour)}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setState(() => ui.workspace.setAccent(colour)),
+              child: Container(
+                width: _swatch,
+                height: _swatch,
+                decoration: BoxDecoration(
+                  color: colour,
+                  borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  // The chosen one is ringed, so which of the five is in force
+                  // is readable without reading the hex beside them.
+                  border: _hex(colour) == _hex(t.accent)
+                      ? Border.all(color: t.textPrimary)
+                      : null,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(width: 6),
+          Text(
+            _hex(t.accent),
+            key: const ValueKey('settings-accent-hex'),
+            style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
+          ),
+        ],
+      );
+
+  /// A colour as the drawing writes it: `#e05a72`. The channels are read as
+  /// the workspace file reads them, so what is shown here and what is stored
+  /// there can never drift apart by a rounding.
+  static String _hex(Color c) {
+    String pair(double channel) =>
+        (channel * 255).round().toRadixString(16).padLeft(2, '0');
+    return '#${pair(c.r)}${pair(c.g)}${pair(c.b)}';
+  }
+
+  /// The interface scale: a track, the number in a well, its unit, and the
+  /// note that says when it lands. **On release**, not while dragging: the
+  /// scale rebuilds and re-lays out the whole application, and doing that on
+  /// every tick of a drag is a slideshow.
+  Widget _scaleRow(LumitTheme t, LumitUiState ui) {
+    final settings = ui.workspace.interface;
+    void set(double percent) => setState(() {
+          settings.uiScale = percent / 100;
+          ui.workspace.settingsChanged();
+        });
+    final unit = t.mono.copyWith(fontSize: 10, color: t.textMuted);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        HouseSlider(
+          key: const ValueKey('settings-ui-scale'),
+          value: settings.uiScale * 100,
+          min: 75,
+          max: 200,
+          step: 5,
+          width: _scaleTrack,
+          showValue: false,
+          commitOnRelease: true,
+          onChanged: set,
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: _scaleWell,
+          height: settingsControlHeight,
+          child: DragValueField(
+            key: const ValueKey('settings-ui-scale-value'),
+            value: (settings.uiScale * 100).round(),
+            min: 75,
+            max: 200,
+            decimals: 0,
+            onChanged: (v) => set(v.toDouble()),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(l10n.unitSymbolPercent, style: unit),
+        const SizedBox(width: 8),
+        // The one thing in the row that may be shortened: the window is
+        // resizable, and at the drawing's own width this row fills the column
+        // to the pixel.
+        Flexible(
+          child: Text(l10n.settingsAppliesOnRelease,
+              style: unit, overflow: TextOverflow.ellipsis),
+        ),
+      ],
+    );
+  }
 
   // ---- Your themes (K-298) -------------------------------------------------
 
@@ -484,87 +987,60 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// that would not read is a fact about the file, not an emergency.
   String? _themeMessage;
 
-  /// The block under the theme rows: everything you can do to a theme that is
-  /// not changing one of its colours. Laid out as a wrapped row of buttons
-  /// rather than one control per settings row, because these are five verbs
-  /// about the same thing, and five rows saying "Duplicate", "Rename" and so
-  /// on would be a list of buttons pretending to be settings.
+  /// Everything you can do to a theme that is not changing one of its colours,
+  /// as one row's worth of buttons: five verbs about the same thing, where five
+  /// rows saying "Duplicate", "Rename" and so on would be a list of buttons
+  /// pretending to be settings.
   Widget _themeShelf(LumitTheme t, LumitUiState ui) {
     final workspace = ui.workspace;
     final custom = workspace.customThemeName;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l10n.settingsYourThemes, style: t.body),
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              l10n.settingsHelpYourThemes,
-              style: t.small.copyWith(color: t.textMuted),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              HouseButton(
-                key: const ValueKey('settings-theme-duplicate'),
-                small: true,
-                onPressed: () => setState(() {
-                  final name = workspace.duplicateActiveTheme();
-                  _themeMessage = l10n.themeCopiedTo(name);
-                }),
-                child: Text(l10n.menuDuplicate, style: t.small),
-              ),
-              HouseButton(
-                key: const ValueKey('settings-theme-rename'),
-                small: true,
-                // Only one of the user's own can be renamed: a built-in
-                // scheme's name is Lumit's, not the user's, and renaming it
-                // would leave two people describing different Darks.
-                onPressed: custom == null ? null : () => _renameTheme(ui),
-                child: Text(l10n.renameEllipsis, style: t.small),
-              ),
-              HouseButton(
-                key: const ValueKey('settings-theme-delete'),
-                small: true,
-                frameless: true,
-                onPressed: custom == null
-                    ? null
-                    : () => setState(() {
-                          workspace.deleteCustomTheme(custom);
-                          _themeMessage = l10n.themeDeleted(custom);
-                        }),
-                child: Text(l10n.delete, style: t.small),
-              ),
-              HouseButton(
-                key: const ValueKey('settings-theme-import'),
-                small: true,
-                onPressed: () => _importTheme(ui),
-                child: Text(l10n.menuImport, style: t.small),
-              ),
-              HouseButton(
-                key: const ValueKey('settings-theme-export'),
-                small: true,
-                onPressed: () => _exportTheme(ui),
-                child: Text(l10n.menuExport, style: t.small),
-              ),
-            ],
-          ),
-          if (_themeMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _themeMessage!,
-                key: const ValueKey('settings-theme-message'),
-                style: t.small.copyWith(color: t.textMuted),
-              ),
-            ),
-        ],
-      ),
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        HouseButton(
+          key: const ValueKey('settings-theme-duplicate'),
+          small: true,
+          onPressed: () => setState(() {
+            final name = workspace.duplicateActiveTheme();
+            _themeMessage = l10n.themeCopiedTo(name);
+          }),
+          child: Text(l10n.menuDuplicate, style: t.small),
+        ),
+        HouseButton(
+          key: const ValueKey('settings-theme-rename'),
+          small: true,
+          // Only one of the user's own can be renamed: a built-in
+          // scheme's name is Lumit's, not the user's, and renaming it
+          // would leave two people describing different Darks.
+          onPressed: custom == null ? null : () => _renameTheme(ui),
+          child: Text(l10n.renameEllipsis, style: t.small),
+        ),
+        HouseButton(
+          key: const ValueKey('settings-theme-delete'),
+          small: true,
+          frameless: true,
+          onPressed: custom == null
+              ? null
+              : () => setState(() {
+                    workspace.deleteCustomTheme(custom);
+                    _themeMessage = l10n.themeDeleted(custom);
+                  }),
+          child: Text(l10n.delete, style: t.small),
+        ),
+        HouseButton(
+          key: const ValueKey('settings-theme-import'),
+          small: true,
+          onPressed: () => _importTheme(ui),
+          child: Text(l10n.menuImport, style: t.small),
+        ),
+        HouseButton(
+          key: const ValueKey('settings-theme-export'),
+          small: true,
+          onPressed: () => _exportTheme(ui),
+          child: Text(l10n.menuExport, style: t.small),
+        ),
+      ],
     );
   }
 
@@ -632,244 +1108,174 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     }
   }
 
-  List<Widget> _interface(LumitTheme t, LumitUiState ui) {
+  /// The Timeline page: how an edit behaves, and what the animation panels
+  /// show. The two the first-run screen sets (K-246), plus the transport's one
+  /// (K-254). They sit here as ordinary rows, and independently of each
+  /// other: the screen offers its pair together, but somebody who wants
+  /// Vegas ramps and After Effects imports is exactly the split docs/07
+  /// §13.1 expects to be common.
+  List<Widget> _timeline(LumitTheme t, LumitUiState ui) {
     final settings = ui.workspace.interface;
-    return [
-      settingsSection(t, l10n.settingsGroupDisplay, [
-        settingsRow(
-          t,
-          l10n.settingsLanguage,
-          l10n.settingsHelpLanguage,
-          SizedBox(
-            width: 170,
-            child: BareDropdown<String?>(
-              key: const ValueKey('settings-language'),
-              // Null first: following the machine is the default, and the one
-              // choice that is not a language in the list.
-              value: settings.language,
-              options: [null, ...languageNames.keys],
-              // Each language names itself, so this list reads the same
-              // whichever language Lumit is currently in — somebody who picked
-              // one they cannot read can still find their way back.
-              label: (tag) =>
-                  tag == null ? l10n.languageFollowSystem : languageNames[tag]!,
-              onChanged: (tag) => setState(() => ui.setLanguage(tag)),
-            ),
-          ),
-        ),
-        settingsRow(
-          t,
-          l10n.settingsInterfaceScale, l10n.settingsHelpInterfaceScale,
-          // Intrinsically sized: the slider carries its own track width and
-          // its readout beside it, and boxing it narrower only overflows.
-          HouseSlider(
-            key: const ValueKey('settings-ui-scale'),
-            value: settings.uiScale,
-            min: 0.75,
-            max: 2.0,
-            step: 0.05,
-            decimals: 2,
-            suffix: '×',
-            onChanged: (v) => setState(() {
-              settings.uiScale = v;
-              ui.workspace.settingsChanged();
-            }),
-          ),
-        ),
-        _flag(t, 'settings-tooltips', l10n.settingsTooltips,
-            l10n.settingsHelpTooltips,
-            value: settings.showTooltips, set: (on) {
-          settings.showTooltips = on;
-          ui.workspace.settingsChanged();
-        }),
-        // `recompose`, not `settingsChanged`: density lives on the built
-        // theme (K-454), so the theme has to be rebuilt before anything is
-        // told to redraw. `recompose` notifies; `save` is still ours to call.
-        _flag(t, 'settings-compact', l10n.settingsCompact,
-            l10n.settingsHelpCompact, value: settings.compact, set: (on) {
-          settings.compact = on;
-          ui.workspace.recompose();
-          ui.workspace.save();
-        }),
-      ]),
-      settingsSection(t, l10n.settingsGroupPanels, [
-        _flag(
-            t,
-            'settings-transform-in-fx',
-            l10n.settingsTransformInEffectControls,
-            l10n.settingsHelpTransformInEffectControls,
-            value: settings.transformInEffectControls, set: (on) {
-          settings.transformInEffectControls = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(t, 'settings-show-tone-map', l10n.settingsShowTheToneMapButton,
-            l10n.settingsHelpShowTheToneMapButton,
-            value: settings.showToneMap, set: (on) {
-          settings.showToneMap = on;
-          ui.workspace.settingsChanged();
-          // Turning it off disengages the tone map as well as hiding the
-          // button, so the picture has to be asked for again — the look the
-          // Viewer is now reading is not the one the engine was given.
-          ui.pushViewerLook();
-        }),
-      ]),
-      // The two the first-run screen sets (K-246), plus the transport's one
-      // (K-254). They sit here as ordinary rows, and independently of each
-      // other: the screen offers its pair together, but somebody who wants
-      // Vegas ramps and After Effects imports is exactly the split docs/07
-      // §13.1 expects to be common. The playhead row is not one the screen
-      // touches — both answers want the returning playhead, so there is
-      // nothing for the question to decide.
-      settingsSection(t, l10n.settingsGroupEditing, [
-        _flag(t, 'settings-retime-speed-lens', l10n.settingsRetimeOpensToSpeed,
-            l10n.settingsHelpRetimeOpensToVelocity,
-            value: settings.retimeOpensToSpeed, set: (on) {
-          settings.retimeOpensToSpeed = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(
-            t,
-            'settings-retime-in-seconds',
-            l10n.settingsRetimeValuesInSeconds,
-            l10n.settingsHelpRetimeValuesInSeconds,
-            value: settings.retimeInSeconds, set: (on) {
-          settings.retimeInSeconds = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(
-            t,
-            'settings-video-as-sequence',
-            l10n.settingsVideoArrivesAsASequence,
-            l10n.settingsHelpVideoArrivesAsASequence,
-            value: settings.videoAsSequenceLayer, set: (on) {
-          settings.videoAsSequenceLayer = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(
-            t,
-            'settings-paste-at-original-time',
-            l10n.settingsPasteLayersAtTheirOriginal,
-            l10n.settingsHelpPasteLayersAtTheirOriginal,
-            value: settings.pasteLayersAtOriginalTime, set: (on) {
-          settings.pasteLayersAtOriginalTime = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(
-            t,
-            'settings-playhead-stays',
-            l10n.settingsPlayheadStaysWherePlaybackStopped,
-            l10n.settingsHelpPlayheadStaysWherePlaybackStopped,
-            value: settings.playheadStaysOnStop, set: (on) {
-          settings.playheadStaysOnStop = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(
-            t,
-            'settings-multiwave',
-            l10n.settingsWaveformFrequencyStack,
-            l10n.settingsHelpWaveformsShowTheFrequencyStack,
-            value: settings.multiwaveWaveforms, set: (on) {
-          settings.multiwaveWaveforms = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(
-            t,
-            'settings-waveform-from-bottom',
-            l10n.settingsWaveformsFromBottom,
-            l10n.settingsHelpWaveformsRiseFromTheBottom,
-            value: settings.waveformsFromBottom, set: (on) {
-          settings.waveformsFromBottom = on;
-          ui.workspace.settingsChanged();
-        }),
-        _flag(
-            t,
-            'settings-easing-in-popup',
-            l10n.settingsShapeEasesInAPopup,
-            l10n.settingsHelpShapeEasesInAPopup,
-            value: settings.easingInPopup, set: (on) {
-          settings.easingInPopup = on;
-          ui.workspace.settingsChanged();
-        }),
-      ]),
-    ];
+    void changed() => ui.workspace.settingsChanged();
+    return _sections(t, [
+      (
+        l10n.settingsGroupEditing,
+        [
+          _flag(
+              t, 'settings-retime-speed-lens', l10n.settingsRetimeOpensToSpeed,
+              value: settings.retimeOpensToSpeed, set: (on) {
+            settings.retimeOpensToSpeed = on;
+            changed();
+          }),
+          _flag(t, 'settings-retime-in-seconds',
+              l10n.settingsRetimeValuesInSeconds,
+              value: settings.retimeInSeconds, set: (on) {
+            settings.retimeInSeconds = on;
+            changed();
+          }),
+          _flag(t, 'settings-video-as-sequence',
+              l10n.settingsVideoArrivesAsASequence,
+              value: settings.videoAsSequenceLayer, set: (on) {
+            settings.videoAsSequenceLayer = on;
+            changed();
+          }),
+          _flag(t, 'settings-paste-at-original-time',
+              l10n.settingsPasteLayersAtTheirOriginal,
+              value: settings.pasteLayersAtOriginalTime, set: (on) {
+            settings.pasteLayersAtOriginalTime = on;
+            changed();
+          }),
+          _flag(t, 'settings-playhead-stays',
+              l10n.settingsPlayheadStaysWherePlaybackStopped,
+              value: settings.playheadStaysOnStop, set: (on) {
+            settings.playheadStaysOnStop = on;
+            changed();
+          }),
+        ],
+      ),
+      (
+        l10n.settingsGroupPanels,
+        [
+          _flag(t, 'settings-transform-in-fx',
+              l10n.settingsTransformInEffectControls,
+              value: settings.transformInEffectControls, set: (on) {
+            settings.transformInEffectControls = on;
+            changed();
+          }),
+          _flag(t, 'settings-easing-in-popup', l10n.settingsShapeEasesInAPopup,
+              value: settings.easingInPopup, set: (on) {
+            settings.easingInPopup = on;
+            changed();
+          }),
+        ],
+      ),
+    ]);
   }
 
-  // ---- Keymap (K-199) ------------------------------------------------------
+  /// The Viewer page: how the picture is shown. What the Viewer *looks* like —
+  /// its surround, its scopes' colours — is Appearance's, one section down
+  /// from the theme it follows; these two are about the image itself.
+  List<Widget> _viewer(LumitTheme t, LumitUiState ui) {
+    final settings = ui.workspace.interface;
+    return _sections(t, [
+      (
+        l10n.settingsGroupPicture,
+        [
+          _flag(t, 'settings-smooth-zoomed-viewer',
+              l10n.settingsSmoothThePictureWhenZoomed,
+              value: ui.workspace.smoothZoomedViewer,
+              set: ui.workspace.setSmoothZoomedViewer),
+          _flag(t, 'settings-show-tone-map', l10n.settingsShowTheToneMapButton,
+              value: settings.showToneMap, set: (on) {
+            settings.showToneMap = on;
+            ui.workspace.settingsChanged();
+            // Turning it off disengages the tone map as well as hiding the
+            // button, so the picture has to be asked for again — the look the
+            // Viewer is now reading is not the one the engine was given.
+            ui.pushViewerLook();
+          }),
+        ],
+      ),
+    ]);
+  }
+
+  // ---- Shortcuts (K-199) ---------------------------------------------------
 
   /// Every shortcut, grouped by where it is live. The table is the engine's —
-  /// this walks what `keymap_groups` answered and draws it.
+  /// this walks what `keymap_groups` answered and draws it. The search is the
+  /// title strip's, handed to the engine as it is typed.
   List<Widget> _keymap(LumitTheme t, LumitUiState ui) {
     final km = ui.keymap;
     final groups = km.visibleGroups;
     return [
-      Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: HouseTextField(
-          key: const ValueKey('keymap-search'),
-          controller: _searchController(km),
-          width: 240,
-          hint: l10n.searchShortcuts,
-        ),
-      ),
-      // The presets and the file, wrapped rather than in one row: five controls
-      // do not fit the window's width, and a button pushed off the edge is a
-      // button nobody can press.
-      Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            HouseButton(
-              key: const ValueKey('keymap-preset-lumit'),
-              small: true,
-              onPressed: () async {
-                await km.loadPreset(BridgeKeymapPreset.lumit);
-                if (mounted) setState(() {});
-              },
-              child: Text(l10n.keymapLumitDefault, style: t.small),
+      // Where the whole table comes from: one of the two presets, or a file.
+      // Two rows rather than five buttons in a heap, so each says what it is.
+      settingsSection(
+          t,
+          l10n.settingsGroupKeymap,
+          [
+            settingsRow(
+              t,
+              l10n.settingsPreset,
+              '',
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('keymap-preset-lumit'),
+                    small: true,
+                    onPressed: () async {
+                      await km.loadPreset(BridgeKeymapPreset.lumit);
+                      if (mounted) setState(() {});
+                    },
+                    child: Text(l10n.keymapLumitDefault, style: t.small),
+                  ),
+                  const SizedBox(width: 6),
+                  HouseButton(
+                    key: const ValueKey('keymap-preset-ae'),
+                    small: true,
+                    onPressed: () async {
+                      await km.loadPreset(BridgeKeymapPreset.afterEffects);
+                      if (mounted) setState(() {});
+                    },
+                    child: Text(l10n.keymapAfterEffects, style: t.small),
+                  ),
+                ],
+              ),
             ),
-            HouseButton(
-              key: const ValueKey('keymap-preset-ae'),
-              small: true,
-              onPressed: () async {
-                await km.loadPreset(BridgeKeymapPreset.afterEffects);
-                if (mounted) setState(() {});
-              },
-              child: Text(l10n.keymapAfterEffects, style: t.small),
-            ),
-            HouseButton(
-              key: const ValueKey('keymap-import'),
-              small: true,
-              onPressed: () => _importKeymap(km),
-              child: Text(l10n.menuImport, style: t.small),
-            ),
-            HouseButton(
-              key: const ValueKey('keymap-export'),
-              small: true,
-              onPressed: () => _exportKeymap(km),
-              child: Text(l10n.menuExport, style: t.small),
+            // What the last import said, when it had something to say. Kept beside
+            // the buttons rather than thrown as a dialogue: a keymap that would not
+            // read is a fact about the file, not an emergency.
+            settingsRow(
+              t,
+              l10n.settingsKeymapFile,
+              _keymapMessage ?? '',
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('keymap-import'),
+                    small: true,
+                    onPressed: () => _importKeymap(km),
+                    child: Text(l10n.menuImport, style: t.small),
+                  ),
+                  const SizedBox(width: 6),
+                  HouseButton(
+                    key: const ValueKey('keymap-export'),
+                    small: true,
+                    onPressed: () => _exportKeymap(km),
+                    child: Text(l10n.menuExport, style: t.small),
+                  ),
+                ],
+              ),
             ),
           ],
-        ),
-      ),
-      // What the last import said, when it had something to say. Kept beside
-      // the buttons rather than thrown as a dialogue: a keymap that would not
-      // read is a fact about the file, not an emergency.
-      if (_keymapMessage != null)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Text(
-            _keymapMessage!,
-            key: const ValueKey('keymap-message'),
-            style: t.small.copyWith(color: t.textMuted),
-          ),
-        ),
+          first: true),
       // The clash warning. Present only when there is one, because a banner
       // that is always there is a banner nobody reads.
       if (km.conflicts.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
           child: Container(
             key: const ValueKey('keymap-conflicts'),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -904,7 +1310,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // finding that out by pressing the key is worse than reading it here.
       if (km.shadows.isNotEmpty)
         Padding(
-          padding: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
           child: Column(
             key: const ValueKey('keymap-shadows'),
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -927,7 +1333,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ),
       if (groups.isEmpty)
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.all(16),
           child: Text(l10n.keymapNoMatches,
               style: t.small.copyWith(color: t.textMuted)),
         ),
@@ -991,20 +1397,25 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// One controller for the search box, kept across rebuilds so typing does
   /// not reset the cursor, and released with the window.
   TextEditingController? _search;
+  final ScrollController _scroll = ScrollController();
 
   @override
   void dispose() {
     _perfTimer?.cancel();
     _search?.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  TextEditingController _searchController(KeymapState km) {
+  TextEditingController _searchController() {
     final existing = _search;
     if (existing != null) return existing;
-    final created = TextEditingController(text: km.query)
+    final created = TextEditingController(text: _query)
       ..addListener(() {
-        km.query = _search?.text ?? '';
+        _query = _search?.text ?? '';
+        // The keymap filters engine-side against its own query, so the shared
+        // field has to hand it over rather than filtering the rows itself.
+        _keymapState()?.query = _query;
         if (mounted) setState(() {});
       });
     _search = created;
@@ -1020,18 +1431,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final tier = perf.tier;
     final memory = perf.memory;
 
-    return [
-      settingsSection(t, l10n.settingsGroupPlayback, [
-        settingsRow(
-          t,
-          l10n.settingsWhenTheMachineCannotKeep,
-          l10n.settingsHelpWhenTheMachineCannotKeep,
-          SizedBox(
-            width: 130,
-            child: BareDropdown<PlaybackMode>(
-              key: const ValueKey('settings-playback-mode'),
+    return _sections(t, [
+      (
+        l10n.settingsGroupPlayback,
+        [
+          _row(
+            t,
+            l10n.settingsWhenTheMachineCannotKeep,
+            _dropdown<PlaybackMode>(
+              key: 'settings-playback-mode',
               value: ui.workspace.performance.playback,
               options: PlaybackMode.values,
+              width: _ddWide,
               label: (m) => m == PlaybackMode.adaptive
                   ? l10n.playbackAdaptive
                   : l10n.playbackEveryFrame,
@@ -1041,196 +1452,194 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
-        ),
-        settingsRow(
-          t,
-          l10n.settingsQualityTier,
-          l10n.settingsHelpQualityTier,
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_tierLabel(tier.tier),
-                  key: const ValueKey('settings-tier'), style: t.small),
-              const SizedBox(width: 8),
-              LumitTooltip(
-                message: l10n.tipResetQualityTier,
-                child: HouseButton(
-                  key: const ValueKey('settings-tier-reset'),
-                  small: true,
-                  onPressed: () => _perfEdit(resetRealtime),
-                  child: Text(l10n.reset, style: t.small),
+          _row(
+            t,
+            l10n.settingsQualityTier,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_tierLabel(tier.tier),
+                    key: const ValueKey('settings-tier'), style: t.small),
+                const SizedBox(width: 8),
+                LumitTooltip(
+                  message: l10n.tipResetQualityTier,
+                  child: HouseButton(
+                    key: const ValueKey('settings-tier-reset'),
+                    small: true,
+                    onPressed: () => _perfEdit(resetRealtime),
+                    child: Text(l10n.reset, style: t.small),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ]),
-      settingsSection(t, l10n.settingsGroupRenderedFrameCache, [
-        _budgetRow(
-          t,
-          key: 'settings-cache-budget',
-          description: l10n.settingsHelpCacheBudget(_gib(_systemMib)),
-          bytes: stats.budgetBytes.toInt(),
-          ceilingMib: _systemMib,
-          onSet: (bytes) => _perfEdit(() {
-            setCacheBudget(bytes: bytes);
-            ui.workspace.setCacheBudgetBytes(bytes.toInt());
-          }),
-        ),
-        settingsRow(
-          t,
-          l10n.settingsInUse,
-          l10n.settingsHelpCacheInUse('${stats.hits}',
-              '${stats.hits + stats.misses}', '${stats.compDecodes}'),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                l10n.settingsUsedMbIn(
-                    _mib(stats.usedBytes.toInt()), '${stats.entries}'),
-                key: const ValueKey('settings-cache-used'),
-                style: t.small,
-              ),
-              const SizedBox(width: 8),
-              HouseButton(
-                key: const ValueKey('settings-cache-clear'),
-                small: true,
-                onPressed: () => _perfEdit(clearCache),
-                child: Text(l10n.clear, style: t.small),
-              ),
-            ],
+        ],
+      ),
+      (
+        l10n.settingsGroupRenderedFrameCache,
+        [
+          _budgetRow(
+            t,
+            key: 'settings-cache-budget',
+            bytes: stats.budgetBytes.toInt(),
+            ceilingMib: _systemMib,
+            onSet: (bytes) => _perfEdit(() {
+              setCacheBudget(bytes: bytes);
+              ui.workspace.setCacheBudgetBytes(bytes.toInt());
+            }),
           ),
-        ),
-      ]),
-      settingsSection(t, l10n.settingsGroupPreviewCacheOnTheGraphics, [
-        _budgetRow(
-          t,
-          key: 'settings-vram-budget',
-          description: l10n.settingsHelpVramBudget(_gib(_vramMib)),
-          bytes: vram.budgetBytes.toInt(),
-          ceilingMib: _vramMib,
-          onSet: (bytes) => _perfEdit(() {
-            setVramCacheBudget(bytes: bytes);
-            ui.workspace.setVramBudgetBytes(bytes.toInt());
-          }),
-        ),
-        settingsRow(
-          t,
-          l10n.settingsInUse,
-          l10n.settingsHelpInUse,
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                l10n.settingsUsedMbIn(
-                    _mib(vram.usedBytes.toInt()), '${vram.entries}'),
-                key: const ValueKey('settings-vram-used'),
-                style: t.small,
-              ),
-              const SizedBox(width: 8),
-              HouseButton(
-                key: const ValueKey('settings-vram-clear'),
-                small: true,
-                onPressed: () => _perfEdit(clearVramCache),
-                child: Text(l10n.clear, style: t.small),
-              ),
-            ],
+          _row(
+            t,
+            l10n.settingsInUse,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.settingsUsedMbIn(
+                      _mib(stats.usedBytes.toInt()), '${stats.entries}'),
+                  key: const ValueKey('settings-cache-used'),
+                  style: t.small,
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: const ValueKey('settings-cache-clear'),
+                  small: true,
+                  onPressed: () => _perfEdit(clearCache),
+                  child: Text(l10n.clear, style: t.small),
+                ),
+              ],
+            ),
+            description: l10n.settingsHelpCacheInUse('${stats.hits}',
+                '${stats.hits + stats.misses}', '${stats.compDecodes}'),
           ),
-        ),
-      ]),
-      ..._diskCache(t, ui),
+        ],
+      ),
+      (
+        l10n.settingsGroupPreviewCacheOnTheGraphics,
+        [
+          _budgetRow(
+            t,
+            key: 'settings-vram-budget',
+            bytes: vram.budgetBytes.toInt(),
+            ceilingMib: _vramMib,
+            onSet: (bytes) => _perfEdit(() {
+              setVramCacheBudget(bytes: bytes);
+              ui.workspace.setVramBudgetBytes(bytes.toInt());
+            }),
+          ),
+          _row(
+            t,
+            l10n.settingsInUse,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.settingsUsedMbIn(
+                      _mib(vram.usedBytes.toInt()), '${vram.entries}'),
+                  key: const ValueKey('settings-vram-used'),
+                  style: t.small,
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: const ValueKey('settings-vram-clear'),
+                  small: true,
+                  onPressed: () => _perfEdit(clearVramCache),
+                  child: Text(l10n.clear, style: t.small),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      _diskCache(t, ui),
       // Where the memory has gone (K-294). Last on the page, under the tiers
       // it weighs: each section above reports one store, and this one reports
-      // the whole process and what none of them accounts for. Read downwards it
-      // is the summing-up, and it leaves every control above where the hand
-      // already knows to find it.
+      // the whole process and what none of them accounts for.
       //
       // **Debug builds only** (owner, 2026-08-06). It is an instrument for
       // hunting a fault, not a setting: a shipped editor asking its user to
       // interpret live texture counts has handed them the engineering rather
       // than the tool. `kDebugMode` is false in both profile and release
       // builds, so what ships is the page without it.
-      if (memory != null)
-        settingsSection(t, l10n.settingsGroupMemory, [
-          settingsRow(
-            t,
-            l10n.settingsThisProcess,
-            l10n.settingsHelpThisProcess,
-            Text(
-              memory.processBytes == BigInt.zero
-                  ? l10n.settingsMemoryNotKnown
-                  : _bytes(memory.processBytes),
-              key: const ValueKey('settings-memory-process'),
-              style: t.small,
-            ),
-          ),
-          settingsRow(
-            t,
-            l10n.settingsNotHeldByAnyCache,
-            l10n.settingsHelpNotHeldByAnyCache,
-            Text(
-              memory.processBytes == BigInt.zero
-                  ? '—'
-                  : _bytes(memory.unaccountedBytes),
-              key: const ValueKey('settings-memory-unaccounted'),
-              style: t.small,
-            ),
-          ),
-          settingsRow(
-            t,
-            l10n.settingsHeldByTheGraphicsDriver,
-            l10n.settingsHelpHeldByTheGraphicsDriver,
-            Text(
-              l10n.settingsMemoryTexturesBuffers(
-                  '${memory.gpuTextures}', '${memory.gpuBuffers}'),
-              key: const ValueKey('settings-memory-gpu'),
-              style: t.small,
-            ),
-          ),
-          // The byte figures are Vulkan and D3D12 only, so the row is not drawn
-          // at all on a Mac rather than printing two zeroes and inviting the
-          // reader to draw a conclusion from them.
-          if (memory.gpuReservedBytes != BigInt.zero)
-            settingsRow(
-              t,
-              l10n.settingsGraphicsMemoryReserved,
-              l10n.settingsHelpGraphicsMemoryReserved,
-              Text(
-                l10n.settingsMemoryReservedInUse(
-                    _bytes(memory.gpuReservedBytes),
-                    _bytes(memory.gpuAllocatedBytes)),
-                key: const ValueKey('settings-memory-gpu-bytes'),
-                style: t.small,
-              ),
-            ),
-          settingsRow(
-            t,
-            l10n.settingsOpenMediaDecoders,
-            l10n.settingsHelpOpenMediaDecoders,
-            Text(
-              '${memory.openDecoders}',
-              key: const ValueKey('settings-memory-decoders'),
-              style: t.small,
-            ),
-          ),
-          settingsRow(
-            t,
-            l10n.settingsFramesWaitingToBeWritten,
-            l10n.settingsHelpFramesWaitingToBeWritten,
-            Text(
-              '${memory.parkQueueFrames}',
-              key: const ValueKey('settings-memory-parks'),
-              style: t.small,
-            ),
-          ),
-        ]),
-    ];
+      (
+        l10n.settingsGroupMemory,
+        memory == null
+            ? <Widget?>[]
+            : [
+                _row(
+                  t,
+                  l10n.settingsThisProcess,
+                  Text(
+                    memory.processBytes == BigInt.zero
+                        ? l10n.settingsMemoryNotKnown
+                        : _bytes(memory.processBytes),
+                    key: const ValueKey('settings-memory-process'),
+                    style: t.small,
+                  ),
+                ),
+                _row(
+                  t,
+                  l10n.settingsNotHeldByAnyCache,
+                  Text(
+                    memory.processBytes == BigInt.zero
+                        ? '—'
+                        : _bytes(memory.unaccountedBytes),
+                    key: const ValueKey('settings-memory-unaccounted'),
+                    style: t.small,
+                  ),
+                ),
+                _row(
+                  t,
+                  l10n.settingsHeldByTheGraphicsDriver,
+                  Text(
+                    l10n.settingsMemoryTexturesBuffers(
+                        '${memory.gpuTextures}', '${memory.gpuBuffers}'),
+                    key: const ValueKey('settings-memory-gpu'),
+                    style: t.small,
+                  ),
+                ),
+                // The byte figures are Vulkan and D3D12 only, so the row is not
+                // drawn at all on a Mac rather than printing two zeroes and
+                // inviting the reader to draw a conclusion from them.
+                if (memory.gpuReservedBytes != BigInt.zero)
+                  _row(
+                    t,
+                    l10n.settingsGraphicsMemoryReserved,
+                    Text(
+                      l10n.settingsMemoryReservedInUse(
+                          _bytes(memory.gpuReservedBytes),
+                          _bytes(memory.gpuAllocatedBytes)),
+                      key: const ValueKey('settings-memory-gpu-bytes'),
+                      style: t.small,
+                    ),
+                  ),
+                _row(
+                  t,
+                  l10n.settingsOpenMediaDecoders,
+                  Text(
+                    '${memory.openDecoders}',
+                    key: const ValueKey('settings-memory-decoders'),
+                    style: t.small,
+                  ),
+                ),
+                _row(
+                  t,
+                  l10n.settingsFramesWaitingToBeWritten,
+                  Text(
+                    '${memory.parkQueueFrames}',
+                    key: const ValueKey('settings-memory-parks'),
+                    style: t.small,
+                  ),
+                ),
+              ],
+      ),
+    ]);
   }
 
   /// The disk tier (docs/06 §5.4, docs/07 §15): its budget, where it lives, and
   /// what it holds. The bottom of the three-tier cache and the only one that
   /// outlives the session, which is why it has a folder at all.
-  List<Widget> _diskCache(LumitTheme t, LumitUiState ui) {
+  (String, List<Widget?>) _diskCache(LumitTheme t, LumitUiState ui) {
     final disk = _perf!.disk;
     // What this project says, if it says anything: a project's own choice
     // overrides the application's, so it is what the controls should show.
@@ -1239,12 +1648,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final where = own?.location ??
         cacheLocationFromName(ui.workspace.performance.diskCacheLocation ??
             BridgeCacheLocation.appData.name);
-    return [
-      settingsSection(t, l10n.settingsGroupFramesParkedOnDisk, [
+    return (
+      l10n.settingsGroupFramesParkedOnDisk,
+      [
         _budgetRow(
           t,
           key: 'settings-disk-budget',
-          description: l10n.settingsHelpDiskBudget,
           bytes: disk.budgetBytes.toInt(),
           ceilingMib: _diskCeilingMib,
           onSet: (bytes) => _perfEdit(() {
@@ -1252,15 +1661,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ui.workspace.setDiskBudgetBytes(bytes.toInt());
           }),
         ),
-        settingsRow(
+        _row(
           t,
           l10n.settingsWhere,
-          disk.root.isEmpty ? l10n.settingsHelpNowhereToPark : disk.root,
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
-                width: 150,
+                width: _ddWide,
+                height: settingsControlHeight,
                 child: BareDropdown<BridgeCacheLocation>(
                   key: const ValueKey('settings-disk-location'),
                   value: where,
@@ -1283,31 +1692,27 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ],
             ],
           ),
+          description:
+              disk.root.isEmpty ? l10n.settingsHelpNowhereToPark : disk.root,
         ),
-        settingsRow(
+        _row(
           t,
           l10n.settingsAppliesTo,
-          scope == CacheScope.thisProject
-              ? l10n.settingsHelpScopeThisProject
-              : l10n.settingsHelpScopeEverywhere,
-          SizedBox(
-            width: 150,
-            child: BareDropdown<CacheScope>(
-              key: const ValueKey('settings-disk-scope'),
-              value: scope,
-              options: CacheScope.values,
-              label: (s) => switch (s) {
-                CacheScope.everywhere => l10n.scopeEverything,
-                CacheScope.thisProject => l10n.scopeThisProject,
-              },
-              onChanged: (s) => _setScope(ui, s, where),
-            ),
+          _dropdown<CacheScope>(
+            key: 'settings-disk-scope',
+            value: scope,
+            options: CacheScope.values,
+            width: _ddWide,
+            label: (s) => switch (s) {
+              CacheScope.everywhere => l10n.scopeEverything,
+              CacheScope.thisProject => l10n.scopeThisProject,
+            },
+            onChanged: (s) => _setScope(ui, s, where),
           ),
         ),
-        settingsRow(
+        _row(
           t,
           l10n.settingsInUse,
-          l10n.settingsHelpInUse2,
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1330,8 +1735,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ],
           ),
         ),
-      ]),
-    ];
+      ]
+    );
   }
 
   /// The open project, or null before one exists — read through the provider
@@ -1424,31 +1829,37 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// A typed box rather than a pick from a fixed list — the old dropdown could
   /// not say "3 GB on a 32 GB machine", and its options were a guess at what
   /// hardware would show up.
-  Widget _budgetRow(
+  Widget? _budgetRow(
     LumitTheme t, {
     required String key,
-    required String description,
     required int bytes,
     required double ceilingMib,
     required ValueChanged<BigInt> onSet,
   }) =>
-      settingsRow(
+      _row(
         t,
         l10n.settingsBudget,
-        description,
-        SizedBox(
-          width: 110,
-          child: DragValueField(
-            key: ValueKey<String>(key),
-            value: (bytes >> 20).toDouble(),
-            min: _minBudgetMib,
-            max: ceilingMib,
-            // A megabyte a pixel is far too fine on a 32 GB ceiling.
-            speed: 16,
-            decimals: 0,
-            suffix: ' ${l10n.unitMb}',
-            onChanged: (mib) => onSet(BigInt.from(mib.round()) << 20),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 110,
+              height: settingsControlHeight,
+              child: DragValueField(
+                key: ValueKey<String>(key),
+                value: (bytes >> 20).toDouble(),
+                min: _minBudgetMib,
+                max: ceilingMib,
+                // A megabyte a pixel is far too fine on a 32 GB ceiling.
+                speed: 16,
+                decimals: 0,
+                onChanged: (mib) => onSet(BigInt.from(mib.round()) << 20),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(l10n.unitMb,
+                style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+          ],
         ),
       );
 
@@ -1465,11 +1876,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final mib = (bytes >> 20).toDouble();
     return mib <= 0 ? _unknownMemoryMib : mib;
   }
-
-  /// A round figure for a sentence: "32 GB", or megabytes when it is small.
-  static String _gib(double mib) => mib >= 1024
-      ? '${(mib / 1024).round()} ${l10n.unitGb}'
-      : '${mib.round()} ${l10n.unitMb}';
 
   /// Bytes as a person reads them — MB up to a gigabyte, GB above, one
   /// decimal so 85.4 GB does not print as 85.
@@ -1606,7 +2012,9 @@ class _ChordCellState extends State<_ChordCell> {
           onTap: _startListening,
           child: Container(
             constraints: const BoxConstraints(minWidth: 110),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            height: settingsControlHeight,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
               color: _listening ? t.accent : t.surface2,
               borderRadius: BorderRadius.circular(t.tokens.controlRadius),

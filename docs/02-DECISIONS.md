@@ -12421,3 +12421,60 @@ and records the owner's one addition on top of it. Nothing here reverses an earl
 - **Neither asks first.** The one destructive control that asks is the disk cache
   (`shell/cache_confirm_frb.dart`), because that one throws away a night's rendering with
   nothing to undo. Forgetting a path deletes nothing and File ▸ Open brings it back.
+
+## K-465 — Settings is rebuilt to its drawing: nine pages named, six built, rows of 30
+
+**DECIDED 2026-08-24.** The approved Settings drawing is authoritative over K-193's five
+pages and over §12A.4's dialog row as it was written (K-458's standing rule). Nothing else
+here reverses an earlier entry.
+
+- **The window is the drawing's frame**: 760×520 inside a hairline, a 30px kicker title
+  strip carrying a search well and a close mark, a 160px sidebar of pages, the page beside
+  it, and a 43px footer saying *Changes apply immediately* with **Reset page** and
+  **Close** at its far end. No filled action: §3.1's one-filled-button rule is a ceiling,
+  and the drawing spends none of it here. The accent is spent once, on the 2px tick beside
+  the page in force.
+- **A page is sections, and a section is a kicker over rows.** No cards: the drawing
+  separates one section from the next with a rule and 6px of air, which is what
+  `settingsSection` now draws. Project settings (K-286) shares the shape, as it always has.
+- **A row is 30, its label in a fixed 190px column, and its control **beside** the label
+  rather than at the right edge.** This corrects §12A.4's "labels in a fixed 110px column"
+  and its right-aligned control: 190 and left is what the drawing computes, twice over.
+- **The help sentence under each setting is gone.** The drawing has no room for one, and a
+  setting whose name does not say what it does is a naming problem. A row may still carry a
+  line *under* it, at full width, when it has something live to report — where the parked
+  frames are, what the last update check found. The `settingsHelp*` strings those rows used
+  are left in the arb rather than deleted, so nothing that still wants one has to be
+  re-translated to get it back.
+- **The pages are General, Appearance, Timeline, Viewer, Preview and cache, Shortcuts.**
+  The drawing lists three more — **Audio, Autosave, Export** — and they are *not built*:
+  there is no audio device setting, no autosave interval and no export default in the
+  engine to put on them, and an empty page is a promise the window cannot keep (K-193's
+  rule, which the drawing does not contradict — it draws the destination, not the stock).
+  Each arrives with the settings it would hold.
+- **A boolean in this window is the drawing's pill switch**, `HouseToggle`: 22×12, on in
+  `animated`, off in `hairline_strong`. Not the accent — a page of switches would spend
+  §3.1's accent a dozen times over — and not the 9px checkbox (K-450), which stays the
+  mark for a checkbox in a panel. Where the drawing puts a dropdown on what was a
+  checkbox, the setting keeps its two values and gains the two words the drawing gives
+  them (Surround: Neutral / Theme colour; waveform Style: Frequency / Plain; Anchor:
+  Centre / Bottom; Tooltips: Short / Off).
+- **The title strip's search is the whole window's.** On every page but Shortcuts it hides
+  the rows whose names do not match; on Shortcuts it is the keymap query the engine
+  filters on, which is where that page's own search box went.
+- **Reset page** puts the page being shown back to what Lumit ships. Preview and cache is
+  the exception it can only half keep: the cache budgets are the engine's own defaults and
+  it offers no way to ask for them back, so that page resets the playback mode and the
+  quality tier and leaves the budgets alone. Nothing asks first — nothing here is
+  destructive, and the disk cache's own confirmation (K-193) still is.
+- **Five one-click accents** (`LumitTheme.accentPresets`), the same five in every scheme,
+  with the hex of whatever the accent actually is beside them. The theme editor still holds
+  the whole wheel; these are the quick answers.
+- **Three drawn rows have nothing behind them and are not faked**: *Viewer bar* (K-448's
+  split/top/bottom arrangement, which no setting stores yet), *Show shortcut hints* (no
+  menu or tooltip reads such a flag), and *Editable values* (the well's own look, which
+  §3.1 fixes rather than offers). They land with the behaviour they would switch.
+- **Chrome labels (K-440) is confirmed as this window's**, on the Appearance page's
+  Interface section, and is not drawn there yet because the three-way setting has nothing
+  to change: the icon set is embedded but no surface reads a labels mode. It arrives with
+  Phase 1's own work, in the place this entry names.

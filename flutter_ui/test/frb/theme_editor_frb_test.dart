@@ -152,8 +152,8 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('settings-theme-duplicate')));
       await tester.pumpAndSettle();
-      expect(p.uiState.workspace.customThemes.map((t) => t.name),
-          ['Dark copy']);
+      expect(
+          p.uiState.workspace.customThemes.map((t) => t.name), ['Dark copy']);
       expect(p.uiState.workspace.customThemeName, 'Dark copy',
           reason: 'the copy is what you are now editing');
 
@@ -253,7 +253,11 @@ void main() {
       expect(dark.viewerSurround.r, dark.viewerSurround.g,
           reason: 'and that grey really is neutral');
 
+      // A choice of two words now, not a switch (K-465): the drawing gives the
+      // surround a dropdown, and its two options are the bool's two values.
       await tester.tap(find.byKey(const ValueKey('settings-themed-surround')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Theme colour').last);
       await tester.pumpAndSettle();
       expect(p.uiState.workspace.themedViewerSurround, isTrue);
       expect(viewerSurroundFor(dark, themed: true), dark.surface0,
@@ -268,6 +272,10 @@ void main() {
       final p = await openAppearance(tester);
       expect(p.uiState.workspace.smoothZoomedViewer, isFalse);
 
+      // On the Viewer page since K-465: Appearance keeps what the Viewer looks
+      // like, and this is about the picture itself.
+      await tester.tap(find.byKey(const ValueKey('settings-page-viewer')));
+      await tester.pumpAndSettle();
       await tester
           .tap(find.byKey(const ValueKey('settings-smooth-zoomed-viewer')));
       await tester.pumpAndSettle();

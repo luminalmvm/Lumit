@@ -1108,11 +1108,20 @@ migration path). Either way they all share one pattern:
 
 - a kicker title strip;
 - an optional page-tab row under it (Export: General / Encoder / Colour / Metadata);
-- label-left / control-right rows, labels in a fixed 110px column;
-- hairline-separated, kicker-titled groups;
+- **label-left rows, the label in a fixed 190px column and the control at the *start* of
+  what is left**, 12px after it (K-465: the approved Settings drawing computes both, and
+  this supersedes the 110px column and the right-aligned control written here before);
+- hairline-separated, kicker-titled groups — a rule and 6px of air above each group after
+  the first, and no card around any of them;
 - a footer strip carrying a summary line (mono, factual: `600 frames · 10.0 s · 1920×1080 ·
-  60 fps`) and **the single filled action**;
+  60 fps`) and **the single filled action** where the dialog has one. The rule is a ceiling
+  of one, not a floor: Settings' own footer carries two outlined buttons and no fill;
 - paired buttons share one width (K-448).
+
+**A settings row states its name and nothing else.** The sentence explaining what a setting
+does was dropped with the drawing that had no room for it (K-465) — a row may still carry a
+line *under* it, at the full width of the page, but only for something live it has to
+report (where frames are parked, what the last update check found), never as help.
 
 ### 12A.5 Feedback is transient and local (K-439)
 
@@ -1173,6 +1182,12 @@ a plain constant in the code rather than a token with two equal values.
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
 | Dialog value wells and dropdowns | 22 | 22 |
+| Settings: the window itself (K-465) | 760×520 | 760×520 |
+| Settings: sidebar, and one page's entry in it | 160 wide, 24 tall | 160 wide, 24 tall |
+| Settings: a section's kicker band (12 above the label, its line, 4 below) | 30 | 30 |
+| Settings: footer strip, and the buttons on it | 43, buttons 26 | 43, buttons 26 |
+| Settings: the search well in the title strip | 174×20 | 174×20 |
+| A switch (`HouseToggle`), on in `animated` | 22×12 | 22×12 |
 | Status bar | 18 | 18 |
 | Graph-side horizontal scrollbar | 7 | 7 |
 
