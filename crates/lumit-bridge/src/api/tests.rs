@@ -11,8 +11,8 @@
 use crate::api::{
     composition::{BridgeCompSettings, CompositionReference},
     effect::{
-        list_effects, BridgeEffectValue, BridgeKeyframe, BridgeRational, BridgeScalar,
-        BridgeSideInterp,
+        list_effects, BridgeEffectInstance, BridgeEffectValue, BridgeKeyframe, BridgeRational,
+        BridgeScalar, BridgeSideInterp,
     },
     folder::FolderReference,
     footage::FootageReference,
@@ -6484,4 +6484,537 @@ fn vector_pairs_and_their_chains_cross_the_seam() {
     assert!(layer.get_info().expect("info").effects[0]
         .linked_pairs
         .is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// The layer driver graph (K-471, K-472; docs/impl/node-graph.md §5).
+// ---------------------------------------------------------------------------
+
+use crate::api::graph::{
+    BridgeGraphEdge, BridgeGraphWiring, BridgeInputRef, BridgeLayerGraph, BridgeNodePosition,
+    BridgeNodeRef, BridgeOutputRef, BridgePortType,
+};
+
+/// A comp with one solid, ready to be wired.
+fn layer_to_wire() -> (ProjectReference, LayerReference) {
+    let (project, ..) = project_with_folder();
+    let comp = add_comp(&project, "Scene");
+    let layer = comp.add_solid_layer().expect("a solid");
+    (project, layer)
+}
+
+/// The ids of the boxes the graph draws for the image chain, in draw order.
+fn image_chain(graph: &BridgeLayerGraph) -> Vec<Uuid> {
+    graph
+        .nodes
+        .iter()
+        .filter_map(|n| match n.node {
+            BridgeNodeRef::Effect(id) => Some(id),
+            _ => None,
+        })
+        .collect()
+}
+
+/// One driver wired into one effect parameter — the shape most of these bend.
+fn wiggle_into_blur(layer: &LayerReference) -> (Uuid, Uuid) {
+    layer.add_effect("blur".into()).expect("a blur");
+    let blur = layer.get_effects().expect("stack")[0].id();
+    let wiggle = layer.new_driver("wiggle".into()).expect("a wiggle");
+    let wiggle_id = wiggle.id();
+    layer
+        .set_graph(
+            vec![wiggle],
+            BridgeGraphWiring {
+                edges: vec![BridgeGraphEdge {
+                    from: BridgeOutputRef::Driver {
+                        node: wiggle_id,
+                        port: "value".into(),
+                    },
+                    to: BridgeInputRef::Param {
+                        node: BridgeNodeRef::Effect(blur),
+                        port: "radius".into(),
+                    },
+                }],
+                layout: vec![BridgeNodePosition {
+                    node: BridgeNodeRef::Driver(wiggle_id),
+                    x: -120.0,
+                    y: 40.0,
+                }],
+                exposed: vec![BridgeNodeRef::Effect(blur)],
+            },
+        )
+        .expect("a number into a number");
+    (blur, wiggle_id)
+}
+
+/// **The stack view never lies** (§9.2). The read model derives the image chain
+/// from `Layer::effects` and stores none of it, so whatever the stack is — in
+/// whatever order, however edited — the graph reports exactly that, box for box.
+///
+/// Walked over a set of arrangements rather than one example: the invariant is
+/// about every stack, and an example only pins the one it happens to hold.
+#[test]
+fn the_graph_reports_the_effect_stack_as_the_image_chain() {
+    let (_project, layer) = layer_to_wire();
+
+    for name in ["blur", "levels", "glow", "fill"] {
+        layer.add_effect(name.to_owned()).expect("added");
+    }
+    let ids = |layer: &LayerReference| -> Vec<Uuid> {
+        layer
+            .get_effects()
+            .expect("stack")
+            .iter()
+            .map(BridgeEffectInstance::id)
+            .collect()
+    };
+    assert_eq!(image_chain(&layer.get_graph().expect("graph")), ids(&layer));
+
+    // Every reordering of it still reads back as the list it is.
+    for to in 0..4 {
+        let staged = layer.get_effects().expect("stack");
+        layer.reorder_effect(&staged[0], to).expect("reordered");
+        assert_eq!(
+            image_chain(&layer.get_graph().expect("graph")),
+            ids(&layer),
+            "the chain is the list, whatever order the list is in"
+        );
+    }
+
+    // And so does a removal.
+    let staged = layer.get_effects().expect("stack");
+    layer.remove_effect(&staged[1]).expect("removed");
+    assert_eq!(image_chain(&layer.get_graph().expect("graph")), ids(&layer));
+
+    let graph = layer.get_graph().expect("graph");
+    assert_eq!(
+        graph.nodes.first().map(|n| n.node),
+        Some(BridgeNodeRef::Source),
+        "the Source is the first box drawn"
+    );
+    assert_eq!(
+        graph.nodes.last().map(|n| n.node),
+        Some(BridgeNodeRef::Out),
+        "and the Layer out closes the chain — there being no driver here"
+    );
+}
+
+/// A fresh layer has no wiring at all, and says so — which is what keeps the
+/// section out of the saved file.
+#[test]
+fn a_layer_nobody_has_wired_reports_the_bare_chain() {
+    let (_project, layer) = layer_to_wire();
+    let graph = layer.get_graph().expect("graph");
+
+    assert_eq!(
+        graph.nodes.iter().map(|n| n.node).collect::<Vec<_>>(),
+        vec![BridgeNodeRef::Source, BridgeNodeRef::Out],
+    );
+    assert!(graph.wiring.edges.is_empty());
+    assert!(graph.wiring.layout.is_empty());
+    assert!(graph.wiring.exposed.is_empty());
+    assert!(layer.get_graph_drivers().expect("drivers").is_empty());
+
+    // The two derived boxes draw the ports the drawing gives them, and no more.
+    let source = &graph.nodes[0];
+    assert_eq!(source.label, "Source");
+    assert!(source.inputs.is_empty());
+    assert_eq!(
+        source
+            .outputs
+            .iter()
+            .map(|p| (p.id.as_str(), p.port_type, p.wired))
+            .collect::<Vec<_>>(),
+        vec![
+            ("image", BridgePortType::Image, true),
+            ("matte", BridgePortType::Matte, false),
+        ],
+    );
+    let out = &graph.nodes[1];
+    assert_eq!(out.label, "Layer out");
+    assert!(out.outputs.is_empty());
+    assert_eq!(
+        out.inputs
+            .iter()
+            .map(|p| (p.id.as_str(), p.port_type, p.wired))
+            .collect::<Vec<_>>(),
+        vec![
+            ("image", BridgePortType::Image, true),
+            // §7: drawn, unfilled, honest — audio comes only from a footage
+            // layer's own stream, so nothing may be wired here in this phase.
+            ("audio", BridgePortType::Audio, false),
+        ],
+    );
+}
+
+/// Adding a driver, wiring it, placing it and growing a box are **one** write
+/// and therefore one undo step (§3).
+#[test]
+fn a_driver_is_added_wired_and_undone_in_one_step() {
+    let (project, layer) = layer_to_wire();
+    let (blur, wiggle) = wiggle_into_blur(&layer);
+
+    let graph = layer.get_graph().expect("graph");
+    let node = graph
+        .nodes
+        .iter()
+        .find(|n| n.node == BridgeNodeRef::Driver(wiggle))
+        .expect("the driver is drawn");
+    assert_eq!(node.match_name, "wiggle");
+    assert_eq!(node.label, "Wiggle", "English on the wire (K-303)");
+    assert!(node.enabled);
+    assert_eq!(
+        node.outputs
+            .iter()
+            .map(|p| (p.id.as_str(), p.label.as_str(), p.port_type, p.wired))
+            .collect::<Vec<_>>(),
+        vec![("value", "Value", BridgePortType::Number, true)],
+        "its one output is wired, and names itself in English"
+    );
+    assert_eq!(
+        node.inputs
+            .iter()
+            .map(|p| p.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["amount", "frequency"],
+        "a socket per parameter a wire could feed"
+    );
+
+    // The socket the wire lands on says so; its siblings do not.
+    let blur_node = graph
+        .nodes
+        .iter()
+        .find(|n| n.node == BridgeNodeRef::Effect(blur))
+        .expect("the blur is drawn");
+    assert!(
+        blur_node.inputs.iter().any(|p| p.id == "radius" && p.wired),
+        "the driven parameter's socket is filled"
+    );
+    assert_eq!(
+        blur_node.inputs.iter().filter(|p| p.wired).count(),
+        2,
+        "the radius and the picture coming in — and nothing else"
+    );
+
+    // The stored half comes back exactly as it was written.
+    assert_eq!(graph.wiring.exposed, vec![BridgeNodeRef::Effect(blur)]);
+    assert_eq!(graph.wiring.layout.len(), 1);
+    assert_eq!(graph.wiring.layout[0].x, -120.0);
+
+    // One gesture, one undo step: the node and its wire go together.
+    project.undo().expect("undone");
+    let graph = layer.get_graph().expect("graph");
+    assert!(graph.wiring.edges.is_empty(), "the undo took the wire");
+    assert!(
+        !graph
+            .nodes
+            .iter()
+            .any(|n| matches!(n.node, BridgeNodeRef::Driver(_))),
+        "and the node with it"
+    );
+}
+
+/// **Every refusal arrives as its own calm sentence** (§1.5). A graph that
+/// breaks a rule is declined whole; the document is left exactly as it was.
+#[test]
+fn a_broken_graph_is_refused_with_the_engines_own_words() {
+    let (_project, layer) = layer_to_wire();
+    let (blur, _) = wiggle_into_blur(&layer);
+    let before = layer.get_graph().expect("graph");
+
+    let drivers = |layer: &LayerReference| layer.get_graph_drivers().expect("drivers");
+    let param = |node, port: &str| BridgeInputRef::Param {
+        node,
+        port: port.to_owned(),
+    };
+    let from = |id: Uuid, port: &str| BridgeOutputRef::Driver {
+        node: id,
+        port: port.to_owned(),
+    };
+    let wiring = |edges: Vec<BridgeGraphEdge>| BridgeGraphWiring {
+        edges,
+        layout: Vec::new(),
+        exposed: Vec::new(),
+    };
+
+    let id = drivers(&layer)[0].id();
+    let cases: Vec<(Vec<BridgeEffectInstance>, BridgeGraphWiring, &str)> = vec![
+        (
+            Vec::new(),
+            wiring(vec![BridgeGraphEdge {
+                from: from(id, "value"),
+                to: param(BridgeNodeRef::Effect(blur), "radius"),
+            }]),
+            "a wire names a node this layer does not have",
+        ),
+        (
+            drivers(&layer),
+            wiring(vec![BridgeGraphEdge {
+                from: from(id, "value"),
+                to: param(BridgeNodeRef::Effect(blur), "no_such_parameter"),
+            }]),
+            "a wire names a port that does not exist",
+        ),
+        (
+            drivers(&layer),
+            wiring(vec![BridgeGraphEdge {
+                from: from(id, "value"),
+                to: BridgeInputRef::Matte { effect: blur },
+            }]),
+            "a wire joins two ports of different types",
+        ),
+        (
+            drivers(&layer),
+            wiring(vec![
+                BridgeGraphEdge {
+                    from: from(id, "value"),
+                    to: param(BridgeNodeRef::Effect(blur), "radius"),
+                },
+                BridgeGraphEdge {
+                    from: from(id, "value"),
+                    to: param(BridgeNodeRef::Effect(blur), "radius"),
+                },
+            ]),
+            "a socket cannot take a second wire",
+        ),
+        (
+            drivers(&layer),
+            wiring(vec![BridgeGraphEdge {
+                from: from(id, "value"),
+                to: param(BridgeNodeRef::Driver(id), "amount"),
+            }]),
+            "the wire would close a loop",
+        ),
+    ];
+
+    for (nodes, wiring, sentence) in cases {
+        let refusal = layer
+            .set_graph(nodes, wiring)
+            .expect_err("the rule is enforced");
+        assert_eq!(
+            refusal.to_string(),
+            sentence,
+            "the refusal is the engine's own calm sentence, fit for the status line"
+        );
+        assert_eq!(
+            layer.get_graph().expect("graph").wiring,
+            before.wiring,
+            "a refused write leaves the document exactly as it was"
+        );
+    }
+}
+
+/// A mistyped wire is refused whichever way round it is drawn — and the matched
+/// pair is accepted, so the refusal is about the types and not about the wiring.
+#[test]
+fn a_colour_and_a_number_refuse_each_other() {
+    let (_project, layer) = layer_to_wire();
+    layer.add_effect("fill".into()).expect("a fill");
+    let fill = layer.get_effects().expect("stack")[0].id();
+    let cycle = layer.new_driver("colour_cycle".into()).expect("a cycle");
+    let cycle_id = cycle.id();
+
+    let wire = |port: &str| BridgeGraphWiring {
+        edges: vec![BridgeGraphEdge {
+            from: BridgeOutputRef::Driver {
+                node: cycle_id,
+                port: "colour".into(),
+            },
+            to: BridgeInputRef::Param {
+                node: BridgeNodeRef::Effect(fill),
+                port: port.to_owned(),
+            },
+        }],
+        layout: Vec::new(),
+        exposed: Vec::new(),
+    };
+
+    layer
+        .set_graph(vec![cycle], wire("colour"))
+        .expect("colour into colour");
+
+    let staged = layer.get_graph_drivers().expect("drivers");
+    assert_eq!(
+        layer
+            .set_graph(staged, wire("mix"))
+            .expect_err("a colour is not a number")
+            .to_string(),
+        "a wire joins two ports of different types"
+    );
+}
+
+/// **The one new capability the drawing shows** (§1.4): the layer's own masked
+/// source alpha, wired into an effect's matte input.
+#[test]
+fn the_source_matte_is_a_wire_like_any_other() {
+    let (_project, layer) = layer_to_wire();
+    layer.add_effect("blur".into()).expect("a blur");
+    let blur = layer.get_effects().expect("stack")[0].id();
+
+    layer
+        .set_graph(
+            Vec::new(),
+            BridgeGraphWiring {
+                edges: vec![BridgeGraphEdge {
+                    from: BridgeOutputRef::SourceMatte,
+                    to: BridgeInputRef::Matte { effect: blur },
+                }],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+            },
+        )
+        .expect("every effect with a matte row takes one");
+
+    let graph = layer.get_graph().expect("graph");
+    assert!(
+        graph.nodes[0]
+            .outputs
+            .iter()
+            .any(|p| p.id == "matte" && p.wired),
+        "the Source's matte output is filled now something reads it"
+    );
+    let blur_node = graph
+        .nodes
+        .iter()
+        .find(|n| n.node == BridgeNodeRef::Effect(blur))
+        .expect("the blur");
+    assert!(
+        blur_node
+            .inputs
+            .iter()
+            .any(|p| p.id == "matte" && p.port_type == BridgePortType::Matte && p.wired),
+        "and the effect's matte socket takes it"
+    );
+}
+
+/// **A driver's parameters ride the ordinary property path** (§3): the staged
+/// instance, the same value types, the same keyframes on the composition's
+/// clock — and `set_graph` is the commit, exactly as `set_effects` is for the
+/// stack.
+#[test]
+fn a_drivers_parameter_keyframes_like_any_other() {
+    let (project, layer) = layer_to_wire();
+    let (_blur, wiggle) = wiggle_into_blur(&layer);
+
+    let mut staged = layer.get_graph_drivers().expect("drivers");
+    assert_eq!(staged.len(), 1);
+    assert_eq!(staged[0].id(), wiggle);
+    assert!(
+        staged[0].get_parameters().contains(&"amount".to_owned()),
+        "a driver lists its parameters like any other instance"
+    );
+
+    // A static write.
+    staged[0]
+        .set_value(
+            "amount".into(),
+            BridgeEffectValue::Float(BridgeScalar::Static(42.0)),
+        )
+        .expect("staged");
+    // And a keyframed one, in composition frames (K-213).
+    staged[0]
+        .set_value(
+            "frequency".into(),
+            BridgeEffectValue::Float(BridgeScalar::Keyframed(vec![
+                BridgeKeyframe {
+                    time: BridgeRational { num: 0, den: 1 },
+                    value: 1.0,
+                    interp_in: BridgeSideInterp::Linear,
+                    interp_out: BridgeSideInterp::Linear,
+                },
+                BridgeKeyframe {
+                    time: BridgeRational { num: 2, den: 1 },
+                    value: 5.0,
+                    interp_in: BridgeSideInterp::Linear,
+                    interp_out: BridgeSideInterp::Linear,
+                },
+            ])),
+        )
+        .expect("staged");
+    // Bypass rides the same staged copy — the node's `B` badge.
+    staged[0].set_enabled(false);
+
+    let wiring = layer.get_graph().expect("graph").wiring;
+    layer.set_graph(staged, wiring).expect("committed");
+
+    let back = layer.get_graph_drivers().expect("drivers");
+    assert!(matches!(
+        back[0].get_value("amount".into()).expect("read"),
+        BridgeEffectValue::Float(BridgeScalar::Static(v)) if v == 42.0
+    ));
+    let BridgeEffectValue::Float(BridgeScalar::Keyframed(keys)) =
+        back[0].get_value("frequency".into()).expect("read")
+    else {
+        panic!("the keys survived the round trip");
+    };
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[1].time.num, 2);
+    assert_eq!(keys[1].time.den, 1);
+    assert!(
+        !layer
+            .get_graph()
+            .expect("graph")
+            .nodes
+            .iter()
+            .find(|n| n.node == BridgeNodeRef::Driver(wiggle))
+            .expect("drawn")
+            .enabled,
+        "a bypassed driver draws its border dashed"
+    );
+
+    // One commit, one undo step — and the wire it was carrying is untouched.
+    project.undo().expect("undone");
+    let after = layer.get_graph_drivers().expect("drivers");
+    assert!(matches!(
+        after[0].get_value("amount".into()).expect("read"),
+        BridgeEffectValue::Float(BridgeScalar::Static(v)) if v != 42.0
+    ));
+    assert_eq!(layer.get_graph().expect("graph").wiring.edges.len(), 1);
+}
+
+/// **The Drivers family has its own listing** (WP1's note, discharged here).
+/// A driver is not an Add-effect entry — dropping one on a stack would add a
+/// node that changes no pixel — so it answers the graph canvas's question
+/// instead, in the same shape and with its own category heading.
+#[test]
+fn the_drivers_listing_is_the_family_with_its_category() {
+    use crate::api::effect::list_drivers;
+
+    let drivers = list_drivers();
+    let names: Vec<&str> = drivers.iter().map(|d| d.name.as_str()).collect();
+    for expected in [
+        "wiggle",
+        "audio_level",
+        "colour_cycle",
+        "math",
+        "remap",
+        "smooth",
+    ] {
+        assert!(names.contains(&expected), "{expected} is a v1 driver");
+    }
+    assert!(
+        drivers
+            .iter()
+            .all(|d| d.category == "drivers" && d.category_label == "Drivers"),
+        "every entry carries the family's key and its translated heading"
+    );
+
+    let effects = list_effects();
+    assert!(
+        !effects.iter().any(|e| names.contains(&e.name.as_str())),
+        "and no driver is offered as something to add to a stack"
+    );
+    assert!(
+        effects.iter().any(|e| e.name == "blur"),
+        "the effects listing is otherwise untouched"
+    );
+}
+
+/// An unknown name is refused and nothing is written — the same answer
+/// `add_effect` gives.
+#[test]
+fn a_driver_this_build_does_not_know_is_refused() {
+    let (_project, layer) = layer_to_wire();
+    assert!(layer.new_driver("nonesuch".into()).is_err());
+    assert!(layer.get_graph_drivers().expect("drivers").is_empty());
 }

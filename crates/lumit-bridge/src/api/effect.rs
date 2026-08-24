@@ -45,21 +45,41 @@ pub struct BridgeEffectInfo {
     pub category_label: String,
 }
 
-/// Every built-in effect, in schema order — the Add-effect menu's source of
+/// Every built-in **effect**, in schema order — the Add-effect menu's source of
 /// truth ([`lumit_core::fx::BUILTINS`]), and the frb form of v0's `list_effects`.
 ///
 /// Stateless, so it is a free function rather than a method: the menu is
 /// available before any project is open.
+///
+/// The Drivers family is not here; it has [`list_drivers`] of its own. The two
+/// lists are two different questions — what may be added to an effect *stack*,
+/// and what may be dropped on the graph *canvas* — and a driver only ever
+/// answers the second.
 #[frb(sync)]
 pub fn list_effects() -> Vec<BridgeEffectInfo> {
+    catalogue(|category| category != lumit_core::fx::FxCategory::Drivers)
+}
+
+/// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
+/// same shape and the same schema order as [`list_effects`].
+///
+/// Its own listing rather than a filter the frontend applies, because the
+/// distinction is the engine's: a driver makes a value, not a picture, so
+/// dropping one on a stack would add a node that changes no pixel. Every entry
+/// carries `category` `drivers` and the translated heading beside it, so the
+/// search groups them exactly as the Add-effect menu groups effects.
+#[frb(sync)]
+pub fn list_drivers() -> Vec<BridgeEffectInfo> {
+    catalogue(|category| category == lumit_core::fx::FxCategory::Drivers)
+}
+
+/// The catalogue walk both listings share, so the two cannot drift apart on
+/// what an entry looks like.
+#[frb(ignore)]
+fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEffectInfo> {
     lumit_core::fx::BUILTINS
         .iter()
-        // The Drivers family is in the catalogue (K-471 WP1) but is not an
-        // Add-effect entry: a driver belongs in the Graph panel's own search,
-        // where a wire can be drawn from it, and dropping one on a stack would
-        // add a node that changes no pixel. WP2 gives the family its own listing
-        // and this filter goes with it (docs/impl/node-graph.md §8).
-        .filter(|schema| schema.category != lumit_core::fx::FxCategory::Drivers)
+        .filter(|schema| keep(schema.category))
         .map(|schema| BridgeEffectInfo {
             name: schema.match_name.to_owned(),
             label: schema.label.to_owned(),
@@ -1241,6 +1261,16 @@ impl BridgeEffectInstance {
     pub fn set_custom_name(&mut self, name: String) {
         let trimmed = name.trim();
         self.effect.custom_name = (!trimmed.is_empty()).then(|| trimmed.to_string());
+    }
+
+    /// Bypass or enable this instance on the **staged** copy, like
+    /// `set_custom_name`. The commit is `LayerReference::set_graph` for a
+    /// driver node, whose `B` badge this is; a stack effect has its own
+    /// committing op (`LayerReference::set_effect_enabled`) and does not need
+    /// this.
+    #[frb(sync)]
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.effect.enabled = enabled;
     }
 
     /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this

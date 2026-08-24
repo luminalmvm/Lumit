@@ -11,17 +11,33 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `bridge_unit`, `document_for`, `param`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `bridge_unit`, `catalogue`, `document_for`, `param`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
-/// Every built-in effect, in schema order — the Add-effect menu's source of
+/// Every built-in **effect**, in schema order — the Add-effect menu's source of
 /// truth ([`lumit_core::fx::BUILTINS`]), and the frb form of v0's `list_effects`.
 ///
 /// Stateless, so it is a free function rather than a method: the menu is
 /// available before any project is open.
+///
+/// The Drivers family is not here; it has [`list_drivers`] of its own. The two
+/// lists are two different questions — what may be added to an effect *stack*,
+/// and what may be dropped on the graph *canvas* — and a driver only ever
+/// answers the second.
 List<BridgeEffectInfo> listEffects() =>
     BridgeLib.instance.api.crateApiEffectListEffects();
+
+/// The Drivers family (K-471 §1.3) — the Graph panel's own search list, in the
+/// same shape and the same schema order as [`list_effects`].
+///
+/// Its own listing rather than a filter the frontend applies, because the
+/// distinction is the engine's: a driver makes a value, not a picture, so
+/// dropping one on a stack would add a node that changes no pixel. Every entry
+/// carries `category` `drivers` and the translated heading beside it, so the
+/// search groups them exactly as the Add-effect menu groups effects.
+List<BridgeEffectInfo> listDrivers() =>
+    BridgeLib.instance.api.crateApiEffectListDrivers();
 
 /// Every `.lumfx` in the preset library folder, sorted by name — what the
 /// Effects & presets browser lists. A file that is not a preset (unreadable,
@@ -135,6 +151,13 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// whitespace name clears it back to the effect's label. Staging only, like
   /// `set_value`: `LayerReference::set_effects` is the commit.
   void setCustomName({required String name});
+
+  /// Bypass or enable this instance on the **staged** copy, like
+  /// `set_custom_name`. The commit is `LayerReference::set_graph` for a
+  /// driver node, whose `B` badge this is; a stack effect has its own
+  /// committing op (`LayerReference::set_effect_enabled`) and does not need
+  /// this.
+  void setEnabled({required bool enabled});
 
   /// Chain or unchain the vector pair keyed by `stem`, on the **staged**
   /// copy — `LayerReference::set_effects` is the commit, exactly as

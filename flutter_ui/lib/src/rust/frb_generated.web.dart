@@ -16,6 +16,7 @@ import 'api/export.dart';
 import 'api/expressions.dart';
 import 'api/folder.dart';
 import 'api/footage.dart';
+import 'api/graph.dart';
 import 'api/import.dart';
 import 'api/keymap.dart';
 import 'api/layer.dart';
@@ -155,6 +156,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFrameProfile dco_decode_box_autoadd_bridge_frame_profile(dynamic raw);
 
   @protected
+  BridgeGraphWiring dco_decode_box_autoadd_bridge_graph_wiring(dynamic raw);
+
+  @protected
   BridgeImportedProject dco_decode_box_autoadd_bridge_imported_project(
       dynamic raw);
 
@@ -166,6 +170,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo dco_decode_box_autoadd_bridge_media_info(dynamic raw);
+
+  @protected
+  BridgeNodeRef dco_decode_box_autoadd_bridge_node_ref(dynamic raw);
 
   @protected
   BridgePoint dco_decode_box_autoadd_bridge_point(dynamic raw);
@@ -338,6 +345,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFrameProfile dco_decode_bridge_frame_profile(dynamic raw);
 
   @protected
+  BridgeGraphEdge dco_decode_bridge_graph_edge(dynamic raw);
+
+  @protected
+  BridgeGraphNode dco_decode_bridge_graph_node(dynamic raw);
+
+  @protected
+  BridgeGraphWiring dco_decode_bridge_graph_wiring(dynamic raw);
+
+  @protected
   BridgeHistory dco_decode_bridge_history(dynamic raw);
 
   @protected
@@ -354,6 +370,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeImportedProject dco_decode_bridge_imported_project(dynamic raw);
+
+  @protected
+  BridgeInputRef dco_decode_bridge_input_ref(dynamic raw);
 
   @protected
   BridgeKeyBinding dco_decode_bridge_key_binding(dynamic raw);
@@ -378,6 +397,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLayerEntry dco_decode_bridge_layer_entry(dynamic raw);
+
+  @protected
+  BridgeLayerGraph dco_decode_bridge_layer_graph(dynamic raw);
 
   @protected
   BridgeLayerInfo dco_decode_bridge_layer_info(dynamic raw);
@@ -419,6 +441,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMemoryReport dco_decode_bridge_memory_report(dynamic raw);
 
   @protected
+  BridgeNodePosition dco_decode_bridge_node_position(dynamic raw);
+
+  @protected
+  BridgeNodeRef dco_decode_bridge_node_ref(dynamic raw);
+
+  @protected
+  BridgeOutputRef dco_decode_bridge_output_ref(dynamic raw);
+
+  @protected
   BridgePaintMode dco_decode_bridge_paint_mode(dynamic raw);
 
   @protected
@@ -444,6 +475,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgePoint dco_decode_bridge_point(dynamic raw);
+
+  @protected
+  BridgePort dco_decode_bridge_port(dynamic raw);
+
+  @protected
+  BridgePortType dco_decode_bridge_port_type(dynamic raw);
 
   @protected
   BridgePresetInfo dco_decode_bridge_preset_info(dynamic raw);
@@ -609,6 +646,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  List<BridgeGraphEdge> dco_decode_list_bridge_graph_edge(dynamic raw);
+
+  @protected
+  List<BridgeGraphNode> dco_decode_list_bridge_graph_node(dynamic raw);
+
+  @protected
   List<BridgeImportArg> dco_decode_list_bridge_import_arg(dynamic raw);
 
   @protected
@@ -645,6 +688,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeMask> dco_decode_list_bridge_mask(dynamic raw);
 
   @protected
+  List<BridgeNodePosition> dco_decode_list_bridge_node_position(dynamic raw);
+
+  @protected
+  List<BridgeNodeRef> dco_decode_list_bridge_node_ref(dynamic raw);
+
+  @protected
   List<BridgeParamGroup> dco_decode_list_bridge_param_group(dynamic raw);
 
   @protected
@@ -655,6 +704,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeParamValue> dco_decode_list_bridge_param_value(dynamic raw);
+
+  @protected
+  List<BridgePort> dco_decode_list_bridge_port(dynamic raw);
 
   @protected
   List<BridgePresetInfo> dco_decode_list_bridge_preset_info(dynamic raw);
@@ -920,6 +972,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeGraphWiring sse_decode_box_autoadd_bridge_graph_wiring(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeImportedProject sse_decode_box_autoadd_bridge_imported_project(
       SseDeserializer deserializer);
 
@@ -931,6 +987,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMediaInfo sse_decode_box_autoadd_bridge_media_info(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeNodeRef sse_decode_box_autoadd_bridge_node_ref(
       SseDeserializer deserializer);
 
   @protected
@@ -1137,6 +1197,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeGraphEdge sse_decode_bridge_graph_edge(SseDeserializer deserializer);
+
+  @protected
+  BridgeGraphNode sse_decode_bridge_graph_node(SseDeserializer deserializer);
+
+  @protected
+  BridgeGraphWiring sse_decode_bridge_graph_wiring(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeHistory sse_decode_bridge_history(SseDeserializer deserializer);
 
   @protected
@@ -1156,6 +1226,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeImportedProject sse_decode_bridge_imported_project(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeInputRef sse_decode_bridge_input_ref(SseDeserializer deserializer);
 
   @protected
   BridgeKeyBinding sse_decode_bridge_key_binding(SseDeserializer deserializer);
@@ -1183,6 +1256,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLayerEntry sse_decode_bridge_layer_entry(SseDeserializer deserializer);
+
+  @protected
+  BridgeLayerGraph sse_decode_bridge_layer_graph(SseDeserializer deserializer);
 
   @protected
   BridgeLayerInfo sse_decode_bridge_layer_info(SseDeserializer deserializer);
@@ -1229,6 +1305,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeNodePosition sse_decode_bridge_node_position(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeNodeRef sse_decode_bridge_node_ref(SseDeserializer deserializer);
+
+  @protected
+  BridgeOutputRef sse_decode_bridge_output_ref(SseDeserializer deserializer);
+
+  @protected
   BridgePaintMode sse_decode_bridge_paint_mode(SseDeserializer deserializer);
 
   @protected
@@ -1256,6 +1342,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgePoint sse_decode_bridge_point(SseDeserializer deserializer);
+
+  @protected
+  BridgePort sse_decode_bridge_port(SseDeserializer deserializer);
+
+  @protected
+  BridgePortType sse_decode_bridge_port_type(SseDeserializer deserializer);
 
   @protected
   BridgePresetInfo sse_decode_bridge_preset_info(SseDeserializer deserializer);
@@ -1439,6 +1531,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeGraphEdge> sse_decode_list_bridge_graph_edge(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeGraphNode> sse_decode_list_bridge_graph_node(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeImportArg> sse_decode_list_bridge_import_arg(
       SseDeserializer deserializer);
 
@@ -1486,6 +1586,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeMask> sse_decode_list_bridge_mask(SseDeserializer deserializer);
 
   @protected
+  List<BridgeNodePosition> sse_decode_list_bridge_node_position(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeNodeRef> sse_decode_list_bridge_node_ref(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeParamGroup> sse_decode_list_bridge_param_group(
       SseDeserializer deserializer);
 
@@ -1500,6 +1608,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   List<BridgeParamValue> sse_decode_list_bridge_param_value(
       SseDeserializer deserializer);
+
+  @protected
+  List<BridgePort> sse_decode_list_bridge_port(SseDeserializer deserializer);
 
   @protected
   List<BridgePresetInfo> sse_decode_list_bridge_preset_info(
@@ -1790,6 +1901,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeFrameProfile self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_graph_wiring(
+      BridgeGraphWiring self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_imported_project(
       BridgeImportedProject self, SseSerializer serializer);
 
@@ -1804,6 +1919,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_media_info(
       BridgeMediaInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_node_ref(
+      BridgeNodeRef self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_point(
@@ -2023,6 +2142,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeFrameProfile self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_graph_edge(
+      BridgeGraphEdge self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_graph_node(
+      BridgeGraphNode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_graph_wiring(
+      BridgeGraphWiring self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_history(BridgeHistory self, SseSerializer serializer);
 
   @protected
@@ -2044,6 +2175,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_imported_project(
       BridgeImportedProject self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_input_ref(
+      BridgeInputRef self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_key_binding(
@@ -2076,6 +2211,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_layer_entry(
       BridgeLayerEntry self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_layer_graph(
+      BridgeLayerGraph self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_layer_info(
@@ -2127,6 +2266,17 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMemoryReport self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_node_position(
+      BridgeNodePosition self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_node_ref(BridgeNodeRef self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_output_ref(
+      BridgeOutputRef self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_paint_mode(
       BridgePaintMode self, SseSerializer serializer);
 
@@ -2160,6 +2310,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_point(BridgePoint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_port(BridgePort self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_port_type(
+      BridgePortType self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_preset_info(
@@ -2358,6 +2515,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeExportQueueItem> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_graph_edge(
+      List<BridgeGraphEdge> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_graph_node(
+      List<BridgeGraphNode> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_import_arg(
       List<BridgeImportArg> self, SseSerializer serializer);
 
@@ -2406,6 +2571,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeMask> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_node_position(
+      List<BridgeNodePosition> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_node_ref(
+      List<BridgeNodeRef> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_param_group(
       List<BridgeParamGroup> self, SseSerializer serializer);
 
@@ -2420,6 +2593,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_param_value(
       List<BridgeParamValue> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_port(
+      List<BridgePort> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_preset_info(

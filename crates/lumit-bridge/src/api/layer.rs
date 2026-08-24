@@ -3647,6 +3647,105 @@ impl LayerReference {
         })
     }
 
+    /// This layer's whole driver graph in one crossing (K-471,
+    /// docs/impl/node-graph.md §5) — every box the canvas draws with its
+    /// sockets, plus the wiring the user edits.
+    ///
+    /// **One call, not one per node.** Fetched when the selection or the
+    /// document changes and held in Dart; asking per node per rebuild is
+    /// exactly the traffic the budget test forbids (K-183). The boxes are
+    /// derived from the effect stack each time, so there is nothing stale to
+    /// invalidate and nothing here to write back — see
+    /// [`crate::api::graph::BridgeLayerGraph`].
+    #[frb(sync)]
+    pub fn get_graph(&self) -> Result<crate::api::graph::BridgeLayerGraph, BridgeError> {
+        Ok(crate::api::graph::read_layer_graph(&self.item()?))
+    }
+
+    /// This layer's driver nodes as **staged copies**, exactly as
+    /// [`Self::get_effects`] hands out the stack's.
+    ///
+    /// A driver's parameters ride the ordinary property path from here:
+    /// `BridgeEffectInstance::get_value` / `set_value` stage a change and
+    /// [`Self::set_graph`] is the commit, so keyframing, the stopwatch and
+    /// every existing property control work on a driver row unchanged.
+    #[frb(sync)]
+    pub fn get_graph_drivers(&self) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
+        let layer = self.item()?;
+        Ok(layer
+            .graph
+            .nodes
+            .iter()
+            .map(|d| BridgeEffectInstance::new(d.clone(), layer.start_offset.0))
+            .collect())
+    }
+
+    /// A new driver of the built-in named `name`, **uncommitted**.
+    ///
+    /// The mirror of [`Self::add_effect`] for the other kind of box, split in
+    /// two because adding a driver is rarely the whole gesture: the panel drops
+    /// the node, auto-wires it, places it, and commits all of that as one
+    /// [`Self::set_graph`] — one op, one undo step (docs/impl/node-graph.md §3).
+    /// An unknown name is refused; nothing is written either way.
+    #[frb(sync)]
+    pub fn new_driver(&self, name: String) -> Result<BridgeEffectInstance, BridgeError> {
+        let layer = self.item()?;
+        let comp = self.composition()?;
+        let mut instance = lumit_core::fx::instantiate_for_raster(
+            &name,
+            f64::from(comp.width),
+            f64::from(comp.height),
+        )
+        .ok_or(BridgeError::UnknownEffectName)?;
+        // A `self_default` layer reference starts pointed at the layer the node
+        // is landing on (K-288) — Audio level's Audio, on a footage layer, is
+        // the sound of the thing you are wiring.
+        lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        Ok(BridgeEffectInstance::new(instance, layer.start_offset.0))
+    }
+
+    /// Commit a whole graph: the staged driver nodes and the edited wiring, as
+    /// one [`lumit_core::Op::SetLayerGraph`].
+    ///
+    /// The whole-graph shape is deliberate and mirrors `SetLayerEffects`. Add a
+    /// driver, remove one, connect, disconnect, drag a box, toggle exposure —
+    /// each is one write and therefore one undo step, and a delete takes its
+    /// wires with it inside the same commit rather than leaving a dangling one
+    /// behind.
+    ///
+    /// Unlike [`Self::set_effects`] the node list may differ from the
+    /// document's: this *is* the structural op for drivers, there being no
+    /// per-node one to defer to.
+    ///
+    /// A graph that breaks one of the model's rules is **refused**, not
+    /// degraded — a wire to a missing node or port, a type mismatch, a second
+    /// wire on one socket, or a loop among the drivers. Each arrives as
+    /// `OpError::InvalidGraph` carrying the engine's own calm sentence, and a
+    /// refused write leaves the document exactly as it was.
+    #[frb(sync)]
+    pub fn set_graph(
+        &self,
+        drivers: Vec<BridgeEffectInstance>,
+        wiring: crate::api::graph::BridgeGraphWiring,
+    ) -> Result<(), BridgeError> {
+        let nodes: Vec<EffectInstance> = drivers
+            .iter()
+            .map(BridgeEffectInstance::get_effects)
+            .collect();
+        let graph = crate::api::graph::wiring_into(wiring, nodes);
+
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetLayerGraph {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                graph: Box::new(graph),
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// Which of this layer's property groups the reveal shortcuts should open
     /// (docs/07 §4.3's `U` / `UU`, K-199).
     ///

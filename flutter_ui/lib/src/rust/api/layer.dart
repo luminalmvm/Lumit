@@ -10,6 +10,7 @@ import 'composition.dart';
 import 'effect.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'graph.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
@@ -1373,6 +1374,33 @@ class LayerReference {
         that: this,
       );
 
+  /// This layer's whole driver graph in one crossing (K-471,
+  /// docs/impl/node-graph.md §5) — every box the canvas draws with its
+  /// sockets, plus the wiring the user edits.
+  ///
+  /// **One call, not one per node.** Fetched when the selection or the
+  /// document changes and held in Dart; asking per node per rebuild is
+  /// exactly the traffic the budget test forbids (K-183). The boxes are
+  /// derived from the effect stack each time, so there is nothing stale to
+  /// invalidate and nothing here to write back — see
+  /// [`crate::api::graph::BridgeLayerGraph`].
+  BridgeLayerGraph getGraph() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraph(
+        that: this,
+      );
+
+  /// This layer's driver nodes as **staged copies**, exactly as
+  /// [`Self::get_effects`] hands out the stack's.
+  ///
+  /// A driver's parameters ride the ordinary property path from here:
+  /// `BridgeEffectInstance::get_value` / `set_value` stage a change and
+  /// [`Self::set_graph`] is the commit, so keyframing, the stopwatch and
+  /// every existing property control work on a driver row unchanged.
+  List<BridgeEffectInstance> getGraphDrivers() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphDrivers(
+        that: this,
+      );
+
   /// One read for everything a row draws — see [`BridgeLayerInfo`]. One
   /// document lock and one crossing, where the per-field getters cost one of
   /// each per field.
@@ -1560,6 +1588,17 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceMoveMaskPathKey(
           that: this, id: id, from: from, to: to);
 
+  /// A new driver of the built-in named `name`, **uncommitted**.
+  ///
+  /// The mirror of [`Self::add_effect`] for the other kind of box, split in
+  /// two because adding a driver is rarely the whole gesture: the panel drops
+  /// the node, auto-wires it, places it, and commits all of that as one
+  /// [`Self::set_graph`] — one op, one undo step (docs/impl/node-graph.md §3).
+  /// An unknown name is refused; nothing is written either way.
+  BridgeEffectInstance newDriver({required String name}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceNewDriver(that: this, name: name);
+
   /// Append copied effects to this layer's stack, **timed to the playhead**
   /// (K-275): whatever the earliest keyframe among them was, it lands at
   /// `at_frame` and the rest keep their spacing.
@@ -1725,6 +1764,30 @@ class LayerReference {
   void setFlowParams({required BridgeFlowParams params}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSetFlowParams(that: this, params: params);
+
+  /// Commit a whole graph: the staged driver nodes and the edited wiring, as
+  /// one [`lumit_core::Op::SetLayerGraph`].
+  ///
+  /// The whole-graph shape is deliberate and mirrors `SetLayerEffects`. Add a
+  /// driver, remove one, connect, disconnect, drag a box, toggle exposure —
+  /// each is one write and therefore one undo step, and a delete takes its
+  /// wires with it inside the same commit rather than leaving a dangling one
+  /// behind.
+  ///
+  /// Unlike [`Self::set_effects`] the node list may differ from the
+  /// document's: this *is* the structural op for drivers, there being no
+  /// per-node one to defer to.
+  ///
+  /// A graph that breaks one of the model's rules is **refused**, not
+  /// degraded — a wire to a missing node or port, a type mismatch, a second
+  /// wire on one socket, or a loop among the drivers. Each arrives as
+  /// `OpError::InvalidGraph` carrying the engine's own calm sentence, and a
+  /// refused write leaves the document exactly as it was.
+  void setGraph(
+          {required List<BridgeEffectInstance> drivers,
+          required BridgeGraphWiring wiring}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetGraph(
+          that: this, drivers: drivers, wiring: wiring);
 
   /// Choose how in-between frames are found. One undo step.
   ///
