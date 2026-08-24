@@ -31,7 +31,16 @@ export default defineConfig({
       description: "Documentation for Lumit, the native motion-graphics and compositing editor.",
       logo: { src: "./src/assets/lumit-mark.svg", alt: "Lumit" },
       favicon: "/lumit-mark.svg",
-      customCss: ["./src/styles/theme.css"],
+      // The marketing site's two faces, shipped the same way it ships them
+      // (web/src/layouts/Base.astro): the variable sans, and the two weights of
+      // the mono that are actually used. theme.css comes last so its tokens sit
+      // after the @font-face rules that name them.
+      customCss: [
+        "@fontsource-variable/hanken-grotesk",
+        "@fontsource/geist-mono/400.css",
+        "@fontsource/geist-mono/500.css",
+        "./src/styles/theme.css",
+      ],
       // The before-and-after wipe on every effect page. Each figure carries a
       // range input across the picture; this points the CSS clip at its value.
       // Small enough to inline, and the figures degrade to an honest
@@ -52,6 +61,8 @@ r.addEventListener("input",set);set()})})`,
       components: {
         PageTitle: "./src/components/PageTitle.astro",
         LastUpdated: "./src/components/LastUpdated.astro",
+        // Emptied: one ramp, dark, so there is nothing for a theme picker to pick.
+        ThemeSelect: "./src/components/ThemeSelect.astro",
       },
       social: [
         { icon: "github", label: "GitHub", href: "https://github.com/luminalmvm/Lumit" },

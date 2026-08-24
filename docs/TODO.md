@@ -483,12 +483,6 @@ does not gate the four. Delete each phase here when it lands, as with everything
       real screenshot, and drops its "plays on hover" label. Nothing fakes motion. The
       posters for the flare and the camera slot are stand-ins from the Viewer; a
       capture of each feature would be better and can replace them in place.
-    - **`web-docs/` still carries the old ramp.** `web-docs/src/styles/theme.css` says
-      in its own first line that it mirrors `web/src/styles/global.css`, and it no
-      longer does: Schibsted Grotesk and JetBrains Mono, `#0a0b0d`/`#f4f6f8`, and a
-      violet/cyan Starlight accent. Porting it is a small follow-up and out of phase
-      4's scope - `--sl-font`, `--sl-font-mono`, the dark ramp and the three
-      `--sl-color-accent*` values are the whole of it.
 - **Later, gated - the Flutter multi-window upgrade** (K-449, K-444, K-182). Blocked
     upstream: windowing is main-channel-only, flagged, and its API promises breaking
     changes, so Lumit takes no production dependency on it until it reaches the

@@ -1,29 +1,40 @@
 /* Match the marketing site's ramp so lumitlab.com and docs.lumitlab.com read as
-   one product. Values come from docs/15-DESIGN.md via web/src/styles/global.css. */
+   one product. Values come from docs/15-DESIGN.md via web/src/styles/global.css -
+   the same three grounds, the same four text tiers, the same two hairlines, the
+   same clay accent, and the same two typefaces.
+
+   One ramp, dark, as web/ has: the site does not ship a light theme, so
+   Starlight's picker is overridden away (src/components/ThemeSelect.astro) and
+   every token below is declared on plain `:root`. Starlight keeps its own two
+   ramps inside the `starlight.base` cascade layer, and unlayered CSS outranks a
+   layered rule whatever its specificity, so these hold under `data-theme="dark"`,
+   under `data-theme="light"`, and with no attribute at all. The handful that
+   Starlight would otherwise derive from a per-theme grey are pinned here rather
+   than left to resolve differently in the light branch. */
 
 :root {
-  --sl-font: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
-  --sl-font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
-}
+  --sl-font: "Hanken Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: "Geist Mono", ui-monospace, monospace;
 
-:root[data-theme="dark"] {
-  --sl-color-bg: #0a0b0d;
-  --sl-color-bg-nav: rgb(10 11 13 / 0.72);
-  --sl-color-bg-sidebar: #0a0b0d;
-  --sl-color-bg-inline-code: rgb(255 255 255 / 0.06);
-  --sl-color-hairline: rgb(255 255 255 / 0.08);
-  --sl-color-hairline-light: rgb(255 255 255 / 0.14);
-  --sl-color-white: #f4f6f8;
-  --sl-color-gray-1: #e6e9ed;
-  --sl-color-gray-2: #b9c0c9;
-  --sl-color-gray-3: #8f96a1;
-  --sl-color-gray-4: #5d646e;
-  --sl-color-gray-5: #2a2f36;
-  --sl-color-gray-6: #16191d;
-  --sl-color-accent: #8a70ff;
-  --sl-color-accent-high: #86e2ff;
-  --sl-color-accent-low: #2a2350;
-  --sl-color-text-accent: #86e2ff;
+  --sl-color-bg: #0b0c0e; /* surface_0 - the page */
+  --sl-color-black: #0b0c0e; /* the mobile menu, the search dialog, the page frame */
+  /* The marketing header's ground once it has scrolled, with the blur below. */
+  --sl-color-bg-nav: color-mix(in srgb, #0b0c0e 80%, transparent);
+  --sl-color-bg-sidebar: #0b0c0e;
+  --sl-color-bg-inline-code: rgb(255 255 255 / 0.04);
+  --sl-color-white: #eef1f2; /* text_primary */
+  --sl-color-gray-1: #eef1f2; /* text_primary - Starlight's strong text */
+  --sl-color-gray-2: #c2c8cb; /* text_secondary - body copy */
+  --sl-color-gray-3: #8b9296; /* text_muted - captions, inactive sidebar */
+  --sl-color-gray-4: #5e666b; /* text_disabled */
+  --sl-color-gray-5: #3c4145; /* hairline_strong */
+  --sl-color-gray-6: #26292c; /* hairline */
+  --sl-color-hairline: #26292c;
+  --sl-color-hairline-light: #3c4145;
+  --sl-color-accent: #e05a72; /* clay */
+  --sl-color-accent-high: #ea7288; /* the site's hover clay, and link text here */
+  --sl-color-accent-low: #402027; /* a quarter of the clay over surface_0 */
+  --sl-color-text-accent: #ea7288;
 }
 
 .site-title {
@@ -34,7 +45,7 @@
 /* Starlight's header hairline, matched to the marketing site's */
 .header {
   border-bottom: 1px solid var(--sl-color-hairline);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(20px);
 }
 
 /* An effect page's example picture. Rendered by the engine, encoded by
