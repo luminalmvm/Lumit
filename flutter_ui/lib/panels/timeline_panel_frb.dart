@@ -2545,10 +2545,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       for (final group in _groupOrder)
         if (drawn(group)) group
     ];
-    final groupWidths = {
-      for (final entry in _groupWidths.entries)
-        if (drawn(entry.key)) entry.key: entry.value
-    };
     final frames = ui.model.durationFrames;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
     final needle = _search.trim().toLowerCase();
@@ -2558,6 +2554,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             !(_hideShy && e.info.switches.shy))
           e,
     ];
+    // Whether the matte column is carrying its two mode toggles' room: it does
+    // while some visible row has a matte set, and not otherwise (K-463) — a
+    // comp with no mattes would else read as a 28px hole between every matte
+    // face and the blend column beside it. Read off the list already in hand,
+    // once for the panel, and handed to the header and the rows alike so the
+    // two cannot disagree.
+    final anyMatte = layers.any((e) => e.info.matte != null);
+    final groupWidths = {
+      for (final entry in _groupWidths.entries)
+        if (drawn(entry.key))
+          entry.key: entry.value +
+              (entry.key == TimelineGroup.compose && anyMatte
+                  ? matteToggleWidth
+                  : 0),
+    };
     _refreshAudio(layers);
     _lastLayers = layers;
     _refreshPeaks(layers);
@@ -2796,6 +2807,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             blockHeights: blockHeights,
                             groupOrder: groupOrder,
                             groupWidths: groupWidths,
+                            matteToggles: anyMatte,
                             graphColours: graphColours,
                             outlineViewport: outlineViewport,
                             outlineWidth: outlineWidth),
@@ -2871,6 +2883,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required List<double> blockHeights,
     required List<TimelineGroup> groupOrder,
     required Map<TimelineGroup, double> groupWidths,
+
+    /// Whether the compose group's width is carrying the matte mode toggles'
+    /// room (K-463) — the header and every row split the column by the same
+    /// answer, so they line up either way.
+    required bool matteToggles,
     required Map<String, List<Color>> graphColours,
     required double outlineViewport,
     required double outlineWidth,
@@ -2939,6 +2956,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               _ColumnHeader(
                                 order: groupOrder,
                                 widths: groupWidths,
+                                matteToggles: matteToggles,
                                 onResize: _resizeGroup,
                                 onReorder: (dragged, target) => setState(
                                   () => _groupOrder = reorderedGroups(
@@ -2985,6 +3003,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                           blockHeights: blockHeights,
                                           groupOrder: groupOrder,
                                           widths: groupWidths,
+                                          matteToggles: matteToggles,
                                           selectedIds: ui.selectedLayerIds,
                                           highlighted: _highlighted,
                                           selectedProperties:
@@ -5958,6 +5977,11 @@ class _GroupSeam extends StatelessWidget {
 class _ColumnHeader extends StatelessWidget {
   final List<TimelineGroup> order;
   final Map<TimelineGroup, double> widths;
+
+  /// Whether the compose group's width carries the matte mode toggles' room
+  /// (K-463): the same answer the rows are given, so the MATTE and BLEND
+  /// kickers stand over the cells below them either way.
+  final bool matteToggles;
   final void Function(TimelineGroup dragged, TimelineGroup target) onReorder;
 
   /// A seam dragged: widen (or narrow) the group on its left by `delta`.
@@ -5966,6 +5990,7 @@ class _ColumnHeader extends StatelessWidget {
   const _ColumnHeader({
     required this.order,
     required this.widths,
+    required this.matteToggles,
     required this.onReorder,
     required this.onResize,
   });
@@ -6084,7 +6109,8 @@ class _ColumnHeader extends StatelessWidget {
       // The render-time column's header is its switch — see timeline_timings.
       TimelineGroup.timings => const TimingsHeaderCell(),
       TimelineGroup.compose => () {
-          final (matte, blend, parent) = composeCellWidths(width);
+          final (matte, blend, parent) =
+              composeCellWidths(width, matteToggles: matteToggles);
           // The compose titles carry the dropdown's own text inset, so each
           // sits directly over the text in the cell below it.
           return Row(
@@ -6470,6 +6496,10 @@ class _Outline extends StatelessWidget {
   final List<TimelineGroup> groupOrder;
   final Map<TimelineGroup, double> widths;
 
+  /// Whether the compose group's width carries the matte mode toggles' room —
+  /// the panel's one answer for the whole outline (K-463).
+  final bool matteToggles;
+
   /// The whole selection as ids (K-217), worked out once by the panel: a row
   /// asking "am I selected?" is then one set lookup rather than a walk of the
   /// list per row per paint.
@@ -6508,6 +6538,7 @@ class _Outline extends StatelessWidget {
     required this.rows,
     required this.groupOrder,
     required this.widths,
+    required this.matteToggles,
     required this.selectedIds,
     required this.highlighted,
     required this.selectedProperties,
@@ -6556,6 +6587,7 @@ class _Outline extends StatelessWidget {
                   layers: layers,
                   groupOrder: groupOrder,
                   widths: widths,
+                  matteToggles: matteToggles,
                   index: i,
                   count: rows.length,
                   // A local compare, not a bridge call: both ids already sit here.
@@ -6637,6 +6669,11 @@ class _OutlineRow extends StatefulWidget {
   /// (docs/07 §4.2).
   final List<TimelineGroup> groupOrder;
   final Map<TimelineGroup, double> widths;
+
+  /// Whether the matte column carries its mode toggles' room (K-463) — the
+  /// panel's answer for the whole comp, not this row's: a row with no matte
+  /// still leaves the slot when a row above it has one.
+  final bool matteToggles;
   final int index;
   final int count;
   final bool selected;
@@ -6679,6 +6716,7 @@ class _OutlineRow extends StatefulWidget {
     required this.layers,
     required this.groupOrder,
     required this.widths,
+    required this.matteToggles,
     required this.index,
     required this.count,
     required this.selected,
@@ -7098,7 +7136,8 @@ class _OutlineRowState extends State<_OutlineRow> {
   /// it wider widens the pickers rather than leaving space beside them.
   Widget _composeCells(
       BuildContext context, LumitTheme t, BridgeLayerInfo info, double width) {
-    final (matteWidth, blendWidth, parentWidth) = composeCellWidths(width);
+    final (matteWidth, blendWidth, parentWidth) =
+        composeCellWidths(width, matteToggles: widget.matteToggles);
     return Row(
       children: [
         LumitTooltip(
@@ -7108,6 +7147,7 @@ class _OutlineRowState extends State<_OutlineRow> {
             info: info,
             all: widget.layers,
             width: matteWidth,
+            toggleRoom: widget.matteToggles,
             onChanged: widget.onChanged,
           ),
         ),

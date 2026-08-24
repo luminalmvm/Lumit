@@ -876,11 +876,17 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   the side coming in and the right half the side going out. The same marks at the same
   **11px** in Layers mode and in Keys (K-459); a shut layer's summary diamonds stay small.
 - **The matte, blend and parent columns start at their content's width** (K-461): the
-  mockup's 84 / 84 / 64 dropdown faces, the matte cell carrying its two mode toggles on top
-  of that. Each seam still drags wider and stays where it is put. **The faces themselves are
-  those widths** (K-462) — the matte's included: the room its column has beyond 84 belongs
-  to the toggles whether or not a matte is set, where the dropdown used to swell into it and
-  put a third width in a row that draws two.
+  mockup's 84 / 84 / 64 dropdown faces, and nothing beside them. Each seam still drags wider
+  and stays where it is put. **The faces themselves are those widths** (K-462) — a dropdown
+  never swells into room it has not been given, which would put a third width in a row that
+  draws two.
+- **The matte column carries its two mode toggles' room only while a matte is set** (K-463):
+  with none anywhere in view the gap between the matte face and the blend column is the
+  row's own 8, like every other gap in it; with one set the column widens by the toggles'
+  28 and *every* row reserves the slot, including the rows with no matte, so the blend
+  stays a column down the whole stack. The column had held that room permanently, which
+  read as a hole on every row of the comps — most of them — that have no matte at all. The
+  blend column shifting once, when the comp's first matte is set, is the accepted price.
 - **The layer search sits in a 16px well** — the mockup's own height, with ground above and
   below it in the 19px row (K-462); it had sized itself to its glyph and filled the row.
 - **The open composition tab carries no accent tick** — the seated surface colour alone

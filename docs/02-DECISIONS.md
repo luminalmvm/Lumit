@@ -12361,3 +12361,31 @@ K-454 and K-461, and settles a colour ruling the owner has now given more than o
   layer rows' own padding before K-441 widened it and before K-454 added the 2 — so every
   value cell and every effect heading's millisecond reading stood 6px right of the column
   it belongs to. This is a bug the pinned test had been failing on, not a new rule.
+
+## K-463 — The matte column carries its toggles' room only while a matte is set
+
+**DECIDED 2026-08-24.** The owner, on the outline as it stands: "there's now a big gap
+between matte and blend, can we reduce that to the normal padding width again."
+
+K-462 fixed the matte dropdown's face at the drawing's 84 while leaving the column 28
+wider, on the reasoning that the two mode toggles' room is theirs whether or not they are
+drawn — so the blend column never shifts as mattes come and go. That rationale is
+superseded here. Most comps have no matte anywhere in them, and on every one of their rows
+the reserved room read as a hole between the matte face and the blend: a 28px gap in a row
+whose every other gap is 8 (K-462).
+
+- **The compose group is 84 + 8 + 84 + 8 + 64 at rest**, and the gap between the matte face
+  and the blend column is the row's own [outlineGap] of 8, like every other gap in it.
+- **The toggles' room appears with the first matte in the comp** and goes when the last one
+  goes: while any *visible* row has a matte set, the compose group is that much wider and
+  every row of the outline reserves the slot — including the rows with no matte, so the
+  blend column stays a column down the whole stack. The blend column shifting once, when
+  that first matte is set, is the accepted price of the eight-pixel rhythm the rest of the
+  time.
+- **The face is still 84 either way.** K-462's other half stands: a dropdown never swells
+  into room it has not been given, which would put a third dropdown width in a row that
+  draws two.
+- The width is derived in Dart from the layer list the outline already holds — no engine
+  call in a rebuild path — and the header and the rows are handed the same answer, so they
+  cannot disagree about where a column starts. The seam still drags, and a dragged width
+  keeps the same behaviour: the toggles' room is added on top of whatever the group is at.

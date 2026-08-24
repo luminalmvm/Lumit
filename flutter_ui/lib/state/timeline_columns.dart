@@ -93,18 +93,29 @@ const double renderGroupWidth = 5 * switchCellWidth;
 /// the dropdown plus the group's normal gaps. The seam still drags, so a
 /// project with long layer names widens it once and keeps it.
 ///
-/// The matte cell's width covers the dropdown **plus its two mode toggles**
-/// even when unset, so the blend column never shifts as mattes come and go —
-/// which is why it is the 84 the mockup draws plus the toggles' 28. The face
-/// itself stays 84 either way (owner, 2026-08-24): the extra room in this
-/// column is the toggles', and a dropdown that swelled to fill it whenever no
-/// matte was set was a third width in a row of two.
+/// **The matte column carries the toggles' room only while a matte is set**
+/// (owner, 2026-08-24; K-463). The column used to reserve the two mode
+/// toggles' 28 whether or not they were drawn, so that the blend column never
+/// shifted as mattes came and went — but on a comp with no mattes at all, which
+/// is most of them, every row read as a 28px hole between the matte face and
+/// the blend. The gap between two pickers is [outlineGap], like every other gap
+/// in a row (K-462), and the toggles' room appears with the first matte in the
+/// comp: the blend column shifting once, when that matte is set, is the price
+/// and it is the cheaper one.
+///
+/// The face itself is the mockup's 84 either way: it never swells to fill the
+/// toggles' room, which would put a third dropdown width in a row that draws
+/// two.
 const double matteToggleWidth = 28;
-const double matteCellWidth = 84 + matteToggleWidth;
+const double matteFaceWidth = 84;
 const double blendCellWidth = 84;
 const double parentCellWidth = 64;
+
+/// The compose group at rest — a comp with no matte set anywhere in view. The
+/// panel adds [matteToggleWidth] to whatever width this group is at (dragged
+/// or not) as soon as one is.
 const double composeGroupWidth =
-    matteCellWidth + cellGap + blendCellWidth + cellGap + parentCellWidth;
+    matteFaceWidth + cellGap + blendCellWidth + cellGap + parentCellWidth;
 
 /// The render-time cell: wide enough for "1234 ms" and its switch, and no
 /// wider — it is a readout beside the work, not a column of the outline that
@@ -196,11 +207,17 @@ double outlineWidthOf(Map<TimelineGroup, double> widths) =>
 /// The compose group's three cells at a given group width, keeping the
 /// proportions the defaults set — so widening the group widens the pickers
 /// rather than leaving dead space beside them.
-(double, double, double) composeCellWidths(double width) {
+///
+/// [matteToggles] is whether the matte column is carrying its two mode
+/// toggles' room, which it does only while some visible row has a matte set
+/// (K-463). The header and the rows are handed the same answer, so they agree.
+(double, double, double) composeCellWidths(double width,
+    {required bool matteToggles}) {
   final usable = (width - 2 * cellGap).clamp(60.0, 1e6);
-  final total = matteCellWidth + blendCellWidth + parentCellWidth;
+  final matte = matteFaceWidth + (matteToggles ? matteToggleWidth : 0);
+  final total = matte + blendCellWidth + parentCellWidth;
   return (
-    usable * matteCellWidth / total,
+    usable * matte / total,
     usable * blendCellWidth / total,
     usable * parentCellWidth / total,
   );

@@ -547,6 +547,12 @@ class MattePickerFrb extends StatelessWidget {
   /// The cell's width — its share of the compose group, which the header's
   /// seam can be dragged to widen.
   final double width;
+
+  /// Whether this cell's width includes room for the two mode toggles: true
+  /// while any visible row in the comp has a matte set (K-463), so the rows
+  /// that have none keep their face and their toggle slot in the same columns
+  /// as the row that does.
+  final bool toggleRoom;
   final VoidCallback onChanged;
 
   const MattePickerFrb({
@@ -555,7 +561,8 @@ class MattePickerFrb extends StatelessWidget {
     required this.info,
     required this.all,
     required this.onChanged,
-    this.width = matteCellWidth,
+    required this.toggleRoom,
+    this.width = matteFaceWidth,
   });
 
   void _set(BridgeMatte? matte) {
@@ -579,8 +586,6 @@ class MattePickerFrb extends StatelessWidget {
                 .firstOrNull ??
             engineLabel('Matte');
 
-    // A fixed overall width whether or not the mode toggles are showing, so
-    // the columns after the matte cell never shift as mattes come and go.
     return SizedBox(
       width: width,
       child: Row(
@@ -589,10 +594,14 @@ class MattePickerFrb extends StatelessWidget {
           SizedBox(
             // **The face is the mockup's 84, matte or no matte** (owner,
             // 2026-08-24): the two mode toggles are 28px between them, and
-            // that room is theirs whether or not they are drawn. The dropdown
-            // used to swell into it while no matte was set, which put a third
-            // dropdown width in a row that draws two.
-            width: (width - matteToggleWidth).clamp(40.0, width),
+            // that room is theirs on every row of a comp that has a matte
+            // somewhere — including the rows that have none, so the blend
+            // column stays a column. On a comp with no matte at all the cell
+            // is the face and nothing else (K-463), and the dropdown still
+            // does not swell into room it is not given.
+            width: toggleRoom
+                ? (width - matteToggleWidth).clamp(40.0, width)
+                : width,
             child: BareLazyDropdown<UuidValue?>(
               key: ValueKey<String>('tl-matte-${layer.internallayerId}'),
               // In an outline row, so the mockup's 16/10 face (§12A.6, K-451).

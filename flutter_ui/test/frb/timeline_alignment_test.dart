@@ -767,9 +767,11 @@ void main() {
     });
 
     /// 10d-ter. **The compose columns start at their content** (K-461): the
-    /// drawing's 84 / 84 / 64 faces, the matte cell carrying its two mode
-    /// toggles on top of its own 84. They had been 118 / 112 / 96, which is
-    /// slack no picker ever used.
+    /// drawing's 84 / 84 / 64 faces, and — with no matte set anywhere in the
+    /// comp — nothing else (K-463). They had been 118 / 112 / 96, which is
+    /// slack no picker ever used; then the matte column kept the mode toggles'
+    /// 28 whether or not they were drawn, which read as a hole between the
+    /// matte and the blend on every row of every comp without a matte.
     testWidgets('matte, blend and parent start at the drawing\'s widths',
         (tester) async {
       final p = withComp();
@@ -777,20 +779,18 @@ void main() {
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      expect((matteCellWidth, blendCellWidth, parentCellWidth), (112.0, 84, 64),
-          reason: 'the drawing\'s dropdown faces, the matte plus its toggles');
-      expect(composeGroupWidth, 112 + cellGap + 84 + cellGap + 64,
-          reason: 'and the group is the three of them and the gaps between');
+      expect((matteFaceWidth, blendCellWidth, parentCellWidth), (84.0, 84, 64),
+          reason: 'the drawing\'s dropdown faces');
+      expect(composeGroupWidth, 84 + cellGap + 84 + cellGap + 64,
+          reason: 'and the group at rest is the three of them and the gaps '
+              'between — no room held back for toggles nobody has asked for');
       expect(composeGroupWidth, lessThan(334),
           reason: 'which is narrower than the 334 that shipped');
 
-      // **The faces themselves are 84 / 84 / 64** (owner, 2026-08-24), the
-      // matte's included: the room the matte column has beyond 84 belongs to
-      // its two mode toggles whether or not a matte is set, and a dropdown
-      // that swelled to 112 while the column was empty put a third width in a
-      // row that draws two.
+      // **The faces themselves are 84 / 84 / 64** (owner, 2026-08-24): a
+      // dropdown never swells past the width the drawing gives it.
       for (final (cell, width) in [
-        ('matte', matteCellWidth - matteToggleWidth),
+        ('matte', matteFaceWidth),
         ('blend', blendCellWidth),
         ('parent', parentCellWidth),
       ]) {
@@ -805,6 +805,47 @@ void main() {
       expect(minGroupWidth(TimelineGroup.compose),
           lessThanOrEqualTo(composeGroupWidth),
           reason: 'and the group can still be dragged narrower than it starts');
+    });
+
+    /// 10d-sexies. **The matte column widens for the toggles, and only while a
+    /// matte is set** (owner, K-463). With one set, the two mode toggles have
+    /// to fit between the matte face and the blend column — on the row that
+    /// has the matte *and* on the rows that do not, or the blend column stops
+    /// being a column.
+    testWidgets('a matte set carries its toggles without crowding the blend',
+        (tester) async {
+      final p = withComp();
+      final source = p.comp.addSolidLayer();
+      final gated = p.comp.addSolidLayer();
+      gated.setMatte(
+          matte: BridgeMatte(
+              layer: source.internallayerId, luma: false, inverted: false));
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      Rect at(String key) => tester.getRect(find.byKey(ValueKey<String>(key)));
+
+      for (final (what, id) in [
+        ('the row with the matte', gated.internallayerId),
+        ('the row without one', source.internallayerId),
+      ]) {
+        expect(at('tl-matte-$id').width, closeTo(matteFaceWidth, 1.0),
+            reason: 'the face is still the drawing\'s 84 on $what');
+        expect(at('tl-blend-$id').left - at('tl-matte-$id').right,
+            closeTo(outlineGap + matteToggleWidth, 1.0),
+            reason: 'and the toggles\' room stands before the blend on $what, '
+                'so the two rows keep the same columns');
+      }
+
+      // The toggles themselves, on the row that has them: inside the room, and
+      // clear of both neighbours.
+      final id = gated.internallayerId;
+      expect(at('tl-matte-luma-$id').left,
+          greaterThanOrEqualTo(at('tl-matte-$id').right - 0.5),
+          reason: 'the luma toggle starts where the face ends');
+      expect(at('tl-matte-invert-$id').right,
+          lessThanOrEqualTo(at('tl-blend-$id').left + 0.5),
+          reason: 'and the invert toggle ends before the blend picker');
     });
 
     /// 10d-quinquies. **One gap, everywhere in an outline row: 8** (owner,
@@ -848,10 +889,10 @@ void main() {
       expect(at('matte').left - at('lit').right, closeTo(outlineGap, 0.5),
           reason: 'as is the seam between the modes and the pickers — the '
               'name\'s own trailing 4 is gone with it');
-      expect(at('blend').left - (at('matte').left + matteCellWidth),
-          closeTo(outlineGap, 0.5),
-          reason: 'and the matte cell — face plus toggle room — is one gap '
-              'from the blend');
+      expect(at('blend').left - at('matte').right, closeTo(outlineGap, 0.5),
+          reason: 'and the matte face is one gap from the blend on a comp with '
+              'no matte set — the toggles\' room appears with the first matte '
+              'and not before (K-463)');
       expect(at('parent').left - at('blend').right, closeTo(outlineGap, 0.5),
           reason: 'as the blend is from the parent');
     });
