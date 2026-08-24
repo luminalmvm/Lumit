@@ -113,6 +113,30 @@ const double _hScrollbarHeight = 7;
 /// Half a keyframe diamond's width on a property's own lane.
 const double _keyHalf = 4;
 
+/// The same in **Keys mode**, where the keys are the whole subject and the
+/// drawing gives them the room to be aimed at: the mockup's diamond measures
+/// 11px point to point.
+const double keysKeyHalf = 5.5;
+
+/// How a key is drawn: the shape says its interpolation (§6.2 — diamond
+/// linear, square hold, circle bezier), which is what lets the dope sheet be
+/// read rather than merely counted.
+enum KeyShape { diamond, square, circle }
+
+/// [key]'s shape. Hold wins over bezier: a held key is a step, and a step is
+/// the one thing you must not mistake for a curve.
+KeyShape keyShapeOf(BridgeKeyframe key) {
+  if (key.interpIn is BridgeSideInterp_Hold ||
+      key.interpOut is BridgeSideInterp_Hold) {
+    return KeyShape.square;
+  }
+  if (key.interpIn is BridgeSideInterp_Bezier ||
+      key.interpOut is BridgeSideInterp_Bezier) {
+    return KeyShape.circle;
+  }
+  return KeyShape.diamond;
+}
+
 /// The same on a **shut layer's** row: smaller than the keys you take hold
 /// of, because these are a summary of everything keyed inside the layer. The
 /// mockup draws them as a 4px square stood on its corner, so point to point
@@ -305,6 +329,72 @@ List<LayerRow> layerRows({
       // the visibility switch is the one every layer but a music track uses,
       // so appearing and then going is far less startling than the reverse.
       hasPicture: hasPicture[id] ?? true,
+    ));
+  }
+  return out;
+}
+
+/// The same decision for **Keys mode**: one [LayerRow] per layer, whose
+/// fold-out is the flat list of its properties rather than the nested one
+/// (K-455, §12A.1).
+///
+/// The dope sheet is a different arrangement of the same parts, so it is the
+/// same row model — the halves stay level, a key keeps the path it has in
+/// Layers mode, and everything that walks rows (the seams, the block heights,
+/// the box-select catch) carries over untouched. What differs is the list: no
+/// headings, no waveform, no sequence room, every property brought up to one
+/// level and named by the group it came out of.
+///
+/// [animatedOnly] is the Animated filter (K-441): on — the default, and what
+/// makes this a dope sheet — only keyframed properties are listed; off lists
+/// every property a layer has.
+List<LayerRow> keysLayerRows({
+  required List<BridgeLayerEntry> layers,
+  required Set<String> open,
+  required double rowHeight,
+  required bool animatedOnly,
+  required Map<String, bool> hasAudio,
+  Map<String, BridgeFlowParams> flowParams = const {},
+  Map<String, BridgeScalar> volumeDb = const {},
+}) {
+  final out = <LayerRow>[];
+  for (final entry in layers) {
+    final id = entry.layer.internallayerId.toString();
+    // Every twirl treated as down, so the list is the layer's properties
+    // rather than the ones the user happens to have opened in Layers mode:
+    // the dope sheet's own twirl is the layer's, and there is nothing below
+    // it to open.
+    final all = layerFoldRows(
+      entry: entry,
+      open: everyFoldPath,
+      hasAudio: hasAudio[id] ?? false,
+      flowParams: flowParams[id],
+      volumeDb: volumeDb[id],
+    );
+    out.add(LayerRow(
+      entry: entry,
+      id: id,
+      open: open.contains(id),
+      rowHeight: rowHeight,
+      foldRows: [
+        for (final row in all)
+          if (foldRowName(row) != null &&
+              (!animatedOnly || laneKeysOf(row).isNotEmpty))
+            row,
+      ],
+      // The same rule Layers mode follows: a shut layer says on its own row
+      // what its properties would have said on theirs, and an open one leaves
+      // it to them rather than drawing a small diamond behind every large one.
+      summaryKeys: open.contains(id)
+          ? const []
+          : layerKeys(
+              entry: entry,
+              flowParams: flowParams[id],
+              volumeDb: volumeDb[id],
+            ),
+      // No Sequence views here: the dope sheet has clips nowhere to put.
+      sequenceExtra: null,
+      hasAudio: hasAudio[id] ?? false,
     ));
   }
   return out;
@@ -1147,10 +1237,36 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _publishPropertySelection();
   }
 
-  /// The graph editor replaces the layer area rather than sitting beside it:
-  /// the two want the same width, and a curve squeezed into half a panel is not
-  /// a curve you can shape.
-  bool _graph = false;
+  /// Which of the three views is up (K-455, §12A.1).
+  ///
+  /// One field rather than a flag per mode: two booleans can say "graph and
+  /// keys at once", and a state that cannot be drawn is a state that will one
+  /// day be reached. The graph editor and the dope sheet each replace the
+  /// layer area rather than sitting beside it — they want the same width, and
+  /// a curve squeezed into half a panel is not a curve you can shape.
+  TimelineMode _mode = TimelineMode.layers;
+
+  /// Graph mode, as everything downstream of the swap has always asked it.
+  bool get _graph => _mode == TimelineMode.graph;
+
+  /// Keys mode — the dope sheet (K-455).
+  bool get _keys => _mode == TimelineMode.keys;
+
+  /// The dope sheet's own two filters (§12A.1, the Keys drawing): **Animated**
+  /// by default — which is what makes it a dope sheet — with **All** to see
+  /// every property a layer has, and a scope of every layer or only the ones
+  /// in hand. Session state, like every other thing about what this panel
+  /// *shows*; nothing here touches the document.
+  bool _keysShowAll = false;
+  bool _keysSelectedOnly = false;
+
+  /// Switch views. The easing claim follows, because which panel owns the
+  /// selected keys' easing depends on which view is up.
+  void _setMode(TimelineMode mode) {
+    if (mode == _mode) return;
+    setState(() => _mode = mode);
+    _publishEasingClaim();
+  }
 
   /// Whether the razor is armed — which is now the *toolbar's* answer (K-220):
   /// the Razor tool (`C`) and this panel's own menu item are two doors into one
@@ -1695,8 +1811,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         );
 
     if (action == 'graph.toggle') {
-      setState(() => _graph = !_graph);
-      _publishEasingClaim();
+      // The key it always was: it puts the graph up, and takes it down again
+      // to the layers. Keys mode has no shortcut of its own — its tab is the
+      // switch — so pressing this from the dope sheet opens the graph, which
+      // is what "show the graph" has always meant.
+      _setMode(_graph ? TimelineMode.layers : TimelineMode.graph);
       return true;
     }
     if (action == 'reveal.animated') {
@@ -2274,15 +2393,35 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // everything below — the outline, the lanes, the drag maths and the row
     // seams alike. It used to be worked out four times over from the same
     // three inputs, once per reader.
-    final rows = layerRows(
-        layers: layers,
-        open: _open,
-        rowHeight: t.density.laneRow,
-        hasAudio: _hasAudio,
-        hasPicture: _hasPicture,
-        sequenceExtra: _sequenceExtra,
-        flowParams: _flowParams,
-        volumeDb: _volumeDb);
+    //
+    // Keys mode asks the same question of the same inputs and gets the dope
+    // sheet's answer: the properties flattened out of the fold-out, filtered
+    // to what is animated, and — with `Selected only` on — only the layers in
+    // hand (K-455).
+    final rows = _keys
+        ? keysLayerRows(
+            layers: _keysSelectedOnly
+                ? [
+                    for (final e in layers)
+                      if (ui.selectedLayerIds.contains(e.layer.internallayerId))
+                        e,
+                  ]
+                : layers,
+            open: _open,
+            rowHeight: t.density.laneRow,
+            animatedOnly: !_keysShowAll,
+            hasAudio: _hasAudio,
+            flowParams: _flowParams,
+            volumeDb: _volumeDb)
+        : layerRows(
+            layers: layers,
+            open: _open,
+            rowHeight: t.density.laneRow,
+            hasAudio: _hasAudio,
+            hasPicture: _hasPicture,
+            sequenceExtra: _sequenceExtra,
+            flowParams: _flowParams,
+            volumeDb: _volumeDb);
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,
@@ -2398,9 +2537,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   // The outline is as wide as its groups make it, and counts
                   // its own scroll gutter so the columns keep their places
                   // when the view changes.
-                  final outlineWidth = outlineWidthOf(groupWidths);
+                  final columnsWidth = outlineWidthOf(groupWidths);
                   final outlineViewport = (constraints.maxWidth - 120)
-                      .clamp(120.0, outlineWidth + scrollGutterWidth);
+                      .clamp(120.0, columnsWidth + scrollGutterWidth);
+                  // Keys mode has no columns to scroll — its outline is a
+                  // name, a group and a value — so it fills the seam the
+                  // user left rather than stretching past it. The seam itself
+                  // is unchanged, so switching modes never moves it.
+                  final outlineWidth = _keys
+                      ? (outlineViewport - scrollGutterWidth).clamp(1.0, 1e6)
+                      : columnsWidth;
                   // The axis spans the lane viewport times the zoom: at 1 the
                   // whole comp fits the panel (the Viewer's fit-to-panel
                   // habit); zoomed in, the lanes scroll under the bottom
@@ -2596,22 +2742,33 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               model: ui.model,
                               playhead: ui.playheadFrame,
                               onSeek: ui.scrubTo,
-                              graph: _graph,
-                              onToggleGraph: () => setState(() {
-                                _graph = !_graph;
-                                _publishEasingClaim();
-                              }),
+                              mode: _mode,
+                              onMode: _setMode,
                               onSearch: (v) => setState(() => _search = v),
                             ),
-                            _ColumnHeader(
-                              order: groupOrder,
-                              widths: groupWidths,
-                              onResize: _resizeGroup,
-                              onReorder: (dragged, target) => setState(
-                                () => _groupOrder = reorderedGroups(
-                                    _groupOrder, dragged, target),
+                            // The second row of the outline: the column
+                            // headers, or — in Keys mode, which has no
+                            // columns — the dope sheet's filters, at the
+                            // same height so the two halves stay level.
+                            if (_keys)
+                              _KeysFilterRow(
+                                showAll: _keysShowAll,
+                                selectedOnly: _keysSelectedOnly,
+                                onShowAll: (v) =>
+                                    setState(() => _keysShowAll = v),
+                                onSelectedOnly: (v) =>
+                                    setState(() => _keysSelectedOnly = v),
+                              )
+                            else
+                              _ColumnHeader(
+                                order: groupOrder,
+                                widths: groupWidths,
+                                onResize: _resizeGroup,
+                                onReorder: (dragged, target) => setState(
+                                  () => _groupOrder = reorderedGroups(
+                                      _groupOrder, dragged, target),
+                                ),
                               ),
-                            ),
                             // The rows scroll under the pinned toolbar
                             // and header, in step with the lanes.
                             Expanded(
@@ -2629,30 +2786,45 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 onTap: () => _deselectAll(ui),
                                 child: SingleChildScrollView(
                                   controller: _vOutline,
-                                  child: _Outline(
-                                    comp: comp,
-                                    rows: rows,
-                                    onOpenSequence: _toggleSequenceView,
-                                    layerDrag: _layerDrag,
-                                    renameRequest: _renameRequest,
-                                    blockHeights: blockHeights,
-                                    groupOrder: groupOrder,
-                                    widths: groupWidths,
-                                    selectedIds: ui.selectedLayerIds,
-                                    highlighted: _highlighted,
-                                    selectedProperties: _selectedProperties,
-                                    graphColours: graphColours,
-                                    onSelectProperty: _selectProperty,
-                                    onEditProperty: _selectOnEdit,
-                                    onToggle: _toggle,
-                                    playheadFrame: ui.playheadFrame.value,
-                                    onSeek: ui.scrubTo,
-                                    onSelect: (l) =>
-                                        _selectLayer(ui, l, among: layers),
-                                    onHighlight: (id) =>
-                                        setState(() => _highlighted = id),
-                                    onChanged: ui.model.refresh,
-                                  ),
+                                  child: _keys
+                                      ? _KeysOutline(
+                                          rows: rows,
+                                          comp: comp,
+                                          selectedIds: ui.selectedLayerIds,
+                                          selectedProperties:
+                                              _selectedProperties,
+                                          highlighted: _highlighted,
+                                          onToggle: _toggle,
+                                          onSelectProperty: _selectProperty,
+                                          onSelect: (l) => _selectLayer(ui, l,
+                                              among: layers),
+                                          playheadFrame: ui.playheadFrame.value,
+                                        )
+                                      : _Outline(
+                                          comp: comp,
+                                          rows: rows,
+                                          onOpenSequence: _toggleSequenceView,
+                                          layerDrag: _layerDrag,
+                                          renameRequest: _renameRequest,
+                                          blockHeights: blockHeights,
+                                          groupOrder: groupOrder,
+                                          widths: groupWidths,
+                                          selectedIds: ui.selectedLayerIds,
+                                          highlighted: _highlighted,
+                                          selectedProperties:
+                                              _selectedProperties,
+                                          graphColours: graphColours,
+                                          onSelectProperty: _selectProperty,
+                                          onEditProperty: _selectOnEdit,
+                                          onToggle: _toggle,
+                                          playheadFrame: ui.playheadFrame.value,
+                                          onSeek: ui.scrubTo,
+                                          onSelect: (l) => _selectLayer(ui, l,
+                                              among: layers),
+                                          onHighlight: (id) =>
+                                              setState(() => _highlighted = id),
+                                          onChanged: ui.model.refresh,
+                                        ),
                                 ),
                               ),
                             ),
@@ -2911,7 +3083,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   }
 
   /// The lane half: the ruler, the cache bar, one bar per layer and the
-  /// bottom bar.
+  /// bottom bar — and, in Keys mode, the same everything with the dope
+  /// sheet's rows where the bars were (K-455).
   Widget _laneHalf(
     BuildContext context,
     LumitUiState ui,
@@ -2942,6 +3115,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     child: _LayerArea(
                       comp: comp,
                       rows: rows,
+                      // Keys mode swaps the body under the shared ruler and
+                      // leaves everything else alone (K-455).
+                      keys: _keys,
+                      selectedProperties: _selectedProperties,
                       selectedIds: ui.selectedLayerIds,
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,
@@ -5099,16 +5276,17 @@ class _Toolbar extends StatelessWidget {
   /// on the ruler makes, so typing a time also stops the transport.
   final ValueChanged<int> onSeek;
 
-  final bool graph;
-  final VoidCallback onToggleGraph;
+  /// Which view is up, and how to ask for another (K-455).
+  final TimelineMode mode;
+  final ValueChanged<TimelineMode> onMode;
   final ValueChanged<String> onSearch;
 
   const _Toolbar({
     required this.model,
     required this.playhead,
     required this.onSeek,
-    required this.graph,
-    required this.onToggleGraph,
+    required this.mode,
+    required this.onMode,
     required this.onSearch,
   });
 
@@ -5191,17 +5369,29 @@ class _Toolbar extends StatelessWidget {
           const SizedBox(width: 2),
           Expanded(child: LayerSearchFrb(onChanged: onSearch, width: 1e9)),
           const SizedBox(width: 2),
-          // The two modes, at the far right of the row (§12A.1). Kicker
-          // segments rather than icons: "Layers" and "Graph" are the names of
-          // two shapes of the same panel, and a word says which one is in
-          // force where two small glyphs made the reader guess.
+          // The three modes, at the far right of the row (§12A.1, K-455).
+          // Kicker segments rather than icons: "Layers", "Keys" and "Graph"
+          // are the names of three shapes of the same panel, and a word says
+          // which one is in force where three small glyphs made the reader
+          // guess. Keys sits between its two neighbours because that is the
+          // order it reads in — bars, then the keys on them, then the curves
+          // between the keys.
           _modeTab(
             context,
             keyName: 'tl-view-lanes',
             label: l10n.timelineModeLayers,
             tip: l10n.tipLaneView,
-            active: !graph,
-            onPressed: graph ? onToggleGraph : () {},
+            active: mode == TimelineMode.layers,
+            onPressed: () => onMode(TimelineMode.layers),
+          ),
+          const SizedBox(width: 2),
+          _modeTab(
+            context,
+            keyName: 'tl-view-keys',
+            label: l10n.timelineModeKeys,
+            tip: l10n.tipKeysView,
+            active: mode == TimelineMode.keys,
+            onPressed: () => onMode(TimelineMode.keys),
           ),
           const SizedBox(width: 2),
           _modeTab(
@@ -5211,18 +5401,18 @@ class _Toolbar extends StatelessWidget {
             keyName: 'tl-graph',
             label: l10n.timelineModeGraph,
             tip: l10n.tipGraphView,
-            active: graph,
-            onPressed: graph ? () {} : onToggleGraph,
+            active: mode == TimelineMode.graph,
+            onPressed: () => onMode(TimelineMode.graph),
           ),
         ],
       ),
     );
   }
 
-  /// One of the two mode segments. The one in force wears the secondary
-  /// button's outline and a `kickerOn` label; the other is frameless and
+  /// One of the three mode segments. The one in force wears the secondary
+  /// button's outline and a `kickerOn` label; the others are frameless and
   /// muted. **No accent**: §3.1's accent list is closed, and a mode segment is
-  /// not on it — which of the two is in force reads from the frame.
+  /// not on it — which of the three is in force reads from the frame.
   Widget _modeTab(
     BuildContext context, {
     required String keyName,
@@ -5718,6 +5908,325 @@ Future<void> _showLayerMenu(
 }
 
 /// The left column: one row per layer, with its switches and columns.
+/// How far a Keys property row is indented — clear of the layer's twirl and
+/// its colour dot, so the group names line up in a column of their own. The
+/// mockup's own 30.
+const double keysPropertyIndent = 30;
+
+/// A number as the dope sheet writes it: whole numbers plain, everything else
+/// to two places — the drawing's own `960, 540`, `100`, `1.60`, `0.60`.
+String keysNumberText(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(2);
+
+/// What one dope-sheet row reads at [time], or null for a row with no number
+/// at all (a mask's shape, which keys as whole paths).
+///
+/// Every row the sheet can list is one or more scalars, so this asks the
+/// memoised sampler for each and joins them the way the property is written —
+/// a Position is `960, 540`, one number per axis.
+String? keysRowValue(LayerFoldRow row, BridgeRational time) {
+  final scalars = switch (row) {
+    FoldTransformRow(:final group, :final transform) => [
+        for (final axis in group.axes) read(transform, axis.prop),
+      ],
+    FoldRetimeRow(:final scalar) => [scalar],
+    FoldFlowRow(:final rate) => rate == null ? const <BridgeScalar>[] : [rate],
+    FoldEffectParamRow(:final value) => switch (value) {
+        BridgeEffectValue_Float(:final field0) => [field0],
+        _ => const <BridgeScalar>[],
+      },
+    FoldMaskValueRow(:final mask, :final value) => value == MaskValue.path
+        ? const <BridgeScalar>[]
+        : [maskScalarOf(mask, value)],
+    _ => const <BridgeScalar>[],
+  };
+  if (scalars.isEmpty) return null;
+  return [
+    for (final s in scalars) keysNumberText(sampledScalar(s, time)),
+  ].join(', ');
+}
+
+/// The dope sheet's second outline row: what the sheet is showing (K-441's
+/// Animated filter, K-455) and which layers it is showing it for.
+///
+/// Kickers rather than buttons, because these name what is on screen rather
+/// than doing anything to the document — the same grammar the bottom bar's
+/// column toggles use. The `U` beside them is the key that opens a layer onto
+/// what is animated, which is the same reveal it has always been in Layers
+/// mode: the filter and the key are two doors into one reading.
+class _KeysFilterRow extends StatelessWidget {
+  final bool showAll;
+  final bool selectedOnly;
+  final ValueChanged<bool> onShowAll;
+  final ValueChanged<bool> onSelectedOnly;
+
+  const _KeysFilterRow({
+    required this.showAll,
+    required this.selectedOnly,
+    required this.onShowAll,
+    required this.onSelectedOnly,
+  });
+
+  /// One filter word. Framed and at foreground strength while it is the one in
+  /// force, frameless and muted otherwise — exactly the mode tabs' rule, and
+  /// **no accent** (§3.1's list is closed).
+  Widget _word(
+    BuildContext context, {
+    required String keyName,
+    required String label,
+    required bool on,
+    required VoidCallback onPressed,
+  }) {
+    final t = ThemeScope.of(context).theme;
+    return HouseButton(
+      key: ValueKey<String>(keyName),
+      small: true,
+      frameless: !on,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      onPressed: onPressed,
+      child: Text(label.toUpperCase(), style: on ? t.kickerOn : t.kicker),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Container(
+      key: const ValueKey('tl-keys-filters'),
+      height: t.density.secondaryRow,
+      decoration: BoxDecoration(
+        color: t.surface1,
+        border: Border(bottom: BorderSide(color: t.hairline)),
+      ),
+      padding: const EdgeInsets.only(left: 10, right: 8),
+      child: Row(
+        children: [
+          Text(l10n.keysShow.toUpperCase(), style: t.kicker),
+          const SizedBox(width: 8),
+          _word(context,
+              keyName: 'tl-keys-all',
+              label: l10n.keysShowAll,
+              on: showAll,
+              onPressed: () => onShowAll(true)),
+          const SizedBox(width: 2),
+          _word(context,
+              keyName: 'tl-keys-animated',
+              label: l10n.keysShowAnimated,
+              on: !showAll,
+              onPressed: () => onShowAll(false)),
+          const SizedBox(width: 6),
+          // The key that does the same thing from the keyboard, said quietly
+          // beside the words it belongs to.
+          Text('U', style: t.mono.copyWith(fontSize: 9, color: t.textDisabled)),
+          const Spacer(),
+          _word(context,
+              keyName: 'tl-keys-scope-layers',
+              label: l10n.keysScopeLayers,
+              on: !selectedOnly,
+              onPressed: () => onSelectedOnly(false)),
+          const SizedBox(width: 2),
+          _word(context,
+              keyName: 'tl-keys-scope-selected',
+              label: l10n.keysScopeSelected,
+              on: selectedOnly,
+              onPressed: () => onSelectedOnly(true)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The dope sheet's outline: a layer, then the properties of it the filter
+/// admits, each named by the group it came out of and reading what it holds
+/// at the playhead (K-455, §12A.1).
+///
+/// The reduced columns are the point. There is nothing here to switch, blend,
+/// parent or measure — a dope sheet is a list of *what is keyed*, and the
+/// columns that make Layers mode a control surface would only be in its way.
+class _KeysOutline extends StatelessWidget {
+  /// The same [LayerRow] list the lane side draws from, built by
+  /// [keysLayerRows] — so the two halves cannot come to different answers
+  /// about which rows a layer has or how tall they are.
+  final List<LayerRow> rows;
+  final CompositionReference comp;
+  final Set<UuidValue> selectedIds;
+  final List<String> selectedProperties;
+  final String? highlighted;
+  final ValueChanged<String> onToggle;
+  final ValueChanged<String> onSelectProperty;
+  final ValueChanged<LayerReference> onSelect;
+  final int playheadFrame;
+
+  const _KeysOutline({
+    required this.rows,
+    required this.comp,
+    required this.selectedIds,
+    required this.selectedProperties,
+    required this.highlighted,
+    required this.onToggle,
+    required this.onSelectProperty,
+    required this.onSelect,
+    required this.playheadFrame,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    // One clock reading for the whole sheet: every row reads its value at the
+    // same moment, and asking the comp for it once is the difference between
+    // one memoised lookup and one per row.
+    final time = timeOfFrame(comp, playheadFrame);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final layer in rows) ...[
+          _KeysLayerRow(
+            key: ValueKey<String>('tl-keys-row-${layer.id}'),
+            row: layer,
+            selected: selectedIds.contains(layer.entry.layer.internallayerId),
+            highlighted: highlighted == layer.id ||
+                selectedProperties.any((p) => isUnderPath(layer.id, p)),
+            onToggle: () => onToggle(layer.id),
+            onSelect: () => onSelect(layer.entry.layer),
+          ),
+          for (final row in layer.drawnRows)
+            Builder(builder: (context) {
+              final path = foldRowPath(layer.id, row);
+              final name = foldRowName(row)!;
+              final selected = selectedProperties.contains(path);
+              return GestureDetector(
+                key: ValueKey<String>('tl-keys-prop-$path'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onSelectProperty(path),
+                child: Container(
+                  height: layer.rowHeight,
+                  color: selected ? t.surface2 : null,
+                  padding:
+                      const EdgeInsets.only(left: keysPropertyIndent, right: 8),
+                  child: Row(
+                    children: [
+                      if (name.group case final String group) ...[
+                        Text(group,
+                            style: t.body.copyWith(color: t.textMuted),
+                            overflow: TextOverflow.ellipsis),
+                        const SizedBox(width: 8),
+                        Text('·',
+                            style: t.body.copyWith(color: t.textDisabled)),
+                        const SizedBox(width: 8),
+                      ],
+                      // **Expanded, and no Spacer**: two flex children share
+                      // the free space rather than queueing, which would put
+                      // the value half way across the row instead of hard
+                      // right where the drawing has it.
+                      Expanded(
+                        child: Text(
+                          name.label,
+                          style: t.body.copyWith(
+                              color:
+                                  selected ? t.textPrimary : t.textSecondary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // What the property reads here, in `animated` — the
+                      // token that means "this is animated" (§3.1), which on
+                      // this sheet every listed row is.
+                      if (keysRowValue(row, time) case final String value)
+                        Text(value,
+                            style: t.mono
+                                .copyWith(fontSize: 10, color: t.animated)),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ],
+    );
+  }
+}
+
+/// One layer's own row in the dope sheet's outline: its twirl, its label
+/// colour, its name and how many properties it is showing.
+class _KeysLayerRow extends StatelessWidget {
+  final LayerRow row;
+  final bool selected;
+  final bool highlighted;
+  final VoidCallback onToggle;
+  final VoidCallback onSelect;
+
+  const _KeysLayerRow({
+    super.key,
+    required this.row,
+    required this.selected,
+    required this.highlighted,
+    required this.onToggle,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final count = row.foldRows.length;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onSelect,
+      child: Container(
+        height: row.rowHeight,
+        // A layer's row stands off the sheet whether or not it is picked —
+        // the mockup draws every one of them raised, which is what makes a
+        // long list read as layers with properties under them.
+        color: selected || highlighted ? t.selectionFill : t.surface2,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Row(
+          children: [
+            GestureDetector(
+              key: ValueKey<String>('tl-keys-twirl-${row.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggle,
+              child: SizedBox(
+                width: iconSize + 6,
+                child: glyph.LumitIcon(
+                  row.open ? LumitIcons.collapse : LumitIcons.expand,
+                  size: iconSize,
+                  colour: row.open ? t.textPrimary : t.textMuted,
+                ),
+              ),
+            ),
+            // The label colour as a bullet, the same 6px swatch the Layers
+            // outline carries — read here, not picked: the dope sheet has no
+            // business changing a layer's colour.
+            Container(
+              width: _labelDotSize,
+              height: _labelDotSize,
+              decoration: BoxDecoration(
+                color: t.labelColour(row.entry.info.label),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Expanded rather than Flexible beside a Spacer, for the reason
+            // the property rows carry: the count belongs hard right.
+            Expanded(
+              child: Text(
+                row.entry.info.name,
+                style: t.body.copyWith(
+                    color: row.open ? t.textPrimary : t.textSecondary),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              l10n.keysPropertyCount(count),
+              style: t.mono.copyWith(fontSize: 9, color: t.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Outline extends StatelessWidget {
   final CompositionReference comp;
 
@@ -6804,9 +7313,23 @@ class _LayerArea extends StatelessWidget {
   /// are left alone, so they still reach the scrollable.
   final void Function(PointerScrollEvent event, double contentX) onWheel;
 
+  /// Keys mode (K-455): the same ruler, ground, marquee, seams and playhead,
+  /// with the dope sheet's rows under them instead of bars. A layer's own row
+  /// becomes a lane like any other — tinted with its label colour and
+  /// carrying the summary of everything keyed inside it — because a dope
+  /// sheet has nothing to trim and nothing to slide.
+  final bool keys;
+
+  /// The picked properties' fold paths — the same list the outline draws
+  /// from, so a row lit on one side is lit on the other. Read in Keys mode
+  /// only, where a lane is washed to show which property is in hand.
+  final List<String> selectedProperties;
+
   const _LayerArea({
     required this.comp,
     required this.rows,
+    this.keys = false,
+    this.selectedProperties = const [],
     required this.selectedIds,
     this.onOpenSequence,
     this.onGraphHeight,
@@ -7072,7 +7595,29 @@ class _LayerArea extends StatelessWidget {
                                           // bar drawn across the first of
                                           // them would put a seam through
                                           // the middle of it (K-248).
-                                          if (rows[i].sequenceExtra == null)
+                                          // The dope sheet's layer row: no
+                                          // bar to move or trim, a lane of
+                                          // its own tinted in the layer's
+                                          // label colour, carrying the
+                                          // summary diamonds while the layer
+                                          // is shut (K-455).
+                                          if (keys)
+                                            _KeysLayerLane(
+                                              key: ValueKey<String>(
+                                                  'tl-keys-layer-${rows[i].id}'),
+                                              row: rows[i],
+                                              axis: axis,
+                                              fps: fps,
+                                              selected: selectedIds.contains(
+                                                  rows[i]
+                                                      .entry
+                                                      .layer
+                                                      .internallayerId),
+                                              onSelect: () =>
+                                                  onSelect(rows[i].entry.layer),
+                                            )
+                                          else if (rows[i].sequenceExtra ==
+                                              null)
                                             _Bar(
                                               key: ValueKey<String>(
                                                   'tl-bar-${rows[i].id}'),
@@ -7161,8 +7706,26 @@ class _LayerArea extends StatelessWidget {
                                               children: [
                                                 for (final row
                                                     in rows[i].drawnRows)
-                                                  SizedBox(
+                                                  Container(
                                                     height: t.density.laneRow,
+                                                    // The picked property's
+                                                    // own lane, marked so it
+                                                    // can be followed across
+                                                    // the sheet (K-455). Keys
+                                                    // mode only: Layers mode
+                                                    // has never washed a lane
+                                                    // and is not changed here.
+                                                    color: keys &&
+                                                            selectedProperties
+                                                                .contains(
+                                                                    foldRowPath(
+                                                                        rows[i]
+                                                                            .id,
+                                                                        row))
+                                                        ? t.textPrimary.withValues(
+                                                            alpha:
+                                                                _keysSelectedTint)
+                                                        : null,
                                                     child: _lane(
                                                         t,
                                                         rows[i].entry,
@@ -7304,15 +7867,19 @@ class _LayerArea extends StatelessWidget {
         },
       );
     }
-    final keys = laneKeysOf(row);
-    if (keys.isEmpty) return null;
+    final rowKeys = laneKeysOf(row);
+    if (rowKeys.isEmpty) return null;
     final rowId = foldRowPath(id, row);
     return _KeyLane(
       key: ValueKey<String>('tl-keys-$rowId'),
       entry: entry,
       row: row,
       rowId: rowId,
-      keys: keys,
+      keys: rowKeys,
+      // Keys mode draws them bigger, and draws the interpolation as shape
+      // (§6.2) — the same diamonds, the same drag, read closer up.
+      half: keys ? keysKeyHalf : _keyHalf,
+      shaped: keys,
       axis: axis,
       fps: fps,
       fpsNum: fpsNum,
@@ -7335,6 +7902,68 @@ class _LayerArea extends StatelessWidget {
         onKeysSelected(next);
       },
       onChanged: onChanged,
+    );
+  }
+}
+
+/// How strongly a layer's own row is tinted in Keys mode: the label colour at
+/// a whisper, so a run of one layer's properties reads as a block without the
+/// sheet turning into a colour chart. The mockup's own 6%.
+const double _keysLayerTint = 0.06;
+
+/// The same for the lane of a **selected property**, which is tinted with the
+/// foreground rather than with a layer's colour — 3% in the drawing, quieter
+/// than the layer bands it crosses.
+const double _keysSelectedTint = 0.03;
+
+/// A layer's own row in Keys mode: no bar, a band in the layer's label colour,
+/// and — while the layer is shut — the summary of everything keyed inside it
+/// (K-455, §12A.1).
+///
+/// Clicking it selects the layer, which is the one thing a layer's row does
+/// everywhere in this panel.
+class _KeysLayerLane extends StatelessWidget {
+  final LayerRow row;
+  final TimelineAxis axis;
+  final double fps;
+  final bool selected;
+  final VoidCallback onSelect;
+
+  const _KeysLayerLane({
+    super.key,
+    required this.row,
+    required this.axis,
+    required this.fps,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final tint = t.labelColour(row.entry.info.label);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onSelect,
+      child: Container(
+        height: row.rowHeight,
+        color: tint.withValues(
+            alpha: selected ? _keysLayerTint * 2 : _keysLayerTint),
+        child: CustomPaint(
+          painter: _LaneKeysPainter(
+            frames: [
+              for (final k in row.summaryKeys) laneKeyFrame(k, fps),
+            ],
+            selected: const {},
+            axis: axis,
+            colour: t.animated,
+            chosen: t.textPrimary,
+            // A summary, not the keys you take hold of — the same half-scale
+            // rule a shut layer's bar follows in Layers mode (§12A.1).
+            half: _summaryKeyHalf,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -7371,6 +8000,12 @@ class _KeyLane extends StatefulWidget {
   final void Function(int index, bool additive) onSelectKey;
   final VoidCallback onChanged;
 
+  /// Half a key's width, and whether its **shape** says its interpolation
+  /// (§6.2). Keys mode draws bigger and shaped; Layers mode draws the diamond
+  /// it always has.
+  final double half;
+  final bool shaped;
+
   const _KeyLane({
     super.key,
     required this.entry,
@@ -7386,6 +8021,8 @@ class _KeyLane extends StatefulWidget {
     required this.selectedKeys,
     required this.onSelectKey,
     required this.onChanged,
+    this.half = _keyHalf,
+    this.shaped = false,
   });
 
   @override
@@ -7486,6 +8123,10 @@ class _KeyLaneState extends State<_KeyLane> {
               axis: widget.axis,
               colour: t.animated,
               chosen: t.textPrimary,
+              half: widget.half,
+              shapes: widget.shaped
+                  ? [for (final k in widget.keys) keyShapeOf(k)]
+                  : null,
             ),
           ),
         ),
@@ -7634,6 +8275,12 @@ class _LaneKeysPainter extends CustomPainter {
   /// the things you drag (§12A.1).
   final double half;
 
+  /// One shape per key (§6.2), or null for the plain diamonds Layers mode has
+  /// always drawn. Only Keys mode asks for shapes: the dope sheet is where a
+  /// comp's interpolation is read at a glance, and a lane of bars has no room
+  /// to say it.
+  final List<KeyShape>? shapes;
+
   const _LaneKeysPainter({
     required this.frames,
     required this.selected,
@@ -7641,6 +8288,7 @@ class _LaneKeysPainter extends CustomPainter {
     required this.colour,
     required this.chosen,
     this.half = _keyHalf,
+    this.shapes,
   });
 
   @override
@@ -7648,15 +8296,37 @@ class _LaneKeysPainter extends CustomPainter {
     final mid = size.height / 2;
     for (var i = 0; i < frames.length; i++) {
       final x = axis.xOf(frames[i]);
-      canvas.drawPath(
-        Path()
-          ..moveTo(x, mid - half)
-          ..lineTo(x + half, mid)
-          ..lineTo(x, mid + half)
-          ..lineTo(x - half, mid)
-          ..close(),
-        Paint()..color = selected.contains(i) ? chosen : colour,
-      );
+      final paint = Paint()..color = selected.contains(i) ? chosen : colour;
+      switch (shapes == null || i >= shapes!.length
+          ? KeyShape.diamond
+          : shapes![i]) {
+        case KeyShape.diamond:
+          canvas.drawPath(
+            Path()
+              ..moveTo(x, mid - half)
+              ..lineTo(x + half, mid)
+              ..lineTo(x, mid + half)
+              ..lineTo(x - half, mid)
+              ..close(),
+            paint,
+          );
+        // A square stood square, not on its corner — and a shade narrower
+        // than it is tall, as the drawing has it, which is what keeps it from
+        // reading as a diamond that failed to turn. The ratios are the
+        // drawing's own: against a diamond spanning 11, a hold key measures
+        // 7 × 8 and a bezier key 8 across.
+        case KeyShape.square:
+          canvas.drawRect(
+            Rect.fromCenter(
+              center: Offset(x, mid),
+              width: half * (7 / 5.5),
+              height: half * (8 / 5.5),
+            ),
+            paint,
+          );
+        case KeyShape.circle:
+          canvas.drawCircle(Offset(x, mid), half * (4 / 5.5), paint);
+      }
     }
   }
 
@@ -7667,6 +8337,7 @@ class _LaneKeysPainter extends CustomPainter {
       old.colour != colour ||
       old.chosen != chosen ||
       old.half != half ||
+      !listEquals(old.shapes, shapes) ||
       old.axis.frames != axis.frames ||
       old.axis.width != axis.width;
 
@@ -8650,3 +9321,10 @@ class _BarState extends State<_Bar> {
 
 /// Which part of a bar a drag grabbed: its middle, or one of its two ends.
 enum BarGrab { move, trimIn, trimOut }
+
+/// The Timeline's three views (K-455, §12A.1), in the order their tabs sit.
+///
+/// All three share the ruler, the cache bar, the work area, the markers and
+/// the playhead — what changes is the body under them: bars, diamonds, or
+/// curves.
+enum TimelineMode { layers, keys, graph }

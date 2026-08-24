@@ -884,6 +884,30 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **The panel's bottom bar carries a toggle for the switches / modes / parent columns**
   (K-448), so the outline pares down to names and bars when the columns are not in use.
 
+### 12A.1a Keys mode — the dope sheet (K-455)
+
+- Keys keeps the **same double-height ruler, cache bar, work area, markers, playhead and
+  zoom bar** as Layers mode, so all three views scroll the same range and nothing jumps on
+  a switch. Only the body under them changes.
+- **The outline's columns stand down.** In their place the second row carries the sheet's
+  filters: **Show — All / Animated** (Animated is the default; it is K-441's filter, and
+  `U` is the same reveal from the keyboard) and a scope of **Layers / Selected only**.
+- **A layer's row, then its properties flat.** The layer's own row carries its twirl, its
+  label-colour bullet, its name and — quietly, at the right — how many properties are
+  listed under it. Each property is one row named by the container it came out of:
+  `Transform · Position`, `Glow · Intensity`, with the value it reads at the playhead in
+  `animated` at the right. There are no group headings: the flattening is the point.
+- **The layer's lane is a band in its label colour**, carrying the half-scale summary
+  diamonds while the layer is shut, exactly as its bar does in Layers mode; a twirled-open
+  layer leaves the diamonds to the properties. The lane of a **picked** property is washed
+  at foreground strength so it can be followed across the sheet.
+- **A key's shape is its interpolation** (§6.2's rule, brought out of the graph): diamond
+  linear, square hold, circle bezier. Keys draw larger here than on a Layers lane — they
+  are the subject of the view.
+- **The mode adds no editing behaviour Layers lacks** (K-455). Selecting a key, dragging
+  one in time, snapping, the marquee and the undo step are the lanes' own machinery,
+  running under a different arrangement.
+
 ### 12A.2 Graph mode (K-442)
 
 - Graph mode keeps the **same double-height ruler, work area, cache bar and playhead** as

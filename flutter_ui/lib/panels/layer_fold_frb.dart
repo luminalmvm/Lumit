@@ -20,6 +20,7 @@ import 'dart:collection';
 
 import 'package:flutter/services.dart';
 
+import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -230,6 +231,38 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
       _ => const [],
     };
 
+/// What a keyed row is called when it is read **out of its fold-out** — the
+/// dope sheet's flat list, where "Position" on its own would not say which of
+/// a comp's Positions it is (15-DESIGN §12A.1).
+///
+/// [group] is the container the row sits in — Transform, the effect's own
+/// name, the mask's name — or null for a row that hangs straight off the
+/// layer, and [label] is the property. Null for a row that is not a property
+/// at all: a heading, a mask's own row, a waveform.
+({String? group, String label})? foldRowName(LayerFoldRow row) => switch (row) {
+      FoldTransformRow(:final group) => (
+          group: l10n.transformSection,
+          label: group.label
+        ),
+      FoldRetimeRow() => (group: null, label: l10n.retime),
+      FoldFlowRow(:final kind) => (group: l10n.flowSection, label: kind.label),
+      // The user's own name for the effect where one is set, exactly as the
+      // fold-out's own heading reads it (K-321).
+      FoldEffectParamRow(:final info, :final param) => (
+          group: info.customName ?? effectLabelOf(info.name),
+          label: engineLabel(param.label),
+        ),
+      FoldMaskValueRow(:final mask, :final value) => (
+          group: mask.name,
+          label: maskValueLabel(value)
+        ),
+      _ => null,
+    };
+
+/// A set that answers yes to every path: [layerFoldRows] handed this builds a
+/// layer's rows as though every twirl in it were down.
+const Set<String> everyFoldPath = _EveryPath();
+
 /// What a mask's value row is called — shared by the row, the graph channel
 /// and anything else that has to name one.
 String maskValueLabel(MaskValue value) => switch (value) {
@@ -305,7 +338,7 @@ List<BridgeKeyframe> layerKeys({
     [
       for (final row in layerFoldRows(
         entry: entry,
-        open: const _EveryPath(),
+        open: everyFoldPath,
         hasAudio: volumeDb != null,
         flowParams: flowParams,
         volumeDb: volumeDb,

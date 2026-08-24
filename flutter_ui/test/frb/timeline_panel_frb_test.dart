@@ -9,6 +9,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -5076,6 +5077,313 @@ void main() {
           reason: 'the layer below an open one still meets its own bar',
         );
       }
+    });
+
+    // ---------------------------------------------------------------------
+    // Keys mode — the dope sheet (K-455, §12A.1).
+    //
+    // The mode adds no editing behaviour Layers lacks: it is a different
+    // arrangement of the same parts, so most of what these claim is that the
+    // *same* machinery is running under a different layout — the same key
+    // paths, the same drag, the same selection, the same ruler.
+    // ---------------------------------------------------------------------
+
+    /// A solid whose Opacity is keyed at [frames], the fixture every claim
+    /// below starts from.
+    LayerReference keyedLayer(dynamic p, {List<int> frames = const [0, 60]}) {
+      final layer = (p.comp as CompositionReference).addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final f in frames)
+            BridgeKeyframe(
+              time: (p.comp as CompositionReference).timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      (p.uiState as LumitUiState).model.refresh();
+      return layer;
+    }
+
+    /// Switch the panel to Keys mode and twirl [layer] open, which is where
+    /// its property rows appear.
+    Future<void> openKeys(WidgetTester tester, LayerReference layer) async {
+      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
+      await tester.pumpAndSettle();
+      await tester.tap(find
+          .byKey(ValueKey<String>('tl-keys-twirl-${layer.internallayerId}')));
+      await tester.pumpAndSettle();
+    }
+
+    /// The tab row gains a third segment, between its two (§12A.1, K-455), and
+    /// the mode it opens is neither of the other two.
+    testWidgets('the mode tabs read Layers, Keys and Graph, in that order',
+        (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+
+      expect(find.text('KEYS'), findsOneWidget);
+      final layers =
+          tester.getRect(find.byKey(const ValueKey('tl-view-lanes')));
+      final keys = tester.getRect(find.byKey(const ValueKey('tl-view-keys')));
+      final graph = tester.getRect(find.byKey(const ValueKey('tl-graph')));
+      expect(layers.right, lessThanOrEqualTo(keys.left));
+      expect(keys.right, lessThanOrEqualTo(graph.left));
+      expect(keys.center.dy, moreOrLessEquals(layers.center.dy, epsilon: 2));
+
+      // Keys is a mode of its own: the graph does not come up with it, and
+      // the columns Layers mode carries stand down.
+      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
+      await tester.pumpAndSettle();
+      expect(find.byType(GraphEditorFrb), findsNothing);
+      expect(find.byKey(const ValueKey('tl-keys-filters')), findsOneWidget,
+          reason: 'the dope sheet\'s filter row replaces the column header');
+
+      // And Layers is unchanged behind it.
+      await tester.tap(find.byKey(const ValueKey('tl-view-lanes')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tl-keys-filters')), findsNothing);
+    });
+
+    /// The sheet itself: a layer's own row saying how many properties it
+    /// carries, then one flat row per keyed property named by the group it
+    /// came out of — `Transform · Opacity` — with what it reads at the
+    /// playhead beside it.
+    testWidgets('Keys mode lists a layer\'s keyed properties, flat',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      expect(
+          find.byKey(ValueKey<String>('tl-keys-row-${layer.internallayerId}')),
+          findsOneWidget);
+      expect(find.text('1 property'), findsOneWidget,
+          reason: 'the layer says how much of it is listed');
+      expect(
+          find.byKey(ValueKey<String>(
+              'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
+          findsOneWidget);
+      expect(find.text('Transform'), findsOneWidget,
+          reason: 'the group the property came out of names it');
+      expect(find.text('Opacity'), findsOneWidget);
+      // At frame 0 the curve reads 0, written the way the sheet writes whole
+      // numbers.
+      expect(find.text('0'), findsWidgets);
+
+      // And a lane beside it, at the same path Layers mode uses.
+      expect(
+          find.byKey(ValueKey<String>(
+              'tl-keys-${layer.internallayerId}/transform/opacity')),
+          findsOneWidget);
+    });
+
+    /// The Animated filter (K-441) applies here as it does in Layers: on — the
+    /// default — only keyframed properties are listed; All restores the rest.
+    testWidgets('the Animated filter decides what the sheet lists',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      expect(find.text('Position'), findsNothing,
+          reason: 'Position is not animated, so Animated leaves it out');
+
+      await tester.tap(find.byKey(const ValueKey('tl-keys-all')));
+      await tester.pumpAndSettle();
+      expect(find.text('Position'), findsOneWidget,
+          reason: 'All restores every property the layer has');
+      expect(find.text('Opacity'), findsOneWidget,
+          reason: 'and keeps the animated ones');
+
+      await tester.tap(find.byKey(const ValueKey('tl-keys-animated')));
+      await tester.pumpAndSettle();
+      expect(find.text('Position'), findsNothing);
+    });
+
+    /// `U` is the same reveal it has always been: it opens a layer onto what
+    /// is animated, and the dope sheet's rows are what it opens onto.
+    testWidgets('U opens a layer in Keys mode as it does in Layers',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      await mount(tester, p);
+      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(ValueKey<String>(
+              'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
+          findsNothing,
+          reason: 'the layer starts shut');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(ValueKey<String>(
+              'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
+          findsOneWidget,
+          reason: 'U reveals what is animated, in this mode too');
+    });
+
+    /// **The dope sheet's keys are the lanes' keys.** Clicking one selects it
+    /// and dragging one moves it — through the very machinery Layers mode
+    /// uses, at the same path, committing one op that undoes in one step.
+    /// This is the claim K-455 rests on: were Keys a second implementation,
+    /// this would need a second set of gestures to pass.
+    testWidgets('a key in Keys mode selects and drags like a lane key',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p, frames: [600, 2400]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      List<BridgeKeyframe> keys() =>
+          (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
+      final laneKey = ValueKey<String>(
+          'tl-keys-${layer.internallayerId}/transform/opacity');
+      final handle = find.byKey(ValueKey<String>(
+          'tl-key-${layer.internallayerId}/transform/opacity#0'));
+      expect(handle, findsOneWidget,
+          reason: 'the diamond is a drag handle here too');
+
+      final perFrame =
+          (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
+              p.comp.durationFrames();
+      await tester.drag(handle, Offset(perFrame * 10.5, 0));
+      await tester.pumpAndSettle();
+
+      final moved = p.comp.frameAtTime(time: keys().first.time);
+      expect(moved, greaterThan(600), reason: 'the drag moved the key later');
+      expect(keys(), hasLength(2), reason: 'no key added or lost');
+
+      p.state.project!.undo();
+      expect(p.comp.frameAtTime(time: keys().first.time), 600,
+          reason: 'one gesture, one undo step — the lane commit, unchanged');
+    });
+
+    /// The ruler, the work area, the cache bar and the playhead are the same
+    /// ones Layers mode draws, not copies: a mode switch leaves them where
+    /// they were, so the two views scroll the same range (§12A.1).
+    testWidgets('Keys mode keeps the shared ruler and playhead',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      p.uiState.playheadFrame.value = 24;
+      await mount(tester, p);
+
+      final rulerBefore =
+          tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      final headBefore = tester.getRect(find.byType(PlayheadMarker).first);
+      final zoomBefore =
+          tester.getRect(find.byKey(const ValueKey('tl-zoom-slider')));
+
+      await openKeys(tester, layer);
+
+      expect(
+          tester.getRect(find.byKey(const ValueKey('tl-ruler'))), rulerBefore,
+          reason: 'the ruler does not move on a mode switch');
+      expect(tester.getRect(find.byType(PlayheadMarker).first), headBefore,
+          reason: 'nor does the playhead');
+      expect(tester.getRect(find.byKey(const ValueKey('tl-zoom-slider'))),
+          zoomBefore,
+          reason: 'nor the zoom bar — all three are shared, not duplicated');
+      expect(find.byType(TimelineCacheBar), findsWidgets);
+    });
+
+    /// The sheet's own metrics, from the approved Keys drawing: the rows are
+    /// the density's lane row on both sides, and a key measures 11 point to
+    /// point where a Layers lane draws 8 (the dope sheet is where the keys
+    /// are the subject).
+    testWidgets('the Keys sheet is built to the drawing\'s metrics',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+      const d = DensityTokens.regular;
+
+      final row = tester.getRect(
+          find.byKey(ValueKey<String>('tl-keys-row-${layer.internallayerId}')));
+      final lane = tester.getRect(find
+          .byKey(ValueKey<String>('tl-keys-layer-${layer.internallayerId}')));
+      final prop = tester.getRect(find.byKey(ValueKey<String>(
+          'tl-keys-prop-${layer.internallayerId}/transform/opacity')));
+      expect(row.height, closeTo(d.laneRow, 0.5),
+          reason: 'a layer\'s row is the density\'s lane row (K-454)');
+      expect(prop.height, closeTo(d.laneRow, 0.5),
+          reason: 'and so is a property\'s');
+      expect(lane.top, closeTo(row.top, 0.5),
+          reason: 'the two halves are one table here as well');
+      expect(lane.height, closeTo(row.height, 0.5));
+
+      // The filter row is a secondary row, level with the column header it
+      // replaces — which is what keeps the ruler opposite it.
+      expect(
+          tester.getRect(find.byKey(const ValueKey('tl-keys-filters'))).height,
+          closeTo(d.secondaryRow, 0.5));
+
+      // The property's value is mono at 10 in `animated`, and the layer's
+      // count mono at 9 muted — the drawing's own two sizes.
+      final value =
+          tester.renderObject<RenderParagraph>(find.text('0').last).text.style!;
+      expect(value.fontSize, 10);
+      expect(value.color, LumitTheme.dark().animated);
+      final count = tester
+          .renderObject<RenderParagraph>(find.text('1 property'))
+          .text
+          .style!;
+      expect(count.fontSize, 9);
+      expect(count.color, LumitTheme.dark().textMuted);
+
+      expect(keysNumberText(960), '960',
+          reason: 'whole numbers plain, as the drawing writes them');
+      expect(keysNumberText(1.6), '1.60');
+
+      // The drawing's own two distances: a key spans 11 point to point, and a
+      // property row starts 30 in, clear of the twirl and the colour dot.
+      expect(keysKeyHalf * 2, 11);
+      expect(keysPropertyIndent, 30);
+      final group = tester.getRect(find.text('Transform'));
+      expect(group.left - prop.left, closeTo(keysPropertyIndent, 0.5),
+          reason: 'the group name starts at the drawing\'s indent');
+    });
+
+    /// Interpolation is drawn as shape (§6.2): diamond linear, square hold,
+    /// circle bezier — the reading a dope sheet exists for.
+    testWidgets('a key\'s shape says its interpolation', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: 0),
+            value: 0,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.hold(),
+          ),
+          BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: 60),
+            value: 100,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      final keys =
+          (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
+      expect(keyShapeOf(keys[0]), KeyShape.square,
+          reason: 'a held key is a step, and a step is drawn square');
+      expect(keyShapeOf(keys[1]), KeyShape.diamond);
     });
   }, skip: !engineAvailable);
 }

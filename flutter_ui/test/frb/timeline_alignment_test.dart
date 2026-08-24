@@ -23,6 +23,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -701,6 +702,55 @@ void main() {
 
       // And the halves still meet, which is the whole point of the derivation.
       expectLevel(tester, layer, why: 'under Compact');
+    });
+
+    /// 10e. **Keys mode is the same table** (K-455): the dope sheet swaps the
+    /// body under the shared ruler, so its rows take the density's lane row
+    /// on both sides and its own filter row stands exactly where the column
+    /// header did. Measured under Compact, because a mode that derived its
+    /// own heights would drift here first.
+    testWidgets('the Keys sheet follows the density like every other row',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final f in [0, 60])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p, density: DensityTokens.compact);
+      const d = DensityTokens.compact;
+
+      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-keys-twirl-${idOf(layer)}')));
+      await tester.pumpAndSettle();
+
+      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      final row = tester
+          .getRect(find.byKey(ValueKey<String>('tl-keys-row-${idOf(layer)}')));
+      final lane = tester.getRect(
+          find.byKey(ValueKey<String>('tl-keys-layer-${idOf(layer)}')));
+      final prop = tester.getRect(find.byKey(
+          ValueKey<String>('tl-keys-prop-${idOf(layer)}/transform/opacity')));
+
+      expect(row.height, closeTo(d.laneRow, 0.5));
+      expect(prop.height, closeTo(d.laneRow, 0.5));
+      expect(row.top - ruler.top, closeTo(d.secondaryRow * 2, 0.5),
+          reason: 'the timecode row and the filter row stand above the first '
+              'layer, exactly the ruler opposite them');
+      expect(lane.top, closeTo(row.top, 0.5),
+          reason: 'the dope sheet\'s halves are level too');
+      expect(lane.height, closeTo(row.height, 0.5));
     });
 
     /// 11. **Neither column of switches ever stretches** (§12A.1, K-448; Modes

@@ -3169,6 +3169,35 @@
       }
     }
   },
+  "keysPropertyCount": "{count, plural, =0{No properties} =1{1 property} other{{count} properties}}",
+  "@keysPropertyCount": {
+    "description": "Timeline, Keys mode: at the right-hand end of a layer's own row, how many of its properties the sheet is listing under it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "keysScopeLayers": "Layers",
+  "@keysScopeLayers": {
+    "description": "Timeline, Keys mode: the filter word for showing every layer in the composition, beside 'Selected only'. Drawn in capitals; one word."
+  },
+  "keysScopeSelected": "Selected only",
+  "@keysScopeSelected": {
+    "description": "Timeline, Keys mode: the filter word for showing only the layers currently picked, beside 'Layers'. Drawn in capitals; two words."
+  },
+  "keysShow": "Show",
+  "@keysShow": {
+    "description": "Timeline, Keys mode: the label at the left of the filter row, naming the two words that follow it. Drawn in capitals; one word."
+  },
+  "keysShowAll": "All",
+  "@keysShowAll": {
+    "description": "Timeline, Keys mode: the filter word for listing every property a layer has, beside 'Animated'. Drawn in capitals; one word."
+  },
+  "keysShowAnimated": "Animated",
+  "@keysShowAnimated": {
+    "description": "Timeline, Keys mode: the filter word for listing only keyframed properties, beside 'All'. The default. Drawn in capitals; one word."
+  },
   "languageFollowSystem": "Same as this machine",
   "@languageFollowSystem": {
     "description": "Language picker: the default, which follows the operating system's own language."
@@ -4950,6 +4979,10 @@
   "@timelineModeGraph": {
     "description": "Label on the right-hand mode segment in the Timeline's top row: the view showing each animated property as a curve. Drawn in capitals; one word."
   },
+  "timelineModeKeys": "Keys",
+  "@timelineModeKeys": {
+    "description": "Label on the middle mode segment in the Timeline's top row: the dope sheet, showing every keyframe in the composition as a row of marks against time. Drawn in capitals; one word."
+  },
   "timelineModeLayers": "Layers",
   "@timelineModeLayers": {
     "description": "Label on the left-hand mode segment in the Timeline's top row: the view showing each layer as a bar against time. Drawn in capitals; one word."
@@ -5102,6 +5135,10 @@
   "tipInverted": "Inverted",
   "@tipInverted": {
     "description": "Tooltip: the matte is the other way round. Under five words."
+  },
+  "tipKeysView": "Keys view",
+  "@tipKeysView": {
+    "description": "Tooltip: show every keyframe in the composition as a sheet. Under five words."
   },
   "tipLabelColour": "Label colour",
   "@tipLabelColour": {

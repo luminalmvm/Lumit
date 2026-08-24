@@ -8316,3 +8316,40 @@ step, like any other change to an effect.
 
 The engine owns the pairing and the remembering; the proportional dragging itself is the
 panel's, because it only exists while your finger is on the mouse.
+
+## 17. The Timeline's three views, in plain terms
+
+The Timeline shows the same composition three ways, and a row of three words at the top
+right of the panel — **Layers**, **Keys**, **Graph** — says which one is up.
+
+**Layers** is the one you already know: one bar per layer, laid along time, and twirl a
+layer open to see its properties with their keyframes on lanes beside them. It is where
+you cut, trim, reorder and key.
+
+**Keys** is the dope sheet. Instead of bars it lists what is *keyed* — every animated
+property of every layer, brought up to one flat level, so a whole composition's timing is
+one screen rather than a dozen twirls. A property that lived three levels down as
+Effects → Glow → Intensity appears here as one row reading `Glow · Intensity`, with what
+it holds at the playhead beside it. Nothing about it is a new way of editing: the marks on
+its lanes are the same keyframes, at the same places, dragged with the same hand — this is
+a way of *looking*. Two words in the row under the tabs decide how much it lists: **All**
+shows every property a layer has, **Animated** (the default, and the same reading the `U`
+key gives you) shows only the ones with keyframes on them; **Layers** and **Selected only**
+decide whether it covers the whole composition or just what you have picked.
+
+One small thing the dope sheet can say that the lanes cannot: a key's *shape* is its
+interpolation. A diamond eases in a straight line, a circle is a curve, a square is a
+hold — the value stays put until the next key and then jumps. Reading a sheet of them
+tells you what a composition's motion feels like before you play a frame of it.
+
+**Graph** is the curves: the same keyframes again, drawn as the value they carry rather
+than as marks on a line, which is where you shape an ease by hand.
+
+The three share everything above and below the middle — the time ruler, the work-area
+band, the cache stripe, the markers, the playhead and the zoom slider are one set of
+things the modes swap the *body* underneath, not three copies. That is why switching modes
+never moves the ruler and never loses your place: the same range is on screen, described
+differently. In the code this is one field saying which mode is up
+(`TimelineMode` in `flutter_ui/lib/panels/timeline_panel_frb.dart`) rather than a switch
+per mode, because two switches can say "graph and keys at once" and a state nobody can
+draw is a state something will eventually reach.
