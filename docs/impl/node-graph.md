@@ -452,12 +452,41 @@ widget, no fork).
 K-448: its own panel, openable in a sidebar of the Effects workspace — a locked,
 read-only second viewport showing one node's output without soloing. Engine side: a
 render request for the compiled node matching a stack prefix (the request tuple already
-addresses nodes), presented to a second shared texture alongside the Viewer's.
-**Files**: `crates/lumit-render` (second present target), bridge call, 
-`flutter_ui/lib/panels/node_preview_panel.dart`, Effects-workspace sidebar wiring.
+addresses nodes).
+
+**Landed 2026-08-24**, with the transport settled the smaller way (**K-486**, which
+supersedes this note's "presented to a second shared texture alongside the Viewer's").
+The preview is a **bounded thumbnail on the worker's existing response stream**, not a
+second zero-copy target: it is a still that changes when the pick, the playhead, the
+layer or the document does, so a second present target would have been a whole Viewer's
+plumbing — three platform variants, a second Dart texture registration, a present pool
+keyed by role rather than size — for a picture the size of a scope trace. K-486 carries
+the reasoning; the seam is `preview_node` / `WorkerResponse::NodePreview` (docs/17).
+
+Three further things came out of building it:
+
+- **The prefix is a length, not a new render path.** `graph::prefix_len` turns a node
+  into "how many effects are upstream of it" and `graph::truncated_effects` hands back a
+  patched *copy* of the snapshot with the layer's stack cut there — the same shape the
+  dropper's solo read and every drag preview already use. The ordinary interactive path
+  renders it, so export-equals-preview and the drag fast path come for free.
+- **The frame key needed no field.** It already hashes each layer's effects, so a shorter
+  stack is a different name by construction. The Layer out node cuts nothing, and so
+  rides the frame the Viewer has already banked.
+- **A driver is answered with silence.** It makes a number, not a picture; the panel
+  draws its own empty face rather than being told a picture is coming.
+
+**Files**: `crates/lumit-core/src/graph.rs` (`prefix_len`, `truncated_effects`),
+`crates/lumit-bridge/src/api/{composition,state,worker_thread}.rs` (then codegen),
+`flutter_ui/lib/panels/node_preview_panel.dart`, `state/dock.dart` (the panel and its
+place in the Effects preset), arb keys.
 **Tests**: preview of a two-effect layer's first node differs from the Viewer exactly by
-the second effect (frame test); closing the panel stops the second render (no idle work);
-skip-on-no-GPU markers as the Viewer tests use.
+the second effect, and equals a project authored with only that effect
+(`lumit-render/tests/node_prefix_preview.rs`, skip-on-no-GPU as the Viewer tests are);
+each prefix names its own frame; the preview's own drain lane; the panel's face, its
+following of the pick, and 0 bridge calls on a hover. Closing the panel stops the second
+render by construction — the reply subscription and every listener go with it, so
+nothing is left asking.
 
 ### WP6 — Points stream and the Particulate design document
 

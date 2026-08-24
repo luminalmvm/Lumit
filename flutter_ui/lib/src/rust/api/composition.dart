@@ -758,6 +758,35 @@ class CompositionReference {
           leaveAttributes: leaveAttributes,
           adjustDuration: adjustDuration);
 
+  /// Ask the worker for the picture **at** one node of `layer`'s graph — the
+  /// Node preview panel's whole seam (K-486, K-448).
+  ///
+  /// `node` is spelt as the graph read model spells it: `source`, `out`, or
+  /// an effect instance's id. A driver's id makes no picture and is answered
+  /// with silence, as is a node the layer no longer carries — the panel draws
+  /// its own empty face rather than waiting for something that is not coming.
+  ///
+  /// `max_edge` is the longest edge of the picture wanted, capped at 256
+  /// (`worker_thread::MAX_PREVIEW_EDGE`): the composite runs at that size, so
+  /// a preview costs a fraction of a Viewer frame, and the payload stays the
+  /// bounded thumbnail K-183 allows rather than becoming a second frame
+  /// transport. The answer arrives as `WorkerResponse::NodePreview`, on the
+  /// stream the frames and traces already ride.
+  ///
+  /// **Asked when something changes, never in a rebuild**: the panel asks on
+  /// a selection, playhead or document change and holds the picture. A
+  /// request superseded by a newer one is dropped in its own lane, so a scrub
+  /// with the panel open renders one preview rather than one per frame
+  /// crossed, and closing the panel stops the second render outright — there
+  /// is nothing left asking.
+  void previewNode(
+          {required BigInt frame,
+          required LayerReference layer,
+          required String node,
+          required int maxEdge}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferencePreviewNode(
+          that: this, frame: frame, layer: layer, node: node, maxEdge: maxEdge);
+
   /// Add this composition to the export queue, and start the queue when
   /// `start` is set.
   ///

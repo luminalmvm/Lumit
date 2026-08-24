@@ -2806,6 +2806,41 @@ fn a_scope_needs_five_colour_triples() {
     ));
 }
 
+/// The Node preview's seam accepts a node the way the graph read model spells
+/// it and asks the worker for a picture (K-486, K-448) — one dispatch, whatever
+/// the node, because deciding what a node *is* needs the document and the
+/// document lives on the worker's side of this call.
+///
+/// The cap matters as much as the call: a preview crosses as pixels, so the
+/// longest edge it may ask for is bounded (K-183's "small by construction"),
+/// and asking for a wall-sized one must be clamped rather than honoured.
+#[test]
+fn a_node_preview_is_asked_for_by_the_nodes_own_name() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+
+    for node in [
+        "source",
+        "out",
+        &uuid::Uuid::now_v7().to_string(),
+        "nonsense",
+    ] {
+        assert!(
+            matches!(
+                comp.preview_node(0, layer, node.to_owned(), 256),
+                Err(BridgeError::InvalidWorkerState) | Ok(())
+            ),
+            "asking for the picture at {node} must dispatch or say the worker is not up"
+        );
+    }
+
+    assert_eq!(
+        crate::api::worker_thread::MAX_PREVIEW_EDGE,
+        256,
+        "a preview is a thumbnail: the same 256 KiB bound the scope traces cross at"
+    );
+}
+
 /// A comp nests into another as a Precomp layer, and refuses to nest into
 /// itself — the one cycle a user reaches by accident.
 #[test]

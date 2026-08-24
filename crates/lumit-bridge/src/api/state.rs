@@ -119,8 +119,8 @@ pub struct BridgeSharedFrameInfo {
 /// A small still picture as plain pixels — the thumbnail payload
 /// (`FootageReference::thumbnail`). **Not a Viewer transport**: the read-back
 /// frame path was deleted in K-183, so the only pixel payloads that cross the
-/// bridge are these thumbnails and the scope traces, both small by
-/// construction.
+/// bridge are these thumbnails, the scope traces and the Node preview
+/// ([`BridgeNodePreview`], K-486), each small by construction.
 #[frb(non_opaque)]
 #[derive(Clone)]
 pub struct BridgeRenderedFrame {
@@ -192,6 +192,33 @@ pub struct BridgeSampledPixels {
     /// True when the window is of one layer rendered alone rather than of the
     /// composite — a depth pass being read for a focal point, say.
     pub layer_alone: bool,
+}
+
+/// The picture at one node of a layer's graph — the Node preview panel's
+/// payload (K-486, K-448, docs/impl/node-graph.md §8 WP5).
+///
+/// **A thumbnail, not a Viewer.** The panel shows the picture *at* a node: the
+/// composition rendered with that layer's effect stack cut off there. It is a
+/// still that changes when the selection, the playhead or the document does —
+/// never sixty times a second — so it crosses as pixels the way the scope
+/// traces do, bounded to the same 256px longest edge and so to the same 256 KiB
+/// at worst. K-183's rule is about *frames*, which stream; this is one small
+/// answer to one question about a picture, and giving it a second zero-copy
+/// transport of its own would be a whole Viewer's plumbing for a thumbnail.
+#[frb(non_opaque)]
+#[derive(Clone)]
+pub struct BridgeNodePreview {
+    /// Which node this is the picture at, so a reply that arrives after the
+    /// selection has moved on is recognised as stale rather than drawn. A
+    /// string, as every other node reference crosses (`graph/<node>` paths):
+    /// `source`, `out`, or the effect instance's id.
+    pub node: String,
+    /// Which frame it is of, stale-checked for the same reason.
+    pub frame: u64,
+    pub width: u32,
+    pub height: u32,
+    /// Tightly packed display-ready sRGB RGBA8, `width * height * 4`.
+    pub rgba: Vec<u8>,
 }
 
 /// How far the frame the user is waiting for has got (docs/13 §7.1).
@@ -278,6 +305,10 @@ pub enum WorkerResponse {
     /// `CompositionReference::sample_pixels`, riding the same stream for the
     /// same reason a trace does.
     Sampled(BridgeSampledPixels),
+    /// The picture at one graph node — the answer to one
+    /// `CompositionReference::preview_node`, riding the same stream for the
+    /// same reason a trace does.
+    NodePreview(BridgeNodePreview),
     /// Playback finished on its own — it ran off the end of the composition.
     ///
     /// Sent so the transport can show itself stopped without the frontend having

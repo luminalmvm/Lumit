@@ -1472,6 +1472,8 @@ pub enum WorkerRequest {
     TraceScope(RenderScopeRequest),
     /// Read the pixels under the dropper (docs/07 §6.1).
     SamplePixels(SamplePixelsRequest),
+    /// Make the picture at one graph node — the Node preview panel (K-486).
+    NodePreview(NodePreviewRequest),
     /// Start playing. The worker paces itself from here until it is stopped or
     /// runs off the end.
     Play(PlayRequest),
@@ -2031,6 +2033,34 @@ pub struct SamplePixelsRequest {
     /// still be read. `None` samples the composite.
     pub layer: Option<LayerReference>,
 }
+
+/// One read of the picture at a graph node — the Node preview panel's request
+/// (K-486, K-448).
+///
+/// It goes through the worker for the same reason the dropper's read does: the
+/// renderer is owned outright by that thread, and a composition frame can only
+/// be made where it lives.
+#[frb(ignore)]
+pub struct NodePreviewRequest {
+    pub comp: CompositionReference,
+    pub frame: u64,
+    /// The layer whose chain is being previewed.
+    pub layer: LayerReference,
+    /// Where in that layer's chain to stop, as the frontend spells a node:
+    /// `source`, `out`, or an effect instance's id. Anything else — a driver
+    /// among them — makes no picture and is answered with silence.
+    pub node: String,
+    /// The longest edge of the picture wanted, capped at
+    /// [`MAX_PREVIEW_EDGE`].
+    pub max_edge: u32,
+}
+
+/// The longest edge a Node preview may be: 256 pixels, so 256 KiB at worst —
+/// exactly the bound the scope traces already cross at (K-183's "small by
+/// construction"). A preview panel is a postage stamp beside the Viewer, and
+/// the cap is what keeps this a thumbnail rather than a second frame transport.
+#[frb(ignore)]
+pub const MAX_PREVIEW_EDGE: u32 = 256;
 
 /// The largest window one read may carry: 129×129 pixels, 66 KiB.
 ///
@@ -2820,7 +2850,7 @@ fn handle_requests(
         // asks every 120 ms while the Viewer asks every tick, so the picture
         // froze on its first frame while the scopes kept updating. A trace and
         // a frame are different jobs; neither is the other's replacement.
-        let (pictures, scope, sample, superseded) =
+        let (pictures, scope, sample, preview, superseded) =
             drain_to_newest(request, receiver, classify_request);
         // Deliberately not logged. Superseding is the normal, healthy case —
         // it is how a drag stays attached to the pointer — and a line per
@@ -2834,10 +2864,16 @@ fn handle_requests(
         //
         // A frame that cannot be rendered is dropped, not fatal: the worker has
         // to survive to serve the next request.
-        for request in pictures.into_iter().chain(scope).chain(sample) {
+        for request in pictures
+            .into_iter()
+            .chain(scope)
+            .chain(sample)
+            .chain(preview)
+        {
             let outcome = match request {
                 WorkerRequest::RenderComp(req) => render_comp(req, state, stream),
                 WorkerRequest::SamplePixels(req) => sample_pixels(req, state, stream),
+                WorkerRequest::NodePreview(req) => node_preview(req, state, stream),
                 // Named for what it does rather than "render", so the three
                 // variants do not all share a prefix that says nothing.
                 WorkerRequest::TraceScope(req) => trace_scope(req, state, stream),
@@ -2908,6 +2944,7 @@ fn classify_request(r: &WorkerRequest) -> DrainClass {
     match r {
         WorkerRequest::TraceScope(_) => DrainClass::Scope,
         WorkerRequest::SamplePixels(_) => DrainClass::Sample,
+        WorkerRequest::NodePreview(_) => DrainClass::NodePreview,
         WorkerRequest::Play(_)
         | WorkerRequest::StopPlayback
         | WorkerRequest::SetViewerLook { .. } => DrainClass::PictureKeepAll,
@@ -2935,6 +2972,11 @@ enum DrainClass {
     /// throw the other away (the same reasoning that gave a trace its own lane
     /// against a frame).
     Sample,
+    /// A Node preview; the newest survives, in its own lane again (K-486). It
+    /// cannot share the dropper's: the preview asks only when the selection,
+    /// the playhead or the document moves, so a request thrown away is never
+    /// re-asked and the panel would sit on a stale picture for good.
+    NodePreview,
 }
 
 /// Take everything queued and keep what its class says to keep.
@@ -2943,17 +2985,18 @@ enum DrainClass {
 /// `WorkerRequest` needs a live project behind it, and the rule being tested has
 /// nothing to do with rendering.
 ///
-/// Returns `(pictures_in_order, scope, sample, superseded_count)`.
+/// Returns `(pictures_in_order, scope, sample, node_preview, superseded_count)`.
 #[frb(ignore)]
 fn drain_to_newest<T>(
     first: T,
     receiver: &Receiver<T>,
     classify: impl Fn(&T) -> DrainClass,
-) -> (Vec<T>, Option<T>, Option<T>, usize) {
+) -> (Vec<T>, Option<T>, Option<T>, Option<T>, usize) {
     let mut kept: Vec<T> = Vec::new();
     let mut newest_wins: Option<T> = None;
     let mut scope = None;
     let mut sample = None;
+    let mut preview = None;
     let mut superseded = 0usize;
     let mut newest = Some(first);
     while let Some(item) = newest.take() {
@@ -2965,6 +3008,11 @@ fn drain_to_newest<T>(
             }
             DrainClass::Sample => {
                 if sample.replace(item).is_some() {
+                    superseded += 1;
+                }
+            }
+            DrainClass::NodePreview => {
+                if preview.replace(item).is_some() {
                     superseded += 1;
                 }
             }
@@ -2980,7 +3028,7 @@ fn drain_to_newest<T>(
     // A surviving newest-wins picture runs after the kept ones: the kept ones
     // were asked for earlier, and order is part of every-frame's contract.
     kept.extend(newest_wins);
-    (kept, scope, sample, superseded)
+    (kept, scope, sample, preview, superseded)
 }
 
 /// Translate one measured frame for the frontend (docs/13 §7.1). Ids cross as
@@ -3539,6 +3587,115 @@ fn sample_layer_alone(
         rgba: rgba.clone(),
     });
     Some((w, h, rgba))
+}
+
+/// Make the picture **at** one node of a layer's graph and publish it
+/// (K-486, K-448, docs/impl/node-graph.md §8 WP5).
+///
+/// # In plain terms
+///
+/// The image chain a layer's graph draws *is* its effect stack (§1.1 of the
+/// note), so the picture at the third box is the picture the composition makes
+/// with that layer's stack cut off after the third effect. There is therefore
+/// no new render here at all: a patched **copy** of the snapshot with a shorter
+/// stack goes through the ordinary interactive path, exactly as the dropper's
+/// solo read and every drag preview already do, and nothing goes near `commit`.
+///
+/// Three things fall out of that, and each is why the seam is this shape:
+///
+/// - **The prefix names its own frame.** The frame key hashes each layer's
+///   effects, so a cut stack is a different name by construction — the cache
+///   cannot hand a preview the Viewer's frame, and no field had to be added to
+///   the key to make that true.
+/// - **The Layer out node cuts nothing**, so it renders the document as it
+///   stands and rides the frame the Viewer has already banked.
+/// - **A driver makes no picture**, so it is answered with silence — as a frame
+///   with nothing to read is. The panel draws its own empty face rather than
+///   being told a picture is coming.
+///
+/// The decode plan does not depend on the effect stack, so a preview re-uses
+/// the retained source pixels and a scrub with the panel open opens no file.
+#[frb(ignore)]
+fn node_preview(
+    req: NodePreviewRequest,
+    state: &mut WorkerState,
+    stream: &mut WorkerResponseStream,
+) -> Result<(), BridgeError> {
+    let document = {
+        let document = state.project.state()?;
+        let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
+        document.store.snapshot()
+    };
+    let comp_id = req.comp.id;
+    let Some(layer) = document
+        .comp(comp_id)
+        .and_then(|c| c.layers.iter().find(|l| l.id == req.layer.layer_id))
+    else {
+        return Ok(()); // the layer went away between the ask and the answer
+    };
+    let Some(node) = node_ref_of(&req.node, &layer.effects) else {
+        return Ok(()); // a driver, or a node this layer no longer carries
+    };
+    let Some(keep) = lumit_core::graph::prefix_len(&layer.effects, node) else {
+        return Ok(());
+    };
+    let cut = lumit_core::graph::truncated_effects(&document, comp_id, req.layer.layer_id, keep);
+    let doc = cut.as_ref().unwrap_or(&document);
+
+    // The longest edge the panel asked for, against the longest edge the comp
+    // has — so the composite itself runs on the small raster (`quality_for`'s
+    // display scale), which is where a preview is actually cheap.
+    let Some(comp) = document.comp(comp_id) else {
+        return Ok(());
+    };
+    let longest = comp.width.max(comp.height).max(1) as f32;
+    let wanted = req.max_edge.clamp(1, MAX_PREVIEW_EDGE) as f32;
+    let scale = (wanted / longest).min(1.0);
+
+    // A preview that will not render is dropped, not fatal — as a frame that
+    // will not render is. The panel keeps the picture it had.
+    let Ok((rgba, width, height)) =
+        state
+            .renderer
+            .render_preview(doc, comp_id, req.frame, quality_for(scale), scale)
+    else {
+        return Ok(());
+    };
+
+    _ = stream.add(WorkerResponse::NodePreview(
+        crate::api::state::BridgeNodePreview {
+            node: req.node,
+            frame: req.frame,
+            width,
+            height,
+            rgba,
+        },
+    ));
+    Ok(())
+}
+
+/// Read the frontend's spelling of a node back into a [`NodeRef`]: `source`,
+/// `out`, or an effect instance's id. A driver's id is deliberately **not**
+/// resolved here — it is not in `effects`, so it comes back `None` and the
+/// caller answers with silence, which is the honest answer for a box that makes
+/// a number rather than a picture.
+#[frb(ignore)]
+fn node_ref_of(
+    node: &str,
+    effects: &[lumit_core::model::EffectInstance],
+) -> Option<lumit_core::graph::NodeRef> {
+    use lumit_core::graph::NodeRef;
+    match node {
+        "source" => Some(NodeRef::Source),
+        "out" => Some(NodeRef::Out),
+        other => {
+            let id = Uuid::parse_str(other).ok()?;
+            effects
+                .iter()
+                .any(|e| e.id == id)
+                .then_some(NodeRef::Effect(id))
+        }
+    }
 }
 
 /// A window cut out of a picture: the pixels, and where its centre landed.
@@ -4414,6 +4571,7 @@ mod tests {
         // newest-wins in every mode.
         EveryFrame(u32),
         Scope(u32),
+        Preview(u32),
     }
 
     fn classify(r: &Req) -> DrainClass {
@@ -4422,6 +4580,7 @@ mod tests {
             Req::EveryFrame(_) => DrainClass::PictureKeepAll,
             Req::Scope(_) => DrainClass::Scope,
             Req::Sample(_) => DrainClass::Sample,
+            Req::Preview(_) => DrainClass::NodePreview,
         }
     }
 
@@ -4472,7 +4631,7 @@ mod tests {
         tx.send(Req::Scope(9)).unwrap();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Adaptive(0), &rx, classify);
+        let (pictures, scope, _, _, superseded) = drain_to_newest(Req::Adaptive(0), &rx, classify);
         assert_eq!(
             pictures,
             vec![Req::Adaptive(3)],
@@ -4493,7 +4652,7 @@ mod tests {
         }
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Adaptive(0), &rx, classify);
+        let (pictures, scope, _, _, superseded) = drain_to_newest(Req::Adaptive(0), &rx, classify);
         assert_eq!(pictures, vec![Req::Adaptive(5)]);
         assert_eq!(scope, None, "nothing asked for a trace");
         assert_eq!(superseded, 5);
@@ -4507,7 +4666,7 @@ mod tests {
         tx.send(Req::Scope(3)).unwrap();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Scope(1), &rx, classify);
+        let (pictures, scope, _, _, superseded) = drain_to_newest(Req::Scope(1), &rx, classify);
         assert!(pictures.is_empty());
         assert_eq!(scope, Some(Req::Scope(3)));
         assert_eq!(superseded, 2);
@@ -4519,7 +4678,7 @@ mod tests {
         let (tx, rx) = channel::<Req>();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::Adaptive(7), &rx, classify);
+        let (pictures, scope, _, _, superseded) = drain_to_newest(Req::Adaptive(7), &rx, classify);
         assert_eq!(pictures, vec![Req::Adaptive(7)]);
         assert_eq!(scope, None);
         assert_eq!(superseded, 0);
@@ -4538,7 +4697,8 @@ mod tests {
         tx.send(Req::Scope(1)).unwrap();
         drop(tx);
 
-        let (pictures, scope, _, superseded) = drain_to_newest(Req::EveryFrame(1), &rx, classify);
+        let (pictures, scope, _, _, superseded) =
+            drain_to_newest(Req::EveryFrame(1), &rx, classify);
         assert_eq!(
             pictures,
             vec![
@@ -4554,21 +4714,25 @@ mod tests {
         assert_eq!(superseded, 0, "nothing every-frame was thrown away");
     }
 
-    /// A dropper read has its own lane. The Scopes panel and an armed dropper
-    /// are often open together — the panel asks every 120 ms and the magnifier
-    /// asks on every pointer move — and neither question is the other's
-    /// replacement, so neither may supersede the other or a frame.
+    /// A dropper read has its own lane, and so does a Node preview (K-486).
+    /// The Scopes panel, an armed dropper and an open preview are all things
+    /// that can be up at once — the panel asks every 120 ms, the magnifier asks
+    /// on every pointer move, the preview asks when the selection or the
+    /// playhead moves — and none of them is another's replacement. A preview
+    /// thrown away is the worst of the three, because nothing re-asks it: the
+    /// panel would sit on a stale picture until the user moved something else.
     #[test]
-    fn a_dropper_read_and_a_trace_do_not_supersede_each_other() {
+    fn a_dropper_read_a_trace_and_a_preview_do_not_supersede_each_other() {
         let (tx, rx) = channel();
         tx.send(Req::Scope(1)).unwrap();
         tx.send(Req::Sample(7)).unwrap();
+        tx.send(Req::Preview(2)).unwrap();
         tx.send(Req::Sample(8)).unwrap();
         drop(tx);
 
-        let (pictures, scope, sample, superseded) =
+        let (pictures, scope, sample, preview, superseded) =
             drain_to_newest(Req::Adaptive(4), &rx, classify);
-        assert_eq!(pictures, vec![Req::Adaptive(4)], "the frame survives both");
+        assert_eq!(pictures, vec![Req::Adaptive(4)], "the frame survives all");
         assert_eq!(
             scope,
             Some(Req::Scope(1)),
@@ -4579,7 +4743,64 @@ mod tests {
             Some(Req::Sample(8)),
             "reads collapse among themselves — only where the pointer is now matters"
         );
+        assert_eq!(
+            preview,
+            Some(Req::Preview(2)),
+            "and the preview outlives the reads either side of it"
+        );
         assert_eq!(superseded, 1, "one older read, and nothing else");
+    }
+
+    /// The Node preview's one parsing boundary (K-486). `source` and `out` are
+    /// the two derived boxes; anything else must be an effect **this layer
+    /// carries**, so a driver's id, a stale id and a word that is not a uuid
+    /// all come back `None` and are answered with silence rather than with the
+    /// full frame — which is the failure that would look like a working panel.
+    #[test]
+    fn only_the_image_nodes_of_this_layer_name_a_picture() {
+        use lumit_core::graph::NodeRef;
+        let blur = lumit_core::fx::instantiate("blur").expect("a built-in");
+        let wiggle = lumit_core::fx::instantiate("wiggle").expect("a built-in");
+        let effects = vec![blur.clone()];
+
+        assert_eq!(
+            super::node_ref_of("source", &effects),
+            Some(NodeRef::Source)
+        );
+        assert_eq!(super::node_ref_of("out", &effects), Some(NodeRef::Out));
+        assert_eq!(
+            super::node_ref_of(&blur.id.to_string(), &effects),
+            Some(NodeRef::Effect(blur.id))
+        );
+        assert_eq!(
+            super::node_ref_of(&wiggle.id.to_string(), &effects),
+            None,
+            "a driver is not in the stack, so it names no picture"
+        );
+        assert_eq!(
+            super::node_ref_of(&Uuid::now_v7().to_string(), &effects),
+            None,
+            "an effect this layer does not carry names no picture"
+        );
+        assert_eq!(super::node_ref_of("", &effects), None);
+        assert_eq!(super::node_ref_of("Out", &effects), None, "spelt exactly");
+    }
+
+    /// Previews collapse among *themselves*, which is what makes a scrub with
+    /// the panel open cost one preview render rather than one per frame
+    /// crossed. Only the newest node and playhead are worth a picture.
+    #[test]
+    fn previews_collapse_among_themselves() {
+        let (tx, rx) = channel();
+        for frame in 2..=4 {
+            tx.send(Req::Preview(frame)).unwrap();
+        }
+        drop(tx);
+
+        let (pictures, _, _, preview, superseded) = drain_to_newest(Req::Preview(1), &rx, classify);
+        assert!(pictures.is_empty());
+        assert_eq!(preview, Some(Req::Preview(4)));
+        assert_eq!(superseded, 3);
     }
 
     /// The window is always exactly `window × window`, odd, and centred on the

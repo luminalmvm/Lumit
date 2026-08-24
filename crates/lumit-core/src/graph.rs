@@ -167,6 +167,64 @@ pub enum GraphError {
     Cycle,
 }
 
+/// How many of `effects` lie at or above `node` in the image chain — the
+/// **prefix** a Node preview shows (K-486, note §8 WP5).
+///
+/// The picture at a node is the picture the layer makes with its stack cut off
+/// there: nothing at the Source, the first *n* effects at the *n*th effect
+/// node, the whole stack at Layer out. Since the chain is the stack (§1.1),
+/// naming the point is naming a length.
+///
+/// `None` for a [`NodeRef::Driver`] — a driver makes a number, not a picture,
+/// so there is nothing to preview — and for an effect this layer does not
+/// carry.
+#[must_use]
+pub fn prefix_len(effects: &[EffectInstance], node: NodeRef) -> Option<usize> {
+    match node {
+        NodeRef::Source => Some(0),
+        NodeRef::Effect(id) => effects.iter().position(|e| e.id == id).map(|i| i + 1),
+        NodeRef::Driver(_) => None,
+        NodeRef::Out => Some(effects.len()),
+    }
+}
+
+/// `doc` with `layer`'s effect stack cut to its first `keep` entries — the
+/// document a Node preview renders (K-486).
+///
+/// A patched **copy**, never anything the document remembers: exactly the shape
+/// the drag previews and the dropper's solo read already use. Because the frame
+/// key hashes each layer's effects, the shortened stack names a different frame
+/// on its own — the prefix point folds into the key without a field being added
+/// to it.
+///
+/// `None` when nothing would change (the whole stack is kept, or the comp or
+/// layer is not there), so a preview of the Layer out node costs no clone and
+/// rides the Viewer's own cached frame.
+#[must_use]
+pub fn truncated_effects(
+    doc: &std::sync::Arc<crate::model::Document>,
+    comp_id: Uuid,
+    layer_id: Uuid,
+    keep: usize,
+) -> Option<std::sync::Arc<crate::model::Document>> {
+    let layer = doc
+        .comp(comp_id)?
+        .layers
+        .iter()
+        .find(|l| l.id == layer_id)?;
+    if keep >= layer.effects.len() {
+        return None;
+    }
+    let mut copy = crate::model::Document::clone(doc);
+    let layer = copy
+        .comp_mut(comp_id)?
+        .layers
+        .iter_mut()
+        .find(|l| l.id == layer_id)?;
+    layer.effects.truncate(keep);
+    Some(std::sync::Arc::new(copy))
+}
+
 impl LayerGraph {
     /// Whether this layer carries no wiring at all — the overwhelming case, and
     /// what keeps the field out of the saved file.
@@ -368,6 +426,33 @@ mod tests {
             },
             vec![blur],
         )
+    }
+
+    /// The Node preview's prefix (K-486): the picture at a node is the stack
+    /// cut off there, so naming the node names a length. A driver has no
+    /// length because it has no picture.
+    #[test]
+    fn a_nodes_prefix_is_the_stack_cut_off_at_it() {
+        let first = inst("blur");
+        let second = inst("blur");
+        let wiggle = inst("wiggle");
+        let effects = vec![first.clone(), second.clone()];
+
+        assert_eq!(prefix_len(&effects, NodeRef::Source), Some(0));
+        assert_eq!(prefix_len(&effects, NodeRef::Effect(first.id)), Some(1));
+        assert_eq!(prefix_len(&effects, NodeRef::Effect(second.id)), Some(2));
+        assert_eq!(prefix_len(&effects, NodeRef::Out), Some(2));
+        assert_eq!(
+            prefix_len(&effects, NodeRef::Driver(wiggle.id)),
+            None,
+            "a driver makes a number, not a picture"
+        );
+        assert_eq!(
+            prefix_len(&effects, NodeRef::Effect(wiggle.id)),
+            None,
+            "an effect this layer does not carry names no prefix"
+        );
+        assert_eq!(prefix_len(&[], NodeRef::Out), Some(0));
     }
 
     #[test]

@@ -13067,3 +13067,59 @@ over `lumit_render::export_presets`, so a preset is the whole settings payload u
 rather than a stamp on three fields, and the dialog's *Edit* and *Save as…* are the same act
 (the store replaces a preset of that name in its own row). Built-ins refuse to be edited and
 say so rather than opening a field that cannot be used.
+
+## K-486 — The Node preview is a bounded prefix thumbnail, not a second Viewer
+
+**DECIDED 2026-08-24.** Fills in the transport K-448 left open and **supersedes the one
+sentence** of `docs/impl/node-graph.md` §8 WP5 that named it ("presented to a second
+shared texture alongside the Viewer's"). The panel itself is unchanged: its own panel,
+openable in a sidebar of the Effects workspace, showing the picture *at* one box of a
+layer's graph without soloing anything.
+
+**The picture at a node is the stack cut off there.** The image chain a graph draws *is*
+the effect stack (§1.1 of the note), so previewing a box is rendering the composition
+with that layer's stack truncated after it — a patched **copy** of the snapshot through
+the ordinary interactive path, exactly as the dropper's solo read and every drag preview
+already work. `graph::prefix_len` turns a node into a length and `graph::truncated_effects`
+makes the copy; there is no second render path, so export-equals-preview, the drag fast
+path and the retained decode all hold at this seam for free. The Layer out box cuts
+nothing, so it renders the document as it stands and rides the frame the Viewer banked.
+
+**The frame key needed no new field.** It already hashes each layer's effects, so a
+shorter stack is a different name by construction: the cache cannot hand a preview the
+Viewer's frame, and the prefix point folds in without the key growing to know what a
+preview is. This was checked rather than assumed (`node_prefix_preview.rs`).
+
+**And so it crosses as pixels, not as a handle.** A second shared texture would mean
+three platform variants, a second Dart texture registration, and a present pool keyed by
+*role* rather than by size — the existing pool would hand a same-sized preview and Viewer
+the same target — all for a still that changes when the pick, the playhead, the layer or
+the document moves and never sixty times a second. K-183's rule is about *frames*, which
+stream, and it already admits bounded stills: thumbnails, the 256×256 scope traces, the
+dropper's 129×129 windows. The preview joins them under the same bound — **256 pixels on
+its longest edge, so 256 KiB at worst**, capped engine-side (`MAX_PREVIEW_EDGE`) rather
+than trusted from the caller, so no request can turn this into a frame transport by the
+back door. The composite itself runs at that size, so a preview costs a fraction of a
+Viewer frame rather than a second one.
+
+**A driver is answered with silence.** It makes a number, not a picture. The panel knows
+which boxes make pictures and draws its own empty face for the rest, so nothing waits for
+something that is not coming — and the engine refuses the same way if asked anyway.
+
+**Its own drain lane, and it needs one most.** A frame, a trace, a dropper patch and a
+preview are four different questions and none may supersede another. The preview is asked
+only when something moves, so one thrown away is never re-asked: sharing the dropper's
+lane would leave the panel holding a stale picture for good. Within its own lane the
+newest wins, which is what makes a scrub with the panel open cost one preview render
+rather than one per frame crossed. **Closing the panel stops the second render outright**
+— the reply subscription and every listener go with the widget, so nothing is left asking.
+
+**It opens tabbed behind, in the Effects workspace's right-hand column** (docs/07 §1.6),
+making Effects the third preset whose inventory differs. "Openable in a sidebar" has to
+mean somewhere in particular or it means the Window menu and nothing else; behind rather
+than fronted, because it answers a question you go looking for, and the arrangement
+should not change until you do.
+
+**If a live preview is ever wanted** — a second viewport that keeps up during playback —
+that is the second shared target this entry declined, and it should arrive as its own
+decision with a measured reason, not as a quiet upgrade of this path.

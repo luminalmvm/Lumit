@@ -12,8 +12,8 @@ use crate::api::{
     layer::LayerReference,
     state::{LumitBridgeState, PROJECTS},
     worker_thread::{
-        RenderCompRequest, RenderCompRequestWithPreview, RenderScopeRequest, SamplePixelsRequest,
-        WorkerRequest,
+        NodePreviewRequest, RenderCompRequest, RenderCompRequestWithPreview, RenderScopeRequest,
+        SamplePixelsRequest, WorkerRequest,
         WorkerRequest::{RenderComp, RenderCompWithPreview},
     },
     BridgeError,
@@ -1948,6 +1948,44 @@ impl CompositionReference {
             v,
             window,
             layer,
+        }))
+    }
+
+    /// Ask the worker for the picture **at** one node of `layer`'s graph — the
+    /// Node preview panel's whole seam (K-486, K-448).
+    ///
+    /// `node` is spelt as the graph read model spells it: `source`, `out`, or
+    /// an effect instance's id. A driver's id makes no picture and is answered
+    /// with silence, as is a node the layer no longer carries — the panel draws
+    /// its own empty face rather than waiting for something that is not coming.
+    ///
+    /// `max_edge` is the longest edge of the picture wanted, capped at 256
+    /// (`worker_thread::MAX_PREVIEW_EDGE`): the composite runs at that size, so
+    /// a preview costs a fraction of a Viewer frame, and the payload stays the
+    /// bounded thumbnail K-183 allows rather than becoming a second frame
+    /// transport. The answer arrives as `WorkerResponse::NodePreview`, on the
+    /// stream the frames and traces already ride.
+    ///
+    /// **Asked when something changes, never in a rebuild**: the panel asks on
+    /// a selection, playhead or document change and holds the picture. A
+    /// request superseded by a newer one is dropped in its own lane, so a scrub
+    /// with the panel open renders one preview rather than one per frame
+    /// crossed, and closing the panel stops the second render outright — there
+    /// is nothing left asking.
+    #[frb(sync)]
+    pub fn preview_node(
+        &self,
+        frame: u64,
+        layer: LayerReference,
+        node: String,
+        max_edge: u32,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(WorkerRequest::NodePreview(NodePreviewRequest {
+            comp: self.clone(),
+            frame,
+            layer,
+            node,
+            max_edge,
         }))
     }
 

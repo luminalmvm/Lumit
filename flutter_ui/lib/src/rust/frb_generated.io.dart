@@ -170,6 +170,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMediaInfo dco_decode_box_autoadd_bridge_media_info(dynamic raw);
 
   @protected
+  BridgeNodePreview dco_decode_box_autoadd_bridge_node_preview(dynamic raw);
+
+  @protected
   BridgeNodeRef dco_decode_box_autoadd_bridge_node_ref(dynamic raw);
 
   @protected
@@ -452,6 +455,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeNodePosition dco_decode_bridge_node_position(dynamic raw);
+
+  @protected
+  BridgeNodePreview dco_decode_bridge_node_preview(dynamic raw);
 
   @protected
   BridgeNodeRef dco_decode_bridge_node_ref(dynamic raw);
@@ -1010,6 +1016,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeNodePreview sse_decode_box_autoadd_bridge_node_preview(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeNodeRef sse_decode_box_autoadd_bridge_node_ref(
       SseDeserializer deserializer);
 
@@ -1340,6 +1350,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeNodePosition sse_decode_bridge_node_position(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeNodePreview sse_decode_bridge_node_preview(
       SseDeserializer deserializer);
 
   @protected
@@ -1967,6 +1981,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMediaInfo self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_node_preview(
+      BridgeNodePreview self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_node_ref(
       BridgeNodeRef self, SseSerializer serializer);
 
@@ -2329,6 +2347,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_node_position(
       BridgeNodePosition self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_node_preview(
+      BridgeNodePreview self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_node_ref(BridgeNodeRef self, SseSerializer serializer);

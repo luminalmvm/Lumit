@@ -8845,6 +8845,27 @@ box — halfway down the stack, say — without soloing or bypassing anything. N
 is the engine's internal "evaluation graph" (§1's compiler still builds that in
 private); what you are looking at is always your own document.
 
+**How the preview knows what to show.** There is no special "render up to here" machinery
+behind it, and that is the point. Because the chain *is* the list, the picture at the
+third box is simply the picture your composition makes if that layer had only its first
+three effects. So the engine takes a throwaway copy of the project, shortens that one
+layer's list, and renders it the ordinary way — the same trick already used when you drag
+a value and the picture keeps up, where a copy carries the value you are dragging before
+it is written down. Your project is never touched; the copy is thrown away with the
+frame.
+
+Two things fall out of that, and both are why it was worth doing this way rather than
+building a second Viewer. Lumit remembers finished frames under a *name* worked out from
+everything that went into them, effects included — so a shortened list is automatically a
+different name, and the preview can never be handed the full picture out of the cupboard
+by mistake. And the preview does not need to be fast in the way the Viewer does: it
+changes when you click a different box, move the playhead, or edit something, not sixty
+times a second. So it comes across as a small picture — at most 256 pixels on its longest
+edge, about the size of a scope trace — rather than through the Viewer's zero-copy
+graphics-card plumbing, which exists to keep up with playback and would have had to be
+built a second time, on three operating systems, to show a postage stamp. Close the
+panel and the extra rendering stops immediately, because nothing is left asking for it.
+
 ## 21. The wordmark and the empty shell, in plain terms
 
 **The wordmark is a picture, not a word.** The "lumit" at the top of the welcome page used
