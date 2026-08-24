@@ -12740,3 +12740,38 @@ its seventh entry — kin to "selected gizmo handles": the thing in hand on a ca
 sparing-use rule stands unchanged; the Auto-wire and Heal toggles need no entry because a
 pill switch is already on in `animated` everywhere (K-465's `HouseToggle`). 15-DESIGN §3.1
 carries the amended list.
+
+## K-474 — Particulate evaluates in closed form: no simulation state, every frame random-access
+
+**PROPOSED 2026-08-24.** Particulate (K-446) carries no state between frames. The birth
+schedule is a deterministic per-frame integral of the rate curve (a cached scalar scan
+from the layer's in point); every per-particle draw is `hash(seed, birth index)`; and a
+particle's position at any time is a **closed-form** function of its birth attributes,
+its age, and the force parameters sampled at the current frame. The v1 force set —
+gravity, wind-through-drag, drag, turbulence-as-displacement — is exactly the set with
+closed-form integrals; that is the selection criterion. Consequences: scrubbing anywhere
+is one evaluation, temporal window `{0}`, the cache key gains no new terms beyond the
+standard seeded rule, export equals preview by construction — and particles cannot react
+to each other. Keyframed forces re-solve every live trajectory under the frame's value
+(the whole system leans, which is the motion-design expectation), deliberately not the
+physically-integrated answer, because integrating changing forces *is* the simulation
+this design excludes. A frame-stepped **Simulate** mode is specified as the exception —
+fixed-step from the in point, a whole-run sim cache keyed by the sim-affecting parameter
+hash, export always stepping from frame 0 — but is not built and waits on real demand.
+The over-cap rule is pure per-frame too: keep the newest `cap` by birth index.
+[impl/particulate.md](impl/particulate.md) carries the formulas and the test plan.
+
+## K-475 — Particulate's budget is the particle cap, and the cap is the user's dial
+
+**PROPOSED 2026-08-24.** Particulate is a **playback-class** effect, not a member of the
+physical flare's owner-set ~2 s-a-frame simulation class (K-353): a particle system that
+cannot play back in real time is not a montage tool. Mirroring K-265 (the flare's budget
+is the user's dial), the dial is a **Max particles** parameter — default 20 000, hard cap
+1 000 000, not animatable because it is a capacity declaration and *the* declared peak
+scratch the governor grants against (docs/13 §6). The numbers, gated in the perf harness
+when the effect lands: the default look ≲ 0.2 ms GPU on the reference desktop; 20 000
+discs ≤ 1 ms desktop / ≤ 4 ms laptop; the hard cap clears evaluate + draw in ≤ 16 ms on
+the reference desktop with a cancellation check between passes. Under pressure the
+effect's degradation rung draws the newest half of its particles (halving as pressure
+demands) — deterministic, interaction-only, in the status readout, never on export; the
+CPU fallback renders the same particles at the same cap, slower but not different.

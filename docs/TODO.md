@@ -425,8 +425,10 @@ does not gate the four. Delete each phase here when it lands, as with everything
     stack stays the spine and each layer gains an additive driver graph -
     **docs/impl/node-graph.md** holds the model and the six ordered work packages
     (engine model, bridge, Graph panel, Nodes workspace, Node preview panel, points
-    stream + Particulate design doc). Particulate (K-446) is designed against the
-    points stream those types introduce.
+    stream + Particulate design doc). ~~WP6, the Particulate design document~~ —
+    landed as **docs/impl/particulate.md** (K-474/K-475 proposed): Particulate
+    (K-446) is designed against the points stream WP1's types introduce; the
+    points-stream *types* themselves still land with WP1.
 - **Phase 4 - the website**: lumitlab.com ported into the new styling - current
     content kept, wordmark top-left, the animation in a half-height hero, platform's
     own download button, screenshot sections and hover-play feature videos; type set
