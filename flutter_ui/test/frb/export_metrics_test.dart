@@ -161,6 +161,41 @@ void main() {
           reason: 'a page other than Output fronts the group it names');
     });
 
+    /// 6b. **A short window scrolls rather than squishing** (§12A.6). An
+    /// overflow is an error in a widget test, so opening the dialog in a window
+    /// too short for its groups is the whole assertion.
+    testWidgets('a window too short for the groups scrolls the body',
+        (tester) async {
+      tester.view.physicalSize = const Size(900, 420);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp.addAdjustmentLayer();
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => HouseButton(
+            key: const ValueKey('open-export'),
+            onPressed: () => showExportDialogFrb(context: context, comp: comp),
+            child: const Text('Open'),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 420),
+      ));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('open-export')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('export-footer')), findsOneWidget,
+          reason: 'the footer is never scrolled away');
+      expect(find.byType(SingleChildScrollView), findsWidgets);
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
     /// 7. **The queue window** is the same pattern at its own width: the
     /// dialog's title strip and footer, unchanged (K-444).
     testWidgets('the queue window wears the dialog pattern', (tester) async {

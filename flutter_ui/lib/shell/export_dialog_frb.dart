@@ -59,6 +59,11 @@ const double exportColumnGap = 20;
 
 /// The two widths the drawing gives a control that does not fill its row: a
 /// button beside a well, and a well holding a number.
+/// The room the frame's own bands take: the title strip, the tab row and the
+/// footer, plus a little air — what the body has to fit inside when the window
+/// is short.
+const double exportChromeHeight = 160;
+
 const double exportButtonWidth = 72;
 const double exportNumberWell = 56;
 const double exportSizeWell = 64;
@@ -307,19 +312,29 @@ class _ExportDialogState extends State<_ExportDialog> {
           onPick: (page) => setState(() => _page = page),
           keyPrefix: 'export',
         ),
-        Padding(
-          padding: exportBodyPadding,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            // The drawing sets 10 between groups, and each group holds 8 of
-            // its own above it for the kicker notched into its top edge.
-            children: [
-              for (final (index, group) in _groups(t).indexed) ...[
-                if (index > 0) const SizedBox(height: dialogGroupGap),
-                group,
-              ],
-            ],
+        // Vertical metrics never squish (§12A.6): when the window is too short
+        // for every group, the body scrolls rather than the rows shrinking.
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: (MediaQuery.sizeOf(context).height - exportChromeHeight)
+                .clamp(exportRowHeight, 4000),
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: exportBodyPadding,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                // The drawing sets 10 between groups, and each group holds 8 of
+                // its own above it for the kicker notched into its top edge.
+                children: [
+                  for (final (index, group) in _groups(t).indexed) ...[
+                    if (index > 0) const SizedBox(height: dialogGroupGap),
+                    group,
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
         dialogFooter(
