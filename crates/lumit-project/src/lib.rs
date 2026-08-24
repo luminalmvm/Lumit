@@ -654,6 +654,20 @@ pub fn resolve_all_media(
         let ProjectItem::Footage(f) = item else {
             continue;
         };
+        // An image sequence imported from After Effects arrives pointing at the
+        // *folder* the run lives in, because that is what the .aep records — a
+        // folder is not a file, so every step below would call it missing. One
+        // look inside turns it into the run's first frame, which is what a
+        // sequence item points at everywhere else (K-439).
+        if f.sequence.is_some() {
+            if let Some(frame) = first_numbered_file(Path::new(&f.media.absolute_path))
+                .or_else(|| first_numbered_file(&project_dir.join(&f.media.relative_path)))
+            {
+                f.media.relative_path = relative_between(project_dir, &frame)
+                    .unwrap_or_else(|| f.media.relative_path.clone());
+                f.media.absolute_path = frame.to_string_lossy().into_owned();
+            }
+        }
         match resolve_media(&f.media, project_dir, search_roots) {
             Resolved::Found { path, how } => {
                 if how != ResolveStep::RelativePath {
@@ -694,6 +708,31 @@ pub fn resolve_all_media(
         }
     }
     (relinked, missing)
+}
+
+/// The first numbered file directly inside `dir`, in name order — the frame an
+/// image-sequence folder's run starts at.
+///
+/// `None` when `dir` is not a directory (the ordinary case: it is already a
+/// file, or it is not there at all) or holds nothing numbered.
+///
+/// "Numbered" rather than "an image": a sequence folder's stray `readme.txt`,
+/// `Thumbs.db` or `.DS_Store` would otherwise sort ahead of the frames and be
+/// picked as the run's first file. A frame of a sequence has a number in its
+/// name by definition, and those do not.
+fn first_numbered_file(dir: &Path) -> Option<PathBuf> {
+    if !dir.is_dir() {
+        return None;
+    }
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.chars().any(|c| c.is_ascii_digit()))
+        .collect();
+    names.sort();
+    names.first().map(|name| dir.join(name))
 }
 
 /// Every file under `root`, by file name, first one in walk order winning.
@@ -1156,6 +1195,63 @@ mod tests {
         };
         assert_eq!(abs(0), here.to_string_lossy());
         assert_eq!(abs(1), moved.to_string_lossy(), "found by content");
+    }
+
+    /// **An image sequence imported from After Effects opens on its first
+    /// frame** (K-439).
+    ///
+    /// The .aep names the folder a run lives in — that is what its file alias
+    /// targets — and a folder is not a file, so every resolution step would
+    /// call an imported sequence missing and send the user to relink something
+    /// that is sitting right there. One look inside answers it. The stray
+    /// `readme.txt` in the fixture is the reason "the first numbered file"
+    /// rather than "the first file": it sorts ahead of the frames.
+    #[test]
+    fn an_imported_sequence_folder_resolves_to_the_runs_first_frame() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("Depth");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join("readme.txt"), b"notes").unwrap();
+        for n in 0..4u32 {
+            fs::write(folder.join(format!("Depth{n:06}_depth.exr")), b"frame").unwrap();
+        }
+
+        let mut doc = Document::default();
+        let item = FootageItem {
+            id: Uuid::now_v7(),
+            name: "Depth".into(),
+            media: MediaRef {
+                relative_path: "Depth".into(),
+                absolute_path: folder.to_string_lossy().into_owned(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            sequence: Some(lumit_core::model::SequenceRef::default()),
+            extra: serde_json::Map::new(),
+        };
+        lumit_core::ops::apply(
+            &mut doc,
+            &Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(item)),
+            },
+        )
+        .unwrap();
+
+        let (_, missing) = resolve_all_media(&mut doc, dir.path(), &[]);
+        assert!(missing.is_empty(), "the run is right there: {missing:?}");
+        let ProjectItem::Footage(f) = &doc.items[0] else {
+            unreachable!()
+        };
+        assert_eq!(
+            f.media.relative_path, "Depth/Depth000000_depth.exr",
+            "the folder became the frame the run starts at"
+        );
+        assert!(
+            Path::new(&f.media.absolute_path).is_file(),
+            "and it resolved to a real file: {}",
+            f.media.absolute_path
+        );
     }
 
     /// **An import from another machine finds its footage beside the project.**

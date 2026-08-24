@@ -43,7 +43,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use lumit_core::model::{
     Composition, Document, Folder, FootageItem, LinearColour, MediaRef, MotionBlur, ProjectItem,
-    SolidDef,
+    SequenceRef, SolidDef,
 };
 use lumit_core::time::Rational;
 use uuid::Uuid;
@@ -315,7 +315,14 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             fingerprint: None,
             extra: serde_json::Map::new(),
         },
-        sequence: None,
+        // A folder of numbered stills is one item, at the default rate
+        // (K-439): After Effects' own conform rate for a sequence is a
+        // preference rather than something the project file carries, so
+        // reading a number out of these bytes would be a guess. The path is
+        // the *folder* the run lives in — which is what the alias names —
+        // and resolution turns it into the run's first file
+        // (`lumit_project::resolve_all_media`).
+        sequence: (item.is_sequence == Some(true)).then(SequenceRef::default),
         // Everything AE knew about how to read the file. Lumit has no field
         // for most of it yet; the `ae` namespace keeps it until it does.
         extra: ae_map(vec![
@@ -331,6 +338,8 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             ("fields", serde_json::json!(item.fields)),
             ("remove_pulldown", serde_json::json!(item.remove_pulldown)),
             ("is_still", serde_json::json!(item.is_still)),
+            ("sequence_prefix", serde_json::json!(item.sequence_prefix)),
+            ("sequence_suffix", serde_json::json!(item.sequence_suffix)),
             ("is_placeholder", serde_json::json!(item.is_placeholder)),
             ("is_missing", serde_json::json!(item.is_missing)),
             ("width", serde_json::json!(item.width)),

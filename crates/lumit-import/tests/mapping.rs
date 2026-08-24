@@ -1026,3 +1026,62 @@ fn a_mapped_document_round_trips_through_a_saved_project() {
         }
     );
 }
+
+/// **An After Effects image sequence becomes a Lumit image sequence** (K-439).
+///
+/// The mapping is small but load-bearing in two directions. It has to carry
+/// the fact through — a run of stills that imports as a single still shows one
+/// frame for a shot that is a thousand — and it has to carry the *folder*, not
+/// a file, because the folder is all the .aep names. Turning that folder into
+/// the run's first frame is resolution's job, and it happens on open.
+#[test]
+fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
+    let mut capture = lumit_import::Capture::default();
+    capture.items.push(lumit_import::capture::Item {
+        id: Some(1),
+        name: Some("Depth".into()),
+        kind: Some("footage".into()),
+        path: Some("/media/Cine3/Depth".into()),
+        is_sequence: Some(true),
+        sequence_prefix: Some("Depth".into()),
+        sequence_suffix: Some("_depth.exr".into()),
+        ..Default::default()
+    });
+    capture.items.push(lumit_import::capture::Item {
+        id: Some(2),
+        name: Some("World.avi".into()),
+        kind: Some("footage".into()),
+        path: Some("/media/Cine3/World.avi".into()),
+        ..Default::default()
+    });
+
+    let (doc, _) = lumit_import::map_capture(&capture);
+    let footage = |name: &str| match doc.item(item_id(&doc, name)) {
+        Some(ProjectItem::Footage(f)) => f.clone(),
+        other => panic!("expected footage, got {other:?}"),
+    };
+
+    let run = footage("Depth");
+    assert_eq!(
+        run.sequence_fps(),
+        Some((25, 1)),
+        "stills carry no rate, and the .aep's conform rate is a preference \
+         rather than a fact in the file — so it is the default (K-439)"
+    );
+    assert_eq!(
+        run.media.relative_path, "/media/Cine3/Depth",
+        "the folder the run lives in, which is what the alias names"
+    );
+    let ae = run.extra.get("ae").expect("an ae namespace");
+    assert_eq!(ae.get("sequence_prefix"), Some(&serde_json::json!("Depth")));
+    assert_eq!(
+        ae.get("sequence_suffix"),
+        Some(&serde_json::json!("_depth.exr"))
+    );
+
+    assert_eq!(
+        footage("World.avi").sequence,
+        None,
+        "a clip in the same folder is still one file"
+    );
+}

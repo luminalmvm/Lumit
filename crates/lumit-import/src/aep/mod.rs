@@ -349,14 +349,48 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
     let within: Vec<Chunk<'_>> = pin.map(|p| p.children().ok().collect()).unwrap_or_default();
     let settings = within.iter().find(|chunk| chunk.id == *b"sspc");
     let asset = within.iter().find(|chunk| chunk.id == *b"opti");
-    let path = within
+    let alias = within
         .iter()
         .find(|chunk| chunk.is_list(b"Als2"))
         .and_then(|list| list.children().ok().find(|chunk| chunk.id == *b"alas"))
-        .and_then(|chunk| serde_json::from_str::<serde_json::Value>(&chunk.text()).ok())
+        .and_then(|chunk| serde_json::from_str::<serde_json::Value>(&chunk.text()).ok());
+    let path = alias
+        .as_ref()
         .and_then(|alias| alias.get("fullpath")?.as_str().map(str::to_string))
         .filter(|path| !path.is_empty());
     let name = name.filter(|name| !name.is_empty());
+
+    // **An image sequence says so in the alias** (K-439): `target_is_folder`,
+    // because what the item points at is the folder the run lives in rather
+    // than any one file. Like the path beside it, that is a field naming
+    // itself and not a byte offset, which is why it can be read here while the
+    // rest of the interpretation still waits for a fixture.
+    //
+    // A sequence also carries its name either side of the frame number, as two
+    // extra `Utf8` chunks between the alias list and the asset record — a
+    // single file has none. Nothing needs them yet (the run is re-read from
+    // the folder), so they are recorded rather than acted on; they corroborate
+    // the flag above, and they are the only thing After Effects knows about the
+    // run that the folder itself does not say.
+    let is_sequence = alias
+        .as_ref()
+        .and_then(|alias| alias.get("target_is_folder")?.as_bool())
+        .unwrap_or(false);
+
+    let run_names: Vec<String> = match (
+        within.iter().position(|chunk| chunk.is_list(b"Als2")),
+        within.iter().position(|chunk| chunk.id == *b"opti"),
+    ) {
+        (Some(after), Some(before)) => within
+            .get(after + 1..before)
+            .unwrap_or_default()
+            .iter()
+            .filter(|chunk| chunk.id == *b"Utf8")
+            .map(Chunk::text)
+            .filter(|part| !part.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    };
 
     let solid = asset.filter(|chunk| chunk.body.get(..4) == Some(b"Soli"));
     let (kind, name, colour) = match solid {
@@ -397,6 +431,9 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
         kind: Some(kind.to_string()),
         path,
         colour,
+        is_sequence: is_sequence.then_some(true),
+        sequence_prefix: run_names.first().cloned(),
+        sequence_suffix: run_names.get(1).cloned(),
         width: settings
             .and_then(|chunk| u16_at(chunk.body, 32))
             .map(u32::from),
@@ -1027,6 +1064,58 @@ mod tests {
             Some("Depth.avi"),
             "a Windows path is taken apart by hand, so this holds on macOS too"
         );
+    }
+
+    /// **An image sequence is read from the two things After Effects says
+    /// about it, and a single file from neither** (K-439).
+    ///
+    /// Both signals here were taken off a real project (the golden fixture has
+    /// no file footage in it, which is why the rest of the interpretation is
+    /// still owed one): the alias targets a folder, and two `Utf8` chunks
+    /// carrying the name either side of the frame number sit between the alias
+    /// list and the asset record. A single file's `Pin ` has neither, which is
+    /// what the second half of this asserts — a plain clip must not come in as
+    /// a sequence pointing at its own folder.
+    #[test]
+    fn a_folder_targeting_alias_and_its_two_names_make_an_image_sequence() {
+        let alias = br#"{"fullpath":"C:\\Clips\\Cine3\\Depth","target_is_folder":true}"#;
+        let mut pin = chunk(b"sspc", &[0; 222]);
+        pin.extend(chunk(b"Utf8", b""));
+        pin.extend(list(b"Als2", &chunk(b"alas", alias)));
+        pin.extend(chunk(b"Utf8", b"Depth"));
+        pin.extend(chunk(b"Utf8", b"_depth.exr"));
+        pin.extend(chunk(b"opti", b"oEXR"));
+        let mut item = idta(ITEM_FOOTAGE_KIND, 11);
+        item.extend(chunk(b"Utf8", b""));
+        item.extend(list(b"Pin ", &pin));
+        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
+
+        let item = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .items[0];
+        assert_eq!(item.is_sequence, Some(true));
+        assert_eq!(item.sequence_prefix.as_deref(), Some("Depth"));
+        assert_eq!(item.sequence_suffix.as_deref(), Some("_depth.exr"));
+        assert_eq!(item.path.as_deref(), Some(r"C:\Clips\Cine3\Depth"));
+
+        // The same shape without either signal: one file, as before.
+        let alias = br#"{"fullpath":"C:\\Clips\\Cine3\\World.avi"}"#;
+        let mut pin = chunk(b"sspc", &[0; 222]);
+        pin.extend(chunk(b"Utf8", b""));
+        pin.extend(list(b"Als2", &chunk(b"alas", alias)));
+        pin.extend(chunk(b"opti", b"AVIV"));
+        let mut item = idta(ITEM_FOOTAGE_KIND, 12);
+        item.extend(chunk(b"Utf8", b""));
+        item.extend(list(b"Pin ", &pin));
+        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
+
+        let item = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .items[0];
+        assert_eq!(item.is_sequence, None);
+        assert_eq!(item.sequence_prefix, None);
     }
 
     /// **A footage item somebody *did* rename keeps the name they gave it.**
