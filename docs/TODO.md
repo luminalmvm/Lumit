@@ -458,6 +458,20 @@ outlawed for distances (docs/08 §2.3: every distance is px@comp). Noticed while
 parameter was learning its unit (K-443) and left alone there: converting it changes
 pictures, so it wants a change of its own with its own before-and-after.
 
+**The Settings drawing's Audio, Autosave and Export pages** (K-458, K-465,
+docs/15-DESIGN.md §12A.4). The drawing gives Settings three pages the engine cannot
+back yet, so their nav entries are omitted rather than opening empty: an audio
+output-device choice (needs device enumeration and selection in the audio engine), an
+autosave interval (needs the autosave mechanism itself), and export defaults (lands
+with the export dialog rework's engine half). Each is engine-first work; the rows are
+drawn and waiting.
+
+**Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
+drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it
+before the switch can honestly exist); and the Settings drawing's slider face (2px
+track, primary knob, no fill) disagrees with the Main drawing's zoom slider that
+`HouseSlider` was built from — each surface should wear its own manifest's face.
+
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
 solve link and Convert to keyframes, all against an injected solve. Stage 2 landed
