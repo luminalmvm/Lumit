@@ -2,13 +2,15 @@
 
 **Decision:** K-446 (Particulate, a separate effect emitting a points stream), K-472 (the
 `Points` port type and the stack-effect-with-a-points-output shape), and two entries
-proposed by this note: K-474 (closed-form evaluation, no simulation state) and K-475 (the
-particle cap is the user's budget dial). **Related:** K-471 (drivers and the wiring
-model), K-419 (px@comp), K-425 (the Mix row's Blend), K-408 (mask-path parameters),
-K-123 (layer references), K-132 (per-effect temporal sampling), K-031 (preview equals
-export). **Status: design note for phase 3's WP6 — design only; nothing here is
-implemented in phase 3** ([node-graph.md](node-graph.md) §8). When Particulate is built,
-docs/08 gains its §3.x entry derived from this note, and this note is the *how*.
+proposed by this note and since **confirmed DECIDED by K-491**: K-474 (closed-form
+evaluation, no simulation state) and K-475 (the particle cap is the user's budget dial).
+**Related:** K-471 (drivers and the wiring model), K-419 (px@comp), K-425 (the Mix row's
+Blend), K-408 (mask-path parameters), K-123 (layer references), K-132 (per-effect
+temporal sampling), K-031 (preview equals export). **Status: commissioned** (K-491, the
+owner's 2026-08-24 commission) — [points-stream.md](points-stream.md) is the
+infrastructure design (consumption, consumers, seam) and holds the ordered work packages
+(PS1–PS7); this note remains the effect's own *how*. When PS2 lands the effect whole,
+docs/08 gains its §3.x entry derived from this note.
 
 ## In plain terms
 
@@ -43,8 +45,10 @@ scrub-safe.
 **Is not:** a simulation. No collisions, no per-particle interaction, no state carried
 between frames — §8 specs the exception's contract should one ever be needed, and it is
 deliberately not built. Also not in v1: emitting from the image's own bright pixels, 3D
-particles (positions grow to `Vec3` with 2.5D points), and every consumer of the points
-output — the port ships before its family, exactly as K-472 planned.
+particles (positions grow to `Vec3` with 2.5D points), and the stack-effect family
+consuming the points output (Connect points, Clone to points, Trail, Scatter) — deferred
+as named packages in [points-stream.md](points-stream.md) §2.3. The one v1 consumer
+beyond this effect's own drawing is the **Points sample** driver (K-494).
 
 ## 2. Parameter surface
 
@@ -212,12 +216,13 @@ Three decisions, each held against K-471's model:
 - **Emission is parameters too** — the emitter's position, rate, direction and spread are
   ordinary drivable rows. There is no Points *input* in v1; nothing upstream produces one.
 - **The Points output is a declared port on the stack node** (K-472): Particulate's
-  registry entry declares it, the Graph panel draws it type-coloured (teal, the geometry
-  group), and in v1 **it accepts no wire** — the same drawn-but-unwirable honesty as the
-  Layer out node's Audio port (node-graph.md §7). Its consumers are the later family
-  (Connect points, Clone to points, Trail…), which will be stack effects with declared
-  Points *inputs*; how their wires thread the stack is that family's design step, listed
-  in Open questions, not faked now.
+  registry entry declares it, and the Graph panel draws it type-coloured (teal, the
+  geometry group). This note first shipped it drawn-but-unwirable; the family design
+  step has since decided how it is consumed — **a graph wire**, the `EffectData` edge of
+  K-492, whose first consumer is the Points sample driver (K-494).
+  [points-stream.md](points-stream.md) §1–§2 carries the rules; the later stack-effect
+  family (Connect points, Clone to points, Trail…) consumes the same edge under the
+  downstream-only rule recorded there.
 
 **Registry shape.** node-graph.md §1.3's `Signature::Image` grows an optional extra-output
 list — `Image { extra: &'static [(&'static str, PortType)] }`, empty for every existing
@@ -365,16 +370,15 @@ Landed with the implementation, per K-007. lumit-core unless noted.
 
 ## Open questions
 
-- **How the points family consumes the stream.** Whether Connect points / Clone to
-  points / Trail read their Points input as a graph wire between stack nodes (the first
-  stack-to-stack non-image wire) or as a reference parameter naming the emitting effect —
-  waits on the family's own design step (the Tier C2 successor to this note); the port's
-  existence and layout do not depend on the answer.
+Two of this note's original questions are resolved by the family design step
+([points-stream.md](points-stream.md)): **how the family consumes the stream** — a graph
+wire, the `EffectData` edge (K-492) — and **Vec2 vs Vec3** — positions are `Vec2`, with
+2.5D remaining node-graph.md §6.2's recorded growth path (K-495). What stays open:
+
 - **Whether the simulated exception is ever needed.** §8 is its contract; building it
   waits on an owner ruling driven by real demand (collisions with layer alpha is the
   likeliest first ask).
 - **Emitting from the image** (births weighted by the input's luminance) — wants an
-  analysis pass over the input and a different birth-schedule story; waits on the same
-  family design step, since Scatter wants the identical machinery.
-- **2.5D points.** `position` grows to `Vec3` when 2.5D points are decided
-  (node-graph.md §6.2's recorded growth path); nothing in this note blocks it.
+  analysis pass over the input and a different birth-schedule story; a named package in
+  points-stream.md §2.3, which also records its constraint on driver-side sampling of an
+  image-dependent stream (K-494), since Scatter wants the identical machinery.

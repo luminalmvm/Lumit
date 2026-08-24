@@ -426,8 +426,8 @@ does not gate the four. Delete each phase here when it lands, as with everything
     **docs/impl/node-graph.md** holds the model and the six ordered work packages
     (engine model, bridge, Graph panel, Nodes workspace, Node preview panel, points
     stream + Particulate design doc). ~~WP6, the Particulate design document~~ —
-    landed as **docs/impl/particulate.md** (K-474/K-475 proposed): Particulate
-    (K-446) is designed against the points stream WP1's types introduce.
+    landed as **docs/impl/particulate.md**; K-474/K-475 have since been
+    confirmed DECIDED by K-491's commission, below.
     ~~WP1, the engine model and evaluation~~ — **landed 2026-08-24**:
     `LayerGraph` on the layer (drivers, typed edges, canvas positions) with
     `SetLayerGraph` and its refusals, the `Signature` split in the registry, the
@@ -459,6 +459,18 @@ does not gate the four. Delete each phase here when it lands, as with everything
     the `AudioTap` is wired (`lumit_render::audio_tap`), so Audio level reads
     the referenced layer's own footage at a fixed rate, identically in the
     preview and the export — the K-031 matrix carries an audio-driven row.
+- **The points-stream programme** (K-491 — the owner's commission; K-492, K-494,
+    K-495): Particulate and the points stream move from design to implementation.
+    **docs/impl/points-stream.md** is the binding plan — the `EffectData` wire (a
+    points connection is a graph edge, the first stack-sourced data wire), the
+    Points sample driver (Count and Nearest distance driving parameters), the
+    evaluation and carriage contract, the seam, and the ordered work packages:
+    PS1 (stream core + closed-form CPU Particulate), PS2 (GPU evaluate,
+    compaction, instanced draw; docs/08 gains Particulate's §3.x entry here),
+    PS3 (the points edge and its refusals), PS4 (the Points sample driver),
+    PS5 (seam + codegen), PS6 (UI), PS7 (goldens + the K-475 budget gates).
+    docs/impl/particulate.md remains the effect's own design. Delete each
+    package from this line as it lands.
 - ~~**Phase 4 - the website**~~ - **landed 2026-08-24** (K-438, K-439, K-476, the
     `WebHero` drawing under K-458): lumitlab.com carries the application's own tokens -
     the three greys, the four text tiers, the two hairlines, clay as the only accent -
@@ -493,6 +505,33 @@ does not gate the four. Delete each phase here when it lands, as with everything
     only, the welcome window, the dialogs (mostly free), the settings/theme/queue
     windows, and last the satellite tear-off panels - which is where the old
     pop-out-panel-windows rebuild item (K-182) is folded in.
+
+## Next - colour management: OCIO (K-489, K-490, docs/impl/ocio.md)
+
+The owner has ruled OCIO support in scope; the design step has landed
+(**docs/impl/ocio.md** holds the model, the maths, the traps and the test plans; K-489
+records the native-Rust hosting decision, K-490 the v1 scope). Six work packages, in
+order, each sized for one agent, each landing with its tests; WP6's fixture format is
+WP1's, so fixtures are authored alongside WP1–2 rather than at the end:
+
+- **WP1 - engine transform core**: the `lumit-colour` crate — the op set with
+    forward/inverse, the tetrahedral and curve samplers, factorisation analysis, the
+    bake to both artefact forms, `.spi1d`/`.spi3d`/CLF parsing (note §4, §5.1).
+- **WP2 - config parser and resolution**: `config.ocio` on `yaml-rust2`, roles,
+    displays/views, `search_path`, the interchange bridge, `BuiltinTransform`'s two
+    tiers, the refusal taxonomy (note §2.1, §4.4).
+- **WP3 - document state, bake wiring, render paths**: `Document::colour` and the
+    per-item tag with their two ops, the degrade ladder, frame-key folding, the decode
+    and display pass variants (mind the Unorm-view double-encode trap), export on the
+    same blit (note §3, §5).
+- **WP4 - the bridge seam**: `colour_summary`, the two set calls, the viewer look
+    call's view field, engine refusal sentences through the K-005 gate (note §6.1).
+- **WP5 - viewer/export/project UI**: the colour-pipeline picker's display/view
+    sections, the export dropdown's config section, the Project settings Colour group,
+    the item context-menu submenu, all arb keys (note §6.2–§6.5).
+- **WP6 - the conformance suite completed**: reference fixtures for both ACES configs,
+    the CLF suite, out-of-domain bounds, the K-031 parity row in every configuration
+    (note §7).
 
 ## Next - engine/bridge follow-ups
 

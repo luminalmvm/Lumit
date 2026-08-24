@@ -8858,12 +8858,13 @@ always connects. And the box and its wire arrive together as one change, so one 
 takes both away — which is only possible because the engine can say what sockets a driver
 has before that driver exists.
 
-**Points** are the fifth kind of thing a wire will one day carry: not a picture but a
-crowd of positions — where every particle of a particle system is this frame, how fast
-each is moving, how old each is. Particulate (K-446) will be the first thing that makes
-them. The type is defined now, with the graph, so that when Particulate and its future
-relatives (scatter, clone to points, connect points) arrive, they plug into sockets that
-already exist rather than needing the plumbing rebuilt around them.
+**Points** are the fifth kind of thing a wire carries: not a picture but a crowd of
+positions — where every particle of a particle system is this frame, how fast each is
+moving, how old each is. Particulate (K-446) is the first thing that makes them, and
+§22 explains the whole idea in plain terms. The type was defined with the graph, before
+anything emitted one, so that Particulate and its future relatives (scatter, clone to
+points, connect points) plug into sockets that already exist rather than needing the
+plumbing rebuilt around them.
 
 **Where you meet all this.** The Graph panel follows the selected layer, like Effect
 controls. The **Nodes workspace** makes the graph the main surface, with a small viewer
@@ -8927,3 +8928,103 @@ Viewer now shows the same three cards the welcome shows — New project, Blank p
 interface, running the same three functions, mounted in a second place. If a project *does*
 have compositions and simply has none open, the Viewer says what it always said — "select a
 composition" — because that is a different situation and deserves a different sentence.
+
+## 22. Colour management and OCIO, in plain terms
+
+**What problem this solves.** A pixel's numbers do not say what colour they are. `(1.0,
+0.2, 0.0)` is one orange on an sRGB monitor, a noticeably different orange in a cinema
+file, and something else again in footage straight off a log-profile camera. Every serious
+editor therefore needs to know, for each piece of footage, *what its numbers mean* — and,
+for every screen and every exported file, *what numbers to write so the right colour comes
+out*. Lumit already does the simple version of this: it assumes footage is ordinary video
+or screen material, works internally in "linear light" (numbers proportional to actual
+light, which is what makes blurs and blends physically correct), and converts back to
+ordinary sRGB on the way to your monitor and your export.
+
+**What OCIO is.** OpenColorIO is the film and VFX industry's standard way of writing those
+meanings down. An *OCIO config* is a folder: one text file, `config.ocio`, that lists
+colour spaces by name — "ACEScct", "sRGB", "Rec.1886" — plus a set of look-up-table files
+it points at, each describing how to convert one space to another. Studios publish
+configs; the ACES ones are the well-known examples. Any program that can load a config
+speaks the same colour language as any other program that loaded it, which is the whole
+point: a Lumit project and a Nuke project can agree about what their pixels mean.
+
+**What loading a config does in Lumit.** Three lists get longer, and that is genuinely
+all. Each footage item's colour-space tag (which today has only built-in choices) offers
+the config's names, so log camera footage can be interpreted correctly on the way in. The
+Viewer's colour picker (the one in the Viewer bar that today lists a single transform)
+offers the config's "displays" and "views" — its named ways of showing linear light on a
+screen. And the export's colour-space setting accepts the config's names, so a delivered
+file can be written in a space the config defines. The config itself is a project setting:
+it travels with the `.lum`, and it is stored the way footage paths are stored, so a config
+that lives beside the project keeps working when the folder moves.
+
+**How the maths runs — and why we wrote it ourselves.** The official OCIO software is a
+big C++ library, and it deliberately computes slightly differently on the processor and
+the graphics card. Lumit's foundational promise is that the preview *is* the export, bit
+for bit, and you cannot build that on a library with two answers. So Lumit reads the
+config format itself, in Rust, the same way it already hosts OpenFX plugins itself and
+reads `.cube` LUT files itself. When a config loads, each conversion it describes is
+worked out once and "baked" into a small table — think of a curve plus a 65×65×65 cube of
+pre-computed answers — and that one table is what both the Viewer and the export use.
+One implementation, one answer. How do we know our answers match the official library's?
+We generated thousands of test values with the official library once, saved them in the
+repository, and the test suite checks our engine against them on every change. And when a
+config uses some feature we have not built, Lumit refuses it *by name* — it tells you what
+it cannot do — rather than quietly producing almost-right colours, because a plausible
+wrong picture is the one failure this design refuses to ship.
+
+**What happens when the config file goes missing.** Nothing dramatic. The project opens,
+every assignment keeps its name, and the picture falls back to the built-in colour
+handling with the Viewer's picker saying so calmly. The one thing that refuses is export:
+writing a delivery file in a colour space Lumit cannot currently compute would produce a
+wrong file, and a wrong file that looks finished is worse than an export that asks you to
+relink the config first.
+
+## 22. Particulate and the points stream, in plain terms
+
+A particle system makes many small things — sparks, dust, snow — that are born, drift
+about, and fade away. The usual way to build one is a **simulation**: every frame takes
+the previous frame's particles and nudges them along. Lumit deliberately does not do
+that, because a simulation can only answer "what does frame 500 look like?" by first
+computing frames 0 to 499 — so scrubbing stutters, and two renders of the same project
+can disagree. **Particulate** works the other way round: the moment a particle is born,
+its whole life is settled — where it starts, which way it flies, how gravity and wind
+will carry it — from a seeded random number that never changes. Asking for any frame is
+then plain arithmetic: for each particle alive at that moment, work out where its
+formula puts it, and draw it. Scrubbing anywhere is instant, the export matches the
+preview exactly, and the same project makes the same pixels forever. The price is that
+particles cannot react to each other — no collisions, no flocking — and for the montage
+work this effect exists for, that is the right trade.
+
+**The stream is the second thing it makes.** Besides drawing its particles over the
+layer, Particulate hands them out as *data*: the **points stream** — every live
+particle's position, speed, age, size, rotation and colour, this frame. On the Graph
+panel that is a teal socket on Particulate's box, and a wire from it works exactly like
+a driver's wire: it carries the data to whatever box you plug it into. The picture
+still flows straight down the effect list, untouched — a points wire runs *beside* the
+picture's path, never through it, so the plain Effect controls view never has to lie
+about what is going on.
+
+**The first thing that plugs in is a driver called Points sample.** It reads the stream
+and turns it into numbers: how many particles are alive, and how far the nearest one is
+from a point you choose on the picture. Those numbers can drive any parameter through
+the wiring that already exists — so "the lamp glows brighter as a spark drifts past it"
+is Particulate's Points socket wired into Points sample, and its Nearest distance wired
+(through a Remap) into the glow's strength. No new machinery, just a new box that knows
+how to read the crowd. Because the stream is pure arithmetic — never read off the
+rendered picture — the driver can work it out on the processor, bit-for-bit the same on
+every machine, and what it reports is always exactly the crowd the picture draws.
+
+**One wire the graph will politely refuse**: feeding Particulate's own particles back
+into Particulate's own settings (say, wiring Count into Emit rate). That is a loop — the
+particles would depend on a number that depends on the particles — and like every other
+loop it is refused calmly when you try to connect it, rather than half-working.
+
+**What comes later** plugs into the same socket: Connect points (lines between nearby
+particles), Clone to points (a layer stamped at every particle), Trail, Scatter, and
+emitting particles from the image's own bright pixels. Each is a named future package;
+none of them will need the plumbing rebuilt, because the socket, the wire and the
+stream's shape are settled now. The full plan lives in docs/impl/points-stream.md, and
+the effect's own design — every slider, formula and budget — in
+docs/impl/particulate.md.
