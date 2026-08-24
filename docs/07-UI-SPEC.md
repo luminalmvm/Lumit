@@ -104,8 +104,9 @@ the panel arrangement is the local user's own.
 
 ### 1.6 Shipped workspace presets
 
-Structure only, with one exception: **Retiming** is the only preset whose panel inventory
-differs, because the Easing panel is in no other arrangement (K-349).
+Structure only, with two exceptions: **Retiming**'s panel inventory differs because the
+Easing panel is in no other arrangement (K-349), and **Nodes**' (K-445, K-471) because the
+Graph and Node panels are in no other.
 
 - **Edit** (default): Project panel left, fronted, with Effect Controls and Hierarchy tabbed
   behind it; Viewer centre; **right column Effects & Presets, fronted**, with Scopes and the
@@ -128,8 +129,15 @@ differs, because the Easing panel is in no other arrangement (K-349).
   panel over the popup is that it stays on screen while the selection changes underneath
   it; Project fronted left with Effect Controls, Effects & Presets and Hierarchy tabbed
   behind; Viewer centre; Timeline as tall as Audio's, retiming being timeline work. Shares:
-  0.55/0.45 vertically, 0.20/0.58/0.22 across the upper band. This is the only preset that
-  brings a panel the others do not have.
+  0.55/0.45 vertically, 0.20/0.58/0.22 across the upper band.
+- **Nodes** (K-445, K-471): the graph as the main surface. The Graph panel takes the
+  centre and left outright, with the ordinary Timeline, short, beneath it inside the same
+  column; the small **Viewer** — keeping its whole bar — sits upper right, and the **Node
+  panel** (the selected node's parameter rows) lower right. The approved Nodes-workspace
+  drawing governs the layout; the panel rules are 15-DESIGN §12A.7 and the model is
+  [impl/node-graph.md](impl/node-graph.md). The **Node preview panel** (K-448) is not in
+  this preset — it opens in a sidebar of the Effects workspace, beside rather than
+  replacing this preset's small viewer.
 
 ### 1.7 The toolbar (K-216)
 

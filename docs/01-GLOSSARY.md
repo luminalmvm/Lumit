@@ -124,6 +124,9 @@ These three words are **not interchangeable**.
 | **Matte** | Using another layer's alpha or luma to gate this layer. Any layer can be chosen as a matte from a dropdown (AE 2023-style); one matte layer can serve many layers. *Track matte* is the AE name; Lumit says **matte**. |
 | **Blend mode** | Per-layer composite operator (Normal, Add, Screen, Multiply, Overlay, …). Full list in [06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md). |
 | **Effect** | One image (or audio) operation instance in a layer's **effect stack**, ordered top-to-bottom. Built-in effects, OFX plugins, and LFX plugins are all "effects" to the user. |
+| **Driver** | A node in a layer's graph that makes a *value* rather than a picture (Wiggle, Audio level, Math, …) and drives a parameter through a wire (K-471). A driven parameter overrides its keyframes and says so in Effect controls. |
+| **Wire** / **port** | A connection on the Graph panel's canvas, and the typed socket it plugs into. Wire and socket colour is the data type (K-472). |
+| **Points stream** | The typed, evaluated data a points-emitting effect produces (Particulate first, K-446/K-472) — per-frame particle attributes, never stored in the project, like an image. |
 | **Working space** | The engine's internal pixel format: scene-linear, premultiplied alpha, fp16 (fp32 opt-in per comp). |
 
 ## 7. Interface
@@ -131,7 +134,9 @@ These three words are **not interchangeable**.
 | Term | Definition |
 |---|---|
 | **Panel** | A dockable UI unit (Timeline, Viewer, Project, Effect Controls, Scopes, …). Full inventory in [07-UI-SPEC.md](07-UI-SPEC.md). |
-| **Workspace** | A named, saveable arrangement of panels. Ships with presets (Edit, Effects, Colour, Audio, Retiming); fully user-rearrangeable. |
+| **Workspace** | A named, saveable arrangement of panels. Ships with presets (Edit, Effects, Colour, Audio, Retiming, Nodes); fully user-rearrangeable. |
+| **Graph panel** | The panel drawing a layer's effect stack as nodes and wires — a second view of the same document (K-445, K-471) that can also wire drivers into parameters. Not the evaluation graph, which stays internal. |
+| **Node preview panel** | Its own panel (K-448): a locked, read-only second viewport showing one node's output without soloing. |
 | **Viewer** | The panel that displays a comp (or footage/layer) with its toolbar: preview resolution, magnification, channel view, transparency grid, guides, and wireframe toggles. |
 | **Timeline** | The panel showing a comp's layer stack against time, with expandable property lanes, keyframes, and cache bars. |
 | **Work area** | The comp-time span used for preview and default export range. |

@@ -149,7 +149,11 @@ own latest snapshot; workers read theirs; both are complete, consistent worlds.
 
 ## 4. Compiling the layer stack to the evaluation graph
 
-Per K-015: **layers in the UI, DAG underneath**. Users never see the evaluation graph.
+Per K-015: **layers in the UI, DAG underneath**. Users never see the evaluation graph —
+the Graph panel (K-471) draws the *document's* stack and wiring, never these compiled
+nodes. A layer's driver graph ([03-DATA-MODEL.md](03-DATA-MODEL.md) §8.1) does not lower
+to pixel nodes at all: driver evaluation is parameter evaluation, resolved before an
+effect's parameters pack, so the graph below keeps its shape.
 
 On every document edit, `lumit-eval` incrementally recompiles the affected comp:
 

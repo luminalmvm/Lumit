@@ -168,7 +168,7 @@ implies "no shadow" once Round is picked.
 | Token | Value | Role in Lumit |
 |---|---|---|
 | `accent` (clay) | `#e05a72` | THE accent, with a deliberately short job list (K-439): **the single filled button per surface, the playhead, and the active tab tick**. The selection tokens (§6.5) derive from it. Everything else in chrome is grey |
-| `animated` | `#d8a24a` (placeholder, tunable) | "This is animated or in hand": **keyframe diamonds, stopwatch-on, selected keyframes, selected gizmo handles, the focused value field, and the work-area band** — a desaturated warm amber, quieter than `accent`. That list is closed: **if a third kind of use appears, it is wrong** |
+| `animated` | `#d8a24a` (placeholder, tunable) | "This is animated or in hand": **keyframe diamonds, stopwatch-on, selected keyframes, selected gizmo handles, the focused value field, the work-area band, and the selected node's border in the Graph panel (K-473)** — a desaturated warm amber, quieter than `accent`. That list is closed: **if a further kind of use appears, it is wrong** |
 | `accent_hover` (clay-deep) | `#ea7288` | Hover/active shift of the accent (lighter in dark) |
 | `success` (olive) | `#5fcfae` | Success, completed exports, cache-bar family root (§6.3) |
 | `warning` (kraft) | `#dd9a82` | Warnings, overrun hatching, missing-footage placeholders, "close" feedback |
@@ -248,6 +248,8 @@ pub struct Theme {
     // editor semantics (§6)
     pub layer: LayerColours,        // per layer type
     pub curve: [Color32; 4],        // graph editor curve ramp (viz_1..4)
+    pub port: PortColours,          // K-472: wire/socket colour by data type (viz-family) —
+                                    // image·matte / number / colour / shape·points / audio
     pub keyframe: KeyframeColours,
     pub cache: CacheColours,        // vram / ram / disk / uncached
     pub marker: MarkerColours,      // manual / beat
@@ -1267,6 +1269,29 @@ before later ones, and nothing ever paints outside its box:
 The user-facing column toggles (switches, modes, parent) are the user's, not the
 degradation ladder's — the ladder never flips them.
 
+### 12A.7 The node graph surfaces (K-471, K-472, K-473)
+
+The approved **NodeGraph** and **Nodes-workspace** drawings govern the Graph panel, the
+Nodes workspace and the Node preview panel; [impl/node-graph.md](impl/node-graph.md)
+carries the model and the work packages. Binding rules beyond the drawings themselves:
+
+- **Wire and socket colour is the data type** — five `port.*` tokens (§4.1) for seven
+  types, grouped image·matte / number / colour / shape·points / audio, with the legend
+  strip along the canvas's bottom edge. Colour is the legend; no other colour coding
+  appears on the canvas.
+- A **filled socket is wired, a hollow one is not**; a dragged wire is dashed. A
+  **bypassed node draws its border dashed** (and its `B` badge is the one place `error`'s
+  family appears on the canvas); the **selected node's border is `animated`** (K-473).
+- The canvas ground is `surface_0` under a dot grid one step lighter; nodes are
+  `surface_1` cards with `surface_2` header strips and kicker-cased names — panel
+  grammar, not a foreign look.
+- **Auto-wire and Heal are `HouseToggle`s** in the panel header (on in `animated`,
+  K-465), beside frame-all and the zoom readout.
+- The **Tab search popover** filters by the dragged wire's type and says so in its
+  footer; category suffixes are kickers.
+- The Nodes workspace keeps the **whole viewer bar on the small viewer** and the ordinary
+  Timeline, shorter, beneath the graph — shared widgets, never forks.
+
 ## 13. New-panel checklist
 
 The Lumit equivalent of the household §9 checklist. Every new panel or feature MUST satisfy:
@@ -1378,7 +1403,7 @@ shown while the application boots:
   Decide after the first Timeline prototype.
 - **Wide-gamut / HDR Viewer output.** When the Viewer gains HDR output, the neutrality zone
   rules need restating in display-referred terms; the SDR spec here deliberately ignores it.
-- **`animated`'s closed list.** K-439 closes the token's jobs at six, but two of them — the
+- **`animated`'s closed list.** K-439 (amended by K-473) closes the token's jobs at seven, but two of them — the
   focused value field and the work-area band — are not keyframe state or a selected handle,
   and the sparing-use intent behind the token argues for trimming them. Confirm with the
   owner; if either goes, a superseding decision entry trims the list.

@@ -182,6 +182,9 @@ struct Layer {
                                        // Times are layer-local. A comp dropped into another
                                        // brings a copy of its markers here; the two lists are
                                        // unrelated from then on.
+    graph: LayerGraph,                 // K-471: the layer's driver graph (§8.1) — additive
+                                       // wiring beside the effect stack. Empty by default,
+                                       // absent from the file when empty.
     switches: Switches,
 }
 // Future (not in v1): `stretch` (uniform rate multiplier).
@@ -474,10 +477,13 @@ Both are **future** (the motion-path unit); v1 animates scalar dimensions indepe
 ### 6.3 Evaluation order of one property
 
 ```
-keyframe/static evaluation → [expression — FUTURE] → clamp/validate
+keyframe/static evaluation → [expression — FUTURE] → [driver edge — K-471] → clamp/validate
 ```
 
-The **expression** stage is future (§6.4); v1 evaluates keyframes/static only. A property's
+The **expression** stage is future (§6.4); v1 evaluates keyframes/static only. The
+**driver** stage (K-471, §8.1): a parameter with a wired input port in the layer's driver
+graph takes the driver's value, overriding whatever the earlier stages produced, and the
+Effect controls row says so. A property's
 evaluated value at a time is pure regardless: same project, same time, same value — no wall
 clock, no external state ([14-ENGINEERING-RULES.md](14-ENGINEERING-RULES.md)).
 
@@ -697,6 +703,32 @@ field): the stored value is an optional layer id, the same by-id cross-reference
 uses, and a dangling reference degrades to a no-op exactly as a dangling matte does. A
 companion `<id>_source` Choice holds its `LayerInputSource` sampling mode (None / Masks /
 Effects and masks, K-142), the same three-way source a matte carries in §5.1.
+
+### 8.1 Wiring — the layer's driver graph (K-471)
+
+`effects` remains the only authority for the image chain: the Graph panel derives its
+image-path nodes from the list, and every image-wire gesture lowers to `SetLayerEffects`.
+Beside it, each layer carries an additive `LayerGraph`:
+
+```rust
+struct LayerGraph {
+    nodes: Vec<EffectInstance>,        // drivers — data signature, no image kernel;
+                                       // declared in the effect registry's Drivers category
+    edges: Vec<Edge>,                  // driver output → parameter or matte input;
+                                       // plus SourceMatte, the layer's own masked source alpha
+    layout: Vec<(NodeRef, [f64; 2])>,  // canvas positions; missing entries auto-place
+}
+```
+
+A driven parameter overrides its keyframes (§6.3); driver parameters are ordinary
+properties on the path `<layer>/graph/<node>/<param>`. Edges never cross layers — a
+cross-layer tap (Audio level reading another layer's sound) is a layer-reference
+parameter (§8, above), drawn as a derived source node. An effect's Input port is by
+construction the previous stack entry, so every graph state has an honest stack
+rendering. One op, `SetLayerGraph`, is the whole-graph commit, mirroring
+`SetLayerEffects`; a cycle, type mismatch or doubled input is refused at apply, and a
+dangling layer reference degrades as a matte does. Port types and the points stream are
+K-472. [impl/node-graph.md](impl/node-graph.md) is the authority on all of it.
 
 ## 9. Rich layer payloads
 

@@ -18,7 +18,8 @@ The document model (layers, keyframes, clips — [03-DATA-MODEL.md](03-DATA-MODE
 evaluated directly. A compiler lowers each comp into an immutable **evaluation graph**: a DAG of
 typed nodes (source, retime, mask, effect, transform, blend, matte-apply, comp-output).
 Recompilation is incremental per comp, runs on every edit, and publishes a new immutable graph
-snapshot; renders in flight keep the old snapshot. Users never see the graph.
+snapshot; renders in flight keep the old snapshot. Users never see this compiled graph — the
+Graph panel (K-471) draws the document's own stack and wiring, never these nodes.
 
 Evaluation is demand-driven pull in two strictly separated phases:
 

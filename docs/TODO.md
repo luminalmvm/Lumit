@@ -421,9 +421,12 @@ does not gate the four. Delete each phase here when it lands, as with everything
     and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes
     workspace with the small viewer and short timeline, and the Node preview panel
     (its own panel, openable in a sidebar of the Effects workspace, K-448). The
-    document-model question stays open until this phase's design step answers it.
-    Particulate (K-446) is
-    designed against the points stream this phase's types introduce.
+    design step has answered the document-model question (K-471, K-472, K-473): the
+    stack stays the spine and each layer gains an additive driver graph -
+    **docs/impl/node-graph.md** holds the model and the six ordered work packages
+    (engine model, bridge, Graph panel, Nodes workspace, Node preview panel, points
+    stream + Particulate design doc). Particulate (K-446) is designed against the
+    points stream those types introduce.
 - **Phase 4 - the website**: lumitlab.com ported into the new styling - current
     content kept, wordmark top-left, the animation in a half-height hero, platform's
     own download button, screenshot sections and hover-play feature videos; type set

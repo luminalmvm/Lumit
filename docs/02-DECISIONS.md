@@ -12692,3 +12692,51 @@ report, but never explains itself.
 **A Preset list is added**: whole formats, a size and a rate together (`HD 1080p · 25`),
 reading *Custom* whenever the fields say something of their own. The list is the frontend's,
 like the rate presets beside it — a table of standard formats is not an engine decision.
+
+## K-471 — The wiring model: the stack stays the spine, and a layer gains an additive driver graph
+
+**DECIDED 2026-08-24.** The design step K-445 left open is closed: the document does **not**
+become a graph with the stack as a projection. `Layer::effects` remains the only authority
+for the image chain, and the Graph panel derives its image-path nodes — Source, each effect
+in stack order, Layer out — from the list. Every image-wire gesture (insert on a wire,
+delete with Heal, rewire) lowers to the existing whole-stack `SetLayerEffects` commit, and
+an effect's Input port takes exactly one wire, by construction the previous stack entry —
+the panel offers no gesture that branches or skips the image chain, so every graph state
+has an honest stack rendering. What the document gains is **additive**: each layer carries a
+`LayerGraph` — driver nodes (registry-declared `EffectInstance`s with a data signature and
+no image kernel: Wiggle, Audio level, Colour cycle, Math, Remap, Smooth in v1), typed edges
+(driver output → parameter or matte input, plus the layer's own source matte as a feed),
+and canvas positions. A driven parameter overrides its keyframes and says so in Effect
+controls (*driven*, and the driver's name); driver parameters ride the ordinary property
+path; edges never cross layers — a cross-layer tap is a layer-reference parameter, drawn as
+a derived source node. One new op, `SetLayerGraph`, the whole-graph commit mirroring
+`SetLayerEffects`; a cycle, mistype or doubled input is refused at apply. Driver evaluation
+is parameter evaluation — resolved before packing, deterministic, folded into the frame key
+— so the compiled evaluation graph (K-015) is untouched in shape and "users never see the
+graph" now means the *evaluation* graph: the panel draws the document. Old files load to an
+empty graph and re-save byte-identically; the field is additive under the pre-1.0 policy.
+docs/03 §6.3/§8.1, docs/05 §4 and [impl/node-graph.md](impl/node-graph.md) carry it, and
+the impl note holds phase 3's ordered work packages.
+
+## K-472 — Port types are the wire's colour, and the points stream is a first-class type from day one
+
+**DECIDED 2026-08-24.** The graph's type system is `Image, Matte, Number, Colour, Shape,
+Points, Audio` — seven types wearing **five** wire colours, grouped as the approved
+NodeGraph drawing's legend groups them: image·matte, number, colour, shape·points, audio.
+The colours are theme tokens (`PortColours`, viz-family, 15-DESIGN §4.1) under the no-hex
+rule; the type crosses the bridge as an enum and Dart maps it to the token — colour as the
+legend (K-445). `Points` lands with the first engine commit so the type system is complete
+before anything consumes it: a **points stream** is evaluated data like an image, never
+stored in the document, and **Particulate** (K-446) is a stack effect — image in, image
+out, plus a declared Points output — so it sits honestly in the linear chain today and
+feeds the later grid/scatter/clone/connect family without redesign. Its design document is
+phase 3's WP6 ([impl/node-graph.md](impl/node-graph.md) §6, §8).
+
+## K-473 — The selected node's border joins the animated token's job list
+
+**DECIDED 2026-08-24.** Both approved node drawings paint the selected node's border in
+`animated`, and under K-458 the drawing wins over K-439's closed list, which gains this as
+its seventh entry — kin to "selected gizmo handles": the thing in hand on a canvas. The
+sparing-use rule stands unchanged; the Auto-wire and Heal toggles need no entry because a
+pill switch is already on in `animated` everywhere (K-465's `HouseToggle`). 15-DESIGN §3.1
+carries the amended list.
