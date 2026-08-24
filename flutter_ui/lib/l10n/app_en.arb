@@ -7353,5 +7353,78 @@
   "trackCreateSolid": "Create solid",
   "@trackCreateSolid": {
     "description": "Button over the Viewer's picture when solved points are selected: puts a Solid layer at their average position."
+  },
+  "keyBlockBadge": "{keys, plural, =1{1 key} other{{keys} keys}} · {frames, plural, =1{1 f} other{{frames} f}}",
+  "@keyBlockBadge": {
+    "description": "Timeline: the badge beside the box drawn round a block of selected keyframes, saying how many keys it holds and how many frames it spans. Very small mono type; the middle dot separates the two counts.",
+    "placeholders": {
+      "keys": {
+        "type": "int"
+      },
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
+  "tipEaseTheBlock": "Ease the selected keyframes",
+  "@tipEaseTheBlock": {
+    "description": "Timeline: hover hint on the badge beside a block of selected keyframes, and on the bottom bar's Ease word. Pressing either opens the Ease popover."
+  },
+  "easeBlockTitle": "Ease",
+  "@easeBlockTitle": {
+    "description": "Title of the Ease popover, which shapes the movement between the selected keyframes. Drawn in capitals; one word."
+  },
+  "easeKeyCount": "{count, plural, =1{1 key} other{{count} keys}}",
+  "@easeKeyCount": {
+    "description": "Ease popover, at the right of its title bar: how many keyframes the popover will act on.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "easeCurve": "Curve",
+  "@easeCurve": {
+    "description": "Ease popover: the label on the row that picks which easing shape to apply, by name (Easy ease, Slow start, and so on)."
+  },
+  "easeInfluence": "Influence",
+  "@easeInfluence": {
+    "description": "Ease popover: the label on the row holding two percentages — how far the ease reaches out of the first keyframe and into the last."
+  },
+  "easeStagger": "Stagger",
+  "@easeStagger": {
+    "description": "Ease popover: the label on the row that fans the selected rows out in time, so they arrive one after another rather than together. Its number is in frames."
+  },
+  "easeStaggerTopDown": "Top down",
+  "@easeStaggerTopDown": {
+    "description": "Ease popover: the stagger direction where the topmost row keeps its timing and each row below it is pushed later."
+  },
+  "easeStaggerBottomUp": "Bottom up",
+  "@easeStaggerBottomUp": {
+    "description": "Ease popover: the stagger direction where the bottom row keeps its timing and each row above it is pushed later."
+  },
+  "easeOpenGraph": "Open graph",
+  "@easeOpenGraph": {
+    "description": "Ease popover: the quiet link that closes the popover and shows the same keyframes in the graph editor, where the shape can be drawn by hand."
+  },
+  "keysEase": "Ease",
+  "@keysEase": {
+    "description": "Timeline, Keys mode bottom bar: the word that opens the Ease popover on the selected keyframes. Drawn in capitals, beside Linear, Hold and Bezier."
+  },
+  "keysPasteAtPlayhead": "Paste at playhead",
+  "@keysPasteAtPlayhead": {
+    "description": "Timeline, Keys mode bottom bar: pastes the copied keyframes so that the first of them lands on the playhead. Drawn in capitals."
+  },
+  "tipReverseKeys": "Reverse the selected keyframes in time",
+  "@tipReverseKeys": {
+    "description": "Timeline, Keys mode bottom bar: hover hint on Reverse. The keys swap places within the span they already occupy; each keeps its own value."
+  },
+  "tipCopyKeys": "Copy the selected keyframes",
+  "@tipCopyKeys": {
+    "description": "Timeline, Keys mode bottom bar: hover hint on Copy."
+  },
+  "tipPasteKeysAtPlayhead": "Paste the copied keyframes at the playhead",
+  "@tipPasteKeysAtPlayhead": {
+    "description": "Timeline, Keys mode bottom bar: hover hint on Paste at playhead."
   }
 }

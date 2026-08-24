@@ -5375,8 +5375,9 @@ void main() {
       final rulerBefore =
           tester.getRect(find.byKey(const ValueKey('tl-ruler')));
       final headBefore = tester.getRect(find.byType(PlayheadMarker).first);
-      final zoomBefore =
-          tester.getRect(find.byKey(const ValueKey('tl-zoom-slider')));
+      final zoomBefore = tester
+          .widget<HouseSlider>(find.byKey(const ValueKey('tl-zoom-slider')))
+          .value;
 
       await openKeys(tester, layer);
 
@@ -5385,9 +5386,20 @@ void main() {
           reason: 'the ruler does not move on a mode switch');
       expect(tester.getRect(find.byType(PlayheadMarker).first), headBefore,
           reason: 'nor does the playhead');
-      expect(tester.getRect(find.byKey(const ValueKey('tl-zoom-slider'))),
+      // The zoom is the *same control*, at the same setting — one slider, not
+      // two. Its x does move, and must: the Keys drawing puts a strip of
+      // commands on this bar to the left of it (K-458), so the slider sits
+      // along from where an empty Layers bar leaves it. What §12A.1a asks of
+      // the zoom is that the two views share it, which is what this reads.
+      expect(find.byKey(const ValueKey('tl-zoom-slider')), findsOneWidget,
+          reason: 'one zoom slider, shared, not one per mode');
+      expect(
+          tester
+              .widget<HouseSlider>(
+                  find.byKey(const ValueKey('tl-zoom-slider')))
+              .value,
           zoomBefore,
-          reason: 'nor the zoom bar — all three are shared, not duplicated');
+          reason: 'and it is still where it was left');
       expect(find.byType(TimelineCacheBar), findsWidgets);
     });
 

@@ -24,6 +24,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
@@ -37,6 +38,7 @@ import '../widgets/marquee.dart';
 import 'easing_curve.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
+import 'key_block.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'transform_rows_frb.dart';
@@ -507,6 +509,168 @@ void applyInterpToSelection({
   if (edits.isNotEmpty) commitChannelEdits(edits);
 }
 
+/// Every selected key's frame, across every channel — what the block tools
+/// measure before they move anything (K-458).
+///
+/// The span a Reverse mirrors within is the *selection's*, not each channel's:
+/// three rows selected together are one block, and mirroring each row inside
+/// its own extent would slide the rows apart rather than turn the block round.
+List<double> selectedKeyFrames({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+  required double fps,
+}) {
+  final out = <double>[];
+  for (final channel in channels) {
+    final keys = channel.keys;
+    for (var i = 0; i < keys.length; i++) {
+      if (selectedKeys.contains('${channel.id}#$i')) {
+        out.add(_keyFrame(keys[i], fps));
+      }
+    }
+  }
+  return out;
+}
+
+/// Give every selected key a new time, [frameOf] deciding where each one goes
+/// from where it is and which channel it is on (K-458).
+///
+/// The shared body of Reverse and of the Ease popover's Stagger. Each channel's
+/// list is rebuilt whole and **re-sorted**, because a move can change the order
+/// keys come in — that is the point of a reverse — and the engine refuses a
+/// curve whose times do not strictly ascend. A channel whose result would put
+/// two keys on the same time is left alone rather than written wrong, and a
+/// channel is written only if something on it actually moved.
+///
+/// [swapSides] mirrors each moved key's in and out interpolation as well as its
+/// time. Reverse wants it: a key that eased slowly *out* of itself is, played
+/// backwards, a key that eases slowly *into* itself, and a reverse that left the
+/// sides alone would turn the times round while leaving the motion's shape
+/// pointing the way it was. Stagger does not: a stagger is a shift, and a shift
+/// changes nothing about how the movement runs.
+void moveSelectedKeys({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+  required double fps,
+  required int fpsNum,
+  required int fpsDen,
+  required double Function(GraphChannel channel, double frame) frameOf,
+  bool swapSides = false,
+}) {
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    final keys = channel.keys;
+    var touched = false;
+    final next = <BridgeKeyframe>[];
+    for (var i = 0; i < keys.length; i++) {
+      if (!selectedKeys.contains('${channel.id}#$i')) {
+        next.add(keys[i]);
+        continue;
+      }
+      final was = _keyFrame(keys[i], fps);
+      final now = frameOf(channel, was);
+      if (now == was && !swapSides) {
+        next.add(keys[i]);
+        continue;
+      }
+      touched = true;
+      next.add(BridgeKeyframe(
+        time: timeOfSubframe(now, fpsNum, fpsDen),
+        value: keys[i].value,
+        interpIn: swapSides ? keys[i].interpOut : keys[i].interpIn,
+        interpOut: swapSides ? keys[i].interpIn : keys[i].interpOut,
+      ));
+    }
+    if (!touched) continue;
+    next.sort(
+        (a, b) => rationalSeconds(a.time).compareTo(rationalSeconds(b.time)));
+    // Two keys landing on one time is a curve the engine must refuse, so the
+    // channel keeps what it had rather than being written into a state that
+    // cannot be saved.
+    var clash = false;
+    for (var i = 1; i < next.length; i++) {
+      if (rationalSeconds(next[i].time) <= rationalSeconds(next[i - 1].time)) {
+        clash = true;
+        break;
+      }
+    }
+    if (!clash) edits[channel] = BridgeScalar.keyframed(next);
+  }
+  if (edits.isNotEmpty) commitChannelEdits(edits);
+}
+
+/// Reverse the selection in time: the block plays backwards where it stands
+/// (K-458, the Keys mode bottom bar).
+///
+/// Each key's new time is its old one reflected through the middle of the
+/// block, so the earliest becomes the latest and the whole run stays exactly
+/// where it was on the Timeline. **The value travels with its key** — this
+/// re-times keys, it does not shuffle values under fixed times — and each key's
+/// two eases swap, because the side that was leaving is now the side arriving.
+///
+/// Wrap the call in [asOneUndoStep]: a selection spanning two layers is two
+/// writes, and Reverse is one press.
+void reverseSelection({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+  required double fps,
+  required int fpsNum,
+  required int fpsDen,
+}) {
+  final frames = selectedKeyFrames(
+      channels: channels, selectedKeys: selectedKeys, fps: fps);
+  if (frames.length < 2) return;
+  var lo = frames.first;
+  var hi = frames.first;
+  for (final f in frames) {
+    if (f < lo) lo = f;
+    if (f > hi) hi = f;
+  }
+  final sum = lo + hi;
+  moveSelectedKeys(
+    channels: channels,
+    selectedKeys: selectedKeys,
+    fps: fps,
+    fpsNum: fpsNum,
+    fpsDen: fpsDen,
+    swapSides: true,
+    frameOf: (_, frame) => sum - frame,
+  );
+}
+
+/// Fan the selection out in time: each row's keys pushed [step] frames further
+/// than the row before it, so a run of properties arrives one after another
+/// rather than together (K-458, the Ease popover's Stagger).
+///
+/// [order] is the list of property paths, top to bottom as the outline lists
+/// them — a channel's rank is where its own path sits in it, so the two axes of
+/// one Position stagger *together*, which is what makes them still one row.
+void staggerSelection({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+  required List<String> order,
+  required double step,
+  required StaggerOrder direction,
+  required double fps,
+  required int fpsNum,
+  required int fpsDen,
+}) {
+  if (step == 0 || order.length < 2) return;
+  moveSelectedKeys(
+    channels: channels,
+    selectedKeys: selectedKeys,
+    fps: fps,
+    fpsNum: fpsNum,
+    fpsDen: fpsDen,
+    frameOf: (channel, frame) {
+      final rank = order.indexOf(channel.path);
+      if (rank < 0) return frame;
+      return staggeredFrame(frame,
+          rank: rank, rows: order.length, step: step, order: direction);
+    },
+  );
+}
+
 /// Stamp one normalised [curve] onto every **span** the selection covers — the
 /// easing editor's Apply.
 ///
@@ -807,12 +971,18 @@ LumitClipGroup _transformClipGroup(
 /// landing on the playhead. The in-app clipboard pastes first; failing that,
 /// keyframe text on the system clipboard is parsed — with its easing when it
 /// carries any. Channels are matched in order.
+///
+/// [project] is what makes a paste **one undo step** (K-458): a clipboard that
+/// came off three properties on two layers writes one op per layer per kind,
+/// and one press of Ctrl+V is one press. Optional, so a caller with no project
+/// to hand — a widget test — pastes exactly as it always did.
 Future<bool> pasteKeysAtPlayhead({
   required List<GraphChannel> channels,
   required int playheadFrame,
   required double fps,
   required int fpsNum,
   required int fpsDen,
+  ProjectReference? project,
 }) async {
   if (channels.isEmpty) return false;
 
@@ -913,7 +1083,7 @@ Future<bool> pasteKeysAtPlayhead({
         BridgeScalar.keyframed([for (final f in frames) merged[f]!]);
   }
   if (edits.isEmpty) return false;
-  commitChannelEdits(edits);
+  asOneUndoStep(project, () => commitChannelEdits(edits));
   return true;
 }
 

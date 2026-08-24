@@ -23,6 +23,7 @@ import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
@@ -368,6 +369,32 @@ BridgeRational timeOfSubframe(double frame, int fpsNum, int fpsDen) {
   );
 }
 
+/// Run [body] as **one undo step**, however many ops it commits (K-458).
+///
+/// A gesture the model cannot say in a single op — stretching a block of
+/// keyframes that spans two layers, reversing it, pasting a clipboard that came
+/// off three properties — writes one op per layer per kind, because that is how
+/// coarse the ops are. The user made one drag and expects one Ctrl-Z, so the
+/// engine folds everything committed between the two calls into one journal
+/// entry (`ProjectReference.beginUndoGroup`).
+///
+/// Closed in a `finally`: a group left open records nothing on the undo stack,
+/// so an exception part-way through a gesture must not cost the session its
+/// history as well. A null [project] — a widget test with no project open —
+/// simply runs [body], which is what leaves this safe to call unconditionally.
+void asOneUndoStep(ProjectReference? project, void Function() body) {
+  if (project == null) {
+    body();
+    return;
+  }
+  project.beginUndoGroup();
+  try {
+    body();
+  } finally {
+    project.endUndoGroup();
+  }
+}
+
 /// Move a lane row's keyframe [index] to [time], as ONE op — one undo step
 /// for the whole drag.
 ///
@@ -381,19 +408,34 @@ bool moveLaneKey({
   required LayerFoldRow row,
   required int index,
   required BridgeRational time,
+}) =>
+    moveLaneKeys(entry: entry, row: row, times: {index: time});
+
+/// Move **several** of a lane row's keyframes at once, as one op per row — the
+/// block stretch, Reverse and the Ease popover's Stagger all land here
+/// (K-458).
+///
+/// The same rule a single key's drag follows, applied to the whole set at once:
+/// every key keeps its value and its eases, only its time moves, and the write
+/// is refused outright — returning false, changing nothing — when the result
+/// would not strictly ascend. All or nothing per row, because a half-applied
+/// stretch is a block that has come apart.
+///
+/// A gesture that touches several rows is several calls, one op each. The
+/// caller wraps them in an undo group ([asOneUndoStep]) so the whole of it is
+/// one step; that is the reason the group exists.
+bool moveLaneKeys({
+  required BridgeLayerEntry entry,
+  required LayerFoldRow row,
+  required Map<int, BridgeRational> times,
 }) {
-  final target = rationalSeconds(time);
+  if (times.isEmpty) return false;
 
   List<BridgeKeyframe>? moved(List<BridgeKeyframe> keys) {
-    if (index >= keys.length) return null;
-    for (var i = 0; i < keys.length; i++) {
-      if (i == index) continue;
-      final other = rationalSeconds(keys[i].time);
-      if (i < index ? other >= target : other <= target) return null;
-    }
-    return [
+    if (times.keys.any((i) => i < 0 || i >= keys.length)) return null;
+    final next = [
       for (var i = 0; i < keys.length; i++)
-        if (i == index)
+        if (times[i] case final time?)
           BridgeKeyframe(
             time: time,
             value: keys[i].value,
@@ -403,6 +445,15 @@ bool moveLaneKey({
         else
           keys[i],
     ];
+    // Strictly ascending, or nothing: the engine refuses a curve whose times
+    // do not, and refusing here means the gesture leaves the document exactly
+    // as it found it rather than writing some rows and failing on others.
+    for (var i = 1; i < next.length; i++) {
+      if (rationalSeconds(next[i].time) <= rationalSeconds(next[i - 1].time)) {
+        return null;
+      }
+    }
+    return next;
   }
 
   switch (row) {
@@ -451,14 +502,23 @@ bool moveLaneKey({
 
     case FoldMaskValueRow(:final mask, :final value):
       if (value == MaskValue.path) {
-        // A path key is a whole shape, so the engine moves it rather than the
-        // frontend rebuilding a list of them (K-340).
-        if (index >= mask.pathKeys.length) return false;
-        return entry.layer.moveMaskPathKey(
-          id: mask.id,
-          from: mask.pathKeys[index].time,
-          to: time,
-        );
+        // A path key is a whole shape, so a *single* move goes to the engine
+        // rather than the frontend rebuilding a list of them (K-340). Several
+        // at once cannot: each `moveMaskPathKey` is its own write, and a run
+        // of them would each be checked against the list as it stood, so the
+        // set has to be re-timed in one go instead.
+        if (times.length == 1) {
+          final index = times.keys.first;
+          if (index >= mask.pathKeys.length) return false;
+          return entry.layer.moveMaskPathKey(
+            id: mask.id,
+            from: mask.pathKeys[index].time,
+            to: times.values.first,
+          );
+        }
+        final next = moved(mask.pathKeys);
+        if (next == null) return false;
+        return entry.layer.setMaskPathKeys(id: mask.id, keys: next);
       }
       final scalar = maskScalarOf(mask, value);
       if (scalar is! BridgeScalar_Keyframed) return false;

@@ -57,7 +57,10 @@ import '../widgets/time_readout.dart';
 export 'timeline_extras_frb.dart' show rulerLabelStepSeconds, rulerLabelOf;
 
 import 'placeholder.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'ease_popover.dart';
 import 'easing_curve.dart';
+import 'key_block.dart';
 import 'easing_editor.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
@@ -189,6 +192,24 @@ Path keyHalfPath(KeyShape shape, double x, double mid, double half,
 /// they span 4√2 ≈ 5.7px — half of that here. Twirl the layer open and each
 /// property draws its own at full size, where they can be dragged.
 const double _summaryKeyHalf = 2.8;
+
+/// The block-selection box's metrics, from the approved Keys drawing (K-458).
+///
+/// The box stands 4px inside its lane top and bottom — 14 of the drawing's
+/// 22px row — so a block that covers three rows reads as one region with the
+/// seams still visible through it. Its handles are the drawing's 3×6 marks,
+/// centred on each end; the badge sits [_blockBadgeGap] past the right one.
+const double _blockBoxInset = 4;
+const double _blockHandleWidth = 3;
+const double _blockHandleHeight = 6;
+const double _blockBadgeGap = 6;
+
+/// How wide a stretch handle's *hit target* is, against the 3px it draws.
+///
+/// K-452's floor bends inside an 18px row but never to three pixels: a mark
+/// that thin is a thing to see, not a thing to aim at. Eleven is the width of
+/// the key it sits beside, so the two are grabbed with the same accuracy.
+const double _blockHandleGrab = 11;
 
 /// The two landscapes flanking the zoom slider (K-293). Painter-drawn, so
 /// K-209's 16px floor — which is about an icon-set glyph's 1.5-unit stroke
@@ -1521,6 +1542,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// only the waveform lanes redraw as the pointer moves, not the whole table.
   final ValueNotifier<BarDragPreview?> _barDrag = ValueNotifier(null);
 
+  /// The block stretch in flight (K-458), on the same terms and for the same
+  /// reason: the box and every lane it crosses have to move together, and only
+  /// they need to repaint while a handle is being dragged.
+  final ValueNotifier<KeyStretch?> _keyStretch = ValueNotifier(null);
+
   /// The lane view's selected keyframes, as `rowId#index` (docs/07 §4.3) —
   /// what the marquee gathered. Session state, like the twirl set.
   final Set<String> _laneKeySelection = {};
@@ -1715,6 +1741,117 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return out;
   }
 
+  /// The property paths the current key selection covers, **top to bottom**.
+  ///
+  /// In graph view that is simply the picked properties. In the lanes and in
+  /// Keys mode it is read off the key selection itself, which the marquee fills
+  /// by walking the rows in the order they are drawn — so the order survives,
+  /// and Stagger's "top down" means what the outline shows.
+  List<String> _selectionPaths() => _graph
+      ? _selectedProperties
+      : {
+          for (final id in _laneKeySelection)
+            if (id.lastIndexOf('#') > 0) id.substring(0, id.lastIndexOf('#'))
+        }.toList();
+
+  /// The channels those paths resolve to, against the read model as it stands.
+  ///
+  /// Re-resolved rather than remembered: an edit replaces a property's whole
+  /// animation, so a channel held across one carries the curve as it was.
+  List<GraphChannel> _selectionChannels(LumitUiState ui) =>
+      graphChannels(layers: ui.model.layers, selected: _selectionPaths());
+
+  /// The project the block tools group their writes into one undo step against
+  /// (K-458). Null in a widget test with no project open.
+  ProjectReference? get _project =>
+      Provider.of<LumitState>(context, listen: false).project;
+
+  /// How many keys the selection holds, as the badge and the Ease popover count
+  /// them — one per *row* diamond, not one per axis, which is what the user
+  /// picked up.
+  int get _selectedKeyCount =>
+      _graph ? _graphKeySelection.length : _laneKeySelection.length;
+
+  /// Open the Ease popover on the selection, anchored at [position] (K-458).
+  ///
+  /// Reached from the block badge, which sits where the drawing puts the
+  /// popover, and from the Keys bottom bar's Ease. Nothing here shapes a curve
+  /// — the popover hands back a shape and a stagger, and both land through the
+  /// machinery the Easing panel and the graph editor already use.
+  void _openEasePopover(Offset position) {
+    if (_selectedKeyCount == 0) return;
+    showEasePopover(
+      context: context,
+      position: position,
+      count: _selectedKeyCount,
+      onOpenGraph: () => _setMode(TimelineMode.graph),
+      onApply: _applyEaseRequest,
+    );
+  }
+
+  /// One press of the popover's Apply: the shape onto every span the selection
+  /// covers, then the stagger — **one undo step for the pair**.
+  ///
+  /// The shape first, and the channels re-read between the two. A shape changes
+  /// no key's *time*, so applying it cannot move an index out from under the
+  /// selection; a stagger does move times, and running it first would leave the
+  /// ease writing the times back as they were. Between them the read model is
+  /// freshened, because the second write must build on the first rather than on
+  /// the curves as they were before either.
+  void _applyEaseRequest(EaseRequest request) {
+    if (!mounted) return;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final (fpsNum, fpsDen) = ui.model.fpsExact;
+    asOneUndoStep(_project, () {
+      var channels = _selectionChannels(ui);
+      var selection = _actionKeySelection(channels);
+      if (selection.isEmpty) return;
+      applyEasingToSelection(
+        channels: channels,
+        selectedKeys: selection,
+        curve: request.curve,
+      );
+      if (request.stagger == 0) return;
+      ui.model.refresh();
+      channels = _selectionChannels(ui);
+      selection = _actionKeySelection(channels);
+      staggerSelection(
+        channels: channels,
+        selectedKeys: selection,
+        order: _selectionPaths(),
+        step: request.stagger,
+        direction: request.order,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+      );
+    });
+    ui.model.refresh();
+  }
+
+  /// Reverse the selected keys in time (K-458, the Keys bottom bar): the block
+  /// plays backwards where it stands, each value travelling with its own key.
+  ///
+  /// One undo step however many rows and layers the block reaches across.
+  void _reverseSelectedKeys() {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final channels = _selectionChannels(ui);
+    final selection = _actionKeySelection(channels);
+    if (selection.isEmpty) return;
+    final (fpsNum, fpsDen) = ui.model.fpsExact;
+    asOneUndoStep(
+      _project,
+      () => reverseSelection(
+        channels: channels,
+        selectedKeys: selection,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+      ),
+    );
+    ui.model.refresh();
+  }
+
   /// Set the selected keys' easing (the F9 family and the bottom bar's
   /// Linear / Bezier / Hold): both sides, or one for ease-in/ease-out.
   void _applyInterp(BridgeSideInterp side,
@@ -1722,13 +1859,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // In lane view the selection speaks in row paths, so the channels have to
     // cover those too, not only the selected properties.
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    final paths = _graph
-        ? _selectedProperties
-        : {
-            for (final id in _laneKeySelection)
-              if (id.lastIndexOf('#') > 0) id.substring(0, id.lastIndexOf('#'))
-          }.toList();
-    final channels = graphChannels(layers: ui.model.layers, selected: paths);
+    final channels = _selectionChannels(ui);
     final selection = _actionKeySelection(channels);
     if (selection.isEmpty) return;
     applyInterpToSelection(
@@ -1789,13 +1920,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (!mounted) return;
     if (_graph && _graphLens == GraphLens.speed) return;
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    final paths = _graph
-        ? _selectedProperties
-        : {
-            for (final id in _laneKeySelection)
-              if (id.lastIndexOf('#') > 0) id.substring(0, id.lastIndexOf('#'))
-          }.toList();
-    final channels = graphChannels(layers: ui.model.layers, selected: paths);
+    final channels = _selectionChannels(ui);
     final selection = _actionKeySelection(channels);
     if (selection.isEmpty) return;
     applyEasingToSelection(
@@ -1983,6 +2108,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       fps: ui.model.fps,
       fpsNum: fpsNum,
       fpsDen: fpsDen,
+      // One press, one step, however many layers the clipboard reaches.
+      project: _project,
     ).then((pasted) {
       if (pasted && mounted) ui.model.refresh();
     });
@@ -3195,6 +3322,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           _razorCutAt(ui, entry, frame, ui.model.refresh),
                       vScroll: _vLane,
                       selectedKeys: _laneKeySelection,
+                      stretch: _keyStretch,
+                      project: Provider.of<LumitState>(context, listen: false)
+                          .project,
+                      onEase: _openEasePopover,
                       onDeselectAll: () => _deselectAll(ui),
                       work: work,
                       onKeysSelected: (keys) {
@@ -3263,6 +3394,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           onZoomDragStart: _zoomDragStart,
           onZoomDragEnd: _zoomDragEnd,
           maxZoom: _maxZoom,
+          // The dope sheet's own strip (K-458). Layers mode leaves it off:
+          // its bar carries the column toggles, and the drawing gives this
+          // run of commands to Keys.
+          keys: _keys,
+          onInterp: (side) => _applyInterp(side),
+          onEaseBlock: (buttonContext) {
+            final box = buttonContext.findRenderObject();
+            if (box is! RenderBox) return;
+            _openEasePopover(box.localToGlobal(Offset.zero));
+          },
+          onReverse: _reverseSelectedKeys,
+          onCopy: _copySelectedKeys,
+          onPaste: _pasteKeysIntoSelection,
         ),
       ],
     );
@@ -7285,6 +7429,33 @@ class _OutlineRowState extends State<_OutlineRow> {
   }
 }
 
+/// One selected keyframe, and where it sits: which row's curve it belongs to,
+/// which key of that curve it is, what frame it reads and where its lane is in
+/// the area's own pixels (K-458).
+///
+/// The block tools' unit of work. A stretch scales [frame]; Reverse mirrors
+/// it; Stagger pushes it; the box and its badge measure the set of them; and
+/// the commit groups them back by ([entry], [row]) into one write per row.
+class _SelectedKey {
+  final BridgeLayerEntry entry;
+  final LayerFoldRow row;
+  final String rowId;
+  final int index;
+  final double frame;
+  final double top;
+  final double height;
+
+  const _SelectedKey({
+    required this.entry,
+    required this.row,
+    required this.rowId,
+    required this.index,
+    required this.frame,
+    required this.top,
+    required this.height,
+  });
+}
+
 /// The right column: the ruler, the playhead, and one bar per layer.
 class _LayerArea extends StatelessWidget {
   final CompositionReference comp;
@@ -7365,6 +7536,23 @@ class _LayerArea extends StatelessWidget {
   final Set<String> selectedKeys;
   final ValueChanged<Set<String>> onKeysSelected;
 
+  /// The block stretch in flight, written by the handle and read by every lane
+  /// — the same arrangement the bar drag uses (K-208), and for the same
+  /// reason: the keys being stretched are spread across rows in two scroll
+  /// views, so a gesture only the handle knew about would move the box while
+  /// the diamonds sat still.
+  final ValueNotifier<KeyStretch?> stretch;
+
+  /// The project the block tools commit against, for the undo group that makes
+  /// a stretch across several rows one step (K-458). Null in a widget test with
+  /// no project open, where [asOneUndoStep] simply runs the writes.
+  final ProjectReference? project;
+
+  /// The Ease popover asked for from the block's badge, at the badge's own
+  /// position in global coordinates — the drawing anchors the popover to the
+  /// selection, and the badge is the only part of the box that is a control.
+  final ValueChanged<Offset> onEase;
+
   /// A click on empty lane space — no bar, no diamond, no drag. Everything
   /// lets go (K-203).
   final VoidCallback onDeselectAll;
@@ -7429,6 +7617,9 @@ class _LayerArea extends StatelessWidget {
     required this.vScroll,
     required this.selectedKeys,
     required this.onKeysSelected,
+    required this.stretch,
+    required this.project,
+    required this.onEase,
     required this.onDeselectAll,
     required this.work,
     required this.layerDrag,
@@ -7465,6 +7656,43 @@ class _LayerArea extends StatelessWidget {
       }
     }
     return caught;
+  }
+
+  /// Every **selected** key, with where it sits: the one walk the block box,
+  /// its badge, the stretch commit, Reverse and Stagger all read.
+  ///
+  /// One walk rather than five, because the five have to agree — a badge that
+  /// counted keys one way while the stretch moved them another would be two
+  /// descriptions of one block, and the disagreement would only show up as a
+  /// box that no longer fits what it holds.
+  ///
+  /// Ordered top to bottom, which is the order Stagger's *top down* means.
+  List<_SelectedKey> _selectedKeyPlaces() {
+    final out = <_SelectedKey>[];
+    var y = 0.0;
+    for (final layer in rows) {
+      final step = layer.rowHeight;
+      y += step; // the layer's own bar row
+      for (final row in layer.drawnRows) {
+        final rowTop = y;
+        y += step;
+        final rowId = foldRowPath(layer.id, row);
+        final keys = laneKeysOf(row);
+        for (var i = 0; i < keys.length; i++) {
+          if (!selectedKeys.contains('$rowId#$i')) continue;
+          out.add(_SelectedKey(
+            entry: layer.entry,
+            row: row,
+            rowId: rowId,
+            index: i,
+            frame: laneKeyFrame(keys[i], fps),
+            top: rowTop,
+            height: step,
+          ));
+        }
+      }
+    }
+    return out;
   }
 
   @override
@@ -7853,6 +8081,23 @@ class _LayerArea extends StatelessWidget {
                                 ),
                               ),
                             ),
+                            // The block-selection box, over the keys it holds
+                            // and over the seams that cross it (K-458): it is
+                            // the one thing here that describes the *whole*
+                            // selection, so anything drawn on top of it would
+                            // be drawn on top of the answer.
+                            Positioned.fill(
+                                child: _KeyBlockOverlay(
+                              places: _selectedKeyPlaces(),
+                              axis: axis,
+                              stretch: stretch,
+                              magnet: magnet,
+                              fpsNum: fpsNum,
+                              fpsDen: fpsDen,
+                              project: project,
+                              onEase: onEase,
+                              onChanged: onChanged,
+                            )),
                           ],
                         ),
                       ),
@@ -7960,6 +8205,7 @@ class _LayerArea extends StatelessWidget {
       magnet: magnet,
       snapTargets: snapTargets,
       selectedKeys: selectedKeys,
+      stretch: stretch,
       onSelectKey: (index, additive) {
         final id = '$rowId#$index';
         // A copy, never the live set: `onKeysSelected` clears it before it
@@ -8067,6 +8313,11 @@ class _KeyLane extends StatefulWidget {
   final List<SnapTarget> snapTargets;
   final Set<String> selectedKeys;
 
+  /// The block stretch in flight (K-458). A key this gesture holds draws where
+  /// the stretch puts it, so the diamonds travel with the box rather than
+  /// waiting for the release — the same live reading a bar drag gives.
+  final ValueNotifier<KeyStretch?> stretch;
+
   /// Click a diamond to select it — the second way into the key selection the
   /// F9 family and the easing buttons act on, beside the marquee. Additive
   /// (Shift, Ctrl) toggles one in or out of the catch.
@@ -8086,6 +8337,7 @@ class _KeyLane extends StatefulWidget {
     required this.magnet,
     required this.snapTargets,
     required this.selectedKeys,
+    required this.stretch,
     required this.onSelectKey,
     required this.onChanged,
   });
@@ -8107,9 +8359,22 @@ class _KeyLaneState extends State<_KeyLane> {
   /// without it a key that jumps reads as a fault rather than a service.
   SnapTarget? _caught;
 
-  /// Where key [i] draws — its own time, plus the drag in flight, snapped.
+  /// Where key [i] draws — its own time, plus whichever gesture has hold of
+  /// it: this lane's own drag, or the block stretch running across every lane.
   double _frameOf(int i) {
     final base = laneKeyFrame(widget.keys[i], widget.fps);
+    // A block stretch and a single key's drag cannot both be in flight — the
+    // handle and the diamond are two gestures on one pointer — so the stretch
+    // is answered first and answered whole.
+    final held = widget.stretch.value;
+    if (held != null && held.keys.contains('\${widget.rowId}#\$i')) {
+      return held.frameOf(
+        base,
+        whole: widget.magnet &&
+            !snapSuspended(
+                controlPressed: HardwareKeyboard.instance.isControlPressed),
+      );
+    }
     if (_dragging != i) return base;
     final perFrame = widget.axis.perFrame;
     final moved = perFrame <= 0 ? base : base + _deltaPx / perFrame;
@@ -8155,6 +8420,17 @@ class _KeyLaneState extends State<_KeyLane> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // Rebuilt while a block stretch runs, so this lane's keys travel with the
+    // box (K-458). Listening rather than reading once: the stretch is written
+    // by a handle in another part of the tree, and a lane that only read it at
+    // build time would show the box moving over keys that had not.
+    return ValueListenableBuilder<KeyStretch?>(
+      valueListenable: widget.stretch,
+      builder: (context, _, __) => _lane(context, t),
+    );
+  }
+
+  Widget _lane(BuildContext context, LumitTheme t) {
     // Worked out once for the build: [_frameOf] is where the snap is decided
     // and where [_caught] is set, so asking it twice per key would answer the
     // same question twice and leave the indicator depending on which of the
@@ -8321,6 +8597,250 @@ class _RowDividerPainter extends CustomPainter {
   /// gestures on the rows below it.
   @override
   bool? hitTest(Offset position) => false;
+}
+
+/// The **block-selection box**: the box round everything the marquee caught, a
+/// stretch handle at each end, and the badge saying how much it holds
+/// (K-458, the approved Keys drawing).
+///
+/// In plain terms: pick several keyframes and they stop being several things
+/// and become one. The box says where they reach, the badge counts them and
+/// says how many frames they span, and the handles at its ends let the whole
+/// run be squeezed or spread in time — the end you did not touch stays put,
+/// and every key keeps its share of the span. The badge is also the way in to
+/// the Ease popover, because the drawing anchors that popover to the selection
+/// and the badge is the only part of the box that is a control.
+///
+/// **Shared, not Keys-only.** It is drawn by the lane area, which is the same
+/// widget in Layers mode and in Keys mode, so Layers gains the block tools by
+/// the same code rather than by a second copy of it (K-441, K-458).
+class _KeyBlockOverlay extends StatelessWidget {
+  /// The selected keys, top to bottom, from the area's one walk.
+  final List<_SelectedKey> places;
+  final TimelineAxis axis;
+  final ValueNotifier<KeyStretch?> stretch;
+  final bool magnet;
+  final int fpsNum;
+  final int fpsDen;
+  final ProjectReference? project;
+  final ValueChanged<Offset> onEase;
+  final VoidCallback onChanged;
+
+  const _KeyBlockOverlay({
+    required this.places,
+    required this.axis,
+    required this.stretch,
+    required this.magnet,
+    required this.fpsNum,
+    required this.fpsDen,
+    required this.project,
+    required this.onEase,
+    required this.onChanged,
+  });
+
+  /// What the selection measures. Null when there is no block — fewer than two
+  /// keys is a key, and a key has its own drag.
+  static KeyBlock? blockOf(List<_SelectedKey> places) {
+    if (!KeyBlock.isBlock(places.length)) return null;
+    var first = places.first.frame;
+    var last = places.first.frame;
+    for (final p in places) {
+      if (p.frame < first) first = p.frame;
+      if (p.frame > last) last = p.frame;
+    }
+    return KeyBlock(first: first, last: last, count: places.length);
+  }
+
+  /// Whether a drag lands on whole frames — the magnet, suspended while Ctrl
+  /// is held, exactly as a single key's drag reads it (docs/07 §4.5).
+  bool get _whole =>
+      magnet &&
+      !snapSuspended(
+          controlPressed: HardwareKeyboard.instance.isControlPressed);
+
+  /// Commit a finished stretch: every touched row re-timed, the whole set one
+  /// undo step (K-458).
+  ///
+  /// Grouped by row before anything is written, so a row's keys move together
+  /// and the strictly-ascending check inside [moveLaneKeys] sees the finished
+  /// list rather than one key at a time.
+  void commit(KeyStretch moved) {
+    final byRow = <String, (_SelectedKey, Map<int, BridgeRational>)>{};
+    for (final place in places) {
+      if (!moved.keys.contains('${place.rowId}#${place.index}')) continue;
+      final frame = moved.frameOf(place.frame, whole: _whole);
+      (byRow[place.rowId] ??= (place, {})).$2[place.index] =
+          timeOfSubframe(frame, fpsNum, fpsDen);
+    }
+    if (byRow.isEmpty) return;
+    var changed = false;
+    asOneUndoStep(project, () {
+      for (final (place, times) in byRow.values) {
+        if (moveLaneKeys(entry: place.entry, row: place.row, times: times)) {
+          changed = true;
+        }
+      }
+    });
+    if (changed) onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    if (blockOf(places) == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<KeyStretch?>(
+      valueListenable: stretch,
+      builder: (context, live, _) {
+        final block = blockOf(places);
+        if (block == null) return const SizedBox.shrink();
+        // While a stretch is in flight the box follows it, so the badge counts
+        // the span the release will actually write rather than the one the
+        // gesture started from.
+        double frameOf(double f) =>
+            live == null ? f : live.frameOf(f, whole: _whole);
+        var top = places.first.top;
+        var bottom = places.first.top + places.first.height;
+        for (final p in places) {
+          if (p.top < top) top = p.top;
+          if (p.top + p.height > bottom) bottom = p.top + p.height;
+        }
+        final left = axis.xOf(frameOf(block.first));
+        final right = axis.xOf(frameOf(block.last));
+        final boxTop = top + _blockBoxInset;
+        final boxBottom = bottom - _blockBoxInset;
+        return Stack(
+          children: [
+            // The box ignores pointers: it covers the very keys it holds, and
+            // one that ate their clicks would make a selected key the one key
+            // that cannot be picked up again.
+            Positioned(
+              key: const ValueKey('tl-block-box'),
+              left: left,
+              top: boxTop,
+              width: right - left,
+              height: boxBottom - boxTop,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: t.textPrimary),
+                  ),
+                ),
+              ),
+            ),
+            _handle(t, x: left, top: boxTop, bottom: boxBottom, start: true),
+            _handle(t, x: right, top: boxTop, bottom: boxBottom, start: false),
+            _badge(t, block, right: right, top: boxTop),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One end of the box: the drawing's 3x6 mark, inside a hit target wide
+  /// enough to aim at (K-452).
+  ///
+  /// [start] is the earlier end, and dragging it anchors the *later* one — the
+  /// end you are not holding is the end that stays put, which is the whole of
+  /// what makes a stretch feel like a stretch rather than a move.
+  Widget _handle(
+    LumitTheme t, {
+    required double x,
+    required double top,
+    required double bottom,
+    required bool start,
+  }) =>
+      Positioned(
+        key: ValueKey<String>('tl-block-handle-${start ? 'start' : 'end'}'),
+        left: x - _blockHandleGrab / 2,
+        top: top,
+        width: _blockHandleGrab,
+        height: bottom - top,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.resizeLeftRight,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            supportedDevices: dragDevices,
+            onHorizontalDragStart: (_) {
+              final block = blockOf(places);
+              if (block == null) return;
+              final from = start ? block.first : block.last;
+              final anchor = start ? block.last : block.first;
+              stretch.value = KeyStretch(
+                keys: {for (final p in places) '${p.rowId}#${p.index}'},
+                anchor: anchor,
+                from: from,
+                to: from,
+              );
+            },
+            onHorizontalDragUpdate: (d) {
+              final held = stretch.value;
+              if (held == null || axis.perFrame <= 0) return;
+              stretch.value = held.movedTo(clampStretch(
+                anchor: held.anchor,
+                from: held.from,
+                to: held.to + d.delta.dx / axis.perFrame,
+              ));
+            },
+            onHorizontalDragEnd: (_) {
+              final held = stretch.value;
+              stretch.value = null;
+              if (held != null) commit(held);
+            },
+            onHorizontalDragCancel: () => stretch.value = null,
+            child: Center(
+              child: SizedBox(
+                width: _blockHandleWidth,
+                height: _blockHandleHeight,
+                child: ColoredBox(color: t.textPrimary),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  /// The badge: how many keys the block holds and how many frames it spans,
+  /// and — pressed — the way into the Ease popover (K-458).
+  Widget _badge(
+    LumitTheme t,
+    KeyBlock block, {
+    required double right,
+    required double top,
+  }) =>
+      Positioned(
+        left: right + _blockBadgeGap,
+        // Level with the top of the box, less the pixel of padding the badge
+        // wears, so the two read as one mark rather than as a label that has
+        // slipped.
+        top: top - 1,
+        child: Builder(
+          builder: (badgeContext) => LumitTooltip(
+            message: l10n.tipEaseTheBlock,
+            child: GestureDetector(
+              key: const ValueKey('tl-block-badge'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                final box = badgeContext.findRenderObject() as RenderBox?;
+                if (box == null) return;
+                onEase(box.localToGlobal(Offset.zero));
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  // The drawing's own 2b3034 — the ramp's top step, which is
+                  // what lifts a small label off the black lane ground it sits
+                  // on without giving it a border to carry.
+                  color: t.surface4,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  l10n.keyBlockBadge(block.count, block.spanFrames),
+                  style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 /// A lane's keyframe diamonds: one per key, in `animated` (§3.1) — the token
@@ -8559,6 +9079,23 @@ class _LaneBottomBar extends StatelessWidget {
   /// panel's decision, not this bar's (K-349).
   final ValueChanged<BuildContext>? onOpenEasing;
 
+  /// Set in **Keys mode**: the dope sheet's own strip of commands, which the
+  /// approved drawing puts on this bar — Interpolation (Linear / Hold / Ease /
+  /// Bezier), then Reverse, Copy and Paste at playhead (K-458).
+  ///
+  /// Keys-only, and deliberately: Layers mode gains the *block* tools, which
+  /// live on the selection itself, but its bottom bar already carries the
+  /// column toggles and the comp-wide switches, and the drawing gives this
+  /// strip to the sheet.
+  final bool keys;
+
+  /// The Ease word pressed, with its own context so the popover can be
+  /// anchored to it — the same box the block badge opens.
+  final ValueChanged<BuildContext>? onEaseBlock;
+  final VoidCallback? onReverse;
+  final VoidCallback? onCopy;
+  final VoidCallback? onPaste;
+
   const _LaneBottomBar({
     required this.zoom,
     required this.maxZoom,
@@ -8575,6 +9112,11 @@ class _LaneBottomBar extends StatelessWidget {
     this.onToggleAutoFit,
     this.onInterp,
     this.onOpenEasing,
+    this.keys = false,
+    this.onEaseBlock,
+    this.onReverse,
+    this.onCopy,
+    this.onPaste,
   });
 
   Widget _graphButton(
@@ -8631,6 +9173,79 @@ class _LaneBottomBar extends StatelessWidget {
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
+                      // Keys mode's own strip (K-458, the approved drawing).
+                      // A label, then the four interpolations, then a rule,
+                      // then the three commands — the same 2-inside-a-run,
+                      // 12-between-runs rhythm the graph's buttons keep.
+                      if (keys) ...[
+                        Text(l10n.fxInterpolation.toUpperCase(),
+                            style: t.kicker),
+                        const SizedBox(width: 8),
+                        _graphButton(t,
+                            keyName: 'keys-interp-linear',
+                            label: l10n.easeLinear,
+                            tip: l10n.tipLinearKeyframes,
+                            on: false,
+                            onPressed: () => onInterp
+                                ?.call(const BridgeSideInterp.linear())),
+                        const SizedBox(width: 2),
+                        _graphButton(t,
+                            keyName: 'keys-interp-hold',
+                            label: l10n.easeHold,
+                            tip: l10n.tipHoldKeyframes,
+                            on: false,
+                            onPressed: () =>
+                                onInterp?.call(const BridgeSideInterp.hold())),
+                        const SizedBox(width: 2),
+                        // The shaped ease, one step along from the flat three:
+                        // the same selection, a curve chosen by name instead of
+                        // a constant. Its own Builder so the popover can be
+                        // anchored to the word that opened it.
+                        Builder(
+                          builder: (buttonContext) => _graphButton(t,
+                              keyName: 'keys-interp-ease',
+                              label: l10n.keysEase,
+                              tip: l10n.tipEaseTheBlock,
+                              on: false,
+                              onPressed: () =>
+                                  onEaseBlock?.call(buttonContext)),
+                        ),
+                        const SizedBox(width: 2),
+                        _graphButton(t,
+                            keyName: 'keys-interp-bezier',
+                            label: l10n.easeBezier,
+                            tip: l10n.tipEasyEase,
+                            on: false,
+                            onPressed: () => onInterp?.call(easyEase)),
+                        const SizedBox(width: 8),
+                        // **The two runs read apart**: everything left of this
+                        // rule says how the movement between keys is shaped;
+                        // everything right of it moves the keys themselves.
+                        Container(
+                            width: 1, height: 10, color: t.hairlineStrong),
+                        const SizedBox(width: 8),
+                        _graphButton(t,
+                            keyName: 'keys-reverse',
+                            label: l10n.fxReverse,
+                            tip: l10n.tipReverseKeys,
+                            on: false,
+                            onPressed: () => onReverse?.call()),
+                        const SizedBox(width: 2),
+                        _graphButton(t,
+                            keyName: 'keys-copy',
+                            label: l10n.menuCopy,
+                            tip: l10n.tipCopyKeys,
+                            on: false,
+                            onPressed: () => onCopy?.call()),
+                        const SizedBox(width: 2),
+                        _graphButton(t,
+                            keyName: 'keys-paste',
+                            label: l10n.keysPasteAtPlayhead,
+                            tip: l10n.tipPasteKeysAtPlayhead,
+                            on: false,
+                            onPressed: () => onPaste?.call()),
+                        const SizedBox(width: 12),
+                      ],
                       if (lens != null) ...[
                         // The selected keys' easing, one click each — the F9 family's
                         // buttons (docs/07 §5.3).
