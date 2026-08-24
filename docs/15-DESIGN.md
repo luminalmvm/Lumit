@@ -575,8 +575,13 @@ mono while focused.
   cache bar): ≥24px visual extent on the smaller axis, with hit-slop extending the
   interactive region to ≥32px. Keyframes render at 9px but hit-test at 32px with
   nearest-wins disambiguation; adjacent slop regions split at their midpoint.
-- Timeline row height: 28px default, 24px minimum at the densest zoom setting; property lanes
-  24px. Nothing interactive ever hit-tests below 32px in either axis.
+- Row and chrome heights are **§12A.6's table** (K-451), which supersedes the 28px/24px rows
+  written here before the redesign: an outline or lane row is 22, a secondary row 18. The
+  floors above still govern what sits *inside* those rows — bars, keyframes, curve handles
+  and the cache bar keep their ≥24px visual and ≥32px hit extent along the axis they are
+  aimed at. A chrome row shorter than the floor is the mockup's height, not a licence to
+  shrink the targets in it: where the two cannot both hold, the visual keeps the table's
+  height and the note beside the code says which floor gave way.
 
 ### 7.3 Spacing
 
@@ -796,6 +801,9 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **Composition tabs run the full width of the panel header.** The row above the outline
   puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
   far right.
+- **The open composition tab carries no accent tick** — the seated surface colour alone
+  marks it, as the mockup draws it. (The workspace tabs keep their accent underline;
+  §3.1's "active tab tick" means those.)
 - **The switches column is fixed at its minimum width** — the toggles never stretch to
   fill a wider column, so there is nothing to gain by widening it (K-448).
 - **Comp-wide toggles live in the bottom bar**, not the timecode row: shy, motion blur
