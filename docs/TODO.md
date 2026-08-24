@@ -173,14 +173,13 @@ These are v1-scope surfaces it does not yet match.
     alignment - the document is one styled run, [03-DATA-MODEL.md](03-DATA-MODEL.md)
     §9.1); per-character and per-word animators.
 - **Paint** (brush/clone stamp/eraser, [impl/paint.md](impl/paint.md)) - owed:
-    **pressure and tilt** from a tablet, **brush shapes** other than round,
-    **spacing** and **scatter**; **write-on** (a stroke's own start and end times,
-    which is what makes paint animate in After Effects - nothing in the model
-    yet); **per-stroke blending modes**; painting in **Layer view** rather than on
-    the composite; **a GPU stamping path** (the rasteriser is a CPU loop beside
-    the mask one, and it changes the rasteriser, not the stored stroke); and
-    **paint on a Precomp layer's nested pixels**, which never come back to the
-    CPU, so a stroke on one currently marks nothing.
+    **pressure and tilt** from a tablet, **spacing** and **scatter**; a keyed
+    Start/End's **curve in the graph editor** (the Timeline lane draws and drags
+    its diamonds, but `graphChannels` walks transform, effect and mask paths only
+    - K-449); painting in **Layer view** rather than on the composite; and **a GPU
+    stamping path** (the rasteriser is a CPU loop beside the mask one, and it
+    changes the rasteriser, not the stored stroke - it is also what would retire
+    the 8-bit read-back a painted Precomp pays, K-447).
 - **Camera** - a separate point of interest (AE's two-node camera) is an engine
     change; the Unified Camera tool; depth-of-field handles on the picture; a
     keyframed camera cannot be dragged (no single value to add to); a drag
