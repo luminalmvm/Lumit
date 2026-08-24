@@ -237,14 +237,6 @@ const BAR_REFINE_PER_TURN: u64 = 1024;
 /// on any composition a bar can usefully draw.
 const BAR_REFINE_PER_TURN_PLAYING: u64 = 256;
 
-/// The coarser preview scales worth probing for the bar's dimmed state: the
-/// adaptive tiers the realtime controller actually drops to (Half, Third,
-/// Quarter — [`crate::realtime::tier_scale`]). Under content keying the scale is
-/// inside the name, so "held at *some* coarser scale" cannot be read off a hash;
-/// these are the scales frames genuinely get cached at, which is what the dimmed
-/// state exists to report.
-const BAR_COARSE_TIERS: [f32; 3] = [0.5, 1.0 / 3.0, 0.25];
-
 /// What a published cache-bar strip was computed from. Recomputed only when one
 /// of these moves, so an editor sitting still hashes nothing.
 #[frb(ignore)]
@@ -719,9 +711,20 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
     }
 }
 
-/// What the bar should draw for one frame: `0` nothing, `1` held coarser, `2`
-/// held at this scale, `3` on disk coarser, `4` on disk at this scale. Playable
-/// beats promotable — a frame both held and parked reads as held.
+/// What the bar should draw for one frame, as the two-nibble strip byte
+/// [`crate::framecache::bar`] documents: the storage state (`0` nothing, `1`
+/// held coarser, `2` held at this scale, `3` on disk coarser, `4` on disk at
+/// this scale) and the preview divisor the found picture was made at (`1`
+/// full … `4` quarter, relative to the scale asked about). Playable beats
+/// promotable — a frame both held and parked reads as held.
+///
+/// **Which coarser scales are probed, and why only those.** The adaptive tiers
+/// the realtime controller actually drops to ([`crate::realtime::tier_scale`]:
+/// Half, Third, Quarter). Under content keying the scale is inside the name,
+/// so "held at *some* coarser scale" cannot be read off a hash; these are the
+/// scales frames genuinely get cached at, which is what both the dimmed state
+/// and the reported divisor exist to report. A frame held at any other scale
+/// is not found, and reads as nothing held.
 ///
 /// Names go through the memo ([`frame_name`]); the caller has presynced the
 /// document. `fast` is set while playback runs: the walk then shares the
@@ -742,31 +745,67 @@ fn frame_tier(
     bgra: bool,
     fast: bool,
 ) -> u8 {
-    let mut on_disk_at_scale = false;
-    if let Some(key) = frame_name(state, document, revision, comp, frame, quality) {
-        if state.renderer.has_frame_texture(key, bgra) || crate::framecache::contains(key) {
-            return 2;
-        }
-        on_disk_at_scale = state.disk.contains(key);
-    }
-    if fast && on_disk_at_scale {
-        return 4;
-    }
-    let mut on_disk_coarser = false;
-    for factor in BAR_COARSE_TIERS {
-        let coarser = quality_for(scale * factor);
-        let Some(key) = frame_name(state, document, revision, comp, frame, coarser) else {
-            continue;
+    use lumit_eval::schedule::FINEST_TIER;
+
+    // Naming and probing one frame needs the renderer, the document and the
+    // three tiers; deciding what the answers add up to needs none of them.
+    // Split for the same reason the strip walk is (see `publish_cache_bar`):
+    // the rule below is then a plain function a test can drive without a
+    // graphics card.
+    bar_byte(fast, |divisor| {
+        let quality = if divisor == FINEST_TIER {
+            quality
+        } else {
+            quality_for(scale * crate::realtime::tier_scale(divisor))
         };
-        if state.renderer.has_frame_texture(key, bgra) || crate::framecache::contains(key) {
-            return 1;
-        }
-        on_disk_coarser |= state.disk.contains(key);
+        // A frame that cannot be named yet is not held anywhere under any
+        // name, so it is neither.
+        let Some(key) = frame_name(state, document, revision, comp, frame, quality) else {
+            return (false, false);
+        };
+        let held = state.renderer.has_frame_texture(key, bgra) || crate::framecache::contains(key);
+        // Playable outranks promotable, so a held frame's parking never needs
+        // asking about.
+        (held, !held && state.disk.contains(key))
+    })
+}
+
+/// The bar's rule, given a `probe` that says whether the picture of one frame
+/// at one preview divisor is held and whether it is parked. Returns the strip
+/// byte [`crate::framecache::bar`] documents.
+///
+/// `probe` is called finest first and only as far as it must be, so the common
+/// answer — held at the scale asked about — costs one probe.
+#[frb(ignore)]
+fn bar_byte(fast: bool, mut probe: impl FnMut(u32) -> (bool, bool)) -> u8 {
+    use crate::framecache::bar::pack;
+    use lumit_eval::schedule::{COARSEST_TIER, FINEST_TIER};
+
+    let full = FINEST_TIER as u8;
+    let (held, parked_at_scale) = probe(FINEST_TIER);
+    if held {
+        return pack(2, full);
     }
-    if on_disk_at_scale {
-        4
-    } else if on_disk_coarser {
-        3
+    if fast && parked_at_scale {
+        return pack(4, full);
+    }
+    // Finest first, so the first tier that answers is the best picture there
+    // is of this frame — which is both the honest tier to report and a stable
+    // one, since the walk does not depend on the order the tiers filled.
+    let mut parked_coarser: Option<u8> = None;
+    for divisor in (FINEST_TIER + 1)..=COARSEST_TIER {
+        let (held, parked) = probe(divisor);
+        if held {
+            return pack(1, divisor as u8);
+        }
+        if parked && parked_coarser.is_none() {
+            parked_coarser = Some(divisor as u8);
+        }
+    }
+    if parked_at_scale {
+        pack(4, full)
+    } else if let Some(divisor) = parked_coarser {
+        pack(3, divisor)
     } else {
         0
     }
@@ -4699,9 +4738,79 @@ mod tests {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod bar_strip_tests {
     use super::{
-        audio_chase, mark_banked, on_time_limit, refine_bar_strip, sample_bar_strip,
+        audio_chase, bar_byte, mark_banked, on_time_limit, refine_bar_strip, sample_bar_strip,
         wants_disk_lead, AudioChase, BarFingerprint, AUDIO_REALTIME_FRAMES,
     };
+    use crate::framecache::bar::pack;
+
+    /// **The bar says not just "cached" but "cached at what size"** (K-441,
+    /// docs/15-DESIGN.md §6.3). Each case names one frame's holdings and
+    /// checks the whole strip byte: the storage state the bar has always
+    /// drawn, and the preview divisor the picture it found was actually made
+    /// at.
+    #[test]
+    fn a_frames_byte_reports_the_finest_picture_there_is_of_it() {
+        // Held at the scale asked about: full, and nothing coarser is probed.
+        let mut probes = 0;
+        let byte = bar_byte(false, |divisor| {
+            probes += 1;
+            (divisor == 1, false)
+        });
+        assert_eq!(byte, pack(2, 1));
+        assert_eq!(probes, 1, "the common answer costs one probe");
+
+        // Held only at half and at quarter: half is the better picture, and
+        // the walk must say so rather than reporting whichever tier it met
+        // last.
+        assert_eq!(
+            bar_byte(false, |divisor| (divisor == 2 || divisor == 4, false)),
+            pack(1, 2)
+        );
+        // Third is a tier the realtime controller genuinely drops to, so a
+        // frame held there is found and named, not rounded to half or quarter.
+        assert_eq!(bar_byte(false, |d| (d == 3, false)), pack(1, 3));
+        assert_eq!(bar_byte(false, |d| (d == 4, false)), pack(1, 4));
+
+        // Parked, not held: the storage state changes, the tier rule does not.
+        assert_eq!(bar_byte(false, |d| (false, d == 1)), pack(4, 1));
+        assert_eq!(bar_byte(false, |d| (false, d == 3 || d == 4)), pack(3, 3));
+
+        // Playable outranks promotable: parked at this scale but held coarser
+        // reads as held, at the tier it is held at.
+        assert_eq!(
+            bar_byte(false, |d| (d == 2, d == 1)),
+            pack(1, 2),
+            "a frame you can play now is not a frame you could promote"
+        );
+
+        // Nothing anywhere has no size either, so the byte is a plain zero —
+        // which is what the sampler's "is this frame held at all?" test reads.
+        assert_eq!(bar_byte(false, |_| (false, false)), 0);
+    }
+
+    /// While playback runs the walk shares the render thread's deadline, so a
+    /// frame parked at this scale is answered without paying the three coarser
+    /// probes (a comp hash apiece on a memo miss).
+    #[test]
+    fn the_playing_walk_stops_at_a_frame_parked_at_this_scale() {
+        let mut probes = 0;
+        let byte = bar_byte(true, |divisor| {
+            probes += 1;
+            (false, divisor == 1)
+        });
+        assert_eq!(byte, pack(4, 1));
+        assert_eq!(probes, 1);
+
+        // Idle, the same holdings cost the full walk — and answer the same,
+        // since nothing coarser turned up.
+        let mut probes = 0;
+        let byte = bar_byte(false, |divisor| {
+            probes += 1;
+            (false, divisor == 1)
+        });
+        assert_eq!(byte, pack(4, 1));
+        assert_eq!(probes, 4);
+    }
 
     /// **The stripe greens while playback lays frames down.** The sweep walks
     /// forward from the playhead, so the frames playback just banked — behind

@@ -2471,6 +2471,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   content fingerprint, so a frame is a frame wherever it lives — and a frame pushed out of
   one tier falls into the next rather than being lost (K-214; §9 walks the whole
   ladder).
+- **A cached frame has a *size*, not just a place.** When the machine cannot keep up, the
+  preview quietly renders smaller — half, a third, a quarter of full size — and those
+  smaller pictures get cached like any other. So "is frame 12 cached?" has never been quite
+  the right question: the useful answer is "cached at what size", because a quarter-size
+  frame is real cache that will still be re-rendered the moment you ask for a sharp one.
+  Each frame of the cache bar is therefore **one byte holding two answers**: where the
+  picture is kept (in memory, on disk, nowhere) and how big it is (full, half, third,
+  quarter, measured against the size the Viewer is currently asking for). Two honest limits
+  come with it. The engine can only look for the four sizes it actually renders at, so a
+  frame cached at some other size is not found and shows as uncached — the same blind spot
+  the bar always had. And on a very long comp the strip is first sketched from samples, one
+  frame standing in for its neighbours, so an unrefined stretch wears its sample's size
+  until the slow pass reaches it. The bar's colours grow out of that byte (K-441).
 - **Timeline guide lines** — the faint vertical lines through the lanes have a mode picker
   in the bottom bar ("Grid"): **beats** (the default — detected beats shine through every
   layer so cuts land on the music), **time** (a neutral second grid that subdivides as you

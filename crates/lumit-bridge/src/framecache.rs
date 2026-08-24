@@ -736,7 +736,11 @@ pub(crate) mod disk {
 /// leaves a note saying which composition and scale it is drawing ([`want`]) and
 /// reads whatever the worker last published for it ([`read`]).
 ///
-/// The values, per frame:
+/// One frame is one **byte, in two nibbles**: where the picture is kept, and
+/// how big it is.
+///
+/// The low nibble is the *storage state*, and is the whole of what the strip
+/// used to say:
 ///
 /// * `0` — nothing held.
 /// * `1` — held in memory or on the card, but only at a coarser preview
@@ -747,8 +751,36 @@ pub(crate) mod disk {
 ///   (blue).
 ///
 /// Playable beats promotable, so a frame both held and parked reads as held.
+///
+/// The high nibble is the *resolution tier* (K-441, docs/15-DESIGN.md §6.3):
+/// the preview **divisor** the held picture was actually made at, relative to
+/// the scale the bar asked about — `1` full, `2` half, `3` third, `4` quarter,
+/// the same ladder [`crate::realtime::tier_scale`] names. It is `0` exactly
+/// when the storage state is `0`, since a frame nobody holds has no size.
+///
+/// So the bar can say not just "cached" but "cached at what size". Two limits
+/// on that, both honest rather than guessed: a frame held at some *other*
+/// scale — one no adaptive tier ever renders at — is not found at all and
+/// reads as nothing held; and on a composition long enough to be sampled, a
+/// frame the sweep has not reached yet wears its sample's tier along with its
+/// sample's storage state until the refinement pass names it (see
+/// `publish_cache_bar`).
 pub(crate) mod bar {
     use std::sync::Mutex;
+
+    /// Build a strip byte from a storage state (`0`..=`4`) and a preview
+    /// divisor (`1`..=`4`, or `0` for nothing held). The one place the two
+    /// nibbles are put together — see the module docs for what they mean.
+    pub(crate) const fn pack(storage: u8, divisor: u8) -> u8 {
+        (divisor << 4) | (storage & 0x0F)
+    }
+
+    /// The storage state out of a strip byte. Its twin — the divisor — is
+    /// `byte >> 4`, and has no reader here because nothing in Rust asks for it:
+    /// the strip crosses whole and the bar's painter splits it.
+    pub(crate) const fn storage_of(byte: u8) -> u8 {
+        byte & 0x0F
+    }
 
     /// What the bar last asked to draw: composition, frame count and preview
     /// scale in thousandths.
@@ -785,10 +817,22 @@ pub(crate) mod bar {
         guard.truncate(SLOTS);
     }
 
-    /// The strip for `comp` at `scale_q`, padded or trimmed to `frames`. All
-    /// zeros when the worker has not published this composition at this scale
-    /// yet — the honest answer, and one the next worker turn corrects.
+    /// The **storage states** for `comp` at `scale_q` — the low nibble of each
+    /// strip byte, `0`..=`4` — padded or trimmed to `frames`.
+    ///
+    /// All zeros when the worker has not published this composition at this
+    /// scale yet — the honest answer, and one the next worker turn corrects.
     pub(crate) fn read(comp: uuid::Uuid, frames: u64, scale_q: u16) -> Vec<u8> {
+        let mut out = read_packed(comp, frames, scale_q);
+        for byte in &mut out {
+            *byte = storage_of(*byte);
+        }
+        out
+    }
+
+    /// The whole strip for `comp` at `scale_q`, both nibbles per frame (see the
+    /// module docs), padded or trimmed to `frames`.
+    pub(crate) fn read_packed(comp: uuid::Uuid, frames: u64, scale_q: u16) -> Vec<u8> {
         want(comp, frames, scale_q);
         let frames = frames as usize;
         let guard = PUBLISHED.lock().unwrap_or_else(|p| p.into_inner());
@@ -1174,6 +1218,49 @@ mod tests {
 
         bar::invalidate();
         assert_eq!(bar::read(comp, 5, 1000), vec![0; 5], "cleared means blank");
+    }
+
+    /// K-441, docs/15-DESIGN.md §6.3: a strip byte says *where* a frame is
+    /// kept and *how big* it is, and the two must stay separable — the bar
+    /// draws its storage states from one nibble and its hue from the other.
+    ///
+    /// The half that matters is [`bar::read`]: it keeps answering `0`..=`4`
+    /// however large the divisor grows, because that is what every consumer
+    /// written before the resolution tier existed reads. A packed byte
+    /// reaching one of those unmasked draws a frame held at quarter as some
+    /// storage state nobody has ever defined.
+    #[test]
+    fn a_strip_byte_carries_the_storage_state_and_the_resolution_tier() {
+        let _guard = cache_test_guard();
+        let comp = uuid::Uuid::now_v7();
+        // Held at the asked scale, held at half, parked at quarter, nothing.
+        bar::publish(
+            comp,
+            1000,
+            vec![
+                bar::pack(2, 1),
+                bar::pack(1, 2),
+                bar::pack(3, 4),
+                bar::pack(0, 0),
+            ],
+        );
+
+        assert_eq!(
+            bar::read(comp, 4, 1000),
+            vec![2, 1, 3, 0],
+            "the storage half is exactly what the strip always said"
+        );
+        assert_eq!(
+            bar::read_packed(comp, 4, 1000),
+            vec![0x12, 0x21, 0x43, 0x00],
+            "and the whole byte carries the divisor above it"
+        );
+        // Nothing held has no size, so a zero byte stays a zero byte and the
+        // sampler's "is this frame held at all?" test keeps working.
+        assert_eq!(bar::pack(0, 0), 0);
+        assert_eq!(bar::storage_of(bar::pack(4, 3)), 4);
+
+        bar::invalidate();
     }
 }
 

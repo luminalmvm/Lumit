@@ -1675,6 +1675,42 @@ mod tests {
         );
     }
 
+    /// **Colour tags travel with the project** (K-451). They are organisation
+    /// rather than picture, but organisation is exactly what is lost when a
+    /// project is handed on, so they belong in the file. A project nobody has
+    /// tagged saves no field at all — the serde-default rule docs/10 §1.1 gives
+    /// every additive field — so an older build reads such a file unchanged,
+    /// and a file written before tags existed opens with every item untagged
+    /// rather than failing.
+    #[test]
+    fn item_colour_tags_survive_a_save_and_older_files_open_untagged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tagged.lum");
+
+        let mut doc = doc_with_item();
+        let id = doc.items[0].id();
+        assert_eq!(doc.item_label(id), 0, "untagged by default");
+        save(&doc, &path).unwrap();
+        assert!(
+            open(&path).unwrap().0.item_labels.is_empty(),
+            "a project nobody has tagged gains no field"
+        );
+
+        apply(&mut doc, &Op::SetItemLabel { id, label: 5 }).unwrap();
+        save(&doc, &path).unwrap();
+        assert_eq!(open(&path).unwrap().0.item_label(id), 5);
+
+        // The shape a file written before tags existed has: no key at all.
+        let mut older: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&doc).unwrap()).unwrap();
+        older
+            .as_object_mut()
+            .expect("a document is an object")
+            .remove("item_labels");
+        let reopened: Document = serde_json::from_value(older).unwrap();
+        assert_eq!(reopened.item_label(id), 0);
+    }
+
     /// **A project's arrangement travels with it** (K-245): hand the file to
     /// someone else and it opens with the panels where its author left them.
     /// The engine stores it as the frontend's own JSON without reading inside,
@@ -1746,6 +1782,113 @@ mod tests {
             lumit_core::model::AntiAliasing::default(),
             "a file with no setting must load at the default, not fail"
         );
+    }
+
+    /// **A marker can carry a span, and the span survives the file**
+    /// (docs/15-DESIGN.md §12A.1, docs/03-DATA-MODEL.md §11). The redesigned
+    /// ruler draws a marker as a pill that runs from its frame for its
+    /// duration, so the number has to be in the `.lum` and not merely in the
+    /// session — and a marker that is only a moment must stay a moment,
+    /// written as no span at all rather than as a zero-length one.
+    ///
+    /// The second half is the one that would go unnoticed: a `.lum` written
+    /// before markers could span at all must open with its markers as moments,
+    /// not fail to open. Every additive field owes that (docs/10 §1.1), and a
+    /// marker's is easy to miss because markers arrive inside a composition
+    /// rather than at the top of the document.
+    #[test]
+    fn a_markers_duration_round_trips_and_is_absent_when_it_is_a_moment() {
+        use lumit_core::markers::{Marker, MarkerKind};
+        use lumit_core::model::{Composition, LinearColour};
+        use lumit_core::time::{Duration, FrameRate, Rational};
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("marked.lum");
+        let rat = |n: i64, d: i64| Rational::new(n, d).unwrap();
+
+        let moment = Marker::user(Uuid::now_v7(), rat(1, 1));
+        let span = Marker {
+            duration: Some(rat(3, 2)),
+            label: "Chorus".into(),
+            ..Marker::user(Uuid::now_v7(), rat(2, 1))
+        };
+        let comp = Composition {
+            id: Uuid::now_v7(),
+            name: "Comp 1".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: FrameRate::new(25, 1).unwrap(),
+            duration: Duration(rat(10, 1)),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: Vec::new(),
+            markers: vec![moment.clone(), span.clone()],
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let mut doc = Document::new();
+        apply(
+            &mut doc,
+            &Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Composition(comp)),
+            },
+        )
+        .unwrap();
+
+        save(&doc, &path).unwrap();
+        let (loaded, _) = open(&path).unwrap();
+        let markers = match &loaded.items[0] {
+            ProjectItem::Composition(c) => c.markers.clone(),
+            other => panic!("expected the composition back, got {other:?}"),
+        };
+        assert_eq!(markers, vec![moment.clone(), span.clone()]);
+        assert_eq!(
+            markers[1].duration,
+            Some(rat(3, 2)),
+            "the span is the point of the test"
+        );
+        assert_eq!(markers[0].duration, None, "and a moment stays a moment");
+
+        // A file written before markers could span: the same project with the
+        // key removed from every marker, which is exactly what such a `.lum`
+        // holds.
+        let older = dir.path().join("older.lum");
+        let mut value = document_json(&path);
+        let items = value["items"].as_array_mut().unwrap();
+        for marker in items[0]["Composition"]["markers"].as_array_mut().unwrap() {
+            assert!(
+                marker.as_object_mut().unwrap().remove("duration").is_some(),
+                "duration was not written, so removing it proves nothing"
+            );
+        }
+        save(&serde_json::from_value::<Document>(value).unwrap(), &older).unwrap();
+
+        let (old, _) = open(&older).unwrap();
+        let markers = match &old.items[0] {
+            ProjectItem::Composition(c) => c.markers.clone(),
+            other => panic!("expected the composition back, got {other:?}"),
+        };
+        assert!(
+            markers.iter().all(|m| m.duration.is_none()),
+            "an older file's markers must open as moments, not fail to open"
+        );
+        assert_eq!(markers[1].label, "Chorus", "and keep everything else");
+        assert_eq!(markers[1].kind, MarkerKind::User);
+    }
+
+    /// The document JSON inside a `.lum`, as a value a test can pick apart —
+    /// the raw file rather than a re-serialised document, so what is checked is
+    /// what was actually written.
+    fn document_json(path: &Path) -> serde_json::Value {
+        use std::io::Read;
+        let mut zip = ZipArchive::new(File::open(path).unwrap()).unwrap();
+        let mut raw = String::new();
+        zip.by_name("project.json")
+            .unwrap()
+            .read_to_string(&mut raw)
+            .unwrap();
+        serde_json::from_str(&raw).unwrap()
     }
 
     /// Rewrite a `.lum` with one key deleted from its document JSON — how a

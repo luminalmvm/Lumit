@@ -776,9 +776,25 @@ current quality, plays in real time now; **blue** — on disk only, promotable; 
 green/blue** — cached at a lower preview resolution than currently displayed. Redrawn from a
 lock-free bitmap snapshot; the UI thread never queries the cache itself (K-017).
 
-**As built (K-214).** The strip is five values per frame — `0` nothing, `1` held coarser,
-`2` held at this resolution, `3` on disk coarser, `4` on disk at this resolution — and playable
-outranks promotable, so a frame both held and parked reads as held.
+**As built (K-214, K-441).** The strip is one byte per frame, in two nibbles: *where* the
+picture is kept and *how big* it is.
+
+The **low nibble is the storage state** — `0` nothing, `1` held coarser, `2` held at this
+resolution, `3` on disk coarser, `4` on disk at this resolution — and playable outranks
+promotable, so a frame both held and parked reads as held.
+
+The **high nibble is the resolution tier**: the preview *divisor* the picture found was
+actually made at, relative to the scale the bar asked about — `1` full, `2` half, `3` third,
+`4` quarter, the same ladder the realtime controller drops along (§6.2). It is `0` exactly
+when the storage state is `0`, since a frame nobody holds has no size. This is what lets the
+bar say not just "cached" but "cached at what size" ([15-DESIGN.md](15-DESIGN.md) §6.3); the
+tiers are probed finest first, so the reported divisor is the best picture there is of that
+frame and does not depend on the order the tiers filled.
+
+Two limits on the tier, stated rather than guessed. A frame held at some *other* scale — one
+no adaptive tier renders at — is not found at all and reads as nothing held, exactly as it did
+before the tier existed. And on a sampled composition (below), a frame the refinement sweep
+has not reached yet wears its sample's tier along with its sample's storage state.
 
 The snapshot is not an optimisation here, it is the only way the question can be answered.
 Under content keying, "is frame 12 held?" means *naming* frame 12 — hashing the whole

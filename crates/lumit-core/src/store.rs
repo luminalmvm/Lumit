@@ -1582,6 +1582,54 @@ mod tests {
         (store, comp_id, layer_id)
     }
 
+    /// **Giving a marker a span is an ordinary undoable edit**
+    /// (docs/15-DESIGN.md §12A.1). `SetCompMarkers` replaces the whole list, so
+    /// the duration needs no op of its own — but "needs no code" and "works"
+    /// are different claims, and only this one is checkable. Undo must put the
+    /// marker back as the moment it was, not merely put a marker back.
+    #[test]
+    fn a_markers_span_is_set_and_undone_like_any_other_edit() {
+        use crate::markers::Marker;
+        let (store, comp, _) = doc_with_layer();
+        let at = crate::time::Rational::new(2, 1).expect("2s");
+        let span = crate::time::Rational::new(3, 2).expect("1.5s");
+
+        let moment = Marker::user(Uuid::now_v7(), at);
+        store
+            .commit(Op::SetCompMarkers {
+                comp,
+                markers: vec![moment.clone()],
+            })
+            .expect("a marker goes on the ruler");
+
+        let stretched = Marker {
+            duration: Some(span),
+            ..moment.clone()
+        };
+        store
+            .commit(Op::SetCompMarkers {
+                comp,
+                markers: vec![stretched.clone()],
+            })
+            .expect("and grows a span");
+        let markers = |store: &DocumentStore| {
+            store
+                .snapshot()
+                .comp(comp)
+                .expect("the comp is there")
+                .markers
+                .clone()
+        };
+        assert_eq!(markers(&store), vec![stretched]);
+
+        store.undo().expect("the span is undoable");
+        assert_eq!(
+            markers(&store),
+            vec![moment],
+            "undo puts the moment back, not a marker with a stale span"
+        );
+    }
+
     fn lock(store: &DocumentStore, comp: Uuid, layer: Uuid, locked: bool) {
         store
             .commit(Op::SetLayerLocked {

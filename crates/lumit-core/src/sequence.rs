@@ -286,6 +286,42 @@ impl Clip {
         self.end_speeds()
     }
 
+    /// How far this clip's source runs either side of its trim, on the
+    /// **layer's** own clock: `(first source moment, last source moment)` as
+    /// layer-local times, or `None` when the reach is not knowable.
+    ///
+    /// In plain terms: the clip shows a window onto a longer piece of media,
+    /// and this says where that whole piece would sit on the row if none of it
+    /// had been trimmed away — which is the faint outline the Timeline draws
+    /// around a trimmed clip (K-441, docs/15-DESIGN.md §12A.1).
+    ///
+    /// The clip-level twin of the layer bar's bounds, and it follows the same
+    /// three rules:
+    ///
+    /// * an un-retimed clip plays its source alongside its own clock from
+    ///   [`Self::source_in`], so source moment zero sits `source_in` before the
+    ///   clip's start and the source's last moment `source_duration` after
+    ///   that;
+    /// * a **retimed** clip has no reach — its map decides for itself which
+    ///   source moment each of its own frames shows, so its length stops being
+    ///   the source's business (docs/04-RETIMING.md);
+    /// * a source whose length could not be read has no reach either, rather
+    ///   than one pinned to a guess.
+    ///
+    /// `source_duration` is passed in because the document does not hold it: a
+    /// nested comp's is on the comp, and a footage item's comes from the media
+    /// probe, so only the caller can know it. Nothing is clamped — a clip
+    /// dragged so its source would begin before the row's origin reports a
+    /// negative first moment, exactly as a layer's bounds do.
+    pub fn source_reach(&self, source_duration: Option<Rational>) -> Option<(Rational, Rational)> {
+        if self.retime.is_some() {
+            return None;
+        }
+        let start = self.place_start.checked_sub(self.source_in).ok()?;
+        let end = start.checked_add(source_duration?).ok()?;
+        Some((start, end))
+    }
+
     /// True when layer-local time `lt` (seconds) falls within this clip.
     pub fn contains(&self, lt: f64) -> bool {
         lt >= self.place_start.to_f64() && lt < self.place_end().to_f64()
@@ -1228,6 +1264,67 @@ mod tests {
             rat(1, 1),
         );
         assert!(!is_source_ordered(&[c1, early_source_late_place]));
+    }
+
+    /// K-441, docs/15-DESIGN.md §12A.1: a trimmed clip draws the faint outline
+    /// of the material trimmed away, exactly as a trimmed layer does. The
+    /// reach is the whole source laid on the layer's clock — so a clip trimmed
+    /// in by 2 s reaches 2 s to the left of where it starts, and on to the end
+    /// of its source whatever the clip's own length.
+    #[test]
+    fn an_untrimmed_clips_reach_is_its_own_span() {
+        // A 4 s clip of a 4 s source, trimmed at neither end: the outline sits
+        // exactly under the bar.
+        let c = clip(Uuid::now_v7(), 3, 4);
+        assert_eq!(
+            c.source_reach(Some(rat(4, 1))),
+            Some((rat(3, 1), rat(7, 1)))
+        );
+    }
+
+    #[test]
+    fn a_trimmed_clips_reach_runs_out_both_sides() {
+        // 10 s of source, of which the clip shows [2, 6) placed at 5 s.
+        let mut c = clip(Uuid::now_v7(), 5, 4);
+        c.source_in = rat(2, 1);
+        c.source_out = rat(6, 1);
+        // Source moment 0 would sit 2 s before the clip's start, and the
+        // source runs 10 s from there.
+        assert_eq!(
+            c.source_reach(Some(rat(10, 1))),
+            Some((rat(3, 1), rat(13, 1)))
+        );
+    }
+
+    #[test]
+    fn a_clip_dragged_past_the_row_origin_reports_a_negative_reach() {
+        // Nothing is clamped: the layer-level bounds are not either, and a
+        // clamped reach would draw an outline that lies about where the
+        // material begins.
+        let mut c = clip(Uuid::now_v7(), 1, 4);
+        c.source_in = rat(3, 1);
+        c.source_out = rat(7, 1);
+        assert_eq!(
+            c.source_reach(Some(rat(9, 1))),
+            Some((rat(-2, 1), rat(7, 1)))
+        );
+    }
+
+    #[test]
+    fn a_retimed_clip_has_no_reach() {
+        // Retime frees the ends, exactly as it does on a layer bar
+        // (docs/04-RETIMING.md): the map decides which source moment each
+        // frame shows, so the source's length stops bounding the clip.
+        let c = clip(Uuid::now_v7(), 3, 4).with_ramp(rat(2, 1), rat(2, 1));
+        assert!(c.retime.is_some());
+        assert_eq!(c.source_reach(Some(rat(4, 1))), None);
+    }
+
+    #[test]
+    fn a_source_of_unknown_length_has_no_reach() {
+        // Missing or unprobed media leaves the outline off rather than drawing
+        // one pinned to a guess.
+        assert_eq!(clip(Uuid::now_v7(), 3, 4).source_reach(None), None);
     }
 
     #[test]
