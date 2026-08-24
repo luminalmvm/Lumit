@@ -37,6 +37,11 @@ pub enum OpError {
     /// entity, so each one is an edit to decline.
     #[error("{0}")]
     InvalidGraph(#[from] crate::graph::GraphError),
+    /// [`Op::SetLayerKind`] was pointed at a kind it does not convert. Only
+    /// Solid ⇄ Adjustment flips (K-484): those two differ by whether the layer
+    /// has a picture of its own, and nothing else.
+    #[error("only solid and adjustment layers convert to one another")]
+    KindNotConvertible,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -171,6 +176,29 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         clips: Vec<crate::sequence::Clip>,
+    },
+    /// Flip a layer between **Solid** and **Adjustment** (K-484) — the one
+    /// kind change the document has, and the whole of the Modes column's
+    /// adjustment toggle.
+    ///
+    /// **In plain terms.** An adjustment layer is a solid with its picture
+    /// taken away: same span, same masks, same effect stack, but what the
+    /// effects run on is everything underneath rather than a rectangle of
+    /// colour. Turning one into the other is therefore a single field —
+    /// serialisation is by kind, and the render plan and [`crate::occlusion`]
+    /// already ask the kind on every frame — so writing `kind` *is* the edit,
+    /// with nothing else to keep in step.
+    ///
+    /// Exactly invertible, like [`Op::SetSequenceClips`]: apply hands back the
+    /// kind it replaced, so one undo puts the solid's own `def` back rather
+    /// than a fresh one. Any other kind on either side is refused
+    /// ([`OpError::KindNotConvertible`]) — a footage layer has a source and a
+    /// camera has no pixels, and neither becomes an effect container by having
+    /// its kind overwritten.
+    SetLayerKind {
+        comp: Uuid,
+        layer: Uuid,
+        kind: Box<crate::model::LayerKind>,
     },
     /// Mute or unmute a layer's audio (the audible switch).
     SetLayerAudible {
@@ -451,6 +479,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
         | Op::SetSequenceClips { comp, layer, .. }
+        | Op::SetLayerKind { comp, layer, .. }
         | Op::SetLayerAudible { comp, layer, .. }
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
@@ -810,6 +839,31 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 clips: previous,
+            })
+        }
+        Op::SetLayerKind { comp, layer, kind } => {
+            use crate::model::LayerKind;
+            // Both ends have to be one of the pair, and they are checked before
+            // anything is written: a refused op leaves the document untouched.
+            let convertible =
+                |k: &LayerKind| matches!(k, LayerKind::Solid { .. } | LayerKind::Adjustment);
+            if !convertible(kind) {
+                return Err(OpError::KindNotConvertible);
+            }
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            if !convertible(&l.kind) {
+                return Err(OpError::KindNotConvertible);
+            }
+            let previous = std::mem::replace(&mut l.kind, (**kind).clone());
+            Ok(Op::SetLayerKind {
+                comp: *comp,
+                layer: *layer,
+                kind: Box::new(previous),
             })
         }
         Op::SetLayerThreeD {

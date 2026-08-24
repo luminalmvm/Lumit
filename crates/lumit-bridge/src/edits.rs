@@ -11,7 +11,9 @@
 //! Everything here is pure: it takes a document or a few numbers and returns
 //! ops or values. Nothing commits, and nothing reaches for global state.
 
-use lumit_core::model::{Folder, Layer, LayerKind, ProjectItem, Switches, TransformGroup};
+use lumit_core::model::{
+    Folder, Layer, LayerKind, LinearColour, ProjectItem, SolidDef, Switches, TransformGroup,
+};
 use lumit_core::ops::{AutoFolderKind, Op};
 use lumit_core::time::{CompTime, Rational};
 use uuid::Uuid;
@@ -146,6 +148,49 @@ pub(crate) fn file_into_folder_op(
         .unwrap_or_default();
     children.push(item);
     Op::SetFolderChildren { folder, children }
+}
+
+/// The ops that add one fresh comp-sized white solid asset, filed in the Solids
+/// auto-folder, plus its id and the name it was given ("White solid N").
+///
+/// Two callers ask for exactly this: **New solid**, which then adds a layer
+/// pointing at it, and the Modes column's adjustment toggle turned back off
+/// (K-484), which has to hand an adjustment layer a picture of its own again.
+pub(crate) fn white_solid_ops(
+    doc: &lumit_core::model::Document,
+    width: u32,
+    height: u32,
+) -> (Uuid, String, Vec<Op>) {
+    let (folder, mut ops) = ensure_auto_folder_ops(doc, AutoFolderKind::Solids);
+
+    let def = Uuid::now_v7();
+    let solids = doc
+        .items
+        .iter()
+        .filter(|i| matches!(i, ProjectItem::Solid(_)))
+        .count();
+    let name = format!("White solid {}", solids + 1);
+
+    // The folder op may itself be an AddItem, so the index has to account for
+    // what this batch has already inserted.
+    let added = ops
+        .iter()
+        .filter(|o| matches!(o, Op::AddItem { .. }))
+        .count();
+    ops.push(Op::AddItem {
+        index: doc.items.len() + added,
+        item: Box::new(ProjectItem::Solid(SolidDef {
+            id: def,
+            name: name.clone(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width,
+            height,
+            extra: serde_json::Map::new(),
+        })),
+    });
+    ops.push(file_into_folder_op(doc, folder, def));
+
+    (def, name, ops)
 }
 
 /// A stable machine key for a [`FxCategory`] (the variant in snake_case) — the

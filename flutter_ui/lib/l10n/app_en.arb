@@ -5007,6 +5007,14 @@
   "@tipAddKeyframe": {
     "description": "Tooltip. Under five words."
   },
+  "tipAdjustmentOff": "Adjustment layer off",
+  "@tipAdjustmentOff": {
+    "description": "Tooltip on the adjustment toggle in the Timeline's Modes column, on a solid layer — clicking it makes the layer an adjustment layer. Under five words."
+  },
+  "tipAdjustmentOn": "Adjustment layer on",
+  "@tipAdjustmentOn": {
+    "description": "Tooltip on the adjustment toggle in the Timeline's Modes column, on a layer that is already an adjustment layer — clicking it makes the layer a solid again. Under five words."
+  },
   "tipAlphaMatte": "Alpha matte",
   "@tipAlphaMatte": {
     "description": "Tooltip: the matte uses the other layer's transparency. Under five words."

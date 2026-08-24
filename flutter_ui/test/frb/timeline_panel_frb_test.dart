@@ -4121,7 +4121,8 @@ void main() {
 
     /// The four column groups in their shipped order (docs/07 §4.2):
     /// visibility · audio · solo · lock · shy, then twirl · label · number ·
-    /// name, then fx · motion blur · 3D, then matte · blend · parent.
+    /// name, then fx · motion blur · 3D · adjustment, then matte · blend ·
+    /// parent.
     testWidgets('the outline columns sit in their groups', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -4144,6 +4145,8 @@ void main() {
         'tl-fx-$id',
         'tl-mb-$id',
         'tl-3d-$id',
+        // A solid draws the adjustment cell (K-484); most kinds do not.
+        'tl-adjust-$id',
         'tl-matte-$id',
         'tl-blend-$id',
         'tl-parent-$id',
@@ -4228,7 +4231,7 @@ void main() {
       final id = layer.internallayerId;
 
       expect(find.byKey(ValueKey<String>('tl-lit-$id')), findsNothing,
-          reason: 'no fifth cell in the Modes column');
+          reason: 'no accepts-lights cell in the Modes column');
 
       Future<void> openMenu() async {
         await tester.tapAt(
@@ -4259,6 +4262,67 @@ void main() {
       await tester.tap(again);
       await tester.pumpAndSettle();
       expect(layer.getSwitches().acceptsLights, isTrue);
+    });
+
+    /// **The adjustment toggle is the Modes column's fifth cell** (K-484), and
+    /// it is drawn on the two kinds that convert and nowhere else: a solid and
+    /// an adjustment layer have it, footage, text and a camera do not. A cell
+    /// that did nothing on most rows would be noise in a column read at a
+    /// glance, and the flow cell has followed that rule since K-168.
+    testWidgets(
+        'the adjustment cell is drawn on solid and adjustment rows only',
+        (tester) async {
+      final p = withComp();
+      final solid = p.comp.addSolidLayer();
+      final adjustment = p.comp.addAdjustmentLayer();
+      final text = p.comp.addTextLayer();
+      final camera = p.comp.addCameraLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      Finder cell(LayerReference l) =>
+          find.byKey(ValueKey<String>('tl-adjust-${l.internallayerId}'));
+
+      expect(cell(solid), findsOneWidget, reason: 'a solid can become one');
+      expect(cell(adjustment), findsOneWidget, reason: 'and back again');
+      expect(cell(text), findsNothing, reason: 'text does not convert');
+      expect(cell(camera), findsNothing, reason: 'nor does a camera');
+    });
+
+    /// The cell lights the way the rest of the column does — `text_primary`
+    /// when the layer **is** an adjustment layer, `text_muted` when it is a
+    /// solid — and it writes the flip both ways, one click each.
+    testWidgets('the adjustment cell lights by kind and writes both ways',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final t = LumitTheme.dark();
+      final id = layer.internallayerId;
+      final cell = find.byKey(ValueKey<String>('tl-adjust-$id'));
+
+      ColorFilter? tint() => tester
+          .widget<SvgPicture>(
+              find.descendant(of: cell, matching: find.byType(SvgPicture)))
+          .colorFilter;
+
+      expect(layer.getKind(), BridgeLayerKind.solid);
+      expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn),
+          reason: 'a solid rests at text_muted');
+
+      await tester.tap(cell);
+      await tester.pumpAndSettle();
+      expect(layer.getKind(), BridgeLayerKind.adjustment,
+          reason: 'the click reached the document');
+      expect(tint(), ColorFilter.mode(t.textPrimary, BlendMode.srcIn),
+          reason: 'and an adjustment layer lights at text_primary');
+
+      // And back: the same cell writes the other direction.
+      await tester.tap(cell);
+      await tester.pumpAndSettle();
+      expect(layer.getKind(), BridgeLayerKind.solid);
+      expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn));
     });
 
     /// The toolbar's readouts: the timecode counts frames at the comp's own

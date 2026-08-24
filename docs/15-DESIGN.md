@@ -902,6 +902,14 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   and neither seam is a drag handle (K-448; Modes added 2026-08-24 on the owner's word).
   Modes is exactly its five switch cells; the fold-out's value cells align to that span,
   so they are as wide as the column they sit under and no wider.
+- **Two of the Modes cells are drawn by layer kind, and blank on the rows that cannot use
+  them.** The flow-or-collapse cell is the first (K-168). The fifth is the **adjustment
+  toggle** (K-484): the set's Adjustment mark, lit `text_primary` when the layer is an
+  adjustment layer and resting at `text_muted` when it is a solid — and drawn on those two
+  kinds **only**. Footage, text, camera and the rest do not convert, so their cell is
+  empty: a mark that does nothing on most rows is noise in a column that is read at a
+  glance. The column keeps its full width on every row all the same, or the pickers after
+  it would step left and right down the stack.
 - **Comp-wide toggles live in the bottom bar**, not the timecode row: shy, motion blur
   and the overflow menu sit beside the Parent column toggle after a divider, so the
   comp-wide switches read apart from the column-visibility toggles.

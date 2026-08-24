@@ -7102,13 +7102,15 @@ class _OutlineRowState extends State<_OutlineRow> {
     );
   }
 
-  /// Group 3: flow (collapse on a Precomp) · fx · motion blur · 3D, spread
-  /// across the same span the fold-out's value cells use.
+  /// Group 3: flow (collapse on a Precomp) · fx · motion blur · 3D ·
+  /// adjustment, spread across the same span the fold-out's value cells use.
   ///
-  /// The flow slot is the spec's flow-or-collapse cell (K-168): a Precomp shows
-  /// its collapse switch there, **footage shows its Flow switch** (K-088/K-331),
-  /// and other kinds leave it empty rather than offering a control that cannot
-  /// do anything.
+  /// Two of the five cells are drawn by kind, on the same rule: a cell is there
+  /// when the row can act on it, and blank otherwise. The flow slot is the
+  /// spec's flow-or-collapse cell (K-168) — a Precomp shows its collapse
+  /// switch, **footage shows its Flow switch** (K-088/K-331), everything else
+  /// leaves it empty; the adjustment cell (K-484) is drawn on solid and
+  /// adjustment rows alone, the only two kinds that convert.
   Widget _renderCells(BuildContext context, BridgeLayerInfo info) {
     final id = layer.internallayerId.toString();
     final switches = info.switches;
@@ -7146,10 +7148,28 @@ class _OutlineRowState extends State<_OutlineRow> {
           _switch(context, id, '3d', LumitIcon.cube3d, switches.threeD,
               BridgeLayerSwitch.threeD,
               tip: l10n.switchThreeD),
-          // No accepts-lights cell (K-483): the switch left this column on the
-          // owner's ruling — an unnameable fifth mark, borrowing the Viewer
-          // bar's Exposure glyph, on a setting that does nothing in a comp with
-          // no lights. It lives in the layer's right-click menu instead.
+          // The adjustment cell (K-484), where accepts lights used to stand
+          // (K-483). It writes a layer **kind**, not a switch, so it is drawn
+          // like the Flow cell: the switch's clothes over its own write.
+          //
+          // **Only on the two rows it can move.** A solid and an adjustment
+          // differ by whether the layer has a picture of its own and by nothing
+          // else, which is what makes this a toggle; footage, text, camera and
+          // the rest do not convert, and a cell that did nothing on most rows
+          // would be noise in a column read at a glance. Those rows keep the
+          // empty width so the pickers after it stay in one column.
+          if (info.kind == BridgeLayerKind.solid ||
+              info.kind == BridgeLayerKind.adjustment)
+            _switch(context, id, 'adjust', LumitIcon.adjustment,
+                info.kind == BridgeLayerKind.adjustment, null,
+                tip: info.kind == BridgeLayerKind.adjustment
+                    ? l10n.tipAdjustmentOn
+                    : l10n.tipAdjustmentOff, onTap: () {
+              layer.setAdjustment(on_: info.kind != BridgeLayerKind.adjustment);
+              widget.onChanged();
+            })
+          else
+            const SizedBox(width: switchCellWidth),
         ],
       ),
     );

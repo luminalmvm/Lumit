@@ -1293,6 +1293,84 @@ mod tests {
         assert_eq!(n(&store.snapshot()), 1);
     }
 
+    /// **The adjustment toggle's op** (K-484): a solid becomes an adjustment
+    /// and an adjustment becomes a solid, each flip is one undo step, and the
+    /// undone flip hands the solid back the `def` it always had rather than a
+    /// fresh one. Every other kind is refused with the document untouched —
+    /// the footage layer here is the case the Modes column never draws a cell
+    /// on, and the op has to say no to it anyway.
+    #[test]
+    fn layer_kind_op_flips_solid_and_adjustment_and_refuses_everything_else() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, comp_id) = scripted_ops(&store.snapshot());
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+        let footage_id = store.snapshot().comp(comp_id).unwrap().layers[0].id;
+
+        let def = Uuid::now_v7();
+        let mut solid = test_layer(Uuid::now_v7());
+        solid.kind = LayerKind::Solid { def };
+        let solid_id = solid.id;
+        store
+            .commit(Op::AddLayer {
+                comp: comp_id,
+                index: 0,
+                layer: Box::new(solid),
+            })
+            .unwrap();
+
+        let kind = |id: Uuid| {
+            store
+                .snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == id)
+                .unwrap()
+                .kind
+                .clone()
+        };
+        let flip = |id: Uuid, kind: LayerKind| Op::SetLayerKind {
+            comp: comp_id,
+            layer: id,
+            kind: Box::new(kind),
+        };
+
+        // Solid → Adjustment, and one undo back to the same asset.
+        store.commit(flip(solid_id, LayerKind::Adjustment)).unwrap();
+        assert_eq!(kind(solid_id), LayerKind::Adjustment);
+        store.undo().unwrap();
+        assert_eq!(
+            kind(solid_id),
+            LayerKind::Solid { def },
+            "undo restores the solid's own def, not a new one"
+        );
+
+        // And the other way: an adjustment made into a solid.
+        store.commit(flip(solid_id, LayerKind::Adjustment)).unwrap();
+        let other = Uuid::now_v7();
+        store
+            .commit(flip(solid_id, LayerKind::Solid { def: other }))
+            .unwrap();
+        assert_eq!(kind(solid_id), LayerKind::Solid { def: other });
+
+        // Refused from either side, and nothing is written when it is.
+        assert_eq!(
+            store.commit(flip(footage_id, LayerKind::Adjustment)),
+            Err(crate::ops::OpError::KindNotConvertible),
+            "a footage layer does not become an effect container"
+        );
+        assert!(matches!(kind(footage_id), LayerKind::Footage { .. }));
+        assert_eq!(
+            store.commit(flip(solid_id, LayerKind::Null)),
+            Err(crate::ops::OpError::KindNotConvertible),
+            "and a solid does not become a null on the way past"
+        );
+        assert_eq!(kind(solid_id), LayerKind::Solid { def: other });
+    }
+
     /// The frame-interpolation policy round-trips through undo, and it is a
     /// layer's own setting rather than part of its retime (K-249): the layer
     /// here is never retimed at all, and still has a policy — which is the

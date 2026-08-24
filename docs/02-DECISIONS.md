@@ -12971,3 +12971,33 @@ adjustment-layer toggle could take the freed cell. It cannot yet: `LayerKind::Ad
 today would be a switch that writes nothing. The column stays at four until the engine
 grows the op; the shape of it is a `convert_to_sequenced`-style undoable op flipping
 `LayerKind::Solid` ⇄ `LayerKind::Adjustment`, not a new bool in the model.
+
+## K-484 — The engine grows its one kind flip, and the Modes column's fifth cell is the adjustment toggle
+
+**DECIDED 2026-08-24.** Owner ruling. Completes K-483, which freed the fifth cell and named
+the shape of the op that would earn it back; nothing in K-483 is reversed.
+
+**`Op::SetLayerKind` flips `LayerKind::Solid` ⇄ `LayerKind::Adjustment`, and nothing else.**
+A kind flip turned out to be a single field: serialisation is by kind, and the render plan
+and `occlusion.rs` already ask the kind on every frame, so writing `kind` *is* the whole
+edit — there is no second place to keep in step. It is exactly invertible, like
+`SetSequenceClips`: apply hands back the kind it replaced, so undoing a flip returns the
+solid's own `def` rather than a fresh asset. Any other kind on either side is refused with
+`OpError::KindNotConvertible` and the document untouched — a footage layer has a source and
+a camera has no pixels, and neither becomes an effect container by having its kind
+overwritten. Over the seam it is `LayerReference::set_adjustment(on)`
+(`BridgeError::NotConvertible` for the rest). Turning it **off** has to give the layer a
+picture again, so the same batch adds a fresh comp-sized white solid — the asset **New
+solid** makes, from the helper both now share — and one batch is one undo step.
+
+**The Modes column is five cells again**: flow-or-collapse · fx · motion blur · 3D ·
+adjustment. The mark is the set's own Adjustment glyph, which K-483's vacating switch
+never had — lit `text_primary` when the layer *is* an adjustment layer, resting at
+`text_muted` when it is a solid, the column's two strengths and no third.
+
+**The cell is drawn on solid and adjustment rows only.** Those two kinds are the only ones
+that convert, and a cell that did nothing on footage, text, camera and the rest would be
+noise in a column read at a glance — the same rule the flow-or-collapse cell has followed
+since K-168. Other kinds leave the cell **empty**, keeping its width: the group's span is
+`5 × switchCellWidth` on every row, because a column that changed width by layer kind
+would step the pickers after it left and right down the stack.

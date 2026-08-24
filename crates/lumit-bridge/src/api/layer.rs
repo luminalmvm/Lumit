@@ -2449,6 +2449,51 @@ impl LayerReference {
         })
     }
 
+    /// Make this layer an adjustment layer, or turn it back into a solid — the
+    /// Modes column's adjustment toggle (K-484).
+    ///
+    /// **Only Solid ⇄ Adjustment**, and asking for the kind the layer already
+    /// is writes nothing at all, so a redundant click leaves no undo step to
+    /// walk back through. Any other kind is refused calmly
+    /// ([`BridgeError::NotConvertible`]): a footage layer has a source and a
+    /// camera has no pixels, and the toggle is not drawn on either row.
+    ///
+    /// Turning the toggle **off** has to give the layer a picture again, so it
+    /// adds a fresh comp-sized white solid asset in the same batch — the same
+    /// asset **New solid** makes, from the same helper. One batch is one undo
+    /// step, and undoing the *on* direction is exactly invertible instead: the
+    /// op hands back the solid's own `def`, so a layer that was a solid a
+    /// moment ago points at the asset it always did.
+    #[frb(sync)]
+    pub fn set_adjustment(&self, on: bool) -> Result<(), BridgeError> {
+        use lumit_core::model::LayerKind;
+
+        let layer = self.item()?;
+        match (&layer.kind, on) {
+            (LayerKind::Adjustment, true) | (LayerKind::Solid { .. }, false) => return Ok(()),
+            (LayerKind::Solid { .. }, true) => self.commit(lumit_core::Op::SetLayerKind {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                kind: Box::new(LayerKind::Adjustment),
+            }),
+            (LayerKind::Adjustment, false) => {
+                let comp = self.composition()?;
+                let (def, _, mut ops) = {
+                    let proj = self.project()?;
+                    let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+                    crate::edits::white_solid_ops(&state.store.snapshot(), comp.width, comp.height)
+                };
+                ops.push(lumit_core::Op::SetLayerKind {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    kind: Box::new(LayerKind::Solid { def }),
+                });
+                self.commit(lumit_core::Op::Batch { ops })
+            }
+            _ => Err(BridgeError::NotConvertible),
+        }
+    }
+
     /// The clips, the index of the one under `frame`, and the layer-local time
     /// there.
     #[frb(ignore)]

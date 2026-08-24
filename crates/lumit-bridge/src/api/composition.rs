@@ -544,39 +544,9 @@ impl CompositionReference {
     /// solid is comp-sized and white, named "White solid N".
     #[frb(sync)]
     pub fn add_solid_layer(&self) -> Result<LayerReference, BridgeError> {
-        use lumit_core::model::{LinearColour, ProjectItem, SolidDef};
-        use lumit_core::ops::AutoFolderKind;
-
         let comp = self.composition()?;
         let doc = self.document()?;
-        let (folder, mut ops) = crate::edits::ensure_auto_folder_ops(&doc, AutoFolderKind::Solids);
-
-        let def = Uuid::now_v7();
-        let solids = doc
-            .items
-            .iter()
-            .filter(|i| matches!(i, ProjectItem::Solid(_)))
-            .count();
-        let name = format!("White solid {}", solids + 1);
-
-        // The folder op may itself be an AddItem, so the index has to account
-        // for what this batch has already inserted.
-        let added = ops
-            .iter()
-            .filter(|o| matches!(o, lumit_core::Op::AddItem { .. }))
-            .count();
-        ops.push(lumit_core::Op::AddItem {
-            index: doc.items.len() + added,
-            item: Box::new(ProjectItem::Solid(SolidDef {
-                id: def,
-                name: name.clone(),
-                colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-                width: comp.width,
-                height: comp.height,
-                extra: serde_json::Map::new(),
-            })),
-        });
-        ops.push(crate::edits::file_into_folder_op(&doc, folder, def));
+        let (def, name, mut ops) = crate::edits::white_solid_ops(&doc, comp.width, comp.height);
 
         let layer = crate::edits::base_layer(
             name,

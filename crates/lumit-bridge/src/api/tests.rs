@@ -2494,6 +2494,86 @@ fn the_sequence_ops_refuse_the_wrong_kind_of_layer() {
     );
 }
 
+/// **The Modes column's adjustment toggle** (K-484) writes both ways, each in
+/// one undo step: a solid becomes an adjustment, and an adjustment turned back
+/// gets a picture of its own again — a fresh comp-sized white solid, filed like
+/// every other. Asking for the kind the layer already is commits nothing at
+/// all, and a kind that cannot flip is refused calmly.
+#[test]
+fn the_adjustment_toggle_flips_a_solid_and_an_adjustment_both_ways() {
+    use crate::api::layer::BridgeLayerKind;
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let solid = comp.add_solid_layer().expect("solid");
+    assert_eq!(solid.get_kind().expect("kind"), BridgeLayerKind::Solid);
+
+    solid.set_adjustment(true).expect("made an adjustment");
+    assert_eq!(solid.get_kind().expect("kind"), BridgeLayerKind::Adjustment);
+    assert!(
+        solid.get_source_item().expect("source").is_none(),
+        "an adjustment layer has no source of its own"
+    );
+
+    project.undo().expect("undone");
+    assert_eq!(
+        solid.get_kind().expect("kind"),
+        BridgeLayerKind::Solid,
+        "the flip is one undo step"
+    );
+
+    // Redundant either way: the layer is already a solid, so nothing is
+    // committed and the one undo left goes back past the layer itself.
+    solid.set_adjustment(false).expect("already a solid");
+    project.undo().expect("undone");
+    assert!(
+        comp.get_layers().expect("layers").is_empty(),
+        "a click that changed nothing left no undo step to walk back through"
+    );
+
+    // And the other way, on a layer that was born an adjustment.
+    let (born, adjustment) = project_with_layer();
+    assert_eq!(
+        adjustment.get_kind().expect("kind"),
+        BridgeLayerKind::Adjustment
+    );
+    adjustment.set_adjustment(false).expect("made a solid");
+    assert_eq!(adjustment.get_kind().expect("kind"), BridgeLayerKind::Solid);
+    assert!(
+        adjustment.get_source_item().expect("source").is_some(),
+        "and it was handed a solid asset to draw"
+    );
+    born.undo().expect("undone");
+    assert_eq!(
+        adjustment.get_kind().expect("kind"),
+        BridgeLayerKind::Adjustment,
+        "the asset and the flip are one undo step together"
+    );
+}
+
+/// Only solids and adjustments flip. Every other kind is a calm refusal rather
+/// than a panic — the toggle is not drawn on those rows, but the seam is a
+/// trust boundary and the engine says no on its own.
+#[test]
+fn the_adjustment_toggle_refuses_every_other_kind() {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/shot.mov".into())
+        .expect("imported");
+    comp.add_footage_layer(&footage, false).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+
+    assert!(matches!(
+        layer.set_adjustment(true),
+        Err(BridgeError::NotConvertible)
+    ));
+    assert!(matches!(
+        layer.set_adjustment(false),
+        Err(BridgeError::NotConvertible)
+    ));
+}
+
 /// The razor cuts in two without moving anything: a cut that shifted what comes
 /// after it would break every edit already in time with the music (K-071).
 #[test]

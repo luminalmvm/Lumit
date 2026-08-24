@@ -1677,6 +1677,24 @@ class LayerReference {
   String savePreset({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSavePreset(that: this, name: name);
 
+  /// Make this layer an adjustment layer, or turn it back into a solid — the
+  /// Modes column's adjustment toggle (K-484).
+  ///
+  /// **Only Solid ⇄ Adjustment**, and asking for the kind the layer already
+  /// is writes nothing at all, so a redundant click leaves no undo step to
+  /// walk back through. Any other kind is refused calmly
+  /// ([`BridgeError::NotConvertible`]): a footage layer has a source and a
+  /// camera has no pixels, and the toggle is not drawn on either row.
+  ///
+  /// Turning the toggle **off** has to give the layer a picture again, so it
+  /// adds a fresh comp-sized white solid asset in the same batch — the same
+  /// asset **New solid** makes, from the same helper. One batch is one undo
+  /// step, and undoing the *on* direction is exactly invertible instead: the
+  /// op hands back the solid's own `def`, so a layer that was a solid a
+  /// moment ago points at the asset it always did.
+  void setAdjustment({required bool on_}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
+
   void setBlend({required int index}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetBlend(that: this, index: index);
 
