@@ -745,6 +745,17 @@ class BridgeShapeItem {
   final List<BridgeScalar> dashes;
   final BridgeScalar dashOffset;
 
+  /// **A gradient fill** (K-455): 0 is the flat [`fill`](Self::fill), 1 ramps
+  /// from it linearly to `gradient_colour` and 2 ramps radially, the end
+  /// point sitting on the outer edge. The two points are in layer pixels —
+  /// the art's own coordinates — and animate; what a ramp *is* does not.
+  final int gradient;
+  final BridgeColourRgba? gradientColour;
+  final BridgeScalar gradientStartX;
+  final BridgeScalar gradientStartY;
+  final BridgeScalar gradientEndX;
+  final BridgeScalar gradientEndY;
+
   /// **Offset paths** (K-454): how far the outline is pushed out of the path,
   /// in layer pixels; negative pulls it in and zero is the path itself.
   final BridgeScalar offsetAmount;
@@ -783,6 +794,12 @@ class BridgeShapeItem {
     required this.trimOffset,
     required this.dashes,
     required this.dashOffset,
+    required this.gradient,
+    this.gradientColour,
+    required this.gradientStartX,
+    required this.gradientStartY,
+    required this.gradientEndX,
+    required this.gradientEndY,
     required this.offsetAmount,
     required this.repeatCopies,
     required this.repeatOffset,
@@ -811,6 +828,12 @@ class BridgeShapeItem {
       trimOffset.hashCode ^
       dashes.hashCode ^
       dashOffset.hashCode ^
+      gradient.hashCode ^
+      gradientColour.hashCode ^
+      gradientStartX.hashCode ^
+      gradientStartY.hashCode ^
+      gradientEndX.hashCode ^
+      gradientEndY.hashCode ^
       offsetAmount.hashCode ^
       repeatCopies.hashCode ^
       repeatOffset.hashCode ^
@@ -841,6 +864,12 @@ class BridgeShapeItem {
           trimOffset == other.trimOffset &&
           dashes == other.dashes &&
           dashOffset == other.dashOffset &&
+          gradient == other.gradient &&
+          gradientColour == other.gradientColour &&
+          gradientStartX == other.gradientStartX &&
+          gradientStartY == other.gradientStartY &&
+          gradientEndX == other.gradientEndX &&
+          gradientEndY == other.gradientEndY &&
           offsetAmount == other.offsetAmount &&
           repeatCopies == other.repeatCopies &&
           repeatOffset == other.repeatOffset &&

@@ -121,6 +121,16 @@ pub struct BridgeShapeItem {
     /// pixels.
     pub dashes: Vec<BridgeScalar>,
     pub dash_offset: BridgeScalar,
+    /// **A gradient fill** (K-455): 0 is the flat [`fill`](Self::fill), 1 ramps
+    /// from it linearly to `gradient_colour` and 2 ramps radially, the end
+    /// point sitting on the outer edge. The two points are in layer pixels —
+    /// the art's own coordinates — and animate; what a ramp *is* does not.
+    pub gradient: u32,
+    pub gradient_colour: Option<crate::api::assets::BridgeColourRgba>,
+    pub gradient_start_x: BridgeScalar,
+    pub gradient_start_y: BridgeScalar,
+    pub gradient_end_x: BridgeScalar,
+    pub gradient_end_y: BridgeScalar,
     /// **Offset paths** (K-454): how far the outline is pushed out of the path,
     /// in layer pixels; negative pulls it in and zero is the path itself.
     pub offset_amount: BridgeScalar,
@@ -166,6 +176,12 @@ impl BridgeShapeItem {
                 .map(|d| BridgeScalar::read_at(d, offset))
                 .collect(),
             dash_offset: BridgeScalar::read_at(&item.dash_offset, offset),
+            gradient: item.gradient,
+            gradient_colour: item.gradient_colour.map(crate::api::assets::colour_of),
+            gradient_start_x: BridgeScalar::read_at(&item.gradient_start_x, offset),
+            gradient_start_y: BridgeScalar::read_at(&item.gradient_start_y, offset),
+            gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
+            gradient_end_y: BridgeScalar::read_at(&item.gradient_end_y, offset),
             offset_amount: BridgeScalar::read_at(&item.offset_amount, offset),
             repeat_copies: BridgeScalar::read_at(&item.repeat_copies, offset),
             repeat_offset: BridgeScalar::read_at(&item.repeat_offset, offset),
@@ -214,6 +230,25 @@ impl BridgeShapeItem {
                 .map(|d| clamped_property(d, offset, 0.0, 100_000.0))
                 .collect::<Result<_, _>>()?,
             dash_offset: clamped_property(&self.dash_offset, offset, -100_000.0, 100_000.0)?,
+            // Two readings and no third: a number naming neither is the flat
+            // fill, which is the answer that draws something.
+            gradient: if self.gradient <= 2 { self.gradient } else { 0 },
+            gradient_colour: self.gradient_colour.map(crate::api::assets::linear_of),
+            // The art's own coordinates, held to the same reach a vertex has.
+            gradient_start_x: clamped_property(
+                &self.gradient_start_x,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            gradient_start_y: clamped_property(
+                &self.gradient_start_y,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            gradient_end_x: clamped_property(&self.gradient_end_x, offset, -100_000.0, 100_000.0)?,
+            gradient_end_y: clamped_property(&self.gradient_end_y, offset, -100_000.0, 100_000.0)?,
             // Layer pixels, out or in: both directions mean something, so only
             // the far ends are held.
             offset_amount: clamped_property(&self.offset_amount, offset, -100_000.0, 100_000.0)?,

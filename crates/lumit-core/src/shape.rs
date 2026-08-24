@@ -114,6 +114,48 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub dash_offset: Property,
+    /// **A gradient fill** (K-455): 0 draws the flat [`fill`](Self::fill), 1
+    /// ramps from it **linearly** to [`gradient_colour`](Self::gradient_colour)
+    /// and 2 ramps **radially**, `gradient_colour` sitting on the outer edge.
+    ///
+    /// A choice rather than a `Property`: what a ramp *is* does not tween, and
+    /// a number between linear and radial would have to mean something. The
+    /// two ends are colours like the fill beside them, and the two points that
+    /// aim the ramp are `Property` and animate.
+    #[serde(default, skip_serializing_if = "is_flat")]
+    pub gradient: u32,
+    /// The colour at the far end of the ramp. `None` is black, which is where
+    /// a gradient nobody has picked a second colour for starts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient_colour: Option<LinearColour>,
+    /// Where the ramp starts and ends, in **layer pixels** — the art's own
+    /// coordinates, the same ones its vertices are in. Linear projects onto
+    /// the line between them; radial measures out from the start, the end
+    /// sitting on the outer edge.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_start_x: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_start_y: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_end_x: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub gradient_end_y: Property,
     /// **Offset paths** (K-454): how far the outline is pushed **out** of the
     /// path, in layer pixels — negative pulls it in. Zero is the path itself
     /// and is absent from the file.
@@ -218,6 +260,11 @@ fn one() -> Property {
     Property::fixed(1.0)
 }
 
+/// True for a flat fill — no gradient, and so nothing written to the file.
+fn is_flat(kind: &u32) -> bool {
+    *kind == 0
+}
+
 /// True for a still 1 — the repeater switched off, and so the thing left out of
 /// the file entirely.
 fn is_static_one(p: &Property) -> bool {
@@ -251,6 +298,12 @@ impl ShapeItem {
             trim_offset: Property::zero(),
             dashes: Vec::new(),
             dash_offset: Property::zero(),
+            gradient: 0,
+            gradient_colour: None,
+            gradient_start_x: Property::zero(),
+            gradient_start_y: Property::zero(),
+            gradient_end_x: Property::zero(),
+            gradient_end_y: Property::zero(),
             offset_amount: Property::zero(),
             repeat_copies: one(),
             repeat_offset: Property::zero(),
@@ -319,6 +372,56 @@ impl ShapeItem {
             // An open path has two ends. Sliding the window off either of them
             // is the window running out of path, which is what clamping says.
             crate::paint::trimmed(&points, start + shift, end + shift)
+        })
+    }
+
+    /// The gradient this item's fill is drawn with at `t`, placed by `to_box`
+    /// (a repeated copy carries its gradient with it) and scaled into the
+    /// buffer's pixels — `None` for the flat fill every shape has until
+    /// somebody ramps it.
+    fn ramp_at(&self, t: f64, to_box: &Affine, sx: f64, sy: f64) -> Option<Ramp> {
+        if self.gradient == 0 {
+            return None;
+        }
+        let from = self.fill?;
+        let to = self
+            .gradient_colour
+            .unwrap_or(crate::model::LinearColour::BLACK);
+        let place = |x: f64, y: f64| {
+            let (x, y) = to_box.apply((x, y));
+            (x * sx, y * sy)
+        };
+        let start = place(
+            self.gradient_start_x.value_at(t),
+            self.gradient_start_y.value_at(t),
+        );
+        let end = place(
+            self.gradient_end_x.value_at(t),
+            self.gradient_end_y.value_at(t),
+        );
+        let axis = (end.0 - start.0, end.1 - start.1);
+        // One epsilon on the squared length, so the linear and the radial
+        // reading degenerate at exactly the same point — the Gradient effect's
+        // rule, and for the same reason.
+        let len2 = (axis.0 * axis.0 + axis.1 * axis.1).max(1e-6);
+        let mut lut = [[0u8; 4]; RAMP_STEPS];
+        for (i, cell) in lut.iter_mut().enumerate() {
+            let u = i as f32 / (RAMP_STEPS - 1) as f32;
+            let mix = crate::model::LinearColour([
+                from.0[0] + (to.0[0] - from.0[0]) * u,
+                from.0[1] + (to.0[1] - from.0[1]) * u,
+                from.0[2] + (to.0[2] - from.0[2]) * u,
+                from.0[3] + (to.0[3] - from.0[3]) * u,
+            ]);
+            *cell = crate::pixels::solid_rgba(mix);
+        }
+        Some(Ramp {
+            radial: self.gradient == 2,
+            start,
+            axis,
+            inv_len2: 1.0 / len2,
+            inv_len: 1.0 / len2.sqrt(),
+            lut,
         })
     }
 
@@ -552,14 +655,32 @@ pub fn rasterise_contents(
 
             if let Some(fill) = item.fill {
                 let coverage = crate::mask::rasterise(&placed, w, h, sx, sy);
-                let colour = crate::pixels::solid_rgba(fill);
-                let alpha = f32::from(colour[3]) / 255.0;
-                for (px, c) in rgba.chunks_exact_mut(4).zip(coverage) {
-                    over(
-                        px,
-                        [colour[0], colour[1], colour[2]],
-                        (f32::from(c) / 255.0) * opacity * alpha,
-                    );
+                // A gradient fill (K-455) is the same coverage painted with a
+                // colour that changes across it; the flat fill is the same
+                // walk with the colour worked out once.
+                match item.ramp_at(t, &to_box, sx, sy) {
+                    None => {
+                        let colour = crate::pixels::solid_rgba(fill);
+                        let alpha = f32::from(colour[3]) / 255.0;
+                        for (px, c) in rgba.chunks_exact_mut(4).zip(coverage) {
+                            over(
+                                px,
+                                [colour[0], colour[1], colour[2]],
+                                (f32::from(c) / 255.0) * opacity * alpha,
+                            );
+                        }
+                    }
+                    Some(ramp) => {
+                        for (i, (px, c)) in rgba.chunks_exact_mut(4).zip(coverage).enumerate() {
+                            if c == 0 {
+                                continue;
+                            }
+                            let (x, y) =
+                                ((i % w as usize) as f64 + 0.5, (i / w as usize) as f64 + 0.5);
+                            let (colour, alpha) = ramp.at(x, y);
+                            over(px, colour, (f32::from(c) / 255.0) * opacity * alpha);
+                        }
+                    }
                 }
             }
 
@@ -719,6 +840,46 @@ fn rotated(points: &[(f64, f64)], shift: f64) -> Vec<(f64, f64)> {
     // begins.
     out.extend_from_slice(&head[1..]);
     out
+}
+
+/// A gradient fill worked out for one drawn copy: the ramp's geometry in the
+/// **buffer's** own pixels, and the colours it runs through as a lookup table.
+///
+/// A table rather than a lerp per pixel because the two ends are scene-linear
+/// and the buffer is 8-bit: mixing has to happen in linear and be encoded
+/// after, which is a transcendental per pixel done honestly and a table lookup
+/// done sensibly. 256 steps is finer than the 8-bit result can show.
+struct Ramp {
+    radial: bool,
+    start: (f64, f64),
+    axis: (f64, f64),
+    inv_len2: f64,
+    inv_len: f64,
+    lut: [[u8; 4]; RAMP_STEPS],
+}
+
+/// How many colours a gradient is worked out at. One per 8-bit level, so the
+/// table cannot be the thing you can see.
+const RAMP_STEPS: usize = 256;
+
+impl Ramp {
+    /// The colour at a pixel centre, `[r, g, b]` encoded and the alpha 0..1.
+    fn at(&self, x: f64, y: f64) -> ([u8; 3], f32) {
+        let (dx, dy) = (x - self.start.0, y - self.start.1);
+        // The Gradient effect's two readings (docs/08 §3.35): linear projects
+        // onto the axis, radial measures how far out you are with the end
+        // point on the outer edge. Both reciprocals were floored against one
+        // epsilon when the ramp was built, so a zero-length axis is one flat
+        // colour rather than a division by zero (docs/14 §4).
+        let along = if self.radial {
+            (dx * dx + dy * dy).sqrt() * self.inv_len
+        } else {
+            (dx * self.axis.0 + dy * self.axis.1) * self.inv_len2
+        };
+        let i = (along.clamp(0.0, 1.0) * (RAMP_STEPS - 1) as f64).round() as usize;
+        let c = self.lut[i.min(RAMP_STEPS - 1)];
+        ([c[0], c[1], c[2]], f32::from(c[3]) / 255.0)
+    }
 }
 
 /// How many straight steps a round join is drawn in, per quarter turn.
@@ -1421,6 +1582,163 @@ mod tests {
         let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
         assert_eq!(back.dashes.len(), 2);
         assert_eq!(back.dashes[1].value_at(0.0), 3.0);
+    }
+
+    /// A linear ramp runs from the fill at one point to the gradient colour at
+    /// the other, and everything between is a mix of the two.
+    #[test]
+    fn a_linear_gradient_ramps_across_the_fill() {
+        let mut it = item(square(0.0, 0.0, 20.0));
+        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient = 1;
+        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        it.gradient_start_x = Property::fixed(0.0);
+        it.gradient_end_x = Property::fixed(20.0);
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+
+        let left = rgb_at(&rgba, 20, 0, 10);
+        let right = rgb_at(&rgba, 20, 19, 10);
+        let middle = rgb_at(&rgba, 20, 10, 10);
+        assert!(
+            left[0] > 200 && left[2] < 60,
+            "the fill at the start: {left:?}"
+        );
+        assert!(
+            right[2] > 200 && right[0] < 60,
+            "the gradient colour at the end: {right:?}"
+        );
+        assert!(
+            middle[0] > 40 && middle[2] > 40,
+            "and a mix of the two between: {middle:?}"
+        );
+        // The ramp runs *across* the shape, not down it.
+        assert_eq!(
+            rgb_at(&rgba, 20, 10, 2),
+            middle,
+            "no ramp along the other axis"
+        );
+    }
+
+    /// Radial measures how far *out* you are, the end point sitting on the
+    /// outer edge — so the middle is the fill and every direction ramps away.
+    #[test]
+    fn a_radial_gradient_ramps_out_from_its_start() {
+        let mut it = item(square(0.0, 0.0, 20.0));
+        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient = 2;
+        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        it.gradient_start_x = Property::fixed(10.0);
+        it.gradient_start_y = Property::fixed(10.0);
+        it.gradient_end_x = Property::fixed(20.0);
+        it.gradient_end_y = Property::fixed(10.0);
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+
+        assert!(rgb_at(&rgba, 20, 10, 10)[0] > 200, "the fill in the middle");
+        // Every direction ramps the same way, which is what makes it radial.
+        let out = [(0u32, 10u32), (19, 10), (10, 0), (10, 19)];
+        for (x, y) in out {
+            assert!(
+                rgb_at(&rgba, 20, x, y)[2] > 150,
+                "the far colour at the edge ({x}, {y})"
+            );
+        }
+    }
+
+    /// The gradient belongs to the art, so a repeated copy carries it (K-453).
+    #[test]
+    fn a_repeated_copy_carries_its_gradient_with_it() {
+        let mut it = item(square(0.0, 0.0, 10.0));
+        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient = 1;
+        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        it.gradient_end_x = Property::fixed(10.0);
+        it.repeat_copies = Property::fixed(2.0);
+        it.repeat_position_x = Property::fixed(10.0);
+        let rgba = rasterise_contents(&[it], 20, 10, 0.0, 0.0, 20.0, 10.0, 0.0);
+        assert!(
+            rgb_at(&rgba, 20, 0, 5)[0] > 200,
+            "the first copy starts red"
+        );
+        assert!(
+            rgb_at(&rgba, 20, 10, 5)[0] > 200,
+            "and so does the copy, ten along: the ramp moved with it"
+        );
+    }
+
+    /// A flat fill is what every shape has until somebody ramps it, and it
+    /// draws exactly the pixels it drew before there were gradients.
+    #[test]
+    fn a_flat_fill_is_untouched_by_the_gradient_machinery() {
+        let plain = item(square(2.0, 3.0, 9.0));
+        let mut off = item(square(2.0, 3.0, 9.0));
+        off.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        off.gradient_end_x = Property::fixed(9.0);
+        assert!(off.ramp_at(0.0, &Affine::IDENTITY, 1.0, 1.0).is_none());
+        assert_eq!(
+            rasterise_contents(&[plain], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
+            rasterise_contents(&[off], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
+        );
+    }
+
+    /// Both points in the same place is no axis at all: one flat colour rather
+    /// than a division by zero (docs/14 §4).
+    #[test]
+    fn a_gradient_with_no_axis_draws_one_flat_colour_and_never_panics() {
+        let mut it = item(square(0.0, 0.0, 10.0));
+        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient = 1;
+        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        let rgba = rasterise_contents(&[it.clone()], 10, 10, 0.0, 0.0, 10.0, 10.0, 0.0);
+        assert_eq!(rgb_at(&rgba, 10, 2, 2), rgb_at(&rgba, 10, 8, 8));
+        it.gradient = 2;
+        let _ = rasterise_contents(&[it], 10, 10, 0.0, 0.0, 10.0, 10.0, 0.0);
+    }
+
+    #[test]
+    fn a_keyed_gradient_point_is_read_on_the_layers_clock() {
+        let mut it = item(square(0.0, 0.0, 20.0));
+        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient = 1;
+        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        let key = |secs: i64, value: f64| crate::anim::Keyframe {
+            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+            value,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        };
+        let mut end = Property::fixed(0.0);
+        end.animation = crate::anim::Animation::Keyframed(vec![key(0, 4.0), key(1, 40.0)]);
+        it.gradient_end_x = end;
+        let blue = |t: f64| {
+            rgb_at(
+                &rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, t),
+                20,
+                10,
+                10,
+            )[2]
+        };
+        assert!(
+            blue(0.0) > blue(1.0),
+            "a ramp stretched out is less far along in the middle"
+        );
+    }
+
+    #[test]
+    fn a_flat_filled_item_is_absent_from_the_file() {
+        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
+        assert!(!json.contains("gradient"), "nothing about ramps: {json}");
+        let mut it = item(square(0.0, 0.0, 4.0));
+        it.gradient = 2;
+        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        it.gradient_end_x = Property::fixed(4.0);
+        let back: ShapeItem =
+            serde_json::from_str(&serde_json::to_string(&it).expect("json")).expect("round trip");
+        assert_eq!(back.gradient, 2);
+        assert_eq!(
+            back.gradient_colour,
+            Some(LinearColour([0.0, 0.0, 1.0, 1.0]))
+        );
+        assert_eq!(back.gradient_end_x.value_at(0.0), 4.0);
     }
 
     /// The outline pushed out of the path: art where the path is not, filled

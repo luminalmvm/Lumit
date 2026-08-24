@@ -1353,6 +1353,12 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1446,6 +1452,12 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1482,6 +1494,84 @@ void main() {
           reason: 'writing one half makes the pair');
     });
 
+    /// A gradient fill is a choice, a second colour and two points, and none of
+    /// them is on screen until there is a fill to ramp (K-455).
+    testWidgets('a filled shape item carries the gradient rows',
+        (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      final layer = p.comp.addShapeLayer(
+        name: 'Panel',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Panel',
+            vertices: [
+              corner(0, 0),
+              corner(60, 0),
+              corner(60, 40),
+              corner(0, 40),
+            ],
+            closed: true,
+            fill: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+            stroke: null,
+            strokeWidth: 0,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      // Flat: the fill's colour and the choice, and nothing to aim.
+      expect(find.text('Fill'), findsOneWidget);
+      expect(find.text('Gradient'), findsOneWidget);
+      expect(find.text('Gradient colour'), findsNothing);
+      expect(find.text('Gradient start x'), findsNothing);
+
+      final item = layer.getShapeContents().single;
+      final dropdown =
+          find.byKey(ValueKey<String>('tl-shape-gradient-${item.id}'));
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Linear').last);
+      await tester.pumpAndSettle();
+
+      final ramped = layer.getShapeContents().single;
+      expect(ramped.gradient, 1);
+      // Switched on unaimed, it aims itself down the art's own box — a ramp
+      // that read as one flat colour would look broken rather than unaimed.
+      expect(ramped.gradientStartY, const BridgeScalar.static_(0));
+      expect(ramped.gradientEndY, const BridgeScalar.static_(40));
+      expect(find.text('Gradient colour'), findsOneWidget);
+      expect(find.text('Gradient start x'), findsOneWidget);
+    });
+
     /// The repeater's step is nine rows of nothing until there is more than
     /// one copy to step between, so Copies is the row that opens them (K-453).
     testWidgets('a repeated shape item carries the repeater rows',
@@ -1511,6 +1601,12 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
@@ -1576,6 +1672,12 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
             offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),

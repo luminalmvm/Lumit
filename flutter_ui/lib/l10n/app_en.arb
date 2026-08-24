@@ -5667,6 +5667,46 @@
   "@shapeGap": {
     "description": "Timeline row under a shape layer's art: how long the space between two dashes of its outline is, in pixels."
   },
+  "shapeFill": "Fill",
+  "@shapeFill": {
+    "description": "Timeline row under a shape layer's art: the colour inside its path."
+  },
+  "shapeGradient": "Gradient",
+  "@shapeGradient": {
+    "description": "Timeline row under a shape layer's art: whether its fill is a flat colour or a ramp, and which kind of ramp."
+  },
+  "shapeGradientColour": "Gradient colour",
+  "@shapeGradientColour": {
+    "description": "Timeline row under a shape layer's art: the colour at the far end of its gradient fill."
+  },
+  "shapeGradientEndX": "Gradient end x",
+  "@shapeGradientEndX": {
+    "description": "Timeline row under a shape layer's art: the x the gradient ends at, in pixels."
+  },
+  "shapeGradientEndY": "Gradient end y",
+  "@shapeGradientEndY": {
+    "description": "Timeline row under a shape layer's art: the y the gradient ends at, in pixels."
+  },
+  "shapeGradientFlat": "Flat",
+  "@shapeGradientFlat": {
+    "description": "One choice on a shape layer's Gradient row: no ramp, the fill is one colour."
+  },
+  "shapeGradientLinear": "Linear",
+  "@shapeGradientLinear": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps along a line."
+  },
+  "shapeGradientRadial": "Radial",
+  "@shapeGradientRadial": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
+  },
+  "shapeGradientStartX": "Gradient start x",
+  "@shapeGradientStartX": {
+    "description": "Timeline row under a shape layer's art: the x the gradient starts at, in pixels."
+  },
+  "shapeGradientStartY": "Gradient start y",
+  "@shapeGradientStartY": {
+    "description": "Timeline row under a shape layer's art: the y the gradient starts at, in pixels."
+  },
   "shapeOffsetPath": "Offset path",
   "@shapeOffsetPath": {
     "description": "Timeline row under a shape layer's art: how far its outline is pushed out of the path, in pixels. Negative pulls it in."

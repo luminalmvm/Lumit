@@ -510,6 +510,12 @@ there is something to say.
 - Each item's **animatable numbers get a row each** under it, as a mask's and a stroke's do
   (K-451): Trim start, Trim end and Trim offset. A row rather than another control on the item's
   own row, because a property without a row has nowhere to put the stopwatch that animates it.
+- **Fill** and **Gradient** head an item's rows, on any item that has a fill (K-455): a colour
+  swatch and a Flat / Linear / Radial choice. **Gradient colour** and the ramp's two points appear
+  once the choice is not Flat. Switching a ramp on **aims it at the art's own box** — down it for
+  linear, out from its middle for radial — because a ramp that read as one flat colour the moment
+  it was chosen would look broken rather than unaimed. None of the three keys: a colour and a
+  choice have no curve, so they carry no stopwatch.
 - **Offset path** is the first of an item's rows, because it applies first (K-454): one length in
   layer pixels, out of the path or — negative — into it.
 - **Dash, Gap and Dash offset** appear under an item that has an **outline**, and only then

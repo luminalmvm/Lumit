@@ -9320,8 +9320,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 24)
-      throw Exception('unexpected arr length: expect 24 but see ${arr.length}');
+    if (arr.length != 30)
+      throw Exception('unexpected arr length: expect 30 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -9336,17 +9336,23 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       trimOffset: dco_decode_bridge_scalar(arr[10]),
       dashes: dco_decode_list_bridge_scalar(arr[11]),
       dashOffset: dco_decode_bridge_scalar(arr[12]),
-      offsetAmount: dco_decode_bridge_scalar(arr[13]),
-      repeatCopies: dco_decode_bridge_scalar(arr[14]),
-      repeatOffset: dco_decode_bridge_scalar(arr[15]),
-      repeatAnchorX: dco_decode_bridge_scalar(arr[16]),
-      repeatAnchorY: dco_decode_bridge_scalar(arr[17]),
-      repeatPositionX: dco_decode_bridge_scalar(arr[18]),
-      repeatPositionY: dco_decode_bridge_scalar(arr[19]),
-      repeatRotation: dco_decode_bridge_scalar(arr[20]),
-      repeatScale: dco_decode_bridge_scalar(arr[21]),
-      repeatStartOpacity: dco_decode_bridge_scalar(arr[22]),
-      repeatEndOpacity: dco_decode_bridge_scalar(arr[23]),
+      gradient: dco_decode_u_32(arr[13]),
+      gradientColour: dco_decode_opt_box_autoadd_bridge_colour_rgba(arr[14]),
+      gradientStartX: dco_decode_bridge_scalar(arr[15]),
+      gradientStartY: dco_decode_bridge_scalar(arr[16]),
+      gradientEndX: dco_decode_bridge_scalar(arr[17]),
+      gradientEndY: dco_decode_bridge_scalar(arr[18]),
+      offsetAmount: dco_decode_bridge_scalar(arr[19]),
+      repeatCopies: dco_decode_bridge_scalar(arr[20]),
+      repeatOffset: dco_decode_bridge_scalar(arr[21]),
+      repeatAnchorX: dco_decode_bridge_scalar(arr[22]),
+      repeatAnchorY: dco_decode_bridge_scalar(arr[23]),
+      repeatPositionX: dco_decode_bridge_scalar(arr[24]),
+      repeatPositionY: dco_decode_bridge_scalar(arr[25]),
+      repeatRotation: dco_decode_bridge_scalar(arr[26]),
+      repeatScale: dco_decode_bridge_scalar(arr[27]),
+      repeatStartOpacity: dco_decode_bridge_scalar(arr[28]),
+      repeatEndOpacity: dco_decode_bridge_scalar(arr[29]),
     );
   }
 
@@ -11730,6 +11736,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_trimOffset = sse_decode_bridge_scalar(deserializer);
     var var_dashes = sse_decode_list_bridge_scalar(deserializer);
     var var_dashOffset = sse_decode_bridge_scalar(deserializer);
+    var var_gradient = sse_decode_u_32(deserializer);
+    var var_gradientColour =
+        sse_decode_opt_box_autoadd_bridge_colour_rgba(deserializer);
+    var var_gradientStartX = sse_decode_bridge_scalar(deserializer);
+    var var_gradientStartY = sse_decode_bridge_scalar(deserializer);
+    var var_gradientEndX = sse_decode_bridge_scalar(deserializer);
+    var var_gradientEndY = sse_decode_bridge_scalar(deserializer);
     var var_offsetAmount = sse_decode_bridge_scalar(deserializer);
     var var_repeatCopies = sse_decode_bridge_scalar(deserializer);
     var var_repeatOffset = sse_decode_bridge_scalar(deserializer);
@@ -11755,6 +11768,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         trimOffset: var_trimOffset,
         dashes: var_dashes,
         dashOffset: var_dashOffset,
+        gradient: var_gradient,
+        gradientColour: var_gradientColour,
+        gradientStartX: var_gradientStartX,
+        gradientStartY: var_gradientStartY,
+        gradientEndX: var_gradientEndX,
+        gradientEndY: var_gradientEndY,
         offsetAmount: var_offsetAmount,
         repeatCopies: var_repeatCopies,
         repeatOffset: var_repeatOffset,
@@ -14321,6 +14340,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.trimOffset, serializer);
     sse_encode_list_bridge_scalar(self.dashes, serializer);
     sse_encode_bridge_scalar(self.dashOffset, serializer);
+    sse_encode_u_32(self.gradient, serializer);
+    sse_encode_opt_box_autoadd_bridge_colour_rgba(
+        self.gradientColour, serializer);
+    sse_encode_bridge_scalar(self.gradientStartX, serializer);
+    sse_encode_bridge_scalar(self.gradientStartY, serializer);
+    sse_encode_bridge_scalar(self.gradientEndX, serializer);
+    sse_encode_bridge_scalar(self.gradientEndY, serializer);
     sse_encode_bridge_scalar(self.offsetAmount, serializer);
     sse_encode_bridge_scalar(self.repeatCopies, serializer);
     sse_encode_bridge_scalar(self.repeatOffset, serializer);

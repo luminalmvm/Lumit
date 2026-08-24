@@ -3420,6 +3420,12 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         trim_offset: BridgeScalar::Static(0.0),
         dashes: Vec::new(),
         dash_offset: BridgeScalar::Static(0.0),
+        gradient: 0,
+        gradient_colour: None,
+        gradient_start_x: BridgeScalar::Static(0.0),
+        gradient_start_y: BridgeScalar::Static(0.0),
+        gradient_end_x: BridgeScalar::Static(0.0),
+        gradient_end_y: BridgeScalar::Static(0.0),
         offset_amount: BridgeScalar::Static(0.0),
         repeat_copies: BridgeScalar::Static(1.0),
         repeat_offset: BridgeScalar::Static(0.0),
@@ -3605,6 +3611,42 @@ fn a_shapes_repeater_round_trips_and_is_clamped() {
         got.repeat_end_opacity,
         BridgeScalar::Static(100.0),
         "and an opacity is a per cent"
+    );
+}
+
+/// A gradient fill crosses as a choice, a second colour and two points (K-455).
+/// A choice naming neither reading is the flat fill, which draws something.
+#[test]
+fn a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].gradient = 2;
+    contents[0].gradient_colour = Some(crate::api::assets::BridgeColourRgba {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    });
+    contents[0].gradient_end_x = BridgeScalar::Static(10.0);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(got.gradient, 2);
+    assert_eq!(got.gradient_end_x, BridgeScalar::Static(10.0));
+    assert_eq!(got.gradient_colour.map(|c| c.b), Some(1.0));
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].gradient = 7;
+    shape.set_shape_contents(contents).expect("set");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0].gradient,
+        0,
+        "a reading nobody has is the flat fill"
     );
 }
 

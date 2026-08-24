@@ -10015,6 +10015,13 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_dashes = <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         let mut var_dashOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradient = <u32>::sse_decode(deserializer);
+        let mut var_gradientColour =
+            <Option<crate::api::assets::BridgeColourRgba>>::sse_decode(deserializer);
+        let mut var_gradientStartX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientStartY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientEndX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientEndY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_offsetAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_repeatCopies = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_repeatOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -10041,6 +10048,12 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             trim_offset: var_trimOffset,
             dashes: var_dashes,
             dash_offset: var_dashOffset,
+            gradient: var_gradient,
+            gradient_colour: var_gradientColour,
+            gradient_start_x: var_gradientStartX,
+            gradient_start_y: var_gradientStartY,
+            gradient_end_x: var_gradientEndX,
+            gradient_end_y: var_gradientEndY,
             offset_amount: var_offsetAmount,
             repeat_copies: var_repeatCopies,
             repeat_offset: var_repeatOffset,
@@ -13780,6 +13793,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.trim_offset.into_into_dart().into_dart(),
             self.dashes.into_into_dart().into_dart(),
             self.dash_offset.into_into_dart().into_dart(),
+            self.gradient.into_into_dart().into_dart(),
+            self.gradient_colour.into_into_dart().into_dart(),
+            self.gradient_start_x.into_into_dart().into_dart(),
+            self.gradient_start_y.into_into_dart().into_dart(),
+            self.gradient_end_x.into_into_dart().into_dart(),
+            self.gradient_end_y.into_into_dart().into_dart(),
             self.offset_amount.into_into_dart().into_dart(),
             self.repeat_copies.into_into_dart().into_dart(),
             self.repeat_offset.into_into_dart().into_dart(),
@@ -15675,6 +15694,15 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
         <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.dashes, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.dash_offset, serializer);
+        <u32>::sse_encode(self.gradient, serializer);
+        <Option<crate::api::assets::BridgeColourRgba>>::sse_encode(
+            self.gradient_colour,
+            serializer,
+        );
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.offset_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_copies, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_offset, serializer);

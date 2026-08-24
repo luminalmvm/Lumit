@@ -140,9 +140,10 @@ These are v1-scope surfaces it does not yet match.
 *tool*; what each tool then does is the backlog.
 - **Razor** - a Sequence layer's eased ramps refuse a cut (`UncuttableClip`).
 - **Shape layers** ([impl/shape-layers.md](impl/shape-layers.md)) - trim paths
-    (K-451), dashed strokes (K-452), the repeater (K-453) and offset paths
-    (K-454) have landed. Owed: nested groups, the **wiggle** modifier, gradient
-    fills, joins and caps other than round, and animated paths.
+    (K-451), dashed strokes (K-452), the repeater (K-453), offset paths (K-454)
+    and gradient fills (K-455) have landed. Owed: nested groups, the **wiggle**
+    modifier, gradient **stop lists** (there are two stops), joins and caps
+    other than round, and animated paths.
 - **Path editing on the picture** - mask and shape-layer points drag (K-224,
     K-307). Still owed: a **paint stroke's** points, which are a stored gesture
     rather than a path and so are their own piece of work; no path's bezier

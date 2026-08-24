@@ -12842,3 +12842,61 @@ Regression tests: in `lumit-core`, `an_offset_path_grows_the_shape_and_a_negativ
 `a_shapes_offset_round_trips_both_ways`; in Flutter, `an offset outline grows the box, and pulling
 it in does not` and the Offset path row's write-through in `a shape layer grows a Contents heading
 in its twirl-down`. New string: `shapeOffsetPath`.
+
+## K-455 — A shape's fill can be a ramp, with two stops and a kind that does not tween
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-451, whose shape it
+takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and
+§7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+`gradient: u32` is 0 for the flat fill, 1 for a **linear** ramp and 2 for a **radial** one, running
+from the item's own `fill` to `gradient_colour` between two points held as `Property` in the art's
+own coordinates. Zero is absent from the file, and a flat-filled item draws byte-for-byte what it
+drew before there were gradients.
+
+**The kind is a choice, not a `Property`.** Every other modifier on a shape item animates, and this
+one deliberately does not: a number between linear and radial would have to mean something, and
+nothing sensible is on offer. The *points* animate, which is where a gradient's motion actually
+lives.
+
+**Two stops, not a stop list.** A list is the right long-term shape and nothing stored here stands
+in its way — its two ends are these two colours. It is not built because a list is worth having
+only with a stop editor to drive it, and that is a piece of interface work rather than a data
+change. The Gradient effect beside it offers two colours for the same reason.
+
+**The reading is the Gradient effect's** (docs/08 §3.35): linear projects onto the axis, radial
+measures out from the start with the end on the outer edge, and one epsilon floors the squared
+axis length so both degenerate at exactly the same point — a ramp with no axis is one flat colour
+rather than a division by zero (docs/14 §4). The **arithmetic is written again rather than called**:
+`cpu::gradient` fills a whole f32 raster and replaces what was there, so calling it would have cost
+an f32 buffer the size of the layer per drawn copy to composite back through the coverage. The doc
+comments on both sides point at each other.
+
+**The colours mix in linear and are encoded after**, through a 256-entry table built once per drawn
+copy. A shape's colours are scene-linear and the buffer is 8-bit; mixing the encoded bytes would be
+the wrong ramp, and a transcendental per pixel is the honest alternative the table replaces at a
+resolution finer than the result can show.
+
+**The gradient belongs to the art**, so a repeated copy carries its ramp: the points are placed
+through the copy's own transform (K-453) rather than sampled from where the original sits.
+
+**Switching a ramp on aims it at the art's box** — top to bottom for linear, middle to edge for
+radial — and only when nobody has aimed it yet. A ramp that read as one flat colour the moment it
+was chosen would look broken rather than unaimed.
+
+**A Fill row arrives with it.** A shape's fill colour had no row at all: it came from the toolbar
+when the art was drawn and could not be changed afterwards, which the manual already claimed it
+could. A gradient whose first colour cannot be picked is half a feature, so the row that fixes both
+lands here. The three paint rows carry no stopwatch, because a colour and a choice have no curve.
+The swatch itself is now `ColourSwatchButton` in `widgets/colour_picker.dart`: four panels had each
+drawn their own, and this is the one the fifth uses.
+
+Regression tests: in `lumit-core`, `a_linear_gradient_ramps_across_the_fill`,
+`a_radial_gradient_ramps_out_from_its_start`, `a_repeated_copy_carries_its_gradient_with_it`,
+`a_flat_fill_is_untouched_by_the_gradient_machinery`,
+`a_gradient_with_no_axis_draws_one_flat_colour_and_never_panics`,
+`a_keyed_gradient_point_is_read_on_the_layers_clock`, `a_flat_filled_item_is_absent_from_the_file`;
+in the bridge, `a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat`; in Flutter, `a filled
+shape item carries the gradient rows`. New strings: `shapeFill`, `shapeGradient`,
+`shapeGradientColour`, `shapeGradientFlat`, `shapeGradientLinear`, `shapeGradientRadial`,
+`shapeGradientStartX`, `shapeGradientStartY`, `shapeGradientEndX`, `shapeGradientEndY`.

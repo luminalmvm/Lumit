@@ -25,7 +25,20 @@ hold `shift` while creating the shape.
 ## Fills and strokes
 
 Each shape group carries its own fill and stroke, set from the toolbar when the shape
-is drawn and editable afterwards from the Timeline.
+is drawn. The fill's colour is editable afterwards from the Timeline, on the group's
+own **Fill** row.
+
+## Gradient fills
+
+A shape group's first rows are **Fill**, the colour inside its path, and **Gradient**,
+which is Flat, Linear or Radial. Choose a ramp and three more rows appear: the
+**Gradient colour** it ends at, and the two points that aim it.
+
+Linear ramps along the line between the points; radial ramps outwards from the first,
+with the second on the outer edge. Switching a ramp on aims it at the shape's own box
+to start with, so there is always something to see. The points are animatable, so a
+gradient can sweep; the two colours are not, and there are two of them rather than a
+stop list.
 
 ## Trim paths
 
@@ -44,10 +57,6 @@ A shape with a stroke carries **Dash**, **Gap** and **Dash offset** rows, in pix
 Dash is the length of each mark, Gap the space after it, and the pair repeats along
 the path. Both start at zero — a solid outline — so typing a Dash is what turns the
 dashes on. Key the offset and the dashes march along the path.
-
-:::note[Not built yet]
-Gradient fills are planned but not built yet.
-:::
 
 ## Offset paths
 

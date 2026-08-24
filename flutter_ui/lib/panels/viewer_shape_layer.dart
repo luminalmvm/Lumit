@@ -430,6 +430,13 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             // Solid, until somebody dashes it (K-452).
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            // A flat fill, until somebody ramps it (K-455).
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
             // On the path itself, until somebody offsets it (K-454).
             offsetAmount: const BridgeScalar.static_(0),
             // Drawn once, until somebody repeats it (K-453).

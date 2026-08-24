@@ -725,6 +725,12 @@ struct ShapeItem {
     trim_offset: Property,            // degrees; 360 is once round a closed path
     dashes: Vec<Property>,            // dash, gap, dash, gap … in layer pixels
     dash_offset: Property,            // layer pixels
+    gradient: u32,                    // 0 flat, 1 linear, 2 radial
+    gradient_colour: Option<LinearColour>,  // the ramp's far end; None is black
+    gradient_start_x: Property,       // layer pixels — the art's own coordinates
+    gradient_start_y: Property,
+    gradient_end_x: Property,
+    gradient_end_y: Property,
     offset_amount: Property,          // layer pixels; out of the path, negative is in
     repeat_copies: Property,          // 1..MAX_COPIES; a still 1 is no repeater
     repeat_offset: Property,          // which copy the original is; may be negative
@@ -783,6 +789,19 @@ along" is, and each piece is drawn by the same brush run the whole outline is. A
 that the path would need more than 4096 pieces is drawn **solid**: at that density it is a solid
 line to the eye, and cutting it would cost a frame to draw something indistinguishable.
 
+**A gradient fill** (K-455) paints the same coverage with a colour that changes across it:
+`gradient` is 0 for the flat `fill`, 1 for a **linear** ramp and 2 for a **radial** one, running
+from `fill` to `gradient_colour` between the two points. Linear projects onto the line between
+them; radial measures out from the start with the end on the outer edge — the Gradient effect's
+two readings (docs/08 §3.35), including its one epsilon on the squared axis length, so a ramp with
+no axis is one flat colour rather than a division by zero. The points are in the art's own
+coordinates and animate; **what a ramp is does not**, which is why the kind is a choice rather than
+a `Property` — a number between linear and radial would have to mean something.
+
+Two stops, not a list. A stop list is the right long-term shape and nothing here stands in its way
+(the two colours become its ends), but it needs an editor of its own to be worth having, and two
+stops is what the Gradient effect beside it offers.
+
 **Offset paths** (K-454) push the outline **out** of the path by `offset_amount` layer pixels;
 negative pulls it in, and zero is the path itself and is absent from the file. "Out" is decided by
 the ring's own winding, so a positive amount grows the shape whichever way round its points were
@@ -804,6 +823,8 @@ copies are drawn last first, so the original sits on top of the copies made from
 Effects' own default. A still count of one is no repeater at all and is absent from the file, and
 the count is held to `MAX_COPIES` (100) because every copy is a rasteriser pass over the whole
 layer.
+
+The gradient is part of the **art**, not of the layer, so a repeated copy carries its ramp with it.
 
 The order is **offset, then trim, then dash, then repeat**: the offset makes the outline, the trim
 cuts whatever outline there is by its length, the dashes run along whatever the trim left, and the

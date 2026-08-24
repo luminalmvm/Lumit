@@ -27,6 +27,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
@@ -46,6 +47,8 @@ import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
+import '../state/layer_bounds.dart' show shapeContentsRect;
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import '../widgets/time_readout.dart';
@@ -3351,6 +3354,13 @@ class _FoldRow extends StatelessWidget {
           valueColumn: valueColumn,
           onChanged: onChanged,
         ),
+      FoldShapePaintRow(:final item, :final which) => _ShapePaintRow(
+          layer: layer,
+          item: item,
+          which: which,
+          valueColumn: valueColumn,
+          onChanged: onChanged,
+        ),
       FoldShapeValueRow(:final item, :final value) => _ShapeValueRow(
           comp: comp,
           layer: layer,
@@ -4868,6 +4878,12 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
   (double, double, String) get _units => switch (widget.value) {
         // Out or in, in layer pixels.
         ShapeValue.offsetPath => (-1000, 1000, ' px'),
+        // Where the ramp starts and ends, in the art's own coordinates.
+        ShapeValue.gradientStartX ||
+        ShapeValue.gradientStartY ||
+        ShapeValue.gradientEndX ||
+        ShapeValue.gradientEndY =>
+          (-10000, 10000, ' px'),
         ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
@@ -5005,6 +5021,136 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
       decimals: 1,
       suffix: _suffix,
       onCommit: _commitKeyed,
+    );
+  }
+}
+
+/// A shape item's fill colour, its gradient choice, or the gradient's second
+/// colour (K-455). None of the three is a number, so this row carries a swatch
+/// or a dropdown where the others carry a value field — and no stopwatch,
+/// because none of them keys.
+class _ShapePaintRow extends StatelessWidget {
+  final LayerReference layer;
+  final BridgeShapeItem item;
+  final ShapePaint which;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+
+  const _ShapePaintRow({
+    required this.layer,
+    required this.item,
+    required this.which,
+    required this.valueColumn,
+    required this.onChanged,
+  });
+
+  /// The whole list back with this item changed — how every shape edit is
+  /// written (K-283), so this is one op and one undo step.
+  void _write(BridgeShapeItem Function(BridgeShapeItem) change) {
+    try {
+      layer.setShapeContents(contents: [
+        for (final other in layer.getShapeContents())
+          if (other.id == item.id) change(other) else other,
+      ]);
+      onChanged();
+    } catch (_) {
+      // The item or its layer went away between the draw and the click.
+    }
+  }
+
+  /// The far end of the ramp before anybody has picked one: black, which is
+  /// what the engine draws for a gradient with no second colour.
+  static const _defaultEnd = BridgeColourRgba(r: 0, g: 0, b: 0, a: 1);
+
+  Color _shown(BridgeColourRgba c) => documentColour(
+        (c.r.clamp(0.0, 1.0) * 255).round(),
+        (c.g.clamp(0.0, 1.0) * 255).round(),
+        (c.b.clamp(0.0, 1.0) * 255).round(),
+        255,
+      );
+
+  BridgeColourRgba _picked(PickedColour p, double alpha) =>
+      BridgeColourRgba(r: p.r, g: p.g, b: p.b, a: alpha);
+
+  /// Where a ramp nobody has aimed should start and end: down the art's own
+  /// box for a linear one, out from its middle for a radial one. A gradient
+  /// that read as one flat colour the moment it was switched on would look
+  /// broken rather than unaimed.
+  BridgeShapeItem _aimed(BridgeShapeItem i, int kind) {
+    final aimed = i.gradientStartX != const BridgeScalar.static_(0) ||
+        i.gradientEndX != const BridgeScalar.static_(0) ||
+        i.gradientStartY != const BridgeScalar.static_(0) ||
+        i.gradientEndY != const BridgeScalar.static_(0);
+    if (kind == 0 || aimed) return shapeItemWith(i, gradient: kind);
+    final box = shapeContentsRect([i]);
+    if (box == null) return shapeItemWith(i, gradient: kind);
+    final (start, end) = kind == 2
+        ? (box.center, Offset(box.right, box.center.dy))
+        : (Offset(box.center.dx, box.top), Offset(box.center.dx, box.bottom));
+    return shapeItemWith(
+      i,
+      gradient: kind,
+      gradientStartX: BridgeScalar.static_(start.dx),
+      gradientStartY: BridgeScalar.static_(start.dy),
+      gradientEndX: BridgeScalar.static_(end.dx),
+      gradientEndY: BridgeScalar.static_(end.dy),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final key = 'tl-shape-${which.name}-${item.id}';
+    return Row(
+      children: [
+        // The width the stopwatch and its gap take on every other row, so the
+        // labels line up down the fold.
+        const SizedBox(width: 24),
+        Expanded(
+          child: Text(shapePaintLabel(which),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
+        SizedBox(
+          width: valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: switch (which) {
+              ShapePaint.gradient => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: item.gradient <= 2 ? item.gradient : 0,
+                    options: const [0, 1, 2],
+                    label: (k) => switch (k) {
+                      1 => l10n.shapeGradientLinear,
+                      2 => l10n.shapeGradientRadial,
+                      _ => l10n.shapeGradientFlat,
+                    },
+                    onChanged: (k) => _write((i) => _aimed(i, k)),
+                  ),
+                ),
+              ShapePaint.fill => ColourSwatchButton(
+                  key: ValueKey<String>(key),
+                  colour: _shown(item.fill ?? _defaultEnd),
+                  // A shape's colours are scene-linear, so the picker counts
+                  // in 0—1 rather than in bytes.
+                  scale: ColourScale.unit,
+                  onPicked: (p) => _write((i) => shapeItemWith(i,
+                      fill: _picked(p, i.fill?.a ?? 1))),
+                ),
+              ShapePaint.gradientColour => ColourSwatchButton(
+                  key: ValueKey<String>(key),
+                  colour: _shown(item.gradientColour ?? _defaultEnd),
+                  scale: ColourScale.unit,
+                  onPicked: (p) => _write((i) => shapeItemWith(i,
+                      gradientColour:
+                          _picked(p, i.gradientColour?.a ?? 1))),
+                ),
+            },
+          ),
+        ),
+        SizedBox(width: valueColumn.rightInset),
+      ],
     );
   }
 }

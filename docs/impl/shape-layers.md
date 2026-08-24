@@ -149,6 +149,21 @@ is not, and that is the whole of its difficulty. Three things fell out of it:
   and lifting the ceiling means teaching the mask rasteriser to work in one
   copy's own box, which is a change over there rather than here.
 
+**Gradient fills.** The ramp is the Gradient effect's arithmetic, written again
+rather than called: `cpu::gradient` fills a whole f32 raster and replaces what
+was there, so reusing it would have meant an f32 buffer the size of the layer
+*per drawn copy* to composite back through coverage. What is shared is the
+*reading* — the linear projection, the radial distance, the single epsilon on
+the squared axis length — and the doc comments point at each other so the two
+cannot drift without somebody noticing. The colours are mixed in **linear** and
+encoded after, through a 256-entry table built once per drawn copy: a
+transcendental per pixel done honestly is the alternative, and the table is
+finer than an 8-bit result can show.
+
+The gradient's points are in the art's own coordinates and are placed through
+the *copy's* transform, which is what makes a repeated copy carry its ramp
+rather than sample the original's.
+
 **Offset paths.** Thirty lines, and the temptation was to make it three hundred.
 The polyline is offset segment by segment, the corners that open are filled with
 a round join, and the corners that close are joined straight — which is where the

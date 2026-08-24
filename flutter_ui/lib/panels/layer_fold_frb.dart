@@ -19,6 +19,7 @@
 import 'package:flutter/services.dart';
 
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -141,6 +142,10 @@ final class FoldShapeRow extends LayerFoldRow {
 /// original is, and the step every copy is one more of. [offsetPath] (K-454) is
 /// first because it applies first: it makes the outline the rest work on.
 enum ShapeValue {
+  gradientStartX,
+  gradientStartY,
+  gradientEndX,
+  gradientEndY,
   offsetPath,
   trimStart,
   trimEnd,
@@ -172,10 +177,25 @@ bool isDashValue(ShapeValue value) => switch (value) {
 /// a slider dragged to its end asks for a frame that arrives.
 const double maxShapeCopies = 100;
 
+/// Which of a shape item's numbers aim its **gradient** (K-455) — shown only
+/// where there is a ramp to aim.
+bool isGradientValue(ShapeValue value) => switch (value) {
+      ShapeValue.gradientStartX ||
+      ShapeValue.gradientStartY ||
+      ShapeValue.gradientEndX ||
+      ShapeValue.gradientEndY =>
+        true,
+      _ => false,
+    };
+
 /// Which of a shape item's numbers describe the **step** the repeater takes
 /// (K-453) — everything but the count itself, which is the row that turns the
 /// repeater on and so is always there to find.
 bool isRepeatStepValue(ShapeValue value) => switch (value) {
+      ShapeValue.gradientStartX ||
+      ShapeValue.gradientStartY ||
+      ShapeValue.gradientEndX ||
+      ShapeValue.gradientEndY ||
       ShapeValue.offsetPath ||
       ShapeValue.trimStart ||
       ShapeValue.trimEnd ||
@@ -196,6 +216,37 @@ bool isRepeated(BridgeShapeItem item) => switch (item.repeatCopies) {
       // somewhere in the animation, so the rows that shape it belong on
       // screen.
       _ => true,
+    };
+
+/// Which of a shape item's **colours and choices** a [FoldShapePaintRow]
+/// carries (K-455). None of the three is a number, so none of them keys, which
+/// is why they are a row kind of their own rather than more [ShapeValue]s.
+enum ShapePaint {
+  /// The colour inside the path — and, where there is a ramp, the colour the
+  /// ramp starts at.
+  fill,
+
+  /// Flat, linear or radial.
+  gradient,
+
+  /// The colour the ramp ends at.
+  gradientColour,
+}
+
+/// A shape item's fill colour, its gradient choice, or its gradient's second
+/// colour, on a row of its own (K-455).
+final class FoldShapePaintRow extends LayerFoldRow {
+  final BridgeShapeItem item;
+  final ShapePaint which;
+  const FoldShapePaintRow(this.item, this.which, {required int depth})
+      : super(depth);
+}
+
+/// What a shape item's paint row is called.
+String shapePaintLabel(ShapePaint which) => switch (which) {
+      ShapePaint.fill => l10n.shapeFill,
+      ShapePaint.gradient => l10n.shapeGradient,
+      ShapePaint.gradientColour => l10n.shapeGradientColour,
     };
 
 /// One of a shape item's numbers on a row of its own under it (K-451). A row
@@ -417,6 +468,10 @@ BridgeStroke strokeWithScalar(
 /// What a shape item's value row is called — shared by the row and the graph
 /// channel, exactly as [maskValueLabel] is.
 String shapeValueLabel(ShapeValue value) => switch (value) {
+      ShapeValue.gradientStartX => l10n.shapeGradientStartX,
+      ShapeValue.gradientStartY => l10n.shapeGradientStartY,
+      ShapeValue.gradientEndX => l10n.shapeGradientEndX,
+      ShapeValue.gradientEndY => l10n.shapeGradientEndY,
       ShapeValue.offsetPath => l10n.shapeOffsetPath,
       ShapeValue.trimStart => l10n.shapeTrimStart,
       ShapeValue.trimEnd => l10n.shapeTrimEnd,
@@ -446,6 +501,10 @@ BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
 /// Which of a shape item's animatable numbers [value] names (K-451).
 BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
     switch (value) {
+      ShapeValue.gradientStartX => item.gradientStartX,
+      ShapeValue.gradientStartY => item.gradientStartY,
+      ShapeValue.gradientEndX => item.gradientEndX,
+      ShapeValue.gradientEndY => item.gradientEndY,
       ShapeValue.offsetPath => item.offsetAmount,
       ShapeValue.trimStart => item.trimStart,
       ShapeValue.trimEnd => item.trimEnd,
@@ -478,6 +537,13 @@ BridgeShapeItem shapeItemWith(
   double? opacity,
   ShapeValue? value,
   BridgeScalar? to,
+  BridgeColourRgba? fill,
+  int? gradient,
+  BridgeColourRgba? gradientColour,
+  BridgeScalar? gradientStartX,
+  BridgeScalar? gradientStartY,
+  BridgeScalar? gradientEndX,
+  BridgeScalar? gradientEndY,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
@@ -486,10 +552,18 @@ BridgeShapeItem shapeItemWith(
     name: name ?? item.name,
     vertices: vertices ?? item.vertices,
     closed: item.closed,
-    fill: item.fill,
+    fill: fill ?? item.fill,
     stroke: item.stroke,
     strokeWidth: item.strokeWidth,
     opacity: opacity ?? item.opacity,
+    gradient: gradient ?? item.gradient,
+    gradientColour: gradientColour ?? item.gradientColour,
+    gradientStartX:
+        gradientStartX ?? at(ShapeValue.gradientStartX, item.gradientStartX),
+    gradientStartY:
+        gradientStartY ?? at(ShapeValue.gradientStartY, item.gradientStartY),
+    gradientEndX: gradientEndX ?? at(ShapeValue.gradientEndX, item.gradientEndX),
+    gradientEndY: gradientEndY ?? at(ShapeValue.gradientEndY, item.gradientEndY),
     offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
     trimStart: at(ShapeValue.trimStart, item.trimStart),
     trimEnd: at(ShapeValue.trimEnd, item.trimEnd),
@@ -687,6 +761,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldShapeRow(:final item) => '${contentsPath(layerId)}/${item.id}',
       FoldShapeValueRow(:final item, :final value) =>
         '${contentsPath(layerId)}/${item.id}/${value.name}',
+      FoldShapePaintRow(:final item, :final which) =>
+        '${contentsPath(layerId)}/${item.id}/${which.name}',
     };
 
 /// Whether [path] sits under [ancestor] — a property under its group, a
@@ -848,6 +924,17 @@ List<LayerFoldRow> layerFoldRows({
     if (contentsOpen) {
       for (final item in info.shapeContents) {
         rows.add(FoldShapeRow(item, depth: 2));
+        // What the inside of the path is painted with comes first, because it
+        // is what the rest of the rows modify (K-455). A shape with no fill
+        // has no colour to show and nothing to ramp.
+        if (item.fill != null) {
+          rows.add(FoldShapePaintRow(item, ShapePaint.fill, depth: 3));
+          rows.add(FoldShapePaintRow(item, ShapePaint.gradient, depth: 3));
+          if (item.gradient != 0) {
+            rows.add(
+                FoldShapePaintRow(item, ShapePaint.gradientColour, depth: 3));
+          }
+        }
         // Its numbers sit under it, the way a stroke's trim sits under the
         // stroke (K-449, K-451), and in the order they read: where the art
         // begins, where it ends, and how far the pair is slid along.
@@ -860,6 +947,9 @@ List<LayerFoldRow> layerFoldRows({
           // than one copy to step between, so Copies is the row that opens
           // them (K-453).
           if (isRepeatStepValue(value) && !isRepeated(item)) continue;
+          // The gradient's two points aim a ramp; with no ramp there is
+          // nothing for them to aim (K-455).
+          if (isGradientValue(value) && item.gradient == 0) continue;
           rows.add(FoldShapeValueRow(item, value, depth: 3));
         }
       }

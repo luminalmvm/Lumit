@@ -6887,6 +6887,29 @@ into thousands of pieces, the outline is simply drawn solid. At that size the
 dashes would be invisible anyway, and cutting them would cost a frame's worth of
 work to draw something you could not tell from a line.
 
+### Filling a shape with a gradient
+
+A shape item's first two rows are **Fill** — the colour inside its path, which you
+can now change long after the shape was drawn — and **Gradient**, which is Flat,
+Linear or Radial. Choose Linear or Radial and three more rows appear: the
+**Gradient colour** the ramp ends at, and the two points that aim it.
+
+Linear ramps along the line between the two points: everything before the first is
+the fill colour, everything past the second is the gradient colour, and in between
+the two mix. Radial ramps outwards from the first point, with the second sitting on
+the outer edge — so the middle is the fill and every direction fades away from it.
+Those are the same two readings the Gradient *effect* offers, and deliberately: one
+idea should not have two meanings in one application.
+
+Switching a ramp on aims it at the shape's own box for you — top to bottom for
+linear, middle to edge for radial — so you see a ramp immediately and move it from
+there. The two points are ordinary animatable numbers, so a gradient can sweep.
+
+Two things this is not. It is not a stop list: there are two colours, the fill's and
+the gradient's, and a ramp with five stops needs an editor of its own before it is
+worth storing. And the colours themselves do not animate — the points do. Both are
+places the feature can grow into without moving anything already saved.
+
 ### Growing and shrinking a shape's outline
 
 **Offset path** is the first row under a shape item. It is one number in pixels:
