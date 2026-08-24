@@ -87,9 +87,8 @@ everything else in the graph; a drag is staged and commits once, the K-344 patte
 A driver is an `EffectInstance` whose `EffectDef` declares a **data signature** instead of
 an image kernel — no WGSL, no CPU pixel path, a scalar/colour/analysis function evaluated
 at resolve time. The K-381 registry machinery carries them for free: one file each under
-`lumit-core/src/fx/effects/` (or a sibling `drivers/` module), schema-declared parameters,
-catalogue generation, `list_parameters`, the Effect-controls row rendering. The registry
-gains one field:
+`lumit-core/src/fx/drivers/`, schema-declared parameters, catalogue generation,
+`list_parameters`, the Effect-controls row rendering. The registry gains one declaration:
 
 ```rust
 enum Signature {
@@ -98,16 +97,34 @@ enum Signature {
 }
 ```
 
+**Built, 2026-08-24.** It is a **method on `EffectDef`** with `Signature::Image` as its
+default, not a field on `EffectSchema`: a field would have meant a `#[derive(Effect)]`
+change and a line added to ninety declarations that all say the same thing. Two more
+default methods ride beside it — `eval_driver`, which computes the outputs, and
+`driver_window`, §2.3's temporal declaration in seconds either side of the frame. Every
+image effect takes all three defaults and is untouched.
+
 The v1 driver set is the six the drawings show, in a **Drivers** catalogue category:
 
 | Driver | Inputs | Outputs | Notes |
 |---|---|---|---|
 | **Wiggle** | Amount, Frequency (number) | Value (number) | Deterministic value noise seeded by the node's id, sampled at layer time. Same recipe as the expressions' wiggle if one exists when built; otherwise pin the noise in this note's test plan. |
-| **Audio level** | Audio (layer reference) | Amplitude, Low (number) | Windowed RMS of the referenced layer's decoded audio at layer time; Low is the same over a low band. Deterministic per (audio fingerprint, time, window). |
-| **Colour cycle** | Phase (number) | Colour (colour) | Hue rotation over time. |
+| **Audio level** | Audio (layer reference), Window (seconds) | Amplitude, Low (number) | Windowed RMS of the referenced layer's decoded audio at layer time; Low is the same over a low band (one pole at 200 Hz). Deterministic per (audio fingerprint, time, window). |
+| **Colour cycle** | Phase (turns), Rate (turns/second), Saturation, Brightness | Colour (colour) | Hue rotation over time. |
 | **Math** | A, B (number), operation (choice) | Value (number) | An expression you can see. |
 | **Remap** | Value, in/out ranges (number) | Value (number) | Linear range map with clamp choice. |
 | **Smooth** | Value (number), Time (number) | Value (number) | Temporal smoothing of its input — a temporal dependency, declared as such (§2.3). |
+
+**Two corrections from the build (2026-08-24).** *Colour cycle* was drawn here with Phase
+alone, and a colour cycle that cannot cycle without a keyframe is not one — it gained
+**Rate**, so hue is `phase + rate x layer time`, and **Saturation** and **Brightness**,
+because a hue on its own is not a colour. *Audio level*'s samples arrive through an
+`AudioTap` trait the host implements: `lumit-core` knows nothing of media, so the driver
+owns the windowed RMS (testable against a synthesised tone in the same crate) and the
+decoding stays where decoding lives. **`lumit-render` passes `None` today** — the seam is
+built and tested, the wiring to decoded audio is not, and it is in no work package's file
+list. It is recorded in docs/TODO.md rather than pretended about: until it lands, Audio
+level reads silence, which is the same labelled no-op a dangling reference gives.
 
 A driver's cross-layer input (Audio level's Audio) is a **layer-reference parameter**
 (docs/03 §8) — the existing machinery, with the existing degrade-to-no-op on a dangling
@@ -126,6 +143,10 @@ the image chain's wires render the list.
   source alpha, a texture the pipeline has already computed at that point in the chain.
   An in-graph `SourceMatte` edge overrides the parameter while it exists; the Matte row
   displays whichever is in force, by name.
+  **Built, 2026-08-24**: it needed no new carriage. `SourceMatte` lowers to K-288's
+  `LayerInputDraw::ThisLayer`, which the draw builder has always meant by "a matte pointed
+  at the layer the effect is on" — the effect's own input at its point in the chain. One
+  branch in `mattes_for`, and nothing downstream learns a new shape.
 - **Exposure** (the `E` badge) grows a node to show one hollow, type-coloured socket per
   parameter. It is presentation state per node (a bool on the instance), not wiring;
   a wired socket is shown regardless.
@@ -170,12 +191,34 @@ Same project, same time, same value — no wall clock, no render-order dependenc
 
 ### 2.3 Cache correctness
 
-A driven parameter's evaluated value reaches the effect's content hash through the same
-door a keyframed value does — substitution happens before packing, so the existing
-formula (docs/06 §5.2) needs no new terms for pointwise drivers. Two drivers are not
-pointwise and declare **temporal dependencies** in the metadata pass, as temporal effects
-already must: Smooth (reads its input over a window) and Audio level (reads audio around
-the frame). The declared window folds the sampled range into the hash.
+Two drivers are not pointwise and declare **temporal dependencies** in the metadata pass,
+as temporal effects already must: Smooth (reads its input over a window) and Audio level
+(reads audio around the frame). The declared window folds the sampled range into the hash.
+
+**Corrected by the build, 2026-08-24.** This section said the existing formula (docs/06
+§5.2) needed no new terms, on the reasoning that substitution happens before packing. It
+does need them, because **the frame key is not built from the packed values** — it is
+built from the document, hashing each stored property at the frame's time. A driven
+parameter's stored value is exactly the thing the picture no longer uses, so left alone
+the key would have missed every driver. A wired layer therefore folds three things beside
+its stack:
+
+- **its driver nodes, hashed exactly as its effects are** — identity, version and stored
+  parameters at the frame's time. That is a hash of the *declaration* rather than of the
+  evaluated value, which discriminates identically (a driver is a pure function of its
+  parameters, its node id and the time) and costs no graph walk inside the key. It also
+  folds Audio level's referenced layer, and with it the audio fingerprint, through the
+  layer-reference arm that was already there.
+- **the layer time**, because a driver's output moves with it while every stored number
+  holds still. Without this, two frames of a Wiggle-driven stack would share a name.
+- **the wires**, since moving one changes which parameter follows what without changing
+  any stored value.
+
+The declared window is folded beside them, so widening Smooth's window retires the frames
+smoothed with the narrow one. The stored value of a driven parameter is still hashed by
+the ordinary loop, which costs a needless *miss* when somebody edits a keyframe under a
+live wire and can never cause a stale *hit* — the safe direction, and far cheaper than
+running the graph inside the key walk.
 
 ## 3. Ops and undo
 
@@ -215,9 +258,10 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
 - **Catalogue**: the Drivers category rides the existing effect-catalogue listing.
 - **Port types cross as an enum**; Dart maps type → theme token. No colour crosses the
   bridge.
-- **K-005 gate**: every driver name, port name and parameter label the engine can send
-  gets its `engine_labels.dart` entry and matching `app_en.arb` key in the same commit —
-  `engine_labels_test.dart` walks the tables.
+- **K-005 gate**: every label the engine can send gets its `engine_labels.dart` entry and
+  matching `app_en.arb` key in the same commit — `engine_labels_test.dart` walks the
+  tables. The driver names, their controls and the Drivers heading landed with WP1 (they
+  could not wait, see there); what is left for WP2 is the **port** names it introduces.
 
 ## 6. Port types and the points stream
 
@@ -295,6 +339,28 @@ v1 drivers, `SetLayerGraph` with validation (§1.5), driver evaluation in the re
 **Files**: `crates/lumit-core/src/` (layer, ops, `fx/` registry and resolve,
 new `fx/drivers/` one file per driver), render threading of `SourceMatte` in
 `crates/lumit-render`.
+**Landed 2026-08-24** as described, with the corrections recorded in §1.3, §1.4 and §2.3
+and three notes on the seam:
+- **The l10n gate moved here from WP2.** The moment a driver enters the catalogue the
+  engine can send its name, `fx-labels.txt` regenerates and `engine_labels_test.dart`
+  fails — so WP1 lands the `app_en.arb` keys and `engine_labels.dart` entries for the
+  driver names, their controls and the Drivers category. WP2 still owns the entries for
+  the port names it adds.
+- **The Drivers family is filtered out of `list_effects`** for now: it is in the catalogue
+  (the lookup needs it) but is not an Add-effect entry, because dropping a driver on a
+  stack would add a node that changes no pixel. WP2 gives the family its own listing and
+  removes the filter.
+- **`resolve_stack_temporal_named` gained a `&ResolvedDrivers` argument**; the two thinner
+  wrappers keep their signatures and pass `ResolvedDrivers::NONE`, so the fifty-odd call
+  sites that do not care are untouched. Substitution happens inside the one walk that
+  evaluates a parameter, so a driven number goes through the identical `Unit` arm a typed
+  one does and cannot land in the wrong units.
+- **Wiggle's noise is pinned** (this note asked for it, there being no expressions'
+  wiggle to match): one octave of the shared seeded 3-D value noise (docs/08 §3.37),
+  walked along its x axis at Frequency cells per second, seeded by the node id's four
+  32-bit halves exclusive-ored together, scaled by Amount. **Smooth** is a nine-tap box
+  average over a **centred** window, so a smoothed ramp comes back as the ramp rather
+  than as the ramp running late.
 **Tests** (lumit-core unless noted): old-file load → empty graph and byte-identical
 re-save; graph round-trip; cycle/mistype/double-input refusal; driven-overrides-keyframes
 evaluation; per-driver value tests (Wiggle determinism across two evaluations, Audio
@@ -374,7 +440,9 @@ Beyond the per-package tests, four properties are the ones a regression would be
 1. **Old files are untouched**: load any pre-K-471 fixture, save, byte-compare.
 2. **The stack view never lies**: for every graph fixture, the effect list order equals
    the image-chain order the graph read model reports (a property test over generated
-   graphs, not one example).
+   graphs, not one example). **This one belongs to WP2**, which is where the read model
+   (`graph_of_layer`) is built — WP1 has no image-chain reporting to hold the list
+   against, because the model deliberately stores none.
 3. **Determinism**: a driven comp renders bit-identically twice, and export equals
    preview (K-031's standing gate extended with one driven fixture).
 4. **Undo symmetry**: any `SetLayerGraph`/`SetLayerEffects` sequence walked back restores
