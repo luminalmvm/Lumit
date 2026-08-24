@@ -3890,6 +3890,31 @@
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
   },
+  "audioChannels": "{count} ch",
+  "@audioChannels": {
+    "description": "A sound's channel count in the Project panel's preview card, for layouts with no everyday name — 6 ch, 8 ch. Abbreviated because it sits in a line of facts.",
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "audioMono": "mono",
+  "@audioMono": {
+    "description": "A one-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
+    "type": "text"
+  },
+  "audioStereo": "stereo",
+  "@audioStereo": {
+    "description": "A two-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
+    "type": "text"
+  },
+  "label": "Label",
+  "@label": {
+    "description": "Row on the Project panel's right-click menu, beside a strip of colour chips that tag the picked items.",
+    "type": "text"
+  },
+  "newFolder": "New folder",
+  "@newFolder": {
+    "description": "Tooltip on the Project panel's bottom-bar button that makes a new folder.",
+    "type": "text"
+  },
   "projectColumnItems": "Items",
   "@projectColumnItems": {
     "description": "Project panel column heading: how many things a folder holds. Shown in capitals by the style, so write it sentence case."
@@ -3898,9 +3923,19 @@
   "@projectColumnSize": {
     "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
   },
+  "projectColumnPath": "Path",
+  "@projectColumnPath": {
+    "description": "Project panel column heading: where a footage item's file is. Shown in capitals by the style, so write it sentence case.",
+    "type": "text"
+  },
   "projectFooterComposition": "Composition",
   "@projectFooterComposition": {
     "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
+  },
+  "projectFooterFolder": "Folder",
+  "@projectFooterFolder": {
+    "description": "Label on the Project panel's bottom-bar button that makes a new folder. Shown in capitals by the style.",
+    "type": "text"
   },
   "projectFooterImport": "Import",
   "@projectFooterImport": {
@@ -3919,6 +3954,11 @@
   "@projectInfoAudio": {
     "description": "Project panel info line for sound-only footage, shown where a picture size would be. Lower case on purpose."
   },
+  "projectInfoStill": "still",
+  "@projectInfoStill": {
+    "description": "Project panel info line for a picture that does not move — a photograph or a single frame, shown where a frame rate and length would be. Lower case on purpose.",
+    "type": "text"
+  },
   "projectItemCount": "{count, plural, =1{1 item} other{{count} items}}",
   "@projectItemCount": {
     "description": "Project panel info line for a folder: how many things it holds.",
@@ -3927,6 +3967,11 @@
         "type": "int"
       }
     }
+  },
+  "projectItemInUse": "in use",
+  "@projectItemInUse": {
+    "description": "Badge beside a Project panel item that some composition places as a layer. Lower case on purpose — it sits in a line of facts.",
+    "type": "text"
   },
   "projectItemMissing": "missing",
   "@projectItemMissing": {
@@ -5082,6 +5127,11 @@
   "@tipMeasureRenderTimes": {
     "description": "Tooltip on the stopwatch in the bottom strip, when measuring is off. Under five words."
   },
+  "tipFilterByLabel": "Show only this colour",
+  "@tipFilterByLabel": {
+    "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
+    "type": "text"
+  },
   "tipMissingOnly": "Missing footage only",
   "@tipMissingOnly": {
     "description": "Tooltip on the Project panel's filter when it is off. Under five words."
@@ -5783,6 +5833,11 @@
   "unitDegrees": "degrees",
   "@unitDegrees": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
+  },
+  "unitKhz": "kHz",
+  "@unitKhz": {
+    "description": "Unit beside a sound's sample rate — kilohertz. Most languages keep the SI symbol.",
+    "type": "text"
   },
   "unitFps": "fps",
   "@unitFps": {

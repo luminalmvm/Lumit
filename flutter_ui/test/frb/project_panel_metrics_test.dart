@@ -267,6 +267,8 @@ void main() {
       expect(find.text('ITEMS'), findsOneWidget);
       expect(find.text('SIZE'), findsOneWidget);
       expect(find.text('FPS'), findsOneWidget);
+      expect(find.text('PATH'), findsOneWidget,
+          reason: 'the 360 artboard shows every column');
 
       await mount(tester, p, width: 260);
       expect(find.byKey(const ValueKey<String>('project-preview-card')),
@@ -274,6 +276,8 @@ void main() {
           reason: 'the docked mockup has no preview card at 260');
       expect(find.text('ITEMS'), findsNothing,
           reason: 'nor an Items column — least essential goes first');
+      expect(find.text('PATH'), findsNothing,
+          reason: 'nor a Path column, which leaves at the same step');
       expect(find.text('SIZE'), findsOneWidget);
       expect(find.text('FPS'), findsOneWidget);
 
@@ -300,12 +304,82 @@ void main() {
       expect(find.descendant(of: footer, matching: find.text('COMPOSITION')),
           findsOneWidget);
 
+      expect(find.descendant(of: footer, matching: find.text('FOLDER')),
+          findsOneWidget,
+          reason: 'the mockup draws Folder beside Composition');
+
       final count = tester.widget<Text>(
           find.descendant(of: footer, matching: find.textContaining('items')));
       expect(count.style!.letterSpacing, closeTo(0.54, 0.001),
           reason: 'the count is factual, not a container label');
       expect(count.data, contains('3 items'),
           reason: 'the folder, the comp inside it, and the clip');
+    });
+
+    /// 8b. **The Path column is quieter than its neighbours.** It is the one
+    /// column carrying context rather than a fact about the item, so both the
+    /// heading and the value sit at `text_disabled` where the rest are
+    /// `text_muted` (§12A.3a, and the mockup's own two greys).
+    testWidgets('the Path column and its heading are text_disabled',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 360);
+      await settleFrb(tester, minRounds: 6);
+
+      final path = tester.widget<Text>(find.text('PATH'));
+      expect(path.style!.color, theme.textDisabled,
+          reason: 'the mockup hushes the Path heading below the other four');
+      expect(path.style!.fontFamily, LumitTheme.monoFontFamily);
+      expect(path.style!.fontSize, 9);
+
+      final size = tester.widget<Text>(find.text('SIZE'));
+      expect(size.style!.color, theme.textMuted,
+          reason: 'and only that one — the rest keep the kicker grey');
+    });
+
+    /// 8c. **The `in use` badge is the missing badge's twin in `success`.**
+    /// Same 14px pill, same mono 9 with no tracking; a badge reports a state,
+    /// so it is deliberately not a kicker (§12A.3a).
+    testWidgets('the in use badge is a 14px success pill, mono 9',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final used = p.state.project!.importFootage(path: 'C:/clips/used.mov');
+      comp.addFootageLayer(footage: used, asSequence: false);
+      await mount(tester, (state: p.state, uiState: p.uiState, compId: ''));
+      await settleFrb(tester, minRounds: 6);
+
+      final badge = find.byKey(ValueKey<String>('in-use-${used.internalid}'));
+      expect(tester.getRect(badge).height, 14,
+          reason: 'the mockup renders the pill at 14, as it does missing');
+      final label = tester.widget<Text>(
+          find.descendant(of: badge, matching: find.byType(Text)));
+      expect(label.style!.fontFamily, LumitTheme.monoFontFamily);
+      expect(label.style!.fontSize, 9);
+      expect(label.style!.letterSpacing, isNull,
+          reason: 'a badge reports a state; it is not a container label');
+      expect(label.style!.color, theme.success);
+    });
+
+    /// 8d. **The colour chips are the mockup's six 6px dots.** Five palette
+    /// colours and a neutral one, in a row beside the search well.
+    testWidgets('the filter chips are six 6px dots beside the search well',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 360);
+      await settleFrb(tester, minRounds: 6);
+
+      final strip = find.byKey(const ValueKey<String>('project-label-chips'));
+      expect(strip, findsOneWidget);
+      for (final label in [...projectFilterLabels, 'none']) {
+        final chip = find.byKey(ValueKey<String>('project-label-chip-$label'));
+        expect(chip, findsOneWidget);
+        expect(tester.getRect(chip).size, const Size(6, 6),
+            reason: 'the mockup draws each chip 6 by 6');
+      }
+      // Inside the search row, and to the right of the well.
+      final well = tester.getRect(find.byKey(const ValueKey('project-search')));
+      expect(tester.getRect(strip).left, greaterThanOrEqualTo(well.right));
     });
 
     /// 9. **A missing file wears the mockup's pill, and the pill relinks.**

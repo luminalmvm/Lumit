@@ -818,17 +818,20 @@ The library of assets: footage items, audio items, comps, folders.
   a comp to match it, exactly as the New composition button does today; asset **colour
   tags** tint the item icon's strokes rather than adding a dot; the **path** column sits at
   the right of the list; and the preview card carries name, size, rate, duration and codec.
-  **Shipped:** the bar carries Composition and **Import** — Import because it is a command
-  the panel has always had and the mockup gave it no other home.
-  **Five pieces now wait on the bridge rather than on the engine**: the bottom bar's
-  Folder button, the item's file path column, the `in use` badge, the asset colour tags
-  with their filter chips beside the search well, and the preview card's codec-and-audio
-  line. The engine answers all five — `ops::new_folder_ops`,
-  `MediaRef::display_path`, `Document::item_is_used`, `Document::item_labels` with
-  `SetItemLabel`, and `MediaProbe::runs_as_video` beside the codec and channel facts the
-  probe already carried — and each needs one method across the seam before the mockup's
-  drawing of it can be filled in (docs/TODO.md). Until then they are absent rather than
-  faked: a button that cannot do anything is worse than one that is not there.
+  **Shipped, all of it.** The bar carries **Folder**, **Composition** and **Import** —
+  Import because it is a command the panel has always had and the mockup gave it no other
+  home, which is also why its word is the first the bar sheds as it narrows. A new folder
+  is filed inside the picked folder when one is picked, at the root otherwise, and takes
+  the next unused "Folder N" when nothing is typed. The **Path** column carries the
+  *folder* a footage item points into, hushed to `text_disabled`, empty when the project
+  records the file by bare name — the Name column two cells left already says the file
+  name, and a column repeating it would not be context. The **`in use`** badge marks any
+  item a composition places, hidden switches included. A **colour tag** tints the row's
+  glyph rather than adding a dot beside it, is set from the row menu's chip strip, and the
+  chips beside the search well narrow the tree to one colour. The preview card's second
+  line names the **codec** and the sound's rate and layout, and a **still** says so where
+  a rate and a length would be — which retired the zero-picture-width guess that called a
+  silent still an audio file.
 - A persistent **search field** filters the tree live (name, type, extension). `Ctrl+F`
   focuses it when the panel has focus.
 - Selecting an item shows a header readout: thumbnail, dimensions, fps, duration, codec,

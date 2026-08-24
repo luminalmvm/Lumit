@@ -1262,6 +1262,7 @@ void main() {
         id: 'path',
         label: 'Path',
         kind: BridgeParamKind.maskPath(),
+        unit: BridgeUnit.raw,
       );
 
       await tester.pumpWidget(hostPanel(

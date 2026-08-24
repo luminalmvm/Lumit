@@ -132,6 +132,24 @@ const double projectItemsColumn = 36;
 const double projectSizeColumn = 64;
 const double projectFpsColumn = 22;
 
+/// The Path column, at the list's right (§12A.3a). Narrow on purpose — the
+/// mockup's own 40 — because it is the one column that is *context* rather
+/// than a fact about the item: it says where the file is, and the head of the
+/// path plus an ellipsis is what answers that at a glance.
+const double projectPathColumn = 40;
+
+/// The colour-chip filter beside the search well (§12A.3a): the mockup's six
+/// 6px dots, 3px apart, in a strip padded 4px either side.
+const double _chipSize = 6;
+const double _chipGap = 3;
+const double _chipStripPad = 4;
+
+/// The label chips the filter row offers, as palette indices, in the mockup's
+/// own order — azure, mint, amber, violet, coral. The sixth chip is not a
+/// colour: it is the neutral one that clears the filter, so the row can always
+/// be got out of.
+const List<int> projectFilterLabels = [1, 4, 2, 3, 8];
+
 /// The gap between every element in a row, headers included.
 const double projectRowGap = 8;
 
@@ -153,45 +171,79 @@ const double projectMinWidth = 180;
 /// this ladder — the 360-wide artboard shows everything, the 260-wide docked
 /// panel has already dropped the preview card and the Items column.
 const double _widthForPreview = 300;
+
+/// Path and Items leave at the same step, deliberately. §12A.3a lists them one
+/// after the other, but the two mockups are the only measurements there are —
+/// 360 wide shows both, 260 shows neither — so nothing renders a width between
+/// them, and a third step would be a drawing nobody approved.
+const double _widthForPath = 300;
 const double _widthForItems = 300;
 const double _widthForFps = 230;
 const double _widthForSize = 190;
+
+/// Where the bottom bar's words go (§12A.6's ladder, step 4: a toolbar sheds
+/// rather than shrinks). **Two steps, because this bar carries three controls
+/// where the mockup drew two.** Import's word goes first — it is the one the
+/// mockup gives no place at all, so it is the one with least claim on the room
+/// — and Folder's and Composition's go together below that, since those two
+/// are the mockup's own and should read as a pair for as long as they fit.
+const double _widthForImportLabel = 420;
+const double _widthForFooterLabels = 380;
 
 /// Which optional columns a given panel width can carry.
 class ProjectColumns {
   final bool items;
   final bool size;
   final bool fps;
+  final bool path;
 
   const ProjectColumns({
     required this.items,
     required this.size,
     required this.fps,
+    required this.path,
   });
 
   factory ProjectColumns.forWidth(double width) => ProjectColumns(
         items: width >= _widthForItems,
         size: width >= _widthForSize,
         fps: width >= _widthForFps,
+        path: width >= _widthForPath,
       );
 
   /// The trailing cells of a row or of the header — the same widths, the same
   /// gaps, the same right edge, so a value lands under its heading. The owner
   /// corrected this alignment twice in the mockup rounds; building both sides
   /// from one function is what stops it drifting again.
+  ///
+  /// [pathStyle] is separate because the Path column is quieter than the rest
+  /// (§12A.3a: `text_disabled`), and because it is the one column that elides
+  /// rather than clipping — a path is longer than its column by nature, and an
+  /// ellipsis says so where a hard cut looks like the value ending there.
   List<Widget> cells({
     String? items,
     String? size,
     String? fps,
+    String? path,
     required TextStyle style,
+    TextStyle? pathStyle,
   }) =>
       [
         if (this.items) ..._cell(projectItemsColumn, items, style),
         if (this.size) ..._cell(projectSizeColumn, size, style),
         if (this.fps) ..._cell(projectFpsColumn, fps, style),
+        if (this.path)
+          ..._cell(projectPathColumn, path, pathStyle ?? style,
+              overflow: TextOverflow.ellipsis),
       ];
 
-  static List<Widget> _cell(double width, String? text, TextStyle style) => [
+  static List<Widget> _cell(
+    double width,
+    String? text,
+    TextStyle style, {
+    TextOverflow overflow = TextOverflow.clip,
+  }) =>
+      [
         const SizedBox(width: projectRowGap),
         SizedBox(
           width: width,
@@ -201,7 +253,7 @@ class ProjectColumns {
                   style: style,
                   textAlign: TextAlign.right,
                   maxLines: 1,
-                  overflow: TextOverflow.clip),
+                  overflow: overflow),
         ),
       ];
 }
@@ -261,7 +313,28 @@ class _Cells {
   final String? items;
   final String? size;
   final String? fps;
-  const _Cells({this.items, this.size, this.fps});
+  final String? path;
+  const _Cells({this.items, this.size, this.fps, this.path});
+}
+
+/// A sound's channel layout in the words the preview card uses. Two names for
+/// the two counts anyone recognises, and a bare count for the rest — "6 ch"
+/// says more than "hexaphonic" ever would.
+String _channelText(int channels) => switch (channels) {
+      1 => l10n.audioMono,
+      2 => l10n.audioStereo,
+      _ => l10n.audioChannels(channels),
+    };
+
+/// A sample rate as the mockup writes it: `48 kHz`, and `44.1 kHz` where the
+/// rate is not a whole number of thousands.
+String _sampleRateText(int hz) {
+  final khz = hz / 1000;
+  final rounded = khz.roundToDouble();
+  final text = (khz - rounded).abs() < 0.001
+      ? rounded.toInt().toString()
+      : khz.toStringAsFixed(1);
+  return '$text ${l10n.unitKhz}';
 }
 
 class ProjectPanelFrb extends StatefulWidget {
@@ -425,6 +498,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// about.
   final Map<String, int> _childCounts = {};
 
+  /// Where each footage item's file is, for the Path column. Cached with the
+  /// rest: it is document data, so it can only change when the document does.
+  final Map<String, String> _paths = {};
+
+  /// Which items a composition places, for the `in use` badge, and each item's
+  /// colour tag, for the row-icon tint and the chip filter. Both are one walk
+  /// of the document engine-side, so they are asked once per document change
+  /// and never in a rebuild.
+  final Map<String, bool> _used = {};
+  final Map<String, int> _labels = {};
+
+  /// The colour chip the filter row is holding, or null for "show everything"
+  /// (§12A.3a). Session state, like the search text and the shut folders: a
+  /// filter is where you are looking, not something about the document.
+  int? _labelFilter;
+
   /// Decoded poster frames by footage id, held in RAM for the session so the
   /// preview card never re-decodes for a selection change. A null entry claims
   /// the slot while the decode is in flight (or records that the item has no
@@ -535,7 +624,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               ),
             ),
           ),
-          _footer(t, items: 0, missing: 0, labels: width >= _widthForItems),
+          _footer(t, items: 0, missing: 0, width: width),
         ],
       );
     }
@@ -564,10 +653,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final selfMatched = ancestorMatched || ownMatch;
       final isMissingFootage =
           item is ItemReference_Footage && (_missing[id] ?? false);
+      final label = _labels[id] ??= _labelOf(item);
       final searchHit = selfMatched ||
           (item is ItemReference_Folder && _subtreeMatches(item));
       // Missing-only is matched on the row's own name alone (docs/07 §3.3).
-      final show = missingOnly ? isMissingFootage && ownMatch : searchHit;
+      // The colour chip narrows *with* whatever else is running, and on the
+      // row's own tag alone — a folder's colour is the folder's, not a claim
+      // about everything inside it.
+      final chipHit = _labelFilter == null || label == _labelFilter;
+      final show =
+          chipHit && (missingOnly ? isMissingFootage && ownMatch : searchHit);
       if (show) {
         _visibleIds.add(id);
         rows.add(_ProjectRowFrb(
@@ -576,7 +671,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           name: name,
           depth: depth,
           missing: isMissingFootage,
-          audio: _mediaInfo[id]?.width == 0,
+          // Sound with no picture at all — the probe's own answer, not the
+          // zero picture width the panel used to infer it from (K-451). A
+          // silent still has no sound and a picture that does not run; the
+          // old guess called it audio.
+          audio: _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null,
+          label: label,
+          inUse: _used[id] ??= _isUsed(item),
           selected: _selectedIds.contains(id),
           renaming: _renamingId == id,
           selectionCount: _selectedIds.length,
@@ -593,6 +694,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             if (!_closedFolders.remove(id)) _closedFolders.add(id);
           }),
           onLocalEdit: _documentChanged,
+          onSetLabel: (picked) => _setLabel(item, picked),
           relinkPicker: widget.relinkPicker,
         ));
       }
@@ -645,10 +747,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           ),
         ),
         _scrollStrip(t),
-        _footer(t,
-            items: itemCount,
-            missing: missingCount,
-            labels: width >= _widthForItems),
+        _footer(t, items: itemCount, missing: missingCount, width: width),
       ],
     );
   }
@@ -669,13 +768,23 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// finished strings, which is what keeps a hover free at the bridge.
   _Cells _cellsFor(ItemReference item, String id, bool missing) {
     switch (item) {
-      case ItemReference_Footage():
-        if (missing) return const _Cells(size: _noValue, fps: _noValue);
+      case ItemReference_Footage(:final field0):
+        // The path is what the *project* records, so it is worth stating even
+        // for a file that is not there — it is where the item is pointing,
+        // which is exactly what a relink is about to change.
+        final path = _paths[id] ??= _pathOf(field0);
+        if (missing) {
+          return _Cells(size: _noValue, fps: _noValue, path: path);
+        }
         final info = _mediaInfo[id];
-        if (info == null || info.width == 0) return const _Cells();
+        if (info == null || info.videoCodec == null) return _Cells(path: path);
         return _Cells(
           size: '${info.width}×${info.height}',
-          fps: _rateText(info.fpsNum, info.fpsDen),
+          // A still has no rate to state (K-246). It probes with a video
+          // stream of one frame, so a number *is* there — and printing it
+          // would say the picture runs when it does not.
+          fps: info.isStill ? null : _rateText(info.fpsNum, info.fpsDen),
+          path: path,
         );
       case ItemReference_Composition(:final field0):
         return _compCells[id] ??= () {
@@ -703,22 +812,76 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               projectRowPadding, _searchPadBottom),
           child: SizedBox(
             height: wellHeight,
-            child: HouseTextField(
-              key: const ValueKey('project-search'),
-              controller: _searchController,
-              focusNode: _searchFocus,
-              width: double.infinity,
-              // The well fills its row rather than floating inside it: the
-              // mockup renders it exactly 20 tall, and the default 3px above
-              // and below would burst that.
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              // `surface2`, not the well's usual recess: this well has its own
-              // row to itself over the panel's `surface1`, and the mockup
-              // computes it a shade lighter rather than a shade darker.
-              fill: t.surface2,
-              hint: l10n.searchProject,
+            child: Row(
+              children: [
+                Expanded(
+                  child: HouseTextField(
+                    key: const ValueKey('project-search'),
+                    controller: _searchController,
+                    focusNode: _searchFocus,
+                    width: double.infinity,
+                    // The well fills its row rather than floating inside it:
+                    // the mockup renders it exactly 20 tall, and the default
+                    // 3px above and below would burst that.
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    // `surface2`, not the well's usual recess: this well has
+                    // its own row to itself over the panel's `surface1`, and
+                    // the mockup computes it a shade lighter rather than a
+                    // shade darker.
+                    fill: t.surface2,
+                    hint: l10n.searchProject,
+                  ),
+                ),
+                _labelChips(t),
+              ],
             ),
           ),
+        ),
+      );
+
+  /// The colour-chip filter, beside the search well (§12A.3a). Five palette
+  /// dots and a neutral one: tapping a colour narrows the tree to the items
+  /// tagged with it, tapping the neutral chip — or the held colour again —
+  /// shows everything.
+  ///
+  /// The held chip is marked by a ring rather than by growing, so the row does
+  /// not change width as the filter is used (§12A.5: nothing changes the
+  /// resting state).
+  Widget _labelChips(LumitTheme t) => Padding(
+        key: const ValueKey('project-label-chips'),
+        padding: const EdgeInsets.symmetric(horizontal: _chipStripPad),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final label in [...projectFilterLabels, null])
+              Padding(
+                padding: const EdgeInsets.only(left: _chipGap),
+                child: LumitTooltip(
+                  message: label == null
+                      ? l10n.tipShowEverything
+                      : l10n.tipFilterByLabel,
+                  child: GestureDetector(
+                    key: ValueKey<String>(
+                        'project-label-chip-${label ?? 'none'}'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() =>
+                        _labelFilter = (label == _labelFilter) ? null : label),
+                    child: Container(
+                      width: _chipSize,
+                      height: _chipSize,
+                      decoration: BoxDecoration(
+                        color:
+                            label == null ? t.surface4 : t.labelColour(label),
+                        shape: BoxShape.circle,
+                        border: _labelFilter == label && label != null
+                            ? Border.all(color: t.textPrimary)
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       );
 
@@ -739,7 +902,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               items: l10n.projectColumnItems.toUpperCase(),
               size: l10n.projectColumnSize.toUpperCase(),
               fps: l10n.unitFps.toUpperCase(),
+              path: l10n.projectColumnPath.toUpperCase(),
               style: t.kicker,
+              // The heading is as quiet as its column: Path is context, not a
+              // fact about the item, and the mockup hushes both together.
+              pathStyle: t.kicker.copyWith(color: t.textDisabled),
             ),
           ],
         ),
@@ -820,8 +987,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// rather than being dropped. The count's `· n missing` half is the
   /// "show only missing" filter, which the mockup likewise has no row for.
   Widget _footer(LumitTheme t,
-      {required int items, required int missing, required bool labels}) {
+      {required int items, required int missing, required double width}) {
     final active = _missingOnly && missing > 0;
+    final labels = width >= _widthForFooterLabels;
     final count = t.kicker.copyWith(letterSpacing: _footerCountTracking);
     return Container(
       key: const ValueKey('project-footer'),
@@ -836,8 +1004,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               t,
               key: const ValueKey('project-import'),
               icon: LumitIcon.import,
-              label: labels ? l10n.projectFooterImport : null,
+              label: width >= _widthForImportLabel
+                  ? l10n.projectFooterImport
+                  : null,
               onPressed: _import,
+            ),
+          ),
+          const SizedBox(width: _footerGap),
+          LumitTooltip(
+            message: l10n.newFolder,
+            child: _footerAction(
+              t,
+              key: const ValueKey('project-new-folder'),
+              icon: LumitIcon.folder,
+              label: labels ? l10n.projectFooterFolder : null,
+              onPressed: _newFolder,
             ),
           ),
           const SizedBox(width: _footerGap),
@@ -987,11 +1168,18 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               const SizedBox(height: _previewLineGap),
               _previewFacts(t, item, id, missing),
               const SizedBox(height: _previewLineGap),
-              // The card's second fact line. The mockup fills it with the
-              // container and audio layout, which the engine does not report
-              // yet; the kind of thing this is, is what the panel can say
-              // truthfully in the same breath.
-              Text(type, style: _metaStyle(t)),
+              // The card's second fact line: the mockup's `H.264 · 48 kHz
+              // stereo`. Codec names are the file's own words, not ours, so
+              // they are printed as the container declares them. With nothing
+              // to say — a folder, a solid, a file that will not probe — it
+              // falls back to the kind of thing this is, which is what the
+              // card said before the codec crossed.
+              Text(
+                _previewCodecs(item, id, missing) ?? type,
+                key: const ValueKey('project-info-codec'),
+                style: _metaStyle(t),
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),
@@ -1018,13 +1206,20 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               ? 0.0
               : info.duration.num / info.duration.den;
           final frames = (seconds * fps).round();
-          // Audio has no frames worth counting, so its last field is
-          // milliseconds rather than a frame number.
-          line = info.width > 0
-              ? '${info.width}×${info.height} · '
-                  '${fps.toStringAsFixed(2)} ${l10n.unitFps}'
-                  ' · ${timecodeOfRate(frames, info.fpsNum, info.fpsDen)}'
-              : '${l10n.projectInfoAudio} · ${timecodeOfSecondsMs(seconds)}';
+          final size = '${info.width}×${info.height}';
+          line = switch (info) {
+            // No picture at all — the probe's answer, not an inference from a
+            // width of zero. Sound has no frames worth counting, so its last
+            // field is milliseconds rather than a frame number.
+            _ when info.videoCodec == null =>
+              '${l10n.projectInfoAudio} · ${timecodeOfSecondsMs(seconds)}',
+            // A picture that does not run has no rate and no length: the two
+            // numbers a still would print are one frame and one frame's worth
+            // of time, which say nothing and imply motion.
+            _ when info.isStill => '$size · ${l10n.projectInfoStill}',
+            _ => '$size · ${fps.toStringAsFixed(2)} ${l10n.unitFps}'
+                ' · ${timecodeOfRate(frames, info.fpsNum, info.fpsDen)}',
+          };
         }
       case ItemReference_Composition(:final field0):
         final s = field0.getSettings();
@@ -1043,6 +1238,21 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         key: const ValueKey('project-info-line'),
         style: _metaStyle(t),
         overflow: TextOverflow.ellipsis);
+  }
+
+  /// The card's second fact line for footage: what the container is made of.
+  /// `null` when there is nothing truthful to say, which is every other kind
+  /// of item and any file that has not probed.
+  String? _previewCodecs(ItemReference item, String id, bool missing) {
+    if (item is! ItemReference_Footage || missing) return null;
+    final info = _mediaInfo[id];
+    if (info == null) return null;
+    final parts = [
+      if (info.videoCodec != null) info.videoCodec!,
+      if (info.audioCodec != null && info.sampleRate > 0)
+        '${_sampleRateText(info.sampleRate)} ${_channelText(info.channels)}',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   /// Fill in a footage item's media facts, off the build.
@@ -1064,6 +1274,75 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     } catch (_) {
       return '';
     }
+  }
+
+  /// The **folder** a footage item points into. Display data — the engine
+  /// reads the path the project records (K-173) and touches no disk for it.
+  ///
+  /// The folder, not the whole path, because the Name column two cells left is
+  /// already saying the file name: a Path column that repeated it would be the
+  /// same fact twice rather than the context §12A.3a asks it to carry, and the
+  /// mockup draws a folder (`~/…`) here for exactly that reason.
+  ///
+  /// Empty when the recorded path is a bare name — a project that has never
+  /// been saved, and the footage-beside-the-project convention — because there
+  /// genuinely is no folder to state: the reference is relative to wherever
+  /// the project lands.
+  String _pathOf(FootageReference footage) {
+    try {
+      final path = footage.filePath();
+      final cut = path.lastIndexOf(RegExp(r'[/\\]'));
+      return cut < 0 ? '' : path.substring(0, cut);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// This item's colour tag, and whether a composition places it. Both are
+  /// document questions with document answers, so both are cached with the
+  /// epoch rather than asked per rebuild; the same calm-on-a-deleted-item rule
+  /// the name read follows applies to both.
+  int _labelOf(ItemReference item) {
+    try {
+      return item.label();
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  bool _isUsed(ItemReference item) {
+    try {
+      return item.isUsed();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Tag every selected item, or untag them with 0 — one call each, so one
+  /// undo step each, which is what the engine's op is.
+  void _setLabel(ItemReference item, int label) {
+    final targets = _selectedIds.contains(_idOf(item))
+        ? [for (final id in _selectedIds) _itemById[id]]
+            .whereType<ItemReference>()
+        : [item];
+    for (final target in targets) {
+      target.setLabel(label: label);
+    }
+    _documentChanged();
+  }
+
+  Future<void> _newFolder() async {
+    final state = Provider.of<LumitState>(context, listen: false);
+    // Filed inside the picked folder when one is picked, at the root
+    // otherwise — the folder you are looking at is the one a new folder
+    // belongs in. The engine takes it from there: a blank name becomes the
+    // next unused "Folder N", and a parent that has since gone leaves the
+    // folder at the root rather than refusing to make it.
+    final anchor = _anchorId != null ? _itemById[_anchorId] : null;
+    final parent =
+        anchor is ItemReference_Folder ? anchor.field0.internalid : null;
+    state.project?.newFolder(name: '', parent: parent);
+    _documentChanged();
   }
 
   Future<void> _import() async {
@@ -1096,6 +1375,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _mediaInfo.clear();
       _compCells.clear();
       _childCounts.clear();
+      _paths.clear();
+      _used.clear();
+      _labels.clear();
       _dropThumbs();
     });
   }
@@ -1219,9 +1501,17 @@ class _ProjectRowFrb extends StatefulWidget {
   final int depth;
   final bool missing;
 
-  /// Sound with no picture — the media probe's own answer (zero width), which
-  /// is what picks the speaker glyph over the film one.
+  /// Sound with no picture — the media probe's own answer, which is what picks
+  /// the speaker glyph over the film one.
   final bool audio;
+
+  /// This item's colour tag, an index into the label palette. `0` is untagged,
+  /// and an untagged row keeps its per-type tint (§12A.3a: a tag **tints the
+  /// glyph's strokes** rather than adding a dot beside it).
+  final int label;
+
+  /// Whether any composition places this item — the `in use` badge.
+  final bool inUse;
   final bool selected;
   final bool renaming;
 
@@ -1255,6 +1545,10 @@ class _ProjectRowFrb extends StatefulWidget {
   /// Called after an edit this row made, so the panel re-reads at once rather
   /// than waiting for the engine's change stream to come back around.
   final VoidCallback onLocalEdit;
+
+  /// Tag this row — and the rest of the selection, when this row is part of
+  /// one — from the context menu's chip strip.
+  final ValueChanged<int> onSetLabel;
   final Future<String?> Function()? relinkPicker;
 
   const _ProjectRowFrb({
@@ -1264,6 +1558,8 @@ class _ProjectRowFrb extends StatefulWidget {
     required this.depth,
     required this.missing,
     required this.audio,
+    required this.label,
+    required this.inUse,
     required this.selected,
     required this.renaming,
     required this.columns,
@@ -1278,6 +1574,7 @@ class _ProjectRowFrb extends StatefulWidget {
     required this.folderOpen,
     required this.onToggleFolder,
     required this.onLocalEdit,
+    required this.onSetLabel,
     this.relinkPicker,
   });
 
@@ -1458,6 +1755,8 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
               onFindMissing: widget.onFindMissing,
               onLocalEdit: widget.onLocalEdit,
               onStartRename: widget.onStartRename,
+              onSetLabel: widget.onSetLabel,
+              label: widget.label,
               onRelink: item is ItemReference_Footage
                   ? () => _doRelink((item as ItemReference_Footage).field0)
                   : null,
@@ -1483,6 +1782,18 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
                 _glyph(t),
                 const SizedBox(width: projectRowGap),
                 Expanded(child: _nameOrEditor(t)),
+                // Placed somewhere (§12A.3a). Before the missing badge, so a
+                // broken file that is nonetheless *in* a comp reads left to
+                // right as "used, and lost" — which is the order those two
+                // facts matter in.
+                if (widget.inUse) ...[
+                  const SizedBox(width: projectRowGap),
+                  ProjectBadge(
+                    key: ValueKey<String>('in-use-${_idOf(item)}'),
+                    label: l10n.projectItemInUse,
+                    colour: t.success,
+                  ),
+                ],
                 if (widget.missing) ...[
                   const SizedBox(width: projectRowGap),
                   // The badge *is* the relink control: the mockup gives a
@@ -1506,7 +1817,9 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
                   items: widget.cells.items,
                   size: widget.cells.size,
                   fps: widget.cells.fps,
+                  path: widget.cells.path,
                   style: _metaStyle(t),
+                  pathStyle: _metaStyle(t).copyWith(color: t.textDisabled),
                 ),
               ],
             ),
@@ -1579,12 +1892,23 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
   /// composition stay muted, as the mockup draws them, and missing footage
   /// wears the warning-tinted unlink glyph. No thumbnail here — the preview
   /// card carries the picture, so the tree stays a tight list of names.
+  ///
+  /// **A colour tag takes the glyph over** (docs/07 §3.1, §12A.3a: the tag
+  /// tints the icon's strokes rather than adding a dot). The per-type tint is
+  /// what an *untagged* item wears — a default, not a fact — so a tag that
+  /// left it alone would need a mark of its own, which is what the mockup
+  /// deliberately does not draw. Missing still wins over both: a file that is
+  /// not there is more urgent than what colour someone filed it under.
   Widget _glyph(LumitTheme t) {
     final (icon, tint) = _iconFor(item, t);
     return lumitIcon(
       widget.missing ? LumitIcon.unlink : icon,
       size: iconSize,
-      color: widget.missing ? t.warning : tint,
+      color: widget.missing
+          ? t.warning
+          : widget.label != 0
+              ? t.labelColour(widget.label)
+              : tint,
     );
   }
 
@@ -1687,6 +2011,13 @@ Future<void> showProjectMenuFrb({
   /// Put the row into its in-place rename editor. Null where the menu is
   /// raised from somewhere with no row to edit.
   VoidCallback? onStartRename,
+
+  /// Tag the item. Null where the menu is raised with no row to tag, which is
+  /// what makes the Label row absent rather than dead.
+  ValueChanged<int>? onSetLabel,
+
+  /// The tag the item wears now, so the strip can mark it.
+  int label = 0,
 }) async {
   final isFootage = item is ItemReference_Footage;
   final isComp = item is ItemReference_Composition;
@@ -1694,6 +2025,9 @@ Future<void> showProjectMenuFrb({
   // the row's build: the menu is a gesture, not a rebuild path.
   final openComp =
       Provider.of<LumitUiState>(context, listen: false).selectedComp;
+  // Read here rather than inside the popup's builder: the popup is raised in
+  // its own route, so it has no ThemeScope of the panel's above it.
+  final menuTheme = ThemeScope.of(context).theme;
   final action = await showLumitPopup<_ProjectMenuAction>(
     context: context,
     position: position,
@@ -1733,6 +2067,41 @@ Future<void> showProjectMenuFrb({
               key: const ValueKey('project-menu-add-audio-only'),
               onPressed: () => close(_ProjectMenuAction.addAudioOnly),
               child: Text(l10n.addAudioOnly),
+            ),
+          // The colour tag, as the strip itself rather than a submenu: the
+          // chips ARE the choice, so putting them on the menu row costs one
+          // click where a submenu costs two and a hover in between. The same
+          // shape the Timeline's layer swatch offers, and the same palette.
+          if (onSetLabel != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(l10n.label, style: menuTheme.small),
+                  const SizedBox(width: 6),
+                  for (var i = 0; i < LumitTheme.labelCount; i++)
+                    GestureDetector(
+                      key: ValueKey<String>('project-menu-label-$i'),
+                      onTap: () {
+                        onSetLabel(i);
+                        close(null);
+                      },
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        margin: const EdgeInsets.only(right: 2),
+                        decoration: BoxDecoration(
+                          color: menuTheme.labelColour(i),
+                          shape: BoxShape.circle,
+                          border: i == label
+                              ? Border.all(color: menuTheme.textPrimary)
+                              : null,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           MenuRow(
             onPressed: () => close(_ProjectMenuAction.moveToRoot),

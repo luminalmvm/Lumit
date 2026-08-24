@@ -442,44 +442,6 @@ does not gate the four. Delete each phase here when it lands, as with everything
 
 ## Next - engine/bridge follow-ups
 
-**The Project panel's mockup owes five engine answers** (K-451, docs/07-UI-SPEC.md
-§3.1, docs/15-DESIGN.md §12A.3a). The panel is built to the approved drawing; these
-five pieces of it are drawn there and cannot be honestly filled in yet, so they are
-simply absent rather than faked.
-
-**The engine half of all five has landed.** What remains is the bridge seam and the
-panel itself - one frb method each, then the drawing the mockup already specifies:
-
-1. **A "make a folder" call.** `lumit_core::ops::new_folder_ops(doc, name, parent)`
-   answers the two decisions (the next unused "Folder N" for a blank name, filing
-   inside a parent or leaving it at the root) and hands back the folder's id plus the
-   ops; the caller commits them as one `Op::Batch`, which is what makes it one undo
-   step. **Bridge owes:** a `ProjectReference::new_folder` beside `new_composition`,
-   and the bottom bar's Folder button wired to it.
-2. **A footage item's file path.** `MediaRef::display_path()` - the relative path a
-   saved project actually carries, falling back to the absolute one when a project has
-   never been saved. Display data, no probing. **Bridge owes:** a `file_path` getter on
-   `FootageReference`, and the Path column.
-3. **Used in any composition.** `Document::item_is_used(id)` - one pass over the comps'
-   layers, stopping at the first hit, counting Footage, Solid, Precomp and each Sequence
-   clip's own source. No cache: a document of 100 comps of 100 layers answers for all
-   1,100 of its items well inside a frame (the measurement is a test). **Bridge owes:**
-   an `is_used` getter on `ItemReference`, and the `in use` badge.
-4. **A label colour per project item.** `Document::item_labels`, a map of item id to the
-   same palette index a layer's chip uses, with `Op::SetItemLabel` to write it and
-   `Document::item_label(id)` to read it. Saved with the project, absent when nothing is
-   tagged, and every older `.lum` opens untagged. **Bridge owes:** a label getter and a
-   `set_label` on `ItemReference`, then the row-icon tint and the colour-chip filter
-   beside the search well.
-5. **Codec and audio layout in media info.** The probe result already carried the codec
-   name per stream and the sound's channel count and sample rate; what it lacked was an
-   honest still-versus-video answer, so `MediaProbe::runs_as_video()` (and
-   `has_picture()`) now live on it - the rule `add_footage_layer` used to keep to
-   itself, so the panel and the timeline cannot disagree about what a file is.
-   **Bridge owes:** codec, channels, sample rate and a still flag on `BridgeMediaInfo`,
-   and the preview card's second fact line. The zero-picture-width inference goes with
-   it.
-
 **The Effect controls' unit rider and its vector-pair link** (K-443,
 docs/15-DESIGN.md §12A.3). The redesigned rows draw the unit beside every value, and a
 point is two equal wells with a chain between them. **The engine half has landed**:

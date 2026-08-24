@@ -790,8 +790,14 @@ void main() {
       expect(find.byKey(const ValueKey('project-info-header')), findsOneWidget);
       expect(find.byType(RawImage), findsOneWidget,
           reason: 'the header drew the decoded picture');
-      expect(find.text('footage'), findsOneWidget,
-          reason: 'the header names the item type');
+      // The card's second line names what the file is MADE OF now the codec
+      // crosses (K-451). "footage" was what it could say before that, and is
+      // still the fallback for an item with no container to name.
+      expect(find.text('footage'), findsNothing);
+      final codec =
+          tester.widget<Text>(find.byKey(const ValueKey('project-info-codec')));
+      expect(codec.data, isNotEmpty,
+          reason: 'the header names the container the picture came out of');
     });
 
     /// The header's second line: the media's own vital statistics, from
@@ -1117,6 +1123,156 @@ void main() {
       await tester.pump();
       expect(find.byKey(const ValueKey('rename-field')), findsNothing,
           reason: 'a per-panel binding is live in the focused panel only');
+    });
+
+    // -----------------------------------------------------------------------
+    // The five the mockup drew and the engine could not answer until now
+    // (K-451, docs/07 §3.1, docs/15 §12A.3a).
+    // -----------------------------------------------------------------------
+
+    testWidgets('the bottom bar makes a folder, filed into the picked one',
+        (tester) async {
+      final p = freshProject();
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('project-new-folder')));
+      await tester.pump();
+      expect(rowText('Folder 1'), findsOneWidget,
+          reason: 'a blank name takes the next unused "Folder N"');
+
+      // Picking it and pressing again files the second one inside it, which
+      // is what "the folder you are looking at" means.
+      await tester.tap(rowText('Folder 1'));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await tester.tap(find.byKey(const ValueKey('project-new-folder')));
+      await tester.pump();
+
+      final children = p.state.project!.getItems();
+      expect(children, hasLength(1),
+          reason: 'the second folder is filed, not left at the root');
+      expect(rowText('Folder 2'), findsOneWidget);
+    });
+
+    testWidgets('a footage row states its path, hushed, at the list\'s right',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      tester.view.physicalSize = const Size(480, 760);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(480, 760),
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      expect(find.text('PATH'), findsOneWidget,
+          reason: 'the column has a kicker heading like the rest');
+      // Importing records the bare file name as the relative path (K-173).
+      expect(rowText('shot.mov'), findsOneWidget);
+      expect(
+        find.descendant(
+            of: find.byType(ListView), matching: find.text('shot.mov')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a placed item wears the in use badge, and only a placed one',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final used = p.state.project!.importFootage(path: 'C:/clips/used.mov');
+      p.state.project!.importFootage(path: 'C:/clips/spare.mov');
+      comp.addFootageLayer(footage: used, asSequence: false);
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      expect(find.byKey(ValueKey<String>('in-use-${used.internalid}')),
+          findsOneWidget);
+      expect(find.text('in use'), findsOneWidget,
+          reason: 'the spare clip is not placed, so it says nothing');
+    });
+
+    testWidgets('a colour tag tints the row glyph, filters the tree and undoes',
+        (tester) async {
+      final p = freshProject();
+      final shot = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      p.state.project!.importFootage(path: 'C:/clips/other.mov');
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      // Tagged through the row menu's chip strip — one click, no submenu.
+      await tester.tap(rowText('shot.mov'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('project-menu-label-4')));
+      await tester.pumpAndSettle();
+
+      final item = p.state.project!.getItems().firstWhere((i) =>
+          i is ItemReference_Footage && i.field0.internalid == shot.internalid);
+      expect(item.label(), 4, reason: 'the engine holds the tag');
+
+      // The chip filter narrows to that colour, and the neutral chip clears it.
+      await tester.tap(find.byKey(const ValueKey('project-label-chip-4')));
+      await tester.pump();
+      expect(rowText('shot.mov'), findsOneWidget);
+      expect(rowText('other.mov'), findsNothing,
+          reason: 'an untagged item is not this colour');
+
+      await tester.tap(find.byKey(const ValueKey('project-label-chip-none')));
+      await tester.pump();
+      expect(rowText('other.mov'), findsOneWidget,
+          reason: 'the neutral chip is the way back out');
+    });
+
+    testWidgets('the preview card states the codec and the sound it found',
+        (tester) async {
+      final p = freshProject();
+      // A real file, so the probe has something to answer about.
+      final path = _probeableImageFile('still.bmp');
+      p.state.project!.importFootage(path: path);
+      tester.view.physicalSize = const Size(480, 760);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(480, 760),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      await tester.tap(rowText('still.bmp'));
+      await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
+      await settleFrb(tester, minRounds: 8);
+
+      // A BMP is a picture that does not run: no rate, no length, and the
+      // second line names the codec rather than the kind of item.
+      final line =
+          tester.widget<Text>(find.byKey(const ValueKey('project-info-line')));
+      expect(line.data, contains('still'),
+          reason: 'a still says so where a rate and a length would be');
+      expect(line.data, isNot(contains('fps')));
+
+      final codec =
+          tester.widget<Text>(find.byKey(const ValueKey('project-info-codec')));
+      expect(codec.data, isNot('footage'),
+          reason: 'the codec line replaced the kind-of-item fallback');
     });
   }, skip: !engineAvailable);
 }
