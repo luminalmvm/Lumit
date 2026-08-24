@@ -310,11 +310,20 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   It started life as a toggle inside Glitch, off by default, because turning it on means
   fetching an extra frame and running the motion-arrow calculation; when Glitch split into
   three separate effects it became its own, and T19 rebuilt its insides into the walk described
-  above. One wrinkle worth knowing: the app can only carry one motion-arrow map per layer per
-  frame right now, so if a layer somehow had both Motion blur and Datamosh turned on together,
-  only whichever one is listed first in the effect stack gets its arrows this frame — the other
-  quietly sits out, the same "missing data, do nothing" safety rule every temporal effect
-  already follows.
+  above.
+
+  **Two effects, two sets of arrows (K-444).** There used to be a wrinkle here: a layer could
+  carry only one motion-arrow map per frame, so a layer with both Fast motion blur and
+  Datamosh on it served whichever came first in the stack and the other quietly sat out. That
+  was never a shortage that could be shared away, because the two are not asking the same
+  question. Fast motion blur asks "where is each pixel going *next* frame", so it needs the
+  arrows measured forward. Datamosh asks "where did each pixel come *from* last frame", so it
+  needs them measured backward. Different pairs of frames, different answers. Measuring is the
+  expensive part, so the fix is not to measure more than necessary but to measure exactly what
+  was asked for: the layer now works out which arrow maps its effects want — one, both, or
+  none — and makes each one, and every effect is handed the map it asked for rather than
+  whichever one happened to be lying about. A layer with only one of the two effects costs
+  precisely what it always did.
 - **Posterize time — the stop-motion "on twos" look, and a new kind of effect entirely.**
   Every effect so far takes a finished picture and paints on it. **Posterize time** does
   something different: it changes *what moment in time* the layers render at. Drop it on a

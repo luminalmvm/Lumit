@@ -1170,7 +1170,7 @@ fn wants_flow(
     interpolation: &lumit_core::retime::Interpolation,
 ) -> bool {
     matches!(interpolation, lumit_core::retime::Interpolation::Flow(_))
-        || lumit_core::fx::stack_flow_neighbour(&layer.effects, layer.switches.fx).is_some()
+        || !lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx).is_empty()
 }
 
 /// The policy as it will actually render: `Flow` whose engagement gate declines

@@ -69,7 +69,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
-        flow_field: None,
+        flow_fields: Vec::new(),
         source_key: 0,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
@@ -301,7 +301,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
-        flow_field: None,
+        flow_fields: Vec::new(),
         source_key: 0,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();

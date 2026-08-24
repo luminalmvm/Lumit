@@ -1276,11 +1276,14 @@ bit-exact passthrough regardless of the other parameters (pinned by test).
 
 Footage-only: with no -1 neighbour or flow field (a non-footage layer, or a dropped decode) it
 degrades to a no-op, never a fault. Temporal window `{-1, 0}` — static, exactly the shape
-Motion blur's own `{0, +1}` has, so `stack_flow_neighbour` reads the match name the same
-static way. A layer can carry only one flow field per frame in v1; if a stack somehow has both
-a live Motion blur and a live Datamosh, whichever comes first in stack order wins the single
-slot and the other's flow-dependent behaviour degrades to its own missing-field passthrough —
-never a fault, pinned by test. `moderate` cost (a multi-tap streamline like Motion blur's
+Motion blur's own `{0, +1}` has, so `effect_flow_neighbour` reads the match name the same
+static way. **A layer measures one flow field per consuming effect (K-443's successor K-444,
+superseding K-104's one-per-layer rule):** Motion blur wants the forward measurement to `+1`
+and Datamosh the backward one to `-1`, so there was never a single field both could read — a
+stack with both now carries both, each op binding the field keyed by the offset its own
+effect asked for. Before K-444 the first of the two in stack order took the layer's single
+slot and the other silently rendered its missing-field passthrough. A stack with only one of
+them measures exactly once, as it always did. `moderate` cost (a multi-tap streamline like Motion blur's
 streak, plus a bilinear flow re-sample each step), `full-frame` ROI (the flow can point
 anywhere in the frame, the same unbounded-read reasoning Motion blur's own ROI carries). Not
 seeded (`seeded: false`) — no hash or random-looking sequence, just flow-directed sampling.
@@ -1296,7 +1299,7 @@ picture) into the streamline-melt above, adding the Bloom accumulation dial and 
 Reset. The schema bumps version 2 → 3; pre-release, no migration is required (K-148's
 `streak_length` is still read as the Displacement reach as a courtesy, so an existing instance
 keeps its look). `temporal: {-1, 0}` remains the schema's static declaration and
-`stack_flow_neighbour` reads the match name the same static way it reads Motion blur's.
+`effect_flow_neighbour` reads the match name the same static way it reads Motion blur's.
 
 **The Matte, on all three (K-427, §2.6).** **Block glitch** scales its **Intensity** per
 pixel, before any hash is read, so the jitter, the displacement, the channel split and the

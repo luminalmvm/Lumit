@@ -294,7 +294,7 @@ pub fn collect_comp_jobs(
                         // refinement (clip-relative neighbour resolution);
                         // footage layers first.
                         temporal: Vec::new(),
-                        flow_neighbour: None,
+                        flow_neighbours: Vec::new(),
                         slate: false,
                     });
                 }
@@ -346,7 +346,7 @@ pub fn collect_comp_jobs(
                         blend: None,
                         flow: None,
                         temporal: Vec::new(),
-                        flow_neighbour: None,
+                        flow_neighbours: Vec::new(),
                         slate: true,
                     });
                     continue;
@@ -378,14 +378,14 @@ pub fn collect_comp_jobs(
                 let interp = &layer.interpolation;
                 let blend_on = matches!(interp, Interpolation::Blend) || flow.is_some();
                 let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
-                let flow_neighbour =
-                    lumit_core::fx::stack_flow_neighbour(&layer.effects, layer.switches.fx);
+                let flow_neighbours =
+                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
                 // A layer that needs flow decodes at its own width whatever the
                 // preview tier says (K-331): flow measured on a shrunk decode is
                 // a different measurement, not the same one smaller. Must match
                 // `Stamper::stamp`'s `native` exactly, or the frame's name lies
                 // about the width of the pixels in it.
-                let native = flow.is_some() || flow_neighbour.is_some();
+                let native = flow.is_some() || !flow_neighbours.is_empty();
                 let target_width = if native {
                     None
                 } else {
@@ -438,8 +438,9 @@ pub fn collect_comp_jobs(
                     temporal,
                     // Flow motion blur / Datamosh measure motion between
                     // this frame and their requested neighbour (already
-                    // in `temporal`).
-                    flow_neighbour,
+                    // in `temporal`) — one entry each when both are live
+                    // (K-444), since they want opposite directions.
+                    flow_neighbours,
                     slate: false,
                 });
             }
@@ -503,7 +504,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
                 && x.blend == y.blend
                 && x.flow == y.flow
                 && x.temporal == y.temporal
-                && x.flow_neighbour == y.flow_neighbour
+                && x.flow_neighbours == y.flow_neighbours
         })
 }
 
@@ -540,7 +541,15 @@ impl CompJob {
             h.update(&offset.to_le_bytes());
             h.update(&frame.to_le_bytes());
         }
-        h.update(&self.flow_neighbour.unwrap_or(i32::MIN).to_le_bytes());
+        // `i32::MIN` is not a reachable offset, so "no flow consumer" cannot
+        // collide with a real one — and a stack with a single consumer keeps
+        // exactly the name it had before K-444 made this a list.
+        if self.flow_neighbours.is_empty() {
+            h.update(&i32::MIN.to_le_bytes());
+        }
+        for offset in &self.flow_neighbours {
+            h.update(&offset.to_le_bytes());
+        }
         let mut k = [0u8; 16];
         k.copy_from_slice(&h.finalize().as_bytes()[..16]);
         u128::from_le_bytes(k)
@@ -720,7 +729,7 @@ mod tests {
             blend: None,
             flow: None,
             temporal: Vec::new(),
-            flow_neighbour: None,
+            flow_neighbours: Vec::new(),
             slate: false,
         }
     }

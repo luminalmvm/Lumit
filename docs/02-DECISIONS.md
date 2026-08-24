@@ -12262,3 +12262,45 @@ from Linear, since an oracle alone would be equally satisfied by a shader and a 
 that both ignored the row. `fx-labels.txt` and `fx-reference.json` regenerated; the manual's
 `lut.mdx` caution block, which stated the missing conversion as a limitation, is rewritten as
 guidance. **New arb keys: `fxInputSpace`, `fxRec709`, `fxSrgb`** (Crowdin upload owed).
+
+## K-444 — Both flow consumers on a layer get their own measurement
+
+**DECIDED 2026-08-24** (allocated on safe-lane). **Supersedes K-104's one-flow-field-per-layer
+rule.** A layer carried a single measured motion field, and `stack_flow_neighbour` returned
+the first flow-consuming effect's offset in stack order. So a layer with both **Fast motion
+blur** (docs/08 §3.2) and **Datamosh** (§3.12) served whichever came first and the other read
+nothing, silently rendering its missing-field passthrough — no badge, no warning, an effect
+that appeared to be on and did nothing.
+
+**They cannot share a field, and that is the point.** The measurement is not a shared resource
+that happened to be scarce: Fast motion blur wants the flow from this frame **forward** to
+`+1`, Datamosh wants it **back** to `-1`. Different frame pairs, different answers. The
+settings are identical (`divisor: 2`, defaults — a flow-consuming effect has no flow
+parameters of its own), so the difference is entirely which neighbour is measured against, and
+the honest answer is one measurement per offset asked for.
+
+**The shape.** `stack_flow_neighbour -> Option<i32>` becomes `stack_flow_neighbours -> Vec<i32>`
+(sorted, deduplicated, empty for a stack that consumes none), and the offset a single effect
+wants is factored out as `effect_flow_neighbour(match_name)`. That one table is read in **two**
+places — the decode worker, which measures, and `run_ops`, which binds a field to an op — so
+the field an effect is handed is by construction the one it asked to have measured, rather than
+two lists that could drift. `CompJob::flow_neighbour`, `CompLayerPixels::flow_field`,
+`CompLayerDraw::flow_field` and `run_ops`'s `flow_field` all become their plural, offset-keyed
+selves; an offset whose neighbour did not decode is simply absent, which is that consumer's
+existing passthrough.
+
+**Cost.** A stack with one of the two measures once, exactly as before — the list has one
+entry. Only the stack that was already broken pays for a second measurement, and it pays it to
+get the picture it asked for. The two land as separate entries in the existing flow cache,
+which is already keyed by `(item, frame_a, frame_b, settings)`, so a scrub re-uses both. The
+decode content name keeps its old bytes for the one-consumer and no-consumer cases, so no
+cache is invalidated by the change itself.
+
+Regression tests: `motion_blur_and_datamosh_together_ask_for_both_measurements` (lumit-core —
+the list is `[-1, 1]` either way round, deduplicated, and still empty with the fx switch off)
+and `both_flow_consumers_on_one_layer_read_their_own_measurement` (lumit-render, through
+`run_ops` — a stack carrying both, rendered with both fields bound, with only the `+1`, and
+with only the `-1`; the full run must differ from both one-field runs, which is exactly the
+comparison that was an equality before). No new user-facing strings. The manual's two
+"One flow measurement per layer" note blocks (`datamosh.mdx`, `fast-motion-blur.mdx`) stated
+the old behaviour as advice and are rewritten.

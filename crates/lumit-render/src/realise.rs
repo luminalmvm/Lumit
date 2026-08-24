@@ -213,7 +213,7 @@ impl Realiser<'_> {
                         d.tex_h,
                         &d.fx,
                         &[],
-                        None,
+                        &[],
                         &luts,
                         &[],
                         &[],
@@ -426,7 +426,7 @@ impl Realiser<'_> {
                 th,
                 &fx_ops,
                 &[],
-                None,
+                &[],
                 &luts,
                 &layer_inputs,
                 &flare_lens,
@@ -669,13 +669,21 @@ impl Realiser<'_> {
                         (*offset, self.engine.linearise(&self.ctx, &src))
                     })
                     .collect();
-                // The dense motion field for Fast motion blur, uploaded as its
-                // own texture (only when it matches the layer's raster). The
-                // confidence rides in the .z channel (FX-19).
-                let flow = l.flow_field.as_ref().and_then(|(u, v, conf, fw, fh)| {
-                    (*fw == w && *fh == h)
-                        .then(|| lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h))
-                });
+                // The dense motion fields, one per offset a flow-consuming
+                // effect asked for (K-444), each uploaded as its own texture
+                // (only when it matches the layer's raster). The confidence
+                // rides in the .z channel (FX-19).
+                let flow: Vec<(i32, wgpu::Texture)> = l
+                    .flow_fields
+                    .iter()
+                    .filter(|(_, _, _, _, fw, fh)| *fw == w && *fh == h)
+                    .map(|(offset, u, v, conf, _, _)| {
+                        (
+                            *offset,
+                            lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h),
+                        )
+                    })
+                    .collect();
                 // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
                 // `lut` ops (§3.11); the same load export uses (K-031).
                 let luts = self.load_luts(&l.lut_files);
@@ -708,7 +716,7 @@ impl Realiser<'_> {
                     h,
                     &fx_ops,
                     &neighbours,
-                    flow.as_ref(),
+                    &flow,
                     &luts,
                     &layer_inputs,
                     &flare_lens,
@@ -849,7 +857,7 @@ impl Realiser<'_> {
                             m.tex_h,
                             &m.fx,
                             &[],
-                            None,
+                            &[],
                             &luts,
                             &[],
                             &[],

@@ -1093,9 +1093,9 @@ pub fn build_comp_draws_at(
                     fx,
                     fx_ids,
                     // Adjustment layers process the composite below, not
-                    // footage frames — no neighbours or flow field here.
+                    // footage frames — no neighbours or flow fields here.
                     neighbours: Vec::new(),
-                    flow_field: None,
+                    flow_fields: Vec::new(),
                     // Ordered file paths of the enabled built-in `lut` effects,
                     // 1:1 with the stack's `lut` ops (docs/08 §3.11);
                     // the same `lt` resolve_stack used above.
@@ -1294,13 +1294,27 @@ pub fn build_comp_draws_at(
                     .collect()
             })
             .unwrap_or_default();
-        // The dense motion field for Fast motion blur, carried from the same
-        // decode job (its `(u, v, conf)` are at the layer's decoded size).
-        let flow_field = pixels_by_layer.get(&layer.id).and_then(|lp| {
-            lp.flow_field
-                .as_ref()
-                .map(|(u, v, conf)| (u.clone(), v.clone(), conf.clone(), lp.width, lp.height))
-        });
+        // The dense motion fields, one per offset a flow-consuming effect
+        // asked for (K-444), carried from the same decode job (their
+        // `(u, v, conf)` are at the layer's decoded size).
+        let flow_fields = pixels_by_layer
+            .get(&layer.id)
+            .map(|lp| {
+                lp.flow_fields
+                    .iter()
+                    .map(|(offset, (u, v, conf))| {
+                        (
+                            *offset,
+                            u.clone(),
+                            v.clone(),
+                            conf.clone(),
+                            lp.width,
+                            lp.height,
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
         draws.push(CompLayerDraw {
             layer: layer.id,
@@ -1348,7 +1362,7 @@ pub fn build_comp_draws_at(
             fx,
             fx_ids,
             neighbours,
-            flow_field,
+            flow_fields,
             // Ordered file paths of the enabled built-in `lut` effects, 1:1
             // with the stack's `lut` ops (docs/08 §3.11); the same `lt`
             // resolve_stack used for `fx`.
@@ -1675,7 +1689,7 @@ pub fn accumulation_mb_below(
 fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     for d in draws.iter_mut() {
         d.neighbours = Vec::new();
-        d.flow_field = None;
+        d.flow_fields = Vec::new();
         if let DrawSource::Nested { draws: inner, .. } = &mut d.source {
             strip_temporal_inputs(inner);
         }

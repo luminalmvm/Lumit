@@ -847,15 +847,16 @@ fn motion_blur_window_reaches_the_next_frame_and_wants_flow() {
     assert_eq!(stack_temporal_window(one, true), vec![0, 1]);
     assert!(stack_is_temporal(one, true));
     // The flow-field gate is set by motion blur and nothing else current.
-    assert_eq!(stack_flow_neighbour(one, true), Some(1));
+    assert_eq!(stack_flow_neighbours(one, true), vec![1]);
+    assert_eq!(effect_flow_neighbour("motion_blur"), Some(1));
     let blur = instantiate("blur").unwrap();
     let echo = instantiate("echo").unwrap();
-    assert_eq!(stack_flow_neighbour(&[blur.clone(), echo], true), None);
+    assert!(stack_flow_neighbours(&[blur.clone(), echo], true).is_empty());
     // Bypassed by the layer fx switch, or disabled, it wants nothing.
-    assert_eq!(stack_flow_neighbour(one, false), None);
+    assert!(stack_flow_neighbours(one, false).is_empty());
     let mut off = mb.clone();
     off.enabled = false;
-    assert_eq!(stack_flow_neighbour(std::slice::from_ref(&off), true), None);
+    assert!(stack_flow_neighbours(std::slice::from_ref(&off), true).is_empty());
 }
 
 #[test]
@@ -867,14 +868,16 @@ fn datamosh_window_reaches_the_prior_frame_and_wants_flow() {
     let one = std::slice::from_ref(&dm);
     assert_eq!(stack_temporal_window(one, true), vec![-1, 0]);
     assert!(stack_is_temporal(one, true));
-    assert_eq!(stack_flow_neighbour(one, true), Some(-1));
+    assert_eq!(stack_flow_neighbours(one, true), vec![-1]);
+    assert_eq!(effect_flow_neighbour("datamosh"), Some(-1));
 
     // A plain Block glitch stays single-frame.
     let plain = instantiate("block_glitch").unwrap();
     let plain_one = std::slice::from_ref(&plain);
     assert_eq!(stack_temporal_window(plain_one, true), vec![0]);
     assert!(!stack_is_temporal(plain_one, true));
-    assert_eq!(stack_flow_neighbour(plain_one, true), None);
+    assert!(stack_flow_neighbours(plain_one, true).is_empty());
+    assert_eq!(effect_flow_neighbour("block_glitch"), None);
 
     // Disabled, or the layer fx switch off, Datamosh wants nothing.
     let mut off = dm.clone();
@@ -883,22 +886,32 @@ fn datamosh_window_reaches_the_prior_frame_and_wants_flow() {
         stack_temporal_window(std::slice::from_ref(&off), true),
         vec![0]
     );
-    assert_eq!(stack_flow_neighbour(std::slice::from_ref(&off), true), None);
-    assert_eq!(stack_flow_neighbour(one, false), None);
+    assert!(stack_flow_neighbours(std::slice::from_ref(&off), true).is_empty());
+    assert!(stack_flow_neighbours(one, false).is_empty());
 }
 
 #[test]
-fn motion_blur_and_datamosh_together_the_first_in_stack_order_wins() {
-    // K-104: a layer can carry only one flow field per frame in v1: if
-    // both a live Motion blur and a live Datamosh are in the same
-    // stack, whichever comes first wins the single slot.
+fn motion_blur_and_datamosh_together_ask_for_both_measurements() {
+    // K-444: a layer used to carry one flow field and the first consumer in
+    // stack order took it, leaving the other silently doing nothing. The two
+    // want opposite measurements — forward to the next frame, back to the
+    // previous — so the stack asks for both, and stack order does not decide
+    // who gets served.
     let mb = instantiate("motion_blur").unwrap();
     let dm = instantiate("datamosh").unwrap();
     assert_eq!(
-        stack_flow_neighbour(&[mb.clone(), dm.clone()], true),
-        Some(1)
+        stack_flow_neighbours(&[mb.clone(), dm.clone()], true),
+        vec![-1, 1]
     );
-    assert_eq!(stack_flow_neighbour(&[dm, mb], true), Some(-1));
+    assert_eq!(
+        stack_flow_neighbours(&[dm.clone(), mb.clone()], true),
+        vec![-1, 1],
+        "the list must not depend on stack order"
+    );
+    // Two of the same effect still measure once: sorted and deduplicated.
+    assert_eq!(stack_flow_neighbours(&[mb.clone(), mb], true), vec![1]);
+    // The fx switch still turns the whole thing off.
+    assert!(stack_flow_neighbours(&[dm], false).is_empty());
 }
 
 #[test]

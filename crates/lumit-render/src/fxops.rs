@@ -375,11 +375,13 @@ pub fn render_layer_input(
 /// unchanged when `ops` is empty). `w`/`h` are the texture's raster size.
 /// `neighbours` are the layer's decoded neighbour frames keyed by offset
 /// (empty unless the stack has a temporal effect); a temporal op like Echo
-/// reads them, single-frame ops ignore them. `flow_field` is the layer's
-/// dense motion field (per-pixel `(u, v)` at this raster size), present only
-/// when the stack has a flow-consuming effect (Flow motion blur, or Datamosh
-/// — §3.12, K-107); a missing field makes that effect a passthrough
-/// (degrade, never fault). `luts` is the parallel LUT list (docs/08 §3.11): the
+/// reads them, single-frame ops ignore them. `flow_fields` are the layer's
+/// dense motion fields (per-pixel `(u, v)` at this raster size) keyed by the
+/// neighbour offset each was measured against — one entry per flow-consuming
+/// effect in the stack (Flow motion blur reads `+1`, Datamosh `-1`; §3.2,
+/// §3.12), since the two want opposite measurements and a single shared field
+/// was never something both could read (K-444). An op whose offset is absent is
+/// a passthrough (degrade, never fault). `luts` is the parallel LUT list (docs/08 §3.11): the
 /// k-th `lut` op binds `luts[k]` — a `None` slot (unset, missing, 1D or
 /// unreadable file) is a passthrough, exactly like a missing flow field.
 /// `layer_inputs` is the parallel layer-input list (docs/08 §3.28,
@@ -427,7 +429,7 @@ pub fn run_ops(
     h: u32,
     ops: &lumit_core::fx::ResolvedStack,
     neighbours: &[(i32, Tex)],
-    flow_field: Option<&Tex>,
+    flow_fields: &[(i32, Tex)],
     luts: &[Option<LoadedLut>],
     layer_inputs: &[LayerInput],
     flare_lens: &[Option<(u64, String)>],
@@ -654,8 +656,20 @@ pub fn run_ops(
                     AuxData::LensFile(lens)
                 }
                 AuxKind::Neighbours => AuxData::Neighbours(neighbours),
+                // Which measurement this op reads is the effect's own, from the
+                // one table in lumit-core that the decode worker also asks
+                // (K-444) — so the field an effect is handed is the one it asked
+                // to have measured, and a stack with both consumers no longer
+                // gives the second one whatever the first happened to want.
                 AuxKind::FlowField => AuxData::FlowField {
-                    field: flow_field,
+                    field: lumit_core::fx::effect_flow_neighbour(gpu.match_name()).and_then(
+                        |offset| {
+                            flow_fields
+                                .iter()
+                                .find(|(o, _)| *o == offset)
+                                .map(|(_, t)| t)
+                        },
+                    ),
                     neighbours,
                 },
             };
@@ -1032,7 +1046,7 @@ mod tests {
             H,
             ops,
             &[],
-            None,
+            &[],
             &[],
             &[],
             &[],
@@ -1166,7 +1180,7 @@ mod tests {
             H,
             &ops,
             &[],
-            None,
+            &[],
             &[],
             &[],
             &[],
@@ -1226,7 +1240,7 @@ mod tests {
                 H,
                 &ops,
                 &[],
-                None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1254,7 +1268,7 @@ mod tests {
                 H,
                 &ops,
                 &[],
-                None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1282,7 +1296,7 @@ mod tests {
                 H,
                 &ops,
                 &[(-1, source(&ctx))],
-                None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1327,7 +1341,7 @@ mod tests {
                 H,
                 &ops,
                 &[],
-                None,
+                &[],
                 &[lut(mtime)],
                 &[],
                 &[],

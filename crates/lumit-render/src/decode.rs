@@ -59,19 +59,24 @@ pub struct CompJob {
     /// offset in the stack's temporal window. Empty for a plain layer, so
     /// a single-frame stack decodes exactly one frame.
     pub temporal: Vec<(i32, usize)>,
-    /// Set when the stack has a flow-consuming effect (Flow motion blur,
-    /// docs/08 §3.2, wants `1`; Datamosh, §3.12, K-104, wants `-1`): the
-    /// decode worker measures the dense motion from this frame to the
-    /// neighbour at that offset (already fetched via `temporal`) and
-    /// stamps it onto [`CompLayerPixels::flow_field`]. See
-    /// [`lumit_core::fx::stack_flow_neighbour`].
-    pub flow_neighbour: Option<i32>,
+    /// One entry per flow-consuming effect in the stack (Flow motion blur,
+    /// docs/08 §3.2, wants `1`; Datamosh, §3.12, K-104, wants `-1`), sorted and
+    /// deduplicated: the decode worker measures the dense motion from this frame
+    /// to the neighbour at each offset (already fetched via `temporal`) and
+    /// stamps them onto [`CompLayerPixels::flow_fields`]. Empty for a stack that
+    /// consumes no flow. See [`lumit_core::fx::stack_flow_neighbours`] — and
+    /// K-444 for why this is a list rather than the one slot it used to be.
+    pub flow_neighbours: Vec<i32>,
     /// The file could not be found (docs/07 §3.3): the worker synthesises the
     /// test-bar slate at the layer's size instead of decoding, so a comp with
     /// missing footage shows unmistakably-absent bars rather than silent
     /// black — and never fails the whole frame.
     pub slate: bool,
 }
+
+/// One measured motion field at a layer's decoded size: per-pixel `u` and `v` in
+/// pixels, then the per-pixel confidence in 0..1 (FX-19), each `width × height`.
+pub type FlowFieldData = (Vec<f32>, Vec<f32>, Vec<f32>);
 
 pub struct CompLayerPixels {
     pub layer: Uuid,
@@ -86,12 +91,14 @@ pub struct CompLayerPixels {
     pub temporal: Vec<(i32, Vec<u8>)>,
     /// Dense forward flow (per-pixel `(u, v)` motion in pixels, plus a per-pixel
     /// `conf`idence in 0..1, row-major, same `width × height` as `rgba`) from
-    /// this frame to the neighbour at [`CompJob::flow_neighbour`]'s offset,
-    /// present only when that neighbour decoded. Fast motion blur (docs/08 §3.2,
-    /// offset `1`) smears along it, scaling the streak by `conf` (FX-19);
-    /// Datamosh (§3.12, K-104, offset `-1`) warps the previous frame along the
-    /// `(u, v)` and ignores `conf`.
-    pub flow_field: Option<(Vec<f32>, Vec<f32>, Vec<f32>)>,
+    /// this frame to each neighbour [`CompJob::flow_neighbours`] asked for,
+    /// keyed by that offset. An offset whose neighbour did not decode is simply
+    /// absent, which is its consumer's passthrough. Fast motion blur (docs/08
+    /// §3.2, offset `1`) smears along its field, scaling the streak by `conf`
+    /// (FX-19); Datamosh (§3.12, K-104, offset `-1`) warps the previous frame
+    /// along the `(u, v)` and ignores `conf`. **Both at once is one field each,
+    /// not one field shared** (K-444): they are opposite measurements.
+    pub flow_fields: Vec<(i32, FlowFieldData)>,
     /// The content name of this decode (K-421): a hash of the [`CompJob`]
     /// identity [`crate::plan::same_decode`] compares — item, path, source
     /// frame, decode width, slate, blend partner, flow settings, temporal
@@ -699,13 +706,22 @@ fn decode_comp(
         // is consumed into `rgba` below, where both frames live as RGBA —
         // exactly as the Flow retiming policy computes its flow, on the
         // shared engine that reuses the GPU when one is present. A
-        // dropped neighbour just leaves it None, degrading the
+        // dropped neighbour just leaves that offset absent, degrading its
         // flow-consuming effect to a passthrough.
-        let flow_field = job.flow_neighbour.and_then(|offset| {
-            temporal
-                .iter()
-                .find(|(o, _)| *o == offset)
-                .map(|(_, other)| {
+        //
+        // **One measurement per offset asked for** (K-444). The two effects
+        // want opposite directions — forward to the next frame, back to the
+        // previous — so a single shared field was never something both could
+        // read; the layer used to carry one and the first effect in stack order
+        // silently took it. They are separate entries in `flow_cache` below,
+        // keyed by the frame pair, so a stack with only one of them measures
+        // exactly once, as it always did.
+        let flow_fields: Vec<(i32, FlowFieldData)> = job
+            .flow_neighbours
+            .iter()
+            .filter_map(|&offset| {
+                let (_, other) = temporal.iter().find(|(o, _)| *o == offset)?;
+                Some((offset, {
                     let (w, h) = (px.width as usize, px.height as usize);
                     // An effect asking for motion has no parameters of its own,
                     // and sharing the retime policy's settings would make one
@@ -755,8 +771,9 @@ fn decode_comp(
                     // 6 px at full — while the confidence is a 0..1 weight and
                     // must not be touched by that scaling.
                     lumit_flow::field_to_size(&fwd, &conf, w, h)
-                })
-        });
+                }))
+            })
+            .collect();
         // Blend / Flow policy: combine with the next source frame.
         let rgba = if let Some((ceil, w)) = job.blend {
             let req2 = Request {
@@ -806,7 +823,7 @@ fn decode_comp(
             natural_w: job.natural_w,
             natural_h: job.natural_h,
             temporal,
-            flow_field,
+            flow_fields,
             source_key: job.source_key(),
         });
         // One more source frame in hand. Reported after the layer is filed, so
