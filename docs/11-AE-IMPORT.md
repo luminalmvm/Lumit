@@ -522,6 +522,10 @@ Every import ends with the report — a panel listing per-item outcomes, in the 
   the File menu; it is also written next to what was imported as `import-report.json` for
   tooling.
   **Not built** (docs/TODO.md): the report lives as long as its window does.
+- **Refusals are counted per effect instance** (K-456): a placeholder for a third-party effect
+  holds parameters After Effects itself could not read, dozens of them each, so they arrive as one
+  row — "Particular: 41 parameters could not be read" — rather than one row apiece. Every parameter
+  is kept whole regardless (§6); a single refused parameter still names itself.
 - Expressions disabled at import are their own filter, so a user can work through them.
   The filter is by outcome today; a reason-level filter comes with the persistence work.
 

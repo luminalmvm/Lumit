@@ -582,6 +582,54 @@ fn a_placeholders_parameters_animate_and_nothing_is_dropped() {
     )));
 }
 
+/// **A placeholder that refused a dozen parameters is one row, not a dozen.**
+///
+/// The report's readability, which is the only reason it exists (docs/11 §9).
+/// A third-party effect keeps every parameter and After Effects itself can
+/// read almost none of them: Particular alone refuses dozens, and a real
+/// project full of them buried every other row under thousands of
+/// "could not be read". The parameters are kept whole either way — this is
+/// about what the reader is told. One refusal still names itself, which is why
+/// Twixtor's blob keeps its own row in the test above.
+#[test]
+fn a_placeholders_refused_parameters_are_counted_in_one_row() {
+    let (doc, report) = mapped("edges.lum-bundle");
+    let third = layer(comp(&doc, "Edges"), "Third party");
+    let particular = &third.effects[1];
+    assert_eq!(particular.effect.match_name, "Trapcode Particular");
+
+    let counted: Vec<_> = report
+        .rows
+        .iter()
+        .filter(|row| matches!(row.reason, Reason::EffectParamsUnreadable { .. }))
+        .collect();
+    assert_eq!(counted.len(), 1, "one row for the instance");
+    assert_eq!(
+        counted[0].reason,
+        Reason::EffectParamsUnreadable { count: 3 }
+    );
+    assert_eq!(counted[0].path.property.as_deref(), Some("Particular"));
+    assert_eq!(counted[0].outcome, Outcome::Skipped);
+
+    // Not one of the three is named on its own, and the readable parameter
+    // and the refused ones are all still in the instance.
+    assert!(!reported(&report, |r| matches!(
+        r,
+        Reason::PropertyUnreadable { match_name } if match_name.starts_with("Trapcode")
+    )));
+    assert!(matches!(
+        particular.param("Trapcode Particular-0004"),
+        Some(EffectValue::Float(_))
+    ));
+    let carried = particular
+        .extra
+        .get("ae")
+        .and_then(|ae| ae.get("params"))
+        .and_then(|p| p.as_array())
+        .expect("the refused leaves are kept whole");
+    assert_eq!(carried.len(), 3);
+}
+
 // ---------------------------------------------------------------------------
 // The awkward half
 // ---------------------------------------------------------------------------

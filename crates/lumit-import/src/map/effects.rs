@@ -97,9 +97,14 @@ fn placeholder(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> EffectI
 
     let mut params = Vec::new();
     let mut carried = Vec::new();
+    // A third-party effect refuses parameters by the dozen, and one row each
+    // buries the rest of the report — so the ones raised under this instance
+    // are folded into a count once the walk is done (docs/11 §9).
+    let mark = conv.report.rows.len();
     for leaf in node.children() {
         collect(conv, &here, leaf, &mut params, &mut carried);
     }
+    conv.report.fold_unreadable_since(mark, here.clone());
 
     conv.report.row(
         here,

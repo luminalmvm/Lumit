@@ -12900,3 +12900,34 @@ in the bridge, `a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat`; in F
 shape item carries the gradient rows`. New strings: `shapeFill`, `shapeGradient`,
 `shapeGradientColour`, `shapeGradientFlat`, `shapeGradientLinear`, `shapeGradientRadial`,
 `shapeGradientStartX`, `shapeGradientStartY`, `shapeGradientEndX`, `shapeGradientEndY`.
+
+## K-456 — A placeholder's refused parameters are counted, not listed
+
+**DECIDED 2026-08-24.** Allocated on safe-lane. Amends [11-AE-IMPORT.md](11-AE-IMPORT.md) §9 and
+[impl/ae-import.md](impl/ae-import.md).
+
+A third-party effect imports as a placeholder holding every parameter (K-060, docs/11 §6), and
+After Effects' own scripting cannot read most of them: they are `CUSTOM_VALUE` blobs. Each refusal
+raised its own `PropertyUnreadable` row, so a project carrying Particular, Sapphire and Optical
+Flares opened its report on some two and a half thousand rows saying the same thing — burying the
+blend mode that fell back and the expression that needs looking at, which are the rows the report
+exists for.
+
+**One row per effect instance now**, `Reason::EffectParamsUnreadable { count }`, filed against the
+instance's own path so the row reads "Edges ▸ Third party ▸ Particular: 41 parameters could not be
+read". Nothing is dropped: every refused parameter is still kept whole in the instance's `ae`
+namespace exactly as before, and the capture's own `report.unreadables` list is untouched. This is
+what the reader is told, not what is stored.
+
+**Two or more, or nothing.** A single refused parameter keeps its own row and its match name —
+Curves' point list is one property and naming it is the whole point of that row. Folding starts
+at two, where the name has stopped being information and the count has started.
+
+**Only the placeholder road folds.** A mapped effect's rows are per-parameter still: there the
+refusal names a dial Lumit has and did not get, which is a different fact.
+
+Regression tests: `a_placeholders_refused_parameters_are_counted_in_one_row` in
+`crates/lumit-import/tests/mapping.rs`, over an `edges.lum-bundle` instance built to refuse three;
+the golden fixture's Curves keeps its own named row in
+`the_report_counts_what_it_says_and_names_both_placeholders`. New string:
+`aeEffectParamsUnreadable`.

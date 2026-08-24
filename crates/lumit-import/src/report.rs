@@ -219,6 +219,14 @@ pub enum Reason {
     /// No mapping for this match name yet, so the instance is inert and keeps
     /// its complete dump (docs/11 §6).
     EffectPlaceholder { match_name: String },
+    /// Several parameters of one placeholder instance that After Effects
+    /// itself could not read, counted rather than listed. A third-party
+    /// effect's dump is mostly blobs — Particular alone refuses dozens — and
+    /// one row per parameter buries every other row in the report. The
+    /// parameters are all kept in the instance's `ae` namespace either way; a
+    /// single refused parameter still names itself with
+    /// [`Self::PropertyUnreadable`].
+    EffectParamsUnreadable { count: usize },
     /// A mapped effect's control that Lumit has no counterpart for. The effect
     /// still imported (docs/11 §5's "reported rather than approximated"); this
     /// one dial did not come with it.
@@ -421,6 +429,10 @@ impl std::fmt::Display for Reason {
                 "{match_name} imported as a placeholder — every parameter is kept and it renders \
                  nothing"
             ),
+            Self::EffectParamsUnreadable { count } => write!(
+                f,
+                "{count} parameters could not be read — they are kept whole and import as nothing"
+            ),
             Self::EffectParamNotCarried { effect, param } => write!(
                 f,
                 "{effect}'s {param} has no equivalent — the effect imported without it"
@@ -580,6 +592,33 @@ impl ImportReport {
             outcome,
             reason,
         });
+    }
+
+    /// Fold the `PropertyUnreadable` rows raised since `mark` — the length
+    /// [`Self::rows`] had before the effect's parameters were walked — into
+    /// one count row filed against the effect instance at `path`.
+    ///
+    /// A placeholder for a third-party effect keeps every parameter, and the
+    /// ones After Effects itself refused are a row each: Particular's forty-one
+    /// blobs, Sapphire's, Optical Flares' — thousands of rows in a real
+    /// project, which is a report nobody reads. One row per instance says the
+    /// same thing. Below two the rows are left alone, because a lone refused
+    /// parameter can afford to name itself.
+    pub fn fold_unreadable_since(&mut self, mark: usize, path: ItemPath) {
+        let unreadable = |row: &ReportRow| matches!(row.reason, Reason::PropertyUnreadable { .. });
+        let mut tail = self.rows.split_off(mark.min(self.rows.len()));
+        let count = tail.iter().filter(|row| unreadable(row)).count();
+        if count < 2 {
+            self.rows.append(&mut tail);
+            return;
+        }
+        tail.retain(|row| !unreadable(row));
+        self.rows.append(&mut tail);
+        self.row(
+            path,
+            Outcome::Skipped,
+            Reason::EffectParamsUnreadable { count },
+        );
     }
 
     /// The counts behind docs/11 §9's summary line.

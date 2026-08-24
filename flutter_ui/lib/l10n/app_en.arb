@@ -7088,6 +7088,11 @@
     "description": "Import report row reason, lower case. The placeholder is the After Effects effect's internal name; leave it as written.",
     "placeholders": { "matchName": { "type": "String" } }
   },
+  "aeEffectParamsUnreadable": "{count} parameters could not be read — they are kept whole and import as nothing",
+  "@aeEffectParamsUnreadable": {
+    "description": "Import report row reason, lower case. Shown against one placeholder effect instance whose parameters After Effects itself could not read; the placeholder is how many of them there were (always two or more).",
+    "placeholders": { "count": { "type": "String" } }
+  },
   "aeEffectParamNotCarried": "{effect}'s {param} has no equivalent — the effect imported without it",
   "@aeEffectParamNotCarried": {
     "description": "Import report row reason, lower case. Names an effect and one of its controls.",

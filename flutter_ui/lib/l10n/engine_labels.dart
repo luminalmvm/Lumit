@@ -898,6 +898,8 @@ String? importReason(String key, Map<String, String> args) {
     // Effects.
     case 'effect_placeholder':
       return l10n.aeEffectPlaceholder(a('match_name'));
+    case 'effect_params_unreadable':
+      return l10n.aeEffectParamsUnreadable(a('count'));
     case 'effect_param_not_carried':
       return l10n.aeEffectParamNotCarried(a('effect'), a('param'));
     case 'effect_param_approximated':

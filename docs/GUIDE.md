@@ -5091,6 +5091,16 @@ mapping table that will recognise the effects Lumit *does* have plugs into a sin
 function (`map_effect`); until it exists, everything takes the placeholder road, which
 is the honest answer rather than a hopeful one.
 
+Those effects come with a wrinkle in the report. After Effects' own scripting cannot
+read a lot of what a third-party effect stores — the settings are kept in a private
+blob it will not hand over — so the import keeps the blob whole and writes a line
+saying it could not be read. On a project built with Particular or Sapphire that is
+dozens of lines for one effect and thousands for the project, which drowns the lines
+that actually need a person: the blend mode that had to change, the expression to look
+at. So they are counted instead: one line per effect saying how many of its parameters
+came across unread. Nothing is dropped, and one lone unreadable parameter still gets
+its name said, because there is nothing to drown it out.
+
 Anything After Effects knew that Lumit has no field for — its own item numbers, its
 renderer's name, a footage item's interpretation settings, a layer's stretch
 percentage — is parked in an **`ae` namespace** on whichever object it belonged to.
