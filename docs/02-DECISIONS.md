@@ -13404,3 +13404,39 @@ appears in a delivered gradient.
 pixel each — 33 MB the pair at 1080p, 133 MB at 4K — transient, during a sixteen-bit
 export only. An eight-bit export allocates nothing new, and no cache, preview or playback
 path widens.
+
+## K-499 — The Keys rows carry the Layers editing anatomy, and the layer number returns
+
+**DECIDED 2026-08-25.** The owner's correction of the shipped Keys mode, taken under
+K-458's own carve-out (the owner personally overrules a drawing): the approved Keys
+drawing's read-only property rows are superseded. A Keys-mode **property row matches a
+Layers fold row** — stopwatch, the ◄ ◆ ► navigator once animating, and an editable value
+well (scrub-drag, click-to-type, the shared row machinery of docs/07 §4.3) — keeping the
+drawing's `Group · Name` naming and the value text in `animated`. The **layer row regains
+the layer number**: twirl · number · dot · name · property count, the same identity
+cluster K-461 gives Layers mode. Supersedes docs/15 §12A.1a's "read-only value labels"
+bullet and that part of K-455's wording; the flat list, the filters and everything else
+in §12A.1a stand. docs/impl/timeline-interaction.md §3.2 carries the exact anatomy.
+
+## K-500 — The timeline selection model: a marquee from any ground, additive Shift, a property's name selects its keys
+
+**DECIDED 2026-08-25**, from the timeline-interaction audit the owner commissioned
+("interaction is everything to the user and we want it slick"). Extends K-196 and K-203;
+docs/impl/timeline-interaction.md §2 is the binding spec. The rulings:
+
+- **A marquee can start on any ground** — empty lane space, a shut layer's row beside its
+  bar, a Keys-mode layer band, the area below the stack. Only a control that uses the
+  drag itself (a bar's strip, a key's grab, a block handle) takes the gesture first; a
+  Keys-mode layer band selects on tap and passes drags through. Plain marquee replaces;
+  `Shift`/`Ctrl` held at drag start adds to the standing selection, in the lanes as in
+  the graph.
+- **Keys mode opens with every listed layer twirled open** — its own default twirl state,
+  not Layers mode's shut-by-default set. A sheet of shut bands shows nothing.
+- **Clicking a property's name selects the property and all of its keys** (extending
+  K-196, which selected the property alone); `Ctrl`-click toggles them in the key
+  selection, `Shift`-click extends the run of rows. The stopwatch stays the animate
+  toggle and never selects.
+- **Selection and block marks draw in `text_primary`, never the accent** — K-439's closed
+  list applied to the marquee box, the graph's selected keys and the tangent handles.
+- Two or more selected keys are the block wherever the selection came from — marquee,
+  clicks or a property name — in Layers mode and Keys alike (K-458's tools, one overlay).

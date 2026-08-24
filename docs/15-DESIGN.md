@@ -956,10 +956,16 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   the sheet's filters: **Show — All / Animated** (Animated is the default; it is K-441's filter, and
   `U` is the same reveal from the keyboard) and a scope of **Layers / Selected only**.
 - **A layer's row, then its properties flat.** The layer's own row carries its twirl, its
-  label-colour bullet, its name and — quietly, at the right — how many properties are
-  listed under it. Each property is one row named by the container it came out of:
-  `Transform · Position`, `Glow · Intensity`, with the value it reads at the playhead in
-  `animated` at the right. There are no group headings: the flattening is the point.
+  **layer number** (K-461's muted mono, K-499), its label-colour bullet, its name and —
+  quietly, at the right — how many properties are listed under it. Each property is one
+  row that **matches a Layers fold row** (K-499, superseding this bullet's earlier
+  read-only labels): the stopwatch, the ◄ ◆ ► navigator once animating, the name written
+  as the container it came out of — `Transform · Position`, `Glow · Intensity` — and an
+  editable value well, the value text in `animated`. There are no group headings: the
+  flattening is the point. The exact anatomy is
+  [impl/timeline-interaction.md](impl/timeline-interaction.md) §3.2. **Keys mode opens
+  with every listed layer twirled open** (K-500) — its own twirl default, not Layers
+  mode's.
 - **The layer's lane is a band in its label colour**, carrying the half-scale summary
   diamonds while the layer is shut, exactly as its bar does in Layers mode; a twirled-open
   layer leaves the diamonds to the properties. The lane of a **picked** property is washed

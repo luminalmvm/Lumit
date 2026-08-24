@@ -956,7 +956,12 @@ touching the file (K-024):
 ## 4. Timeline
 
 One Timeline panel; one tab per open comp. Left: the layer outline. Right: time ruler and
-lane area. The divider is draggable.
+lane area. The divider is draggable. **Interaction is specified in
+[impl/timeline-interaction.md](impl/timeline-interaction.md)** (K-499, K-500): the
+selection model (marquee from any ground, additive `Shift`, a property's name selecting
+its keys), the cursor and hover vocabulary, the drag rules (one undo step, live preview,
+Escape reverts), and the audited gap list — read it before touching any gesture in this
+section or §5.
 
 **A comp that stops existing cannot stay fronted.** Deleting the fronted comp, or undoing the
 pre-compose that made it while standing inside it, leaves the panels pointed at something the
