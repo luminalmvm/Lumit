@@ -13123,3 +13123,38 @@ should not change until you do.
 **If a live preview is ever wanted** — a second viewport that keeps up during playback —
 that is the second shared target this entry declined, and it should arrive as its own
 decision with a measured reason, not as a quiet upgrade of this path.
+
+## K-486 — The export preset controls are a strip of their own, above the scroll
+
+**DECIDED 2026-08-24** (owner ruling, on the *Save as…* button clipping its own word).
+
+**The reported symptom was one clipped button; the fix is where the controls live.** K-485
+put the preset list, *Edit* and *Save as…* into the right column of a paired row in the
+Output group — 78 of label and 195 of control. A 95px list, a 48px *Edit* and whatever was
+left is not enough for *Save as…*, and the ellipsis landed mid-word. Widening the column
+would have taken the room from Format beside it and left the same three controls fighting
+over one row's worth of space the next time a word grew.
+
+**A preset is not a setting in the Output section — it is every setting in every section.**
+Applying one fills the format, the size, the bitrate, the rate, the depth, the alpha, the
+crop, the render settings and the sound; saving one writes all of them back. A control with
+that reach sitting inside one of the seven groups it governs was the actual error, and the
+clipping was only how it showed. So the preset controls move **out of the body entirely**,
+into a band under the tab row and above the scrolling page, at the dialog's full width:
+14 either side, 8 above a 22px control and 8 below, over its own hairline — **38** at rest.
+The inline name row that *Edit* and *Save as…* both open appears in the same band, on a
+second line of 22 and its 8, rather than pushing the Output group down.
+
+**It is chrome, not a tab.** The strip sits beside the tab row in the frame's stack of
+bands, but the tab row still names six sections, the scroll-spy is untouched, and nothing
+about it scrolls. A seventh tab would have said the presets are a *place on the page*, and
+they are not — they are the page's own header.
+
+**The buttons take their content's width.** §12A.4 has said since K-469 that a dialog
+button is 12 either side of its label rather than a shared fixed width; the paired column
+was the one place that rule was broken, by an `Expanded` handing *Save as…* the leftovers.
+With the strip's 502 after its label column, a 220 list and two content-width buttons leave
+146 of air, so no translation of either word can reach the edge. `export_metrics_test`
+pins the band, the shared left edge with the rows below, and the button's own width against
+its label — a clipped button is a button narrower than its word, and that now fails.
+

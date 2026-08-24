@@ -1,7 +1,9 @@
 // The export dialog, rebuilt to its drawing (K-444, K-449, K-458, K-485).
 //
 // **The shape is the approved drawing's.** A frame of 640: a kicker title
-// strip naming the composition, a row of section tabs, and a body of titled
+// strip naming the composition, a row of section tabs, the preset strip
+// (K-486 — a preset sets and saves every section, so it is chrome over the
+// whole page rather than a row inside Output), and a body of titled
 // groups — Output, Composition, Time, Picture, Colour, Audio, Metadata — whose
 // rows are a label in a fixed column with the control beside it, two to a line
 // where the rows are short. The footer states the facts (frames, length, size,
@@ -85,19 +87,28 @@ const double exportLabelColumnPaired = 78;
 const EdgeInsets exportBodyPadding = EdgeInsets.fromLTRB(14, 10, 14, 12);
 const double exportColumnGap = 20;
 
-/// The room the frame's own bands take: the title strip, the tab row and the
-/// footer, plus a little air — what the body has to fit inside when the window
-/// is short.
-const double exportChromeHeight = 160;
+/// The room the frame's own bands take: the title strip, the tab row, the
+/// preset strip and the footer, plus a little air — what the body has to fit
+/// inside when the window is short.
+const double exportChromeHeight = 199;
 
 const double exportButtonWidth = 72;
 const double exportNumberWell = 56;
 const double exportSizeWell = 64;
 
-/// The preset row: a narrower list than a full-width control, then *Edit* and
-/// *Save as…* beside it (the owner's ruling on the drawing's single button).
-const double exportPresetDropdown = 95;
-const double exportPresetEditButton = 48;
+/// The preset strip: its own band under the tab row, 8 above a 22px control
+/// and 8 below it, over a hairline — chrome above the scroll, exactly as the
+/// tab row is (the owner's ruling; K-486).
+///
+/// A second line of the same 22 and 8 appears while a preset is being named,
+/// which is why this is the *resting* height rather than the band's only one.
+const double exportPresetStrip = 38;
+const double exportPresetStripGap = 8;
+
+/// The preset list itself. 220 in the 502 the strip has after its label column
+/// leaves the two buttons their content width and 146 of air after them, so
+/// neither *Edit* nor *Save as…* is ever cut (K-486).
+const double exportPresetDropdown = 220;
 
 /// A crop inset's well — four of them and their T · L · B · R marks fit the
 /// row beside the region tick and the final-size reading.
@@ -523,6 +534,7 @@ class _ExportDialogState extends State<_ExportDialog> {
           onPick: _goToSection,
           keyPrefix: 'export',
         ),
+        _presetStrip(t),
         // Vertical metrics never squish (§12A.6): when the window is too short
         // for every group, the body scrolls rather than the rows shrinking.
         ConstrainedBox(
@@ -684,47 +696,8 @@ class _ExportDialogState extends State<_ExportDialog> {
                 onChanged: _setFormat,
               ),
             ),
-            _row(
-              t,
-              l10n.exportPreset,
-              Row(children: [
-                SizedBox(
-                  width: exportPresetDropdown,
-                  height: dialogControlHeight,
-                  child: BareDropdown<String>(
-                    key: const ValueKey('export-preset'),
-                    value: _preset,
-                    options: ['', ..._presets.map((p) => p.name)],
-                    label: (p) => p.isEmpty ? l10n.custom : p,
-                    onChanged: _applyPreset,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: exportPresetEditButton,
-                  height: dialogControlHeight,
-                  child: HouseButton(
-                    key: const ValueKey('export-preset-edit'),
-                    onPressed: _editPreset,
-                    child: Text(l10n.exportPresetEdit, style: t.body),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: SizedBox(
-                    height: dialogControlHeight,
-                    child: HouseButton(
-                      key: const ValueKey('export-preset-save-as'),
-                      onPressed: () => _nameAPreset(''),
-                      child: Text(l10n.exportPresetSaveAs, style: t.body),
-                    ),
-                  ),
-                ),
-              ]),
-              labelColumn: exportLabelColumnPaired,
-            ),
+            null,
           ),
-          if (_naming) _presetNameRow(t),
           _row(
             t,
             l10n.exportWriteTo,
@@ -766,50 +739,110 @@ class _ExportDialogState extends State<_ExportDialog> {
         ],
       );
 
-  /// Naming a preset: the one row *Edit* and *Save as…* both open, because
-  /// saving over a name and renaming into it are the same act (the store
-  /// replaces a preset of that name in its own row).
-  Widget _presetNameRow(LumitTheme t) => _row(
-        t,
-        l10n.exportPresetName,
-        Row(children: [
-          HouseTextField(
-            key: const ValueKey('export-preset-name'),
-            controller: _presetName,
-            width: 180,
-            autofocus: true,
-            fill: t.surface0,
-            onSubmitted: (_) => _savePreset(),
-          ),
-          const SizedBox(width: 6),
-          SizedBox(
-            height: dialogControlHeight,
-            child: HouseButton(
-              key: const ValueKey('export-preset-save'),
-              onPressed: _savePreset,
-              child: Text(l10n.save, style: t.body),
+  /// **The preset strip: chrome above the scroll, not a row inside Output**
+  /// (K-486). A preset sets and saves every section of this dialog, so it
+  /// belongs to the whole page rather than to one group of it — and the strip
+  /// gives *Save as…* its content width, which is what the 173px column it
+  /// used to share never could.
+  ///
+  /// It is not a tab: it sits under the tab row, above the body, and the
+  /// scroll-spy neither reads it nor is read by it.
+  Widget _presetStrip(LumitTheme t) => Container(
+        key: const ValueKey('export-preset-strip'),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: t.hairline)),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+            dialogPadding, exportPresetStripGap, dialogPadding, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _stripRow(
+              t,
+              l10n.exportPreset,
+              [
+                SizedBox(
+                  width: exportPresetDropdown,
+                  height: dialogControlHeight,
+                  child: BareDropdown<String>(
+                    key: const ValueKey('export-preset'),
+                    value: _preset,
+                    options: ['', ..._presets.map((p) => p.name)],
+                    label: (p) => p.isEmpty ? l10n.custom : p,
+                    onChanged: _applyPreset,
+                  ),
+                ),
+                _stripButton(t, 'export-preset-edit', l10n.exportPresetEdit,
+                    _editPreset),
+                _stripButton(t, 'export-preset-save-as',
+                    l10n.exportPresetSaveAs, () => _nameAPreset('')),
+              ],
             ),
-          ),
-          const SizedBox(width: 6),
-          if (_presets.any((p) => p.name == _preset && !p.readOnly))
-            SizedBox(
-              height: dialogControlHeight,
-              child: HouseButton(
-                key: const ValueKey('export-preset-delete'),
-                onPressed: _deletePreset,
-                child: Text(l10n.delete, style: t.body),
+            // Naming a preset: the one line *Edit* and *Save as…* both open,
+            // because saving over a name and renaming into it are the same act
+            // (the store replaces a preset of that name in its own row). It
+            // opens **in this strip**, under the list it is naming.
+            if (_naming)
+              _stripRow(
+                t,
+                l10n.exportPresetName,
+                [
+                  SizedBox(
+                    width: exportPresetDropdown,
+                    child: HouseTextField(
+                      key: const ValueKey('export-preset-name'),
+                      controller: _presetName,
+                      width: exportPresetDropdown,
+                      autofocus: true,
+                      fill: t.surface0,
+                      onSubmitted: (_) => _savePreset(),
+                    ),
+                  ),
+                  _stripButton(t, 'export-preset-save', l10n.save, _savePreset),
+                  if (_presets.any((p) => p.name == _preset && !p.readOnly))
+                    _stripButton(
+                        t, 'export-preset-delete', l10n.delete, _deletePreset),
+                  _stripButton(t, 'export-preset-cancel', l10n.cancel,
+                      () => setState(() => _naming = false)),
+                ],
               ),
-            ),
-          const SizedBox(width: 6),
-          SizedBox(
-            height: dialogControlHeight,
-            child: HouseButton(
-              key: const ValueKey('export-preset-cancel'),
-              onPressed: () => setState(() => _naming = false),
-              child: Text(l10n.cancel, style: t.body),
-            ),
-          ),
-        ]),
+          ],
+        ),
+      );
+
+  /// One line of the strip: a label in the body's own 100px column so the
+  /// strip and the rows under it share a left edge, then the controls, each
+  /// standing 8 after the last and no wider than its own content.
+  Widget _stripRow(LumitTheme t, String label, List<Widget> controls) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: exportPresetStripGap),
+        child: SizedBox(
+          height: dialogControlHeight,
+          child: Row(children: [
+            SizedBox(
+                width: exportLabelColumn, child: Text(label, style: t.body)),
+            const SizedBox(width: exportRowGap),
+            for (final (index, control) in controls.indexed) ...[
+              if (index > 0) const SizedBox(width: exportPresetStripGap),
+              control,
+            ],
+          ]),
+        ),
+      );
+
+  /// A strip button at its content width — §12A.4's 12 either side of an
+  /// outlined label, which is the whole of the clipping fix.
+  Widget _stripButton(
+          LumitTheme t, String id, String label, VoidCallback onPressed) =>
+      SizedBox(
+        height: dialogControlHeight,
+        child: HouseButton(
+          key: ValueKey<String>(id),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          onPressed: onPressed,
+          child: Text(label, style: t.body),
+        ),
       );
 
   Widget _compositionGroup(LumitTheme t) => _group(

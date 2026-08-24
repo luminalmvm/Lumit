@@ -1191,6 +1191,17 @@ be set would only be arranging a refusal, and one that hid the row would leave t
 wondering where it went. The same face is used for the rows no *subsystem* backs — **guide
 layers** and **proxies** ([TODO.md](TODO.md)) — each with a short reason on hover.
 
+**The Export dialog's preset controls are a strip of their own** (K-486). A preset sets and
+saves *every* section of the dialog, so it is chrome over the whole page rather than a row
+inside Output: a band under the tab row and above the scrolling body, at the dialog's full
+width — 14 either side, 8 above a 22px control and 8 below it, over its own hairline, so
+**38** at rest and a second line of 22 and 8 while a preset is being named. It is not a
+tab; the tab row still names six sections and the scroll-spy neither reads the strip nor is
+read by it. Inside it: the body's own 100px label column and its 10, a **220** preset list,
+then *Edit* and *Save as…* **at their content width** — 12 either side of the label, as
+§12A.4's button rule already said — which leaves 146 of air at 640. *Save as…* used to
+share a 173px paired column with the list and *Edit*, and the word was cut in half.
+
 **The right column of a paired row extends left into its own label** (K-485). The drawing
 gives every label 100 and then asks the frame-rate row for a 150px list *and* a 56px value
 well, which is 212 of control in a 173 column: the drawing overflows itself, and the well
@@ -1306,6 +1317,7 @@ a plain constant in the code rather than a token with two equal values.
 | Welcome: the footer strip, and the outlined links in it | 28 / 24 | 28 / 24 |
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
+| Export: the preset strip, at rest (K-486) | 38 | 38 |
 | Dialog value wells and dropdowns | 22 | 22 |
 | Settings: the window itself (K-465) | 760×520 | 760×520 |
 | Settings: sidebar, and one page's entry in it | 160 wide, 24 tall | 160 wide, 24 tall |
