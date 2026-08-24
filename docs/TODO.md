@@ -416,6 +416,22 @@ does not gate the four. Delete each phase here when it lands, as with everything
     rework, the switch-column-at-minimum-width polish, the editable-value colour
     treatment (decided by K-439, built here), and the rest of the redesign's visual
     polish list.
+- **The timeline interaction programme** (K-499, K-500;
+    **docs/impl/timeline-interaction.md** is the binding spec, audit and package list).
+    Ten packages, one agent each, in order - all of them **after** the export-workflow
+    session lands, since they share `timeline_panel_frb.dart` and the arbs:
+    TI-1 selection reaches everywhere (marquee from any ground, additive Shift, Keys
+    opens twirled open, property-name selects its keys, lane key menu);
+    TI-2 the block feel (the escaped-string stretch bug, the sequence-view walk fix,
+    stretch snapping, Escape reverts drags); TI-3 the seamless key mark; TI-4 the Keys
+    rows to K-499 (layer number, stopwatch, navigator, value wells); TI-5 graph handles
+    (dashed lines, hollow rings, handles travel with a dragged key, value hint pill);
+    TI-6 Graph mode's drawn surface (colour-ticked outline, Normalise, Key readout row,
+    right-hand value gutter); TI-7 the graph transform box + numeric entry; TI-8 tangent
+    modes Auto/Clamp/Free (engine seam); TI-9 snapping + ruler completion (bar/work-area/
+    marker snap, double-click reset/create, B/N actions, edge-follow, `=`/`-`/`\`);
+    TI-10 the hover, cursor and modifier-ladder-hint pass. Delete each TI line from here
+    as it lands.
 - **Phase 3 - the node graph and the Nodes workspace** (K-445): the Graph panel as a
     second view of the effect stack that can also wire effects together, auto-wire
     and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes
