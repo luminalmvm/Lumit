@@ -43,7 +43,8 @@ pub struct Mosaic {
         max = 200,
         default = 24,
         hard_min = 1,
-        hard_max = 2000
+        hard_max = 2000,
+        unit = Raw
     )]
     pub horizontal_blocks: i32,
 
@@ -54,7 +55,8 @@ pub struct Mosaic {
         max = 200,
         default = 14,
         hard_min = 1,
-        hard_max = 2000
+        hard_max = 2000,
+        unit = Raw
     )]
     pub vertical_blocks: i32,
 
@@ -70,7 +72,8 @@ pub struct Mosaic {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

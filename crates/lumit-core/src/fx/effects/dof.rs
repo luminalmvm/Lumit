@@ -197,7 +197,8 @@ pub struct Dof {
         max = 1.0,
         default = 0.5,
         hard_min = 0.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub focus: f32,
 
@@ -228,7 +229,8 @@ pub struct Dof {
         max = 1.0,
         default = 0.1,
         hard_min = 0.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub range: f32,
 
@@ -244,7 +246,7 @@ pub struct Dof {
     /// become actual pixels. Exactly one factor of the product may follow the
     /// raster or a half-resolution preview would blur by a quarter of the disc,
     /// and the factor that does is Near/Far below.
-    #[slider(min = 0.0, max = 40.0, default = 8.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 40.0, default = 8.0, hard_min = 0.0, unit = Raw)]
     pub aperture: f32,
 
     /// Per-side circle of confusion for the near side — depths in front of focus
@@ -290,7 +292,8 @@ pub struct Dof {
         max = MAX_BLADES as i64,
         default = 6,
         hard_min = 3,
-        hard_max = MAX_BLADES as i64
+        hard_max = MAX_BLADES as i64,
+        unit = Raw
     )]
     pub blades: i32,
 
@@ -303,7 +306,8 @@ pub struct Dof {
         max = 1.0,
         default = 1.0,
         hard_min = -1.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub roundness: f32,
 
@@ -323,7 +327,8 @@ pub struct Dof {
         max = 1.0,
         default = 0.0,
         hard_min = -1.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub aspect: f32,
 
@@ -340,7 +345,8 @@ pub struct Dof {
         max = 1.0,
         default = 0.0,
         hard_min = -1.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub rim: f32,
 
@@ -354,7 +360,8 @@ pub struct Dof {
         min = 0.0,
         max = 4.0,
         default = 1.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Raw
     )]
     pub threshold: f32,
 
@@ -375,7 +382,8 @@ pub struct Dof {
         max = 30.0,
         default = 0.0,
         hard_min = -30.0,
-        hard_max = 30.0
+        hard_max = 30.0,
+        unit = Raw
     )]
     pub exposure: f32,
 
@@ -409,7 +417,8 @@ pub struct Dof {
         max = 10.0,
         default = 0.0,
         hard_min = -10.0,
-        hard_max = 10.0
+        hard_max = 10.0,
+        unit = Raw
     )]
     pub gamma: f32,
 
@@ -419,11 +428,11 @@ pub struct Dof {
     /// takes the unweighted gather — the arithmetic this effect has always done.
     /// **Our reading**, though the artefact and the family of fixes are well
     /// known.
-    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub remove_edge_leak: f32,
 
     /// How big a depth jump counts as an edge for the row above.
-    #[slider(min = 0.0, max = 1.0, default = 0.10, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.10, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub detect_edge_threshold: f32,
 
     // ---- Back out of the twirls ----
@@ -454,7 +463,8 @@ pub struct Dof {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

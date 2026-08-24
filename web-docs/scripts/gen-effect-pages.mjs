@@ -64,9 +64,11 @@ const CONTROL = {
 
 const UNIT = {
   raw: "-",
+  percent: "Per cent",
   px: "Pixels at composition size",
   degrees: "Degrees",
   seconds: "Seconds",
+  frames: "Frames",
 };
 
 /** Escape the characters that would break out of a Markdown table cell. */

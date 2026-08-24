@@ -48,7 +48,7 @@ pub struct Datamosh {
     /// value above 1 extrapolates past the moshed frame for a punchier tear.
     /// Default 1 (owner, 2026-07-19): below 1 it reads like a lowered Mix, so the
     /// full melt is the out-of-the-box look.
-    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
     /// Frames of predicted motion the streamline walk reaches (each step advances
@@ -61,14 +61,14 @@ pub struct Datamosh {
     /// [`Datamosh::DERIVED_DISPLACEMENT`] rather than this row: an old project's
     /// reach lives under an id the schema no longer declares, so the bag cannot
     /// carry it.
-    #[slider(min = 1.0, max = 16.0, default = 4.0, hard_min = 1.0)]
+    #[slider(min = 1.0, max = 16.0, default = 4.0, hard_min = 1.0, unit = Frames)]
     pub displacement: f32,
 
     /// How much of the reach accumulates into the smear: 0 keeps only the nearest
     /// step (a short, quickly-resetting trail), 1 averages the whole walk evenly
     /// (a long melting bloom). A pure 0..1 ratio — the natural unit for a blend
     /// weight.
-    #[slider(min = 0.0, max = 1.0, default = 0.6, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.6, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub bloom: f32,
 
     /// Seconds between simulated I-frames: the melt ramps from a clean frame just
@@ -81,7 +81,7 @@ pub struct Datamosh {
     ///
     /// What it *produces* — where the ramp has got to this frame — is
     /// [`Datamosh::DERIVED_RAMP`].
-    #[slider(min = 0.0, max = 5.0, default = 0.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 5.0, default = 0.0, hard_min = 0.0, unit = Seconds)]
     pub reset_interval: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -90,7 +90,8 @@ pub struct Datamosh {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

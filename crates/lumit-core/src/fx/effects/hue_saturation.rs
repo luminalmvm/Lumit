@@ -100,7 +100,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Saturation"
+        label = "Saturation",
+        unit = Percent
     )]
     pub master_saturation: f32,
     /// Per cent gain on the HSV value: −100 to black, +100 doubled.
@@ -109,7 +110,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Lightness"
+        label = "Lightness",
+        unit = Percent
     )]
     pub master_lightness: f32,
 
@@ -122,7 +124,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Saturation"
+        label = "Saturation",
+        unit = Percent
     )]
     pub reds_saturation: f32,
     /// Per cent, weighted toward hues near red.
@@ -131,7 +134,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Lightness"
+        label = "Lightness",
+        unit = Percent
     )]
     pub reds_lightness: f32,
 
@@ -144,7 +148,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Saturation"
+        label = "Saturation",
+        unit = Percent
     )]
     pub yellows_saturation: f32,
     /// Per cent, weighted toward hues near yellow.
@@ -153,7 +158,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Lightness"
+        label = "Lightness",
+        unit = Percent
     )]
     pub yellows_lightness: f32,
 
@@ -166,7 +172,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Saturation"
+        label = "Saturation",
+        unit = Percent
     )]
     pub greens_saturation: f32,
     /// Per cent, weighted toward hues near green.
@@ -175,7 +182,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Lightness"
+        label = "Lightness",
+        unit = Percent
     )]
     pub greens_lightness: f32,
 
@@ -188,7 +196,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Saturation"
+        label = "Saturation",
+        unit = Percent
     )]
     pub cyans_saturation: f32,
     /// Per cent, weighted toward hues near cyan.
@@ -197,7 +206,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Lightness"
+        label = "Lightness",
+        unit = Percent
     )]
     pub cyans_lightness: f32,
 
@@ -210,7 +220,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Saturation"
+        label = "Saturation",
+        unit = Percent
     )]
     pub blues_saturation: f32,
     /// Per cent, weighted toward hues near blue.
@@ -219,7 +230,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Lightness"
+        label = "Lightness",
+        unit = Percent
     )]
     pub blues_lightness: f32,
 
@@ -232,7 +244,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Saturation"
+        label = "Saturation",
+        unit = Percent
     )]
     pub magentas_saturation: f32,
     /// Per cent, weighted toward hues near magenta.
@@ -241,7 +254,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 0.0,
         hard_min = -100.0,
-        label = "Lightness"
+        label = "Lightness",
+        unit = Percent
     )]
     pub magentas_lightness: f32,
 
@@ -251,7 +265,8 @@ pub struct HueSaturation {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

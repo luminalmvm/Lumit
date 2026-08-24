@@ -544,9 +544,20 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
         .unwrap_or_else(|| sentence_case(&id));
 
     let idc = quote! { ::lumit_core::fx::ParamId::new(#id) };
+    // What the number means (K-443's unit rider, and the resolve step's spatial
+    // rescale). A `#[dial]` is degrees by definition and a control that carries
+    // no number carries no unit, so those two answer themselves; a slider, a
+    // bounded slider or a counter has a genuine choice to make, and saying
+    // nothing is `Unset` — which the catalogue test fails the build on, rather
+    // than the silent `Raw` that used to make "dimensionless" and "nobody
+    // decided" the same declaration.
     let unit = match get("unit") {
         Some(u) => quote! { ::lumit_core::fx::Unit::#u },
-        None => quote! { ::lumit_core::fx::Unit::Raw },
+        None => match which.as_str() {
+            "slider" | "bounded" | "counter" => quote! { ::lumit_core::fx::Unit::Unset },
+            "dial" => quote! { ::lumit_core::fx::Unit::Degrees },
+            _ => quote! { ::lumit_core::fx::Unit::Raw },
+        },
     };
 
     let (kind, read) = match which.as_str() {

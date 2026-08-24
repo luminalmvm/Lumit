@@ -42,7 +42,7 @@ pub struct AccumulationMb {
     /// Float (as Echo's Echoes and flow Motion blur's Samples are); the detector
     /// rounds and clamps. Heavy — each sample is a full comp re-render — so a
     /// tasteful default of 8.
-    #[slider(min = 2.0, max = 32.0, default = 8.0, hard_min = 2.0, hard_max = 64.0)]
+    #[slider(min = 2.0, max = 32.0, default = 8.0, hard_min = 2.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
     /// Degrees: the fraction of the frame interval the shutter is open is
@@ -53,7 +53,8 @@ pub struct AccumulationMb {
         max = 720.0,
         default = 180.0,
         hard_min = 0.0,
-        hard_max = 720.0
+        hard_max = 720.0,
+        unit = Degrees
     )]
     pub shutter_angle: f32,
 
@@ -65,7 +66,8 @@ pub struct AccumulationMb {
         max = 360.0,
         default = -90.0,
         hard_min = -720.0,
-        hard_max = 720.0
+        hard_max = 720.0,
+        unit = Degrees
     )]
     pub shutter_phase: f32,
 
@@ -84,7 +86,8 @@ pub struct AccumulationMb {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

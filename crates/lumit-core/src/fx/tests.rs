@@ -12429,3 +12429,266 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
         assert_eq!(ops.len(), 1, "{name}: the effect resolved to no op");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Units, vector pairs and the pair link flag (K-443)
+// ---------------------------------------------------------------------------
+
+/// **Every parameter says what its number means.** The panel draws the unit
+/// beside the value (K-443), so a parameter that never declared one would show a
+/// bare number and nobody would notice; the derive answers for the kinds that
+/// cannot carry a unit and for a dial, and leaves the numeric kinds to decide,
+/// which is what this catches when one forgets.
+///
+/// `Unit::Unset` is the derive's default for `#[slider]`, `#[bounded]` and
+/// `#[counter]`, so this test *is* the gate: it fails with the offenders named.
+#[test]
+fn every_parameter_declares_a_deliberate_unit() {
+    let offenders: Vec<(&str, &str)> = BUILTIN_DEFS
+        .iter()
+        .flat_map(|d| {
+            d.schema()
+                .params
+                .iter()
+                .map(move |p| (d.schema().match_name, p))
+        })
+        .filter(|(_, p)| p.unit == Unit::Unset)
+        .map(|(name, p)| (name, p.id))
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "parameters with no declared unit — add `unit = Px | Percent | Degrees | \
+         Seconds | Frames | Raw` to each (Raw is the deliberate 'no unit'): {offenders:?}"
+    );
+}
+
+/// **The units the frontend used to hard-code are the declaration's now.**
+///
+/// `pickablePointParams` in the Effect controls panel was a Dart map from a
+/// parameter *id* to "writes comp pixels" or "writes % of frame". Two things
+/// were wrong with it: the knowledge is the engine's, and an id is not unique —
+/// `centre_x` is a per cent of the comp's width on Radial blur and px@comp on
+/// four other effects, so a map keyed on the id alone could only be right about
+/// one of them. These are the exact truths it encoded, plus the ones it could
+/// not express, read off the declarations.
+#[test]
+fn the_point_units_the_panel_hard_coded_are_declared_per_effect() {
+    let unit_of = |name: &str, id: &str| {
+        BUILTIN_DEFS
+            .get(name)
+            .and_then(|d| d.schema().params.iter().find(|p| p.id == id))
+            .map(|p| p.unit)
+    };
+    // The map's `true` entries: comp pixels.
+    for (effect, id) in [
+        ("lens_flare", "light_x"),
+        ("lens_flare", "light_y"),
+        ("dof", "focus_point_x"),
+        ("dof", "focus_point_y"),
+    ] {
+        assert_eq!(unit_of(effect, id), Some(Unit::Px), "{effect}.{id}");
+    }
+    // Its one `false` entry: Radial blur's centre is a per cent of the frame,
+    // and `packed` turns it into a fraction of the raster's own width/height.
+    assert_eq!(unit_of("radial_blur", "centre_x"), Some(Unit::Percent));
+    assert_eq!(unit_of("radial_blur", "centre_y"), Some(Unit::Percent));
+    // The `centre_x` rows an id-keyed map called percentages by mistake.
+    for effect in ["iris_wipe", "linear_wipe", "lens_distort", "mirror"] {
+        assert_eq!(unit_of(effect, "centre_x"), Some(Unit::Px), "{effect}");
+        assert_eq!(unit_of(effect, "centre_y"), Some(Unit::Px), "{effect}");
+    }
+}
+
+/// **A per cent of the diagonal is still nobody's unit** — K-419's rule, now
+/// that there is a `Percent` beside it to be confused with. A share of the
+/// frame is not a distance; a distance is px@comp.
+#[test]
+fn percent_is_never_a_disguised_distance() {
+    for d in BUILTIN_DEFS.iter() {
+        for p in d.schema().params {
+            assert!(
+                !(p.unit == Unit::Percent && p.unit.is_spatial()),
+                "{}.{}: a per cent must not follow the raster",
+                d.schema().match_name,
+                p.id
+            );
+        }
+    }
+}
+
+/// **Every `_x` is half of a pair the declaration names.** A point is two
+/// adjacent Float rows by convention (docs/07 §6.1); [`EffectSchema::pairs`] is
+/// where that convention is read now, so an `_x` with no `_y` after it — a typo,
+/// a row inserted between the halves — would silently stop being a point, lose
+/// its link chain and its crosshair, and look like a plain number instead.
+#[test]
+fn every_x_parameter_is_half_of_a_declared_pair() {
+    let mut pairs_seen = 0;
+    for d in BUILTIN_DEFS.iter() {
+        let schema = d.schema();
+        let declared: Vec<&str> = schema.pairs().map(|p| p.x).collect();
+        for p in schema.params {
+            if let Some(stem) = p.id.strip_suffix("_x") {
+                assert!(
+                    declared.contains(&p.id),
+                    "{}.{}: no `{stem}_y` Float directly after it, so the panel \
+                     cannot draw the pair",
+                    schema.match_name,
+                    p.id
+                );
+            }
+            if let Some(stem) = p.id.strip_suffix("_y") {
+                assert!(
+                    schema.pairs().any(|q| q.stem == stem),
+                    "{}.{}: a `_y` with no `{stem}_x` before it",
+                    schema.match_name,
+                    p.id
+                );
+            }
+        }
+        pairs_seen += schema.pairs().count();
+    }
+    // A walk that suddenly finds nothing is a broken walk, not a catalogue with
+    // no points in it.
+    assert!(
+        pairs_seen >= 40,
+        "only {pairs_seen} vector pairs found across the catalogue"
+    );
+}
+
+/// The pairs themselves, spot-checked where the panel already draws one: the
+/// flare's Light, Radial blur's Centre, and the Transform effect's three.
+#[test]
+fn a_pair_is_its_stem_and_its_two_halves() {
+    let pairs = |name: &str| -> Vec<(&str, &str, &str)> {
+        BUILTIN_DEFS
+            .get(name)
+            .map(|d| d.schema().pairs().map(|p| (p.stem, p.x, p.y)).collect())
+            .unwrap_or_default()
+    };
+    assert!(pairs("lens_flare").contains(&("light", "light_x", "light_y")));
+    assert!(pairs("radial_blur").contains(&("centre", "centre_x", "centre_y")));
+    let transform = pairs("transform");
+    assert!(transform.contains(&("anchor", "anchor_x", "anchor_y")));
+    assert!(transform.contains(&("position", "position_x", "position_y")));
+    assert!(transform.contains(&("scale", "scale_x", "scale_y")));
+}
+
+/// **A pair starts unlinked, and the flag survives the file.**
+///
+/// Unlinked is what every project written before the flag existed means, and
+/// what it did: two numbers that moved on their own. A document that has never
+/// been linked writes no field at all, so an untouched project saves back the
+/// same bytes (K-258), and a document from before the field loads with every
+/// pair unlinked rather than refusing.
+#[test]
+fn a_vector_pair_link_is_off_by_default_and_survives_the_file() {
+    let mut e = instantiate("lens_flare").expect("the flare is a built-in");
+    assert!(!e.pair_linked("light"), "a fresh pair is unlinked");
+    assert!(e.linked_pairs.is_empty());
+
+    // Nothing linked: nothing written.
+    let bare = serde_json::to_value(&e).expect("an instance serialises");
+    assert!(
+        bare.get("linked_pairs").is_none(),
+        "an unlinked instance must not grow a field: {bare}"
+    );
+
+    // Linked: written, and read back linked.
+    assert!(e.set_pair_linked("light", true), "the toggle changed it");
+    assert!(!e.set_pair_linked("light", true), "and is idempotent");
+    let saved = serde_json::to_value(&e).expect("an instance serialises");
+    let back: crate::model::EffectInstance = serde_json::from_value(saved).expect("it reads back");
+    assert!(back.pair_linked("light"));
+    assert_eq!(back.linked_pairs, vec!["light".to_owned()]);
+
+    // A file from before the field: every pair unlinked, no error.
+    let mut older = serde_json::to_value(&e).expect("an instance serialises");
+    older
+        .as_object_mut()
+        .expect("an object")
+        .remove("linked_pairs");
+    let old: crate::model::EffectInstance =
+        serde_json::from_value(older).expect("an older instance still loads");
+    assert!(!old.pair_linked("light"));
+
+    // Unlinking takes the field away again, so the document goes back to the
+    // bytes it had before anyone touched the chain.
+    let mut relinked = back;
+    assert!(relinked.set_pair_linked("light", false));
+    assert!(serde_json::to_value(&relinked)
+        .expect("an instance serialises")
+        .get("linked_pairs")
+        .is_none());
+
+    // Two pairs stay sorted whatever order the chains were clicked in, so the
+    // same links always save the same bytes.
+    let mut both = instantiate("transform").expect("Transform is a built-in");
+    both.set_pair_linked("scale", true);
+    both.set_pair_linked("anchor", true);
+    assert_eq!(
+        both.linked_pairs,
+        vec!["anchor".to_owned(), "scale".to_owned()]
+    );
+}
+
+/// **Toggling the chain is one undo step.** It rides the effect stack's own op
+/// (`SetLayerEffects`), exactly as renaming an instance or typing a value does —
+/// docs/03 §8's coarse, exactly-invertible edit — so one undo puts the chain
+/// back and nothing else moves.
+#[test]
+fn linking_a_pair_is_one_undoable_op() {
+    use crate::model::{Document, ProjectItem};
+    use crate::ops::Op;
+    use crate::store::DocumentStore;
+
+    let (mut comp, mut layer) = marker_rig((25, 1), Vec::new(), (0, 1));
+    layer.effects = vec![instantiate("lens_flare").expect("the flare is a built-in")];
+    let (comp_id, layer_id) = (comp.id, layer.id);
+    comp.layers.push(layer);
+    let store = DocumentStore::new(Document::new());
+    store
+        .commit(Op::AddItem {
+            index: 0,
+            item: Box::new(ProjectItem::Composition(comp)),
+        })
+        .expect("the comp goes in");
+
+    let linked = |s: &DocumentStore| {
+        s.snapshot()
+            .comp(comp_id)
+            .expect("the comp")
+            .layers
+            .iter()
+            .find(|l| l.id == layer_id)
+            .expect("the layer")
+            .effects[0]
+            .pair_linked("light")
+    };
+    assert!(!linked(&store), "a fresh flare's Light is unlinked");
+
+    let mut effects = store
+        .snapshot()
+        .comp(comp_id)
+        .expect("the comp")
+        .layers
+        .iter()
+        .find(|l| l.id == layer_id)
+        .expect("the layer")
+        .effects
+        .clone();
+    assert!(effects[0].set_pair_linked("light", true));
+    store
+        .commit(Op::SetLayerEffects {
+            comp: comp_id,
+            layer: layer_id,
+            effects,
+        })
+        .expect("the toggle commits");
+    assert!(linked(&store), "the chain closed");
+
+    store.undo().expect("one undo");
+    assert!(!linked(&store), "and one undo opened it again");
+    store.redo().expect("one redo");
+    assert!(linked(&store), "and redo closes it");
+}

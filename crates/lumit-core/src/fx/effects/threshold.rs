@@ -38,7 +38,8 @@ pub struct Threshold {
         max = 100.0,
         default = 50.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub level: f32,
 
@@ -46,7 +47,7 @@ pub struct Threshold {
     /// cut (floored at a thousandth, so it is still antialiased); raise it for a
     /// gradient between the two tones. Not an AE control (K-401), and neutral at
     /// its default.
-    #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 100.0, default = 0.0, hard_min = 0.0, unit = Percent)]
     pub softness: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -55,7 +56,8 @@ pub struct Threshold {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

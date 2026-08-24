@@ -177,7 +177,7 @@ pub struct BezierWarp {
     /// decision 2 — AE's Quality buys smaller triangles; there are no triangles
     /// here, so it buys convergence). Eight is well past where an ordinary warp
     /// stops moving.
-    #[counter(min = 1, max = 12, default = 8, hard_min = 1, hard_max = 12)]
+    #[counter(min = 1, max = 12, default = 8, hard_min = 1, hard_max = 12, unit = Raw)]
     pub quality: i32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -186,7 +186,8 @@ pub struct BezierWarp {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

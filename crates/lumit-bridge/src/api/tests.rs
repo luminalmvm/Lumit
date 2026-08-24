@@ -713,6 +713,7 @@ fn effect_with_every_kind() -> lumit_core::model::EffectInstance {
         ],
         sample_temporally: true,
         custom_name: None,
+        linked_pairs: Vec::new(),
         extra: serde_json::Map::new(),
     }
 }

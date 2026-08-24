@@ -35,7 +35,8 @@ pub struct Sharpen {
         max = 300.0,
         default = 60.0,
         hard_min = 0.0,
-        hard_max = 300.0
+        hard_max = 300.0,
+        unit = Percent
     )]
     pub amount: f32,
 
@@ -53,7 +54,7 @@ pub struct Sharpen {
 
     /// Linear-light contrast below which detail is left alone, so compression
     /// noise is not amplified (§3.9).
-    #[slider(min = 0.0, max = 1.0, default = 0.05, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.05, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub threshold: f32,
 
     /// Sharpen the luma signal only — avoids chroma fringing on compressed game
@@ -67,7 +68,8 @@ pub struct Sharpen {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

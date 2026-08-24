@@ -71,7 +71,7 @@ pub struct CardWipe {
     /// Closed 0..100 (K-414): a wipe cannot be less than begun or more than
     /// complete, so the range is the parameter, and typing past either end
     /// would offer a picture that does not exist.
-    #[bounded(min = 0.0, max = 100.0, default = 50.0)]
+    #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub completion: f32,
 
     /// How much of the whole wipe one card's own flip takes, per cent. At 100
@@ -83,17 +83,18 @@ pub struct CardWipe {
         max = 100.0,
         default = 50.0,
         hard_min = 1.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub transition_width: f32,
 
     /// How many cards down the frame.
-    #[counter(min = 1, max = 64, default = 6, hard_min = 1, hard_max = 256)]
+    #[counter(min = 1, max = 64, default = 6, hard_min = 1, hard_max = 256, unit = Raw)]
     pub rows: i32,
 
     /// How many cards across it. The default pair is near-square on a 16:9
     /// frame, as §3.65's is.
-    #[counter(min = 1, max = 64, default = 8, hard_min = 1, hard_max = 256)]
+    #[counter(min = 1, max = 64, default = 8, hard_min = 1, hard_max = 256, unit = Raw)]
     pub columns: i32,
 
     /// Which line each card turns about. Random picks per card, from the Seed.
@@ -116,7 +117,8 @@ pub struct CardWipe {
         max = 100.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub randomness: f32,
 
@@ -131,7 +133,8 @@ pub struct CardWipe {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

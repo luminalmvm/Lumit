@@ -75,7 +75,7 @@ pub struct MatteKey {
 
     /// Per cent → a 0.. multiplier on the matte fall-off. 100 % keys the exact
     /// screen colour to zero; higher keys more aggressively.
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub screen_gain: f32,
 
     /// Per cent → 0..1: how the two non-screen channels are weighted into the
@@ -85,7 +85,8 @@ pub struct MatteKey {
         max = 100.0,
         default = 50.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub screen_balance: f32,
 
@@ -108,7 +109,8 @@ pub struct MatteKey {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub spill: f32,
 
@@ -119,7 +121,8 @@ pub struct MatteKey {
         max = 100.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub clip_black: f32,
 
@@ -130,7 +133,8 @@ pub struct MatteKey {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub clip_white: f32,
 
@@ -141,7 +145,8 @@ pub struct MatteKey {
         max = 100.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub clip_rollback: f32,
 
@@ -164,7 +169,8 @@ pub struct MatteKey {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

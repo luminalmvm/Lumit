@@ -45,7 +45,8 @@ pub struct DirectionalBlur {
         max = 180.0,
         default = 0.0,
         hard_min = -3600.0,
-        hard_max = 3600.0
+        hard_max = 3600.0,
+        unit = Degrees
     )]
     pub angle: f32,
 
@@ -55,7 +56,8 @@ pub struct DirectionalBlur {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

@@ -61,7 +61,8 @@ pub struct MotionBlur {
         max = 720.0,
         default = 180.0,
         hard_min = 0.0,
-        hard_max = 720.0
+        hard_max = 720.0,
+        unit = Degrees
     )]
     pub shutter_angle: f32,
 
@@ -69,7 +70,7 @@ pub struct MotionBlur {
     /// a Float row (Echo's Echoes does the same); [`MotionBlur::packed`] rounds
     /// and clamps. The kernel spends fewer than this on a short streak (K-390's
     /// adaptive taps), so this is the ceiling on quality and cost, not the count.
-    #[slider(min = 8.0, max = 32.0, default = 16.0, hard_min = 2.0, hard_max = 64.0)]
+    #[slider(min = 8.0, max = 32.0, default = 16.0, hard_min = 2.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
     /// The reconstruction tier (K-390). Normal draws straight streaks; High
@@ -137,7 +138,8 @@ pub struct MotionBlur {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

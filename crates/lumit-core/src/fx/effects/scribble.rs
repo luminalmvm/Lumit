@@ -93,7 +93,8 @@ pub struct Scribble {
         max = 100.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub start: f32,
 
@@ -103,7 +104,8 @@ pub struct Scribble {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub end: f32,
 
@@ -121,7 +123,8 @@ pub struct Scribble {
         min = 0.0,
         max = 30.0,
         default = 8.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Raw
     )]
     pub wiggles_per_second: f32,
 
@@ -136,7 +139,8 @@ pub struct Scribble {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub opacity: f32,
 
@@ -151,7 +155,8 @@ pub struct Scribble {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

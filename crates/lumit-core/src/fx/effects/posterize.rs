@@ -40,7 +40,7 @@ use lumit_fx_macros::Effect;
 pub struct Posterize {
     /// How many rungs each channel keeps. 2 is the two-tone print, 8 is the
     /// poster, and the hard maximum is AE's 255.
-    #[counter(min = 2, max = 64, default = 8, hard_min = 2, hard_max = 255)]
+    #[counter(min = 2, max = 64, default = 8, hard_min = 2, hard_max = 255, unit = Raw)]
     pub levels: i32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -49,7 +49,8 @@ pub struct Posterize {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

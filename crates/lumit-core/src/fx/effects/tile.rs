@@ -48,7 +48,8 @@ pub struct Tile {
         min = 1.0,
         max = 500.0,
         default = 50.0,
-        hard_min = 1.0
+        hard_min = 1.0,
+        unit = Percent
     )]
     pub tile_width: f32,
 
@@ -58,7 +59,8 @@ pub struct Tile {
         min = 1.0,
         max = 500.0,
         default = 50.0,
-        hard_min = 1.0
+        hard_min = 1.0,
+        unit = Percent
     )]
     pub tile_height: f32,
 
@@ -71,7 +73,8 @@ pub struct Tile {
         min = 1.0,
         max = 500.0,
         default = 100.0,
-        hard_min = 1.0
+        hard_min = 1.0,
+        unit = Percent
     )]
     pub output_width: f32,
 
@@ -81,7 +84,8 @@ pub struct Tile {
         min = 1.0,
         max = 500.0,
         default = 100.0,
-        hard_min = 1.0
+        hard_min = 1.0,
+        unit = Percent
     )]
     pub output_height: f32,
 
@@ -105,7 +109,8 @@ pub struct Tile {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

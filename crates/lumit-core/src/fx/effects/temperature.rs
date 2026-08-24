@@ -30,7 +30,8 @@ pub struct Temperature {
         max = 150.0,
         default = 0.0,
         hard_min = -200.0,
-        hard_max = 200.0
+        hard_max = 200.0,
+        unit = Raw
     )]
     pub temperature: f32,
 
@@ -40,7 +41,8 @@ pub struct Temperature {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

@@ -275,6 +275,16 @@ Parameters MUST be expressed in units that survive comp resizing and preview res
   export. No distance in Lumit is a percentage of the composition diagonal.
 - **degrees** — all angles.
 - **seconds** or **frames** — durations; frames are comp-frame-rate frames.
+- **per cent** — a share of something the parameter names: the host-uniform Mix, a
+  channel's share of a grain, a position given as a fraction of the frame's own width
+  and height. 100 is the whole of it. A per cent survives resizing because it is not a
+  distance; a *distance* is px@comp, never a percentage of the diagonal (K-419).
+- **none** — a number with no unit at all: a gamma, a count, a stop, a rate in Hz.
+
+Every parameter declares which of these it is (`Unit` in `lumit_core::fx`), and a test
+fails the build on one that declares nothing — the declaration is where the resolve
+step learns what to scale for a preview raster, and where the panel learns what to
+write beside the value (K-443).
 
 A raw "pixels of whatever buffer I was handed" parameter is forbidden; previews at Quarter
 resolution MUST look like the export, only softer.

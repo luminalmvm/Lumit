@@ -69,13 +69,14 @@ pub struct Stroke {
         max = 100.0,
         default = 75.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub hardness: f32,
 
     /// How far apart the stamps are, per cent of the brush's width. Under 50 the
     /// stroke is continuous; well over it, a dotted line.
-    #[slider(min = 1.0, max = 500.0, default = 15.0, hard_min = 1.0)]
+    #[slider(min = 1.0, max = 500.0, default = 15.0, hard_min = 1.0, unit = Percent)]
     pub spacing: f32,
 
     /// Where the brush starts, per cent of the way round the path.
@@ -84,7 +85,8 @@ pub struct Stroke {
         max = 100.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub start: f32,
 
@@ -95,7 +97,8 @@ pub struct Stroke {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub end: f32,
 
@@ -116,7 +119,8 @@ pub struct Stroke {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub opacity: f32,
 
@@ -126,7 +130,8 @@ pub struct Stroke {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

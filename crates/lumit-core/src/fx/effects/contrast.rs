@@ -18,7 +18,7 @@ use lumit_fx_macros::Effect;
 pub struct Contrast {
     /// Per cent about mid-grey: 0 = flat grey, 100 = neutral, 200 = doubled.
     /// Hard min 0 (no inversion); unbounded above.
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub contrast: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -27,7 +27,8 @@ pub struct Contrast {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

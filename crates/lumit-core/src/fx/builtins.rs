@@ -398,6 +398,9 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
             .collect(),
         sample_temporally: true,
         custom_name: None,
+        // Unlinked (K-443): a fresh point's two halves move on their own, which
+        // is what every effect did before there was a chain to close.
+        linked_pairs: Vec::new(),
         extra: serde_json::Map::new(),
     })
 }

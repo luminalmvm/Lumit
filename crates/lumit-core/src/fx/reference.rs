@@ -179,11 +179,17 @@ pub fn slug(label: &str) -> String {
 
 const fn unit_name(unit: Unit) -> &'static str {
     match unit {
+        // Never reached by a shipped parameter — the catalogue test fails the
+        // build on one — but the manual would rather print an honest "unset"
+        // than have this function refuse to compile a work in progress.
+        Unit::Unset => "unset",
         Unit::Raw => "raw",
+        Unit::Percent => "percent",
         Unit::PctDiag => "pct_diag",
         Unit::Px => "px",
         Unit::Degrees => "degrees",
         Unit::Seconds => "seconds",
+        Unit::Frames => "frames",
     }
 }
 

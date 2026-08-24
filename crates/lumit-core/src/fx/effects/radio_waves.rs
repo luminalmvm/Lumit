@@ -63,7 +63,7 @@ pub struct RadioWaves {
     pub time: f32,
 
     /// Waves a second.
-    #[slider(min = 0.1, max = 20.0, default = 2.0, hard_min = 0.01)]
+    #[slider(min = 0.1, max = 20.0, default = 2.0, hard_min = 0.01, unit = Raw)]
     pub frequency: f32,
 
     /// How fast a wave grows, px@comp a second (§2.3).
@@ -76,7 +76,7 @@ pub struct RadioWaves {
 
     /// How many corners the shape has. 32 reads as a circle, which is what a
     /// radio wave usually wants; drop it to six for a polygon.
-    #[counter(min = 3, max = 64, default = 32, hard_min = 3, hard_max = 64)]
+    #[counter(min = 3, max = 64, default = 32, hard_min = 3, hard_max = 64, unit = Raw)]
     pub sides: i32,
 
     /// Put every second vertex on an inner radius, making a star of the polygon.
@@ -90,7 +90,8 @@ pub struct RadioWaves {
         max = 100.0,
         default = 50.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub star_depth: f32,
 
@@ -125,7 +126,8 @@ pub struct RadioWaves {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub opacity: f32,
 
@@ -136,7 +138,8 @@ pub struct RadioWaves {
         max = 100.0,
         default = 15.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub fade_in: f32,
 
@@ -147,7 +150,8 @@ pub struct RadioWaves {
         max = 100.0,
         default = 45.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub fade_out: f32,
 
@@ -162,7 +166,8 @@ pub struct RadioWaves {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

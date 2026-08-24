@@ -1856,6 +1856,7 @@ mod tests {
             }],
             sample_temporally: true,
             custom_name: None,
+            linked_pairs: Vec::new(),
             extra: serde_json::Map::new(),
         };
         let mut with_fx = plain.clone();
@@ -1963,6 +1964,7 @@ mod tests {
             }],
             sample_temporally: true,
             custom_name: None,
+            linked_pairs: Vec::new(),
             extra: serde_json::Map::new(),
         };
 

@@ -34,7 +34,7 @@ pub struct SharpenSimple {
     /// High-pass strength: 1 is the classic 5/−1 sharpen kernel, 0 a no-op.
     /// Clamped at zero below (a negative amount would blur, out of scope),
     /// unbounded above (K-090).
-    #[slider(min = 0.0, max = 5.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 5.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub amount: f32,
 
     /// Neighbour distance in raster pixels (T15): 1 = the classic 3×3 kernel,
@@ -44,7 +44,7 @@ pub struct SharpenSimple {
     /// rather than a length at comp size, so it does not follow the preview
     /// raster — which is exactly what the old `rescale_px` said when it skipped
     /// this field, and a migration changes no behaviour.
-    #[slider(min = 1.0, max = 8.0, default = 1.0, hard_min = 1.0)]
+    #[slider(min = 1.0, max = 8.0, default = 1.0, hard_min = 1.0, unit = Raw)]
     pub radius: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -53,7 +53,8 @@ pub struct SharpenSimple {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

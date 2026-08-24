@@ -95,7 +95,7 @@ pub struct Shake {
     /// frequency. Unbounded above (K-090): any positive rate is meaningful,
     /// sampling handles it. Read by [`ShakeDef::resolve_derived`] rather than by
     /// [`Shake::packed`], because what it produces is the noise sample itself.
-    #[slider(min = 0.1, max = 30.0, default = 8.0, hard_min = 0.0)]
+    #[slider(min = 0.1, max = 30.0, default = 8.0, hard_min = 0.0, unit = Raw)]
     pub frequency: f32,
 
     /// Degrees of twist wobble either way.
@@ -105,7 +105,8 @@ pub struct Shake {
         max = 45.0,
         default = 1.0,
         hard_min = 0.0,
-        hard_max = 360.0
+        hard_max = 360.0,
+        unit = Degrees
     )]
     pub rotation: f32,
 
@@ -115,7 +116,8 @@ pub struct Shake {
         min = 0.0,
         max = 2.0,
         default = 1.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Raw
     )]
     pub x_amp: f32,
 
@@ -126,7 +128,8 @@ pub struct Shake {
         min = 0.0,
         max = 4.0,
         default = 1.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Raw
     )]
     pub x_freq: f32,
 
@@ -136,7 +139,8 @@ pub struct Shake {
         min = 0.0,
         max = 2.0,
         default = 1.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Raw
     )]
     pub y_amp: f32,
 
@@ -146,7 +150,8 @@ pub struct Shake {
         min = 0.0,
         max = 4.0,
         default = 1.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Raw
     )]
     pub y_freq: f32,
 
@@ -160,7 +165,8 @@ pub struct Shake {
         max = 20.0,
         default = 0.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub z_amp: f32,
 
@@ -170,7 +176,8 @@ pub struct Shake {
         min = 0.0,
         max = 4.0,
         default = 1.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Raw
     )]
     pub z_freq: f32,
 
@@ -188,7 +195,8 @@ pub struct Shake {
         max = 1.0,
         default = 0.5,
         hard_min = 0.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub mb_amount: f32,
 
@@ -210,7 +218,8 @@ pub struct Shake {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

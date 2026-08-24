@@ -131,11 +131,11 @@ pub struct FractalNoise {
 
     /// Per cent about the mid-grey pivot: 0 flattens the field to grey, 100
     /// leaves it, above 100 drives it toward black and white.
-    #[slider(min = 0.0, max = 400.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 400.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub contrast: f32,
 
     /// Per cent added after Contrast; ±100 covers the whole range on its own.
-    #[slider(min = -200.0, max = 200.0, default = 0.0)]
+    #[slider(min = -200.0, max = 200.0, default = 0.0, unit = Percent)]
     pub brightness: f32,
 
     /// Degrees: turns the noise field under the frame, not the frame.
@@ -186,7 +186,7 @@ pub struct FractalNoise {
     /// How many octaves are summed. Capped at
     /// [`noise::MAX_OCTAVES`](crate::fx::noise::MAX_OCTAVES) so a `moderate`
     /// effect stays moderate.
-    #[counter(min = 1, max = 10, default = 6, hard_min = 1, hard_max = 10)]
+    #[counter(min = 1, max = 10, default = 6, hard_min = 1, hard_max = 10, unit = Raw)]
     pub complexity: i32,
 
     /// Per cent: each octave's amplitude as a share of the one before. 0 leaves
@@ -197,7 +197,8 @@ pub struct FractalNoise {
         min = 0.0,
         max = 100.0,
         default = 60.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Percent
     )]
     pub sub_influence: f32,
 
@@ -210,7 +211,8 @@ pub struct FractalNoise {
         max = 100.0,
         default = 55.0,
         hard_min = 5.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub sub_scaling: f32,
 
@@ -226,7 +228,7 @@ pub struct FractalNoise {
 
     /// Whole turns of Evolution before the field repeats. The loop is exact
     /// (§3.37 decision 4), so a `cycle`-long animation tiles end to end.
-    #[counter(min = 1, max = 30, default = 1, hard_min = 1, hard_max = 30)]
+    #[counter(min = 1, max = 30, default = 1, hard_min = 1, hard_max = 30, unit = Raw)]
     pub cycle: i32,
 
     /// Which field this instance draws (§2.4).
@@ -239,7 +241,8 @@ pub struct FractalNoise {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

@@ -26,7 +26,7 @@ pub struct Vibrancy {
     /// Per cent: 0 = neutral (bit-exact identity), higher lifts the
     /// less-saturated pixels more. The slider reaches a heavy 200; typing
     /// higher pushes further (K-135 open ceiling), floored at 0.
-    #[slider(min = 0.0, max = 200.0, default = 0.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 0.0, hard_min = 0.0, unit = Percent)]
     pub amount: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -35,7 +35,8 @@ pub struct Vibrancy {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

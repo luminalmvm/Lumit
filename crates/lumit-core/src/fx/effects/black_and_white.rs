@@ -42,27 +42,27 @@ pub const BLACK_AND_WHITE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
 pub struct BlackAndWhite {
     /// Per cent: how bright the red part of a colour comes out. Raise it to
     /// lift skin and brick, lower it to darken them.
-    #[slider(min = -200.0, max = 300.0, default = 40.0, hard_min = -200.0)]
+    #[slider(min = -200.0, max = 300.0, default = 40.0, hard_min = -200.0, unit = Percent)]
     pub reds: f32,
 
     /// Per cent; see [`reds`](Self::reds).
-    #[slider(min = -200.0, max = 300.0, default = 60.0, hard_min = -200.0)]
+    #[slider(min = -200.0, max = 300.0, default = 60.0, hard_min = -200.0, unit = Percent)]
     pub yellows: f32,
 
     /// Per cent; see [`reds`](Self::reds).
-    #[slider(min = -200.0, max = 300.0, default = 40.0, hard_min = -200.0)]
+    #[slider(min = -200.0, max = 300.0, default = 40.0, hard_min = -200.0, unit = Percent)]
     pub greens: f32,
 
     /// Per cent; see [`reds`](Self::reds).
-    #[slider(min = -200.0, max = 300.0, default = 60.0, hard_min = -200.0)]
+    #[slider(min = -200.0, max = 300.0, default = 60.0, hard_min = -200.0, unit = Percent)]
     pub cyans: f32,
 
     /// Per cent; see [`reds`](Self::reds). Lower it to darken a sky.
-    #[slider(min = -200.0, max = 300.0, default = 20.0, hard_min = -200.0)]
+    #[slider(min = -200.0, max = 300.0, default = 20.0, hard_min = -200.0, unit = Percent)]
     pub blues: f32,
 
     /// Per cent; see [`reds`](Self::reds).
-    #[slider(min = -200.0, max = 300.0, default = 80.0, hard_min = -200.0)]
+    #[slider(min = -200.0, max = 300.0, default = 80.0, hard_min = -200.0, unit = Percent)]
     pub magentas: f32,
 
     /// On, the grey is coloured by [`tint_colour`](Self::tint_colour) —
@@ -81,7 +81,8 @@ pub struct BlackAndWhite {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

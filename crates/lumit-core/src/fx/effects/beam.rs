@@ -52,7 +52,8 @@ pub struct Beam {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub length: f32,
 
@@ -64,7 +65,8 @@ pub struct Beam {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub time: f32,
 
@@ -98,7 +100,8 @@ pub struct Beam {
         max = 100.0,
         default = 30.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub softness: f32,
 
@@ -123,7 +126,8 @@ pub struct Beam {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

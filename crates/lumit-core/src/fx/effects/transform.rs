@@ -44,11 +44,11 @@ pub struct Transform {
 
     /// Per cent, 100 = natural size; negative flips (like the layer transform),
     /// so both hard sides stay open.
-    #[slider(label = "Scale x %", min = 0.0, max = 400.0, default = 100.0)]
+    #[slider(label = "Scale x %", min = 0.0, max = 400.0, default = 100.0, unit = Percent)]
     pub scale_x: f32,
 
     /// See [`scale_x`](Self::scale_x).
-    #[slider(label = "Scale y %", min = 0.0, max = 400.0, default = 100.0)]
+    #[slider(label = "Scale y %", min = 0.0, max = 400.0, default = 100.0, unit = Percent)]
     pub scale_y: f32,
 
     /// Degrees on a dial (docs/07 §6), unbounded — whip transitions spin whole
@@ -63,7 +63,8 @@ pub struct Transform {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub opacity: f32,
 
@@ -73,7 +74,8 @@ pub struct Transform {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

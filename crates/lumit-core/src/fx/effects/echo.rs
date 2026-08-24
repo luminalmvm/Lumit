@@ -45,11 +45,11 @@ use lumit_fx_macros::Effect;
 pub struct Echo {
     /// Count of trailing frames; each is one comp frame further back (v1 fixed
     /// spacing). Capped at the 16-frame window (FX-17/K-149, raised from 8).
-    #[slider(min = 1.0, max = 16.0, default = 4.0, hard_min = 1.0, hard_max = 16.0)]
+    #[slider(min = 1.0, max = 16.0, default = 4.0, hard_min = 1.0, hard_max = 16.0, unit = Raw)]
     pub echoes: f32,
 
     /// Per-echo intensity falloff: echo *k* has intensity `decay^k`.
-    #[slider(min = 0.0, max = 1.0, default = 0.6, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.6, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub decay: f32,
 
     /// Two effect-only compositing ORDERS first, then a divider (T21), then the
@@ -86,7 +86,8 @@ pub struct Echo {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

@@ -25,7 +25,7 @@ use lumit_fx_macros::Effect;
 pub struct Gamma {
     /// The power curve raises to 1/gamma. 1 is neutral; hard floor 0.01 keeps
     /// 1/gamma finite, no hard ceiling above.
-    #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.01)]
+    #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.01, unit = Raw)]
     pub gamma: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -34,7 +34,8 @@ pub struct Gamma {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

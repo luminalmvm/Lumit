@@ -68,7 +68,8 @@ pub struct IrisWipe {
         max = 32,
         default = 6,
         hard_min = 6,
-        hard_max = 32
+        hard_max = 32,
+        unit = Raw
     )]
     pub points: i32,
 
@@ -117,7 +118,8 @@ pub struct IrisWipe {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

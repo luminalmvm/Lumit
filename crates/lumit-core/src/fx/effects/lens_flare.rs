@@ -331,7 +331,7 @@ pub struct LensFlare {
 
     /// Master gain on everything the effect adds; 0 is the neutral point (a
     /// bit-exact passthrough, pinned by test).
-    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
     /// The working f-stop: stops the iris down from the lens's native f-number.
@@ -345,7 +345,8 @@ pub struct LensFlare {
         max = 22.0,
         default = 1.3,
         hard_min = 0.7,
-        hard_max = 32.0
+        hard_max = 32.0,
+        unit = Raw
     )]
     pub fstop: f32,
 
@@ -389,7 +390,8 @@ pub struct LensFlare {
         min = 0.5,
         max = 100.0,
         default = 100.0,
-        hard_min = 0.2
+        hard_min = 0.2,
+        unit = Raw
     )]
     pub focus: f32,
 
@@ -401,7 +403,8 @@ pub struct LensFlare {
         max = 2.0,
         default = 1.0,
         hard_min = 0.5,
-        hard_max = 3.0
+        hard_max = 3.0,
+        unit = Raw
     )]
     pub anamorphic: f32,
 
@@ -411,7 +414,7 @@ pub struct LensFlare {
     /// conversion does, so unlike Depth of field's blade count this row needs no
     /// derivation of its own (K-385): the old resolve arm rounded here too, and
     /// moving the step would change what a keyframed sweep renders mid-way.
-    #[counter(min = 3, max = 16, default = 8, hard_min = 3, hard_max = 16)]
+    #[counter(min = 3, max = 16, default = 8, hard_min = 3, hard_max = 16, unit = Raw)]
     pub blades: i32,
 
     /// Turns the iris. Degrees on a dial (docs/07 §6): turning an iris is the
@@ -422,11 +425,11 @@ pub struct LensFlare {
 
     /// 0 = uncoated (bright neutral ghosts), 1 = full quarter-wave coating
     /// interference (dim, colour-cast ghosts).
-    #[slider(min = 0.0, max = 1.0, default = 0.75, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.75, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub coating: f32,
 
     /// Blends the blade polygon toward a circle.
-    #[slider(min = 0.0, max = 1.0, default = 0.15, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.15, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub roundness: f32,
 
     /// Softens the iris edge, and with it every ghost's rim.
@@ -436,7 +439,8 @@ pub struct LensFlare {
         max = 1.0,
         default = 0.05,
         hard_min = 0.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub aperture_softness: f32,
 
@@ -627,7 +631,7 @@ pub struct LensFlare {
 
     // ---- The Flare options twirl ----
     /// Gain on the ghost train alone.
-    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub ghost_intensity: f32,
 
     /// Box-blur radius as % of the frame diagonal (K-261, FlareSim's Ghost Blur):
@@ -635,12 +639,12 @@ pub struct LensFlare {
     /// with the vertex-smoothed density and the multisampled raster the geometry
     /// no longer needs hiding, so the default is taste, not cover, and 0 stays a
     /// usable, clean setting.
-    #[slider(min = 0.0, max = 1.0, default = 0.02, hard_min = 0.0, hard_max = 2.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.02, hard_min = 0.0, hard_max = 2.0, unit = Raw)]
     pub ghost_softness: f32,
 
     /// How many of the brightest-ranked ghost pairs render. The cap survives by
     /// rank, so turning it down drops the dimmest ghosts first.
-    #[counter(min = 0, max = 150, default = 60, hard_min = 0, hard_max = 200)]
+    #[counter(min = 0, max = 150, default = 60, hard_min = 0, hard_max = 200, unit = Raw)]
     pub max_ghosts: i32,
 
     /// Ray-budget multiplier on the Quality tier's pupil grid (K-265,
@@ -648,21 +652,21 @@ pub struct LensFlare {
     /// to the user — a lens whose ghost rims still show their cells buys more rays
     /// without jumping a whole tier, a preview buys fewer. Frame-time, never
     /// rebakes; 1 is the tier as shipped.
-    #[slider(min = 0.25, max = 2.0, default = 1.0, hard_min = 0.25, hard_max = 4.0)]
+    #[slider(min = 0.25, max = 2.0, default = 1.0, hard_min = 0.25, hard_max = 4.0, unit = Raw)]
     pub detail: f32,
 
     /// Scales each traced wavelength's offset from the spectrum midpoint: 0 is a
     /// monochrome trace (no fringing), 1 physical, 2 doubled.
-    #[slider(min = 0.0, max = 2.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 2.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub dispersion: f32,
 
     /// Gain on the starburst alone.
-    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub starburst_intensity: f32,
 
     /// Scales the WHOLE flare about the optical centre — ghost train and
     /// starburst together (owner pass 2).
-    #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.05, hard_max = 20.0)]
+    #[slider(min = 0.1, max = 4.0, default = 1.0, hard_min = 0.05, hard_max = 20.0, unit = Raw)]
     pub scale: f32,
 
     // ---- Source ----
@@ -713,11 +717,11 @@ pub struct LensFlare {
     /// The absolute scene-linear luma a pixel must EXCEED to flare (K-363): at 1.0
     /// only over-range highlights, at 0.0 anything brighter than black — black
     /// itself never. The slider is normalised 0–1; typing goes above.
-    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 1.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub threshold: f32,
 
     /// Half-width of the soft gate around the threshold.
-    #[slider(min = 0.0, max = 1.0, default = 0.25, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.25, hard_min = 0.0, unit = Raw)]
     pub threshold_softness: f32,
 
     /// The ray-grid density and traced wavelength count; Draft renders the flare
@@ -746,7 +750,8 @@ pub struct LensFlare {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

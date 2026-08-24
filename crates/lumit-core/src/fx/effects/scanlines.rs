@@ -39,7 +39,7 @@ pub struct Scanlines {
     /// Collapses the old Intensity × Darkness pair into one control; an old
     /// project's Darkness folds into it at resolve, which is why the number the
     /// kernel reads is [`Scanlines::DERIVED_INTENSITY`] rather than this row.
-    #[slider(min = 0.0, max = 1.0, default = 0.35, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.35, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub intensity: f32,
 
     /// px@comp: the deliberately pixel-scale scanline pitch. Declared `Px`, so
@@ -63,7 +63,7 @@ pub struct Scanlines {
     /// Lines (periods) per second; either direction (K-090). What it *produces*
     /// — the pattern's pixel offset this frame — is
     /// [`Scanlines::DERIVED_ROLL_PX`].
-    #[slider(label = "Roll speed", min = -30.0, max = 30.0, default = 0.0)]
+    #[slider(label = "Roll speed", min = -30.0, max = 30.0, default = 0.0, unit = Raw)]
     pub scanline_roll: f32,
 
     /// Alternates which half of each period darkens on odd periods: the classic
@@ -77,7 +77,8 @@ pub struct Scanlines {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

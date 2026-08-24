@@ -32,14 +32,14 @@ use lumit_fx_macros::Effect;
 pub struct Brightness {
     /// Per cent, added to every channel: ±100 is ±1.0 of scene-linear light.
     /// Unbounded either way — the offset stays meaningful past the slider.
-    #[slider(min = -100.0, max = 100.0, default = 0.0)]
+    #[slider(min = -100.0, max = 100.0, default = 0.0, unit = Percent)]
     pub brightness: f32,
 
     /// Per cent about mid-grey, AE's signed spelling: 0 is neutral, −100
     /// flattens the picture to grey, +100 doubles the spread. Floored at −100
     /// (below it the picture would invert about the pivot, which is Invert's
     /// job) and open above.
-    #[slider(min = -100.0, max = 100.0, default = 0.0, hard_min = -100.0)]
+    #[slider(min = -100.0, max = 100.0, default = 0.0, hard_min = -100.0, unit = Percent)]
     pub contrast: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -48,7 +48,8 @@ pub struct Brightness {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

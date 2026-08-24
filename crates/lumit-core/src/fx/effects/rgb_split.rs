@@ -91,7 +91,8 @@ pub struct RgbSplit {
         max = 180.0,
         default = 0.0,
         hard_min = -3600.0,
-        hard_max = 3600.0
+        hard_max = 3600.0,
+        unit = Degrees
     )]
     pub angle: f32,
 
@@ -101,15 +102,15 @@ pub struct RgbSplit {
     /// Open both sides (K-135): a negative scale flips a tap's direction.
     /// Labelled Red / Green / Blue for the classic case; each really scales its
     /// like-numbered tint.
-    #[slider(label = "Red", min = -200.0, max = 200.0, default = 100.0)]
+    #[slider(label = "Red", min = -200.0, max = 200.0, default = 100.0, unit = Percent)]
     pub red_amount: f32,
 
     /// See [`red_amount`](Self::red_amount).
-    #[slider(label = "Green", min = -200.0, max = 200.0, default = 0.0)]
+    #[slider(label = "Green", min = -200.0, max = 200.0, default = 0.0, unit = Percent)]
     pub green_amount: f32,
 
     /// See [`red_amount`](Self::red_amount).
-    #[slider(label = "Blue", min = -200.0, max = 200.0, default = 100.0)]
+    #[slider(label = "Blue", min = -200.0, max = 200.0, default = 100.0, unit = Percent)]
     pub blue_amount: f32,
 
     /// The three tap tints (T17), scene-linear RGBA (alpha ignored). Defaults
@@ -137,7 +138,7 @@ pub struct RgbSplit {
     /// Wavelength mode's tap count (FX-9/K-144): more taps fill the same
     /// ±offset span more densely. Rounded and clamped to 3..=64; ignored in the
     /// classic mode.
-    #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0)]
+    #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -146,7 +147,8 @@ pub struct RgbSplit {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

@@ -57,7 +57,8 @@ pub struct BroadcastSafe {
         max = 120.0,
         default = 110.0,
         hard_min = 90.0,
-        hard_max = 120.0
+        hard_max = 120.0,
+        unit = Raw
     )]
     pub maximum_signal: f32,
 
@@ -67,7 +68,8 @@ pub struct BroadcastSafe {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

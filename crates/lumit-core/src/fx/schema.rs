@@ -65,15 +65,39 @@ pub struct ParamSchema {
     pub label: &'static str,
     pub kind: ParamKind,
     /// What the number *means* (docs/impl/effect-registry.md §2.2): a plain
-    /// number, pixels at comp size, degrees, seconds.
+    /// number, pixels at comp size, a per cent, degrees, seconds, frames.
     ///
     /// Declaring it is what lets the preview-raster rescale be one generic pass
     /// rather than a match that has to know which field of which effect holds a
-    /// pixel count — an effect cannot forget to be rescaled. Parameters whose
-    /// effect has not yet moved to the generated schema declare [`Unit::Raw`]
-    /// and are rescaled by the old per-variant path until they do, so the two
-    /// never both act on the same value.
+    /// pixel count — an effect cannot forget to be rescaled. It is also the
+    /// single source of truth for the unit rider the panel draws beside the
+    /// value (K-443), which is why [`Unit::Unset`] is a build failure rather
+    /// than a quiet "no unit": a parameter that never decided and a parameter
+    /// that is genuinely dimensionless must not look alike.
+    ///
+    /// Every numeric declaration says it outright. A control that cannot carry
+    /// a unit at all — a switch, a dropdown, a colour, a seed, a file, a layer,
+    /// a mask, a curve, a button — is [`Unit::Raw`] from the derive, and a
+    /// `#[dial]` is [`Unit::Degrees`] from the derive, an angle being degrees by
+    /// definition.
     pub unit: Unit,
+}
+
+/// One **vector pair**: two adjacent parameters that are the x and y halves of
+/// one point, found by [`EffectSchema::pairs`].
+///
+/// `stem` is the pair's name with the axis taken off — `light` for
+/// `light_x` / `light_y` — and it is the **key the link flag is stored under**
+/// on an effect instance (K-443), so it has to be the pair's identity rather
+/// than either half's id.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParamPair {
+    /// The shared name: `light`, `centre`, `focus_point`.
+    pub stem: &'static str,
+    /// The x half's parameter id.
+    pub x: &'static str,
+    /// The y half's parameter id.
+    pub y: &'static str,
 }
 
 /// Parameter type + defaults/ranges (docs/08 §1.2: sliders may be exceeded
@@ -702,6 +726,42 @@ impl EffectSchema {
     #[must_use]
     pub fn blend(&self) -> bool {
         self.params.iter().any(|p| p.id == BLEND_PARAM)
+    }
+
+    /// This effect's **vector pairs**: the `foo_x` / `foo_y` runs the panel
+    /// draws as one row of two wells with a link glyph between them (K-443).
+    ///
+    /// # In plain terms
+    ///
+    /// A point has never been a parameter *kind* in Lumit — it is two adjacent
+    /// number parameters whose ids end `_x` and `_y`, which is why an effect can
+    /// have a Centre without the schema growing a Point type (see
+    /// [`ParamKind::Angle`]'s note). That convention was read off the ids at the
+    /// seam, in the frontend, by whoever happened to need it. It is read here
+    /// now: this is the declaration answering "which of my parameters are two
+    /// halves of one thing", so the panel, the link flag on the instance
+    /// ([`EffectInstance::pair_linked`](crate::model::EffectInstance::
+    /// pair_linked)) and anything else that asks all get one answer.
+    ///
+    /// The rule is exactly the one the panel already folded rows by, written
+    /// down once: **adjacent** in schema order, x then y, the same stem, and
+    /// both [`ParamKind::Float`] — so a `_x` with no `_y`, or a pair with a
+    /// dropdown wedged between them, is not a pair and is not silently made
+    /// one. `every_x_parameter_has_its_y_pair` fails the build on the first
+    /// half of that, which is the one an effect declaration can get wrong.
+    pub fn pairs(&self) -> impl Iterator<Item = ParamPair> + '_ {
+        self.params.windows(2).filter_map(|w| {
+            let stem = w[0].id.strip_suffix("_x")?;
+            let y = w[1].id.strip_suffix("_y")?;
+            (y == stem
+                && matches!(w[0].kind, ParamKind::Float { .. })
+                && matches!(w[1].kind, ParamKind::Float { .. }))
+            .then_some(ParamPair {
+                stem,
+                x: w[0].id,
+                y: w[1].id,
+            })
+        })
     }
 
     #[must_use]

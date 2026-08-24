@@ -63,7 +63,7 @@ pub struct SpriteFlare {
     pub light_y: f32,
 
     /// Master gain on everything the effect draws; 0 is the neutral point.
-    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
     /// Scene-linear, and open above so an HDR tint can push the flare hotter
@@ -76,16 +76,16 @@ pub struct SpriteFlare {
     pub glow_size: f32,
 
     /// The central glow's gain.
-    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub glow_intensity: f32,
 
     /// How many discs march along the axis; 0 is none of them.
-    #[counter(min = 0, max = 16, default = 6, hard_min = 0, hard_max = 16)]
+    #[counter(min = 0, max = 16, default = 6, hard_min = 0, hard_max = 16, unit = Raw)]
     pub ghosts: i32,
 
     /// A fraction of the light→centre distance, so the train stretches and
     /// gathers as the light moves, exactly as a real one does.
-    #[slider(min = 0.0, max = 1.5, default = 0.35, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 1.5, default = 0.35, hard_min = 0.0, unit = Raw)]
     pub ghost_spacing: f32,
 
     /// The ghosts' base radius, px@comp.
@@ -93,7 +93,7 @@ pub struct SpriteFlare {
     pub ghost_size: f32,
 
     /// The ghosts' gain.
-    #[slider(min = 0.0, max = 2.0, default = 0.35, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 2.0, default = 0.35, hard_min = 0.0, unit = Raw)]
     pub ghost_intensity: f32,
 
     /// The anamorphic streak's half-length, px@comp.
@@ -101,11 +101,11 @@ pub struct SpriteFlare {
     pub streak_length: f32,
 
     /// The streak's gain.
-    #[slider(min = 0.0, max = 2.0, default = 0.5, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 2.0, default = 0.5, hard_min = 0.0, unit = Raw)]
     pub streak_intensity: f32,
 
     /// Degrees; 0 is horizontal — the anamorphic look.
-    #[slider(min = -180.0, max = 180.0, default = 0.0)]
+    #[slider(min = -180.0, max = 180.0, default = 0.0, unit = Degrees)]
     pub streak_angle: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -114,7 +114,8 @@ pub struct SpriteFlare {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

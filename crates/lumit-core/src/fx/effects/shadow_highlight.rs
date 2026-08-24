@@ -61,7 +61,8 @@ pub struct ShadowHighlight {
         max = 100.0,
         default = 25.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub shadow_amount: f32,
 
@@ -73,7 +74,8 @@ pub struct ShadowHighlight {
         max = 100.0,
         default = 50.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub shadow_tonal_width: f32,
 
@@ -85,7 +87,8 @@ pub struct ShadowHighlight {
         max = 100.0,
         default = 25.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub highlight_amount: f32,
 
@@ -96,7 +99,8 @@ pub struct ShadowHighlight {
         max = 100.0,
         default = 50.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub highlight_tonal_width: f32,
 
@@ -122,7 +126,8 @@ pub struct ShadowHighlight {
         min = -100.0,
         max = 100.0,
         default = 20.0,
-        hard_min = -100.0
+        hard_min = -100.0,
+        unit = Percent
     )]
     pub colour_correction: f32,
 
@@ -133,7 +138,8 @@ pub struct ShadowHighlight {
         min = -100.0,
         max = 100.0,
         default = 0.0,
-        hard_min = -100.0
+        hard_min = -100.0,
+        unit = Percent
     )]
     pub midtone_contrast: f32,
 
@@ -144,7 +150,8 @@ pub struct ShadowHighlight {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

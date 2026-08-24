@@ -85,7 +85,8 @@ pub struct PhotoFilter {
         max = 100.0,
         default = 25.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub density: f32,
 
@@ -101,7 +102,8 @@ pub struct PhotoFilter {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

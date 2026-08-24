@@ -630,11 +630,67 @@ pub struct EffectInstance {
     /// `match_name` lookup are untouched by it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_name: Option<String>,
+    /// Which of this effect's **vector pairs** are linked (K-443), by the
+    /// pair's stem — `light` for `light_x` / `light_y`, as
+    /// [`EffectSchema::pairs`](crate::fx::EffectSchema::pairs) names them.
+    ///
+    /// # In plain terms
+    ///
+    /// A point is drawn as two wells with a chain between them. Closed, dragging
+    /// one number moves the other with it; open, the two are independent. Which
+    /// way the chain is set is the user's choice about *this* effect on *this*
+    /// layer, so it is saved with the document — like a custom name, and unlike
+    /// a value it never animates, has no keyframes and is read by no kernel.
+    ///
+    /// **Empty means every pair is unlinked**, which is exactly what a project
+    /// written before the flag existed deserialises to and exactly how it
+    /// behaved: two numbers that moved on their own. So the field is
+    /// `#[serde(default)]` and is left out of the file when empty, and no
+    /// format version moves (K-258 — an untouched document saves back the same
+    /// bytes).
+    ///
+    /// **The proportional edit itself is not here.** Scaling y as x is dragged
+    /// is what the panel does with a linked pair while the gesture is live; the
+    /// document's business is only *which* pairs are tied together. Kept sorted
+    /// so two documents that were given the same links save identically,
+    /// whatever order the toggles were clicked in.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_pairs: Vec<String>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl EffectInstance {
+    /// Whether the vector pair named by `stem` is linked (K-443). Unknown to
+    /// this instance means unlinked, which is every pair of every older project.
+    #[must_use]
+    pub fn pair_linked(&self, stem: &str) -> bool {
+        self.linked_pairs.iter().any(|s| s == stem)
+    }
+
+    /// Link or unlink the vector pair named by `stem`, and answer whether that
+    /// changed anything — `false` when the pair was already that way, which is
+    /// the caller's cue not to commit an op that would undo to itself.
+    ///
+    /// Takes any stem, including one this effect has no pair for: the
+    /// declaration is what the panel offers a chain for, and a document that
+    /// names a pair a later build removed is a stale line to ignore, never a
+    /// fault (14-ENGINEERING-RULES §4).
+    pub fn set_pair_linked(&mut self, stem: &str, linked: bool) -> bool {
+        match (self.pair_linked(stem), linked) {
+            (true, true) | (false, false) => false,
+            (false, true) => {
+                self.linked_pairs.push(stem.to_owned());
+                self.linked_pairs.sort();
+                true
+            }
+            (true, false) => {
+                self.linked_pairs.retain(|s| s != stem);
+                true
+            }
+        }
+    }
+
     /// The parameter named `id`, if the instance carries it.
     pub fn param(&self, id: &str) -> Option<&EffectValue> {
         self.params.iter().find(|p| p.id == id).map(|p| &p.value)

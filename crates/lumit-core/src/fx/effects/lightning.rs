@@ -80,7 +80,7 @@ pub struct Lightning {
     /// The depth axis of the noise the bolt is displaced by — AE's control under
     /// AE's name. Animate it to make the bolt writhe; it is a coordinate, never a
     /// clock (§2.4).
-    #[slider(label = "Conductivity state", min = 0.0, max = 100.0, default = 0.0)]
+    #[slider(label = "Conductivity state", min = 0.0, max = 100.0, default = 0.0, unit = Raw)]
     pub conductivity: f32,
 
     /// Which bolt (§2.4).
@@ -94,7 +94,8 @@ pub struct Lightning {
         max = 100.0,
         default = 12.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub amplitude: f32,
 
@@ -105,7 +106,8 @@ pub struct Lightning {
         max = 100.0,
         default = 45.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub forking: f32,
 
@@ -115,7 +117,8 @@ pub struct Lightning {
         max = 100.0,
         default = 30.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub decay: f32,
 
@@ -156,7 +159,8 @@ pub struct Lightning {
         max = 100.0,
         default = 70.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub glow_opacity: f32,
 
@@ -171,7 +175,8 @@ pub struct Lightning {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

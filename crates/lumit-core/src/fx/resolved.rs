@@ -367,7 +367,16 @@ fn resolve_into_arena(
             match p.unit {
                 Unit::PctDiag => v / 100.0 * diag_px,
                 Unit::Px => v * px_scale,
-                Unit::Raw | Unit::Degrees | Unit::Seconds => v,
+                // Everything else is a number the raster does not move:
+                // a share, an angle, a duration, and — until the catalogue
+                // test catches it — an undeclared unit, which must render
+                // rather than fault (14-ENGINEERING-RULES §4).
+                Unit::Unset
+                | Unit::Raw
+                | Unit::Percent
+                | Unit::Degrees
+                | Unit::Seconds
+                | Unit::Frames => v,
             }
         };
         let value = match p.kind {

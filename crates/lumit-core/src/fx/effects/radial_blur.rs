@@ -48,11 +48,11 @@ pub struct RadialBlur {
     /// w — exactly how chromatic aberration derives the frame centre. Not
     /// spatial, therefore: a fraction of the raster does not move when the
     /// raster does.
-    #[slider(label = "Centre X", min = 0.0, max = 100.0, default = 50.0)]
+    #[slider(label = "Centre X", min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub centre_x: f32,
 
     /// % of comp height (see [`centre_x`](Self::centre_x)).
-    #[slider(label = "Centre Y", min = 0.0, max = 100.0, default = 50.0)]
+    #[slider(label = "Centre Y", min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub centre_y: f32,
 
     /// Spin (arcs about Centre) or Zoom (rays through it).
@@ -74,7 +74,8 @@ pub struct RadialBlur {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

@@ -124,6 +124,9 @@ fn placeholder(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> EffectI
         // docs/11 §6: the placeholder keeps the name the user was looking at,
         // which is what `custom_name` is for (K-321).
         custom_name: Some(name),
+        // Nothing to link: a placeholder carries no schema, so it has no
+        // `_x`/`_y` pairs for a chain to tie together (K-443).
+        linked_pairs: Vec::new(),
         extra: ae_map(vec![("params", serde_json::Value::Array(carried))]),
     }
 }

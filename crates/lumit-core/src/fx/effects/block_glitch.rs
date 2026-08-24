@@ -34,7 +34,7 @@ use lumit_fx_macros::Effect;
 pub struct BlockGlitch {
     /// The master dial (§1.2): scales every hashed quantity. 0 is the bit-exact
     /// passthrough (pinned by test).
-    #[slider(min = 0.0, max = 1.0, default = 0.35, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.35, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub intensity: f32,
 
     /// px@comp (§2.3): a deliberately pixel-scale look. Declared `Px`, so the
@@ -57,7 +57,8 @@ pub struct BlockGlitch {
         max = 100.0,
         default = 25.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub block_jitter: f32,
 
@@ -92,7 +93,8 @@ pub struct BlockGlitch {
         max = 100.0,
         default = 20.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub slice_repeat: f32,
 
@@ -107,7 +109,8 @@ pub struct BlockGlitch {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

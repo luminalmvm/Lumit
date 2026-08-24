@@ -51,7 +51,7 @@ pub struct Emboss {
 
     /// Per cent: the gain on the difference between the two taps. 0 is flat
     /// mid-grey; above 100 the relief goes to black and white quickly.
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub contrast: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -61,7 +61,8 @@ pub struct Emboss {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

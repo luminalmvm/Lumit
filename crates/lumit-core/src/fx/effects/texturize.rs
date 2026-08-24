@@ -103,7 +103,8 @@ pub struct Texturize {
         min = 0.0,
         max = 200.0,
         default = 100.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Percent
     )]
     pub texture_contrast: f32,
 
@@ -117,7 +118,7 @@ pub struct Texturize {
     /// Per cent: how big one copy of the texture is, as a fraction of the frame.
     /// Lumit's own control — the layer carriage renders a referenced layer at
     /// this raster, so 100 is the fitting AE calls Stretch.
-    #[slider(min = 10.0, max = 400.0, default = 100.0, hard_min = 1.0)]
+    #[slider(min = 10.0, max = 400.0, default = 100.0, hard_min = 1.0, unit = Percent)]
     pub scale: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -126,7 +127,8 @@ pub struct Texturize {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

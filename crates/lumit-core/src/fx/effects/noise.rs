@@ -34,7 +34,7 @@ pub struct Noise {
     /// Per cent of full scene-linear scale: the grain's amplitude. 0 is the
     /// bit-exact passthrough (pinned by test); unbounded above, because a
     /// deliberate wall of static is a legitimate look (§1.2's one-sided range).
-    #[slider(min = 0.0, max = 100.0, default = 25.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 100.0, default = 25.0, hard_min = 0.0, unit = Percent)]
     pub amount: f32,
 
     /// Uniform draws flat across the range; Gaussian clusters near zero, which
@@ -63,7 +63,8 @@ pub struct Noise {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

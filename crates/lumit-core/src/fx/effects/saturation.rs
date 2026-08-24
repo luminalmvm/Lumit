@@ -27,7 +27,7 @@ pub struct Saturation {
     /// doubled. The maths (a mix of luma and colour by saturation ÷ 100) simply
     /// keeps extrapolating above 200, so the hard ceiling is open (K-135): the
     /// slider reaches a heavy 400, and typing higher pushes further.
-    #[slider(min = 0.0, max = 400.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 400.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub saturation: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -36,7 +36,8 @@ pub struct Saturation {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

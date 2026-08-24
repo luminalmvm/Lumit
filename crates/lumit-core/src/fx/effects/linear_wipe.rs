@@ -49,7 +49,7 @@ pub struct LinearWipe {
     /// Closed 0..100 (K-414): a wipe cannot be less than begun or more than
     /// complete, so the range is the parameter, and typing past either end
     /// would offer a picture that does not exist.
-    #[bounded(min = 0.0, max = 100.0, default = 50.0)]
+    #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub completion: f32,
 
     /// Which way the edge runs, degrees, **measured from straight up and
@@ -70,7 +70,8 @@ pub struct LinearWipe {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

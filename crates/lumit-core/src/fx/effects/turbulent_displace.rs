@@ -92,7 +92,7 @@ pub struct TurbulentDisplace {
 
     /// How many octaves of swirl are summed. One is a smooth swell; three is
     /// where it reads as turbulence, which is what the effect is called.
-    #[counter(min = 1, max = 10, default = 3, hard_min = 1, hard_max = 10)]
+    #[counter(min = 1, max = 10, default = 3, hard_min = 1, hard_max = 10, unit = Raw)]
     pub complexity: i32,
 
     /// px@comp: where the noise field's origin sits. Animate it to drift the
@@ -115,7 +115,7 @@ pub struct TurbulentDisplace {
 
     /// Whole turns of Evolution before the field repeats. The loop is exact
     /// (§3.37 decision 4), so a `cycle`-long animation tiles end to end.
-    #[counter(min = 1, max = 30, default = 1, hard_min = 1, hard_max = 30)]
+    #[counter(min = 1, max = 30, default = 1, hard_min = 1, hard_max = 30, unit = Raw)]
     pub cycle: i32,
 
     /// Which of the frame's edges are held still. A pinned edge cannot move, so
@@ -138,7 +138,8 @@ pub struct TurbulentDisplace {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

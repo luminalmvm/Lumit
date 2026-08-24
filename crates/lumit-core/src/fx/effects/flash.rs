@@ -47,13 +47,13 @@ pub struct Flash {
     pub mode: u32,
 
     /// Manual mode's hit track: each keyframe is a hit of that strength.
-    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0)]
+    #[slider(min = 0.0, max = 1.0, default = 0.0, hard_min = 0.0, hard_max = 1.0, unit = Raw)]
     pub trigger: f32,
 
     /// Frames (comp-rate, §2.3) a marker-driven flash lasts. Hard floor 0,
     /// unbounded above (the K-090 one-sided clamp); 0 is honestly a flash zero
     /// frames long — never shown.
-    #[slider(min = 0.0, max = 12.0, default = 2.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 12.0, default = 2.0, hard_min = 0.0, unit = Frames)]
     pub duration: f32,
 
     /// Hard holds full strength for Duration then cuts; Fade decays linearly to
@@ -68,12 +68,13 @@ pub struct Flash {
         min = 1.0,
         max = 8.0,
         default = 1.0,
-        hard_min = 1.0
+        hard_min = 1.0,
+        unit = Raw
     )]
     pub every_nth: f32,
 
     /// Frames a marker-driven flash trails (> 0) or leads (< 0) its beat.
-    #[slider(label = "Phase offset", min = -8.0, max = 8.0, default = 0.0)]
+    #[slider(label = "Phase offset", min = -8.0, max = 8.0, default = 0.0, unit = Frames)]
     pub phase: f32,
 
     /// Per cent scale on the trigger envelope.
@@ -82,7 +83,8 @@ pub struct Flash {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 400.0
+        hard_max = 400.0,
+        unit = Percent
     )]
     pub intensity: f32,
 
@@ -97,7 +99,8 @@ pub struct Flash {
         max = 1000.0,
         default = 120.0,
         hard_min = 0.0,
-        hard_max = 10000.0
+        hard_max = 10000.0,
+        unit = Raw
     )]
     pub decay: f32,
 
@@ -107,7 +110,8 @@ pub struct Flash {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

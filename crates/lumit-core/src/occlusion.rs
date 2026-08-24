@@ -280,6 +280,7 @@ mod tests {
             }],
             sample_temporally: true,
             custom_name: None,
+            linked_pairs: Vec::new(),
             extra: serde_json::Map::new(),
         }
     }

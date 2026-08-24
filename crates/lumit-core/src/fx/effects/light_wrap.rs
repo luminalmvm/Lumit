@@ -63,7 +63,7 @@ pub struct LightWrap {
 
     /// Gain on the spill before it is screened on. Open above (K-090) for a
     /// deliberately hot wrap.
-    #[slider(min = 0.0, max = 3.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 3.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -72,7 +72,8 @@ pub struct LightWrap {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

@@ -8274,3 +8274,45 @@ the others and the Viewer paints it when it draws it.
 
 At this stage the set exists and is tested but is not yet wired into any panel; the old
 icons stay on screen until the panels phase replaces them one panel at a time.
+
+## 16. What a control's number means, in plain terms
+
+Every control in Effect controls shows a number, and a number on its own is ambiguous.
+Is a Radius of 30 thirty pixels, thirty per cent, thirty of something else? Lumit's
+answer is that each control declares its **unit** once, in the effect's own declaration
+in the engine, and everything else reads it from there.
+
+There are six answers a control can give. **Pixels at composition size** — the unit of
+every distance, radius and offset: a number authored against the composition's own size,
+which the engine scales down for a half-resolution preview and up for a larger export, so
+what you set once looks the same everywhere. **Per cent** — a share of something the
+control names, where 100 is all of it: the Mix at the bottom of every effect, one
+channel's share of a grain, a position given as a fraction of the frame. **Degrees** for
+angles, **seconds** and **frames** for durations. And **none**, for a number that
+genuinely has no unit — a gamma, a count of blades, a threshold in light values. "None"
+is a deliberate answer, not a blank: a test fails the build if a control never says which
+of the six it is, because a control that forgot would show a bare number and nobody
+would spot it.
+
+Declaring it once buys two things at opposite ends of the program. The engine knows which
+numbers to rescale when a frame is rendered smaller than the composition — so no effect
+can be forgotten when preview resolution changes, which used to be a list somebody had to
+remember to add to. And the panel knows what to write in small type after the value, so
+the same fact is not typed out a second time in the interface, where it would drift. It
+had drifted: the interface was carrying its own short list of which controls write pixels
+and which write percentages, keyed by the control's name — and because two different
+effects can both call a control "Centre X" while meaning different things, that list could
+only ever be right about one of them.
+
+**Points, and the chain between them.** A point — a Centre, a Light, a Focus point — is
+not one control in Lumit but two ordinary number controls sitting next to each other,
+named `..._x` and `..._y`. The panel notices the pair and draws them as one row: two equal
+boxes with a small chain between. Closed, the chain ties them together, so dragging one
+moves the other in proportion; open, each is on its own. Which way you left the chain is
+remembered with the project, per effect, exactly as a renamed effect is — and because
+nothing before this had a chain, every project made until now opens with all of them open,
+which is precisely how those projects behaved. Closing or opening one is a single undo
+step, like any other change to an effect.
+
+The engine owns the pairing and the remembering; the proportional dragging itself is the
+panel's, because it only exists while your finger is on the mouse.

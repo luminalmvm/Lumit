@@ -98,7 +98,7 @@ pub struct ChromaticAberration {
 
     /// Wavelength mode's tap count (K-144). Rounded and clamped to 3..=64;
     /// ignored when Wavelength is off.
-    #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0)]
+    #[slider(min = 3.0, max = 64.0, default = 16.0, hard_min = 3.0, hard_max = 64.0, unit = Raw)]
     pub samples: f32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
@@ -107,7 +107,8 @@ pub struct ChromaticAberration {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

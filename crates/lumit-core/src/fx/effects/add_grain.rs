@@ -39,7 +39,7 @@ use lumit_fx_macros::Effect;
 pub struct AddGrain {
     /// How strong the grain is, per cent. 0 is the bit-exact passthrough; the
     /// range runs to 200 because a deliberately coarse stock is a look.
-    #[slider(min = 0.0, max = 200.0, default = 50.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 50.0, hard_min = 0.0, unit = Percent)]
     pub intensity: f32,
 
     /// How big one grain is, px@comp (§2.3), so a Half-resolution preview shows
@@ -55,21 +55,22 @@ pub struct AddGrain {
         max = 100.0,
         default = 50.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub softness: f32,
 
     /// How much grain the red channel gets, per cent of Intensity — AE's Channel
     /// Balance.
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub red: f32,
 
     /// The green channel's share; see [`red`](Self::red).
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub green: f32,
 
     /// The blue channel's share; see [`red`](Self::red).
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub blue: f32,
 
     /// Off (the default) draws the three channels from three independent fields,
@@ -79,17 +80,17 @@ pub struct AddGrain {
     pub monochrome: bool,
 
     /// How much grain the dark end of the range gets, per cent.
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub shadows: f32,
 
     /// The middle of the range; see [`shadows`](Self::shadows). The three weights
     /// are hat functions summing to one, so 100/100/100 is provably neutral
     /// (§3.77's third note).
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub midtones: f32,
 
     /// The bright end of the range; see [`shadows`](Self::shadows).
-    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 200.0, default = 100.0, hard_min = 0.0, unit = Percent)]
     pub highlights: f32,
 
     /// On, the grain is redrawn every frame — what grain does. Off freezes one
@@ -107,7 +108,8 @@ pub struct AddGrain {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

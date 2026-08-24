@@ -38,13 +38,14 @@ pub struct PosterizeTime {
         min = 1.0,
         max = 60.0,
         default = 12.0,
-        hard_min = 0.01
+        hard_min = 0.01,
+        unit = Raw
     )]
     pub rate: f32,
 
     /// Comp seconds: shifts where the steps land, so the hold can be aligned to a
     /// beat. 0 snaps to the comp's own zero.
-    #[slider(min = -1.0, max = 1.0, default = 0.0)]
+    #[slider(min = -1.0, max = 1.0, default = 0.0, unit = Seconds)]
     pub phase: f32,
 }
 

@@ -34,7 +34,7 @@ pub struct Glow {
     /// range made concrete: clamped at zero below, unbounded above — HDR values
     /// beyond the slider are legal and glow harder (§2.1). Default 0.8 so
     /// highlights just shy of white already bloom on a fresh instance.
-    #[slider(min = 0.0, max = 4.0, default = 0.8, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 4.0, default = 0.8, hard_min = 0.0, unit = Raw)]
     pub threshold: f32,
 
     /// Soft-knee width: the threshold's onset is eased by a smoothstep over
@@ -47,7 +47,8 @@ pub struct Glow {
         max = 1.0,
         default = 0.5,
         hard_min = 0.0,
-        hard_max = 1.0
+        hard_max = 1.0,
+        unit = Raw
     )]
     pub knee: f32,
 
@@ -67,7 +68,7 @@ pub struct Glow {
 
     /// Gain on the added halo; 0 is the effect's neutral point (bit-exact
     /// passthrough, pinned by test).
-    #[slider(min = 0.0, max = 10.0, default = 1.0, hard_min = 0.0)]
+    #[slider(min = 0.0, max = 10.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
     /// The halo's colour, scene-linear — HDR tints are legal.
@@ -80,7 +81,8 @@ pub struct Glow {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

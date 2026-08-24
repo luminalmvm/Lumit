@@ -33,7 +33,7 @@ use lumit_fx_macros::Effect;
 pub struct SliderControl {
     /// The number. Unbounded on purpose — the soft 0..100 is only where the
     /// thumb starts.
-    #[slider(min = 0.0, max = 100.0, default = 0.0)]
+    #[slider(min = 0.0, max = 100.0, default = 0.0, unit = Raw)]
     pub slider: f32,
 }
 

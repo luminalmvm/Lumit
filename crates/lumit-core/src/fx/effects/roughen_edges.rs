@@ -101,7 +101,8 @@ pub struct RoughenEdges {
         max = 100.0,
         default = 70.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub edge_sharpness: f32,
 
@@ -113,7 +114,8 @@ pub struct RoughenEdges {
         min = 0.0,
         max = 200.0,
         default = 100.0,
-        hard_min = 0.0
+        hard_min = 0.0,
+        unit = Percent
     )]
     pub fractal_influence: f32,
 
@@ -133,7 +135,7 @@ pub struct RoughenEdges {
 
     /// How many octaves of lump are summed. AE's default is two, and two is
     /// what reads as torn paper; more reads as corrosion.
-    #[counter(min = 1, max = 10, default = 2, hard_min = 1, hard_max = 10)]
+    #[counter(min = 1, max = 10, default = 2, hard_min = 1, hard_max = 10, unit = Raw)]
     pub complexity: i32,
 
     /// Degrees: the field's depth coordinate. One full turn advances one cell,
@@ -147,7 +149,7 @@ pub struct RoughenEdges {
 
     /// Whole turns of Evolution before the field repeats. The loop is exact
     /// (§3.37 decision 4).
-    #[counter(min = 1, max = 30, default = 1, hard_min = 1, hard_max = 30)]
+    #[counter(min = 1, max = 30, default = 1, hard_min = 1, hard_max = 30, unit = Raw)]
     pub cycle: i32,
 
     /// On, the chewed band is painted in [`edge_colour`](Self::edge_colour) —
@@ -170,7 +172,8 @@ pub struct RoughenEdges {
         max = 100.0,
         default = 100.0,
         hard_min = 0.0,
-        hard_max = 100.0
+        hard_max = 100.0,
+        unit = Percent
     )]
     pub mix: f32,
 }

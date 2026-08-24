@@ -67,10 +67,37 @@ impl ParamId {
 /// match that has to know which field of which effect holds a pixel count. An
 /// effect cannot forget to be rescaled, which was possible when the knowledge
 /// lived in `rescale_px`.
+/// It is also **what the panel writes beside the number** (K-443's unit rider:
+/// "px", "%", "°", "s", "f"). That is the second reason every declaration has to
+/// carry one: the alternative was a table in the frontend saying which ids are
+/// pixels and which are percentages, which is the engine's knowledge kept in the
+/// view — and it was already wrong, because it keyed on the parameter's id alone
+/// while `centre_x` means % of comp width on Radial blur and px@comp on four
+/// other effects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unit {
-    /// A plain number: a mix, a gamma, a count, a threshold.
+    /// **Nobody has decided yet.** The derive's default for a numeric
+    /// parameter whose declaration says nothing, and a defect rather than a
+    /// unit: `every_parameter_declares_a_deliberate_unit` fails the build on
+    /// any parameter that ships in it.
+    ///
+    /// It exists so that "dimensionless" and "unconsidered" are different
+    /// answers. They were the same answer while [`Unit::Raw`] was the silent
+    /// default, which is how a pixel count could reach the panel with no unit
+    /// beside it and nothing to notice.
+    Unset,
+    /// A plain number: a gamma, a count, a threshold, a stop, a rate in Hz.
+    /// The deliberate "none" — the panel draws no unit rider.
     Raw,
+    /// A percentage, where 100 is the whole of whatever the parameter is a
+    /// share of: the host-uniform Mix, a channel's share of a grain, Radial
+    /// blur's centre as a fraction of the comp's width and height.
+    ///
+    /// **Not a distance.** A per cent of the *frame* is a position that means
+    /// the same thing at any raster, so it is not scaled by the preview factor;
+    /// a per cent of the *diagonal* is [`Unit::PctDiag`], which K-419 forbids
+    /// any parameter from declaring.
+    Percent,
     /// A percentage of the composition diagonal. **No parameter may declare
     /// it** (K-419: every distance is px@comp); it stays for the ROI padding
     /// declarations and the reference format, and
@@ -85,6 +112,10 @@ pub enum Unit {
     Degrees,
     /// Seconds of layer time.
     Seconds,
+    /// Comp-rate frames — docs/08 §2.3's other duration unit, for the handful
+    /// of controls a frame count is the honest spelling of (Flash's Duration
+    /// and Phase, Datamosh's reach along the flow).
+    Frames,
 }
 
 impl Unit {
