@@ -313,6 +313,14 @@ class Workspace extends ChangeNotifier {
   /// anybody a surprise few hundred megabytes.
   bool autoUpdate = true;
 
+  /// Whether the welcome screen opens on launch (K-481).
+  ///
+  /// On by default. Off is for somebody who always starts from the same
+  /// project, or simply does not want to be asked: Lumit then opens straight
+  /// into the shell, whose Viewer offers the same three ways to start until
+  /// something is displayed, so turning this off never hides a choice.
+  bool showWelcomeOnLaunch = true;
+
   /// When the last update check finished, in milliseconds since the epoch.
   /// Zero means never. Kept so six launches in a morning ask GitHub once.
   int lastUpdateCheckMs = 0;
@@ -575,6 +583,12 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// Turn the welcome screen on or off for the next launch (K-481).
+  void setShowWelcomeOnLaunch(bool on) {
+    showWelcomeOnLaunch = on;
+    settingsChanged();
+  }
+
   /// Record that a check has just happened, so the next launch does not repeat
   /// it. Saved without notifying — nothing on screen reads this.
   void rememberUpdateCheck(int atMillis) {
@@ -790,6 +804,7 @@ class Workspace extends ChangeNotifier {
         'interface': interface.toJson(),
         'first_run_done': firstRunDone,
         'auto_update': autoUpdate,
+        'show_welcome_on_launch': showWelcomeOnLaunch,
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'custom_themes': [for (final t in customThemes) t.toJson()],
@@ -839,6 +854,9 @@ class Workspace extends ChangeNotifier {
     // for; the default is on, and an existing user gets the same offer a new
     // one does.
     autoUpdate = j['auto_update'] as bool? ?? true;
+    // Absent means a settings file written before the screen could be turned
+    // off, and the answer for those is the same as for a new user: show it.
+    showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
     customThemes = [];

@@ -11,8 +11,8 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -21,9 +21,13 @@ import 'package:lumit_flutter/panels/viewer_panel_frb.dart'
     show captureViewerPicturePng;
 import 'package:lumit_flutter/shell/menu_bar_frb.dart'
     show projectThumbnailCapture, saveProjectFrb;
+import 'package:lumit_flutter/shell/about_window_frb.dart'
+    show lumitProductVersion;
 import 'package:lumit_flutter/shell/welcome_frb.dart';
+import 'package:lumit_flutter/shell/wordmark.dart';
 import 'package:lumit_flutter/state/external_links.dart';
 import 'package:lumit_flutter/state/workspace.dart';
+import 'package:lumit_flutter/theme/brand.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
 import 'frb_test_support.dart';
@@ -110,19 +114,74 @@ void main() {
       expect(header.top - cards.bottom, welcomeBlockGap);
     });
 
-    /// 2. **The wordmark is mono at 22 with 0.08em of tracking**, in the top
-    /// of the text ramp — the one place on the page that is a brand mark
-    /// rather than a phrase.
-    testWidgets('the wordmark is the drawing\'s', (tester) async {
+    /// 2. **The wordmark is the brand's own lockup** (K-480), not the word set
+    /// in mono: the blue key, `umi`, and the violet key that is the blue one
+    /// turned through 180°. The two keys are brand tokens, so they are the same
+    /// in every colour scheme; only the lettering follows the theme.
+    testWidgets('the wordmark is the website\'s', (tester) async {
       await mount(tester);
-      final mark = tester
-          .widget<Text>(find.byKey(const ValueKey('welcome-wordmark')))
-          .style!;
+      final mark = tester.widget<LumitWordmark>(
+          find.byKey(const ValueKey('welcome-wordmark')));
 
-      expect(mark.fontSize, welcomeWordmarkSize, reason: '22 in the drawing');
-      expect(mark.letterSpacing, welcomeWordmarkTracking, reason: '0.08em');
-      expect(mark.fontFamily, LumitTheme.monoFontFamily);
-      expect(mark.color, theme.textPrimary);
+      expect(mark.height, welcomeWordmarkHeight, reason: '22 in the drawing');
+      expect(mark.ground, theme.surface0, reason: 'the page it stands on');
+      expect(mark.letters, brandWordmarkPaper,
+          reason: 'light lettering on the dark scheme\'s ground');
+      final box =
+          tester.getRect(find.byKey(const ValueKey('welcome-wordmark'))).size;
+      expect(box.height, welcomeWordmarkHeight);
+      expect(
+          box.width, closeTo(welcomeWordmarkHeight * lumitWordmarkAspect, 0.01),
+          reason: 'the width follows the lockup');
+    });
+
+    /// 2b. **The drawing is the website's own file**, copied rather than
+    /// redrawn: the two key gradients as the brand sets them, the `t` as the
+    /// `l` flipped about the lockup's centre, and the lettering left to inherit
+    /// so it can follow the theme.
+    testWidgets('the wordmark asset is the site\'s drawing', (tester) async {
+      final svg = await rootBundle.loadString(lumitWordmarkAsset);
+
+      String hex(Color c) {
+        String channel(double v) =>
+            (v * 255).round().toRadixString(16).padLeft(2, '0');
+        return '#${channel(c.r)}${channel(c.g)}${channel(c.b)}';
+      }
+
+      for (final key in [
+        brandKeyBlueLight,
+        brandKeyBlue,
+        brandKeyViolet,
+        brandKeyMagenta,
+      ]) {
+        expect(svg, contains(hex(key)),
+            reason: '${hex(key)} is one of the mark\'s keys');
+      }
+      expect(svg, contains('rotate(180 134.26 -35.16)'),
+          reason: 'the t is the l flipped about the lockup\'s centre');
+      expect('currentColor'.allMatches(svg).length, 3,
+          reason: 'u, m and i inherit; nothing else does');
+      expect(hex(brandWordmarkPaper), '#f4f6f8',
+          reason: 'the token is the fill the site\'s own file carries');
+    });
+
+    /// 2c. **The lettering is chosen against the ground it stands on**, so the
+    /// mark is legible under every scheme and under a custom theme nobody has
+    /// seen yet. The keys are never chosen: they are the brand.
+    test('the wordmark\'s lettering follows the ground', () {
+      final dark = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final light =
+          LumitTheme.forScheme(LumitColorScheme.light, ThemeShape.sharp);
+
+      expect(wordmarkLetters(dark.surface0), brandWordmarkPaper);
+      expect(wordmarkLetters(light.surface0), brandWordmarkInk,
+          reason: 'dark letters on a light page');
+      // A custom theme is judged the same way — by its ground, not by its name.
+      expect(wordmarkLetters(const Color(0xfff7f3ea)), brandWordmarkInk,
+          reason: 'a bright custom ground takes dark letters');
+      expect(wordmarkLetters(const Color(0xff141414)), brandWordmarkPaper);
+      expect(wordmarkLetters(null), brandWordmarkPaper,
+          reason: 'no ground to judge: the mark as it is usually seen');
     });
 
     /// 3. **Three start cards, 180 × 63 with 10 between them.** The height is
@@ -304,6 +363,64 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(done, isFalse);
+    });
+
+    /// 9b. **New project is the Save as flow, and choosing a folder is the
+    /// first act** (K-480): the picker, the file, then the editor — on the
+    /// project that now has a home, never on one that does not.
+    testWidgets('New project saves where it was asked to, then hands over',
+        (tester) async {
+      final dir = Directory.systemTemp.createTempSync('lumit-new');
+      addTearDown(() {
+        try {
+          dir.deleteSync(recursive: true);
+        } catch (_) {}
+      });
+      final target = '${dir.path}${Platform.pathSeparator}First project.lum';
+      var asked = 0;
+
+      final p = await mount(tester);
+      await tester.runAsync(() => startNewProject(
+            p.state,
+            p.uiState,
+            picker: () async {
+              asked++;
+              return target;
+            },
+            onStarted: () => done = true,
+          ));
+
+      expect(asked, 1, reason: 'the picker opens straight away');
+      expect(File(target).existsSync(), isTrue,
+          reason: 'and the file is written');
+      expect(p.state.project!.path(), target);
+      expect(done, isTrue, reason: 'the editor opens on the saved project');
+    });
+
+    /// 9c. **Escape closes the screen with nothing open** (K-481). It is the
+    /// standard way out of anything that has taken the window, and it is safe
+    /// because the shell behind it offers the same three ways to start.
+    testWidgets('Escape closes the welcome screen', (tester) async {
+      await mount(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(done, isTrue);
+    });
+
+    /// 9d. **The footer says which Lumit this is**, not which library printed
+    /// the boot line (K-480): "Lumit 0.2.0", the one product version Settings ▸
+    /// General shows too.
+    testWidgets('the version line is the product\'s, not the crate\'s',
+        (tester) async {
+      await mount(tester);
+
+      final line = lumitProductVersion();
+      expect(line, startsWith('Lumit '));
+      expect(line, isNot(contains('lumit-bridge')),
+          reason: 'the crate\'s name is for the boot log and bug reports');
+      expect(find.text(line), findsOneWidget);
     });
 
     /// 10. **Clear empties the whole list**, and the well says so rather than
@@ -509,6 +626,75 @@ void main() {
           reason: 'the user is told the save worked, because it did');
       expect(scratch.thumb.existsSync(), isFalse,
           reason: 'and the row simply shows its placeholder');
+    });
+  }, skip: !engineAvailable);
+
+  // --- The empty shell (K-481) ---------------------------------------------
+  //
+  // The welcome screen can be closed with nothing open, so something has to be
+  // behind it. The three ways to start work stand in the Viewer until
+  // something is displayed — the same three, from the same file, so they can
+  // never drift apart.
+  group('The empty stage (frb)', () {
+    Future<({LumitState state, LumitUiState uiState})> mount(
+      WidgetTester tester, {
+      Future<String?> Function()? openPicker,
+      bool withComposition = false,
+    }) async {
+      final p = freshProject();
+      if (withComposition) p.state.project!.newComposition(name: 'Scene');
+      await tester.pumpWidget(hostPanel(
+        child: EmptyStageFrb(openPicker: openPicker),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      return p;
+    }
+
+    /// 18. **Nothing open, so the Viewer offers the three ways to start.** An
+    /// empty editor whose largest panel says "select a composition" when there
+    /// is no composition to select is a dead end.
+    testWidgets('the three actions stand where the picture would be',
+        (tester) async {
+      await mount(tester);
+
+      expect(find.byKey(const ValueKey('empty-stage')), findsOneWidget);
+      expect(find.byKey(const ValueKey('welcome-card-new')), findsOneWidget);
+      expect(find.byKey(const ValueKey('welcome-card-blank')), findsOneWidget);
+      expect(find.byKey(const ValueKey('welcome-card-open')), findsOneWidget);
+      expect(find.text(l10n.selectACompositionFirst), findsNothing);
+    });
+
+    /// 19. **They go the moment there is something to show.** A project that
+    /// has compositions and simply has none fronted is a different sentence,
+    /// and keeps the panel's ordinary empty line.
+    testWidgets('they go once the project has a composition', (tester) async {
+      await mount(tester, withComposition: true);
+
+      expect(find.byKey(const ValueKey('empty-stage')), findsNothing);
+      expect(find.byKey(const ValueKey('welcome-card-new')), findsNothing);
+      expect(find.text(l10n.selectACompositionFirst), findsOneWidget);
+    });
+
+    /// 20. **The actions are the welcome screen's own flows.** Open runs the
+    /// same picker-then-read the File menu row runs; a cancelled one leaves the
+    /// editor exactly as it was.
+    testWidgets(
+        'Open runs the same flow, and a cancelled picker changes '
+        'nothing', (tester) async {
+      var asked = 0;
+      final p = await mount(tester, openPicker: () async {
+        asked++;
+        return null;
+      });
+
+      await tester.tap(find.byKey(const ValueKey('welcome-card-open')));
+      await tester.pumpAndSettle();
+
+      expect(asked, 1);
+      expect(p.state.project!.path(), isNull);
+      expect(find.byKey(const ValueKey('empty-stage')), findsOneWidget);
     });
   }, skip: !engineAvailable);
 }

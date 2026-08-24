@@ -564,7 +564,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('recover')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Recover unsaved work'), findsOneWidget);
+      // The title is a kicker now the dialogue wears the shared frame, so the
+      // capitals are the style rather than the string (K-444).
+      expect(find.text('RECOVER UNSAVED WORK'), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-journal')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-autosave')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-discard')), findsOneWidget);
@@ -573,6 +575,77 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('recover-discard')));
       await tester.pumpAndSettle();
       expect(listAutosaves(project: path), hasLength(1));
+    });
+
+    /// The footer's filled action applies whichever source is picked in the
+    /// body, and every one of the three answers still comes back — the shape
+    /// changed, what the dialogue can say did not.
+    testWidgets('the filled action recovers the picked source', (tester) async {
+      Future<RecoveryChoice?> run(
+        WidgetTester tester,
+        String tempPrefix,
+        Future<void> Function(WidgetTester) act,
+      ) async {
+        final p = freshProject();
+        p.state.project!.newComposition(name: 'Scene');
+        final dir = Directory.systemTemp.createTempSync(tempPrefix);
+        final path = '${dir.path}/scene.lum';
+        // A saved file to replay the journal onto, and a real autosave beside
+        // it so the dialogue has something to offer.
+        await p.state.project!.save(path: path);
+        p.state.project!.autosave(projectPath: path, keep: 3);
+
+        RecoveryChoice? choice;
+        await tester.pumpWidget(hostPanel(
+          child: Builder(builder: (context) {
+            return HouseButton(
+              key: const ValueKey('recover'),
+              onPressed: () async {
+                choice = await showRecoveryDialogFrb(
+                  context: context,
+                  state: p.state,
+                  projectPath: path,
+                );
+              },
+              child: const Text('Recover'),
+            );
+          }),
+          state: p.state,
+          uiState: p.uiState,
+          size: const Size(700, 600),
+        ));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('recover')));
+        await tester.pumpAndSettle();
+        await act(tester);
+        await tester.pumpAndSettle();
+        return choice;
+      }
+
+      // Nothing picked: the journal is what the dialogue opens on.
+      expect(
+        await run(tester, 'lumit-recover-journal', (t) async {
+          await t.tap(find.byKey(const ValueKey('recover-apply')));
+        }),
+        RecoveryChoice.journal,
+      );
+
+      expect(
+        await run(tester, 'lumit-recover-auto', (t) async {
+          await t.tap(find.byKey(const ValueKey('recover-autosave')));
+          await t.pumpAndSettle();
+          await t.tap(find.byKey(const ValueKey('recover-apply')));
+        }),
+        RecoveryChoice.autosave,
+      );
+
+      // The close mark is neither answer: the project opens as it was saved.
+      expect(
+        await run(tester, 'lumit-recover-close', (t) async {
+          await t.tap(find.byKey(const ValueKey('recover-close')));
+        }),
+        isNull,
+      );
     });
   }, skip: !engineAvailable);
 
@@ -936,6 +1009,30 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('welcome-card-blank')));
       await tester.pumpAndSettle();
       expect(find.byType(LumitAppView), findsOneWidget);
+    });
+
+    /// Settings ▸ General can stand the welcome screen down for every launch
+    /// (K-481). Lumit then opens straight into the shell, whose Viewer offers
+    /// the same three ways to start until something is displayed — so the
+    /// setting hides no choice.
+    testWidgets('the launch setting is honoured', (tester) async {
+      tester.view.physicalSize = const Size(1800, 1100);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final p = freshProject();
+      p.uiState.workspace.showWelcomeOnLaunch = false;
+      await tester.pumpWidget(hostPanel(
+        child: const BootGate(splash: false),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WelcomeScreenFrb), findsNothing);
+      expect(find.byType(LumitAppView), findsOneWidget);
+      expect(find.byKey(const ValueKey('welcome-card-new')), findsOneWidget,
+          reason: 'the shell\'s own empty stage offers the same three ways in');
     });
 
     testWidgets('can be stood down, for the tests that drive the shell',

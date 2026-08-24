@@ -615,6 +615,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         (
           l10n.settingsGroupWorkspace,
           [
+            // Off means Lumit opens straight into the shell (K-481); the
+            // Viewer offers the same three ways to start until something is
+            // displayed, so nothing is hidden by turning this off.
+            _flag(t, 'settings-welcome-on-launch', l10n.settingsWelcomeOnLaunch,
+                value: ui.workspace.showWelcomeOnLaunch,
+                set: ui.workspace.setShowWelcomeOnLaunch),
             _row(
               t,
               l10n.settingsPanelLayout,
@@ -675,8 +681,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// What this build is, read over the bridge once: the row rebuilds with
   /// every update-service notification, and the installed version cannot
   /// change under a running process.
-  late final String _installed =
-      'Lumit ${versionFromBootLine(lumitVersion()) ?? '?'}';
+  late final String _installed = lumitProductVersion();
 
   /// The line under "This version": what is installed, and what the last check
   /// made of it. Rebuilt with the row, so it follows the service too.
@@ -726,8 +731,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ],
             ),
           ),
-          _row(t, l10n.settingsShape, _shapeChips(t, ui)),
-          _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
+          // Scheme, then the two rows about *your* theme, then the two dials
+          // that tune whichever one is in force. The order is the order the
+          // work happens in: pick a scheme, make it yours, then adjust it —
+          // accent and shape used to sit above the rows that create the thing
+          // they adjust.
           _row(
             t,
             l10n.settingsCustomColours,
@@ -747,26 +755,24 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ),
           _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
               description: _themeMessage ?? ''),
+          _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
+          _row(t, l10n.settingsShape, _shapeChips(t, ui)),
         ],
       ),
       (
         l10n.settingsPageInterface,
         [
           _row(t, l10n.settingsScale, _scaleRow(t, ui)),
-          _row(
-            t,
-            l10n.settingsTooltips,
-            _dropdown<bool>(
-              key: 'settings-tooltips',
-              value: settings.showTooltips,
-              options: const [true, false],
-              label: (on) => on ? l10n.tooltipsShort : l10n.off,
-              onChanged: (on) => setState(() {
-                settings.showTooltips = on;
-                ui.workspace.settingsChanged();
-              }),
-            ),
-          ),
+          // On or off, and nothing in between: a tooltip is a name, never a
+          // lesson (K-440, docs/07 §13.2), so there is no longer form to
+          // choose between. The switch is the whole setting, and off means
+          // no tooltip anywhere — `LumitTooltip` reads it from the theme
+          // scope and hands back the bare control.
+          _flag(t, 'settings-tooltips', l10n.settingsTooltips,
+              value: settings.showTooltips, set: (on) {
+            settings.showTooltips = on;
+            ui.workspace.settingsChanged();
+          }),
           _row(
             t,
             l10n.settingsMotion,

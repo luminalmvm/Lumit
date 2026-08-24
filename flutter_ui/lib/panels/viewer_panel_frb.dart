@@ -57,6 +57,7 @@ import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/tool_bar_frb.dart';
+import '../shell/welcome_frb.dart' show EmptyStageFrb;
 import '../state/dropper.dart';
 import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../state/preview_throttle.dart';
@@ -70,7 +71,6 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/dropper_overlay.dart';
 import '../widgets/time_readout.dart';
-import 'placeholder.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_anchor.dart';
 import 'viewer_gizmo.dart';
@@ -448,13 +448,9 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       });
     }
     final comp = ui.selectedComp;
-    if (comp == null) {
-      return PlaceholderPanel(
-        icon: LumitIcon.footage,
-        title: l10n.panelViewer,
-        hint: l10n.selectACompositionFirst,
-      );
-    }
+    // Nothing to show: the ways to start work, or this panel's ordinary empty
+    // line when the project does have compositions (K-481, shell/welcome_frb).
+    if (comp == null) return const EmptyStageFrb();
     // A newly fronted composition is a new picture to ask for. Nothing else
     // asks: the playhead has not moved and no edit has landed, so without this
     // the Viewer sat on the last comp's frame and — because the engine's idle

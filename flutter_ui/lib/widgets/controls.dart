@@ -257,13 +257,44 @@ class _HouseButtonState extends State<HouseButton> {
                         ? (widget.dropdown ? t.body : t.bodyPrimary)
                         : t.bodyPrimary.copyWith(color: label)))
                 : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
-            child: _capitalised(widget.child, widget.primary),
+            child: _centred(_capitalised(widget.child, widget.primary)),
           ),
         ),
       ),
     );
   }
 }
+
+/// The label, held in the middle of whatever box the button was given.
+///
+/// **Why this is needed at all.** A `Container`'s padding passes its own
+/// constraints straight down, so a button handed a *height* — the dialog
+/// footer states 24 (§12A.4), a bar states its own — hands the label a **tight**
+/// box 2px shorter. A paragraph in a tight box stretches to fill it and then
+/// paints its single line at the **top**, which is the "the text sits
+/// off-centre" every dialog footer showed: the label's rectangle was centred
+/// while its words were not.
+///
+/// **An `Align` with both factors set to 1** is the whole fix, and the factors
+/// are the point: they make it shrink-wrap, so under the loose constraints
+/// every other button gets it is exactly the size of the child and a button
+/// that was sizing itself to its own words still does, to the pixel. Under a
+/// stated height it is forced to that height instead and centres the label in
+/// it. `Container(alignment:)` would have centred too — and also made every
+/// button in a bounded row grow to that row's full height, which is a different
+/// change to every bar in the application.
+///
+/// A plain `Column` would centre as well, and was tried: it *reports* an
+/// overflow wherever a caller states a box **smaller** than its label, and the
+/// Export dialog has one such caller today. That is worth finding on its own
+/// account, but it is not this fix's business to start failing the suite over —
+/// `Align` takes the too-small box the way the padding always silently did.
+Widget _centred(Widget label) => Align(
+      alignment: Alignment.center,
+      widthFactor: 1,
+      heightFactor: 1,
+      child: label,
+    );
 
 /// The primary button's label in capitals, when it is a plain word.
 ///
@@ -1425,6 +1456,13 @@ class HouseTextField extends StatefulWidget {
   /// click on it still lands in the field behind it.
   final Widget? leading;
 
+  /// Which end of the well the text sits at. The default reads from the start,
+  /// which is what a name or a search term wants; a **number** reads from the
+  /// right, so the digits of one line up with the digits of the next — the
+  /// drawings right-align every numeric well they draw (the composition's
+  /// frame rate, its size, its shutter angle).
+  final TextAlign textAlign;
+
   /// The well's own inset. Overridden by the one caller that has to fit a
   /// **secondary row** (K-451: 18 px — the Timeline's timecode/search/mode
   /// row), where the default 3 px above and below would burst it.
@@ -1455,6 +1493,7 @@ class HouseTextField extends StatefulWidget {
     this.style,
     this.hint,
     this.leading,
+    this.textAlign = TextAlign.start,
   });
 
   @override
@@ -1475,6 +1514,12 @@ class _HouseTextFieldState extends State<HouseTextField>
     _focus.onKeyEvent = onKeyEvent;
     // The hint draws only while empty, so emptiness changing must redraw.
     widget.controller.addListener(_changed);
+    // And the edge answers focus, so taking or losing it must redraw too.
+    _focus.addListener(_redraw);
+  }
+
+  void _redraw() {
+    if (mounted) setState(() {});
   }
 
   List<dynamic> suggestions = List.empty();
@@ -1625,6 +1670,7 @@ class _HouseTextFieldState extends State<HouseTextField>
   @override
   void dispose() {
     widget.controller.removeListener(_changed);
+    _focus.removeListener(_redraw);
     // The completion list is an OverlayEntry, which lives in the Overlay rather
     // than under this widget — so it outlives the field that opened it unless
     // it is taken down here, and a field disposed with suggestions showing
@@ -1657,7 +1703,12 @@ class _HouseTextFieldState extends State<HouseTextField>
       decoration: BoxDecoration(
         color: widget.fill ?? t.surface0,
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-        border: Border.all(color: t.hairline),
+        // `animated`, not `accent`: a focused well is the one focus that means
+        // "you are about to change a value" (§3.1, §6.5), and the drawings
+        // draw the focused well's edge in that token. [DragValueField] has
+        // answered focus this way all along; a well you type into rather than
+        // scrub had simply never answered at all.
+        border: Border.all(color: _focus.hasFocus ? t.animated : t.hairline),
       ),
       child: _withLeading(
         leading,
@@ -1683,6 +1734,7 @@ class _HouseTextFieldState extends State<HouseTextField>
                     focusNode: _focus,
                     autofocus: widget.autofocus,
                     style: widget.style ?? t.bodyPrimary,
+                    textAlign: widget.textAlign,
                     cursorColor: t.accent,
                     backgroundCursorColor: t.surface2,
                     selectionColor: t.accent.withValues(alpha: 0.5),

@@ -12887,3 +12887,58 @@ carries both in full. Faking either at export would be worse than the empty row.
 The **seam is unchanged by this entry**: `BridgeExportSpec` still carries the eight fields it
 carried, and `to_export_spec` fills the rest from `ExportSpec::default()`, so exposing the
 whole set later is one change in one place rather than many.
+
+## K-480 — The welcome screen: Save as first, the product's version, and the brand's own wordmark
+
+**DECIDED 2026-08-24** (owner review of the welcome screen). Three corrections to
+15-DESIGN §12A.3b, all of them things the page said about itself that were not quite true:
+
+- **New project is the Save as flow, and choosing where the `.lum` lives is the first
+  act.** Picker, then the file, then the editor — on the project that now has a home. A
+  cancelled picker leaves the welcome standing, because backing out of choosing a folder is
+  not starting work. (This is what the card's own note, "choose a project folder", already
+  promised; the flow is now exactly that and is tested at both ends.)
+- **The version line is the product's**: `Lumit 0.2.0`, the one string Settings ▸ General
+  shows, from one function (`lumitProductVersion`). The line used to print the engine's
+  boot line — `lumit-bridge 0.2.0` — which names the library that printed it. The *number*
+  was never wrong and no new version source is needed: `Cargo.toml`'s `workspace.package`,
+  `flutter_ui/pubspec.yaml` and the release tag the updater compares against carry the same
+  three digits, so the repository has one version. Only the crate's name was leaking, and
+  it belongs in the boot log and in bug reports, where `lumitVersion()` still puts it.
+- **The wordmark is the brand's own lockup**, not the word set in mono at 0.08em. It is the
+  website's file, `web/public/lumit-wordmark.svg`, copied to `flutter_ui/assets/brand/` and
+  drawn through flutter_svg — the route Lumit's icons already take — rather than redrawn:
+  the `l` and the `t` **are** the mark's two keys, blue and violet-magenta, and no type
+  sets them. Three deliberate differences from the site's file and no others: the view box
+  is tightened to the lockup, so 22px asks for 22px of ink; the three letter paths are
+  filled `currentColor`; and the animated version's zero-scale glow ellipse is gone. The
+  keys keep their gradients under **every** scheme and every custom theme — a wordmark
+  whose blue went green would not be the wordmark — while `umi` is chosen against the
+  ground it stands on: relative luminance over 0.5 takes the dark lettering, under it the
+  light, and a ground that cannot be judged takes the light, Lumit being dark-first. The
+  four key colours and the two letter colours are named tokens in
+  `flutter_ui/lib/theme/brand.dart`, which is inside the no-hex rule's one permitted folder
+  (§4.1) and outside the theme struct, because a brand colour is the same in every scheme.
+
+## K-481 — The welcome closes with nothing open, and the empty shell offers the same three ways in
+
+**DECIDED 2026-08-24** (owner ruling from the mockup rounds, made explicit). The welcome
+screen is **closable** — Escape, the standard way out of anything that has taken the window
+— and Settings ▸ General ▸ Workspace gains **Welcome screen on launch**, on by default,
+which stands it down for every launch. Both are only safe because of the other half of the
+ruling: **with nothing open, the Viewer shows the three start cards** (New project, Blank
+project, Open) until something is displayed. 07-UI-SPEC §13.2 already said so; this entry
+is what makes it real and pins the details.
+
+They are the **same widget** as the welcome's, running the same three functions, so the
+ways to start work cannot drift apart — `StartCards` in `shell/welcome_frb.dart`, which the
+Viewer mounts through a one-line branch. A project that *has* compositions and simply has
+none fronted is a different sentence and keeps the panel's ordinary "select a composition"
+line, so the cards appear only when there is genuinely nothing. Blank project, pressed in
+the shell against a project that already has a home on disk, starts a fresh one — from the
+welcome the boot project is already blank, so it only hands the window over, which is what
+it always did.
+
+The setting is a `Workspace` field (`show_welcome_on_launch`), not an interface setting: it
+is a launch behaviour, sibling to the automatic update check, and it is read once by the
+boot gate. A settings file written before it existed loads as on.

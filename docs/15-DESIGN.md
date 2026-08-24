@@ -1079,8 +1079,14 @@ has said how they want to start. Somebody who double-clicked a `.lum` is never s
 - **One centred column, 560 wide, four blocks 28 apart**: the wordmark, the start cards,
   the recents list, the footer. Everything on the page is that width, which is what makes
   it read as one thing rather than three.
-- **The wordmark is mono at 22 with 0.08em of tracking**, in `text_primary`. It is a brand
-  mark, not a phrase, so it is the same in every language.
+- **The wordmark is the brand's own lockup at 22** (K-480) — the website's
+  `lumit-wordmark.svg`, shipped as `flutter_ui/assets/brand/` and drawn through flutter_svg,
+  22 logical pixels from its cap line to the `u`'s overshoot. The `l` and the `t` are the
+  mark's two keys and keep their gradients under every scheme; `umi` is filled
+  `currentColor` and is chosen against the ground it stands on — dark lettering over a
+  surface whose relative luminance is above 0.5, light below it, and light when there is no
+  ground to judge. It is a brand mark, not a phrase, so it is the same in every language.
+  It replaces the word set in mono at 0.08em, which was this section's rule until K-480.
 - **Three start cards, 180×63, ten apart** — New project (choose a folder), Blank project
   (save later), Open (a `.lum`). Each is a `surface_1` well behind a plain hairline with a
   13px title and a sentence-case kicker note under it at 0.06em; hover takes fill and edge
@@ -1111,7 +1117,25 @@ has said how they want to start. Somebody who double-clicked a `.lum` is never s
   control that asks, because it is the one with nothing to undo.
 - **The footer is a 28px strip**: the version at the left in the sentence-case kicker face,
   and Manual and What's new at the right as 24px outlined buttons with their labels in
-  `text_secondary`.
+  `text_secondary`. The version is the **product's** — `Lumit 0.2.0`, the same string
+  Settings ▸ General shows — not the boot line's `lumit-bridge 0.2.0`, which names the
+  library that printed it and belongs in the boot log and in bug reports (K-480).
+- **New project is Save as, first** (K-480): the card opens the file picker immediately,
+  writes the `.lum` where it is told, and only then hands the window to the shell. A
+  cancelled picker leaves the screen standing — backing out of choosing a folder is not
+  starting work.
+- **Escape closes the screen** (K-481), as it closes anything that has taken the window.
+  What is behind it is the empty shell, whose Viewer offers the same three cards (§12A.3c),
+  so closing the page never leaves somebody in an editor with no way in.
+
+### 12A.3c The empty shell (K-481)
+
+With the welcome closed — or stood down for good in Settings ▸ General ▸ Workspace ▸
+*Welcome screen on launch* — the shell is what opens, and the **Viewer carries the same
+three start cards**, centred, capped at the welcome's 560 and shrinking with the panel,
+until something is displayed. They are the same widget as the welcome's, so the ways to
+start work cannot drift apart. A project that *has* compositions and simply has none
+fronted is a different sentence and keeps the panel's ordinary "select a composition" line.
 
 ### 12A.4 Dialogs (K-444, K-449)
 
@@ -1126,7 +1150,9 @@ migration path). Either way they all share one pattern:
 - **label-left rows, the label in a fixed column and the control at the *start* of what is
   left**. **The column and the gap are the drawing's own** (K-469): Settings computes
   190 and 12 in rows of 30 (K-465), New composition 110 and 12 in rows of 30, Export 100
-  and 10 in rows of 28. Each is pinned by its own metrics test;
+  and 10 in rows of 28, Recovery 160 and 12 in rows of 30 (no drawing of its own — it
+  wears the pattern rather than a third measurement). Each is pinned by its own metrics
+  test;
 - **kicker-titled groups, drawn as that dialog's drawing draws them** (K-469): a settings
   page separates them with a rule and 6px of air above each group after the first and no
   card around any of them; the Export dialog fences each in a hairline box with the kicker
@@ -1382,7 +1408,13 @@ The SVG sources carry the mark's own palette and are the only permitted hex valu
 outside the theme module: keys `#86e2ff→#2f6fe0` (blue) and `#8a70ff→#ff4f9e`
 (violet-magenta), core white/`#eaf4ff`, rim `#0c0e14`, tile `#16181d→#0d0f13`, bloom
 `#b7c6e2`, document chassis `#181b21→#101217`, fold `#272b34`, kicker `#aab6c6`. The
-wordmark is the word "Lumit" set beside or beneath the mark; no custom lettering. It was
+wordmark is the word "Lumit" set beside or beneath the mark; no custom lettering — except
+the **lockup wordmark** the site draws, `web/public/lumit-wordmark.svg`, where the `l` and
+the `t` *are* the two keys. That file is the one the application ships too (K-480): copied
+to `flutter_ui/assets/brand/` with its view box tightened to the lockup, its three letter
+paths left `currentColor` so the theme can set them, and the animated version's zero-scale
+glow removed. The letter colours are brand tokens as well — `#f4f6f8` on a dark ground,
+the rim's `#0c0e14` on a light one. It was
 drawn in Schibsted Grotesk and rides outlined in the SVG assets — the face is a brand
 artefact, not part of the UI bundle (§7.1); whether the wordmark is redrawn in Hanken
 Grotesk is a brand decision taken when the mark is next touched.

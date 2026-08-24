@@ -2233,7 +2233,20 @@ class BootGate extends StatefulWidget {
 
 class _BootGateState extends State<BootGate> {
   late bool _booting = widget.splash;
-  late bool _welcoming = widget.welcome;
+
+  /// Whether the welcome screen is the window right now. Both answers have to
+  /// agree: a `.lum` on the command line stands the screen down for this launch
+  /// ([BootGate.welcome]), and Settings ▸ General stands it down for every
+  /// launch (K-481). Read once, here, because the shell behind it is what the
+  /// setting sends somebody to.
+  late bool _welcoming;
+
+  @override
+  void initState() {
+    super.initState();
+    _welcoming = widget.welcome &&
+        context.read<LumitUiState>().workspace.showWelcomeOnLaunch;
+  }
 
   /// The engine's boot log, or empty where there is no engine to ask — a
   /// placeholder build, or a widget test with no library loaded. Read once:

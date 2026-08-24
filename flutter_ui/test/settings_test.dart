@@ -274,6 +274,28 @@ void main() {
     Workspace.storeOverride = null;
   });
 
+  // The welcome screen on launch (K-481): on by default, off survives the
+  // restart it is about — a setting that forgot itself would be a poor joke.
+  test('the welcome screen defaults to on and survives a restart', () {
+    expect(Workspace().showWelcomeOnLaunch, isTrue);
+    expect(
+        (Workspace()..applyJson(<String, dynamic>{'ui_scale': 1.0}))
+            .showWelcomeOnLaunch,
+        isTrue,
+        reason: 'a file that predates the setting still gets the default');
+
+    final path = _scratchStore('welcome-on-launch');
+    File(path).parent.createSync(recursive: true);
+    if (File(path).existsSync()) File(path).deleteSync();
+    Workspace.storeOverride = path;
+
+    (Workspace()..load()).setShowWelcomeOnLaunch(false);
+    expect((Workspace()..load()).showWelcomeOnLaunch, isFalse);
+    (Workspace()..load()).setShowWelcomeOnLaunch(true);
+    expect((Workspace()..load()).showWelcomeOnLaunch, isTrue);
+    Workspace.storeOverride = null;
+  });
+
   test('when the last update check happened is remembered', () {
     final path = _scratchStore('update-check');
     File(path).parent.createSync(recursive: true);

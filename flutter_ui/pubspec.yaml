@@ -39,6 +39,10 @@ flutter:
   uses-material-design: true
   # Turns lib/l10n/*.arb into Dart at `flutter pub get` time (see l10n.yaml).
   generate: true
+  assets:
+    # The brand's own drawings — the wordmark on the welcome screen (K-480).
+    # The site's file, copied rather than redrawn (shell/wordmark.dart).
+    - assets/brand/
   fonts:
     # The two redesign faces (docs/15-DESIGN.md §7.1, K-438): Hanken Grotesk
     # for UI text, Geist Mono for every number, timecode and container label.

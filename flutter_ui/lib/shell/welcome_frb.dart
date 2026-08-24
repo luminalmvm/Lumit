@@ -16,21 +16,29 @@
 // menu row runs (`openProjectFrb`, `saveProjectFrb`, `LumitState.newProject`),
 // so there is one implementation of "open a project" and the welcome is a
 // second way to reach it rather than a second copy of it.
+//
+// The same three cards are also what the Viewer shows when the welcome has been
+// closed and nothing is open ([EmptyStageFrb], K-481) — the one list of ways to
+// start work, in the two places somebody can be standing when they have not
+// started yet.
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/placeholder.dart';
 import '../state/external_links.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
 import 'menu_bar_frb.dart';
+import 'wordmark.dart';
 
 // --- The drawing's measurements -------------------------------------------
 //
@@ -45,10 +53,10 @@ const double welcomeColumnWidth = 560;
 /// The air between the four blocks: wordmark, cards, recents, footer.
 const double welcomeBlockGap = 28;
 
-/// The wordmark: mono at 22 with the drawing's 0.08em of tracking, written out
-/// in logical pixels because that is what Flutter measures tracking in.
-const double welcomeWordmarkSize = 22;
-const double welcomeWordmarkTracking = 1.76;
+/// The wordmark: the brand's own lockup rather than the word set in type
+/// (K-480), 22 logical pixels from its cap line to the `u`'s overshoot — the
+/// height the drawing's 22px mono mark stood at. Its width follows the lockup.
+const double welcomeWordmarkHeight = 22;
 
 /// A start card: 14 of padding above and below a 13px title, a 4px gap and a
 /// 9px note, with the hairline counted in.
@@ -146,24 +154,35 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
 
   static String _readVersion() {
     try {
-      return lumitVersion();
+      return lumitProductVersion();
     } catch (_) {
       return '';
     }
   }
 
-  /// Make a project and ask where to keep it, then hand over — the card's own
-  /// note is the promise ("choose a project folder"), so a cancelled picker
-  /// leaves the screen up rather than dropping the user into an editor they
-  /// did not ask for.
-  Future<void> _newProject(LumitState app, LumitUiState ui) async {
-    await saveProjectFrb(app, ui, forcePicker: true, picker: widget.savePicker);
-    if (app.project?.path() != null) widget.onDone();
+  /// Escape closes the screen with nothing open (K-481) — the standard way out
+  /// of anything that has taken the window, and the reason the shell behind it
+  /// has something to show. Registered globally, as every other Escape in the
+  /// shell is (`fx_console_frb`): this page has no focused field to route one.
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_escapeCloses);
   }
 
-  Future<void> _open(LumitState app) async {
-    await openProjectFrb(app, picker: widget.openPicker);
-    if (app.project?.path() != null) widget.onDone();
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_escapeCloses);
+    super.dispose();
+  }
+
+  bool _escapeCloses(KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape) {
+      return false;
+    }
+    widget.onDone();
+    return true;
   }
 
   /// Follow a link, saying so in the status line when the desktop will not take
@@ -192,20 +211,19 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      // The wordmark, not a phrase: a brand mark is the same
-                      // in every language, so it is a literal here exactly as
-                      // it is on the boot splash.
-                      'lumit',
+                    // The wordmark, not a phrase: a brand mark is the same in
+                    // every language, and since K-480 it is the website's own
+                    // lockup — the blue key, `umi`, the violet key — rather
+                    // than the word set in mono.
+                    LumitWordmark(
                       key: const ValueKey('welcome-wordmark'),
-                      style: t.mono.copyWith(
-                        fontSize: welcomeWordmarkSize,
-                        letterSpacing: welcomeWordmarkTracking,
-                        color: t.textPrimary,
-                      ),
+                      height: welcomeWordmarkHeight,
+                      // The page's own ground, which is what the lettering has
+                      // to be read against.
+                      ground: t.surface0,
                     ),
                     const SizedBox(height: welcomeBlockGap),
-                    _cards(app, ui),
+                    _cards(),
                     const SizedBox(height: welcomeBlockGap),
                     _recents(app, workspace),
                     const SizedBox(height: welcomeBlockGap),
@@ -222,40 +240,12 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
 
   /// The three ways to start: give the project a home now, start without one,
   /// or open one that exists.
-  Widget _cards(LumitState app, LumitUiState ui) => SizedBox(
+  Widget _cards() => SizedBox(
         width: welcomeColumnWidth,
-        child: Row(
-          children: [
-            Expanded(
-              child: _WelcomeCard(
-                id: 'welcome-card-new',
-                title: l10n.welcomeNewProject,
-                note: l10n.welcomeNewProjectNote,
-                onTap: () => _newProject(app, ui),
-              ),
-            ),
-            const SizedBox(width: welcomeCardGap),
-            Expanded(
-              child: _WelcomeCard(
-                id: 'welcome-card-blank',
-                title: l10n.welcomeBlankProject,
-                note: l10n.welcomeBlankProjectNote,
-                // The empty project the application boots with is already
-                // loaded (see `main`), so this card has nothing to make — it
-                // is the one that says "get out of my way".
-                onTap: widget.onDone,
-              ),
-            ),
-            const SizedBox(width: welcomeCardGap),
-            Expanded(
-              child: _WelcomeCard(
-                id: 'welcome-card-open',
-                title: l10n.welcomeOpenProject,
-                note: l10n.welcomeOpenProjectNote,
-                onTap: () => _open(app),
-              ),
-            ),
-          ],
+        child: StartCards(
+          onStarted: widget.onDone,
+          openPicker: widget.openPicker,
+          savePicker: widget.savePicker,
         ),
       );
 
@@ -365,6 +355,152 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
           ),
         ),
       );
+}
+
+// --- The three ways to start work -----------------------------------------
+
+/// New project: choose where the `.lum` lives **first**, then open the editor
+/// on the project that now has a home (K-480).
+///
+/// The card's own note is the promise ("choose a project folder"), so a
+/// cancelled picker leaves everything as it was rather than dropping somebody
+/// into an editor they did not ask for — [onStarted] runs only when the file
+/// is genuinely on disk.
+Future<void> startNewProject(
+  LumitState app,
+  LumitUiState ui, {
+  Future<String?> Function()? picker,
+  VoidCallback? onStarted,
+}) async {
+  await saveProjectFrb(app, ui, forcePicker: true, picker: picker);
+  if (app.project?.path() != null) onStarted?.call();
+}
+
+/// Blank project: no file, no questions.
+///
+/// From the welcome screen there is nothing to make — the empty project the
+/// application boots with is already loaded (see `main`), so this is the card
+/// that says "get out of my way". From the empty shell, where the project may
+/// be one that *does* have a home on disk with nothing shown in it, it starts a
+/// fresh one, which is what the word blank means.
+void startBlankProject(LumitState app, {VoidCallback? onStarted}) {
+  if (app.project?.path() != null) app.newProject();
+  onStarted?.call();
+}
+
+/// Open: the very call File ▸ Open makes.
+Future<void> startOpenProject(
+  LumitState app, {
+  Future<String?> Function()? picker,
+  VoidCallback? onStarted,
+}) async {
+  await openProjectFrb(app, picker: picker);
+  if (app.project?.path() != null) onStarted?.call();
+}
+
+/// The three start cards, in a row that gives each of them a third of whatever
+/// width it is handed.
+///
+/// One widget for the two places they appear — the welcome screen and the empty
+/// shell behind it — so the ways to start work cannot drift apart. [onStarted]
+/// is what a card does once it has put a document up: on the welcome that hands
+/// the window to the shell, and in the shell there is nothing left to do.
+class StartCards extends StatelessWidget {
+  final VoidCallback? onStarted;
+  final Future<String?> Function()? openPicker;
+  final Future<String?> Function()? savePicker;
+
+  const StartCards({
+    super.key,
+    this.onStarted,
+    this.openPicker,
+    this.savePicker,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.read<LumitState>();
+    final ui = context.read<LumitUiState>();
+    return Row(
+      children: [
+        Expanded(
+          child: _WelcomeCard(
+            id: 'welcome-card-new',
+            title: l10n.welcomeNewProject,
+            note: l10n.welcomeNewProjectNote,
+            onTap: () => startNewProject(app, ui,
+                picker: savePicker, onStarted: onStarted),
+          ),
+        ),
+        const SizedBox(width: welcomeCardGap),
+        Expanded(
+          child: _WelcomeCard(
+            id: 'welcome-card-blank',
+            title: l10n.welcomeBlankProject,
+            note: l10n.welcomeBlankProjectNote,
+            onTap: () => startBlankProject(app, onStarted: onStarted),
+          ),
+        ),
+        const SizedBox(width: welcomeCardGap),
+        Expanded(
+          child: _WelcomeCard(
+            id: 'welcome-card-open',
+            title: l10n.welcomeOpenProject,
+            note: l10n.welcomeOpenProjectNote,
+            onTap: () =>
+                startOpenProject(app, picker: openPicker, onStarted: onStarted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the Viewer shows when there is nothing to show (K-481).
+///
+/// In plain terms: the welcome screen can be closed with nothing open, so
+/// something has to be behind it — and an empty editor whose largest panel says
+/// "select a composition" when there is no composition to select is a dead end.
+/// The three ways to start work stand there instead, until something is
+/// displayed.
+///
+/// A project that *has* compositions and simply has none fronted is a different
+/// sentence, and keeps the panel's ordinary empty line.
+class EmptyStageFrb extends StatelessWidget {
+  /// The pickers, so a widget test can answer them — the same seam the welcome
+  /// screen takes.
+  final Future<String?> Function()? openPicker;
+  final Future<String?> Function()? savePicker;
+
+  const EmptyStageFrb({super.key, this.openPicker, this.savePicker});
+
+  @override
+  Widget build(BuildContext context) {
+    // Watched: the moment a composition exists this is the wrong thing to be
+    // showing. `comps()` is the cached list (K-184), so a rebuild asks the
+    // engine nothing.
+    final app = context.watch<LumitState>();
+    if (app.comps().isNotEmpty) {
+      return PlaceholderPanel(
+        icon: LumitIcon.footage,
+        title: l10n.panelViewer,
+        hint: l10n.selectACompositionFirst,
+      );
+    }
+    return Center(
+      key: const ValueKey('empty-stage'),
+      child: Padding(
+        padding: const EdgeInsets.all(welcomeBlockGap),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: welcomeColumnWidth),
+          child: StartCards(
+            openPicker: openPicker,
+            savePicker: savePicker,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// One start card: a title, a note under it, and the whole thing is the button

@@ -2192,8 +2192,14 @@ small image over each choice, remain the destination (polish tracked in TODO).
   column; a size and a rate are per-composition, and a project has many) — with a
   **Clear** that empties the list and a **×** on each row that forgets just that one.
   Neither asks first: nothing is deleted and File ▸ Open brings a project back.
-  A footer carries the version and the two links. The shape and every measurement are in
-  [15-DESIGN.md](15-DESIGN.md) §12A.3b.
+  A footer carries the **product** version — `Lumit 0.2.0`, not the boot line's crate name
+  (K-480) — and the two links. **New project opens the save picker first** and the editor
+  second, on the project that now has a home; a cancelled picker leaves the screen up
+  (K-480). **Escape closes the screen** with nothing open (K-481), and
+  **Settings ▸ General ▸ Workspace ▸ Welcome screen on launch** stands it down for every
+  launch — off means Lumit opens straight into the shell, where the same three cards are
+  waiting in the Viewer, so the setting hides no choice. The shape and every measurement
+  are in [15-DESIGN.md](15-DESIGN.md) §12A.3b–c.
 - **Comp with no layers**: the Timeline shows one line of hint text (drag footage here, or
   press the new-Sequence-layer / new-Solid shortcuts). Hints disappear at first content
   and never return unprompted.
@@ -2202,13 +2208,15 @@ small image over each choice, remain the destination (polish tracked in TODO).
   never more** (K-440, tightening this rule's original "under five words"). *Add keyframe*,
   not *Add a keyframe here*. A
   control whose state changes says the state — *Visible* / *Hidden*, *Locked* / *Lock* —
-  rather than narrating the click. Rich tooltips (a sentence + *Learn more* link) are
-  reserved for concepts with Lumit-specific behaviour (Retime, overrun, matte, adaptive
-  degradation) and for the readouts that carry live figures or warn that a click throws
-  work away; each one is named, with its reason, in `flutter_ui/test/l10n/arb_test.dart`,
-  which fails any other tooltip that runs long.
+  rather than narrating the click. **There is no long form and no exception list** (K-476):
+  the sentence-length "rich" tooltip is gone, readouts with live figures included — a
+  figure is a word, and the sentence around it was never read. Explanation belongs in the
+  settings row's own line, in an empty state, or nowhere.
+  `flutter_ui/test/l10n/arb_test.dart` walks every `tip*` key and fails any that runs long;
+  nothing may be added to it as an allowance.
   Tooltips MUST never block input, auto-play media, or step users through forced tours.
-  A single setting disables all tooltips.
+  **The setting is a switch**, on or off, and off means no tooltip anywhere; there is
+  nothing to choose between, because there is only one length.
 - No multi-step onboarding wizard or forced tour. The single first-run screen (§13.1),
   empty states, tooltips, and command palette are the entire onboarding surface.
 

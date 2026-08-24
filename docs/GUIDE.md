@@ -8779,3 +8779,33 @@ viewer that shows what the picture looks like at one chosen box — halfway down
 say — without soloing or bypassing anything. None of these is the engine's internal
 "evaluation graph" (§1's compiler still builds that in private); what you are looking at
 is always your own document.
+
+## 21. The wordmark and the empty shell, in plain terms
+
+**The wordmark is a picture, not a word.** The "lumit" at the top of the welcome page used
+to be the five letters typed out in Lumit's mono face. It is now the mark itself: the same
+drawing the website uses, where the `l` and the `t` are the two coloured keys of the Lumit
+logo — the blue one, and the violet one that is the blue one turned upside down — with
+`umi` between them. The file is the site's own, copied into the application's assets rather
+than redrawn, because a brand mark drawn twice is a brand mark that will one day disagree
+with itself. Three small changes were made when it was copied, all of them noted at the top
+of `flutter_ui/lib/shell/wordmark.dart`.
+
+**Two of the colours never change, and one always does.** The keys are the brand, so they
+are the same under every colour scheme and under a theme somebody invented this morning.
+The three middle letters are only lettering, and lettering has to be readable, so they are
+chosen against the surface they are standing on. The maths is the ordinary "how bright is
+this colour" calculation every browser and toolkit has: over halfway to white counts as a
+light surface and takes dark letters, under it takes light ones, and when there is nothing
+to judge — a theme that cannot say — the letters stay light, because Lumit is dark-first.
+Those six colours live in `flutter_ui/lib/theme/brand.dart`: beside the theme, not in it,
+since a theme colour is one that changes and these do not.
+
+**The empty shell.** The welcome page can now be closed with nothing open — Escape does it,
+and Settings ▸ General can stop it appearing at launch at all. That would once have left
+somebody staring at an editor with no document and no obvious way to start one, so the
+Viewer now shows the same three cards the welcome shows — New project, Blank project, Open
+— until there is something to display. They are not a copy: they are the same piece of
+interface, running the same three functions, mounted in a second place. If a project *does*
+have compositions and simply has none open, the Viewer says what it always said — "select a
+composition" — because that is a different situation and deserves a different sentence.

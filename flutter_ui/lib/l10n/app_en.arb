@@ -4699,6 +4699,10 @@
   "@settingsWaveformsFromBottom": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsWelcomeOnLaunch": "Welcome screen on launch",
+  "@settingsWelcomeOnLaunch": {
+    "description": "Settings window, General page: the name of the switch that decides whether Lumit opens on the welcome screen. Off means it opens straight into the editor."
+  },
   "settingsWhenTheMachineCannotKeep": "When the machine cannot keep up",
   "@settingsWhenTheMachineCannotKeep": {
     "description": "Settings window: the name of one setting."
