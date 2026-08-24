@@ -446,15 +446,10 @@ does not gate the four. Delete each phase here when it lands, as with everything
     panel large with the ordinary Timeline short beneath it, the small Viewer
     and the new **Node panel** down the right), its tab on the workspace strip,
     and the graph's pick carried through the shell so the Node panel follows
-    it. **WP5 is pending**: the Node preview panel. One named gap remains from
-    WP1, recorded in
-    docs/impl/node-graph.md:
-    - **Audio level reads silence in the application.** The `AudioTap` seam is
-      built and tested against a synthesised tone in `lumit-core`, but
-      `lumit-render` passes `None` — nothing yet hands the driver decoded
-      audio. The wiring belongs beside the playback scheduler's decoded stream
-      (docs/09, docs/impl/playback-scheduler.md); it is in no work package's
-      file list, so it needs assigning before the driver is offered as working.
+    it. **WP5 is pending**: the Node preview panel. WP1's named gap is closed:
+    the `AudioTap` is wired (`lumit_render::audio_tap`), so Audio level reads
+    the referenced layer's own footage at a fixed rate, identically in the
+    preview and the export — the K-031 matrix carries an audio-driven row.
 - **Phase 4 - the website**: lumitlab.com ported into the new styling - current
     content kept, wordmark top-left, the animation in a half-height hero, platform's
     own download button, screenshot sections and hover-play feature videos; type set

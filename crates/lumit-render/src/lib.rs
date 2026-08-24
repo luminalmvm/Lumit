@@ -48,6 +48,7 @@
 //! above without a window: writing a file, and rendering single frames for a
 //! frontend that draws them itself.
 
+pub mod audio_tap;
 pub mod build;
 pub mod cache;
 pub mod decode;

@@ -277,6 +277,34 @@ pub mod tests_support {
 
     /// A zero-byte file — the simplest malformed input a footage import can
     /// be pointed at.
+    /// One second of a 440 Hz sine at half amplitude, stereo, as lossless
+    /// FLAC — sound and nothing else, for the tests that need a layer whose
+    /// only stream is audio (the Audio level driver's tap). Lossless so the
+    /// samples that come back are the samples that went in, and the native
+    /// encoder so any ffmpeg build makes it.
+    pub fn tone(dir: &Path) -> Option<PathBuf> {
+        let bin = ffmpeg_bin()?;
+        let out = dir.join("tone.flac");
+        let status = Command::new(bin)
+            .args([
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=1:sample_rate=48000",
+                "-af",
+                "volume=0.5,pan=stereo|c0=c0|c1=c0",
+                "-c:a",
+                "flac",
+            ])
+            .arg(&out)
+            .status()
+            .ok()?;
+        status.success().then_some(out)
+    }
+
     /// An audio file with embedded cover art: one second of tone in a FLAC,
     /// plus a single still image written as an attached-picture stream — the
     /// shape of a music file with album artwork (native flac + png encoders,

@@ -2275,7 +2275,7 @@ fn composite_scale(quality: Quality) -> f32 {
 
 /// The on-disk path a footage item points at (absolute when known, else the
 /// stored relative path) — the same resolution the bridge's decode path uses.
-fn footage_path(f: &FootageItem) -> PathBuf {
+pub(crate) fn footage_path(f: &FootageItem) -> PathBuf {
     if f.media.absolute_path.is_empty() {
         PathBuf::from(&f.media.relative_path)
     } else {
@@ -3976,6 +3976,130 @@ surfaces:
         assert_eq!(
             preview, export,
             "the interactive and export paths must produce identical pixels (K-031)"
+        );
+    }
+
+    /// **A parameter the music drives is the same number in both renders**
+    /// (K-471 §1.3, K-031) — and it is a number, not silence.
+    ///
+    /// The row the matrix was missing: a Brightness on a solid, driven through
+    /// a Remap by the level of a track on another layer. Two things are checked,
+    /// and the second is the one that would have caught the gap this closes:
+    /// the interactive and export paths agree pixel for pixel, **and** the
+    /// driven picture differs from the same comp with the wire cut. Before the
+    /// tap was wired the driver read nought in both renders, so the first
+    /// assertion passed on a picture that had ignored the music entirely.
+    #[test]
+    fn the_preview_and_export_paths_agree_on_an_audio_driven_comp() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let dir = std::env::temp_dir().join("lumit-audio-driver-fixture");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let Some(tone) = lumit_media::index::tests_support::tone(&dir) else {
+            eprintln!("no ffmpeg CLI: the audio-driven row is skipped");
+            return;
+        };
+
+        let (cw, ch) = (32u32, 16u32);
+        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.2, 0.2, 0.2, 1.0]));
+
+        // The music: sound and no picture.
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            id: item,
+            name: "tone.flac".into(),
+            media: lumit_core::model::MediaRef {
+                relative_path: "tone.flac".into(),
+                absolute_path: tone.to_string_lossy().into_owned(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+        }));
+        let mut music = matrix_layer("Music", LayerKind::Footage { item }, cw, ch);
+        music.audio_only = true;
+        let music_id = music.id;
+
+        // Brightness on the solid, wired to the level of that music. The Remap
+        // is what makes the level readable as a percentage: the whole track's
+        // RMS is a fraction of one, and Brightness is a percentage.
+        let brightness = lumit_core::fx::instantiate("brightness").expect("the catalogue knows it");
+        let brightness_id = brightness.id;
+        let mut level = lumit_core::fx::instantiate("audio_level").expect("the catalogue knows it");
+        for p in &mut level.params {
+            if p.id == "audio" {
+                p.value = lumit_core::model::EffectValue::Layer(Some(music_id));
+            }
+        }
+        let level_id = level.id;
+        let remap = lumit_core::fx::instantiate("remap").expect("the catalogue knows it");
+        let remap_id = remap.id;
+
+        let to_brightness = Edge {
+            from: OutputRef::Driver {
+                node: remap_id,
+                port: "value".into(),
+            },
+            to: InputRef::Param {
+                node: NodeRef::Effect(brightness_id),
+                port: "brightness".into(),
+            },
+        };
+        let graph = LayerGraph {
+            nodes: vec![level, remap],
+            edges: vec![
+                Edge {
+                    from: OutputRef::Driver {
+                        node: level_id,
+                        port: "amplitude".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Driver(remap_id),
+                        port: "value".into(),
+                    },
+                },
+                to_brightness,
+            ],
+            ..LayerGraph::default()
+        };
+        {
+            let comp = doc.comp_mut(comp_id).expect("comp");
+            comp.layers.push(music);
+            comp.layers[0].effects = vec![brightness];
+            comp.layers[0].graph = graph;
+        }
+        // The same comp with the last wire cut: the parameter falls back to its
+        // own stored value, which is what "reads silence" looked like.
+        let mut unwired = doc.clone();
+        unwired.comp_mut(comp_id).expect("comp").layers[0]
+            .graph
+            .edges
+            .pop();
+
+        let doc = std::sync::Arc::new(doc);
+        let (preview, pw, ph) = r
+            .render_preview(&doc, comp_id, 0, crate::plan::Quality::default(), 1.0)
+            .expect("preview render");
+        let (export, ew, eh) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("export render");
+        assert_eq!((pw, ph), (ew, eh), "both paths render at the comp's size");
+        assert_eq!(
+            preview, export,
+            "a driven parameter must reach the same value in both renders (K-031)"
+        );
+
+        let (silent, _, _) = r
+            .render_rgba(&std::sync::Arc::new(unwired), comp_id, 0, 1.0)
+            .expect("unwired render");
+        assert_ne!(
+            export, silent,
+            "the driver must actually read the sound — equal pixels mean it read silence"
         );
     }
 

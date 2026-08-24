@@ -786,10 +786,35 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
             let previous = std::mem::replace(&mut l.effects, effects.clone());
-            Ok(Op::SetLayerEffects {
+            let inverse = Op::SetLayerEffects {
                 comp: *comp,
                 layer: *layer,
                 effects: previous,
+            };
+            // **The wires go with the box** (K-471 §1.5). Removing an effect is
+            // this op, and the graph's edges, positions and `E` badges may name
+            // it; left behind they would name a box that is not there, and the
+            // next `SetLayerGraph` would be refused for a dangling edge nobody
+            // drew. An empty graph — the overwhelming case — costs nothing to
+            // check and is not cloned.
+            if l.graph.is_empty() {
+                return Ok(inverse);
+            }
+            let restored = l.graph.clone();
+            if !l.graph.prune_to(&l.effects) {
+                return Ok(inverse);
+            }
+            // Still one undo step, and the stack goes back first so the wires
+            // have their boxes again by the time the graph is validated.
+            Ok(Op::Batch {
+                ops: vec![
+                    inverse,
+                    Op::SetLayerGraph {
+                        comp: *comp,
+                        layer: *layer,
+                        graph: Box::new(restored),
+                    },
+                ],
             })
         }
         Op::SetLayerGraph { comp, layer, graph } => {

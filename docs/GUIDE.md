@@ -8826,6 +8826,28 @@ it go with it. Turn Heal off and a box with wires still on it is left alone unti
 unplug it yourself — for people who would rather nothing disappeared that they did not
 name. The `Tab` key opens that same list of drivers anywhere on the canvas.
 
+**Where Audio level's sound actually comes from.** The part of the engine that works out
+effect values knows nothing about files or codecs — that is deliberate, and it is why the
+same code can be tested against a tone nobody had to decode. So Audio level does not read
+a file; it asks for "the sound of that layer, between these two moments", and the pixel
+side of the engine answers by decoding the layer's own footage. Two details matter. The
+sound is decoded at one fixed rate (48 kHz) rather than at whatever rate the sound card
+happened to ask for, so the number is a fact about your project and not about the machine
+— otherwise the same frame would come out differently on a laptop and on a render box.
+And the answering happens in the one place both the Viewer and the exporter build their
+picture from, so there is no second copy of the logic to drift: what pulses on screen is
+what lands in the file. A layer with no sound, a file that has moved, a reference to a
+layer somebody deleted — each reads as silence, which is a picture that simply does not
+pulse rather than an error.
+
+**Deleting a driven effect takes its wires with it.** The wires live beside the effect
+list, so removing an effect could leave a wire pointing at a box that no longer exists —
+and the next thing you did on the canvas, even just dragging a box, would be refused
+because of it. Removing an effect now drops the wires, canvas positions and expanded
+badges that named it, in the same single step, so one undo brings the effect *and* its
+wiring back together. This is the same rule as **Heal** above, applied where the deletion
+comes from somewhere else entirely — the Effect controls panel, or the Timeline.
+
 **Points** are the fifth kind of thing a wire will one day carry: not a picture but a
 crowd of positions — where every particle of a particle system is this frame, how fast
 each is moving, how old each is. Particulate (K-446) will be the first thing that makes

@@ -122,10 +122,25 @@ alone, and a colour cycle that cannot cycle without a keyframe is not one — it
 because a hue on its own is not a colour. *Audio level*'s samples arrive through an
 `AudioTap` trait the host implements: `lumit-core` knows nothing of media, so the driver
 owns the windowed RMS (testable against a synthesised tone in the same crate) and the
-decoding stays where decoding lives. **`lumit-render` passes `None` today** — the seam is
-built and tested, the wiring to decoded audio is not, and it is in no work package's file
-list. It is recorded in docs/TODO.md rather than pretended about: until it lands, Audio
-level reads silence, which is the same labelled no-op a dangling reference gives.
+decoding stays where decoding lives.
+
+**The tap is wired, 2026-08-24.** `lumit_render::audio_tap::DocumentAudio` is the host
+half: it is made inside `build_comp_draws_at` from the document that walk already holds,
+and it answers a layer id and a layer-time range by decoding that layer's own footage
+item. Three things make it a *deterministic* answer rather than a plausible one. It is
+built where **both** renders build their draws — the Viewer's and the exporter's — so
+there is no second implementation to drift (K-031). It decodes at a fixed
+`audio_tap::TAP_RATE` (48 kHz) rather than at the sound device's rate, so the level is a
+fact about the project and not about the machine; the playback mixer's device rate never
+reaches a pixel. And layer time *is* source time for sound, which is exactly the mapping
+`lumit_audio::mix::place_on_timeline` uses to place a clip, so the driver and the mixer
+cannot disagree about which moment of the track a frame sits on. Decoded tracks are
+shared per file across the process under a byte budget. A layer that is not footage, a
+missing file, a failed decode or a reference naming no layer all read as silence — the
+same labelled no-op a dangling reference gives. The K-031 matrix gained an audio-driven
+row (`headless::tests::the_preview_and_export_paths_agree_on_an_audio_driven_comp`),
+which asserts both that the two renders agree **and** that the driven picture differs
+from the same comp with the wire cut — equal pixels there would mean silence again.
 
 A driver's cross-layer input (Audio level's Audio) is a **layer-reference parameter**
 (docs/03 §8) — the existing machinery, with the existing degrade-to-no-op on a dangling
@@ -232,6 +247,16 @@ One new op, shaped like the one it mirrors:
   `SetLayerGraph`, one undo step. Auto-wire folds the edge into the same commit as the
   add. Heal on an *effect* delete is `SetLayerEffects` (the list heals by construction);
   heal on a *driver* delete is dropping its edges in the same `SetLayerGraph`.
+- **`SetLayerEffects` prunes the graph** (built 2026-08-24). The image chain heals by
+  construction, but the *wires* do not: an edge, a canvas position or an `E` badge naming
+  a removed effect would be left dangling, and the next `SetLayerGraph` of any kind — a
+  box dragged, a wire drawn — would be refused for it. `LayerGraph::prune_to` drops them
+  inside the same apply, and the op's inverse becomes an `Op::Batch` of
+  `[SetLayerEffects(previous), SetLayerGraph(previous)]` so one undo restores the stack
+  **and** its wiring together. A layer with an empty graph — the overwhelming case —
+  neither clones nor prunes anything. This is the only place the graph heals rather than
+  refusing, and it is because the edit is the *stack's*, which cannot be refused on the
+  wiring's behalf.
 - Driver **parameters** ride the property path — `<layer>/graph/<node>/<param>` beside
   the existing `<layer>/effects/<effect>/<param>` — so keyframing, expressions, the
   stopwatch and every existing property op work on a driver row unchanged.

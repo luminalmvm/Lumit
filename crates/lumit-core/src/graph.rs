@@ -242,6 +242,35 @@ impl LayerGraph {
         self.nodes.iter().find(|n| n.id == id)
     }
 
+    /// Drop everything that names an effect the stack no longer carries, and
+    /// say whether anything went (K-471 §1.5).
+    ///
+    /// **Why the graph heals here rather than refusing.** Every other broken
+    /// state in this file is an edit somebody made *to the graph*, so refusing
+    /// it is the honest answer. A removed effect is not: it is an edit to the
+    /// **stack**, which knows nothing of wires and cannot be refused on their
+    /// behalf. Left alone, the wire would name a box that is not there and the
+    /// next `SetLayerGraph` — a box dragged, a wire drawn, anything — would be
+    /// refused for a dangling edge nobody drew. So `SetLayerEffects` prunes,
+    /// and takes the wires with the box exactly as deleting a driver does.
+    ///
+    /// Only `NodeRef::Effect` entries are considered: a driver, the Source and
+    /// the Layer out are not the effect stack's to remove.
+    pub fn prune_to(&mut self, effects: &[EffectInstance]) -> bool {
+        let alive = |id: &Uuid| effects.iter().any(|e| e.id == *id);
+        let gone = |node: &NodeRef| matches!(node, NodeRef::Effect(id) if !alive(id));
+        let before = (self.edges.len(), self.layout.len(), self.exposed.len());
+        // A wire's *source* is a driver or the layer's own alpha, neither of
+        // which the stack can remove — only its destination can dangle.
+        self.edges.retain(|e| match &e.to {
+            InputRef::Param { node, .. } => !gone(node),
+            InputRef::Matte { effect } => alive(effect),
+        });
+        self.layout.retain(|(node, _)| !gone(node));
+        self.exposed.retain(|node| !gone(node));
+        before != (self.edges.len(), self.layout.len(), self.exposed.len())
+    }
+
     /// The wire feeding `to`, if any.
     #[must_use]
     pub fn wire_into(&self, to: &InputRef) -> Option<&OutputRef> {

@@ -429,6 +429,12 @@ pub fn build_comp_draws_at(
     // nesting level — this function recurses through Precomps).
     let expr_doc = doc;
 
+    // Where the Audio level driver's samples come from (K-471 §1.3). Made here,
+    // from the document this walk already holds, so the preview and the export
+    // — which both build their draws through this function — hand the driver
+    // the same sound and reach the same number (K-031).
+    let audio = crate::audio_tap::DocumentAudio::new(doc, comp);
+
     let pixels_for = |layer: &lumit_core::model::Layer| -> Option<LayerPixels> {
         let context = Arc::new(ExpressionContext {
             document: expr_doc.clone(),
@@ -668,7 +674,8 @@ pub fn build_comp_draws_at(
             // The referenced layer's own driver graph too (K-471): a wire
             // substitutes where a keyframe would have been read, so it belongs
             // to whichever stack is being resolved.
-            let drivers = lumit_core::fx::resolve_drivers(&src.graph, slt, context.clone(), None);
+            let drivers =
+                lumit_core::fx::resolve_drivers(&src.graph, slt, context.clone(), Some(&audio));
             (
                 lumit_core::fx::resolve_stack_temporal_named(
                     &src.effects,
@@ -1007,7 +1014,7 @@ pub fn build_comp_draws_at(
                             &layer.graph,
                             effect_lt,
                             context.clone(),
-                            None,
+                            Some(&audio),
                         ),
                         effect_lt,
                         frame_lt,
@@ -1210,7 +1217,7 @@ pub fn build_comp_draws_at(
 
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
                 let drivers =
-                    lumit_core::fx::resolve_drivers(&src.graph, mlt, context.clone(), None);
+                    lumit_core::fx::resolve_drivers(&src.graph, mlt, context.clone(), Some(&audio));
                 (
                     lumit_core::fx::resolve_stack_temporal_named(
                         &src.effects,
@@ -1285,7 +1292,7 @@ pub fn build_comp_draws_at(
                         &layer.graph,
                         effect_lt,
                         context.clone(),
-                        None,
+                        Some(&audio),
                     ),
                     effect_lt,
                     frame_lt,

@@ -2117,6 +2117,106 @@ mod tests {
         assert_eq!(read(&store), wired, "and the redo brings both back");
     }
 
+    /// K-471 §1.5: taking a **wired** effect out of the stack takes its wires
+    /// with it, in the same undo step — and one undo puts both back.
+    ///
+    /// Without the prune the graph kept an edge naming a box that was gone, and
+    /// the next graph write of any kind was refused for it.
+    #[test]
+    fn removing_a_wired_effect_takes_its_wires_with_it() {
+        use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        let (store, comp, layer) = doc_with_layer();
+
+        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let blur_id = blur.id;
+        store
+            .commit(Op::SetLayerEffects {
+                comp,
+                layer,
+                effects: vec![blur],
+            })
+            .expect("the stack goes in");
+
+        let wiggle = crate::fx::instantiate("wiggle").expect("the catalogue knows it");
+        let wiggle_id = wiggle.id;
+        let wired = LayerGraph {
+            nodes: vec![wiggle],
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: wiggle_id,
+                    port: "value".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(blur_id),
+                    port: "radius".into(),
+                },
+            }],
+            layout: vec![
+                (NodeRef::Driver(wiggle_id), [40.0, 12.0]),
+                (NodeRef::Effect(blur_id), [80.0, 12.0]),
+            ],
+            exposed: vec![NodeRef::Effect(blur_id)],
+        };
+        store
+            .commit(Op::SetLayerGraph {
+                comp,
+                layer,
+                graph: Box::new(wired.clone()),
+            })
+            .expect("a well-formed graph is accepted");
+
+        let read = |store: &DocumentStore| -> LayerGraph {
+            store
+                .snapshot()
+                .comp(comp)
+                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
+                .expect("the layer")
+                .graph
+                .clone()
+        };
+
+        // The stack's own op, with the wired effect gone.
+        store
+            .commit(Op::SetLayerEffects {
+                comp,
+                layer,
+                effects: Vec::new(),
+            })
+            .expect("the removal applies");
+
+        let pruned = read(&store);
+        assert!(pruned.edges.is_empty(), "the wire goes with the box");
+        assert_eq!(
+            pruned.layout,
+            vec![(NodeRef::Driver(wiggle_id), [40.0, 12.0])],
+            "so does its place on the canvas"
+        );
+        assert!(pruned.exposed.is_empty(), "and its E badge");
+        assert_eq!(pruned.nodes.len(), 1, "the driver itself stays");
+        pruned
+            .validate(&[])
+            .expect("what is left must be a graph the engine accepts");
+
+        // The proof the prune is *for*: the next graph write is not refused.
+        store
+            .commit(Op::SetLayerGraph {
+                comp,
+                layer,
+                graph: Box::new(LayerGraph {
+                    layout: vec![(NodeRef::Driver(wiggle_id), [4.0, 4.0])],
+                    ..pruned
+                }),
+            })
+            .expect("a box may still be dragged after the removal");
+
+        store.undo().expect("undo applies");
+        assert!(
+            store.undo().expect("undo applies").is_some(),
+            "one gesture, one undo step"
+        );
+        assert_eq!(read(&store), wired, "the undo brings the wires back");
+    }
+
     /// §1.5: a graph that breaks a rule is refused, and the document it was
     /// offered to is left exactly as it was — an edit that half-applied would
     /// undo to a state that was never on screen.
