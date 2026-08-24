@@ -55,6 +55,13 @@ final Map<(String?, double, int), double> _slotWidths = {};
 /// each other and from whatever is beside them.
 const EdgeInsets readoutPadding = EdgeInsets.symmetric(horizontal: 6);
 
+/// A readout drawn as a **value well** stands this tall, whatever size its own
+/// type is. Stated rather than grown out of the text, so the timecode at 11
+/// and the frame count at 10 are two faces of one height rather than two
+/// nearly-equal boxes side by side, and so both fit the 19px secondary row
+/// they sit in with two clear above and below.
+const double readoutWellHeight = 15;
+
 /// How many pixels of drag move a draggable readout by one frame.
 const double _pixelsPerFrame = 4;
 
@@ -101,6 +108,23 @@ class TimeReadout extends StatefulWidget {
   /// What hovering says. Null for no tooltip.
   final String? tooltip;
 
+  /// Draw the readout as a **value well** — the inset `surface_0` face inside
+  /// a hairline that [DragValueField] wears at rest (§2.1/§3.1, K-460).
+  ///
+  /// The well is what says *editable*. Without it a readout is bare text that
+  /// happens to answer a click, which is a thing nobody clicks: the recess is
+  /// the whole of the invitation, and it costs no colour to make.
+  final bool well;
+
+  /// What the **editor** is seeded with, when that is not what the readout
+  /// shows. The frame count rests as `f48` and edits as `48` (K-460): the `f`
+  /// is a label saying which clock this is, not a digit, and leaving it in the
+  /// field made every edit start by stepping over it. It goes back on at
+  /// commit, because [format] is what draws the resting face.
+  ///
+  /// Null means the editor starts from [format], which is every other readout.
+  final String Function(int frame)? editFormat;
+
   const TimeReadout({
     super.key,
     required this.frame,
@@ -115,6 +139,8 @@ class TimeReadout extends StatefulWidget {
     this.onDragLive,
     this.onDragCancel,
     this.tooltip,
+    this.well = false,
+    this.editFormat,
   });
 
   @override
@@ -158,7 +184,7 @@ class _TimeReadoutState extends State<TimeReadout>
   }
 
   void _beginEdit() {
-    final text = widget.format(widget.frame);
+    final text = (widget.editFormat ?? widget.format)(widget.frame);
     setState(() {
       _editing = true;
       _controller.text = text;
@@ -185,8 +211,11 @@ class _TimeReadoutState extends State<TimeReadout>
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // The well's hairline insets its own child, so a welled readout is two
+    // pixels wider than a bare one and its slot holds the same digits.
     final width = monoSlotWidth(widget.style, widget.widthChars) +
-        readoutPadding.horizontal;
+        readoutPadding.horizontal +
+        (widget.well ? 2 : 0);
 
     final Widget inner = _editing
         ? Focus(
@@ -277,15 +306,31 @@ class _TimeReadoutState extends State<TimeReadout>
             : null,
         child: Container(
           width: width,
+          height: widget.well ? readoutWellHeight : null,
           padding: readoutPadding,
           alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
-            color: _editing
+            // A well keeps its recess in every state — it does not lift under
+            // the pointer, or it would stop being a recess (§2.1). Hover and
+            // the open editor speak through the edge instead, exactly as the
+            // value wells in the panels do.
+            color: widget.well || _editing
                 ? t.surface0
                 : _hovered
                     ? t.surface2
                     : null,
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: widget.well
+                ? Border.all(
+                    color: _editing
+                        // The one focus ring that is `animated` rather than
+                        // `accent`: it means "you are about to change a
+                        // value" (§3.1, §6.5).
+                        ? t.animated
+                        : _hovered
+                            ? t.hairlineStrong
+                            : t.hairline)
+                : null,
           ),
           child: inner,
         ),

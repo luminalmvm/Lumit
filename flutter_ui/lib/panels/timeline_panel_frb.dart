@@ -5384,7 +5384,13 @@ class _Toolbar extends StatelessWidget {
                   minFrame: 0,
                   maxFrame: lastFrame,
                   tooltip: l10n.tipPlayheadTime,
+                  // A **well**, because the clock can be typed into (K-460):
+                  // the recess is what says so, and a time you can read is a
+                  // time you should be able to state. It was bare text that
+                  // happened to answer a click.
+                  well: true,
                 ),
+                const SizedBox(width: 4),
                 TimeReadout(
                   key: const ValueKey('tl-frame'),
                   frame: frame,
@@ -5399,6 +5405,12 @@ class _Toolbar extends StatelessWidget {
                   minFrame: 0,
                   maxFrame: lastFrame,
                   tooltip: l10n.tipFrameNumber,
+                  well: true,
+                  // Rests as `f48`, edits as `48` (K-460). The `f` names the
+                  // clock rather than counting in it, so the field holds the
+                  // bare number and wears the letter again on commit — an
+                  // edit that began by stepping over a letter began wrong.
+                  editFormat: (f) => '$f',
                 ),
               ],
             ),
@@ -5409,6 +5421,9 @@ class _Toolbar extends StatelessWidget {
           // the frame counter rather than fading a step further. Outside the
           // listener, because a comp's length does not move as the playhead
           // does.
+          // Outside the well, because the comp's length is not editable and
+          // a recess round it would say it was (K-460).
+          const SizedBox(width: 4),
           Text(
             '/ ${model.durationFrames}',
             style: t.mono.copyWith(fontSize: 10, color: t.textMuted),

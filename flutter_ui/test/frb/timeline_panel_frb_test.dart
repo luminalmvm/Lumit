@@ -16,6 +16,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
+import 'package:lumit_flutter/widgets/time_readout.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/theme/theme.dart';
@@ -237,6 +238,80 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(p.uiState.playheadFrame.value, last);
+    });
+
+    /// **Both readouts sit in value wells** (K-460): the inset `surface_0`
+    /// face inside a hairline that every editable number in the editor wears,
+    /// because that recess is the whole of what says "you may type here".
+    /// They were bare text that happened to answer a click.
+    testWidgets('the timecode and the frame count rest in wells',
+        (tester) async {
+      final p = withComp();
+      p.uiState.playheadFrame.value = 48;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final t = LumitTheme.dark();
+
+      for (final key in ['tl-timecode', 'tl-frame']) {
+        final box = tester.widget<Container>(find
+            .descendant(
+                of: find.byKey(ValueKey<String>(key)),
+                matching: find.byType(Container))
+            .first);
+        final face = box.decoration as BoxDecoration;
+        expect(face.color, t.surface0,
+            reason: '$key rests in the well\'s own recess');
+        expect((face.border as Border).top.color, t.hairline,
+            reason: 'inside a hairline, like every other value well');
+        expect(tester.getRect(find.byKey(ValueKey<String>(key))).height,
+            closeTo(readoutWellHeight, 0.5),
+            reason: 'and both wells are one height, whatever size their own '
+                'type is — 11 for the clock, 10 for the frame count');
+      }
+
+      // The total is not editable, so it wears no well: a recess round it
+      // would be an invitation the readout cannot accept.
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('tl-frame')),
+              matching: find.text('/ ${p.comp.durationFrames()}')),
+          findsNothing);
+    });
+
+    /// **The frame count drops its `f` while it is being typed** (K-460): the
+    /// letter names the clock rather than counting in it, so an edit that
+    /// began by stepping over it began wrong. It goes back on at commit.
+    testWidgets('editing the frame count edits the bare number',
+        (tester) async {
+      final p = withComp();
+      p.uiState.playheadFrame.value = 48;
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      expect(find.text('f48'), findsOneWidget,
+          reason: 'at rest it wears the f');
+
+      await tester.tap(find.byKey(const ValueKey('tl-frame')));
+      await tester.pump();
+      expect(tester.widget<EditableText>(fieldIn('tl-frame')).controller.text,
+          '48',
+          reason: 'the field holds the number alone');
+
+      await tester.enterText(fieldIn('tl-frame'), '60');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(p.uiState.playheadFrame.value, 60);
+      expect(find.text('f60'), findsOneWidget,
+          reason: 'and it wears the f again the moment the edit lands');
+
+      // Escape puts it back, exactly as §12A.3 says an edit is abandoned.
+      await tester.tap(find.byKey(const ValueKey('tl-frame')));
+      await tester.pump();
+      await tester.enterText(fieldIn('tl-frame'), '9');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(p.uiState.playheadFrame.value, 60,
+          reason: 'Escape reverts, and the playhead never moved');
+      expect(find.text('f60'), findsOneWidget);
     });
 
     /// **The frame counter says how many frames there are** (§12A.1): the

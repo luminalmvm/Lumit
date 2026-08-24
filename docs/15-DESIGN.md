@@ -847,6 +847,10 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   puts the timecode and frame count at its far left and the Layers / Keys / Graph mode tabs at its
   far right. **The frame count says how far through**: the frame in hand, then the comp's
   whole length after it — `f48 / 250`, the total quieter again than the number it follows.
+- **Both readouts sit in value wells** (K-460) — the inset face of §2.1, which is what says
+  they can be typed into. The frame count rests as `f48` and **edits as `48`**: the `f`
+  names the clock rather than counting in it, and it is worn again on commit. The total
+  after them stays outside any well, because a comp's length is not edited there.
 - **The column headers are kicker words, not icons**: Switches · # · Layer · Matte ·
   Blend · Parent · ms. A column header names a container, and §7.1 sets every container
   label as a kicker; the switch cells keep their marks, because those are the controls.

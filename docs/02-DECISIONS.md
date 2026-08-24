@@ -12299,3 +12299,20 @@ verdict. The bezier side is the **hourglass**, which supersedes the rounded shap
 Keys mode landed with. Nothing new crosses the bridge: `BridgeKeyframe` has carried
 `interp_in` and `interp_out` since the graph editor could edit them, so this is exposure
 of a seam that was already there.
+
+## K-460 — The Timeline's two clock readouts sit in wells, and the frame count edits bare
+
+**DECIDED 2026-08-24.** The owner's ruling, extending §2.1's value well to the timecode
+row. Both readouts above the outline — the timecode and the frame count — draw as **value
+wells**: the inset `surface_0` face inside a hairline that every editable number in the
+editor wears at rest. They have been typeable since K-287, but they looked like text, and
+a number that looks like text is a number nobody clicks; the recess is the whole of the
+invitation and it costs no colour to make. Hover firms the edge and the open editor takes
+`animated`, exactly as a property's well does — neither ever lifts out of its recess.
+
+**The frame count drops its `f` while it is being edited.** At rest it reads `f48`; the
+field it opens holds `48`, and the letter is worn again the moment the edit commits. The
+`f` names which clock this is rather than counting in it, so an edit that began by
+stepping over a letter began wrong. `/ 250` stays outside the well: the comp's length is
+not edited there, and a recess round it would say it was. Commit on Enter, Escape reverts
+(§12A.3).
