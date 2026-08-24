@@ -40,6 +40,26 @@ pub const MAX_UNDO_DEPTH: usize = 500;
 struct Journal {
     undo: Vec<JournalEntry>,
     redo: Vec<JournalEntry>,
+    /// The **undo group** in flight, if one is open: the entries committed
+    /// since [`DocumentStore::begin_undo_group`], waiting to be folded into a
+    /// single step.
+    ///
+    /// One gesture is one undo step, and some gestures are several ops by
+    /// construction — stretching a block of keyframes that spans two layers
+    /// writes each layer's curves separately, because a layer is as small as
+    /// the ops get. Without this, one drag took two presses of Ctrl-Z to put
+    /// back, and how many depended on what happened to be selected.
+    ///
+    /// **Each op still applies the moment it is committed.** Only the journal
+    /// waits: the document, the revision and the change observer all move as
+    /// they always did, so a read between two members of a group sees the
+    /// world as it actually is. Deferring the *apply* instead would have made
+    /// every read-modify-write inside a group read stale.
+    group: Option<Vec<JournalEntry>>,
+    /// How many [`DocumentStore::begin_undo_group`] calls are outstanding. The
+    /// fold happens when this returns to zero, so a grouped gesture that calls
+    /// a helper which groups on its own account still ends as one step.
+    depth: usize,
 }
 
 /// What an observer is told after the store publishes a new snapshot: the op
@@ -165,6 +185,81 @@ impl DocumentStore {
         self.current.store(Arc::new(doc));
     }
 
+    /// Push one finished step onto the undo stack, keeping it bounded.
+    ///
+    /// Compaction (docs/14 §5): the history stays at [`MAX_UNDO_DEPTH`] by
+    /// dropping the oldest steps. Dropping history never changes the document
+    /// — only how far back an undo can reach.
+    fn push_step(journal: &mut Journal, entry: JournalEntry) {
+        journal.undo.push(entry);
+        if journal.undo.len() > MAX_UNDO_DEPTH {
+            let overflow = journal.undo.len() - MAX_UNDO_DEPTH;
+            journal.undo.drain(..overflow);
+        }
+    }
+
+    /// Begin an **undo group**: every [`Self::commit`] until the matching
+    /// [`Self::end_undo_group`] becomes one step in the history.
+    ///
+    /// For a gesture the model cannot express as a single op. Stretching a
+    /// selected block of keyframes writes one curve per property and one op
+    /// per layer, because that is how coarse the ops are (`Op::SetTransform
+    /// Property` and friends replace a whole animation); the user made one
+    /// drag and expects one Ctrl-Z. Reversing a selection, staggering it and
+    /// pasting a multi-layer clipboard are the same shape of thing.
+    ///
+    /// **Balanced calls, always.** A group left open records nothing on the
+    /// undo stack, so callers pair the two — the Flutter side wraps them in a
+    /// `try`/`finally` — and the depth count means a helper that groups on its
+    /// own account nests harmlessly inside a caller that already has.
+    pub fn begin_undo_group(&self) {
+        let mut journal = self.journal.lock();
+        journal.depth += 1;
+        journal.group.get_or_insert_with(Vec::new);
+    }
+
+    /// Close the group [`Self::begin_undo_group`] opened, folding everything
+    /// committed inside it into one undo step.
+    ///
+    /// An empty group leaves the history alone; a group of one is pushed as
+    /// itself, because a `Batch` of one op undoes identically and reads worse
+    /// in the journal. Two or more become an [`Op::Batch`] whose inverse is
+    /// the reversed inverses — exactly what `apply` builds for a batch, so a
+    /// folded group and a hand-built one are the same entry.
+    ///
+    /// Unbalanced calls are a no-op rather than a panic: this is reached from
+    /// the frontend across FFI, where docs/14 §2 forbids panicking, and the
+    /// worst an extra call can do is close a group that was never open.
+    pub fn end_undo_group(&self) {
+        let mut journal = self.journal.lock();
+        if journal.depth == 0 {
+            return;
+        }
+        journal.depth -= 1;
+        if journal.depth > 0 {
+            return;
+        }
+        let Some(held) = journal.group.take() else {
+            return;
+        };
+        let mut held = held;
+        let entry = match held.len() {
+            0 => return,
+            1 => held.remove(0),
+            _ => {
+                let mut inverses: Vec<Op> = held.iter().map(|e| e.inverse.clone()).collect();
+                inverses.reverse();
+                JournalEntry {
+                    op: Op::Batch {
+                        ops: held.into_iter().map(|e| e.op).collect(),
+                    },
+                    inverse: Op::Batch { ops: inverses },
+                }
+            }
+        };
+        Self::push_step(&mut journal, entry);
+    }
+
     /// Apply an operation, journal it, publish the new snapshot.
     pub fn commit(&self, op: Op) -> Result<Arc<Document>, OpError> {
         let mut journal = self.journal.lock();
@@ -172,15 +267,15 @@ impl DocumentStore {
         let inverse = apply(&mut doc, &op)?;
 
         let observed = op.clone();
-        journal.undo.push(JournalEntry { op, inverse });
-        journal.redo.clear();
-        // Compaction (docs/14 §5): keep the history bounded by dropping the
-        // oldest steps once it exceeds the cap. Dropping history never changes
-        // the document — only how far back an undo can reach.
-        if journal.undo.len() > MAX_UNDO_DEPTH {
-            let overflow = journal.undo.len() - MAX_UNDO_DEPTH;
-            journal.undo.drain(..overflow);
+        let entry = JournalEntry { op, inverse };
+        // Inside a group the entry waits to be folded; outside one it is the
+        // step. Redo is cleared either way — the document has moved, so the
+        // forward history is gone whether or not a gesture is still running.
+        match journal.group {
+            Some(ref mut held) => held.push(entry),
+            None => Self::push_step(&mut journal, entry),
         }
+        journal.redo.clear();
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
         self.bump_revision();
@@ -1997,5 +2092,140 @@ mod tests {
         let l = &doc.comp(comp).expect("comp").layers[0];
         assert!(!l.switches.locked, "the lock came off first");
         assert_ne!(l.name, "Edited", "and the edit under it came back out");
+    }
+
+    // -----------------------------------------------------------------------
+    // Undo groups: one gesture, one step (docs/07 §4.7).
+    // -----------------------------------------------------------------------
+
+    /// The claim the block tools rest on: several ops committed inside a group
+    /// undo together, and one undo puts every one of them back. Fails without
+    /// the group — each `commit` would be its own step, so a stretch that
+    /// touched three curves would need three presses of Ctrl-Z.
+    #[test]
+    fn a_group_of_commits_is_one_undo_step() {
+        let initial = Document::new();
+        let initial_json = json(&initial);
+        let store = DocumentStore::new(initial);
+        let (ops, _) = scripted_ops(&store.snapshot());
+        let committed = ops.len();
+
+        store.begin_undo_group();
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+        store.end_undo_group();
+
+        assert_eq!(
+            store.journal_ops().len(),
+            1,
+            "{committed} ops folded into one step"
+        );
+        assert!(store.undo().unwrap().is_some(), "the one step undoes");
+        assert_eq!(
+            json(&store.snapshot()),
+            initial_json,
+            "and it puts the whole gesture back"
+        );
+        assert!(!store.can_undo(), "there is nothing under it");
+    }
+
+    /// The document does not wait for the group to close: each op applies as it
+    /// is committed, so a read taken between two members of a gesture sees the
+    /// world as it is. Only the journal waits.
+    #[test]
+    fn a_group_applies_each_op_as_it_is_committed() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, comp) = scripted_ops(&store.snapshot());
+
+        store.begin_undo_group();
+        for op in ops {
+            store.commit(op).unwrap();
+            assert!(
+                store.revision() > 0,
+                "every commit publishes its own snapshot"
+            );
+        }
+        assert!(
+            store.snapshot().comp(comp).is_some(),
+            "the comp is there before the group closes"
+        );
+        store.end_undo_group();
+    }
+
+    /// A group of one is pushed as itself: a `Batch` of one undoes identically
+    /// and reads worse in the journal, and the redo of it must still work.
+    #[test]
+    fn a_group_of_one_is_not_wrapped_in_a_batch() {
+        let store = DocumentStore::new(Document::new());
+        let (mut ops, _) = scripted_ops(&store.snapshot());
+        ops.truncate(1);
+
+        store.begin_undo_group();
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+        store.end_undo_group();
+
+        assert!(
+            !matches!(store.journal_ops().as_slice(), [Op::Batch { .. }]),
+            "one op stays one op"
+        );
+        assert!(store.undo().unwrap().is_some());
+        assert!(store.redo().unwrap().is_some(), "and redoes");
+    }
+
+    /// An empty group leaves the history alone — a gesture that turned out to
+    /// change nothing is not an undo step.
+    #[test]
+    fn an_empty_group_records_nothing() {
+        let store = DocumentStore::new(Document::new());
+        store.begin_undo_group();
+        store.end_undo_group();
+        assert!(!store.can_undo(), "nothing was committed, nothing recorded");
+    }
+
+    /// Nesting: a helper that groups on its own account inside a caller that
+    /// already has must not close the caller's group early. The fold happens
+    /// when the outermost one ends.
+    #[test]
+    fn nested_groups_fold_at_the_outermost_end() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, _) = scripted_ops(&store.snapshot());
+
+        store.begin_undo_group();
+        let mut ops = ops.into_iter();
+        store.commit(ops.next().unwrap()).unwrap();
+        store.begin_undo_group();
+        store.commit(ops.next().unwrap()).unwrap();
+        store.end_undo_group();
+        assert!(
+            !store.can_undo(),
+            "the inner end did not close the outer group"
+        );
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+        store.end_undo_group();
+
+        assert_eq!(store.journal_ops().len(), 1, "one step for the whole nest");
+    }
+
+    /// Unbalanced calls are survivable rather than fatal: this is reached from
+    /// the frontend across FFI, where docs/14 §2 forbids panicking.
+    #[test]
+    fn ending_a_group_that_was_never_begun_does_nothing() {
+        let store = DocumentStore::new(Document::new());
+        store.end_undo_group();
+        let (ops, _) = scripted_ops(&store.snapshot());
+        let committed = ops.len();
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+        assert_eq!(
+            store.journal_ops().len(),
+            committed,
+            "ordinary commits are unaffected"
+        );
     }
 }

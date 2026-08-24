@@ -88,6 +88,26 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceAutosave(
           that: this, projectPath: projectPath, keep: keep);
 
+  /// Begin an undo group: everything committed until [`Self::end_undo_group`]
+  /// becomes **one** undo step (docs/07 §4.7).
+  ///
+  /// For a gesture that is several ops by construction, because the ops are
+  /// as coarse as a whole property's animation: stretching a selected block
+  /// of keyframes across two layers, reversing it, staggering it, pasting a
+  /// clipboard that came off three properties. The user made one drag or
+  /// pressed one button, and expects one Ctrl-Z.
+  ///
+  /// The edits still land as they are made — only the history waits — so a
+  /// read taken part-way through a group sees the document as it is.
+  ///
+  /// **Pair the two calls.** A group left open records nothing, so the
+  /// frontend closes it in a `finally`. Calls nest: an inner pair inside an
+  /// outer one folds into the outer group rather than closing it early.
+  void beginUndoGroup() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceBeginUndoGroup(
+        that: this,
+      );
+
   /// Where *this project* parks its rendered frames, overriding the
   /// application-wide choice — or `None` when it follows that choice, which is
   /// the ordinary case (docs/06-RENDER-PIPELINE.md §5.4).
@@ -115,6 +135,13 @@ class ProjectReference {
   /// proof: a test process makes a project per test, and without a close the
   /// Linux CI runner ran out of memory under the pile of live renderers.
   void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
+        that: this,
+      );
+
+  /// Close the group [`Self::begin_undo_group`] opened. Ending one that was
+  /// never begun does nothing.
+  void endUndoGroup() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceEndUndoGroup(
         that: this,
       );
 
