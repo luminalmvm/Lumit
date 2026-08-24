@@ -460,6 +460,13 @@ before the switch can honestly exist); and the Settings drawing's slider face (2
 track, primary knob, no fill) disagrees with the Main drawing's zoom slider that
 `HouseSlider` was built from — each surface should wear its own manifest's face.
 
+**A composition thumbnail over the seam** (K-468). The welcome screen's save-time
+thumbnail photographs the Viewer's own picture boundary, which is honest but means a
+project saved with no Viewer up gets no picture. The better shape, when wanted: a
+`comp_thumbnail(frame, max_edge)` returning encoded pixels off the playback path — the
+worker's private `render_preview` already produces the RGBA; only the capture function
+in `viewer_panel_frb.dart` would change.
+
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
 solve link and Convert to keyframes, all against an injected solve. Stage 2 landed
