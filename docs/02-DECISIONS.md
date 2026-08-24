@@ -12225,3 +12225,21 @@ absorbed when Keys was withdrawn — the Animated filter (`U`), twirl-down lane 
 block selection, end-handle stretch, the Ease popover — because that is where
 After Effects hands land. Keys is an additional way of seeing, built to the approved
 Keys drawing; it adds no editing behaviour Layers lacks. K-441's other bullets stand.
+
+## K-456 — Icons display at the mockups' sizes; the 16 grid is the drawing grid, not the law
+
+**DECIDED 2026-08-24.** Supersedes K-209's fixed 16px rendering where a mockup renders
+smaller. The owner's ruling, with the general note that any earlier design decision may
+be overruled by the redesign's drawings. Glyphs stay drawn on the 16 grid with the
+1.5-unit stroke; each panel renders them at the size its mockup's computed-style
+manifest records (the Project panel: 13px in rows, 14px in the footer). Slight stroke
+softening at non-native sizes is accepted as the mockups' own look.
+
+## K-457 — A keyframe's shape says its interpolation, half by half
+
+**DECIDED 2026-08-24.** In the Timeline's lanes (and the Keys mode), a keyframe's mark
+depends on interpolation: **linear = the diamond, bezier = an hourglass** (two triangles
+tip to tip), **held = a square** — all at one height. The mark is split at its vertical
+centre: the left half draws the incoming interpolation's shape, the right half the
+outgoing, so a key that eases in and holds out reads as half hourglass, half square.
+Colours unchanged (animated; selected brightens as today).
