@@ -12832,3 +12832,10 @@ first, then the arrowed preview size, then the composition's name, and only what
 the time, the size, the magnification — ellipsises. In practice the bar reaches its
 minimum and scrolls (the ladder's step 5) before that, so a value is never cut. This
 refines K-451 for one compound reading; it reverses nothing.
+
+## K-476 — Sharp's control corner is 2, the drawings' own
+
+**DECIDED 2026-08-25.** Supersedes K-394's `controlRadius: 4` under Sharp. The
+computed-style manifests measure `border-radius: 2px` on the mockups' controls almost
+without exception — wells, dropdown faces, buttons, badges — so the token follows the
+drawings (K-458). Round's stadium is untouched.

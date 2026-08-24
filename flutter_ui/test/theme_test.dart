@@ -12,9 +12,9 @@ int g(Color c) => (c.g * 255).round();
 int b(Color c) => (c.b * 255).round();
 
 void main() {
-  test('shape tokens sharp matches the pre-K-092 hardcoded numbers', () {
+  test('shape tokens sharp matches the drawings (K-476)', () {
     const t = ShapeTokens.sharp;
-    expect(t.controlRadius, 4);
+    expect(t.controlRadius, 2);
     expect(t.floatRadius, 6);
     expect(t.cardRadius, 0);
     expect(t.cardPadding, 0);

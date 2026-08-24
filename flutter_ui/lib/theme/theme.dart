@@ -106,7 +106,9 @@ class ShapeTokens {
   });
 
   static const sharp = ShapeTokens(
-    controlRadius: 4,
+    // The mockups draw 2 on almost every control (K-476, measured from the
+    // computed-style manifests); 4 was K-394's original guess.
+    controlRadius: 2,
     floatRadius: 6,
     cardRadius: 0,
     cardPadding: 0,
