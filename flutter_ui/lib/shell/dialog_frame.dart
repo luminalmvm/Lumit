@@ -39,6 +39,15 @@ const double dialogFooterHeight = 45;
 const double dialogFooterButton = 24;
 const double dialogFooterGap = 12;
 
+/// The air between two **stacked** actions, and the band they add up to.
+///
+/// A footer whose actions will not fit on one line drops them to a column
+/// instead of eliding their words — §12A.6's ladder, step 2, applied to a
+/// footer (K-487). Three buttons come to 10 above, 24 · 8 · 24 · 8 · 24, and
+/// 10 below.
+const double dialogFooterStackGap = 8;
+const double dialogFooterPad = 10;
+
 /// The inset the title strip, the footer and a body take from the dialog's
 /// edges.
 const double dialogPadding = 14;
@@ -299,38 +308,69 @@ Widget dialogRow(
 ///
 /// The single filled action is the ceiling, not the floor — a dialog with
 /// nothing to commit carries outlined buttons and no fill (§12A.4).
+///
+/// [stacked] drops the actions to a column, each at the footer's full width,
+/// for a dialog too narrow to seat them in a line — §12A.6's ladder step 2
+/// (K-487). The order is unchanged, so the filled action is still last, which
+/// in a column means the bottom.
 Widget dialogFooter(
   LumitTheme t, {
   String summary = '',
   required List<Widget> actions,
   required String keyPrefix,
+  bool stacked = false,
 }) =>
     Container(
       key: ValueKey<String>('$keyPrefix-footer'),
-      height: dialogFooterHeight,
+      height: stacked ? null : dialogFooterHeight,
       decoration: BoxDecoration(
         color: t.surface2,
         border: Border(top: BorderSide(color: t.hairline)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: dialogPadding),
-      child: Row(
-        children: [
-          if (summary.isNotEmpty)
-            Flexible(
-              child: Text(
-                summary,
-                key: ValueKey<String>('$keyPrefix-summary'),
-                style: dialogMono(t),
-                overflow: TextOverflow.ellipsis,
-              ),
+      padding: stacked
+          ? const EdgeInsets.fromLTRB(
+              dialogPadding, dialogFooterPad, dialogPadding, dialogFooterPad)
+          : const EdgeInsets.symmetric(horizontal: dialogPadding),
+      child: stacked
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (summary.isNotEmpty)
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(bottom: dialogFooterStackGap),
+                    child: Text(
+                      summary,
+                      key: ValueKey<String>('$keyPrefix-summary'),
+                      style: dialogMono(t),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                for (final (index, action) in actions.indexed) ...[
+                  if (index > 0) const SizedBox(height: dialogFooterStackGap),
+                  SizedBox(height: dialogFooterButton, child: action),
+                ],
+              ],
+            )
+          : Row(
+              children: [
+                if (summary.isNotEmpty)
+                  Flexible(
+                    child: Text(
+                      summary,
+                      key: ValueKey<String>('$keyPrefix-summary'),
+                      style: dialogMono(t),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                const Spacer(),
+                for (final action in actions) ...[
+                  const SizedBox(width: dialogFooterGap),
+                  SizedBox(height: dialogFooterButton, child: action),
+                ],
+              ],
             ),
-          const Spacer(),
-          for (final action in actions) ...[
-            const SizedBox(width: dialogFooterGap),
-            SizedBox(height: dialogFooterButton, child: action),
-          ],
-        ],
-      ),
     );
 
 /// A factual line — the footer's summary, a group's own reading. Mono, small,

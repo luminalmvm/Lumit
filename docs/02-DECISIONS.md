@@ -13158,3 +13158,43 @@ With the strip's 502 after its label column, a 220 list and two content-width bu
 pins the band, the shared left edge with the rows below, and the button's own width against
 its label — a clipped button is a button narrower than its word, and that now fails.
 
+## K-487 — The recovery dialogue asks once: one sentence, three buttons, and they stack
+
+**DECIDED 2026-08-24** (owner ruling, rewriting the dialogue the crash journal raises).
+
+**The dialogue asked the same question twice.** K-444's shape gave it two source rows to
+pick between and then a *Recover* button in the footer to apply the pick — two decisions for
+one question, and a footer whose filled action meant something different depending on a row
+above it. It now asks once. The title is the kicker **RECOVER WORK**; the body is one
+sentence, the owner's own — *It looks like Lumit crashed with unsaved changes, would you
+like to restore them?* — and the answers are three buttons along the bottom, in the order
+they keep the least first: **Don't restore changes** (open the saved file as it is),
+**Restore latest autosave** (the last timed copy), **Restore all changes** (the journal,
+every edit). The last is the filled action and the focused one, because it is the answer
+that loses nothing. The source rows are gone; the buttons *are* the choice. What the
+dialogue can answer is unchanged — the same three `RecoveryChoice` values, the same silence
+when there is nothing beside the project, and Escape and the close mark still answer none of
+them.
+
+**The autosave count and the file name go.** They were a factual footer line and a mono line
+under a row, and neither survives a narrow window or a dialogue with no rows. What each
+button costs is in its tooltip instead, at §13.2's length.
+
+**The width is measured, and the buttons stack.** The owner asked for roughly two-thirds of
+the old 520 and for the row to be tried first. In Hanken Grotesk at 11 the three labels are
+108.5, 116.5 and — the filled one being a 9px mono kicker tracked 0.12em — 123.1; with 12
+either side of the two outlined buttons and 16 either side of the filled one that is 428.1
+of button, and with the footer's 14 insets and the 12 before each button **one line needs
+492**. 492 is 95% of the window it was meant to shrink, so the row loses on its own numbers.
+The actions therefore stack — §12A.6's ladder step 2, a run that will not fit dropping to
+another line rather than eliding its words — each at the footer's full width, the order
+unchanged so the filled action is still last, which in a column means the bottom. The band
+is 10 above, three 24px buttons 8 apart, 10 below: **108** over its hairline. The window is
+the owner's **350**, where the sentence sets in two lines and every button has more than
+twice the room its label needs.
+
+**Widget tests cannot measure this, and say so.** A widget test draws in the test font,
+where every glyph is a square of the type size, so a label measured there is roughly twice
+what it renders. The width above comes from the shipped fonts' own advance widths;
+`recovery_metrics_test` pins what survives either font — the frame, the band, and three
+full-width buttons one above the next.

@@ -1163,9 +1163,8 @@ migration path). Either way they all share one pattern:
 - **label-left rows, the label in a fixed column and the control at the *start* of what is
   left**. **The column and the gap are the drawing's own** (K-469): Settings computes
   190 and 12 in rows of 30 (K-465), New composition 110 and 12 in rows of 30, Export 100
-  and 10 in rows of 28, Recovery 160 and 12 in rows of 30 (no drawing of its own — it
-  wears the pattern rather than a third measurement). Each is pinned by its own metrics
-  test;
+  and 10 in rows of 28. Each is pinned by its own metrics test. **Recovery has no rows at
+  all** (K-487): one sentence and three buttons, so its only measurement is its width;
 - **kicker-titled groups, drawn as that dialog's drawing draws them** (K-469): a settings
   page separates them with a rule and 6px of air above each group after the first and no
   card around any of them; the Export dialog fences each in a hairline box with the kicker
@@ -1173,7 +1172,11 @@ migration path). Either way they all share one pattern:
 - a footer strip of **45** — 10 above a 24px button and 10 below, over a hairline — carrying
   a summary line (mono 10px, factual: `250 frames · 10.0 s · 1920×1080 · 25 fps · ≈ 1.2
   GB`) and **the single filled action** where the dialog has one. The rule is a ceiling of
-  one, not a floor: Settings' own footer carries two outlined buttons and no fill;
+  one, not a floor: Settings' own footer carries two outlined buttons and no fill. **A
+  footer whose actions will not fit one line stacks them** instead of eliding their words
+  — §12A.6's ladder step 2, each action at the footer's full width, the order unchanged so
+  the filled one is still last (the bottom). The band is then 10 above, the buttons 8
+  apart, 10 below: 108 for three, over the hairline (K-487);
 - **buttons are sized by their content**, not paired to one width (K-469 supersedes K-448's
   bullet): 12px either side of an outlined label, 16 either side of the filled one, both
   24 tall. Both approved drawings draw a pair that way.
@@ -1318,6 +1321,7 @@ a plain constant in the code rather than a token with two equal values.
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
 | Export: the preset strip, at rest (K-486) | 38 | 38 |
+| Recovery: the window itself, and its stacked footer (K-487) | 350 wide, footer 108 | 350 wide, footer 108 |
 | Dialog value wells and dropdowns | 22 | 22 |
 | Settings: the window itself (K-465) | 760×520 | 760×520 |
 | Settings: sidebar, and one page's entry in it | 160 wide, 24 tall | 160 wide, 24 tall |

@@ -531,7 +531,7 @@ void main() {
 
       expect(choice, isNull,
           reason: 'a project with nothing to recover raises no dialogue');
-      expect(find.textContaining('Recover unsaved work'), findsNothing);
+      expect(find.textContaining('RECOVER WORK'), findsNothing);
     });
 
     testWidgets('an autosave beside the project offers the three choices',
@@ -566,31 +566,39 @@ void main() {
 
       // The title is a kicker now the dialogue wears the shared frame, so the
       // capitals are the style rather than the string (K-444).
-      expect(find.text('RECOVER UNSAVED WORK'), findsOneWidget);
+      expect(find.text('RECOVER WORK'), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-journal')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-autosave')), findsOneWidget);
       expect(find.byKey(const ValueKey('recover-discard')), findsOneWidget);
 
-      // Discard leaves everything where it is — the copies are not deleted.
+      // Not restoring leaves everything where it is — the copies are not
+      // deleted.
       await tester.tap(find.byKey(const ValueKey('recover-discard')));
       await tester.pumpAndSettle();
       expect(listAutosaves(project: path), hasLength(1));
     });
 
-    /// The footer's filled action applies whichever source the body has
-    /// picked, and the close mark applies none of them — the shape changed,
-    /// what the dialogue can answer did not.
+    /// Each button is its own answer (K-487), and the close mark is none of
+    /// them — the shape changed, what the dialogue can answer did not.
     ///
-    /// The journal is the case driven here because replaying it is synchronous
-    /// engine work. Opening an autosave is not: it goes through
-    /// `state.openProject`, whose future never completes in a widget test's
-    /// fake-async zone. That the *choice* moves to the autosave is pinned in
-    /// `recovery_metrics_test` instead, on the rows themselves.
-    testWidgets('the filled action recovers the picked source', (tester) async {
+    /// *Restore all changes* is the case driven here because replaying the
+    /// journal is synchronous engine work. Opening an autosave is not: it goes
+    /// through `state.openProject`, whose future never completes in a widget
+    /// test's fake-async zone. That the autosave button is present and on the
+    /// same row is pinned in `recovery_metrics_test` instead.
+    testWidgets('each button is its own answer', (tester) async {
+      // Held outside `run` on purpose. A second `pumpWidget` in one test does
+      // not re-root the tree under a modal-capable host, so the opener element
+      // — and the closure inside it — is the first run's. The dialogue it
+      // raises is freshly built either way, so what it answers is genuine; the
+      // answer just has to land somewhere both runs can read.
+      RecoveryChoice? choice;
+
       Future<RecoveryChoice?> run(
         String tempPrefix,
         Future<void> Function() act,
       ) async {
+        choice = null;
         final p = freshProject();
         p.state.project!.newComposition(name: 'Scene');
         final dir = Directory.systemTemp.createTempSync(tempPrefix);
@@ -601,7 +609,6 @@ void main() {
         await tester.runAsync(() => p.state.project!.save(path: path));
         p.state.project!.autosave(projectPath: path, keep: 3);
 
-        RecoveryChoice? choice;
         await tester.pumpWidget(hostPanel(
           child: Builder(builder: (context) {
             return HouseButton(
@@ -628,12 +635,20 @@ void main() {
         return choice;
       }
 
-      // Nothing picked: the journal is what the dialogue opens on.
+      // The filled, focused action: every change since the save.
       expect(
         await run('lumit-recover-journal', () async {
-          await tester.tap(find.byKey(const ValueKey('recover-apply')));
+          await tester.tap(find.byKey(const ValueKey('recover-journal')));
         }),
         RecoveryChoice.journal,
+      );
+
+      // The leftmost: open the saved file as it is.
+      expect(
+        await run('lumit-recover-none', () async {
+          await tester.tap(find.byKey(const ValueKey('recover-discard')));
+        }),
+        RecoveryChoice.discard,
       );
 
       // The close mark is no answer at all: the project opens as it was saved.

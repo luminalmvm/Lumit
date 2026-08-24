@@ -4066,50 +4066,25 @@
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
   },
-  "recoverAction": "Recover",
-  "@recoverAction": {
-    "description": "Recovery dialogue: the filled button in the footer, which applies whichever source is picked above it. One word."
+  "recoveryQuestion": "It looks like Lumit crashed with unsaved changes, would you like to restore them?",
+  "@recoveryQuestion": {
+    "description": "Recovery dialogue: the one sentence in the body, above the three buttons. It is asking a question, so it keeps its question mark."
   },
-  "recoverAutosave": "Open the newest autosave",
-  "@recoverAutosave": {
-    "description": "Recovery choice: open the last timed copy."
+  "recoveryRestoreAll": "Restore all changes",
+  "@recoveryRestoreAll": {
+    "description": "Recovery dialogue: the filled button at the far right of the footer. Replays the journal of edits onto the saved file, recovering everything. Three words at most — three buttons share one row."
   },
-  "recoverAutosaveHelp": "A whole copy from the last timed save. Anything after it is lost.",
-  "@recoverAutosaveHelp": {
-    "description": "The sentence under the autosave recovery choice."
+  "recoveryRestoreAutosave": "Restore latest autosave",
+  "@recoveryRestoreAutosave": {
+    "description": "Recovery dialogue: the middle button in the footer. Opens the newest timed copy, losing whatever happened after it. Three words at most — three buttons share one row."
   },
-  "recoverBlurb": "This project has work beside it that the saved file does not contain.",
-  "@recoverBlurb": {
-    "description": "The sentence under the recovery question."
+  "recoveryRestoreNone": "Don't restore changes",
+  "@recoveryRestoreNone": {
+    "description": "Recovery dialogue: the leftmost button in the footer. Opens the saved file as it is; nothing is deleted. Three words at most — three buttons share one row."
   },
-  "recoverDiscard": "Open the saved file as it is",
-  "@recoverDiscard": {
-    "description": "Recovery choice: ignore the extra work."
-  },
-  "recoverDiscardHelp": "Leave the extra work where it is; nothing is deleted.",
-  "@recoverDiscardHelp": {
-    "description": "The sentence under the discard recovery choice."
-  },
-  "recoverFound": "{count, plural, =1{1 autosave} other{{count} autosaves}}",
-  "@recoverFound": {
-    "description": "Recovery dialogue: the factual line at the left of the footer, counting the timed copies found beside the project. Small mono type.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "recoverJournal": "Replay the edit journal",
-  "@recoverJournal": {
-    "description": "Recovery choice: rebuild the session edit by edit."
-  },
-  "recoverJournalHelp": "Everything up to the moment the session ended.",
-  "@recoverJournalHelp": {
-    "description": "The sentence under the journal recovery choice."
-  },
-  "recoverTitle": "Recover unsaved work",
-  "@recoverTitle": {
-    "description": "Title of the dialogue shown when a project has work its saved file does not contain."
+  "recoveryTitle": "Recover work",
+  "@recoveryTitle": {
+    "description": "Recovery dialogue: the kicker title, drawn in capitals by the style. Shown when a project has work its saved file does not contain."
   },
   "relink": "Relink",
   "@relink": {
@@ -5297,6 +5272,18 @@
   "tipProperties": "Properties",
   "@tipProperties": {
     "description": "Tooltip on the twirl that opens a layer's properties. Under five words."
+  },
+  "tipRecoverAll": "Every change since saving",
+  "@tipRecoverAll": {
+    "description": "Tooltip on the recovery dialogue's filled button, saying what it recovers. Under five words."
+  },
+  "tipRecoverAutosave": "The last timed copy",
+  "@tipRecoverAutosave": {
+    "description": "Tooltip on the recovery dialogue's autosave button, saying what it opens. Under five words."
+  },
+  "tipRecoverNone": "Open the saved file",
+  "@tipRecoverNone": {
+    "description": "Tooltip on the recovery dialogue's leftmost button, saying what it opens. Nothing is deleted. Under five words."
   },
   "tipRemove": "Remove",
   "@tipRemove": {
