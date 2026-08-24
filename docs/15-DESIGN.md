@@ -1148,8 +1148,8 @@ carrying the panel's kicker and, at its right-hand end, the magnification, the p
 quality and the colour pipeline; and a **bottom bar** of 22 carrying the ways of looking,
 the snapshot behind a hairline seam, the transport with its clock, and the composition's
 own reading at the far end. The setting that gathers everything into a single bar, at the
-top or the bottom, keeps each strip's own order within whichever arrangement is set
-([07-UI-SPEC.md](07-UI-SPEC.md) §2.2).
+top or the bottom (Appearance → Viewer → Viewer bars, K-467), keeps each strip's own order
+within whichever arrangement is set ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2).
 
 **The bars' own measurements**, all the drawing's: glyphs at **14** (K-456), gaps of **8**
 between the marks and **10** inside the transport, **10** of padding either end of both

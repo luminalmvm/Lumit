@@ -299,6 +299,11 @@ anywhere, including other monitors.
   zoom` — which is where degradation is stated (item 9), and the preview progress bar,
   which is nothing at all until a frame is genuinely waited on.
 
+**Settings → Appearance → Viewer → Viewer bars** chooses between the three arrangements
+(K-448, K-467): the drawing's **split**, or **one bar at the top** or **at the bottom**,
+which gathers the panel's kicker, the three pickers and everything the bottom bar carries
+onto a single strip in that same order. No control is added or dropped by the choice.
+
 Every control on either strip keeps the behaviour its item below defines. The items:
 
 1. **Magnification** dropdown: Fit, Fit up to 100%, then 25 / 33.3 / 50 / 100 / 200 / 400 /

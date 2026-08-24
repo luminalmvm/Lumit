@@ -4687,6 +4687,10 @@
   "@settingsVideoArrivesAsASequence": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsViewerBars": "Viewer bars",
+  "@settingsViewerBars": {
+    "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
+  },
   "settingsWaveformFrequencyStack": "Waveform frequency stack",
   "@settingsWaveformFrequencyStack": {
     "description": "Settings window: the name of one setting."
@@ -6174,6 +6178,18 @@
         "type": "String"
       }
     }
+  },
+  "viewerBarsBottom": "One bar, at the bottom",
+  "@viewerBarsBottom": {
+    "description": "Settings window, Appearance: one of the three arrangements of the Viewer's chrome. Everything the Viewer offers on one strip under the picture."
+  },
+  "viewerBarsSplit": "Split, top and bottom",
+  "@viewerBarsSplit": {
+    "description": "Settings window, Appearance: one of the three arrangements of the Viewer's chrome, and the default. The magnification, quality and colour pickers sit in a strip above the picture; everything else in the bar below it."
+  },
+  "viewerBarsTop": "One bar, at the top",
+  "@viewerBarsTop": {
+    "description": "Settings window, Appearance: one of the three arrangements of the Viewer's chrome. Everything the Viewer offers on one strip over the picture."
   },
   "viewerDisplayTransform": "Linear → sRGB",
   "@viewerDisplayTransform": {

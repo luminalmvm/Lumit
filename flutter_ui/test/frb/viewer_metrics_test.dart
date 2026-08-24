@@ -20,6 +20,7 @@ import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
@@ -44,7 +45,9 @@ void main() {
       return (state: p.state, uiState: p.uiState, layer: layer);
     }
 
-    Future<void> mount(WidgetTester tester, dynamic p) async {
+    Future<void> mount(WidgetTester tester, dynamic p,
+        {ViewerBars bars = ViewerBars.split}) async {
+      (p.uiState as LumitUiState).workspace.interface.viewerBars = bars;
       await tester.pumpWidget(hostPanel(
         child: const ViewerPanelFrb(),
         state: p.state as LumitState,
@@ -283,6 +286,47 @@ void main() {
       p.uiState.clearSelection();
       await tester.pump();
       expect(find.byKey(const ValueKey('viewer-tag')), findsNothing);
+    });
+
+    /// **The three arrangements** (K-448's setting, K-466's drawing). Split is
+    /// the drawing's: a header above the picture and the bar below it. The
+    /// other two gather everything into one strip, which then carries the
+    /// panel's kicker and the three pickers ahead of the bar's own marks —
+    /// the same controls in the same order, on one row instead of two.
+    testWidgets('the setting splits the bars, or gathers them top or bottom',
+        (tester) async {
+      final p = withLayer();
+
+      await mount(tester, p);
+      var stage = rectOf(tester, 'viewer-stage');
+      expect(rectOf(tester, 'viewer-header').bottom, closeTo(stage.top, 0.5),
+          reason: 'split: the header is above the picture');
+      expect(rectOf(tester, 'viewer-bar').top, closeTo(stage.bottom, 0.5),
+          reason: 'and the bar below it');
+
+      await mount(tester, p, bars: ViewerBars.top);
+      stage = rectOf(tester, 'viewer-stage');
+      expect(find.byKey(const ValueKey('viewer-header')), findsNothing,
+          reason: 'gathered: there is one strip, not two');
+      expect(rectOf(tester, 'viewer-bar').bottom, closeTo(stage.top, 0.5),
+          reason: 'and it is above the picture');
+      expect(
+          barKeys(tester).take(4),
+          [
+            'viewer-zoom',
+            'viewer-resolution',
+            'viewer-colour',
+            'viewer-grid',
+          ],
+          reason: "the pickers lead the strip, in the header's own order");
+      expect(find.text('VIEWER'), findsOneWidget,
+          reason: 'the panel keeps its name when the header goes');
+
+      await mount(tester, p, bars: ViewerBars.bottom);
+      stage = rectOf(tester, 'viewer-stage');
+      expect(find.byKey(const ValueKey('viewer-header')), findsNothing);
+      expect(rectOf(tester, 'viewer-bar').top, closeTo(stage.bottom, 0.5),
+          reason: 'gathered at the bottom, under the picture');
     });
 
     /// The surround is the neutral grey no scheme colours (§3.2), and the

@@ -813,6 +813,29 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   setState(() => ui.workspace.setThemedViewerSurround(themed)),
             ),
           ),
+          // How the Viewer's chrome is arranged round the picture (K-448's
+          // choice, K-466's drawing). Appearance rather than the Viewer page:
+          // the Viewer page is about the *image*, and this is about where the
+          // chrome round it sits.
+          _row(
+            t,
+            l10n.settingsViewerBars,
+            _dropdown<ViewerBars>(
+              key: 'settings-viewer-bars',
+              value: settings.viewerBars,
+              options: ViewerBars.values,
+              label: (bars) => switch (bars) {
+                ViewerBars.split => l10n.viewerBarsSplit,
+                ViewerBars.top => l10n.viewerBarsTop,
+                ViewerBars.bottom => l10n.viewerBarsBottom,
+              },
+              width: _ddWide,
+              onChanged: (bars) => setState(() {
+                settings.viewerBars = bars;
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
         ],
       ),
       (

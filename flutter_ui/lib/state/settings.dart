@@ -109,6 +109,23 @@ BridgeCacheLocation cacheLocationFromName(String name) =>
       orElse: () => BridgeCacheLocation.appData,
     );
 
+/// How the Viewer's chrome is laid out round the picture (K-448, K-466).
+///
+/// The approved drawing splits it: the magnification, the preview quality and
+/// the colour pipeline in a header strip above the picture, everything else in
+/// the bar below it. The other two gather the lot into one strip, for anyone
+/// who would rather spend 22 pixels once than twice.
+enum ViewerBars {
+  /// The drawing's own: pickers above, everything else below.
+  split,
+
+  /// One strip, above the picture.
+  top,
+
+  /// One strip, below the picture.
+  bottom,
+}
+
 /// Interface (Settings → Interface): UI scale and tooltips (K-117), plus the
 /// two editing preferences that make Lumit behave the Vegas way (K-246).
 class InterfaceSettings {
@@ -223,6 +240,16 @@ class InterfaceSettings {
   /// heights — no colour, no size of type, nothing about what anything means.
   bool compact;
 
+  /// How the Viewer's two strips are arranged round the picture (K-448,
+  /// K-466).
+  ///
+  /// [ViewerBars.split] by default, because it is what the approved drawing
+  /// draws: the three pickers in a header above the picture, the ways of
+  /// looking and the transport in the bar below it. The other two gather
+  /// everything into one strip at whichever end is asked for — the same
+  /// controls in the same order, on one row instead of two.
+  ViewerBars viewerBars;
+
   /// The interface language, as a BCP-47 tag (`en`, `de`, `zh`), or null to
   /// follow whatever the machine is set to (K-303).
   ///
@@ -248,6 +275,7 @@ class InterfaceSettings {
     this.showToneMap = false,
     this.easingInPopup = false,
     this.compact = false,
+    this.viewerBars = ViewerBars.split,
   });
 
   Map<String, dynamic> toJson() => {
@@ -265,6 +293,7 @@ class InterfaceSettings {
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
         'compact': compact,
+        'viewer_bars': viewerBars.name,
       };
   factory InterfaceSettings.fromJson(Map<String, dynamic> j) =>
       InterfaceSettings(
@@ -314,5 +343,13 @@ class InterfaceSettings {
         // tight set is now something to ask for rather than something to
         // inherit by silence.
         compact: j['compact'] as bool? ?? false,
+        // By name, not by index: a settings file outlives any build, and a
+        // reordered enum would otherwise silently rearrange the Viewer. An
+        // unknown name — an older file that has none, or a newer build's — is
+        // the split the drawing draws.
+        viewerBars: ViewerBars.values.firstWhere(
+          (b) => b.name == j['viewer_bars'],
+          orElse: () => ViewerBars.split,
+        ),
       );
 }

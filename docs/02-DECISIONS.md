@@ -12540,3 +12540,21 @@ same commit.
   §3.1's closed list already names "selected gizmo handles" for that colour, §3.2 bans the
   accent inside the Viewer's neutrality zone, and the drawing draws both in the amber. This
   is a correction, not a new rule.
+
+## K-467 — The Viewer bar arrangement is a real setting: split, one at the top, one at the bottom
+
+**DECIDED 2026-08-24.** K-448 gave the choice, K-465's Settings drawing drew the row, and
+K-466 built the two strips it chooses between; this fills in the field behind it, which
+K-465 recorded as drawn-but-unbacked.
+
+- **`InterfaceSettings.viewerBars`**, stored by name (`split` / `top` / `bottom`) so a
+  reordered enum cannot silently rearrange somebody's Viewer, and defaulting to `split` —
+  which is what the approved drawing draws, and what a settings file written before the
+  field existed therefore gets.
+- **Gathered means one strip carrying both**, in the order the two read: the panel's
+  kicker and the three pickers, then the ways of looking, the seam and the snapshot, the
+  transport with its clock, and the reading at the far end. No control changes, no control
+  is dropped, and the strip is the same 22 with the same measurements — it is one row
+  instead of two, which is the whole of the choice.
+- **The row lives on Appearance, under Viewer**, beside the surround, because the Viewer
+  page is about the *image* and this is about the chrome round it.

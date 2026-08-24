@@ -95,6 +95,59 @@ const List<double?> _zoomSteps = [null, 0.25, 0.5, 1.0, 2.0, 4.0];
 /// Which channel the picture shows.
 enum ViewerChannel { rgb, red, green, blue, alpha }
 
+// --- The project's own picture (K-466) --------------------------------------
+//
+// In plain terms: when a project is saved, the welcome screen wants a small
+// picture of it to show on its recent row next time. The picture it wants is
+// the composition as it looks right now — which is exactly what the Viewer is
+// already showing, inside the very [RepaintBoundary] the Snapshot button
+// photographs.
+//
+// **So no engine call is involved, and none exists.** A composition frame never
+// crosses the bridge as pixels: zero-copy is the only Viewer transport (K-183),
+// so a rendered frame reaches Dart as a texture handle and the read-back path
+// was deleted. Photographing the boundary is not a workaround around a call
+// that exists — it is the only place in the process where those pixels are
+// addressable at all. If the engine ever grows a call that renders a
+// composition to bytes off the playback path, this is the one function that
+// should change.
+
+/// The picture boundary of the Viewer currently on screen, or null when there
+/// is no Viewer up — the welcome screen's window, or a workspace with the panel
+/// closed. Set by the panel while it is mounted; see `_lendPicture`.
+GlobalKey? viewerPictureKey;
+
+/// How many pixels across a project thumbnail is captured at.
+///
+/// The welcome row draws it 64 wide, so this is that at 200 % and no more: a
+/// picture nobody will ever see at full size is bytes on somebody's disk and
+/// milliseconds on every save.
+const double projectThumbnailPixels = 128;
+
+/// Photograph the composition on screen as a small PNG, for the welcome
+/// screen's recent rows (K-466).
+///
+/// Null whenever there is nothing honest to hand back: no Viewer up, a boundary
+/// that has not painted yet, or a driver that will not read the picture back.
+/// A missing thumbnail is an ordinary state and the row is built for it.
+Future<Uint8List?> captureViewerPicturePng() async {
+  final boundary = viewerPictureKey?.currentContext?.findRenderObject();
+  if (boundary is! RenderRepaintBoundary) return null;
+  final size = boundary.size;
+  if (size.isEmpty) return null;
+  // The boundary is the *whole* picture at the current magnification, not the
+  // visible part of it (see the stack in `_stage`), so this is the composition
+  // frame however the Viewer happens to be zoomed or panned.
+  final ratio = (projectThumbnailPixels / size.width).clamp(0.001, 1.0);
+  final shot = await boundary.toImage(pixelRatio: ratio);
+  try {
+    final png = await shot.toByteData(format: dartui.ImageByteFormat.png);
+    return png?.buffer.asUint8List();
+  } finally {
+    shot.dispose();
+  }
+}
+
 class ViewerPanelFrb extends StatefulWidget {
   const ViewerPanelFrb({super.key});
 
@@ -423,22 +476,33 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     _animationLevel = scope.animationLevel;
     final round = t.shape == ThemeShape.round;
 
+    // How the chrome is arranged round the picture (K-448's setting, K-466's
+    // drawing): the drawing's split by default, or everything gathered into
+    // one strip at whichever end is asked for.
+    final arrangement = ui.workspace.interface.viewerBars;
+    final split = arrangement == ViewerBars.split;
+
     // The panel's own header strip (K-466): the Viewer's kicker, and the three
     // pickers the drawing puts at its right — the magnification, the preview
     // quality and the colour pipeline. The Viewer docks as a pane of its own,
     // so the dock draws no strip above it and this is the panel's only title.
-    final header = _ViewerHeader(
-      zoom: _zoom,
-      shownScale: _shownScale,
-      look: ui.viewerLook,
-      showToneMap: ui.workspace.interface.showToneMap,
-      onToneMap: ui.toggleViewerToneMap,
-      // The magnification menu is a jump to a named place, so it flies there
-      // like every other zoom (K-218) — from whatever is on screen, which is
-      // what the measured rectangle in the layout builder knows.
-      onZoom: (z) => _goToZoom(z, Offset.zero, from: _shownScale),
-      detached: round,
-    );
+    //
+    // The magnification menu is a jump to a named place, so it flies there
+    // like every other zoom (K-218) — from whatever is on screen, which is
+    // what the measured rectangle in the layout builder knows.
+    void goToNamedZoom(double? z) =>
+        _goToZoom(z, Offset.zero, from: _shownScale);
+    final header = split
+        ? _ViewerHeader(
+            zoom: _zoom,
+            shownScale: _shownScale,
+            look: ui.viewerLook,
+            showToneMap: ui.workspace.interface.showToneMap,
+            onToneMap: ui.toggleViewerToneMap,
+            onZoom: goToNamedZoom,
+            detached: round,
+          )
+        : null;
 
     // Both notifiers, because the transport shows two things the engine owns:
     // where the playhead is, and whether it is running.
@@ -473,6 +537,22 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
             onSnapshotTake: _takeSnapshot,
             onSnapshotHold: _holdSnapshot,
             detached: round,
+            // Gathered: the header's contents lead the one strip, in the
+            // order the two strips read.
+            leading: split
+                ? const []
+                : [
+                    Text(l10n.panelViewer.toUpperCase(), style: t.kickerOn),
+                    viewerBarGapBox(viewerBarGap),
+                    ...viewerPickers(
+                      zoom: _zoom,
+                      shownScale: _shownScale,
+                      look: ui.viewerLook,
+                      showToneMap: ui.workspace.interface.showToneMap,
+                      onToneMap: ui.toggleViewerToneMap,
+                      onZoom: goToNamedZoom,
+                    ),
+                  ],
           ),
         ),
       ),
@@ -582,10 +662,21 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     // is the point: the layout builder above measures what is left, so fit,
     // zoom and every hit-test are against a picture that no longer has a bar
     // sitting on it.
+    // The strips above and below the picture, in whichever arrangement is set:
+    // the drawing's header above and bar below, or the one gathered strip at
+    // the top or at the bottom.
+    final above = <Widget>[
+      if (header != null) header,
+      if (!split && arrangement == ViewerBars.top) bar
+    ];
+    final below = <Widget>[
+      if (split || arrangement == ViewerBars.bottom) bar,
+    ];
+
     if (!round) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [header, Expanded(child: stage), bar],
+        children: [...above, Expanded(child: stage), ...below],
       );
     }
     return ColoredBox(
@@ -593,16 +684,20 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          header,
-          SizedBox(height: t.tokens.tileGap),
+          for (final strip in above) ...[
+            strip,
+            SizedBox(height: t.tokens.tileGap)
+          ],
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(t.tokens.cardRadius),
               child: stage,
             ),
           ),
-          SizedBox(height: t.tokens.tileGap),
-          bar,
+          for (final strip in below) ...[
+            SizedBox(height: t.tokens.tileGap),
+            strip
+          ],
         ],
       ),
     );
@@ -1949,37 +2044,61 @@ class _ViewerHeader extends StatelessWidget {
           // several tabs in it.
           Text(l10n.panelViewer.toUpperCase(), style: t.kickerOn),
           const Spacer(),
-          // The picture's scale. The face hugs its own label: "Fit" and
-          // "400%" are different widths, and a common box left a gap that
-          // read as a missing control.
-          BareDropdown<int>(
-            key: const ValueKey('viewer-zoom'),
-            dense: true,
-            // -1: a wheel zoom between the listed steps; the face then reads
-            // the true percentage and the menu still offers the steps.
-            value: _zoomSteps.indexOf(zoom),
-            options: [for (var i = 0; i < _zoomSteps.length; i++) i],
-            label: (i) => i == -1
-                ? '${(shownScale * 100).round()}%'
-                : _zoomSteps[i] == null
-                    ? l10n.menuFit
-                    : '${(_zoomSteps[i]! * 100).round()}%',
-            onChanged: (i) => onZoom(_zoomSteps[i]),
-          ),
-          const SizedBox(width: viewerHeaderGap),
-          const _QualityDropdown(key: ValueKey('viewer-resolution')),
-          const SizedBox(width: viewerHeaderGap),
-          _ColourDropdown(
-            key: const ValueKey('viewer-colour'),
+          ...viewerPickers(
+            zoom: zoom,
+            shownScale: shownScale,
             look: look,
             showToneMap: showToneMap,
             onToneMap: onToneMap,
+            onZoom: onZoom,
           ),
         ],
       ),
     );
   }
 }
+
+/// The three pickers the drawing puts at the header's right-hand end, 6 apart.
+///
+/// A list rather than a widget because the strip they sit in is not always the
+/// header: with the bars gathered into one (K-448's setting) they lead the
+/// bottom bar instead, in this same order.
+List<Widget> viewerPickers({
+  required double? zoom,
+  required double shownScale,
+  required ViewerLook look,
+  required bool showToneMap,
+  required VoidCallback onToneMap,
+  required ValueChanged<double?> onZoom,
+}) =>
+    [
+      // The picture's scale. The face hugs its own label: "Fit" and "400%"
+      // are different widths, and a common box left a gap that read as a
+      // missing control.
+      BareDropdown<int>(
+        key: const ValueKey('viewer-zoom'),
+        dense: true,
+        // -1: a wheel zoom between the listed steps; the face then reads the
+        // true percentage and the menu still offers the steps.
+        value: _zoomSteps.indexOf(zoom),
+        options: [for (var i = 0; i < _zoomSteps.length; i++) i],
+        label: (i) => i == -1
+            ? '${(shownScale * 100).round()}%'
+            : _zoomSteps[i] == null
+                ? l10n.menuFit
+                : '${(_zoomSteps[i]! * 100).round()}%',
+        onChanged: (i) => onZoom(_zoomSteps[i]),
+      ),
+      const SizedBox(width: viewerHeaderGap),
+      const _QualityDropdown(key: ValueKey('viewer-resolution')),
+      const SizedBox(width: viewerHeaderGap),
+      _ColourDropdown(
+        key: const ValueKey('viewer-colour'),
+        look: look,
+        showToneMap: showToneMap,
+        onToneMap: onToneMap,
+      ),
+    ];
 
 /// A tick in a menu row, the mark the guides menu already uses.
 ///
@@ -2223,6 +2342,12 @@ class _ViewerBar extends StatelessWidget {
   /// panel's bottom edge under Sharp.
   final bool detached;
 
+  /// What leads the strip when the setting has gathered both bars into one
+  /// (K-448): the panel's kicker and the three pickers the header would
+  /// otherwise carry, in that same order. Empty in the drawing's own split,
+  /// where the header carries them.
+  final List<Widget> leading;
+
   const _ViewerBar({
     required this.channel,
     required this.grid,
@@ -2246,6 +2371,7 @@ class _ViewerBar extends StatelessWidget {
     required this.onSnapshotTake,
     required this.onSnapshotHold,
     required this.detached,
+    this.leading = const [],
   });
 
   @override
@@ -2271,6 +2397,8 @@ class _ViewerBar extends StatelessWidget {
           final loose = constraints.maxWidth >= _barMinimum;
           final row = Row(
             children: [
+              ...leading,
+              if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
               ..._looking(context, t),
               if (loose) const Spacer() else const SizedBox(width: 24),
               ..._transport(t),

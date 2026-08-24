@@ -351,6 +351,7 @@ void main() {
           'settings-compact',
           'settings-themed-scopes',
           'settings-themed-surround',
+          'settings-viewer-bars',
           'settings-multiwave',
           'settings-waveform-from-bottom',
         ],
@@ -411,7 +412,17 @@ void main() {
             .tap(find.byKey(ValueKey<String>('settings-page-${page.key}')));
         await tester.pumpAndSettle();
         for (final control in page.value) {
-          expect(find.byKey(ValueKey<String>(control)), findsOneWidget,
+          final finder = find.byKey(ValueKey<String>(control));
+          // The page is a lazy list, so a row below the fold is not built
+          // until it is scrolled to. Scroll to it rather than asserting the
+          // window happens to be tall enough for every page — which is what
+          // it did until the Appearance page grew a row.
+          if (finder.evaluate().isEmpty) {
+            await tester.scrollUntilVisible(finder, 120,
+                scrollable: find.byType(Scrollable).last);
+            await tester.pumpAndSettle();
+          }
+          expect(finder, findsOneWidget,
               reason: '$control belongs to the ${page.key} page');
         }
       }

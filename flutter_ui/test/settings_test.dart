@@ -77,6 +77,27 @@ void main() {
     expect(InterfaceSettings.fromJson(tight.toJson()).compact, isTrue);
   });
 
+  /// K-448's arrangement choice, settled by K-466's drawing. Split is the
+  /// default because it is what the drawing draws; the other two gather the
+  /// chrome into one strip. Stored by name, so a reordered enum cannot
+  /// silently rearrange somebody's Viewer.
+  test("the Viewer's bars are split unless a settings file says otherwise", () {
+    expect(InterfaceSettings().viewerBars, ViewerBars.split);
+    expect(InterfaceSettings.fromJson(const {'ui_scale': 1.25}).viewerBars,
+        ViewerBars.split,
+        reason: "a file written before the field existed gets the drawing's");
+    expect(
+        InterfaceSettings.fromJson(const {'viewer_bars': 'nonsense'})
+            .viewerBars,
+        ViewerBars.split,
+        reason: 'and so does a name no build of Lumit ever wrote');
+    for (final bars in ViewerBars.values) {
+      final chosen = InterfaceSettings()..viewerBars = bars;
+      expect(chosen.toJson()['viewer_bars'], bars.name);
+      expect(InterfaceSettings.fromJson(chosen.toJson()).viewerBars, bars);
+    }
+  });
+
   /// The two densities are the two the design doc's §12A.6 table lists, and
   /// Regular is the one a theme carries when nobody has chosen.
   test('the density tokens are the table, and Regular is the default', () {
@@ -123,6 +144,7 @@ void main() {
       showToneMap: true,
       easingInPopup: true,
       compact: true,
+      viewerBars: ViewerBars.bottom,
     );
     final back = InterfaceSettings.fromJson(all.toJson());
     expect(back.language, 'de');
@@ -139,9 +161,10 @@ void main() {
     expect(back.showToneMap, isTrue);
     expect(back.easingInPopup, isTrue);
     expect(back.compact, isTrue);
+    expect(back.viewerBars, ViewerBars.bottom);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 14);
+    expect(all.toJson().keys.length, 15);
   });
 
   test('the Retime seconds preference round-trips', () {

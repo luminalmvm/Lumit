@@ -8549,6 +8549,12 @@ picture of the screen, kept in the frontend, thrown away when you take the next 
 In the middle, the transport: to the start, back a frame, play, on a frame, to the end, and
 the clock. Click the clock and type a time to go there.
 
+Two strips is the default because it is what the drawing draws, but it is a choice:
+**Settings → Appearance → Viewer → Viewer bars** will put everything on one strip instead,
+above the picture or below it. Nothing is added or taken away by that — the same controls
+in the same order, on one row rather than two, for anyone who would rather spend those 22
+pixels once.
+
 At the far right, one line that says what is on screen: which composition, at what time, at
 how many pixels the engine actually made it, and how big it is being drawn. The second
 pixel count is the interesting one — `1920×1080 → 960×540` means you are being shown a
