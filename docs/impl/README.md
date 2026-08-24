@@ -46,3 +46,4 @@ Rules of engagement:
 | [tracking.md](tracking.md) | Camera and object tracking: affine KLT tracks, global SfM solve, dynamic-track rejection, zoom-cut handling (K-415) | 08, 16, 05 |
 | [node-graph.md](node-graph.md) | The layer's driver graph (K-471): model, ops, evaluation, port types, the points stream, and phase 3's ordered work packages | 03, 05, 15 |
 | [particulate.md](particulate.md) | The Particulate design (K-446): closed-form points evaluation, the parameter surface, the finalised `PointsStream` layout, budgets, and the simulated exception's contract — design only until built | 08, 06, 13 |
+| [ocio.md](ocio.md) | OCIO colour management (K-489/K-490): the native transform engine, config parsing and resolution, the deterministic bake, where each edge runs, the seam and UI surfaces, the golden conformance suite, and the ordered work packages — design only until built | 06, 07, 03, 10 |

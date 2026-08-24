@@ -128,6 +128,7 @@ These three words are **not interchangeable**.
 | **Wire** / **port** | A connection on the Graph panel's canvas, and the typed socket it plugs into. Wire and socket colour is the data type (K-472). |
 | **Points stream** | The typed, evaluated data a points-emitting effect produces (Particulate first, K-446/K-472) — per-frame particle attributes, never stored in the project, like an image. |
 | **Working space** | The engine's internal pixel format: scene-linear, premultiplied alpha, fp16 (fp32 opt-in per comp). |
+| **OCIO config** | An OpenColorIO configuration a project can name (K-489/K-490): one `config.ocio` file plus the LUT files it points at, whose colour space, display and view names fill the footage item's colour-space tag, the Viewer's colour-pipeline picker, and the export's output space. |
 
 ## 7. Interface
 

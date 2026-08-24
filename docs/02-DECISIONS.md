@@ -13198,3 +13198,171 @@ where every glyph is a square of the type size, so a label measured there is rou
 what it renders. The width above comes from the shipped fonts' own advance widths;
 `recovery_metrics_test` pins what survives either font — the frame, the band, and three
 full-width buttons one above the next.
+
+## K-489 — OCIO is hosted natively in Rust: one implementation, baked artefacts, proven against the reference
+
+**DECIDED 2026-08-25** (owner ruling that OCIO support is now in scope; the design step's
+recommendation, docs/impl/ocio.md §1). The fork was linking the official OpenColorIO C++
+library or implementing the config format's core natively. **Native Rust** — a
+`lumit-colour` engine crate owning the `config.ocio` grammar, the transform op set real
+configs are made of (matrix, exponent, log, CDL, range, group, 1D/3D file LUTs via
+`.spi1d`/`.spi3d`/`.cube`/CLF with tetrahedral interpolation, builtin transforms in two
+tiers), resolution through the reference space, and a deterministic CPU bake of every
+resolved chain to a small artefact (factorised curves + matrix where the chain allows;
+a shaper + 65³ cube otherwise) that the Viewer's display pass and the export's identical
+blit both sample.
+
+Four reasons, in weight order. **K-031 is structural**: the official library computes
+differently on CPU and GPU by design, and a preview that is the export cannot be built on
+a library with two answers — baking its output ourselves would already mean writing the
+bake, the samplers and the oracle natively. **Build weight**: OCIO plus yaml-cpp, Imath,
+pystring and minizip-ng under CMake on three platforms (K-304) would be the workspace's
+second foreign build system after ffmpeg, for a parser and arithmetic. **Precedent**: the
+repo already hosts the OpenFX C ABI natively and parses `.cube` natively; the standing
+answer to a foreign spec is "implement it, gate it with tests". **Determinism**: a native
+bake is fixed-order f32 arithmetic — same config, same artefact bytes, every platform —
+so artefacts content-hash into the frame key.
+
+The honest cost is fidelity risk, and its mitigation is proof rather than care: **no
+transform class is claimed until its golden fixtures pass** — input/expected tables
+generated offline with the reference OpenColorIO library and checked in with provenance —
+and a config using anything outside the implemented set is **refused by name**, never
+approximated. Licence was checked and not decisive (OCIO is BSD-3-Clause). Supersedes
+docs/06 §3.3's "OCIO v2 integration is post-v1 … via OCIO's GPU shader API, transpiled to
+WGSL" in both respects: it is in scope now, and it is not the C++ library's shader
+generator.
+
+## K-490 — OCIO's v1 scope: five surfaces, the working space stays fixed, the config is a project property
+
+**DECIDED 2026-08-25** (the same design step, docs/impl/ocio.md §2–§3). All five surfaces
+ship together — config loading, per-footage input assignment, the Viewer's display/view
+picker, the export's named output space (`ColourSpace::Ocio(name)` stops refusing), and
+the project-settings Colour group — because each is small once the core exists and a
+colour pipeline with a missing edge is worse than none.
+
+**The working space stays scene-linear Rec.709/sRGB, fp16, premultiplied, with OCIO at
+the edges.** The Nuke-style alternative — the working space becomes the config's
+`scene_linear` role — is deliberately not taken in v1: Oklab's matrices (K-034), the
+perceptual blend modes' Rec.709 luma, the tone-map curve and the hardware sRGB texture
+trick all hard-code the working primaries, and each would silently become wrong. Bridging
+uses the OCIO v2 interchange roles where a config declares them (exact); a legacy config
+without them composes through its `scene_linear` role — end-to-end trips stay exact, only
+Lumit's own perceptual ops read wide-gamut pixels as if Rec.709, which is what every
+OCIO v1-era host did and is stated on the project-settings face. A config-defined working
+space is recorded follow-up with its own decision, not a side effect of loading a file.
+
+**The config is a project property** (`Document::colour`, a `MediaRef` so relative-path
+serialisation and fingerprint relink come for free, K-173), and per-item assignment is a
+field on `FootageItem` — it changes pixels, so it travels in the `.lum`. Loaded configs,
+resolved chains and baked artefacts are derived state, cached by content hash, never
+stored. **The degrade is calm and asymmetric**: a missing or refused config never blocks
+opening — preview falls back to the built-in family with the picker's face saying so, and
+every stored name is kept — while an export naming an unavailable space keeps K-479's
+refusal, because a wrong colour space in a delivered file is worse than an export that
+did not run. Deliberately out of v1, recorded in the note: config-defined working space,
+context variables, `FixedFunctionTransform` and the grading ops, 3D-LUT inversion, a
+standalone looks picker.
+
+## K-491 — The points-stream programme is commissioned: K-474 and K-475 are confirmed
+
+**DECIDED 2026-08-25** (owner commission, 2026-08-24: "begin the work on the point
+stream type stuff that we can use to drive things and render etc"). Particulate and the
+points stream move from design to implementation, and the commission is the approval the
+two PROPOSED entries were waiting on: **K-474** (closed-form evaluation, no simulation
+state, every frame random-access) and **K-475** (the particle cap is the user's budget
+dial, with its four gated numbers) are confirmed **DECIDED** as written.
+[impl/particulate.md](impl/particulate.md) remains the effect's design;
+[impl/points-stream.md](impl/points-stream.md) is the infrastructure's — consumption,
+consumers, contract, seam — and holds the ordered work packages (PS1–PS7).
+
+## K-492 — A points connection is a graph wire, and the first stack-sourced data edge
+
+**DECIDED 2026-08-25** (this design step, closing particulate.md's consumption question —
+the Tier C2 family question). The points family reads its Points input as a **graph
+edge**, not a reference parameter: `OutputRef` gains `EffectData { effect, port }` — the
+first wire whose source is a stack effect — feeding the existing `InputRef::Param` on a
+declared data input. One storage, the edge; no parameter/edge override pair like the
+matte row's. The K-471 invariant holds without a carve-out to the chain rule: a points
+wire is a **data** edge, never an image edge — it cannot reorder, branch or skip the
+image chain, and the stack view renders it as a named source on the consumer's row, the
+same honesty as *driven*. The rules: type match, same layer only (a cross-layer tap
+would be a layer-reference parameter with a derived source node, deferred), one wire per
+input, and — the recorded carve-out — **a stack-to-stack points wire flows down the
+stack** (producer strictly earlier than consumer), so an image-dependent emitter's
+stream is well-defined at its consumer; a reorder that would invert one heals (drops the
+edge) inside `prune_to`, as deleting the producer does, because a stack edit cannot be
+refused on the wiring's behalf. The cycle check extends through effect data sources
+(stream → driver → parameter-of-the-same-effect is a refusable loop), and `prune_to`
+drops edges sourcing from a removed effect. [impl/points-stream.md](impl/points-stream.md)
+§1 carries the arms and refusals.
+
+## K-493 — The export's three sound options are real, and a mono fold-down is sum-and-halve
+
+**DECIDED 2026-08-25.** Completes the Audio row K-485 drew dead. Sample rate, sample width
+and channel layout are `ExportSpec` fields now, honoured through the same mix and the same
+encoder every export already used; nothing in K-479's capability rule is reversed, and this
+entry is what that rule now refuses on.
+
+**The rate resamples at the source, not after the mix.** Three rates — 44 100, 48 000, 96 000
+— and every audio source is decoded *straight to* the chosen one through the resampler the
+preview mix already uses. There is no second sampling step, so there is nothing for a second
+step to disagree with the first about: `mixdown` was always given a rate and always honoured
+it, and the export simply stopped being the one caller that passed a constant. A rate off the
+list is refused rather than nudged to the nearest one, for K-479's reason.
+
+**AAC has no sample width, and says so.** 16 or 24 bits, on the uncompressed forms only. The
+capability table lists sixteen for AAC, which is not a claim about AAC's precision — a lossy
+transform codec stores coefficients, not samples, and has no width to set at all. An `.mp4` or
+an `.m4a` asked for 24 bits is therefore **refused**: accepting the setting and writing the
+identical file either way would be the quiet coercion K-479 exists to prevent. A `.wav` takes
+either width, through `pcm_s16le` and `pcm_s24le`, and the widths were checked by opening the
+real encoders at every rate and layout rather than by trusting a table.
+
+**A mono export folds the finished stereo mix down, once, and the law is `(L + R) / 2`.** The
+comp mixes in stereo because playback does, so preview and export cannot drift; mono is the
+last thing that happens to the buffer, after the range cut, where nothing else reads it.
+Sum-and-halve is the delivery law: a centred signal keeps its own level, a correlated pair
+cannot clip on the way down, and a signal present on one side only arrives 6 dB quieter, which
+is what one loudspeaker really plays. The ×1/√2 alternative preserves the *power* of two
+uncorrelated sides and can overshoot full scale on a correlated pair — it is the right law in
+the other direction, which is why the decoder's own mono→stereo upmix uses it and the test
+asserts that asymmetry rather than hiding it.
+
+**Old presets are unchanged by construction.** All three fields default to what every export
+has always written — 48 kHz, sixteen bits, stereo — under the struct's standing
+`#[serde(default)]`, so a stored spec that never heard of them loads to exactly the file it
+used to produce, and a test removes the three keys from a serialised default and asserts the
+result is still equal to it.
+
+**The seam is not crossed yet, on purpose.** `BridgeExportSpec` still carries what it carried
+and `to_export_spec` fills the three from `ExportSpec::default()` — one place to change when
+the dialog's rows come alive, and no codegen in a commit whose subject is the engine.
+
+## K-494 — The v1 points consumers: Particulate's render modes, and the Points sample driver
+
+**DECIDED 2026-08-25.** The owner's "drive things and render" resolves to two v1
+consumers. **Render** is Particulate's own instanced modes — disc, sprite, streak — per
+K-474's design. **Drive** is one new driver, **Points sample**: a Points data input
+(wire-only, no stored value), a Position parameter (px@comp, the query point), and two
+number outputs — Count (live particles) and Nearest distance (px@comp to the nearest
+live particle; an unwired or empty stream reads Count 0 and Nearest distance 1e9,
+"nothing is anywhere near"). It evaluates the shared closed-form CPU module — the same
+stream the picture draws, bit-identical across machines — which is legal precisely
+because a K-474 stream is a pure function of document and time, never of pixels.
+**Emit-from-image breaks that premise**, so that package owns a recorded constraint on
+driver-side sampling of image-dependent streams and decides it with its own entry. The
+rest of the family — Connect points, Clone to points, Trail, Scatter, emit-from-image,
+cross-layer taps — is deferred as named packages in
+[impl/points-stream.md](impl/points-stream.md) §2.3, all consuming the same contract.
+
+## K-495 — Points are 2D: `Vec2` now, 2.5D stays the recorded growth path
+
+**DECIDED 2026-08-25** (closing particulate.md's Vec2/Vec3 question honestly).
+`PointsStream::position` and `speed` are **`Vec2`**. The effect is 2D, the whole v1
+family is 2D, and a `Vec3` today would be a dead z lane in every buffer, kernel and test
+for a feature with no decision behind it. 2.5D points remain exactly what
+node-graph.md §6.2 recorded: a growth path — positions grow to `Vec3` if and when 2.5D
+is decided, changing buffer strides and nothing in the consumption or evaluation
+contracts. The layout is otherwise confirmed as particulate.md §4 finalised it,
+`life` buffer and id-is-birth-index included.
+
