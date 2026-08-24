@@ -249,10 +249,12 @@ class _HouseButtonState extends State<HouseButton> {
                 Border.all(color: edge ?? const Color(0x00000000), width: 1),
           ),
           child: DefaultTextStyle(
+            // A dropdown's closed face reads in the secondary text colour —
+            // the mockups' own (§12A.6); bright primary at 11px reads bold.
             style: enabled
                 ? (labelStyle ??
                     (label == null
-                        ? t.bodyPrimary
+                        ? (widget.dropdown ? t.body : t.bodyPrimary)
                         : t.bodyPrimary.copyWith(color: label)))
                 : (labelStyle ?? t.body.copyWith(color: t.textDisabled)),
             child: _capitalised(widget.child, widget.primary),
