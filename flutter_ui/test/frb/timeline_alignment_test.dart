@@ -782,6 +782,97 @@ void main() {
           reason: 'and the group can still be dragged narrower than it starts');
     });
 
+    /// 10d-quater. **A lane key is the drawing's 11 in Layers mode too**
+    /// (K-459), and its mark is **split at its vertical centre** — the left
+    /// half drawn from the interpolation coming in, the right half from the
+    /// one going out (K-457).
+    ///
+    /// Two claims, asked two ways: the size off the rendered lane, because
+    /// that is what a reader aims at; the shapes off the geometry itself,
+    /// because a triangle's tip is a fact about the path and reading it back
+    /// out of painted pixels would only be measuring the renderer.
+    testWidgets('a lane key stands 11 tall in Layers mode', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: 40),
+            value: 0,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.hold(),
+          ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await tester.tap(find.byKey(ValueKey<String>('tl-twirl-${idOf(layer)}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transform'));
+      await tester.pumpAndSettle();
+
+      // The lane is there and drawing keys — the size claim below is about
+      // the constant both modes now share.
+      expect(
+          find.byKey(const ValueKey<String>('tl-lane-diamonds')), findsWidgets,
+          reason: 'a twirled-open property draws its own lane of keys');
+      expect(laneKeyHalf * 2, 11,
+          reason: 'a key stands 11 point to point in Layers mode as it does '
+              'in Keys — Layers used to draw them at 8 (K-459)');
+      expect(
+          tester
+              .getRect(
+                  find.byKey(const ValueKey<String>('tl-lane-diamonds')).first)
+              .height,
+          greaterThanOrEqualTo(laneKeyHalf * 2),
+          reason: 'and the lane it is drawn in has the room for it');
+    });
+
+    /// 10d-quinquies. **The mark is split at its vertical centre** (K-457):
+    /// each half is its own side's shape, all three shapes stand the same
+    /// height, and a bezier side is the **hourglass** — two triangles tip to
+    /// tip — which supersedes the rounded shape Keys mode first drew.
+    test('a key\'s two halves are drawn from their own sides', () {
+      const x = 100.0, mid = 10.0, half = laneKeyHalf;
+      Path pathOf(KeyShape s, {required bool left}) =>
+          keyHalfPath(s, x, mid, half, left: left);
+
+      // One height, every shape, either side — the whole of "all at one
+      // height", and the thing that keeps a mixed lane reading as one row.
+      for (final shape in KeyShape.values) {
+        for (final left in [true, false]) {
+          final box = pathOf(shape, left: left).getBounds();
+          expect(box.height, closeTo(half * 2, 0.01),
+              reason: '$shape stands the same height as the rest');
+          expect(left ? box.right : box.left, closeTo(x, 0.01),
+              reason: '$shape is split on the centre line, not beside it');
+        }
+      }
+
+      // The diamond comes to a point at top and bottom; the square does not.
+      // Sampled a whisker inside the top edge, on the half's own side.
+      final justInside = Offset(x - half + 0.5, mid - half + 0.5);
+      expect(pathOf(KeyShape.diamond, left: true).contains(justInside), isFalse,
+          reason: 'a diamond is a point at the top, so its corner is empty');
+      expect(
+          pathOf(KeyShape.square, left: true)
+              .contains(Offset(x - 1, mid - half + 0.5)),
+          isTrue,
+          reason: 'a square is at full width there');
+
+      // The hourglass: wide at top and bottom, pinched to nothing at the
+      // centre — which is what "two triangles tip to tip" means and what a
+      // circle could never say.
+      final hourglass = pathOf(KeyShape.hourglass, left: true);
+      expect(hourglass.contains(Offset(x - 1, mid - half + 0.5)), isTrue,
+          reason: 'wide where the value is furthest from the key');
+      expect(hourglass.contains(Offset(x - 1, mid - 0.5)), isFalse,
+          reason: 'and pinched to the centre point the mark is split on');
+      expect(hourglass.contains(Offset(x - 1, mid + half - 0.5)), isTrue,
+          reason: 'the second triangle stands under the first');
+    });
+
     /// 10e. **Keys mode is the same table** (K-455): the dope sheet swaps the
     /// body under the shared ruler, so its rows take the density's lane row
     /// on both sides and its own filter row stands exactly where the column

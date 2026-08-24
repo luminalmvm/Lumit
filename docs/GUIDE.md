@@ -3127,6 +3127,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   without hunting for them by eye. (Effect parameters get this same navigator now too — an
   animated Glow radius or blur amount steps and adds/removes keys from its row exactly as a
   transform property does.)
+  **A key's mark is two halves, and each half is a shape.** A keyframe has two sides — how
+  the value *arrives* at it and how it *leaves* — and they need not agree: a move can ease
+  in and then hold. So the mark on the lane is split down its middle, and each half is
+  drawn from its own side's interpolation: a **diamond** point for linear, an **hourglass**
+  for eased (bezier), a **square** block for a hold. A key that eases in and holds out is
+  therefore half hourglass and half square, which is the truth about it and is not
+  something one shape could ever have said. All three stand the same height, so a lane of
+  mixed keys still reads as one even row of marks. The same marks at the same size in
+  Layers mode and in Keys mode — one painter draws both.
   **The diamonds on the lane are live, not just a picture (notes 2.1/2.6).** Click a keyframe
   diamond to select it — it wears a ring — and **drag it left or right to change its time**;
   while the **magnet** (the bottom-bar toggle, on by default) is lit it snaps to the nearest

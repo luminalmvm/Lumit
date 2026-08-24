@@ -110,31 +110,77 @@ const double _labelDotSize = 6;
 /// same one, so the two modes do not swap bar shapes on the switch).
 const double _hScrollbarHeight = 7;
 
-/// Half a keyframe diamond's width on a property's own lane.
-const double _keyHalf = 4;
+/// Half a keyframe's height on a property's own lane — **the same in Layers
+/// mode and in Keys mode** (K-459). The drawing measures the key 11px point
+/// to point in both, so this is 5.5. Layers mode used to draw them at 8: a
+/// mark you take hold of should not shrink because there happen to be bars
+/// beside it, and the two modes showing the same key at two sizes made the
+/// switch between them look like a change to the comp.
+const double laneKeyHalf = 5.5;
 
-/// The same in **Keys mode**, where the keys are the whole subject and the
-/// drawing gives them the room to be aimed at: the mockup's diamond measures
-/// 11px point to point.
-const double keysKeyHalf = 5.5;
+/// How a key is drawn: the shape says its interpolation (§12A.1, K-457 —
+/// **diamond linear, hourglass bezier, square hold**), which is what lets a
+/// lane of keys be read rather than merely counted.
+enum KeyShape { diamond, hourglass, square }
 
-/// How a key is drawn: the shape says its interpolation (§6.2 — diamond
-/// linear, square hold, circle bezier), which is what lets the dope sheet be
-/// read rather than merely counted.
-enum KeyShape { diamond, square, circle }
+/// One side of a key's interpolation as a shape. Each side answers for its own
+/// half of the mark (K-457), so nothing here has to choose between them: a key
+/// that eases in and holds out is half hourglass and half square, which is the
+/// truth about it and was previously unsayable.
+KeyShape keyShapeOfSide(BridgeSideInterp side) => switch (side) {
+      BridgeSideInterp_Hold() => KeyShape.square,
+      BridgeSideInterp_Bezier() => KeyShape.hourglass,
+      _ => KeyShape.diamond,
+    };
 
-/// [key]'s shape. Hold wins over bezier: a held key is a step, and a step is
-/// the one thing you must not mistake for a curve.
-KeyShape keyShapeOf(BridgeKeyframe key) {
-  if (key.interpIn is BridgeSideInterp_Hold ||
-      key.interpOut is BridgeSideInterp_Hold) {
-    return KeyShape.square;
-  }
-  if (key.interpIn is BridgeSideInterp_Bezier ||
-      key.interpOut is BridgeSideInterp_Bezier) {
-    return KeyShape.circle;
-  }
-  return KeyShape.diamond;
+/// [key]'s two halves: the shape of the interpolation coming **in** to it, and
+/// of the one going **out**. The mark is split at its vertical centre and each
+/// half drawn from its own side.
+(KeyShape, KeyShape) keyShapeOf(BridgeKeyframe key) =>
+    (keyShapeOfSide(key.interpIn), keyShapeOfSide(key.interpOut));
+
+/// One side of one key's mark: [shape]'s left half when [left], its right half
+/// otherwise, standing [half] above and below [mid] and split down the line at
+/// [x] (K-457).
+///
+/// **Every shape is the same height** — that is what makes a lane of mixed
+/// keys read as one row of marks rather than as a row that also changes size.
+/// Only the diamond is as wide as it is tall; the other two take the drawing's
+/// narrower 8-in-11 box, which is what keeps a hold key from reading as a
+/// diamond that failed to turn.
+///
+/// Top level, and returning the path rather than drawing it, so the geometry
+/// can be asked questions directly: what a mark's halves are is a claim about
+/// shapes, and reading it back out of a rendered lane would be measuring the
+/// renderer.
+Path keyHalfPath(KeyShape shape, double x, double mid, double half,
+    {required bool left}) {
+  final w =
+      (shape == KeyShape.diamond ? half : half * 8 / 11) * (left ? -1.0 : 1.0);
+  return switch (shape) {
+    KeyShape.diamond => Path()
+      ..moveTo(x, mid - half)
+      ..lineTo(x + w, mid)
+      ..lineTo(x, mid + half)
+      ..close(),
+    // A square stood square, not on its corner.
+    KeyShape.square => Path()
+      ..addRect(Rect.fromLTRB(
+          left ? x + w : x, mid - half, left ? x : x + w, mid + half)),
+    // Two triangles tip to tip: half an hourglass is still two triangles,
+    // meeting at the centre point the whole mark is split on. Two subpaths
+    // rather than one outline, because a polygon drawn through its own pinch
+    // point fills the wrong side of itself.
+    KeyShape.hourglass => Path()
+      ..moveTo(x + w, mid - half)
+      ..lineTo(x, mid - half)
+      ..lineTo(x, mid)
+      ..close()
+      ..moveTo(x + w, mid + half)
+      ..lineTo(x, mid + half)
+      ..lineTo(x, mid)
+      ..close(),
+  };
 }
 
 /// The same on a **shut layer's** row: smaller than the keys you take hold
@@ -7892,10 +7938,6 @@ class _LayerArea extends StatelessWidget {
       row: row,
       rowId: rowId,
       keys: rowKeys,
-      // Keys mode draws them bigger, and draws the interpolation as shape
-      // (§6.2) — the same diamonds, the same drag, read closer up.
-      half: keys ? keysKeyHalf : _keyHalf,
-      shaped: keys,
       axis: axis,
       fps: fps,
       fpsNum: fpsNum,
@@ -8016,12 +8058,6 @@ class _KeyLane extends StatefulWidget {
   final void Function(int index, bool additive) onSelectKey;
   final VoidCallback onChanged;
 
-  /// Half a key's width, and whether its **shape** says its interpolation
-  /// (§6.2). Keys mode draws bigger and shaped; Layers mode draws the diamond
-  /// it always has.
-  final double half;
-  final bool shaped;
-
   const _KeyLane({
     super.key,
     required this.entry,
@@ -8037,8 +8073,6 @@ class _KeyLane extends StatefulWidget {
     required this.selectedKeys,
     required this.onSelectKey,
     required this.onChanged,
-    this.half = _keyHalf,
-    this.shaped = false,
   });
 
   @override
@@ -8139,10 +8173,10 @@ class _KeyLaneState extends State<_KeyLane> {
               axis: widget.axis,
               colour: t.animated,
               chosen: t.textPrimary,
-              half: widget.half,
-              shapes: widget.shaped
-                  ? [for (final k in widget.keys) keyShapeOf(k)]
-                  : null,
+              // The same size and the same shapes in both modes (K-457,
+              // K-459): a key says its interpolation wherever it is drawn,
+              // and says it at the size it is aimed at.
+              shapes: [for (final k in widget.keys) keyShapeOf(k)],
             ),
           ),
         ),
@@ -8286,16 +8320,15 @@ class _LaneKeysPainter extends CustomPainter {
   final Color colour;
   final Color chosen;
 
-  /// Half a diamond's width. [_keyHalf] on a property's own lane; half of
-  /// that on a shut layer's row, where the diamonds are a summary rather than
-  /// the things you drag (§12A.1).
+  /// Half a key's height. [laneKeyHalf] on a property's own lane in either
+  /// mode; half of that on a shut layer's row, where the marks are a summary
+  /// rather than the things you drag (§12A.1).
   final double half;
 
-  /// One shape per key (§6.2), or null for the plain diamonds Layers mode has
-  /// always drawn. Only Keys mode asks for shapes: the dope sheet is where a
-  /// comp's interpolation is read at a glance, and a lane of bars has no room
-  /// to say it.
-  final List<KeyShape>? shapes;
+  /// Each key's two halves — the shape of the interpolation coming in and the
+  /// one going out (K-457) — or null on a shut layer's summary row, where a
+  /// plain diamond is all a mark that cannot be aimed at has to say.
+  final List<(KeyShape, KeyShape)>? shapes;
 
   const _LaneKeysPainter({
     required this.frames,
@@ -8303,7 +8336,7 @@ class _LaneKeysPainter extends CustomPainter {
     required this.axis,
     required this.colour,
     required this.chosen,
-    this.half = _keyHalf,
+    this.half = laneKeyHalf,
     this.shapes,
   });
 
@@ -8313,36 +8346,11 @@ class _LaneKeysPainter extends CustomPainter {
     for (var i = 0; i < frames.length; i++) {
       final x = axis.xOf(frames[i]);
       final paint = Paint()..color = selected.contains(i) ? chosen : colour;
-      switch (shapes == null || i >= shapes!.length
-          ? KeyShape.diamond
-          : shapes![i]) {
-        case KeyShape.diamond:
-          canvas.drawPath(
-            Path()
-              ..moveTo(x, mid - half)
-              ..lineTo(x + half, mid)
-              ..lineTo(x, mid + half)
-              ..lineTo(x - half, mid)
-              ..close(),
-            paint,
-          );
-        // A square stood square, not on its corner — and a shade narrower
-        // than it is tall, as the drawing has it, which is what keeps it from
-        // reading as a diamond that failed to turn. The ratios are the
-        // drawing's own: against a diamond spanning 11, a hold key measures
-        // 7 × 8 and a bezier key 8 across.
-        case KeyShape.square:
-          canvas.drawRect(
-            Rect.fromCenter(
-              center: Offset(x, mid),
-              width: half * (7 / 5.5),
-              height: half * (8 / 5.5),
-            ),
-            paint,
-          );
-        case KeyShape.circle:
-          canvas.drawCircle(Offset(x, mid), half * (4 / 5.5), paint);
-      }
+      final (into, out) = shapes == null || i >= shapes!.length
+          ? (KeyShape.diamond, KeyShape.diamond)
+          : shapes![i];
+      canvas.drawPath(keyHalfPath(into, x, mid, half, left: true), paint);
+      canvas.drawPath(keyHalfPath(out, x, mid, half, left: false), paint);
     }
   }
 

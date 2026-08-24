@@ -1844,9 +1844,10 @@ void main() {
 
       // The sizes themselves, not only their ratio: a diamond that shrank at
       // both ends would keep the ratio and lose the mark. A property's own
-      // key is 8 across (half 4); the mockup's summary diamond is a 4px
-      // square on its corner, 4√2 ≈ 5.7 point to point (half 2.8).
-      expect(lane.half, 4.0, reason: 'a lane diamond is 8 across');
+      // key is the drawing's 11 point to point in **both** modes (half 5.5,
+      // K-459 — it was 8 here); the mockup's summary diamond is a 4px square
+      // on its corner, 4√2 ≈ 5.7 point to point (half 2.8), and is unchanged.
+      expect(lane.half, laneKeyHalf, reason: 'a lane key is 11 across');
       expect(painter.half, 2.8, reason: 'a summary diamond is 5.7 across');
     });
 
@@ -5346,7 +5347,7 @@ void main() {
 
       // The drawing's own two distances: a key spans 11 point to point, and a
       // property row starts 30 in, clear of the twirl and the colour dot.
-      expect(keysKeyHalf * 2, 11);
+      expect(laneKeyHalf * 2, 11);
       expect(keysPropertyIndent, 30);
       final group = tester.getRect(find.text('Transform'));
       expect(group.left - prop.left, closeTo(keysPropertyIndent, 0.5),
@@ -5381,9 +5382,20 @@ void main() {
 
       final keys =
           (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
-      expect(keyShapeOf(keys[0]), KeyShape.square,
-          reason: 'a held key is a step, and a step is drawn square');
-      expect(keyShapeOf(keys[1]), KeyShape.diamond);
+      // Linear in, held out: the two halves disagree, and the mark says so.
+      expect(keyShapeOf(keys[0]), (KeyShape.diamond, KeyShape.square),
+          reason: 'a held key is a step, and a step is drawn square — but '
+              'only on the side that holds');
+      expect(keyShapeOf(keys[1]), (KeyShape.diamond, KeyShape.diamond));
+
+      // And a bezier side is the hourglass, which supersedes the rounded
+      // shape the Keys mode first drew (K-457).
+      expect(
+          keyShapeOfSide(const BridgeSideInterp.bezier(
+              BridgeBezierSide(speed: 0, influence: 33))),
+          KeyShape.hourglass);
+      expect(keyShapeOfSide(const BridgeSideInterp.hold()), KeyShape.square);
+      expect(keyShapeOfSide(const BridgeSideInterp.linear()), KeyShape.diamond);
     });
   }, skip: !engineAvailable);
 }

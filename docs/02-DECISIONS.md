@@ -12281,3 +12281,21 @@ bar's Interpolation / Reverse / Copy / Paste-at-playhead strip. Where those tool
 belong in Layers per K-441's own bullet, the shared machinery serves both; where the
 engine lacks an op (reverse, paste at playhead), the op is built with it, per the
 standing build-the-bridge-parts rule.
+
+## K-459 — A lane key is the same size in Layers mode as in Keys
+
+**DECIDED 2026-08-24.** The owner's ruling, superseding K-451's "the 8px one a property's
+own lane draws" in §12A.6. A keyframe on a property's lane measures **11px point to
+point in both modes** — the size the approved drawings give it, and the size Keys mode
+already drew. Layers mode drew it at 8, which made the same key change size as the panel
+switched view, and made the mark harder to aim at in the mode where it is most often
+dragged. **A shut layer's summary diamonds keep their smaller scale**: they are a
+statement that something is keyed inside, not a thing to take hold of.
+
+The shapes go with the size. K-457's marks are drawn by the one painter both modes share,
+so Layers mode now says a key's interpolation too, and `keyShapeOf` answers with the
+**pair** of shapes a split mark needs rather than folding a key's two sides into one
+verdict. The bezier side is the **hourglass**, which supersedes the rounded shape the
+Keys mode landed with. Nothing new crosses the bridge: `BridgeKeyframe` has carried
+`interp_in` and `interp_out` since the graph editor could edit them, so this is exposure
+of a seam that was already there.

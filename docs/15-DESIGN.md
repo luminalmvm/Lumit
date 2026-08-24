@@ -442,7 +442,11 @@ Sequence layer show thumbnails/waveforms.
   of the same data and must look like it.
 - Keyframe markers at rest: `text_secondary` fills with `surface_1` outline. Selected:
   `animated` fill (K-439). Hovered: `animated` @ 40% halo. Interpolation is encoded by
-  *shape* (diamond linear, square hold, circle bezier), never by colour alone.
+  *shape* (diamond linear, square hold, circle bezier), never by colour alone. **In the
+  Timeline's lanes and in Keys mode the bezier mark is an hourglass, and every mark is
+  split at its vertical centre** — left half the incoming side, right half the outgoing
+  (K-457). The graph editor keeps the circle: a curve is what it draws, so the shape there
+  is a label on a point rather than the only place interpolation can be read.
 - Bezier handles: `text_muted` stems, `animated` when selected, `accent` while grabbed.
 - Graph paper: `surface_0` ground, `hairline` minor gridlines, `hairline_strong` at zero/100%
   lines. Axis numbers: Geist Mono 11px `text_muted`.
@@ -851,6 +855,10 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   dot follows it and belongs to the name it colours, so the cluster reads twirl · number ·
   dot · name (K-458). **The three marks stand 8 apart** — the mockup's own row gap, where
   the outline had run the twirl hard against the dot and given the number 4.
+- **A key's mark says its interpolation, half by half** (K-457): diamond linear, hourglass
+  bezier, square hold, all at one height, split at the vertical centre so the left half is
+  the side coming in and the right half the side going out. The same marks at the same
+  **11px** in Layers mode and in Keys (K-459); a shut layer's summary diamonds stay small.
 - **The matte, blend and parent columns start at their content's width** (K-458): the
   mockup's 84 / 84 / 64 dropdown faces, the matte cell carrying its two mode toggles on top
   of that. Each seam still drags wider and stays where it is put.
@@ -1091,8 +1099,9 @@ a row changes with it, and the degradation ladder below is the same under both.
 
 **The pieces inside a row are the mockups' too**, and are pinned by
 `timeline_alignment_test` and, for the Project panel, `project_panel_metrics_test`: a layer's label colour is a **6px dot**, its number stands in an
-**18px column** set in muted mono at 10, the keyframe diamond on a shut layer's row is a **4px square stood
-on its corner** (≈5.7px point to point, against the 8px one a property's own lane draws), a labelled ruler tick is **7px** tall
+**18px column** set in muted mono at 10, the keyframe mark on a shut layer's row is a **4px square stood
+on its corner** (≈5.7px point to point, against the **11px** one a property's own lane draws in
+both Layers and Keys — K-459), a labelled ruler tick is **7px** tall
 against a minor tick's **4**, and under Sharp a bar's ends are **square** — the stadium ends are
 Round's, and are the whole of that shape's difference here.
 
