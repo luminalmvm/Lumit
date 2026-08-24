@@ -54,6 +54,7 @@ import 'fx_console_context.dart';
 import 'fx_console_frb.dart';
 import 'precompose_dialog_frb.dart';
 import 'export_dialog_frb.dart';
+import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
@@ -628,7 +629,11 @@ List<MenuSection> lumitMenus(
         MenuEntry.todo(l10n.menuCropCompToWorkArea),
         MenuEntry.divider(),
         // "Export", never "render", for anything the user sees (glossary §9).
-        MenuEntry.todo(l10n.menuAddToExportQueue, action: 'export.queue.add'),
+        // Adding to the queue is what the export dialog does, so this opens
+        // it rather than queueing something nobody has said where to write.
+        MenuEntry(l10n.menuAddToExportQueue,
+            comp == null ? null : () => exportFrb(context),
+            action: 'export.queue.add'),
         MenuEntry.divider(),
         // Comp-level markers, including the beat pass, which makes them
         // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
@@ -825,6 +830,8 @@ List<MenuSection> lumitMenus(
             checked: panelVisible(ui.split, panel),
           ),
         MenuEntry.divider(),
+        MenuEntry(
+            l10n.menuExportQueue, () => showExportQueueFrb(context: context)),
         MenuEntry(l10n.menuCommandPalette, palette, action: 'palette.open'),
       ]
     ),

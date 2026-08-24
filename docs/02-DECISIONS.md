@@ -12597,3 +12597,65 @@ K-458 reserves to them. It supersedes two parts of K-464 and nothing else.
   renders a composition to bytes off the playback path, `captureViewerPicturePng` is the
   single function that changes.
 - **The × and the row's open behaviour are untouched** (K-464 stands on both).
+
+## K-469 — Export is rebuilt to its drawing, the queue is the engine's, and a dialog row is whatever its own drawing measures
+
+**DECIDED 2026-08-24.** The approved Export drawing and the New composition drawing are one
+popup at two sizes, and building them settles three things the pattern had left as single
+numbers. Where this contradicts an earlier entry the drawing wins (K-458), and the
+superseded halves are named below. 15-DESIGN §12A.4 carries the result.
+
+**A dialog row is the drawing's, not the pattern's.** §12A.4 said 190px and 12, which K-465
+took from the Settings drawing; the Export drawing computes a **100px label column with 10
+after it in rows of 28**, and the New composition drawing **110 and 12 in rows of 30**. All
+three stand — each drawing measures its own — so the row helper takes the column and the
+gap rather than fixing one. The three are pinned by their own metrics tests.
+
+**A group inside a dialog is a box, not a rule.** §12A.4's "hairline-separated, kicker-titled
+groups … and no card around any of them" is the Settings *page's* shape and stays that for
+settings pages. The Export drawing fences each group in a hairline box with the kicker
+notched into its top edge, 8 above it and 10 between groups. Both are the same idea — a
+named area — and each drawing says which it wants.
+
+**Paired buttons are sized by their content** (superseding K-448's "paired dialog buttons
+share one width"). Neither drawing shares a width: Export sets *Add to queue* at 92 against
+EXPORT's 71, New composition *Cancel* at 60 against CREATE's 71. What is shared is the
+padding and the height — 12px either side of an outlined label, 16 either side of the
+filled one, both **24 tall** — which is what actually makes a pair look like a pair.
+
+**Both footer actions queue the export.** *Add to queue* leaves the item waiting; **EXPORT**
+lets the queue run. The dialog itself no longer follows an export: the drawing has no
+progress line in it, because progress belongs to the queue window and to the status strip,
+and a dialog that had to stay open to watch its own work was the reason the old one could
+not be closed. The queue window opens over the dialog either way, so nothing is ever
+started somewhere the user cannot see it.
+
+**The queue lives in the engine** (docs/06 §7.1), not in Dart: `queue_export` snapshots the
+document as the item is added, so later edits never alter what a queued export writes, and
+the list is turned by the interface's own polling rather than by a thread of its own.
+Cancelling a running item stops it at its next frame and leaves no half-file; cancelling
+one still waiting takes it off the list. The **queue window has no drawing**, so it is built
+to this pattern — the same title strip, rows and footer.
+
+**The page tabs front what exists.** The drawing's Output page holds every group, which is
+what it draws; Picture, Time and Audio front the group they name until the long tail behind
+them exists. **Colour and Metadata are not built**: there is nothing to put on them, and an
+empty page is a promise the dialog cannot keep — K-465's own rule for the Settings pages
+the engine could not back.
+
+**Rows the drawing draws that the engine cannot back are left out and listed**, not drawn
+dead: the render-settings rows (quality, effects, solo switches, proxies, guide layers,
+disk cache, colour depth — none of which the document model has any notion of), the
+picture's colour management (channels, alpha, depth, colour space), crop and the region of
+interest, the Still and Audio-only output types, *Save as…* for a preset of one's own, and
+the *When done* action list. Three of the Audio row's five faces are **facts rather than
+choices** — every export is mixed at 48 kHz stereo — so they read as one mono line instead
+of as dropdowns over nothing. docs/TODO.md carries each as engine-first work.
+
+**Rows that were there before and the drawing has no place for are kept, restyled**: the
+video bit rate (in the Picture group, where the quality of the picture is set), the two
+frame numbers of a span of one's own (under Span, only while Span is Custom), and the
+format list (under Type, filtered by it).
+
+**Export defaults are not a Settings page here.** The queue's engine half stores nothing
+between sessions; the Settings drawing's Export page stays where docs/TODO.md left it.

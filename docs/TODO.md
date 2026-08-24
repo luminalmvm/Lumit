@@ -450,9 +450,35 @@ pictures, so it wants a change of its own with its own before-and-after.
 docs/15-DESIGN.md §12A.4). The drawing gives Settings three pages the engine cannot
 back yet, so their nav entries are omitted rather than opening empty: an audio
 output-device choice (needs device enumeration and selection in the audio engine), an
-autosave interval (needs the autosave mechanism itself), and export defaults (lands
-with the export dialog rework's engine half). Each is engine-first work; the rows are
-drawn and waiting.
+autosave interval (needs the autosave mechanism itself), and export defaults — which the
+export rework did **not** bring with it (K-469): the queue's engine half remembers nothing
+between sessions, so a defaults store is still the first thing that page needs. Each is
+engine-first work; the rows are drawn and waiting.
+
+**The Export drawing's rows the engine cannot back** (K-469, docs/15-DESIGN.md §12A.4).
+The drawing draws a fuller export than the engine can honour, and the rows nothing backs
+are left out rather than drawn dead — each is engine-first work, and the drawing is the
+specification for it:
+
+- **The render settings**: quality, effects, solo switches, proxies, guide layers, disk
+  cache and colour depth. None of these concepts exists in the document model at all —
+  there is no guide layer, no proxy and no solo switch to honour — so each is a document
+  feature first and an export override second.
+- **The picture's colour management**: channels (RGB / RGB + alpha), alpha
+  (premultiplied / straight), bit depth, and the output colour space. The exporter writes
+  what the render walk gives it; a colour transform on the way out is the same work the
+  Viewer's colour pipeline is waiting for.
+- **Crop and the region of interest** on the way out, with the drawing's `T · L · B · R`
+  reading.
+- **Two output types**: *Still* (one frame, written under its own name rather than as a
+  numbered sequence) and *Audio only* (needs a video-less mux path in lumit-media, which
+  `Encoder::open` cannot express today).
+- **Presets of one's own** — the drawing's *Save as…* beside the preset list. Needs a user
+  preset store (docs/07 §11: "presets are user-editable and shareable files").
+- **The *When done* action list** beside the Open folder tick: the tick is built
+  (`reveal_in_folder`), the list of machine actions after it is not.
+- **Reordering the queue** (docs/07 §11: "items are reorderable"). The engine holds the
+  list in the order things were added; nothing moves a row up it.
 
 **Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
 drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it

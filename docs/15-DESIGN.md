@@ -1115,17 +1115,25 @@ Every popup is built in-window today and becomes a **real OS window** when multi
 ships (K-449: the toolkit support is not stable yet; ordinary framework dialogs are the
 migration path). Either way they all share one pattern:
 
-- a kicker title strip;
-- an optional page-tab row under it (Export: General / Encoder / Colour / Metadata);
-- **label-left rows, the label in a fixed 190px column and the control at the *start* of
-  what is left**, 12px after it (K-465: the approved Settings drawing computes both, and
-  this supersedes the 110px column and the right-aligned control written here before);
-- hairline-separated, kicker-titled groups — a rule and 6px of air above each group after
-  the first, and no card around any of them;
-- a footer strip carrying a summary line (mono, factual: `600 frames · 10.0 s · 1920×1080 ·
-  60 fps`) and **the single filled action** where the dialog has one. The rule is a ceiling
-  of one, not a floor: Settings' own footer carries two outlined buttons and no fill;
-- paired buttons share one width (K-448).
+- a kicker title strip of **30**, over its hairline — the dialog's name as a kicker and,
+  where the dialog is *about* something, that thing's own name beside it in `text_muted`;
+- an optional page-tab row under it, **26** over its own hairline (Export: Output /
+  Picture / Time / Audio), the page in force in `text_primary` over an accent rule;
+- **label-left rows, the label in a fixed column and the control at the *start* of what is
+  left**. **The column and the gap are the drawing's own** (K-469): Settings computes
+  190 and 12 in rows of 30 (K-465), New composition 110 and 12 in rows of 30, Export 100
+  and 10 in rows of 28. Each is pinned by its own metrics test;
+- **kicker-titled groups, drawn as that dialog's drawing draws them** (K-469): a settings
+  page separates them with a rule and 6px of air above each group after the first and no
+  card around any of them; the Export dialog fences each in a hairline box with the kicker
+  notched into its top edge, 8 above it and 10 between groups;
+- a footer strip of **45** — 10 above a 24px button and 10 below, over a hairline — carrying
+  a summary line (mono 10px, factual: `250 frames · 10.0 s · 1920×1080 · 25 fps · ≈ 1.2
+  GB`) and **the single filled action** where the dialog has one. The rule is a ceiling of
+  one, not a floor: Settings' own footer carries two outlined buttons and no fill;
+- **buttons are sized by their content**, not paired to one width (K-469 supersedes K-448's
+  bullet): 12px either side of an outlined label, 16 either side of the filled one, both
+  24 tall. Both approved drawings draw a pair that way.
 
 **A settings row states its name and nothing else.** The sentence explaining what a setting
 does was dropped with the drawing that had no room for it (K-465) — a row may still carry a

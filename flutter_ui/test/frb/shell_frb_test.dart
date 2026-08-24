@@ -18,6 +18,7 @@ import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -679,148 +680,221 @@ void main() {
     });
   }, skip: !engineAvailable);
 
-  group('Export dialogue (frb)', () {
-    testWidgets('Export is inert until somewhere to write is chosen',
-        (tester) async {
+  group('Export dialog (frb)', () {
+    /// Open the dialog over a fresh comp, in a view big enough for its frame.
+    Future<void> open(
+      WidgetTester tester, {
+      Future<String?> Function()? picker,
+      void Function(CompositionReference comp)? before,
+    }) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
       final p = freshProject();
       final comp = p.state.project!.newComposition(name: 'Scene');
       comp.addAdjustmentLayer();
+      before?.call(comp);
 
       await tester.pumpWidget(hostPanel(
         child: Builder(
           builder: (context) => HouseButton(
             key: const ValueKey('open-export'),
             onPressed: () => showExportDialogFrb(
-              context: context,
-              comp: comp,
-              picker: () async => '${Directory.systemTemp.path}/out.mp4',
-            ),
+                context: context, comp: comp, picker: picker),
             child: const Text('Open'),
           ),
         ),
         state: p.state,
         uiState: p.uiState,
+        size: const Size(1200, 1000),
       ));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('open-export')));
       await tester.pumpAndSettle();
+    }
 
-      expect(find.text('Export composition'), findsOneWidget);
+    /// Both footer actions are inert until somewhere to write is chosen, and
+    /// choosing shows the file by its own name.
+    testWidgets('Export is inert until somewhere to write is chosen',
+        (tester) async {
+      await open(tester,
+          picker: () async => '${Directory.systemTemp.path}/out.mp4');
+
       expect(find.text('Not chosen'), findsOneWidget);
+      expect(
+          tester
+              .widget<HouseButton>(find.byKey(const ValueKey('export-start')))
+              .onPressed,
+          isNull,
+          reason: 'nowhere to write is nothing to export');
 
       await tester.tap(find.byKey(const ValueKey('export-choose')));
       await tester.pumpAndSettle();
       expect(find.text('out.mp4'), findsOneWidget,
           reason: 'the chosen path is shown by its file name');
+      expect(
+          tester
+              .widget<HouseButton>(find.byKey(const ValueKey('export-start')))
+              .onPressed,
+          isNotNull);
 
-      // Starting either runs or explains itself — a machine with no GPU says
-      // so where the progress would be, rather than the dialogue looking dead.
-      await tester.tap(find.byKey(const ValueKey('export-start')));
-      await tester.pumpAndSettle(const Duration(milliseconds: 400));
-      expect(find.byKey(const ValueKey('export-close')), findsOneWidget,
-          reason: 'the dialogue survives whatever the exporter said');
-
-      exportCancel();
       await tester.tap(find.byKey(const ValueKey('export-close')));
       await tester.pumpAndSettle();
     });
 
-    /// The dialogue's fields default to the composition's own facts (K-201):
-    /// the frame rate is the comp's, and the range is the work area exactly as
-    /// the Timeline set it — already typed, not re-derived by the user.
-    testWidgets('the rate and range default to the comp and its work area',
+    /// The dialog's fields default to the composition's own facts (K-201): the
+    /// frame rate is the comp's, and the span is the work area exactly as the
+    /// Timeline set it — already typed, not re-derived by the user.
+    testWidgets('the rate and span default to the comp and its work area',
         (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      comp.addAdjustmentLayer();
-      // A 60 fps comp with a work area over frames 60..180 (1 s .. 3 s).
-      comp.setWorkArea(
-        span: const BridgeSpan(
-          inPoint: BridgeRational(num: 1, den: 1),
-          outPoint: BridgeRational(num: 3, den: 1),
-          startOffset: BridgeRational(num: 0, den: 1),
-        ),
-      );
-
-      await tester.pumpWidget(hostPanel(
-        child: Builder(
-          builder: (context) => HouseButton(
-            key: const ValueKey('open-export'),
-            onPressed: () => showExportDialogFrb(context: context, comp: comp),
-            child: const Text('Open'),
+      await open(tester, before: (comp) {
+        // A 60 fps comp with a work area over frames 60..180 (1 s .. 3 s).
+        comp.setWorkArea(
+          span: const BridgeSpan(
+            inPoint: BridgeRational(num: 1, den: 1),
+            outPoint: BridgeRational(num: 3, den: 1),
+            startOffset: BridgeRational(num: 0, den: 1),
           ),
-        ),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('open-export')));
-      await tester.pumpAndSettle();
+        );
+      });
 
       expect(find.text('Frame rate'), findsOneWidget);
-      expect(find.text('60.00'), findsOneWidget,
-          reason: 'the rate starts as the comp order — its own 60');
-      expect(find.text('60'), findsOneWidget,
-          reason: 'the range starts at the work area start');
-      expect(find.text('180'), findsOneWidget,
-          reason: 'and ends at the work area end');
+      expect(find.text('Composition · 60'), findsOneWidget,
+          reason: "the rate starts as the comp's own 60");
+      expect(find.text('Work area · 60–180'), findsOneWidget,
+          reason: 'the span starts as the work area the Timeline set');
+      expect(find.textContaining('120 frames'), findsOneWidget,
+          reason: 'and the footer counts exactly those frames');
 
       await tester.tap(find.byKey(const ValueKey('export-close')));
       await tester.pumpAndSettle();
     });
 
     /// An image sequence is stills: the video-only rows leave rather than
-    /// sitting greyed, and the picker's suggestion follows the extension.
-    testWidgets('choosing a sequence format sheds the video-only rows',
+    /// sitting greyed, and the note says what will be written.
+    testWidgets('choosing a sequence sheds the video-only rows',
         (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      comp.addAdjustmentLayer();
-
-      await tester.pumpWidget(hostPanel(
-        child: Builder(
-          builder: (context) => HouseButton(
-            key: const ValueKey('open-export'),
-            onPressed: () => showExportDialogFrb(context: context, comp: comp),
-            child: const Text('Open'),
-          ),
-        ),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('open-export')));
-      await tester.pumpAndSettle();
+      await open(tester);
 
       expect(find.byKey(const ValueKey('export-audio')), findsOneWidget);
       expect(find.byKey(const ValueKey('export-bitrate')), findsOneWidget);
-      // The dialogue opens on the delivery preset, not a blank Custom
-      // (docs/06 §7.5): a fresh export showing a bit rate of 0 read as
-      // broken, and the preset's 16 Mb/s stamp is the proof it applied.
-      expect(find.textContaining('16'), findsOneWidget,
+      // The dialog opens on the delivery preset, not a blank Custom (docs/06
+      // §7.5): a fresh export showing a bit rate of 0 read as broken, and the
+      // preset's 16 Mb/s stamp is the proof it applied.
+      expect(find.textContaining('16 Mb/s'), findsOneWidget,
           reason: "the YouTube 1080p60 preset's bit rate is stamped on open");
       expect(find.byKey(const ValueKey('export-audio-rate')), findsOneWidget,
           reason: 'audio has its own rate once audio is on');
 
-      await tester.tap(find.byKey(const ValueKey('export-format')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('PNG image sequence').last);
+      await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('export-audio')), findsNothing,
-          reason: 'stills carry no sound');
       expect(find.byKey(const ValueKey('export-bitrate')), findsNothing,
           reason: 'stills are lossless');
-      expect(find.byKey(const ValueKey('export-preset')), findsNothing,
-          reason: 'the delivery presets are mp4 by nature');
       expect(find.textContaining('One numbered PNG per frame'), findsOneWidget,
-          reason: 'the dialogue says what a sequence writes');
-      // The rate and range stay: stills have both.
+          reason: 'the dialog says what a sequence writes');
+      // The rate and span stay: stills have both.
       expect(find.byKey(const ValueKey('export-fps')), findsOneWidget);
-      expect(find.byKey(const ValueKey('export-range-start')), findsOneWidget);
+      expect(find.byKey(const ValueKey('export-span')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('export-close')));
       await tester.pumpAndSettle();
+    });
+
+    /// The size the file will be is one answer built from two rows: the
+    /// Composition group's resolution, and Picture's own Resize when it is
+    /// ticked. Both read back in the footer, which is what the user checks.
+    testWidgets('the resolution and the resize agree on one size',
+        (tester) async {
+      await open(tester);
+
+      expect(find.text('Final 1920 × 1080'), findsOneWidget);
+      expect(find.textContaining('1920×1080'), findsOneWidget,
+          reason: 'the footer states the size the file will be');
+
+      await tester.tap(find.byKey(const ValueKey('export-resolution')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('One 2 · 960 × 540').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Final 960 × 540'), findsOneWidget,
+          reason: 'half resolution halves what is written');
+
+      // Resize wins over it: an explicit size is an explicit size.
+      await tester.tap(find.byKey(const ValueKey('export-resize')));
+      await tester.pumpAndSettle();
+      expect(find.text('Final 1920 × 1080'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// Both footer actions queue the export — the difference is whether the
+    /// queue runs — and the queue window opens on top, so nothing is ever
+    /// started somewhere the user cannot see it.
+    testWidgets('Add to queue queues without starting, and shows the queue',
+        (tester) async {
+      final target = '${Directory.systemTemp.path}/queued.mp4';
+      await open(tester, picker: () async => target);
+      await tester.tap(find.byKey(const ValueKey('export-choose')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('export-add-to-queue')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('EXPORT QUEUE'), findsOneWidget,
+          reason: 'the queue window opens over the closed dialog');
+      final queued = exportQueueList().where((i) => i.path == target).toList();
+      expect(queued, hasLength(1), reason: "the item is on the engine's list");
+      expect(queued.single.state, isA<BridgeExportQueueState_Waiting>(),
+          reason: 'Add to queue adds; it does not start');
+      expect(queued.single.compName, 'Scene',
+          reason: "the row carries the comp's name as it was at queue time");
+
+      // And the row can be taken off again from the window.
+      await tester.tap(find
+          .byKey(ValueKey<String>('export-queue-drop-${queued.single.id}')));
+      await tester.pumpAndSettle();
+      expect(exportQueueList().where((i) => i.path == target), isEmpty);
+
+      await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
+      await tester.pumpAndSettle();
+    });
+
+    /// EXPORT is the same call with the queue let loose: the item leaves
+    /// Waiting the moment the window opens, and whatever the machine can
+    /// actually do — encode it, or refuse for want of a GPU — the queue says
+    /// so calmly and the row can be taken off again.
+    ///
+    /// Last in the group deliberately: it leaves the process-wide queue
+    /// *running*, which is exactly what a test asserting "Add to queue does
+    /// not start" must not have happen to it first.
+    testWidgets('EXPORT starts the queue and reports whatever happens',
+        (tester) async {
+      final target = '${Directory.systemTemp.path}/exported.mp4';
+      await open(tester, picker: () async => target);
+      await tester.tap(find.byKey(const ValueKey('export-choose')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('export-start')));
+      await tester.pumpAndSettle(const Duration(milliseconds: 400));
+
+      final item = exportQueueList().firstWhere((i) => i.path == target);
+      expect(item.state, isNot(isA<BridgeExportQueueState_Waiting>()),
+          reason: 'Export lets the queue run rather than leaving it waiting');
+      expect(
+          item.state,
+          anyOf(
+            isA<BridgeExportQueueState_Running>(),
+            isA<BridgeExportQueueState_Done>(),
+            isA<BridgeExportQueueState_Failed>(),
+          ),
+          reason: 'it either runs or explains itself — never neither');
+
+      exportQueueCancel(id: item.id);
+      exportQueueRemove(id: item.id);
+      await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
+      await tester.pumpAndSettle();
+      File(target).existsSync() ? File(target).deleteSync() : null;
     });
   }, skip: !engineAvailable);
 

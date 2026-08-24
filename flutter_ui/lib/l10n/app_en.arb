@@ -7658,5 +7658,234 @@
   "waveformBottom": "Bottom",
   "@waveformBottom": {
     "description": "One choice for where a waveform sits in its row: standing on the floor of the row and reaching up."
+  },
+  "exportGroupOutput": "Output",
+  "@exportGroupOutput": {
+    "description": "Export dialog: the group naming what is written and where."
+  },
+  "exportGroupComposition": "Composition",
+  "@exportGroupComposition": {
+    "description": "Export dialog: the group of settings the composition is rendered with."
+  },
+  "exportGroupTime": "Time",
+  "@exportGroupTime": {
+    "description": "Export dialog: the group naming how much is written and at what rate."
+  },
+  "exportGroupPicture": "Picture",
+  "@exportGroupPicture": {
+    "description": "Export dialog: the group naming the size and quality of the picture."
+  },
+  "exportGroupAudio": "Audio",
+  "@exportGroupAudio": {
+    "description": "Export dialog: the group naming the sound written with the picture."
+  },
+  "exportType": "Type",
+  "@exportType": {
+    "description": "Export dialog: row label: what kind of thing is written — a video, or one image per frame."
+  },
+  "exportTypeVideo": "Video",
+  "@exportTypeVideo": {
+    "description": "Export dialog: output type: a single video file."
+  },
+  "exportTypeImageSequence": "Image sequence",
+  "@exportTypeImageSequence": {
+    "description": "Export dialog: output type: one numbered still image per frame."
+  },
+  "exportBrowse": "Browse",
+  "@exportBrowse": {
+    "description": "Export dialog: button that opens the system file picker to choose where to write."
+  },
+  "exportWhenDone": "When done",
+  "@exportWhenDone": {
+    "description": "Export dialog: row label: what happens once the export has finished."
+  },
+  "exportOpenFolder": "Open folder",
+  "@exportOpenFolder": {
+    "description": "Export dialog: tick beside \"When done\": show the finished file in the file manager."
+  },
+  "exportResolution": "Resolution",
+  "@exportResolution": {
+    "description": "Export dialog: row label: what fraction of the composition size is rendered."
+  },
+  "exportResolutionFull": "Composition · {width} × {height}",
+  "@exportResolutionFull": {
+    "description": "Export dialog: resolution: the composition’s own size.",
+    "placeholders": {
+      "width": {
+        "type": "String"
+      },
+      "height": {
+        "type": "String"
+      }
+    }
+  },
+  "exportResolutionFraction": "One {divisor} · {width} × {height}",
+  "@exportResolutionFraction": {
+    "description": "Export dialog: resolution: one half, third or quarter of the composition size. {divisor} is 2, 3 or 4.",
+    "placeholders": {
+      "divisor": {
+        "type": "String"
+      },
+      "width": {
+        "type": "String"
+      },
+      "height": {
+        "type": "String"
+      }
+    }
+  },
+  "exportSpan": "Span",
+  "@exportSpan": {
+    "description": "Export dialog: row label: which part of the composition is written."
+  },
+  "exportSpanWorkArea": "Work area · {from}–{to}",
+  "@exportSpanWorkArea": {
+    "description": "Export dialog: span: the work area set in the Timeline, given in frames.",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "exportSpanWholeComp": "Whole composition",
+  "@exportSpanWholeComp": {
+    "description": "Export dialog: span: every frame of the composition."
+  },
+  "exportSpanFrames": "Frames",
+  "@exportSpanFrames": {
+    "description": "Export dialog: row label for the two frame numbers of a span of one’s own."
+  },
+  "exportRateComposition": "Composition · {rate}",
+  "@exportRateComposition": {
+    "description": "Export dialog: frame rate: the composition’s own rate.",
+    "placeholders": {
+      "rate": {
+        "type": "String"
+      }
+    }
+  },
+  "exportTimeReading": "Start {start} · End {end} · Duration {duration}",
+  "@exportTimeReading": {
+    "description": "Export dialog: a factual line under the Time rows; each value is a timecode.",
+    "placeholders": {
+      "start": {
+        "type": "String"
+      },
+      "end": {
+        "type": "String"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "exportResize": "Resize",
+  "@exportResize": {
+    "description": "Export dialog: row label: write the picture at a size of one’s own."
+  },
+  "exportLockAspect": "Lock aspect",
+  "@exportLockAspect": {
+    "description": "Export dialog: tick beside Resize: keep the shape when one side is changed."
+  },
+  "exportFinalSize": "Final {width} × {height}",
+  "@exportFinalSize": {
+    "description": "Export dialog: a factual reading of the size the file will be, in pixels.",
+    "placeholders": {
+      "width": {
+        "type": "String"
+      },
+      "height": {
+        "type": "String"
+      }
+    }
+  },
+  "exportAudioOn": "On",
+  "@exportAudioOn": {
+    "description": "Export dialog: audio: sound is written with the picture."
+  },
+  "exportAudioOff": "Off",
+  "@exportAudioOff": {
+    "description": "Export dialog: audio: no sound is written."
+  },
+  "exportAudioReading": "48.000 kHz · Stereo",
+  "@exportAudioReading": {
+    "description": "Export dialog: a factual reading of the sound format every export is mixed to. The number is not translated."
+  },
+  "exportSummary": "{frames} frames · {seconds} s · {width}×{height} · {fps} fps",
+  "@exportSummary": {
+    "description": "Export dialog: the footer line stating what pressing Export would produce.",
+    "placeholders": {
+      "frames": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      },
+      "width": {
+        "type": "String"
+      },
+      "height": {
+        "type": "String"
+      },
+      "fps": {
+        "type": "String"
+      }
+    }
+  },
+  "exportSummarySize": "≈ {size} GB",
+  "@exportSummarySize": {
+    "description": "Export dialog: the footer line’s estimate of the file size, appended to the summary.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "exportAddToQueue": "Add to queue",
+  "@exportAddToQueue": {
+    "description": "Export dialog: button that puts the export on the queue without starting it."
+  },
+  "exportQueueTitle": "Export queue",
+  "@exportQueueTitle": {
+    "description": "Export queue window: the window’s title."
+  },
+  "exportQueueEmpty": "Nothing queued",
+  "@exportQueueEmpty": {
+    "description": "Export queue window: shown in place of the list when no export is waiting."
+  },
+  "exportQueueStart": "Start",
+  "@exportQueueStart": {
+    "description": "Export queue window: the filled action: let the queue run."
+  },
+  "exportQueueWaiting": "Waiting",
+  "@exportQueueWaiting": {
+    "description": "Export queue window: an item’s state before it starts."
+  },
+  "exportQueueDone": "Done",
+  "@exportQueueDone": {
+    "description": "Export queue window: an item’s state once its file has been written."
+  },
+  "exportQueueRemove": "Remove",
+  "@exportQueueRemove": {
+    "description": "Export queue window: tooltip on the mark that takes a finished item off the list."
+  },
+  "exportQueueSummary": "{waiting} waiting · {done} done",
+  "@exportQueueSummary": {
+    "description": "Export queue window: the footer line counting the items.",
+    "placeholders": {
+      "waiting": {
+        "type": "String"
+      },
+      "done": {
+        "type": "String"
+      }
+    }
+  },
+  "menuExportQueue": "Export queue…",
+  "@menuExportQueue": {
+    "description": "Window menu: opens the export queue window."
   }
 }
