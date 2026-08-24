@@ -5667,6 +5667,10 @@
   "@shapeGap": {
     "description": "Timeline row under a shape layer's art: how long the space between two dashes of its outline is, in pixels."
   },
+  "shapeOffsetPath": "Offset path",
+  "@shapeOffsetPath": {
+    "description": "Timeline row under a shape layer's art: how far its outline is pushed out of the path, in pixels. Negative pulls it in."
+  },
   "shapeRepeatAnchorX": "Repeater anchor x",
   "@shapeRepeatAnchorX": {
     "description": "Timeline row under a shape layer's art: the x of the point each repeated copy is turned and scaled about, in pixels."

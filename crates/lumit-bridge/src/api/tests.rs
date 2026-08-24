@@ -3420,6 +3420,7 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         trim_offset: BridgeScalar::Static(0.0),
         dashes: Vec::new(),
         dash_offset: BridgeScalar::Static(0.0),
+        offset_amount: BridgeScalar::Static(0.0),
         repeat_copies: BridgeScalar::Static(1.0),
         repeat_offset: BridgeScalar::Static(0.0),
         repeat_anchor_x: BridgeScalar::Static(0.0),
@@ -3604,6 +3605,25 @@ fn a_shapes_repeater_round_trips_and_is_clamped() {
         got.repeat_end_opacity,
         BridgeScalar::Static(100.0),
         "and an opacity is a per cent"
+    );
+}
+
+/// The offset crosses as one length in layer pixels, out or in (K-454).
+#[test]
+fn a_shapes_offset_round_trips_both_ways() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].offset_amount = BridgeScalar::Static(-2.5);
+    shape.set_shape_contents(contents).expect("set");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0].offset_amount,
+        BridgeScalar::Static(-2.5),
+        "pulling the outline in is as meant as pushing it out"
     );
 }
 

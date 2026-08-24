@@ -46,8 +46,19 @@ the path. Both start at zero — a solid outline — so typing a Dash is what tu
 dashes on. Key the offset and the dashes march along the path.
 
 :::note[Not built yet]
-Offset paths and gradient fills are planned but not built yet.
+Gradient fills are planned but not built yet.
 :::
+
+## Offset paths
+
+The first row under a shape group is **Offset path**, one number in pixels. Positive
+pushes the outline outwards and the shape gets fatter; negative pulls it in. Corners
+come out round, and the shape keeps its character — unlike scaling, which changes the
+proportions of everything at once.
+
+Pull the outline in by more than the shape is thick somewhere and it can cross itself,
+leaving a small loop. The fill rule hides most of that; where it shows, use a smaller
+number.
 
 ## The repeater
 

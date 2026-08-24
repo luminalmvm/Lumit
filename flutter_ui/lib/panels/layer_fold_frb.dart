@@ -138,8 +138,10 @@ final class FoldShapeRow extends LayerFoldRow {
 /// [dash] and [gap] are the first pair of the item's dash list (K-452), which
 /// is where a dashed outline is set from: writing either into an item that has
 /// no list makes one. The repeater's ten (K-453) are the count, which copy the
-/// original is, and the step every copy is one more of.
+/// original is, and the step every copy is one more of. [offsetPath] (K-454) is
+/// first because it applies first: it makes the outline the rest work on.
 enum ShapeValue {
+  offsetPath,
   trimStart,
   trimEnd,
   trimOffset,
@@ -174,6 +176,7 @@ const double maxShapeCopies = 100;
 /// (K-453) — everything but the count itself, which is the row that turns the
 /// repeater on and so is always there to find.
 bool isRepeatStepValue(ShapeValue value) => switch (value) {
+      ShapeValue.offsetPath ||
       ShapeValue.trimStart ||
       ShapeValue.trimEnd ||
       ShapeValue.trimOffset ||
@@ -414,6 +417,7 @@ BridgeStroke strokeWithScalar(
 /// What a shape item's value row is called — shared by the row and the graph
 /// channel, exactly as [maskValueLabel] is.
 String shapeValueLabel(ShapeValue value) => switch (value) {
+      ShapeValue.offsetPath => l10n.shapeOffsetPath,
       ShapeValue.trimStart => l10n.shapeTrimStart,
       ShapeValue.trimEnd => l10n.shapeTrimEnd,
       ShapeValue.trimOffset => l10n.shapeTrimOffset,
@@ -442,6 +446,7 @@ BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
 /// Which of a shape item's animatable numbers [value] names (K-451).
 BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
     switch (value) {
+      ShapeValue.offsetPath => item.offsetAmount,
       ShapeValue.trimStart => item.trimStart,
       ShapeValue.trimEnd => item.trimEnd,
       ShapeValue.trimOffset => item.trimOffset,
@@ -485,6 +490,7 @@ BridgeShapeItem shapeItemWith(
     stroke: item.stroke,
     strokeWidth: item.strokeWidth,
     opacity: opacity ?? item.opacity,
+    offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
     trimStart: at(ShapeValue.trimStart, item.trimStart),
     trimEnd: at(ShapeValue.trimEnd, item.trimEnd),
     trimOffset: at(ShapeValue.trimOffset, item.trimOffset),

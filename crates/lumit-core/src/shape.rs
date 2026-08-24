@@ -114,6 +114,20 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub dash_offset: Property,
+    /// **Offset paths** (K-454): how far the outline is pushed **out** of the
+    /// path, in layer pixels — negative pulls it in. Zero is the path itself
+    /// and is absent from the file.
+    ///
+    /// The corners are **round**, which is the one join this crate draws
+    /// (K-237); the offset does not undo its own self-intersections, so an
+    /// inward offset past a curve's own radius leaves a small loop that the
+    /// non-zero winding fill mostly swallows.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub offset_amount: Property,
     /// **The repeater** (K-453): how many copies of the item are drawn, and the
     /// transform each copy is one more step of.
     ///
@@ -237,6 +251,7 @@ impl ShapeItem {
             trim_offset: Property::zero(),
             dashes: Vec::new(),
             dash_offset: Property::zero(),
+            offset_amount: Property::zero(),
             repeat_copies: one(),
             repeat_offset: Property::zero(),
             repeat_anchor_x: Property::zero(),
@@ -264,16 +279,29 @@ impl ShapeItem {
             || self.trim_offset.value_at(t) != 0.0
     }
 
-    /// The item's art at `t` as a polyline, once the trim has had it — `None`
-    /// when the trim leaves the whole path alone (draw the bezier instead), and
-    /// `Some(empty)` when it leaves nothing at all.
+    /// The item's art at `t` as a polyline, once the offset and the trim have
+    /// had it — `None` when neither of them changes the path (draw the bezier
+    /// instead), and `Some(empty)` when the trim leaves nothing at all.
+    ///
+    /// The order is **offset, then trim** (docs/03 §7.2.1): the offset makes
+    /// the outline, and the trim cuts whatever outline there is by its length.
     fn trimmed_at(&self, t: f64) -> Option<Vec<(f64, f64)>> {
-        if !self.trims_at(t) {
+        let amount = self.offset_amount.value_at(t);
+        if !self.trims_at(t) && amount == 0.0 {
             return None;
         }
-        let points = flatten_path(&self.path);
+        let mut points = flatten_path(&self.path);
         if points.len() < 2 {
             return None;
+        }
+        if amount != 0.0 {
+            points = offset_polyline(&points, amount, self.path.closed);
+            if points.len() < 2 {
+                return Some(points);
+            }
+        }
+        if !self.trims_at(t) {
+            return Some(points);
         }
         let (start, end) = (
             self.trim_start.value_at(t).clamp(0.0, 100.0),
@@ -409,6 +437,10 @@ impl ShapeItem {
         } else {
             0.0
         };
+        // An outline pushed out of the path is art outside the path, so the
+        // box holds it too (K-454). Pulled *in* it never needs more room, so
+        // only the outward half counts.
+        let half = half + self.offset_amount.value_at(t).max(0.0);
         let (x0, y0, x1, y1) = (x0 - half, y0 - half, x1 + half, y1 + half);
 
         // Every copy's box, unioned. One copy and the identity — every shape
@@ -686,6 +718,109 @@ fn rotated(points: &[(f64, f64)], shift: f64) -> Vec<(f64, f64)> {
     // The join is one shared point, not two: the tail ends where the head
     // begins.
     out.extend_from_slice(&head[1..]);
+    out
+}
+
+/// How many straight steps a round join is drawn in, per quarter turn.
+///
+/// Four is smooth at the sizes an offset outline is drawn at, and a count taken
+/// from the angle rather than the size keeps the answer identical on every
+/// machine (docs/14 §determinism).
+const JOIN_STEPS_PER_QUARTER: f64 = 4.0;
+
+/// `points` pushed `amount` layer pixels **out** of itself, corners rounded —
+/// After Effects' Offset Paths, with the one join this crate draws (K-454).
+///
+/// "Out" is decided by the ring's own winding for a closed path, so a positive
+/// amount always grows the shape whichever way round its points were written.
+/// An open path has no inside, so it is simply moved to the side its own
+/// direction puts on the left.
+///
+/// **Self-intersections are left in.** Offsetting inwards by more than a curve
+/// bends can fold the outline back through itself; the non-zero winding fill
+/// swallows most of what that produces, and unpicking it properly is a
+/// polygon-clipping library rather than thirty lines. The failure is visible
+/// and local, which is why it is a limit rather than a trap.
+fn offset_polyline(points: &[(f64, f64)], amount: f64, closed: bool) -> Vec<(f64, f64)> {
+    // A closed path flattens with its first point repeated at the end; the
+    // offset works on the ring, and closes itself again at the end.
+    let ring: &[(f64, f64)] = if closed && points.len() > 2 && points[0] == points[points.len() - 1]
+    {
+        &points[..points.len() - 1]
+    } else {
+        points
+    };
+    if ring.len() < 2 {
+        return points.to_vec();
+    }
+
+    // Which side is "out". The shoelace area is positive for the winding a
+    // shape tool draws, and a path written the other way round gets the sign
+    // flipped so that a positive amount still grows it.
+    let sign = if closed {
+        let mut area = 0.0;
+        for i in 0..ring.len() {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            area += a.0 * b.1 - b.0 * a.1;
+        }
+        if area < 0.0 {
+            -1.0
+        } else {
+            1.0
+        }
+    } else {
+        1.0
+    };
+    let d = amount * sign;
+
+    // The normal of the segment starting at `i`, or `None` where the segment
+    // has no length to take a direction from.
+    let normal = |i: usize| -> Option<(f64, f64)> {
+        let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let len = (dx * dx + dy * dy).sqrt();
+        (len > 1e-12).then(|| (dy / len, -dx / len))
+    };
+
+    let last = if closed { ring.len() } else { ring.len() - 1 };
+    let mut out: Vec<(f64, f64)> = Vec::with_capacity(ring.len() * 2);
+    for i in 0..ring.len() {
+        // The segments that meet at this point. An open path's two ends have
+        // only one each, which is what moves an open path to the side.
+        let before = (closed || i > 0)
+            .then(|| normal((i + ring.len() - 1) % ring.len()))
+            .flatten();
+        let after = (i < last).then(|| normal(i)).flatten();
+        let p = ring[i];
+        match (before, after) {
+            (Some(n0), Some(n1)) => {
+                out.push((p.0 + d * n0.0, p.1 + d * n0.1));
+                // The corner opens on the side the offset is going: that gap
+                // is what a round join fills. On the other side the two
+                // offset ends overlap, and joining them straight is the whole
+                // of the self-intersection this leaves behind.
+                let cross = n0.0 * n1.1 - n0.1 * n1.0;
+                if cross * d > 0.0 {
+                    let angle = (n0.0 * n1.0 + n0.1 * n1.1).clamp(-1.0, 1.0).acos();
+                    let steps =
+                        (angle / std::f64::consts::FRAC_PI_2 * JOIN_STEPS_PER_QUARTER).ceil();
+                    let steps = steps.max(1.0) as usize;
+                    for step in 1..steps {
+                        let a = angle * (step as f64 / steps as f64) * cross.signum();
+                        let (sin, cos) = a.sin_cos();
+                        let (nx, ny) = (n0.0 * cos - n0.1 * sin, n0.0 * sin + n0.1 * cos);
+                        out.push((p.0 + d * nx, p.1 + d * ny));
+                    }
+                }
+                out.push((p.0 + d * n1.0, p.1 + d * n1.1));
+            }
+            (Some(n), None) | (None, Some(n)) => out.push((p.0 + d * n.0, p.1 + d * n.1)),
+            (None, None) => out.push(p),
+        }
+    }
+    if closed && out.len() > 1 {
+        out.push(out[0]);
+    }
     out
 }
 
@@ -1286,6 +1421,148 @@ mod tests {
         let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
         assert_eq!(back.dashes.len(), 2);
         assert_eq!(back.dashes[1].value_at(0.0), 3.0);
+    }
+
+    /// The outline pushed out of the path: art where the path is not, filled
+    /// as one piece.
+    #[test]
+    fn an_offset_path_grows_the_shape_and_a_negative_one_shrinks_it() {
+        let mut it = item(square(5.0, 5.0, 10.0));
+        it.offset_amount = Property::fixed(3.0);
+        let grown = rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert_eq!(
+            alpha_at(&grown, 20, 3, 10),
+            255,
+            "outside the path, inside the offset"
+        );
+        assert_eq!(alpha_at(&grown, 20, 0, 10), 0, "and not beyond it");
+
+        it.offset_amount = Property::fixed(-3.0);
+        let shrunk = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert_eq!(
+            alpha_at(&shrunk, 20, 6, 10),
+            0,
+            "inside the path, outside the offset"
+        );
+        assert_eq!(
+            alpha_at(&shrunk, 20, 10, 10),
+            255,
+            "and the middle is still there"
+        );
+    }
+
+    /// The corner of a grown square is a quarter circle, not a square corner:
+    /// round is the one join this crate draws.
+    #[test]
+    fn an_offset_corner_is_rounded_rather_than_mitred() {
+        let mut it = item(square(6.0, 6.0, 8.0));
+        it.offset_amount = Property::fixed(4.0);
+        let rgba = rasterise_contents(&[it], 24, 24, 0.0, 0.0, 24.0, 24.0, 0.0);
+        // Straight out from the top edge, right to the offset's edge, is
+        // inside. The pixel a mitred corner would reach — the corner of the
+        // grown box — is nearly five away from the path's own corner, so a
+        // round join of four leaves it outside.
+        assert_eq!(alpha_at(&rgba, 24, 10, 2), 255, "square out from the edge");
+        assert_eq!(alpha_at(&rgba, 24, 2, 2), 0, "and the corner is cut round");
+    }
+
+    /// A path written the other way round is the same shape, so a positive
+    /// offset has to grow it either way.
+    #[test]
+    fn an_offset_grows_a_path_written_either_way_round() {
+        let mut backwards = square(5.0, 5.0, 10.0);
+        backwards.vertices.reverse();
+        let mut it = item(backwards);
+        it.offset_amount = Property::fixed(3.0);
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert_eq!(alpha_at(&rgba, 20, 3, 10), 255, "grown, not shrunk");
+    }
+
+    #[test]
+    fn the_box_holds_the_grown_outline() {
+        let mut it = item(square(5.0, 5.0, 10.0));
+        assert_eq!(it.bounds(0.0), Some((5.0, 5.0, 15.0, 15.0)));
+        it.offset_amount = Property::fixed(3.0);
+        assert_eq!(it.bounds(0.0), Some((2.0, 2.0, 18.0, 18.0)));
+        // Pulled in, the art never needs more room than the path did.
+        it.offset_amount = Property::fixed(-3.0);
+        assert_eq!(it.bounds(0.0), Some((5.0, 5.0, 15.0, 15.0)));
+    }
+
+    /// The identity case: an item nobody has offset draws from its bezier,
+    /// exactly as it did before there was an offset at all.
+    #[test]
+    fn an_offset_of_nothing_is_the_path_itself() {
+        let plain = item(square(2.0, 3.0, 9.0));
+        let mut zero = item(square(2.0, 3.0, 9.0));
+        zero.offset_amount = Property::fixed(0.0);
+        assert!(zero.trimmed_at(0.0).is_none(), "nothing to reshape");
+        assert_eq!(
+            rasterise_contents(&[plain], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
+            rasterise_contents(&[zero], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
+        );
+    }
+
+    /// Offset first, then trim: the trim cuts whatever outline the offset made,
+    /// which is longer than the path it came from.
+    #[test]
+    fn the_trim_cuts_the_offset_outline_and_not_the_path() {
+        let mut it = item(square(5.0, 5.0, 10.0));
+        it.offset_amount = Property::fixed(3.0);
+        it.trim_end = Property::fixed(50.0);
+        let piece = it.trimmed_at(0.0).expect("a piece");
+        let whole = offset_polyline(&flatten_path(&it.path), 3.0, true);
+        let length = |p: &[(f64, f64)]| -> f64 {
+            p.windows(2)
+                .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
+                .sum()
+        };
+        let (cut, all) = (length(&piece), length(&whole));
+        assert!(
+            (cut - all / 2.0).abs() < all * 0.01,
+            "half of the grown outline: {cut} of {all}"
+        );
+    }
+
+    #[test]
+    fn a_keyed_offset_is_read_on_the_layers_clock() {
+        let mut it = item(square(5.0, 5.0, 10.0));
+        let key = |secs: i64, value: f64| crate::anim::Keyframe {
+            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+            value,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        };
+        let mut grow = Property::fixed(0.0);
+        grow.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 4.0)]);
+        it.offset_amount = grow;
+        let at = |t: f64| {
+            ink(&rasterise_contents(
+                &[it.clone()],
+                24,
+                24,
+                0.0,
+                0.0,
+                24.0,
+                24.0,
+                t,
+            ))
+        };
+        assert!(at(1.0) > at(0.0), "the shape swells as it plays");
+    }
+
+    #[test]
+    fn an_unoffset_item_is_absent_from_the_file() {
+        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
+        assert!(
+            !json.contains("offset_amount"),
+            "nothing about offsets: {json}"
+        );
+        let mut it = item(square(0.0, 0.0, 4.0));
+        it.offset_amount = Property::fixed(2.5);
+        let back: ShapeItem =
+            serde_json::from_str(&serde_json::to_string(&it).expect("json")).expect("round trip");
+        assert_eq!(back.offset_amount.value_at(0.0), 2.5);
     }
 
     /// A repeated square is drawn where the step puts it, and nowhere else.

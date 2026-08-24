@@ -559,6 +559,7 @@ mod tests {
             trim_offset: lumit_core::anim::Property::zero(),
             dashes: Vec::new(),
             dash_offset: lumit_core::anim::Property::zero(),
+            offset_amount: lumit_core::anim::Property::zero(),
             repeat_copies: lumit_core::anim::Property::fixed(1.0),
             repeat_offset: lumit_core::anim::Property::zero(),
             repeat_anchor_x: lumit_core::anim::Property::zero(),

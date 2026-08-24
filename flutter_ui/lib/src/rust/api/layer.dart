@@ -745,6 +745,10 @@ class BridgeShapeItem {
   final List<BridgeScalar> dashes;
   final BridgeScalar dashOffset;
 
+  /// **Offset paths** (K-454): how far the outline is pushed out of the path,
+  /// in layer pixels; negative pulls it in and zero is the path itself.
+  final BridgeScalar offsetAmount;
+
   /// **The repeater** (K-453): how many copies of the item are drawn, which
   /// copy the original is (`repeat_offset`), and the transform each copy is
   /// one more step of — moved by `repeat_position_*` layer pixels, turned by
@@ -779,6 +783,7 @@ class BridgeShapeItem {
     required this.trimOffset,
     required this.dashes,
     required this.dashOffset,
+    required this.offsetAmount,
     required this.repeatCopies,
     required this.repeatOffset,
     required this.repeatAnchorX,
@@ -806,6 +811,7 @@ class BridgeShapeItem {
       trimOffset.hashCode ^
       dashes.hashCode ^
       dashOffset.hashCode ^
+      offsetAmount.hashCode ^
       repeatCopies.hashCode ^
       repeatOffset.hashCode ^
       repeatAnchorX.hashCode ^
@@ -835,6 +841,7 @@ class BridgeShapeItem {
           trimOffset == other.trimOffset &&
           dashes == other.dashes &&
           dashOffset == other.dashOffset &&
+          offsetAmount == other.offsetAmount &&
           repeatCopies == other.repeatCopies &&
           repeatOffset == other.repeatOffset &&
           repeatAnchorX == other.repeatAnchorX &&

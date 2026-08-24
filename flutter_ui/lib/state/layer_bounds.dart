@@ -83,7 +83,10 @@ Size textLayerBounds(String text, double size) => Size(
 Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
   double? minX, minY, maxX, maxY;
   for (final item in contents) {
-    final half = item.stroke != null ? item.strokeWidth / 2 : 0.0;
+    // Half the outline sits outside the path, and an outline pushed *out* of
+    // it (K-454) sits further out still. Pulled in it never needs more room.
+    final half = (item.stroke != null ? item.strokeWidth / 2 : 0.0) +
+        math.max(0.0, evaluateScalar(item.offsetAmount, t));
     double? ix0, iy0, ix1, iy1;
     for (final v in item.vertices) {
       for (final (x, y) in [

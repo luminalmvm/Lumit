@@ -6887,6 +6887,25 @@ into thousands of pieces, the outline is simply drawn solid. At that size the
 dashes would be invisible anyway, and cutting them would cost a frame's worth of
 work to draw something you could not tell from a line.
 
+### Growing and shrinking a shape's outline
+
+**Offset path** is the first row under a shape item. It is one number in pixels:
+positive pushes the outline outwards, so the shape gets fatter; negative pulls it
+in, so it gets thinner. The shape keeps its character while it does — a rounded
+rectangle grown by ten is still a rounded rectangle, with rounder corners.
+
+That is the difference between an offset and a scale. Scaling a rounded rectangle
+makes its corners bigger in proportion; offsetting it adds the same margin all the
+way round, which is what you want for a border, a keyline or a thicker version of
+a logo. Corners come out **round**, which is the only kind of corner Lumit's shape
+outlines have.
+
+One honest limit: pull the outline in by more than the shape is thick anywhere and
+the outline crosses itself, leaving a small loop. Most of the time the fill rule
+swallows it and you see nothing; where you do see it, the cure is a smaller number.
+Cleaning that up properly means a whole polygon-clipping library, which is not
+worth carrying for a case a slider drag walks straight back out of.
+
 ### Repeating a shape
 
 A shape item has a **Copies** row. Leave it at one and nothing changes; turn it

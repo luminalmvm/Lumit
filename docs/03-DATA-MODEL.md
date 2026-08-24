@@ -725,6 +725,7 @@ struct ShapeItem {
     trim_offset: Property,            // degrees; 360 is once round a closed path
     dashes: Vec<Property>,            // dash, gap, dash, gap … in layer pixels
     dash_offset: Property,            // layer pixels
+    offset_amount: Property,          // layer pixels; out of the path, negative is in
     repeat_copies: Property,          // 1..MAX_COPIES; a still 1 is no repeater
     repeat_offset: Property,          // which copy the original is; may be negative
     repeat_anchor_x: Property,        // layer pixels; what a copy turns and scales about
@@ -782,6 +783,16 @@ along" is, and each piece is drawn by the same brush run the whole outline is. A
 that the path would need more than 4096 pieces is drawn **solid**: at that density it is a solid
 line to the eye, and cutting it would cost a frame to draw something indistinguishable.
 
+**Offset paths** (K-454) push the outline **out** of the path by `offset_amount` layer pixels;
+negative pulls it in, and zero is the path itself and is absent from the file. "Out" is decided by
+the ring's own winding, so a positive amount grows the shape whichever way round its points were
+written; an open path has no inside, so it is simply moved to one side. The corners are **round**,
+which is the one join this crate draws. The offset does **not** unpick its own
+self-intersections: pulling in by more than a curve bends folds the outline back through itself,
+and the non-zero winding fill swallows most of what that produces. Unpicking it properly is a
+polygon-clipping library, and the failure is local and visible, which makes it a limit rather than
+a trap.
+
 **The repeater** (K-453) draws the item **more than once**: `repeat_copies` copies, each one more
 step of a transform than the last. The step moves by `repeat_position_*` layer pixels, turns by
 `repeat_rotation` degrees and scales by `repeat_scale` per cent, all about `repeat_anchor_*`;
@@ -794,8 +805,9 @@ Effects' own default. A still count of one is no repeater at all and is absent f
 the count is held to `MAX_COPIES` (100) because every copy is a rasteriser pass over the whole
 layer.
 
-The order is **trim, then dash, then repeat**: the dashes run along whatever the trim left, and
-the repeater copies whatever the two of them drew.
+The order is **offset, then trim, then dash, then repeat**: the offset makes the outline, the trim
+cuts whatever outline there is by its length, the dashes run along whatever the trim left, and the
+repeater copies whatever the three of them drew.
 
 **Future:** nested groups, wiggle paths, joins and caps other than round, and animated paths.
 

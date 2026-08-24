@@ -149,6 +149,16 @@ is not, and that is the whole of its difficulty. Three things fell out of it:
   and lifting the ceiling means teaching the mask rasteriser to work in one
   copy's own box, which is a change over there rather than here.
 
+**Offset paths.** Thirty lines, and the temptation was to make it three hundred.
+The polyline is offset segment by segment, the corners that open are filled with
+a round join, and the corners that close are joined straight — which is where the
+self-intersections come from. The alternatives were a proper polygon-clipping
+library (a dependency and a determinism question, for a case a slider walks back
+out of) or a miter join with a limit (a second join style, when the crate draws
+exactly one). Neither earned its keep. The **winding** is read from the shoelace
+area so a positive amount grows a path written either way round; that is one loop
+and it removes the only way the feature could be silently backwards.
+
 ## The trap to expect
 
 The wireframe and hit-testing (K-217) read a layer's *content size* to draw its

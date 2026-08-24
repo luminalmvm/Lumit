@@ -10015,6 +10015,7 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_dashes = <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         let mut var_dashOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_offsetAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_repeatCopies = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_repeatOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_repeatAnchorX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
@@ -10040,6 +10041,7 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             trim_offset: var_trimOffset,
             dashes: var_dashes,
             dash_offset: var_dashOffset,
+            offset_amount: var_offsetAmount,
             repeat_copies: var_repeatCopies,
             repeat_offset: var_repeatOffset,
             repeat_anchor_x: var_repeatAnchorX,
@@ -13778,6 +13780,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.trim_offset.into_into_dart().into_dart(),
             self.dashes.into_into_dart().into_dart(),
             self.dash_offset.into_into_dart().into_dart(),
+            self.offset_amount.into_into_dart().into_dart(),
             self.repeat_copies.into_into_dart().into_dart(),
             self.repeat_offset.into_into_dart().into_dart(),
             self.repeat_anchor_x.into_into_dart().into_dart(),
@@ -15672,6 +15675,7 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
         <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.dashes, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.dash_offset, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.offset_amount, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_copies, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_offset, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_anchor_x, serializer);

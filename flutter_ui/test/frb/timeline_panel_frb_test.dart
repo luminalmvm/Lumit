@@ -1353,6 +1353,7 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
             repeatAnchorX: const BridgeScalar.static_(0),
@@ -1403,6 +1404,18 @@ void main() {
 
       // This item has no outline, so it has no dashes to set.
       expect(find.text('Dash'), findsNothing);
+
+      // The offset applies before the trim, and reads as one length (K-454).
+      expect(find.text('Offset path'), findsOneWidget);
+      final offset =
+          find.byKey(ValueKey<String>('tl-shape-offsetPath-${item.id}'));
+      await tester.tap(offset);
+      await tester.pumpAndSettle();
+      await tester.enterText(offset, '-4');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.offsetAmount,
+          const BridgeScalar.static_(-4));
     });
 
     /// The dashes belong to the outline: their rows appear under an item that
@@ -1433,6 +1446,7 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
             repeatAnchorX: const BridgeScalar.static_(0),
@@ -1497,6 +1511,7 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
             repeatAnchorX: const BridgeScalar.static_(0),
@@ -1561,6 +1576,7 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
             repeatCopies: const BridgeScalar.static_(1),
             repeatOffset: const BridgeScalar.static_(0),
             repeatAnchorX: const BridgeScalar.static_(0),

@@ -26,6 +26,7 @@ void main() {
     double copies = 1,
     double stepX = 0,
     double copyOffset = 0,
+    double offset = 0,
   }) =>
       BridgeShapeItem(
         id: UuidValue.fromString(const Uuid().v4()),
@@ -42,6 +43,7 @@ void main() {
         trimOffset: const BridgeScalar.static_(0),
         dashes: const [],
         dashOffset: const BridgeScalar.static_(0),
+        offsetAmount: BridgeScalar.static_(offset),
         repeatCopies: BridgeScalar.static_(copies),
         repeatOffset: BridgeScalar.static_(copyOffset),
         repeatAnchorX: const BridgeScalar.static_(0),
@@ -67,6 +69,16 @@ void main() {
       item([corner(-5, 4), corner(20, 4), corner(20, 8), corner(-5, 8)]),
     ]);
     expect(size, const Size(25, 10));
+  });
+
+  /// An outline pushed out of the path is art outside the path (K-454), and
+  /// the engine grows its raster the same way.
+  test('an offset outline grows the box, and pulling it in does not', () {
+    final art = [corner(0, 0), corner(10, 0), corner(10, 10), corner(0, 10)];
+    expect(shapeContentsRect([item(art, offset: 3)]),
+        const Rect.fromLTRB(-3, -3, 13, 13));
+    expect(shapeContentsRect([item(art, offset: -3)]),
+        const Rect.fromLTRB(0, 0, 10, 10));
   });
 
   /// The repeater puts art where the path is not, so the layer has to be big

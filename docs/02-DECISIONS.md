@@ -12798,3 +12798,47 @@ holds every copy` and `a repeated shape item carries the repeater rows`. New str
 `shapeRepeatCopies`, `shapeRepeatOffset`, `shapeRepeatAnchorX`, `shapeRepeatAnchorY`,
 `shapeRepeatPositionX`, `shapeRepeatPositionY`, `shapeRepeatRotation`, `shapeRepeatScale`,
 `shapeRepeatStartOpacity`, `shapeRepeatEndOpacity`.
+
+## K-454 — A shape's outline can be pushed out of its path, with round corners and its own loops left in
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-451, whose shape it
+takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and
+§7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+`offset_amount: Property` is one length in **layer pixels**: positive pushes the outline out of the
+path, negative pulls it in, zero is the path itself and is absent from the file. The item's box
+grows by the outward half, because an outline outside the path is art outside the path.
+
+**Which way is out is read from the path, not assumed.** The shoelace area of the flattened ring
+gives its winding, and the offset's sign follows it, so a positive amount grows a shape whichever
+way round its points were written. That is one loop, and it removes the only way this feature could
+have been silently backwards on half the paths in a document. An open path has no inside, so it is
+moved to the side its own direction puts on the left.
+
+**The joins are round, and there is no miter limit.** This crate draws one join — a stroke is a
+round brush run along a path (K-237) — so an offset with a mitre would be the *only* square corner
+in the renderer, and would arrive with a limit parameter to keep its spikes in check. Round corners
+are what an offset outline gets until joins and caps are a feature in their own right.
+
+**Self-intersections are left in.** Offsetting inwards by more than a curve bends folds the outline
+back through itself. The honest fixes are a polygon-clipping library — a dependency, and a
+determinism question (docs/14) — or several hundred lines of segment-intersection work, and both
+are being carried for a case a slider drag walks straight back out of. The non-zero winding fill
+swallows most of what a fold produces, and the rest is local and visible rather than a wrong answer
+that hides. Written down here rather than discovered later.
+
+**The order is offset, then trim, then dash, then repeat** (§7.2.1). The offset makes the outline
+and everything after it works on the outline there is: a trim measures the *grown* path's length,
+which is longer than the path it came from, and that is the reading that matches what the eye
+watches.
+
+**The row is first**, for the same reason: an item's rows read in the order they apply.
+
+Regression tests: in `lumit-core`, `an_offset_path_grows_the_shape_and_a_negative_one_shrinks_it`,
+`an_offset_corner_is_rounded_rather_than_mitred`, `an_offset_grows_a_path_written_either_way_round`,
+`the_box_holds_the_grown_outline`, `an_offset_of_nothing_is_the_path_itself`,
+`the_trim_cuts_the_offset_outline_and_not_the_path`, `a_keyed_offset_is_read_on_the_layers_clock`,
+`an_unoffset_item_is_absent_from_the_file`; in the bridge,
+`a_shapes_offset_round_trips_both_ways`; in Flutter, `an offset outline grows the box, and pulling
+it in does not` and the Offset path row's write-through in `a shape layer grows a Contents heading
+in its twirl-down`. New string: `shapeOffsetPath`.

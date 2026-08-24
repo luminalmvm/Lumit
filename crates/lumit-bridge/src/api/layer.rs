@@ -121,6 +121,9 @@ pub struct BridgeShapeItem {
     /// pixels.
     pub dashes: Vec<BridgeScalar>,
     pub dash_offset: BridgeScalar,
+    /// **Offset paths** (K-454): how far the outline is pushed out of the path,
+    /// in layer pixels; negative pulls it in and zero is the path itself.
+    pub offset_amount: BridgeScalar,
     /// **The repeater** (K-453): how many copies of the item are drawn, which
     /// copy the original is (`repeat_offset`), and the transform each copy is
     /// one more step of — moved by `repeat_position_*` layer pixels, turned by
@@ -163,6 +166,7 @@ impl BridgeShapeItem {
                 .map(|d| BridgeScalar::read_at(d, offset))
                 .collect(),
             dash_offset: BridgeScalar::read_at(&item.dash_offset, offset),
+            offset_amount: BridgeScalar::read_at(&item.offset_amount, offset),
             repeat_copies: BridgeScalar::read_at(&item.repeat_copies, offset),
             repeat_offset: BridgeScalar::read_at(&item.repeat_offset, offset),
             repeat_anchor_x: BridgeScalar::read_at(&item.repeat_anchor_x, offset),
@@ -210,6 +214,9 @@ impl BridgeShapeItem {
                 .map(|d| clamped_property(d, offset, 0.0, 100_000.0))
                 .collect::<Result<_, _>>()?,
             dash_offset: clamped_property(&self.dash_offset, offset, -100_000.0, 100_000.0)?,
+            // Layer pixels, out or in: both directions mean something, so only
+            // the far ends are held.
+            offset_amount: clamped_property(&self.offset_amount, offset, -100_000.0, 100_000.0)?,
             // The count is what the engine holds to 1..MAX_COPIES as it draws,
             // so the clamp here only keeps a wild number out of the document;
             // the offset is a copy index and may be negative, which is what

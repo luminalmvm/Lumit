@@ -117,6 +117,7 @@ void main() {
         trimOffset: const BridgeScalar.static_(0),
         dashes: const [],
         dashOffset: const BridgeScalar.static_(0),
+        offsetAmount: const BridgeScalar.static_(0),
         repeatCopies: const BridgeScalar.static_(1),
         repeatOffset: const BridgeScalar.static_(0),
         repeatAnchorX: const BridgeScalar.static_(0),

@@ -4866,6 +4866,8 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
   /// The trim's two ends are a per cent of the path's own length; its offset is
   /// degrees, because degrees go round; the dashes are lengths in layer pixels.
   (double, double, String) get _units => switch (widget.value) {
+        // Out or in, in layer pixels.
+        ShapeValue.offsetPath => (-1000, 1000, ' px'),
         ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
