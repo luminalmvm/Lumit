@@ -13,7 +13,6 @@
 // one.
 
 abstract final class LumitIcons {
-
   // --- Tools ---
   static const String select =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l10 6-4.5 1L6 13z"/></svg>';
@@ -67,6 +66,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6c3-3 7-3 10 0"/><path d="M2 9c3 3 9 3 12 0"/></svg>';
   static const String shyOn =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6c3-3 7-3 10 0" opacity=".35"/><path d="M2 9c3 3 9 3 12 0"/></svg>';
+  static const String effectsSwitch =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3.5c-1.2 0-1.8.8-2 2L2.5 12.5M2 7.5h4"/><path d="M8.5 6.5l5 6M13.5 6.5l-5 6"/></svg>';
   static const String motionBlur =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="3"/><path d="M2 6h4M1 8h4M2 10h4" opacity=".6"/></svg>';
   static const String flow =
@@ -189,6 +190,7 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6 2.5v11M10 2.5v11M2.5 6h11M2.5 10h11"/></svg>';
   static const String safeZones =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9"/><rect x="4.5" y="5.5" width="7" height="5" stroke-dasharray="1.5 1.5"/></svg>';
+
   /// Monochrome here; the Viewer colours the circles per viewed channel at runtime.
   static const String channels =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="9.5" r="3.8"/><circle cx="10" cy="9.5" r="3.8"/><circle cx="8" cy="5.5" r="3.8"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg>';
@@ -295,6 +297,7 @@ abstract final class LumitIcons {
     'Unlocked': unlocked,
     'Shy': shy,
     'Shy on': shyOn,
+    'Effects switch': effectsSwitch,
     'Motion blur': motionBlur,
     'Flow': flow,
     '3D': threeD,

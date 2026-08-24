@@ -23,7 +23,6 @@ import 'package:iconoir_flutter/regular/erase.dart' as ic;
 import 'package:iconoir_flutter/regular/expand.dart' as ic;
 import 'package:iconoir_flutter/regular/fill_color.dart' as ic;
 import 'package:iconoir_flutter/regular/flare.dart' as ic;
-import 'package:iconoir_flutter/regular/fx.dart' as ic;
 import 'package:iconoir_flutter/regular/globe.dart' as ic;
 import 'package:iconoir_flutter/regular/hdr.dart' as ic;
 import 'package:iconoir_flutter/regular/intersect.dart' as ic;
@@ -341,6 +340,7 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.graphCurve => LumitIcons.scopes,
       // Keyframes and values.
       LumitIcon.stopwatch => LumitIcons.stopwatch,
+      LumitIcon.fx => LumitIcons.effectsSwitch,
       LumitIcon.prevKeyframe => LumitIcons.previousKey,
       LumitIcon.nextKeyframe => LumitIcons.nextKey,
       LumitIcon.keyframeAdd => LumitIcons.addKey,
@@ -420,7 +420,6 @@ Widget _iconoirGlyph(LumitIcon icon, Color color) => switch (icon) {
       LumitIcon.keyframeFilled => ics.KeyframeSolid(color: color),
       LumitIcon.collapse => ic.Flare(color: color),
       LumitIcon.magnet => ic.Magnet(color: color),
-      LumitIcon.fx => ic.Fx(color: color),
       LumitIcon.label => ic.Label(color: color),
       LumitIcon.rotate => ic.RotateCameraRight(color: color),
       LumitIcon.vertexAdd => ic.PlusCircle(color: color),
