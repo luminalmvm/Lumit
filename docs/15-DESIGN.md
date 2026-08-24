@@ -882,6 +882,46 @@ top and a bottom bar; a setting gathers everything into a single bar, at the top
 bottom. K-411's instrument grouping carries over whichever arrangement is set
 ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2).
 
+### 12A.6 Metrics and degradation (K-451)
+
+**The approved mockups' heights are canonical.** Chrome is built to these logical-pixel
+values, not approximations of them; a mismatch is a defect. Vertical metrics never squish —
+when a panel is too short, its content scrolls.
+
+| Element | Height |
+|---|---|
+| Panel header strip (title and tabs, composition tabs) | 22 |
+| Secondary rows: timecode/search/mode row, column headers, filter rows, panel bottom bars | 18 |
+| Outline and lane rows | 22 |
+| Clip bars within a lane row | 16 |
+| Property and effect-parameter rows | 26 |
+| Effect section headings | 24 |
+| Timeline ruler (times above, markers and work area below) | 36 |
+| Value wells in panels | 20 |
+| Dialog title strip and dialog rows | 30 |
+| Dialog page-tab row | 26 |
+| Dialog value wells and dropdowns | 22 |
+| Status bar | 18 |
+| Graph-side horizontal scrollbar | 7 |
+
+**When width runs out, things give way in this order** — earlier steps must be exhausted
+before later ones, and nothing ever paints outside its box:
+
+1. **Flexible text ellipsises**: names, paths and other user text truncate with an
+   ellipsis on one line; values and units never truncate.
+2. **Secondary control runs wrap**: riders and control clusters (Mix and Matte's blend,
+   channel and invert; similar runs elsewhere) drop to a second line inside their column
+   rather than eliding their words.
+3. **Optional metadata columns hide**, least essential first (path, then fps, then size);
+   names and states stay.
+4. **Toolbars overflow**: buttons that no longer fit collapse into a single overflow menu
+   at the end of the bar rather than shrinking or clipping.
+5. **Below a panel's minimum width, it scrolls horizontally** instead of degrading
+   further. Every panel declares a minimum; the dock will not shrink it past that.
+
+The user-facing column toggles (switches, modes, parent) are the user's, not the
+degradation ladder's — the ladder never flips them.
+
 ## 13. New-panel checklist
 
 The Lumit equivalent of the household §9 checklist. Every new panel or feature MUST satisfy:

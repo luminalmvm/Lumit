@@ -12159,3 +12159,14 @@ mockups already differ; the three-greys rule and the borderless grammar otherwis
 - **The secondary button rests as a `hairline_strong` outline**, a deliberate exception to
   the borderless-widget rule (§2.3) for buttons only: a dialog's non-default action has to
   be findable beside the filled one without spending a fourth grey on it.
+
+## K-451 — Mockup heights are canonical, and width gives way in a fixed order
+
+**DECIDED 2026-08-24.** The approved mockups' vertical metrics are binding: chrome is
+built to the table in `docs/15-DESIGN.md` §12A.6 (22px header strips, 18px secondary
+rows, 22px outline rows, 26px property rows, 36px ruler, and the rest), and vertical
+metrics never compress — short panels scroll. When width runs out, the degradation
+ladder in §12A.6 applies in order: flexible text ellipsises, secondary control runs
+wrap, optional metadata columns hide, toolbars overflow into a menu, and below a
+panel's declared minimum width the panel scrolls horizontally. Values and units never
+truncate, and the ladder never flips the user's own column toggles.
