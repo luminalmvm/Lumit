@@ -12203,3 +12203,14 @@ sentence-case words tinted in the accent: that spends the accent on text and lea
 strip with no tick at all. Round keeps its filled pill (K-394) and needs no tick under a
 fill. The Timeline's snap magnet loses its accent for the same reason — a tool toggle is
 not on §3.1's closed list, and it now reads as foreground on the button's own face.
+
+## K-454 — Two row densities: the mockups' room by default, Compact as a setting
+
+**DECIDED 2026-08-24.** The owner's ruling on density: the redesign's default row and
+bar heights follow the approved mockups' *effective* rendered heights — content plus
+the borders and gaps the mockup actually paints, rounded toward the roomier reading —
+and a **Compact** toggle in the settings houses the slimmer variants for users who want
+more visible at once. Where a K-451 metric reads tighter than the mockup renders, the
+mockup's value becomes the Regular default and the tighter value moves into Compact;
+§12A.6's table gains the second column as the measurements land. Supersedes K-451 only
+in that sense — the table's authority and its degradation ladder stand.
