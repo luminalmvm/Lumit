@@ -76,7 +76,7 @@ const double composeGroupWidth =
 /// The render-time cell: wide enough for "1234 ms" and its switch, and no
 /// wider — it is a readout beside the work, not a column of the outline that
 /// earns its space when nothing is being measured.
-const double timingsGroupWidth = 74;
+const double timingsGroupWidth = 56;
 
 /// The seam between two adjacent groups: a hairline in the header with a
 /// margin each side, plain space in the rows (the header's rule is enough to
@@ -111,10 +111,14 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
 /// to fill a wider column, so widening either would only buy blank space, and
 /// the seams beside them are not draggable at all.
 ///
-/// Only those two. The rest each have something inside them that gains from
-/// more room — a longer name, a longer blend-mode word, a render time.
+/// Only these. The rest each have something inside them that gains from
+/// more room — a longer name, a longer blend-mode word. The render-time
+/// column is fixed too (owner's ruling): sized for "00.00 ms" exactly, so
+/// its dots stack whatever the window does.
 bool groupIsFixedWidth(TimelineGroup group) =>
-    group == TimelineGroup.switches || group == TimelineGroup.render;
+    group == TimelineGroup.switches ||
+    group == TimelineGroup.render ||
+    group == TimelineGroup.timings;
 
 /// How narrow a group may be dragged: enough for the cells that cannot
 /// shrink — its icons, or a dropdown you can still read a name in.

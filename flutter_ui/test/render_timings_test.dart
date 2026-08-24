@@ -97,9 +97,9 @@ void main() {
   });
 
   test('the readout stays the same width and never lies about precision', () {
-    expect(formatRenderMs(0), '0.0 ms');
-    expect(formatRenderMs(8.24), '8.2 ms');
-    expect(formatRenderMs(99.94), '99.9 ms');
+    expect(formatRenderMs(0), '0.00 ms');
+    expect(formatRenderMs(8.24), '8.24 ms');
+    expect(formatRenderMs(99.94), '99.94 ms');
     expect(formatRenderMs(100), '100 ms');
     expect(formatRenderMs(842.6), '843 ms');
     expect(formatRenderMs(1000), '1.00 s');

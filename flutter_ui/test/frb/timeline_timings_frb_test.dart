@@ -86,9 +86,9 @@ void main() {
       ));
       await tester.pump();
 
-      expect(find.text('8.5 ms'), findsOneWidget,
+      expect(find.text('8.50 ms'), findsOneWidget,
           reason: 'the layer row shows what its picture cost');
-      expect(find.text('12.5 ms'), findsOneWidget,
+      expect(find.text('12.50 ms'), findsOneWidget,
           reason: 'and the header shows what the whole frame cost, so a dash '
               'on a row below can be told from an engine saying nothing');
     });
@@ -178,8 +178,8 @@ void main() {
       ));
       await tester.pump();
 
-      final layerNumber = tester.getRect(find.text('8.5 ms'));
-      final effectNumber = tester.getRect(find.text('4.5 ms'));
+      final layerNumber = tester.getRect(find.text('8.50 ms'));
+      final effectNumber = tester.getRect(find.text('4.50 ms'));
       expect(effectNumber.right, closeTo(layerNumber.right, 0.5),
           reason: 'the two numbers share a column, so they read as one');
     });

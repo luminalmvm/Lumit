@@ -134,5 +134,8 @@ String formatRenderMs(double ms) {
   if (!ms.isFinite || ms < 0) return '—';
   if (ms >= 1000) return '${(ms / 1000).toStringAsFixed(2)} s';
   if (ms >= 100) return '${ms.round()} ms';
-  return '${ms.toStringAsFixed(1)} ms';
+  // Two decimals always (owner's ruling): every value in the column carries
+  // the same shape, so right-aligned tabular figures stack their dots into
+  // one line and the column reads at a glance.
+  return '${ms.toStringAsFixed(2)} ms';
 }
