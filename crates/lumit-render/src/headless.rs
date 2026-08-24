@@ -3198,6 +3198,60 @@ mod tests {
         assert_eq!(builder.has_audio.len(), 1);
     }
 
+    /// **Sound inside a precomp reaches the comp that holds it.** A song sits
+    /// in comp A; comp B places A two seconds in. Rendering B's audio must find
+    /// the song, mapped into B's own time and carrying the Precomp layer's
+    /// Volume, because that is how a music bed usually arrives: laid down once
+    /// in a comp of its own and then placed, rather than dropped straight into
+    /// the comp being exported.
+    ///
+    /// The walk recurses, so this is a guard rather than a repair — but a
+    /// silent export is the kind of fault nobody notices until the file is
+    /// somewhere else, and the mapping (not merely the presence) is what a
+    /// nested placement gets wrong.
+    ///
+    /// No media fixture: the has-audio probe is a cache, so seeding it says
+    /// "this item has sound" without a file on disk.
+    #[test]
+    fn audio_inside_a_precomp_reaches_the_comp_that_holds_it() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let inner = push_comp(&mut doc, "A", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        let outer = push_comp(&mut doc, "B", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
+        // B places A two seconds in, at −6 dB.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            let layer = &mut c.layers[0];
+            layer.start_offset = CompTime(Rational::new(2, 1).unwrap());
+            layer.volume_db = lumit_core::anim::Property::fixed(-6.0);
+        }
+
+        let mut builder = AudioJobsBuilder::new();
+        builder.has_audio.insert(song, true);
+        let comp = doc.comp(outer).unwrap().clone();
+        let jobs = builder.audio_jobs(&doc, &comp);
+
+        assert_eq!(jobs.len(), 1, "the song inside the precomp must be heard");
+        let job = &jobs[0];
+        assert_eq!(job.item, song);
+        // A's layer spans 0..5 in A's time, which is 2..7 in B's — clipped to
+        // where the Precomp layer itself plays, 0..5.
+        assert!((job.in_s - 2.0).abs() < 1e-9, "in_s was {}", job.in_s);
+        assert!((job.out_s - 5.0).abs() < 1e-9, "out_s was {}", job.out_s);
+        assert!(
+            (job.offset_s - 2.0).abs() < 1e-9,
+            "the source starts where A was placed, got {}",
+            job.offset_s
+        );
+        assert_eq!(
+            job.carriers.len(),
+            1,
+            "the Precomp layer's Volume rides on the job"
+        );
+        assert!((job.carriers[0].0.value_at(0.0) - -6.0).abs() < 1e-9);
+    }
+
     /// **The export contract for the deferred flare bake (K-350).** A fresh
     /// renderer bakes lens flares *inside* the frame, exactly as it always did.
     ///
