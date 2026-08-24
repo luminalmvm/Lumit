@@ -47,7 +47,8 @@ void main() {
     // push its right edge (and the lanes) off screen. Height is a parameter
     // because the scrolling claims need a viewport shorter than the stack.
     Future<void> mount(WidgetTester tester, dynamic p,
-        {double height = 600}) async {
+        {double height = 600,
+        DensityTokens density = DensityTokens.regular}) async {
       tester.view.physicalSize = Size(1280, height);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -56,6 +57,7 @@ void main() {
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
         size: Size(1280, height),
+        density: density,
       ));
       await tester.pump();
     }
@@ -530,32 +532,37 @@ void main() {
 
     /// 9. **The mockups' heights are canonical** (K-451, docs/15 §12A.6). The
     /// panel's chrome is built to those logical pixels, not to approximations
-    /// of them, so each one is measured here rather than trusted: a secondary
-    /// row is 18, a lane row 22, and the ruler — counting the cache bar drawn
-    /// on its floor, which the table counts — is 36.
+    /// of them, so each one is measured here rather than trusted — and against
+    /// the density's own tokens rather than against numbers copied out of the
+    /// table, so the pin cannot drift from what the app reads (K-454).
     testWidgets('the panel is built to K-451 heights', (tester) async {
       final p = withComp();
       final layer = p.comp.addAdjustmentLayer();
       p.uiState.model.refresh();
       await mount(tester, p);
+      const d = DensityTokens.regular;
 
       final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
       final cache = tester.getRect(find.byType(TimelineCacheBar).first);
-      expect(ruler.height, closeTo(36, 0.5),
-          reason: 'the ruler is 36 with the cache bar counted inside it');
+      expect(ruler.height, closeTo(d.ruler, 0.5),
+          reason: 'the ruler is the density\'s, cache bar counted inside it');
       // And the cache bar is *on* the ruler's floor, not a strip beneath it
       // (§12A.1): the work-area band is what it is drawn over.
       expect(cache.bottom, closeTo(ruler.bottom, 0.5),
-          reason: 'the cache bar sits on the ruler floor, inside its 36');
+          reason: 'the cache bar sits on the ruler floor, inside it');
 
       // The outline's two secondary rows — timecode/search/mode, then the
       // column header — stand between the top of the panel's table and its
       // first row, and the ruler starts at that same top on the lane side.
-      expect(outlineRow(tester, layer).top - ruler.top, closeTo(36, 0.5),
-          reason: 'two 18px secondary rows sit above the first layer row');
-      expect(outlineRow(tester, layer).height, closeTo(22, 0.5),
-          reason: 'an outline row is 22');
-      expect(laneBar(tester, layer).height, closeTo(22, 0.5),
+      // **That equality is the ruler's whole derivation** (§12A.6): the lane
+      // side spends on its ruler exactly what the outline spends on its two
+      // rows, so the two halves meet.
+      expect(outlineRow(tester, layer).top - ruler.top,
+          closeTo(d.secondaryRow * 2, 0.5),
+          reason: 'two secondary rows sit above the first layer row');
+      expect(outlineRow(tester, layer).height, closeTo(d.laneRow, 0.5),
+          reason: 'an outline row is the density\'s lane row');
+      expect(laneBar(tester, layer).height, closeTo(d.laneRow, 0.5),
           reason: 'and so is its bar');
 
       // The cache bar's own 3, at the bottom of the ruler's lower row.
@@ -573,11 +580,10 @@ void main() {
     });
 
     /// 10. **The pieces inside a row are the mockup's, not approximations of
-    /// them** (K-451): a bar is 16 in a 22 row and centred in it, the layer's
-    /// label colour is a 6px dot, and the number beside it stands in an 18px
-    /// column.
-    testWidgets('a lane row draws a 16px bar centred in its 22',
-        (tester) async {
+    /// them** (K-451): a bar is 16 whatever the row measures and centred in it,
+    /// the layer's label colour is a 6px dot, and the number beside it stands
+    /// in an 18px column.
+    testWidgets('a lane row draws a 16px bar centred in it', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       p.uiState.model.refresh();
@@ -587,7 +593,8 @@ void main() {
       final bar = tester
           .getRect(find.byKey(ValueKey<String>('tl-bar-body-${idOf(layer)}')));
       expect(bar.height, closeTo(clipBarHeight, 0.5),
-          reason: 'a clip bar within a lane row is 16 (§12A.6)');
+          reason: 'a clip bar within a lane row is 16 under either '
+              'density (§12A.6)');
       expect(bar.center.dy, closeTo(row.center.dy, 0.5),
           reason: 'and is centred in the row, ground above and below');
 
@@ -619,9 +626,10 @@ void main() {
           reason: 'a layer\'s own name is sentence-case Hanken, not mono');
     });
 
-    /// 10c. **The pickers inside a row are 16 with a 10px label** (§12A.6's
-    /// table, K-451): matte, blend and parent are cells in a 22px row, not
-    /// dialog controls, and the mockup draws all three at the shorter face.
+    /// 10c. **The pickers inside a row wear the in-row face** (§12A.6's table,
+    /// K-451): matte, blend and parent are cells in a layer's row, not dialog
+    /// controls, and the mockup draws all three at the shorter face with a
+    /// 10px label.
     testWidgets('the matte, blend and parent pickers are the density\'s',
         (tester) async {
       final p = withComp();
@@ -650,6 +658,49 @@ void main() {
             inRowDropdownTextSize,
             reason: 'with the mockup\'s 10px label');
       }
+    });
+
+    /// 10d. **Compact is the same panel, a pixel tighter** (K-454, §12A.6's
+    /// second column). The setting reaches the rows that matter — the layer
+    /// rows and the panel's own chrome — and it reaches them through the
+    /// theme, so the outline and the lanes move together: a table whose two
+    /// halves agreed at one density and not at the other would be worse than
+    /// no setting at all.
+    testWidgets('Compact draws the table\'s tighter column', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p, density: DensityTokens.compact);
+      const d = DensityTokens.compact;
+
+      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      final row = outlineRow(tester, layer);
+      expect(row.height, closeTo(22, 0.5), reason: 'a lane row is 22');
+      expect(ruler.height, closeTo(36, 0.5), reason: 'the ruler is 36');
+      // The ruler is still exactly the two secondary rows the outline spends
+      // opposite it, which is what holds the halves level at either density.
+      expect(row.top - ruler.top, closeTo(36, 0.5),
+          reason: 'two 18px secondary rows stand above the first layer row');
+      expect(
+          tester
+              .getRect(find.byKey(const ValueKey('tl-lane-bottom-bar')))
+              .height,
+          closeTo(18, 0.5),
+          reason: 'a panel bottom bar is a secondary row, and so 18');
+      expect(d.secondaryRow, 18, reason: 'which is the token\'s own value');
+
+      for (final cell in ['matte', 'blend', 'parent']) {
+        expect(
+            tester
+                .getRect(find.byKey(
+                    ValueKey<String>('tl-$cell-${layer.internallayerId}')))
+                .height,
+            closeTo(16, 0.5),
+            reason: 'an in-row picker is 16 under Compact');
+      }
+
+      // And the halves still meet, which is the whole point of the derivation.
+      expectLevel(tester, layer, why: 'under Compact');
     });
 
     /// 11. **Neither column of switches ever stretches** (§12A.1, K-448; Modes
@@ -710,5 +761,6 @@ void main() {
 
 /// The Sequence view takes the layer's own bar row as the top of its clip
 /// strip, so the outline's spacer holds everything *below* that row — one row
-/// less than the view is tall (K-248).
-const double _seqOwnRow = 22;
+/// less than the view is tall (K-248). That row is the table's, and so the
+/// density's (K-454), not one of the view's own.
+final double _seqOwnRow = DensityTokens.regular.laneRow;

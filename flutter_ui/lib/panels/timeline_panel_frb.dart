@@ -96,10 +96,6 @@ double sampledScalar(BridgeScalar scalar, BridgeRational time) {
       sampleScalar(scalar: scalar, time: time);
 }
 
-/// One layer row's height (K-451, via [laneRowHeight] so the bars inside it
-/// and the row itself are one number).
-const double _rowHeight = laneRowHeight;
-
 /// The layer-number column: the mockup's own 18 (K-451), shared by the column
 /// header's `#` and the muted mono number under it so the two stack.
 const double _numberCellWidth = 18;
@@ -108,38 +104,6 @@ const double _numberCellWidth = 18;
 /// (K-451), drawn round whatever the shape is: this is a colour swatch, not a
 /// control, and Sharp's square corners have nothing to say about a bullet.
 const double _labelDotSize = 6;
-
-/// The outline's two header rows: the toolbar (timecode, search, the view
-/// buttons) and the column-group header under it.
-///
-/// Both are **secondary rows**, which the mockups fix at 18 (K-451, docs/15
-/// §12A.6) — and 18 + 18 less the cache bar is exactly the 36 the same table
-/// gives the ruler, which is what makes the two halves of the panel meet.
-///
-/// **This is where the hit floor gives way** (§7.2): the buttons in these rows
-/// are 18 tall, under the 32 nothing interactive is supposed to hit-test below.
-/// They are not given the floor by slop, because there is nowhere to take it
-/// from — 7px above is the composition tab strip and 7px below is the column
-/// header's own drag-to-reorder and resize seams, so an expanded target here
-/// would swallow a neighbour's gesture rather than add one. Across, where a
-/// row like this is actually aimed, they keep their room.
-const double _toolbarHeight = 18;
-
-/// The lane side's bottom bar (zoom, magnet, the horizontal scrollbar).
-///
-/// **The outline reserves the same height below its rows**, and that is not
-/// decoration: the two halves are one table, and a viewport that is shorter on
-/// one side can be scrolled further than the other. The lanes could run past the
-/// outline's last row by exactly this bar's height, and the halves came apart at
-/// the bottom of a long stack — reported as "the lane area can scroll up more
-/// than the layer area". Reserving it keeps both viewports the same height,
-/// which is what keeps `maxScrollExtent` the same on both.
-///
-/// A panel bottom bar, and so 18 (K-451).
-const double _laneBottomBarHeight = 18;
-
-/// The column-group header: a secondary row, and so 18 (K-451).
-const double _headerHeight = 18;
 
 /// The horizontal scrollbar that rides in the bottom bar — 7 (K-451, docs/15
 /// §12A.6, where it is named for the graph side; the lanes' bar carries the
@@ -163,17 +127,6 @@ const double _summaryKeyHalf = 2.8;
 /// enough to read as "less of this / more of this" at a glance.
 const double _zoomGlyphSmall = 9;
 const double _zoomGlyphLarge = 14;
-
-/// The time ruler's height: the toolbar and column header stay inside the
-/// outline (docs/07 §4.1), so the lane side gives their whole height to the
-/// ruler — the **36** the mockups give it (K-451, docs/15 §12A.6). The cache
-/// bar is drawn *inside* that 36, on the ruler's floor over the work-area
-/// band, rather than taking three pixels of its own beneath it. That is what
-/// makes the ruler **double height** (docs/15 §12A.1): the upper half is the
-/// clock, carrying the labels, the ticks and the playhead's head, and the
-/// lower half carries the markers, the work-area band and the cache. A taller
-/// bar is an easier playhead grab as well, but the two rows are the point.
-const double _rulerHeight = _toolbarHeight + _headerHeight;
 
 /// How near the end of a bar counts as grabbing its edge to trim rather than its
 /// middle to move.
@@ -266,6 +219,16 @@ class LayerRow {
   final bool hasAudio;
   final bool hasPicture;
 
+  /// What one row of this layer measures — `t.density.laneRow` (K-454).
+  ///
+  /// **Carried, not looked up.** This is a plain description of a row, built
+  /// once for the whole panel and read by the maths that has no `BuildContext`
+  /// to ask: the row seams, the box-select catch, the drag slots. Handing it
+  /// the number at the one place a row is made keeps the density in the theme
+  /// where it belongs, and keeps every reader of a row answering with the same
+  /// arithmetic.
+  final double rowHeight;
+
   /// Every keyframe anywhere on this layer, for the diamonds its **own** row
   /// draws while it is shut (§12A.1). Empty while the layer is open: each
   /// property then draws its own on its own lane, and saying it twice would
@@ -277,6 +240,7 @@ class LayerRow {
     required this.id,
     required this.open,
     required this.foldRows,
+    required this.rowHeight,
     this.summaryKeys = const [],
     required this.sequenceExtra,
     this.hasAudio = false,
@@ -285,7 +249,7 @@ class LayerRow {
 
   /// This block's height: its own row, the rows it draws, and its open view.
   double get height =>
-      _rowHeight * (1 + drawnRows.length) + (sequenceExtra ?? 0);
+      rowHeight * (1 + drawnRows.length) + (sequenceExtra ?? 0);
 }
 
 /// What a column group is called — in its header, and on the bottom bar's
@@ -306,6 +270,7 @@ String columnGroupLabel(TimelineGroup group) => switch (group) {
 List<LayerRow> layerRows({
   required List<BridgeLayerEntry> layers,
   required Set<String> open,
+  required double rowHeight,
   required Map<String, bool> hasAudio,
   Map<String, bool> hasPicture = const {},
   Map<String, double> sequenceExtra = const {},
@@ -319,6 +284,7 @@ List<LayerRow> layerRows({
       entry: entry,
       id: id,
       open: open.contains(id),
+      rowHeight: rowHeight,
       foldRows: layerFoldRows(
           entry: entry,
           open: open,
@@ -975,7 +941,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // as a single block. The seams that *bound* the whole view are left
         // alone: the range is exclusive at both ends, so the layer still has a
         // line above it and the fold-out below still has one over it.
-        out.add((y, y + _rowHeight + extra));
+        out.add((y, y + row.rowHeight + extra));
       }
       y += row.height;
     }
@@ -2195,12 +2161,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// the pinned toolbar and column header and scrolls under them, so the drop
   /// is measured in stack space; the slot is then read back as an index into
   /// the whole comp, because the rows on screen may be a filtered subset.
+  ///
+  /// [density] is handed in rather than read from a context: this is geometry,
+  /// called from a drop callback, and the panel already has the theme in hand
+  /// where the gesture is wired up.
   int _dropIndex(LumitUiState ui, List<BridgeLayerEntry> layers,
-      List<double> heights, Offset global) {
+      List<double> heights, Offset global, DensityTokens density) {
     final box = _dropArea.currentContext?.findRenderObject();
     if (box is! RenderBox) return 0;
+    // The two secondary rows above the stack — the same pair the lane side
+    // spends on its ruler.
     final y = box.globalToLocal(global).dy -
-        (_toolbarHeight + _headerHeight) +
+        density.secondaryRow * 2 +
         (_vLane.hasClients ? _vLane.offset : 0);
     final slot = layerDropSlot(heights, y);
     if (slot >= layers.length) return ui.model.layers.length;
@@ -2305,6 +2277,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final rows = layerRows(
         layers: layers,
         open: _open,
+        rowHeight: t.density.laneRow,
         hasAudio: _hasAudio,
         hasPicture: _hasPicture,
         sequenceExtra: _sequenceExtra,
@@ -2373,7 +2346,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               // Where the pointer let go, not the top of the stack: dropping
               // between two layers means "here", and a stack that ignores it
               // has to be re-sorted by hand after every drop.
-              final at = _dropIndex(ui, layers, blockHeights, details.offset);
+              final at = _dropIndex(
+                  ui, layers, blockHeights, details.offset, t.density);
               switch (details.data) {
                 case FootageDragData(:final footage):
                   // Bottom-up, so a multi-item drop stacks in the order the
@@ -2585,7 +2559,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // A column, to match the lane side's: rows, then a
       // block the height of the lane bottom bar, so both
       // halves give their rows the same viewport and scroll
-      // the same distance ([_laneBottomBarHeight]).
+      // the same distance.
+      //
+      // **That reservation is not decoration**: the two
+      // halves are one table, and a viewport shorter on one
+      // side can be scrolled further than the other. The
+      // lanes could run past the outline's last row by
+      // exactly the bottom bar's height, and the halves came
+      // apart at the bottom of a long stack — reported as
+      // "the lane area can scroll up more than the layer
+      // area". Reserving it keeps both viewports the same
+      // height, which is what keeps `maxScrollExtent` the
+      // same on both.
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2685,8 +2670,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     controller: _vOutline,
                     showThumb: _graph,
                     header: [
-                      Container(height: _toolbarHeight, color: t.surface1),
-                      Container(height: _headerHeight, color: t.surface1),
+                      Container(
+                          height: t.density.secondaryRow, color: t.surface1),
+                      Container(
+                          height: t.density.secondaryRow, color: t.surface1),
                     ],
                   ),
                 ],
@@ -2696,7 +2683,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               // phased by the scroll so they travel with the
               // rows they separate.
               Positioned(
-                top: _toolbarHeight + _headerHeight,
+                // Below the outline's own two secondary rows —
+                // level with the foot of the lane side's ruler.
+                top: t.density.secondaryRow * 2,
                 left: 0,
                 right: 0,
                 bottom: 0,
@@ -2705,10 +2694,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     animation: _vOutline,
                     builder: (context, _) => CustomPaint(
                       painter: _RowDividerPainter(
-                        step: _rowHeight,
+                        step: t.density.laneRow,
                         colour: t.hairline,
                         phase: -((_positionOf(_vOutline)?.pixels ?? 0) %
-                            _rowHeight),
+                            t.density.laneRow),
                         // The grid here repeats from the
                         // panel's edge, so the blanks are
                         // carried up by however far the rows
@@ -2788,7 +2777,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               comp: comp,
                               axis: axis,
                               fps: ui.model.fps,
-                              height: _rulerHeight,
+                              height: t.density.ruler,
                               work: work,
                               onWorkArea: (span) {
                                 comp.setWorkArea(span: span);
@@ -2889,7 +2878,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 showThumb: false,
                 header: [
                   Container(
-                    height: _rulerHeight,
+                    height: t.density.ruler,
                     color: t.timelineOutOfRange,
                   ),
                 ],
@@ -3033,7 +3022,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 showThumb: true,
                 header: [
                   Container(
-                    height: _rulerHeight,
+                    height: t.density.ruler,
                     color: t.timelineOutOfRange,
                   ),
                 ],
@@ -3223,7 +3212,7 @@ class _FoldRow extends StatelessWidget {
               onEditProperty(path);
             },
       child: Container(
-        height: _rowHeight,
+        height: t.density.laneRow,
         // Selected is the full surface; a row that merely *contains* the
         // selection — the effect heading over a picked parameter — is the
         // same at half strength, exactly as a layer row marks itself.
@@ -5084,6 +5073,21 @@ class BarEndMarksPainter extends CustomPainter {
 /// the master motion-blur and shy-filter buttons and the ⋯ menu (the
 /// layer/work-area/marker commands the old full-width toolbar carried) between
 /// the well and the segments.
+///
+/// **A secondary row**, and so `t.density.secondaryRow` — 19 under Regular, 18
+/// under Compact (K-451, K-454, docs/15 §12A.6). Twice that is exactly what
+/// the same table gives the ruler across the panel, and that is what makes the
+/// two halves meet: this row and the column header under it are what the
+/// outline spends where the lane side spends a ruler.
+///
+/// **This is where the hit floor gives way** (§7.2, K-452): the buttons in
+/// this row are the row's own height, well under the 32 nothing interactive is
+/// supposed to hit-test below. They are not given the floor by slop, because
+/// there is nowhere to take it from — a few pixels above is the composition
+/// tab strip and a few below is the column header's own drag-to-reorder and
+/// resize seams, so an expanded target here would swallow a neighbour's
+/// gesture rather than add one. Across, where a row like this is actually
+/// aimed, they keep their room.
 class _Toolbar extends StatelessWidget {
   /// The read model, for the exact rate — no bridge calls in a build (K-184).
   final CompModel model;
@@ -5114,7 +5118,7 @@ class _Toolbar extends StatelessWidget {
     final (fpsNum, fpsDen) = model.fpsExact;
     final lastFrame = model.durationFrames - 1;
     return Container(
-      height: _toolbarHeight,
+      height: t.density.secondaryRow,
       // The panel's own surface, ruled off from the column header below it —
       // the mockup draws both secondary rows on the panel ground with a
       // hairline under each, not as a raised strip.
@@ -5532,6 +5536,9 @@ class _GroupSeam extends StatelessWidget {
 /// reader work out what each column *was* from the same marks the cells below
 /// already carry. The switch cells still wear their icons — those are the
 /// controls; this is the legend.
+///
+/// The second of the outline's two **secondary rows**, and so the same
+/// `t.density.secondaryRow` the toolbar above it stands at (K-454).
 class _ColumnHeader extends StatelessWidget {
   final List<TimelineGroup> order;
   final Map<TimelineGroup, double> widths;
@@ -5551,7 +5558,7 @@ class _ColumnHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
-      height: _headerHeight,
+      height: t.density.secondaryRow,
       // The panel's own ground with a rule under it, like the timecode row
       // above — the mockup draws no raised strip here.
       decoration: BoxDecoration(
@@ -5592,7 +5599,7 @@ class _ColumnHeader extends StatelessWidget {
         key: ValueKey<String>('tl-colgroup-${group.name}'),
         data: group,
         feedback: Container(
-          height: _headerHeight,
+          height: t.density.secondaryRow,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           color: t.surface2,
           child: Center(
@@ -6093,7 +6100,7 @@ class _OutlineRowState extends State<_OutlineRow> {
   Widget _rowBody(BuildContext context, LumitTheme t, BridgeLayerInfo info) {
     return Container(
         key: ValueKey<String>('tl-rowbody-${layer.internallayerId}'),
-        height: _rowHeight,
+        height: t.density.laneRow,
         decoration: BoxDecoration(
           // Selected is the brighter of the two states; a highlight (this
           // layer's fold-out was last touched) is the same surface at half
@@ -6127,7 +6134,7 @@ class _OutlineRowState extends State<_OutlineRow> {
                 child: switch (widget.groupOrder[i]) {
                   TimelineGroup.identity => _identityCells(context, t, info),
                   TimelineGroup.switches =>
-                    _ownClick(_switchCells(context, info)),
+                    _ownClick(_switchCells(context, t, info)),
                   TimelineGroup.render =>
                     _ownClick(_renderCells(context, info)),
                   TimelineGroup.compose => _ownClick(_composeCells(context, t,
@@ -6156,7 +6163,8 @@ class _OutlineRowState extends State<_OutlineRow> {
   /// have to click it to find out. Each keeps its cell's width either way, so
   /// the switches stay in their columns down the stack and the ones a row does
   /// have sit where the eye reads for them.
-  Widget _switchCells(BuildContext context, BridgeLayerInfo info) {
+  Widget _switchCells(
+      BuildContext context, LumitTheme t, BridgeLayerInfo info) {
     final id = layer.internallayerId.toString();
     final switches = info.switches;
     return Row(
@@ -6169,7 +6177,7 @@ class _OutlineRowState extends State<_OutlineRow> {
               offMark: LumitIcons.hidden,
               tip: switches.visible ? l10n.switchVisible : l10n.switchHidden)
         else
-          const SizedBox(width: switchCellWidth, height: _rowHeight),
+          SizedBox(width: switchCellWidth, height: t.density.laneRow),
         if (widget.hasAudio)
           _switch(context, id, 'audible', null, switches.audible,
               BridgeLayerSwitch.audible,
@@ -6177,7 +6185,7 @@ class _OutlineRowState extends State<_OutlineRow> {
               offMark: LumitIcons.muted,
               tip: switches.audible ? l10n.switchAudible : l10n.switchMuted)
         else
-          const SizedBox(width: switchCellWidth, height: _rowHeight),
+          SizedBox(width: switchCellWidth, height: t.density.laneRow),
         // A ringed dot, dimmed until soloed — the set has one solo mark, so
         // this pair is told apart by strength rather than by shape.
         _switch(
@@ -6215,7 +6223,7 @@ class _OutlineRowState extends State<_OutlineRow> {
             onTap: widget.onToggleOpen,
             child: SizedBox(
               width: 16,
-              height: _rowHeight,
+              height: t.density.laneRow,
               child: Center(
                 child: glyph.LumitIcon(
                   widget.open ? LumitIcons.collapse : LumitIcons.expand,
@@ -6428,7 +6436,7 @@ class _OutlineRowState extends State<_OutlineRow> {
       behavior: HitTestBehavior.opaque,
       onDoubleTap: _openLayer,
       child: SizedBox(
-        height: _rowHeight,
+        height: t.density.laneRow,
         child: Align(
           alignment: Alignment.centerLeft,
           // The chosen layer's name is the one thing on its row read at full
@@ -6485,7 +6493,7 @@ class _OutlineRowState extends State<_OutlineRow> {
       },
       child: SizedBox(
         width: 16,
-        height: _rowHeight,
+        height: t.density.laneRow,
         child: Center(
           // A 6px **dot** (K-451: the mockup's own diameter). It was a 10px
           // rounded square, which read as a swatch competing with the name
@@ -6547,7 +6555,7 @@ class _OutlineRowState extends State<_OutlineRow> {
           },
       child: SizedBox(
         width: switchCellWidth,
-        height: _rowHeight,
+        height: t.density.laneRow,
         child: Center(
           child: Container(
             width: 18,
@@ -6833,15 +6841,20 @@ class _LayerArea extends StatelessWidget {
 
   /// Every keyframe the box caught, walking the same rows the lanes draw —
   /// y from the row stack, x from the key's frame on the axis.
+  ///
+  /// The height comes off the row itself rather than from a theme lookup: this
+  /// runs from a drag, outside any build, and a row already knows what it
+  /// measures (K-454).
   Set<String> _keysIn(Rect rect) {
     final caught = <String>{};
     var y = 0.0;
     for (final layer in rows) {
-      y += _rowHeight; // the layer's own bar row
+      final step = layer.rowHeight;
+      y += step; // the layer's own bar row
       for (final row in layer.drawnRows) {
         final rowTop = y;
-        y += _rowHeight;
-        if (rowTop + _rowHeight < rect.top || rowTop > rect.bottom) continue;
+        y += step;
+        if (rowTop + step < rect.top || rowTop > rect.bottom) continue;
         final keys = laneKeysOf(row);
         for (var i = 0; i < keys.length; i++) {
           final x = axis.xOf(laneKeyFrame(keys[i], fps));
@@ -6896,11 +6909,24 @@ class _LayerArea extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // The toolbar and column header stay inside the outline
+                // (docs/07 §4.1), so the lane side gives their whole height to
+                // the ruler — which is exactly what `density.ruler` is: the
+                // token carries that derivation now, rather than this file
+                // adding two constants up (K-454, docs/15 §12A.6). The cache
+                // bar is drawn *inside* it, on the ruler's floor over the
+                // work-area band, rather than taking three pixels of its own
+                // beneath it. That is what makes the ruler **double height**
+                // (docs/15 §12A.1): the upper half is the clock, carrying the
+                // labels, the ticks and the playhead's head, and the lower
+                // half carries the markers, the work-area band and the cache.
+                // A taller bar is an easier playhead grab as well, but the two
+                // rows are the point.
                 TimelineRuler(
                   comp: comp,
                   axis: axis,
                   fps: fps,
-                  height: _rulerHeight,
+                  height: t.density.ruler,
                   work: work,
                   onSeek: onSeek,
                   onWorkArea: (span) {
@@ -7106,9 +7132,13 @@ class _LayerArea extends StatelessWidget {
                                                   onSelect(rows[i].entry.layer),
                                               onClose: () => onOpenSequence
                                                   ?.call(rows[i].entry),
+                                              // Whatever the row grew, less
+                                              // the two clip rows: the
+                                              // rest is the graph's, so
+                                              // the view fills exactly the
+                                              // room the outline left.
                                               graphHeight:
-                                                  (rows[i].sequenceExtra ??
-                                                          sequenceViewHeight) -
+                                                  rows[i].sequenceExtra! -
                                                       sequenceClipExtra,
                                               onGraphHeight: (h) =>
                                                   onGraphHeight?.call(
@@ -7132,7 +7162,7 @@ class _LayerArea extends StatelessWidget {
                                                 for (final row
                                                     in rows[i].drawnRows)
                                                   SizedBox(
-                                                    height: _rowHeight,
+                                                    height: t.density.laneRow,
                                                     child: _lane(
                                                         t,
                                                         rows[i].entry,
@@ -7176,7 +7206,7 @@ class _LayerArea extends StatelessWidget {
                               child: IgnorePointer(
                                 child: CustomPaint(
                                   painter: _RowDividerPainter(
-                                    step: _rowHeight,
+                                    step: t.density.laneRow,
                                     colour: t.hairline,
                                     blanks: sequenceBlanks,
                                   ),
@@ -7250,7 +7280,7 @@ class _LayerArea extends StatelessWidget {
               axis.perFrame <= 0 || fps <= 0 ? 0.0 : 1 / (axis.perFrame * fps);
           return CustomPaint(
             key: ValueKey<String>('tl-wave-$id'),
-            size: Size(axis.width, _rowHeight),
+            size: Size(axis.width, t.density.laneRow),
             painter: WaveformPainter(
               peaks: peaks[id],
               // Canvas x 0 is the axis's left padding, comp time 0 sits a
@@ -7268,7 +7298,7 @@ class _LayerArea extends StatelessWidget {
               // half of one, and a wave rising from the floor has the pair to
               // rise through. The paint reaches up; the row does not grow, so
               // the outline and the lanes stay level.
-              height: _rowHeight * 2,
+              height: t.density.laneRow * 2,
             ),
           );
         },
@@ -7478,7 +7508,7 @@ class _KeyLaneState extends State<_KeyLane> {
             left: widget.axis.xOf(frames[i]) - 6,
             top: 0,
             width: 12,
-            height: _rowHeight,
+            height: t.density.laneRow,
             child: MouseRegion(
               cursor: SystemMouseCursors.resizeLeftRight,
               child: GestureDetector(
@@ -7692,7 +7722,7 @@ class _ColumnToggles extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final mbOn = model.motionBlurEnabled;
     return Container(
-      height: _laneBottomBarHeight,
+      height: t.density.secondaryRow,
       color: t.surface2,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       // Scrolls sideways when the outline is narrow — the same answer the
@@ -7779,6 +7809,10 @@ class _ColumnToggles extends StatelessWidget {
 /// In graph view it also carries the graph's own commands (docs/07 §5.3):
 /// Linear / Bezier / Hold for the selected keys, the value/speed lens
 /// switch, and the auto-fit toggle.
+///
+/// A panel bottom bar, and so a **secondary row**: `t.density.secondaryRow`
+/// (K-451, K-454). The outline reserves the same height below its own rows —
+/// see `_outlineHalf`, where the reason is written down.
 class _LaneBottomBar extends StatelessWidget {
   /// Where the zoom is *going*, not where the flight has reached — so the
   /// handle sits under the finger that put it there rather than trailing the
@@ -7863,7 +7897,10 @@ class _LaneBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
-      height: _laneBottomBarHeight,
+      // Keyed so the density tests have a secondary row they can measure
+      // whole; every other one is a strip with no handle on it (K-454).
+      key: const ValueKey('tl-lane-bottom-bar'),
+      height: t.density.secondaryRow,
       // A panel bottom bar, and so `surface_2` — the same value the panel
       // header wears at the other end of the panel (K-451).
       color: t.surface2,
@@ -8186,13 +8223,16 @@ class _BarState extends State<_Bar> {
         ? (widget.axis.xOf(minIn), widget.axis.xOf(maxOut))
         : null;
 
-    // **16 inside a 22 row** (§12A.6's table, K-451), centred: three pixels of
-    // lane ground above and below, so a stack of bars reads as a stack rather
-    // than as one continuous slab, and the row seams the lane overlay draws
-    // (K-190) fall on empty ground instead of through a bar's edge. The bar
-    // used to fill the row's whole height.
+    // **16 inside the row, whatever the row measures** (§12A.6's table, K-451,
+    // K-454): the bar is one of the few heights the table gives the same under
+    // both densities, so what changes with the setting is the lane ground above
+    // and below it — three pixels under Compact, three and a half under
+    // Regular. That ground is the point: a stack of bars reads as a stack
+    // rather than as one continuous slab, and the row seams the lane overlay
+    // draws (K-190) fall on it instead of through a bar's edge. The bar used to
+    // fill the row's whole height.
     return SizedBox(
-      height: _rowHeight,
+      height: t.density.laneRow,
       // **Both children are keyed.** The ghost comes and goes as the bar is
       // trimmed, and without keys the children were matched by position: the
       // ghost appearing took the bar's slot, so the bar's element — and with it
@@ -8209,7 +8249,7 @@ class _BarState extends State<_Bar> {
                   'tl-bar-ghost-${widget.entry.layer.internallayerId}'),
               left: ghost.$1,
               width: (ghost.$2 - ghost.$1).clamp(1.0, 1e6),
-              top: clipBarInset,
+              top: clipBarInsetFor(t.density),
               height: clipBarHeight,
               child: IgnorePointer(
                 child: Container(
@@ -8236,7 +8276,7 @@ class _BarState extends State<_Bar> {
                 'tl-bar-body-${widget.entry.layer.internallayerId}'),
             left: left,
             width: width,
-            top: clipBarInset,
+            top: clipBarInsetFor(t.density),
             height: clipBarHeight,
             // Selection on the raw DOWN, outside the gesture arena: the
             // bar's tap otherwise waits for the move/trim drag recognisers

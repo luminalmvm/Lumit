@@ -39,21 +39,24 @@ import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'waveform_frb.dart';
 
-/// One timeline row's height — the unit the whole view is measured in, so it
-/// lands on the table's own grid.
+/// One row of the view's **own** grid — the rows opening a layer adds, which
+/// are the view's to size and are the same at either density.
+///
+/// The layer's own row is not one of these: that one belongs to the table, and
+/// so measures `t.density.laneRow` (K-454). Counting it here as well is what
+/// used to leave the view a pixel shorter than the room the outline reserved
+/// for it under Regular, and the halves went out of step below an open view.
 const double sequenceRow = 22;
 
-/// The clips get three rows — **including the layer's own bar row**, which is
-/// the top of them. Collapsed, that row is exactly the bar it always was;
-/// opening adds the two below it and the clips spread across all three, so
-/// nothing about the layer's own row changes shape as it opens (K-248).
-const double sequenceClipStrip = sequenceRow * 3;
-
-/// What opening actually adds to the row: the two clip rows under the bar,
-/// plus the graph.
-const double sequenceClipExtra = sequenceClipStrip - sequenceRow;
+/// What opening actually adds to the layer's row: the two clip rows under the
+/// bar, plus the graph.
+///
+/// The clips get three rows in all — **including the layer's own bar row**,
+/// which is the top of them. Collapsed, that row is exactly the bar it always
+/// was; opening adds the two below it and the clips spread across all three,
+/// so nothing about the layer's own row changes shape as it opens (K-248).
+const double sequenceClipExtra = sequenceRow * 2;
 const double sequenceEnvelopeStrip = sequenceRow * 3;
-const double sequenceViewHeight = sequenceClipStrip + sequenceEnvelopeStrip;
 
 /// How short and how tall the graph half may be dragged. The floor is one row
 /// — below that a curve has nowhere to be — and the ceiling stops a view
@@ -278,8 +281,10 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
         SizedBox(
           // All three rows, the layer's own bar row included: the view stands
           // in for the bar while it is open, so the clips are one region
-          // rather than a strip under a bar with a seam between them.
-          height: sequenceClipStrip,
+          // rather than a strip under a bar with a seam between them. The top
+          // one is the table's row and takes the density's height; the two
+          // below are the view's own.
+          height: t.density.laneRow + sequenceClipExtra,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             // The razor cuts here, since there is no bar to aim at while the

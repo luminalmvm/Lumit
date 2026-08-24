@@ -1879,13 +1879,18 @@ const double clipFillAlpha = 0.38;
 /// which rounded nothing visibly and softened every bar end by a pixel.
 const double sharpClipRadius = 0;
 
-/// An outline or lane row (§12A.6's table, K-451).
-const double laneRowHeight = 22;
-
-/// A bar's own height inside a lane row, and the ground left above it
-/// (the same table: a lane row is 22, a clip bar within it 16).
+/// A bar's own height inside a lane row (§12A.6's table, K-451). A plain
+/// constant, because it is one of the rows the table gives the same height
+/// under both densities — only the ground around it changes.
 const double clipBarHeight = 16;
-const double clipBarInset = (laneRowHeight - clipBarHeight) / 2;
+
+/// The ground left above (and below) the bar: whatever the row has over.
+///
+/// **A fraction under Regular**, where a 16 bar sits in a 23 row and the
+/// inset is 3.5. That is not a defect: Flutter's lengths are logical pixels,
+/// and half of one is a real distance the compositor resolves — the bar is
+/// centred either way, which is the claim §12A.6 makes about it.
+double clipBarInsetFor(DensityTokens d) => (d.laneRow - clipBarHeight) / 2;
 
 /// The same fill on a selected bar. Brighter as well as lighter, so selection
 /// beats every label colour in the palette (§6.1).
