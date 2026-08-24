@@ -1203,13 +1203,25 @@ class EffectParamRowFrb extends StatelessWidget {
     // fixed label edge holds).
     const wrapBelow = 230.0;
     return LayoutBuilder(builder: (context, constraints) {
+      // A second line only exists where the host can grow to hold it: the
+      // Effect controls' rows size to their content, but a Timeline fold-out
+      // row is a fixed lane height, and a wrapped line there is 20px of
+      // invisible overflow. In a fixed row the riders stay on the one line
+      // and elide instead — "Nor…" can at least be hovered; a clipped second
+      // line cannot be seen at all.
+      final canGrow =
+          !constraints.hasBoundedHeight || constraints.maxHeight >= 44;
       final riderRow = [
         for (final (p, v) in riders) ...[
           const SizedBox(width: 6),
-          ..._rider(t, id, p, v),
+          Flexible(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              ..._rider(t, id, p, v),
+            ]),
+          ),
         ],
       ];
-      if (constraints.maxWidth >= wrapBelow) {
+      if (constraints.maxWidth >= wrapBelow || !canGrow) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [

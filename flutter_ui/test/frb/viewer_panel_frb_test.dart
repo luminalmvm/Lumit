@@ -220,7 +220,12 @@ void main() {
           reason: 'and it is still following the pointer');
     });
 
-    testWidgets('without a composition it says so', (tester) async {
+    testWidgets('without a composition the empty stage offers the ways in',
+        (tester) async {
+      // K-481: a project with no comps at all shows the welcome's three
+      // start cards in the stage; the "select a composition" sentence is
+      // for a project that has comps with none fronted (EmptyStageFrb
+      // decides between the two).
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
         child: const ViewerPanelFrb(),
@@ -228,7 +233,9 @@ void main() {
         uiState: p.uiState,
       ));
       await tester.pump();
-      expect(find.textContaining('Select a composition'), findsOneWidget);
+      expect(find.text('New project'), findsOneWidget);
+      expect(find.text('Open'), findsOneWidget);
+      expect(find.textContaining('Select a composition'), findsNothing);
     });
 
     testWidgets('the transport steps, homes and ends within the comp',

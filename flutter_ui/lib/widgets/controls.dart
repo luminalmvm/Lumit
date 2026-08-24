@@ -669,21 +669,30 @@ class _MenuHoverScope extends InheritedWidget {
 /// bar's channel picker, whose answer is a tinted glyph rather than a word
 /// (K-411). The caret is the same one either way, so an icon dropdown still
 /// reads as a dropdown.
-Widget dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        face ?? Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-        // 6, the gap every `.dd` the mockups compute leaves between its label
-        // and its caret.
-        const SizedBox(width: 6),
-        // A small quiet mark: the border already says this is a control, so
-        // the caret only has to say which kind (§12A, no raised look).
-        CustomPaint(
-          size: const Size(7, 7),
-          painter: _CaretPainter(t.textMuted),
-        ),
-      ],
-    );
+Widget dropdownFace(LumitTheme t, String label, {Widget? face}) =>
+    LayoutBuilder(builder: (context, c) {
+      // In a cell too tight for even the caret and its gap (a fold-out value
+      // column at its minimum), the caret is the first thing to go — a
+      // sliver of the word still says more than striped overflow tape.
+      final caretFits = !c.hasBoundedWidth || c.maxWidth >= 20;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          face ?? Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+          if (caretFits) ...[
+            // 6, the gap every `.dd` the mockups compute leaves between its
+            // label and its caret.
+            const SizedBox(width: 6),
+            // A small quiet mark: the border already says this is a control,
+            // so the caret only has to say which kind (§12A, no raised look).
+            CustomPaint(
+              size: const Size(7, 7),
+              painter: _CaretPainter(t.textMuted),
+            ),
+          ],
+        ],
+      );
+    });
 
 /// The **in-row** dropdown's label size (§12A.6's table): the pickers that sit
 /// inside a Timeline row — matte, blend and parent — carry a 10px label, as the

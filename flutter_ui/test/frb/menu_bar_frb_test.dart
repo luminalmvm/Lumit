@@ -271,7 +271,8 @@ void main() {
       final p = await mount(tester);
 
       await choose(tester, 'Composition', 'Composition settings…');
-      expect(find.text('Composition settings'), findsNothing,
+      // The dialogue heading prints as a capitals kicker (§12A.4).
+      expect(find.text('COMPOSITION SETTINGS'), findsNothing,
           reason: 'no comp is fronted, so the row does nothing when pressed');
 
       // Front one, and the same row now opens the dialogue.
@@ -280,7 +281,7 @@ void main() {
       await choose(tester, 'Composition', 'Composition settings…');
       await tester.pump();
 
-      expect(find.text('Composition settings'), findsOneWidget,
+      expect(find.text('COMPOSITION SETTINGS'), findsOneWidget,
           reason: 'the dialogue heading');
     });
 
