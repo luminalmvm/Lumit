@@ -39,11 +39,13 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/track.dart';
@@ -57,6 +59,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
+import 'graph_panel.dart' show graphNodeKey;
 import 'camera_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'fx_section.dart';
@@ -106,6 +109,18 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// is what an effect's own display watches to know a button was pushed.
   int _actionPressed = 0;
 
+  /// Which parameters a driver is wired to (K-471), by `effectId/paramId`,
+  /// with the driver's own name and what its wire carries.
+  ///
+  /// Read from `getGraph` at the two moments the graph can change — the
+  /// selection moves, or the document commits — and held, never asked for in a
+  /// rebuild: this panel redraws on every playhead frame, and a read in that
+  /// path is exactly the traffic `bridge_call_budget_test` guards against.
+  /// Empty for every layer that has never been wired, which is nearly all of
+  /// them, and empty costs one call that answers "no drivers".
+  Map<String, ({String driver, BridgePortType type})> _driven = const {};
+  LumitUiState? _boundUi;
+
   @override
   void initState() {
     super.initState();
@@ -116,7 +131,64 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    if (identical(ui, _boundUi)) return;
+    _unbindDriven();
+    _boundUi = ui;
+    ui.selectedLayer.addListener(_readDriven);
+    ui.model.addListener(_readDriven);
+    _readDriven();
+  }
+
+  void _unbindDriven() {
+    _boundUi?.selectedLayer.removeListener(_readDriven);
+    _boundUi?.model.removeListener(_readDriven);
+  }
+
+  /// The one read behind the *driven* rows. A wire's colour is its **source**
+  /// port's type, which is what the parameter is now following.
+  void _readDriven() {
+    if (!mounted) return;
+    final layer = _boundUi?.selectedLayer.value ?? _lastLayer;
+    if (layer == null) {
+      if (_driven.isNotEmpty) setState(() => _driven = const {});
+      return;
+    }
+    final next = <String, ({String driver, BridgePortType type})>{};
+    try {
+      final graph = layer.getGraph();
+      final byRef = {for (final n in graph.nodes) graphNodeKey(n.node): n};
+      for (final edge in graph.wiring.edges) {
+        if (edge.to case BridgeInputRef_Param(:final node, :final port)) {
+          if (node is! BridgeNodeRef_Effect) continue;
+          final (fromKey, fromPort) = switch (edge.from) {
+            BridgeOutputRef_Driver(node: final d, port: final p) => (
+                graphNodeKey(BridgeNodeRef.driver(d)),
+                p
+              ),
+            BridgeOutputRef_SourceMatte() => ('source', 'matte'),
+          };
+          final source = byRef[fromKey];
+          if (source == null) continue;
+          final socket = source.outputs.where((o) => o.id == fromPort);
+          if (socket.isEmpty) continue;
+          next['${node.field0}/$port'] = (
+            driver: source.customName ?? engineLabel(source.label),
+            type: socket.first.portType,
+          );
+        }
+      }
+    } catch (_) {
+      // The layer has gone; the rows simply draw their own controls again.
+    }
+    if (!mapEquals(next, _driven)) setState(() => _driven = next);
+  }
+
+  @override
   void dispose() {
+    _unbindDriven();
     HardwareKeyboard.instance.removeHandler(_onKey);
     super.dispose();
   }
@@ -352,6 +424,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         open: _isOpen('fx-${info.effects[index].id}'),
                         onToggle: () => _toggle('fx-${info.effects[index].id}'),
                         selected: picked.contains(info.effects[index].id),
+                        driven: _driven,
                         renaming: _renamingEffect == info.effects[index].id,
                         onRenamed: (name) {
                           // Stage the name on a fresh handle and commit the
@@ -543,6 +616,11 @@ class _EffectSection extends StatelessWidget {
   final bool selected;
   final VoidCallback onSelect;
 
+  /// Which of this layer's parameters a driver is wired to, by
+  /// `effectId/paramId` (K-471). Read once by the panel and passed down, so a
+  /// card costs no question of its own.
+  final Map<String, ({String driver, BridgePortType type})> driven;
+
   /// The drag in flight's staged value for (effect, param), or null — overlaid
   /// on the model's value so the number under the pointer is the staged one.
   final BridgeEffectValue? Function(UuidValue effect, String param) stagedValue;
@@ -593,6 +671,7 @@ class _EffectSection extends StatelessWidget {
     required this.onToggle,
     required this.selected,
     required this.onSelect,
+    this.driven = const {},
     required this.stagedValue,
     required this.index,
     required this.count,
@@ -885,6 +964,7 @@ class _EffectSection extends StatelessWidget {
             (r, stagedValue(id, r.id) ?? values[r.id]),
         ],
         onAction: onAction,
+        driven: driven['$id/${param.id}'],
       );
     }
 

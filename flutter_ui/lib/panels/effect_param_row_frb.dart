@@ -23,6 +23,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgePortType;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -43,6 +44,7 @@ import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'fx_section.dart';
 import 'graph_editor_frb.dart';
+import 'graph_panel.dart' show portColour;
 import 'keyframe_controls_frb.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
@@ -186,6 +188,16 @@ class EffectParamRowFrb extends StatelessWidget {
   /// somewhere that cannot fire one (the Timeline's twirl-down) should do.
   final void Function(UuidValue effect, String param)? onAction;
 
+  /// A **driver** is wired to this parameter in the Graph panel (K-471): the
+  /// name it draws under, and what its wire carries.
+  ///
+  /// The row then says *driven* and names the driver instead of offering a
+  /// control, because the stored value is exactly the thing the picture no
+  /// longer uses — a spinner you could still drag would be a lie about what is
+  /// in charge, the same reasoning `enabled` follows. The stopwatch stays: the
+  /// keyframes are still there, waiting under the wire.
+  final ({String driver, BridgePortType type})? driven;
+
   const EffectParamRowFrb({
     super.key,
     required this.effectId,
@@ -207,6 +219,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.enabled = true,
     this.riders = const [],
     this.onAction,
+    this.driven,
   });
 
   @override
@@ -261,8 +274,13 @@ class EffectParamRowFrb extends StatelessWidget {
 
     // The unit goes on the control itself, inside the riders: `100 %` then the
     // Blend dropdown, never `100` then Blend then `%`.
-    final control = _greyed(_withRiders(t, id,
-        withUnitRider(t, param.unit, _control(context, t, id, value, frame))));
+    final control = driven != null
+        ? _drivenWell(t, id)
+        : _greyed(_withRiders(
+            t,
+            id,
+            withUnitRider(
+                t, param.unit, _control(context, t, id, value, frame))));
 
     // **An Action is a button, and a button says its own name** (K-417). Drawn
     // in the value column with the name column left empty, rather than as a
@@ -327,6 +345,47 @@ class EffectParamRowFrb extends StatelessWidget {
   /// already carries `text_disabled`, and the value stays fully legible, so you
   /// can read what Focus distance *would* be. Being off is not being gone.
   Widget _greyed(Widget child) => enabled ? child : IgnorePointer(child: child);
+
+  /// What a driven row shows in place of its control (the Nodes-workspace
+  /// drawing's Node panel rows): a hollow ring in the wire's own colour, the
+  /// word *driven* beside it, and the driver's name in the well.
+  ///
+  /// The ring is hollow because the value is not held here — it arrives along
+  /// a wire, and a filled mark is what a socket uses to say a wire has landed.
+  Widget _drivenWell(LumitTheme t, UuidValue id) {
+    final it = driven!;
+    final colour = portColour(t, it.type);
+    return Row(
+      key: ValueKey<String>('fx-driven-$id-${param.id}'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: colour),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(l10n.graphDriven,
+            style: t.kicker.copyWith(letterSpacing: 0.54, color: colour)),
+        const SizedBox(width: 8),
+        Container(
+          height: 16,
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          decoration: BoxDecoration(
+            color: t.surface0,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: Border.all(color: t.hairline),
+          ),
+          child: Text(it.driver,
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+        ),
+      ],
+    );
+  }
 
   BridgeScalar? _animatableScalarOf(BridgeEffectValue? value) {
     // Int is a Float value with integer display (docs/08 §1.2), and a Slider is

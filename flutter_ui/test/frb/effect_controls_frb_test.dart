@@ -24,6 +24,7 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
 import 'package:lumit_flutter/widgets/dashed_outline.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
@@ -1455,6 +1456,55 @@ void main() {
       expect(valueOf('light_x'), 400);
       expect(valueOf('light_y'), 100,
           reason: 'x doubled, so y doubled — the ratio is what is kept');
+    });
+
+    /// **A driven parameter says so** (K-471): a driver wired to it in the
+    /// Graph panel wins over its keyframes, so the row draws a hollow ring in
+    /// the wire's own colour, the word *driven*, and the driver's name in the
+    /// well — never a control you could drag while the wire decides the value.
+    testWidgets('a driven parameter names its driver instead of a control',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      final effect = p.layer.getEffects().single.id();
+      final made = p.layer.newDriver(name: 'wiggle');
+      p.layer.setGraph(
+        drivers: [made],
+        wiring: BridgeGraphWiring(
+          edges: [
+            BridgeGraphEdge(
+              from: BridgeOutputRef.driver(node: made.id(), port: 'value'),
+              to: BridgeInputRef.param(
+                  node: BridgeNodeRef.effect(effect), port: 'radius'),
+            ),
+          ],
+          layout: const [],
+          exposed: const [],
+        ),
+      );
+      await mount(tester, p);
+
+      expect(find.byKey(ValueKey<String>('fx-driven-$effect-radius')),
+          findsOneWidget);
+      expect(find.text('driven'), findsOneWidget);
+      expect(find.text('Wiggle'), findsWidgets,
+          reason: 'the well names the driver the parameter is following');
+      expect(
+          find.byKey(ValueKey<String>('fx-float-$effect-radius')), findsNothing,
+          reason: 'the stored number is not what the picture uses any more, '
+              'so there is nothing here to drag');
+
+      // Unwire it and the ordinary control comes straight back. The staged
+      // instance above was consumed by its own commit, so this reads a fresh
+      // one — the same rule every staged handle on this seam follows.
+      p.layer.setGraph(
+        drivers: p.layer.getGraphDrivers(),
+        wiring: const BridgeGraphWiring(edges: [], layout: [], exposed: []),
+      );
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(find.byKey(ValueKey<String>('fx-driven-$effect-radius')),
+          findsNothing);
     });
 
     // Without the built library there is nothing to test against; the harness
