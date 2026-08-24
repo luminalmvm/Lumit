@@ -438,6 +438,11 @@ pub fn build_comp_draws_at(
             current_depth: 0,
         });
 
+        // The layer's own clock, the same one its transform, its masks and its
+        // paint are read at (K-213) — a keyframed shape modifier travels with
+        // the layer exactly as a keyframed mask does.
+        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+
         let raw = match &layer.kind {
             // Neither kind has pixels of its own. An Adjustment layer is a
             // pass-through until its effect stack exists; a Null never draws at
@@ -505,7 +510,7 @@ pub fn build_comp_draws_at(
                     let w = natural_w.round().max(1.0) as u32;
                     let h = natural_h.round().max(1.0) as u32;
                     (
-                        lumit_core::shape::rasterise_contents(contents, w, h, x0, y0, x1, y1),
+                        lumit_core::shape::rasterise_contents(contents, w, h, x0, y0, x1, y1, lt),
                         w,
                         h,
                         (natural_w as f32, natural_h as f32),
@@ -518,10 +523,6 @@ pub fn build_comp_draws_at(
             // `Composition::lights_at`, not from the draw list.
             LayerKind::Light { .. } => None,
         };
-        // The layer's own clock, the same one its transform and effects are
-        // read at (K-213) — a keyframed mask on a layer dragged along the
-        // timeline travels with the layer.
-        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         raw.map(|(mut rgba, w, h, natural)| {
             // Paint first, masks second: a stroke is part of the layer's
             // picture, and a mask gates the picture (K-227, docs/06 render

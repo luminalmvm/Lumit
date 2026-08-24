@@ -489,6 +489,10 @@ List<BridgeShapeItem>? shapeContentsWithPointsMoved(
       stroke: item.stroke,
       strokeWidth: item.strokeWidth,
       opacity: item.opacity,
+      // A point drag moves geometry; the modifiers on it are untouched.
+      trimStart: item.trimStart,
+      trimEnd: item.trimEnd,
+      trimOffset: item.trimOffset,
     ));
   }
   return touched ? contents : null;

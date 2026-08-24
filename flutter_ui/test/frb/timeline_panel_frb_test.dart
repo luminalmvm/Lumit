@@ -1348,6 +1348,9 @@ void main() {
             stroke: null,
             strokeWidth: 0,
             opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
           ),
         ],
       );
@@ -1372,6 +1375,19 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(layer.getShapeContents().single.opacity, 30);
+
+      // The trim's three rows sit under the item, and each writes through.
+      expect(find.text('Trim start'), findsOneWidget);
+      expect(find.text('Trim end'), findsOneWidget);
+      expect(find.text('Trim offset'), findsOneWidget);
+      final field = find.byKey(ValueKey<String>('tl-shape-trimEnd-${item.id}'));
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '40');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.trimEnd,
+          const BridgeScalar.static_(40));
     });
 
     /// A shape layer's art gets the same rename as a mask: it too arrives named
@@ -1394,6 +1410,9 @@ void main() {
             stroke: null,
             strokeWidth: 0,
             opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
           ),
         ],
       );

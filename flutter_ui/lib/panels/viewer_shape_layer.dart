@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
@@ -422,6 +423,10 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             stroke: tools.strokeWidth > 0 ? tools.strokeRgba : null,
             strokeWidth: tools.strokeWidth,
             opacity: 100,
+            // Whole, until somebody trims it (K-451).
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
           ),
         ],
       );

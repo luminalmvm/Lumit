@@ -3145,8 +3145,15 @@ fn render_comp_with_preview(
         // Only a shape layer has art; a stale request against another kind
         // renders the layer as it stands rather than failing the frame, which
         // is the same courtesy `apply_text_preview` gives.
+        // The preview's art is the layer's own, so its trims read on the
+        // layer's clock, exactly as its masks do above.
+        let offset = comp.layers[index].start_offset.0;
         if let lumit_core::model::LayerKind::Shape { contents } = &mut comp.layers[index].kind {
-            *contents = items.into_iter().map(|i| i.write_item()).collect();
+            let written: Result<Vec<_>, _> =
+                items.into_iter().map(|i| i.write_item(offset)).collect();
+            if let Ok(written) = written {
+                *contents = written;
+            }
         }
     }
     if let Some(transform) = &req.transform {

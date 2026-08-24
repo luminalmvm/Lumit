@@ -12629,3 +12629,65 @@ Regression tests: in `lumit-core`, `a_strokes_blend_combines_it_with_what_is_und
 `a_strokes_blend_round_trips_by_index`; in Flutter, `a stroke row picks a blend mode from the
 layer list`. No new strings — the mode names come from the engine's own table, which a layer's
 picker already shows and `engine_labels.dart` already covers.
+
+## K-451 — A shape layer's modifiers are fields on the item, and the first of them is Trim paths
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Amends
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 (which gains §7.2.1), §9.2,
+[06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §1.2 step 1,
+[07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+**The shape of it.** After Effects carries a shape's modifiers — Trim Paths, the Repeater,
+Offset Paths and the rest — as entries in a nested group, and their *position* in that group is
+what decides which paths they act on. Lumit's contents list is flat (K-237) and has no positions
+to read. Two ways out: build the tree first and then the modifiers, or make each modifier a
+**property of the item it modifies** and write the order down. This is the second.
+
+The order is fixed: **trim, then the rest as they land.** It is in one place, in
+`shape::rasterise_contents`, and in §7.2.1.
+
+**Why not the tree.** The tree is still the right long-term shape and §9.2 still says so. But a
+modifier that is a `Property` beside `opacity` needs no new machinery whatsoever: it keys with the
+same keyframe controls, undoes through the same whole-list `SetShapeContents` op, previews through
+the same `renderFrameWithShapePreview` door, and crosses the bridge as the `BridgeScalar` every
+other animatable number crosses as. A tree would need a new op family, a new read model, a new
+Timeline row hierarchy and a new file shape before a single path could be trimmed. The cost of
+this choice is real and named: **you cannot trim two items as one**, because there is no group to
+put the trim on. When the tree lands it re-homes these fields rather than replacing them, because
+every one of them is absent from the file until it is used.
+
+**Trim paths.** `trim_start`, `trim_end` (per cent of the path's own **arc length**) and
+`trim_offset` (degrees; 360 is once round). Arc length, not vertex count, for the reason K-449
+gives for a paint stroke's write-on: the samples of a path are not evenly spread, and the eye
+watches length. The cutting is K-449's own `trimmed`, widened to the crate rather than written a
+second time — one description of "cut a polyline by length".
+
+Three sub-decisions, each of which could have gone the other way:
+
+**The fill is trimmed too**, as After Effects trims it: the surviving piece is closed and filled,
+so a half-trimmed circle is a filled half circle. A polyline is a `BezierPath` with every handle
+at zero, so the piece goes through the *same* fill rasteriser the whole path does — no second
+rasteriser, and no second answer about which pixels are inside.
+
+**The offset moves the seam, not the window.** Sliding a trimmed piece round a closed path can
+leave it astride the path's own start, which is two pieces to draw. Re-starting the polyline
+`offset` per cent along makes it one contiguous piece again and the ordinary trim then cuts it.
+An **open** path has no seam to run through, so it gets the window shifted and clamped: slid far
+enough, it runs off the end and draws nothing.
+
+**An untrimmed item never sees a polyline.** With the trim at 0..100 and no offset, the item is
+rasterised from its **bezier** exactly as before, so every frame already cached for an untrimmed
+shape stays valid and the identity case is byte for byte what it was.
+
+**The layer's natural size is still the untrimmed box.** A box that shrank as a write-on played
+would make the layer breathe and churn every cache keyed on its size — the same reasoning K-449
+gives for a stroke's bounds being the whole stroke.
+
+Regression tests: in `lumit-core`, `an_untrimmed_shape_is_drawn_from_its_curve_and_not_a_polyline_of_it`,
+`a_trim_cuts_the_path_by_its_own_length`, `a_trimmed_fill_closes_the_piece_that_is_left`,
+`an_end_at_or_below_the_start_draws_nothing`,
+`the_offset_slides_the_piece_round_a_closed_path_without_shortening_it`,
+`an_open_paths_offset_runs_the_window_off_the_end_rather_than_wrapping`,
+`a_keyed_trim_is_read_on_the_layers_clock`, `an_untrimmed_item_is_absent_from_the_file`; in the
+bridge, `a_shapes_trim_round_trips_and_is_clamped`; in Flutter, the Contents twirl-down test.
+New strings: `shapeTrimStart`, `shapeTrimEnd`, `shapeTrimOffset`.

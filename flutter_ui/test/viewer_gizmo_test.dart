@@ -112,6 +112,9 @@ void main() {
         stroke: null,
         strokeWidth: 0,
         opacity: 100,
+        trimStart: const BridgeScalar.static_(0),
+        trimEnd: const BridgeScalar.static_(100),
+        trimOffset: const BridgeScalar.static_(0),
       );
 
   group('What a point is inside', () {

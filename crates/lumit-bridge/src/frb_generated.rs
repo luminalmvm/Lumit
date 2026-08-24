@@ -10010,6 +10010,9 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             <Option<crate::api::assets::BridgeColourRgba>>::sse_decode(deserializer);
         let mut var_strokeWidth = <f64>::sse_decode(deserializer);
         let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_trimStart = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_trimEnd = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeShapeItem {
             id: var_id,
             name: var_name,
@@ -10019,6 +10022,9 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             stroke: var_stroke,
             stroke_width: var_strokeWidth,
             opacity: var_opacity,
+            trim_start: var_trimStart,
+            trim_end: var_trimEnd,
+            trim_offset: var_trimOffset,
         };
     }
 }
@@ -13742,6 +13748,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.stroke.into_into_dart().into_dart(),
             self.stroke_width.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
+            self.trim_start.into_into_dart().into_dart(),
+            self.trim_end.into_into_dart().into_dart(),
+            self.trim_offset.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -15621,6 +15630,9 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <Option<crate::api::assets::BridgeColourRgba>>::sse_encode(self.stroke, serializer);
         <f64>::sse_encode(self.stroke_width, serializer);
         <f64>::sse_encode(self.opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_start, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_end, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
     }
 }
 

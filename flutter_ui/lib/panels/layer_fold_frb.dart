@@ -133,6 +133,21 @@ final class FoldShapeRow extends LayerFoldRow {
   const FoldShapeRow(this.item, {required int depth}) : super(depth);
 }
 
+/// Which of a shape item's animatable numbers a [FoldShapeValueRow] carries
+/// (K-451). The trim's three are the first of them.
+enum ShapeValue { trimStart, trimEnd, trimOffset }
+
+/// One of a shape item's numbers on a row of its own under it (K-451). A row
+/// rather than another control on the item's own row, for the reason
+/// [FoldMaskValueRow] gives: a property without a row has nowhere to put the
+/// stopwatch that animates it.
+final class FoldShapeValueRow extends LayerFoldRow {
+  final BridgeShapeItem item;
+  final ShapeValue value;
+  const FoldShapeValueRow(this.item, this.value, {required int depth})
+      : super(depth);
+}
+
 /// One paint stroke on the layer (K-227): its name, so a stroke can be found,
 /// renamed and deleted after it was painted.
 final class FoldStrokeRow extends LayerFoldRow {
@@ -338,6 +353,39 @@ BridgeStroke strokeWithScalar(
       cloneOffsetY: stroke.cloneOffsetY,
     );
 
+/// What a shape item's value row is called — shared by the row and the graph
+/// channel, exactly as [maskValueLabel] is.
+String shapeValueLabel(ShapeValue value) => switch (value) {
+      ShapeValue.trimStart => l10n.shapeTrimStart,
+      ShapeValue.trimEnd => l10n.shapeTrimEnd,
+      ShapeValue.trimOffset => l10n.shapeTrimOffset,
+    };
+
+/// Which of a shape item's animatable numbers [value] names (K-451).
+BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
+    switch (value) {
+      ShapeValue.trimStart => item.trimStart,
+      ShapeValue.trimEnd => item.trimEnd,
+      ShapeValue.trimOffset => item.trimOffset,
+    };
+
+/// [item] with the one number [value] names replaced.
+BridgeShapeItem shapeWithScalar(
+        BridgeShapeItem item, ShapeValue value, BridgeScalar to) =>
+    BridgeShapeItem(
+      id: item.id,
+      name: item.name,
+      vertices: item.vertices,
+      closed: item.closed,
+      fill: item.fill,
+      stroke: item.stroke,
+      strokeWidth: item.strokeWidth,
+      opacity: item.opacity,
+      trimStart: value == ShapeValue.trimStart ? to : item.trimStart,
+      trimEnd: value == ShapeValue.trimEnd ? to : item.trimEnd,
+      trimOffset: value == ShapeValue.trimOffset ? to : item.trimOffset,
+    );
+
 /// A key's position on the comp's frame axis, computed Dart-side from its
 /// exact time and the comp's rate so a paint never crosses the bridge for it.
 ///
@@ -501,6 +549,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldStrokeValueRow(:final stroke, :final value) =>
         '${paintPath(layerId)}/${stroke.id}/${value.name}',
       FoldShapeRow(:final item) => '${contentsPath(layerId)}/${item.id}',
+      FoldShapeValueRow(:final item, :final value) =>
+        '${contentsPath(layerId)}/${item.id}/${value.name}',
     };
 
 /// Whether [path] sits under [ancestor] — a property under its group, a
@@ -662,6 +712,12 @@ List<LayerFoldRow> layerFoldRows({
     if (contentsOpen) {
       for (final item in info.shapeContents) {
         rows.add(FoldShapeRow(item, depth: 2));
+        // Its numbers sit under it, the way a stroke's trim sits under the
+        // stroke (K-449, K-451), and in the order they read: where the art
+        // begins, where it ends, and how far the pair is slid along.
+        for (final value in ShapeValue.values) {
+          rows.add(FoldShapeValueRow(item, value, depth: 3));
+        }
       }
     }
   }

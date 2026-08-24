@@ -6844,6 +6844,33 @@ waiting to be wired: the file format has no way to say "these two arms are
 linked" versus "this is a corner", so adding the gesture means adding that to
 the format first, and deciding what an older project means without it.
 
+### Trimming a shape's path
+
+A shape layer's art can be **cut back to a piece of itself**, and animated so the
+piece grows: the drawing draws itself on. Three numbers do it, on rows of their
+own under the item in the Timeline. **Trim start** and **Trim end** say where
+along the path the art begins and ends, as a percentage; **Trim offset** slides
+that piece along the path, in degrees, so 360 is a full lap of a closed shape.
+
+The percentage is of the path's **length**, not of how many points it has. That
+matters because points are not spread evenly: a circle drawn with four points and
+long curve handles has most of its length between them, so counting points would
+make the trim crawl along the straight bits and jump round the curved ones.
+Measuring length is what makes the growth look even, and it is the same
+measurement a paint stroke's write-on uses.
+
+Two things behave the way After Effects behaves, and are worth knowing because
+neither is obvious. The **fill** is trimmed too, not just the outline: the piece
+that survives is joined end to end and filled, so half a trimmed circle is a
+filled half-circle rather than a whole one with half an outline. And on a
+**closed** shape the piece **wraps** — slide it far enough with the offset and it
+runs through the point the shape starts at and carries on — while on an **open**
+path there is nothing to wrap through, so sliding it far enough simply runs it
+off the end and nothing is drawn.
+
+Setting the end below the start draws nothing at all. That is not an error: it is
+what the first frame of a write-on looks like.
+
 ### What the lock switch does
 
 Locking a layer means **no edits until unlocked** — not just the obvious ones

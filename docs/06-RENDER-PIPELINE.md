@@ -61,7 +61,9 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
    [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2) has no asset at all: its contents are rasterised
    into their own bounding box, which is also the layer's natural size — the one kind whose size
    moves when it is edited. Each item is filled through the mask rasteriser and then outlined
-   through the paint rasteriser, in list order.
+   through the paint rasteriser, in list order, each after its **modifiers** have had its geometry
+   ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2.1) — read, like the layer's masks and paint, on the
+   **layer's** own clock (K-213), so a keyed trim travels with the layer.
 2. **Retime** — for a Footage layer, the retime map converts layer time to source time and the
    layer's frame-interpolation policy (nearest / blend / flow) synthesises non-integer source
    frames ([04-RETIMING.md](04-RETIMING.md)). Overrun holds the boundary frame. Retime affects

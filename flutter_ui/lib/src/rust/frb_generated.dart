@@ -9320,8 +9320,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -9331,6 +9331,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       stroke: dco_decode_opt_box_autoadd_bridge_colour_rgba(arr[5]),
       strokeWidth: dco_decode_f_64(arr[6]),
       opacity: dco_decode_f_64(arr[7]),
+      trimStart: dco_decode_bridge_scalar(arr[8]),
+      trimEnd: dco_decode_bridge_scalar(arr[9]),
+      trimOffset: dco_decode_bridge_scalar(arr[10]),
     );
   }
 
@@ -11709,6 +11712,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_decode_opt_box_autoadd_bridge_colour_rgba(deserializer);
     var var_strokeWidth = sse_decode_f_64(deserializer);
     var var_opacity = sse_decode_f_64(deserializer);
+    var var_trimStart = sse_decode_bridge_scalar(deserializer);
+    var var_trimEnd = sse_decode_bridge_scalar(deserializer);
+    var var_trimOffset = sse_decode_bridge_scalar(deserializer);
     return BridgeShapeItem(
         id: var_id,
         name: var_name,
@@ -11717,7 +11723,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         fill: var_fill,
         stroke: var_stroke,
         strokeWidth: var_strokeWidth,
-        opacity: var_opacity);
+        opacity: var_opacity,
+        trimStart: var_trimStart,
+        trimEnd: var_trimEnd,
+        trimOffset: var_trimOffset);
   }
 
   @protected
@@ -14268,6 +14277,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_box_autoadd_bridge_colour_rgba(self.stroke, serializer);
     sse_encode_f_64(self.strokeWidth, serializer);
     sse_encode_f_64(self.opacity, serializer);
+    sse_encode_bridge_scalar(self.trimStart, serializer);
+    sse_encode_bridge_scalar(self.trimEnd, serializer);
+    sse_encode_bridge_scalar(self.trimOffset, serializer);
   }
 
   @protected

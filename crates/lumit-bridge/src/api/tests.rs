@@ -3415,6 +3415,9 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         stroke: None,
         stroke_width: 0.0,
         opacity: 100.0,
+        trim_start: BridgeScalar::Static(0.0),
+        trim_end: BridgeScalar::Static(100.0),
+        trim_offset: BridgeScalar::Static(0.0),
     }
 }
 
@@ -3475,6 +3478,59 @@ fn shape_contents_are_replaced_as_a_whole_and_undone_in_one_step() {
     );
 }
 
+/// A shape item's Trim start, end and offset round trip, animate, and are
+/// clamped to the 0..100 they mean — every key of them (K-451).
+#[test]
+fn a_shapes_trim_round_trips_and_is_clamped() {
+    use crate::api::effect::{BridgeKeyframe, BridgeSideInterp};
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].trim_start = BridgeScalar::Static(-40.0);
+    contents[0].trim_offset = BridgeScalar::Static(180.0);
+    contents[0].trim_end = BridgeScalar::Keyframed(vec![
+        BridgeKeyframe {
+            time: BridgeRational { num: 0, den: 1 },
+            value: -10.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+        BridgeKeyframe {
+            time: BridgeRational { num: 1, den: 1 },
+            value: 400.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+    ]);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        got.trim_start,
+        BridgeScalar::Static(0.0),
+        "a Start below zero could only ever draw wrongly"
+    );
+    assert_eq!(
+        got.trim_offset,
+        BridgeScalar::Static(180.0),
+        "the offset is degrees, and degrees wrap"
+    );
+    let BridgeScalar::Keyframed(keys) = &got.trim_end else {
+        panic!("End keeps its keys");
+    };
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[0].value, 0.0);
+    assert_eq!(
+        keys[1].value, 100.0,
+        "and every key is clamped, not just one"
+    );
+}
+
 /// Dragging the left-most point left grows the art's box leftwards, and the
 /// layer's origin **is** that box's corner — so without the position following
 /// it, every point nobody touched would slide the other way (K-308).
@@ -3497,7 +3553,13 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     // into the art's box.
     let drawn_at = |index: usize| {
         let contents = shape.get_shape_contents().expect("contents");
-        let items: Vec<_> = contents.iter().map(|i| i.write_item()).collect();
+        let items: Vec<_> = contents
+            .iter()
+            .map(|i| {
+                i.write_item(lumit_core::time::Rational::ZERO)
+                    .expect("an item")
+            })
+            .collect();
         let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&items).expect("a box");
         let tf = shape.get_transform().expect("transform");
         let v = &contents[0].vertices[index];

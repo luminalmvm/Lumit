@@ -107,11 +107,19 @@ pub struct BridgeShapeItem {
     pub stroke_width: f64,
     /// 0..100.
     pub opacity: f64,
+    /// **Trim paths** (K-451): where along the path's own length the art begins
+    /// and ends, as a per cent, and how far the pair is slid along it in
+    /// degrees. Animatable on the layer's own clock (K-213), exactly as a
+    /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
+    /// the same diamonds.
+    pub trim_start: BridgeScalar,
+    pub trim_end: BridgeScalar,
+    pub trim_offset: BridgeScalar,
 }
 
 impl BridgeShapeItem {
     #[frb(ignore)]
-    fn read(item: &lumit_core::shape::ShapeItem) -> Self {
+    fn read_at(item: &lumit_core::shape::ShapeItem, offset: Rational) -> Self {
         Self {
             id: item.id,
             name: item.name.clone(),
@@ -121,14 +129,20 @@ impl BridgeShapeItem {
             stroke: item.stroke.map(crate::api::assets::colour_of),
             stroke_width: item.stroke_width,
             opacity: item.opacity,
+            trim_start: BridgeScalar::read_at(&item.trim_start, offset),
+            trim_end: BridgeScalar::read_at(&item.trim_end, offset),
+            trim_offset: BridgeScalar::read_at(&item.trim_offset, offset),
         }
     }
 
     /// The engine's item this describes. Public to the crate because the
     /// composition builds a whole layer out of a list of them.
     #[frb(ignore)]
-    pub(crate) fn write_item(&self) -> lumit_core::shape::ShapeItem {
-        lumit_core::shape::ShapeItem {
+    pub(crate) fn write_item(
+        &self,
+        offset: Rational,
+    ) -> Result<lumit_core::shape::ShapeItem, BridgeError> {
+        Ok(lumit_core::shape::ShapeItem {
             id: self.id,
             name: self.name.clone(),
             path: lumit_core::mask::BezierPath {
@@ -139,8 +153,15 @@ impl BridgeShapeItem {
             stroke: self.stroke.map(crate::api::assets::linear_of),
             stroke_width: self.stroke_width.clamp(0.0, 10_000.0),
             opacity: self.opacity.clamp(0.0, 100.0),
+            // Per cent of the path's own length, so anything outside 0..100 is
+            // a number that could only ever draw wrongly — clamped here, every
+            // key of it, exactly as a stroke's trim is (K-449). The offset is
+            // degrees and wraps, so it is left alone.
+            trim_start: clamped_property(&self.trim_start, offset, 0.0, 100.0)?,
+            trim_end: clamped_property(&self.trim_end, offset, 0.0, 100.0)?,
+            trim_offset: clamped_property(&self.trim_offset, offset, -360_000.0, 360_000.0)?,
             extra: serde_json::Map::new(),
-        }
+        })
     }
 }
 
@@ -913,9 +934,10 @@ pub(crate) fn read_layer_info(
             })
             .collect(),
         shape_contents: match &layer.kind {
-            lumit_core::model::LayerKind::Shape { contents } => {
-                contents.iter().map(BridgeShapeItem::read).collect()
-            }
+            lumit_core::model::LayerKind::Shape { contents } => contents
+                .iter()
+                .map(|i| BridgeShapeItem::read_at(i, layer.start_offset.0))
+                .collect(),
             _ => Vec::new(),
         },
         flow: matches!(
@@ -1766,7 +1788,11 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Shape { contents } = self.item()?.kind else {
             return Ok(Vec::new());
         };
-        Ok(contents.iter().map(BridgeShapeItem::read).collect())
+        let offset = self.item()?.start_offset.0;
+        Ok(contents
+            .iter()
+            .map(|i| BridgeShapeItem::read_at(i, offset))
+            .collect())
     }
 
     /// Replace this shape layer's whole contents.
@@ -1793,8 +1819,11 @@ impl LayerReference {
         if contents.iter().any(|i| i.vertices.len() < 2) {
             return Err(BridgeError::EmptyPath);
         }
-        let items: Vec<lumit_core::shape::ShapeItem> =
-            contents.iter().map(BridgeShapeItem::write_item).collect();
+        let offset = layer.start_offset.0;
+        let items: Vec<lumit_core::shape::ShapeItem> = contents
+            .iter()
+            .map(|i| i.write_item(offset))
+            .collect::<Result<_, _>>()?;
         let shift = match (
             lumit_core::shape::contents_bounds(before),
             lumit_core::shape::contents_bounds(&items),

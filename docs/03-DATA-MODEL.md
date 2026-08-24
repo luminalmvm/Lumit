@@ -275,7 +275,7 @@ Invariants:
 | `Camera { zoom: Property, solve_link: Option<Uuid> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link (K-417); `None` — the usual case — is a camera the user drives by hand. |
 | `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. (There is no `adjustment` switch — it is this kind.) |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only (K-206). |
-| `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art | §7.2 (K-237). Flat list; nested groups and modifiers are future (§9.2). |
+| `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art | §7.2 (K-237). Flat list, modifiers as fields (§7.2.1); nested groups are future (§9.2). |
 | `Light { light: Box<LightDef> }` | yes | §5.5 | A source of light other layers see (K-360). Draws no pixels of its own, like a Camera; its placement is the ordinary layer transform. |
 
 **There is no `Audio` kind (K-435).** An Audio layer — a layer whose source is an audio item,
@@ -720,6 +720,9 @@ struct ShapeItem {
     stroke: Option<LinearColour>,     // None, or a zero width, draws no outline
     stroke_width: f64,                // layer pixels
     opacity: f64,                     // 0..100
+    trim_start: Property,             // per cent of the path's own arc length
+    trim_end: Property,               // per cent; at or below start draws nothing
+    trim_offset: Property,            // degrees; 360 is once round a closed path
 }
 ```
 
@@ -727,8 +730,12 @@ A shape layer's art **is** its picture: vector paths rasterised at whatever reso
 frame is rendered at, so they stay crisp at any scale. The path type is the mask's, deliberately
 — a shape's path and a mask's path differ in what they do, not in what they are.
 
-The list is **flat**: After Effects' nested groups exist to carry its shape modifiers (repeater,
-trim paths, wiggle), and none of those are built.
+The list is **flat**, and the **modifiers are fields on the item** (K-451). After Effects carries
+Trim Paths, the Repeater and the rest as entries in a nested group, where their position decides
+what they act on; Lumit's list has no positions to read, so each modifier is a property of the
+item it modifies and the order they apply in is fixed and written down (§7.2.1). Every modifier
+is absent from the file until it is used, so nothing here stands in the way of the
+`ShapeElement` tree §9.2 still plans.
 
 **The layer's natural size is the box its art fills**, bounding the curves by their control
 points, and it *changes as the art is edited* — the only layer kind whose size is not fixed by
@@ -737,8 +744,21 @@ its source. Anything caching a layer's size must key on the document revision.
 The op is `SetShapeContents` — the whole list, exactly invertible, like `SetLayerMasks` and
 `SetLayerPaint`.
 
-**Future:** nested groups and the shape modifiers, gradient fills, dashed strokes, joins and
-caps other than round, and animated paths.
+#### 7.2.1 The modifiers, and the order they apply in
+
+**Trim paths** (K-451) cut the item by its own **arc length**: `trim_start` and `trim_end` are a
+per cent of it, and `trim_offset` slides the pair along in degrees, 360 being once round. Per cent
+of length rather than of vertex count, for the reason a paint stroke's write-on gives (K-449) —
+the eye watches length. The trim cuts the **fill** as well as the outline: the piece that is left
+is closed to fill it, so a half-trimmed circle is a filled half circle, as After Effects draws it.
+A closed path **wraps** through its seam; an open one has no seam, so a window slid off either end
+simply runs out of path. An `end` at or below `start` draws nothing, which is what the first frame
+of a write-on looks like.
+
+An item whose trim is the whole path is rasterised **from its bezier**, not from a polyline of it,
+so the untrimmed case draws exactly the pixels it drew before there were modifiers.
+
+**Future:** nested groups, wiggle paths, joins and caps other than round, and animated paths.
 
 ## 8. Effects
 
@@ -788,10 +808,12 @@ with the styled-runs model.
 
 ### 9.2 Shape — how the shipped flat list grows
 
-`LayerKind::Shape` ships as §7.2's flat `Vec<ShapeItem>` (K-237). The intended growth is a
-`ShapeElement` tree: groups; parametric rectangle/ellipse/polystar; fill (solid, linear/radial
-gradient); stroke (width, caps, joins, dashes); trim paths. Repeater, offset, wiggle-path are
-tier 2 ([08-EFFECTS.md](08-EFFECTS.md) keeps the list).
+`LayerKind::Shape` ships as §7.2's flat `Vec<ShapeItem>` (K-237), with the modifiers as fields on
+the item (§7.2.1, K-451). The intended growth is a `ShapeElement` tree: groups; parametric
+rectangle/ellipse/polystar; fill (solid, linear/radial gradient); stroke (width, caps, joins,
+dashes); trim paths. Wiggle-path is tier 2 ([08-EFFECTS.md](08-EFFECTS.md) keeps the list). The
+tree is a **re-homing** of the fields §7.2 already stores, not a second way to say the same
+thing.
 
 ### 9.3 2.5D (K-023)
 

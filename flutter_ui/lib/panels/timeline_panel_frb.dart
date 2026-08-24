@@ -3351,6 +3351,16 @@ class _FoldRow extends StatelessWidget {
           valueColumn: valueColumn,
           onChanged: onChanged,
         ),
+      FoldShapeValueRow(:final item, :final value) => _ShapeValueRow(
+          comp: comp,
+          layer: layer,
+          item: item,
+          value: value,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
+          onChanged: onChanged,
+        ),
       FoldStrokeValueRow(:final stroke, :final value) => _StrokeValueRow(
           comp: comp,
           layer: layer,
@@ -4469,6 +4479,9 @@ class _ShapeItemRow extends StatelessWidget {
         stroke: i.stroke,
         strokeWidth: i.strokeWidth,
         opacity: opacity ?? i.opacity,
+        trimStart: i.trimStart,
+        trimEnd: i.trimEnd,
+        trimOffset: i.trimOffset,
       );
 
   /// Write the contents back with this item changed, or dropped.
@@ -4818,6 +4831,169 @@ class _StrokeValueRowState extends State<_StrokeValueRow> {
       max: 100,
       decimals: 1,
       suffix: '%',
+      onCommit: _commitKeyed,
+    );
+  }
+}
+
+/// One of a shape item's animatable numbers in the Timeline (K-451) — its Trim
+/// start, end or offset — on the same shape of row a stroke's write-on uses.
+///
+/// The whole contents list is sent for every write, because a shape layer's art
+/// is stored and committed as a whole list (K-237): a preview shaped differently
+/// from the op would be a second description of the same thing.
+class _ShapeValueRow extends StatefulWidget {
+  final CompositionReference comp;
+  final LayerReference layer;
+  final BridgeShapeItem item;
+  final ShapeValue value;
+  final ValueColumn valueColumn;
+  final int playheadFrame;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onChanged;
+
+  const _ShapeValueRow({
+    required this.comp,
+    required this.layer,
+    required this.item,
+    required this.value,
+    required this.valueColumn,
+    required this.playheadFrame,
+    required this.onSeek,
+    required this.onChanged,
+  });
+
+  @override
+  State<_ShapeValueRow> createState() => _ShapeValueRowState();
+}
+
+class _ShapeValueRowState extends State<_ShapeValueRow> {
+  double? _staged;
+  final PreviewThrottle _throttle = PreviewThrottle();
+
+  BridgeScalar get _scalar => shapeScalarOf(widget.item, widget.value);
+
+  String get _rowKey => 'tl-shape-${widget.value.name}-${widget.item.id}';
+
+  /// The trim's two ends are a per cent of the path's own length; the offset is
+  /// degrees, and degrees go round.
+  bool get _isAngle => widget.value == ShapeValue.trimOffset;
+  double get _min => _isAngle ? -3600 : 0;
+  double get _max => _isAngle ? 3600 : 100;
+  String get _suffix => _isAngle ? '°' : '%';
+
+  @override
+  void dispose() {
+    _throttle.cancel();
+    super.dispose();
+  }
+
+  /// Show the value the drag is passing through without writing it (K-240).
+  void _preview(BridgeScalar v) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithShapePreview(
+          frame: BigInt.from(ui.playheadFrame.value),
+          scale: ui.viewerScale,
+          layer: widget.layer,
+          contents: [
+            for (final i in widget.layer.getShapeContents())
+              if (i.id == widget.item.id)
+                shapeWithScalar(i, widget.value, v)
+              else
+                i,
+          ],
+        );
+      } catch (_) {
+        // A preview is a courtesy; the drag carries on without it.
+      }
+    });
+  }
+
+  void _write(BridgeScalar v) {
+    setState(() => _staged = null);
+    try {
+      widget.layer.setShapeContents(contents: [
+        for (final i in widget.layer.getShapeContents())
+          if (i.id == widget.item.id) shapeWithScalar(i, widget.value, v) else i,
+      ]);
+      widget.onChanged();
+    } catch (_) {
+      // The item or its layer went away mid-drag.
+    }
+  }
+
+  void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
+
+  void _commitKeyed(double v) =>
+      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      children: [
+        KeyframeControlsFrb(
+          scalars: [_scalar],
+          onWrite: (s) => _write(s.first),
+          comp: widget.comp,
+          playheadFrame: widget.playheadFrame,
+          onSeek: widget.onSeek,
+          rowKey: _rowKey,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(shapeValueLabel(widget.value),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
+        SizedBox(
+          width: widget.valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 72, child: _field()),
+          ),
+        ),
+        SizedBox(width: widget.valueColumn.rightInset),
+      ],
+    );
+  }
+
+  Widget _field() {
+    final key = ValueKey<String>(_rowKey);
+    final scalar = _scalar;
+    if (scalar is! BridgeScalar_Keyframed) {
+      final stored =
+          _staged ?? (scalar is BridgeScalar_Static ? scalar.field0 : 0.0);
+      return DragValueField(
+        key: key,
+        value: stored,
+        min: _min,
+        max: _max,
+        decimals: 1,
+        suffix: _suffix,
+        onChanged: _commitStatic,
+        onChangeLive: (v) {
+          setState(() => _staged = v.toDouble());
+          _preview(BridgeScalar.static_(v.toDouble()));
+        },
+        onChangeEnd: _commitStatic,
+        onDragCancel: () {
+          setState(() => _staged = null);
+          _preview(scalar);
+        },
+      );
+    }
+    // Animated: the field shows what the curve reads at the playhead, and an
+    // edit writes the key there.
+    return KeyedValueField(
+      fieldKey: key,
+      value:
+          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      min: _min,
+      max: _max,
+      decimals: 1,
+      suffix: _suffix,
       onCommit: _commitKeyed,
     );
   }

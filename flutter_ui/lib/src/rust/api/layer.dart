@@ -17,7 +17,7 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_kind`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_kind`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
@@ -729,6 +729,15 @@ class BridgeShapeItem {
   /// 0..100.
   final double opacity;
 
+  /// **Trim paths** (K-451): where along the path's own length the art begins
+  /// and ends, as a per cent, and how far the pair is slid along it in
+  /// degrees. Animatable on the layer's own clock (K-213), exactly as a
+  /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
+  /// the same diamonds.
+  final BridgeScalar trimStart;
+  final BridgeScalar trimEnd;
+  final BridgeScalar trimOffset;
+
   const BridgeShapeItem({
     required this.id,
     required this.name,
@@ -738,6 +747,9 @@ class BridgeShapeItem {
     this.stroke,
     required this.strokeWidth,
     required this.opacity,
+    required this.trimStart,
+    required this.trimEnd,
+    required this.trimOffset,
   });
 
   @override
@@ -749,7 +761,10 @@ class BridgeShapeItem {
       fill.hashCode ^
       stroke.hashCode ^
       strokeWidth.hashCode ^
-      opacity.hashCode;
+      opacity.hashCode ^
+      trimStart.hashCode ^
+      trimEnd.hashCode ^
+      trimOffset.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -763,7 +778,10 @@ class BridgeShapeItem {
           fill == other.fill &&
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
-          opacity == other.opacity;
+          opacity == other.opacity &&
+          trimStart == other.trimStart &&
+          trimEnd == other.trimEnd &&
+          trimOffset == other.trimOffset;
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.

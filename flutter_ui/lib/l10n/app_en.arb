@@ -5655,6 +5655,18 @@
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "shapeTrimStart": "Trim start",
+  "@shapeTrimStart": {
+    "description": "Timeline row under a shape layer's art: how far along the path's own length the art begins, as a percentage."
+  },
+  "shapeTrimEnd": "Trim end",
+  "@shapeTrimEnd": {
+    "description": "Timeline row under a shape layer's art: how far along the path's own length the art ends, as a percentage."
+  },
+  "shapeTrimOffset": "Trim offset",
+  "@shapeTrimOffset": {
+    "description": "Timeline row under a shape layer's art: how far the trimmed piece is slid along the path, in degrees."
+  },
   "strokeStart": "Start",
   "@strokeStart": {
     "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark begins, as a percentage."

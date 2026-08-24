@@ -866,8 +866,12 @@ impl CompositionReference {
             return Err(BridgeError::EmptyPath);
         }
         let comp = self.composition()?;
-        let items: Vec<lumit_core::shape::ShapeItem> =
-            contents.iter().map(|i| i.write_item()).collect();
+        // A fresh layer starts at the head of the comp, so its own clock is
+        // the composition's: no offset to carry.
+        let items: Vec<lumit_core::shape::ShapeItem> = contents
+            .iter()
+            .map(|i| i.write_item(lumit_core::time::Rational::ZERO))
+            .collect::<Result<_, _>>()?;
         // The art's own box: the layer's natural size, and where it sits.
         let (x0, y0, _x1, _y1) =
             lumit_core::shape::contents_bounds(&items).ok_or(BridgeError::EmptyPath)?;

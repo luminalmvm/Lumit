@@ -554,6 +554,9 @@ mod tests {
             stroke: None,
             stroke_width: 0.0,
             opacity: 100.0,
+            trim_start: lumit_core::anim::Property::zero(),
+            trim_end: lumit_core::anim::Property::fixed(100.0),
+            trim_offset: lumit_core::anim::Property::zero(),
             extra: serde_json::Map::new(),
         };
 

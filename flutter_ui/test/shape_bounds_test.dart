@@ -10,6 +10,7 @@ import 'dart:ui' show Size;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:uuid/uuid.dart';
@@ -33,6 +34,9 @@ void main() {
             stroked ? const BridgeColourRgba(r: 0, g: 0, b: 0, a: 1) : null,
         strokeWidth: strokeWidth,
         opacity: 100,
+        trimStart: const BridgeScalar.static_(0),
+        trimEnd: const BridgeScalar.static_(100),
+        trimOffset: const BridgeScalar.static_(0),
       );
 
   test('the art\'s own box is the layer\'s size', () {

@@ -100,20 +100,21 @@ fn is_normal(mode: &BlendMode) -> bool {
     matches!(mode, BlendMode::Normal)
 }
 
-/// serde default for [`PaintStroke::end`]: the whole stroke.
-fn full() -> Property {
+/// serde default for [`PaintStroke::end`] and for a shape item's Trim end
+/// ([`crate::shape::ShapeItem`]): the whole path.
+pub(crate) fn full() -> Property {
     Property::fixed(100.0)
 }
 
 /// True for a still 0 — [`PaintStroke::start`]'s default, and so the thing left
-/// out of the file entirely.
-fn is_static_zero(p: &Property) -> bool {
+/// out of the file entirely. Shape items' trims default the same way.
+pub(crate) fn is_static_zero(p: &Property) -> bool {
     matches!(p.animation, Animation::Static(v) if v == 0.0) && p.extra.is_empty()
 }
 
 /// True for a still 100 — [`PaintStroke::end`]'s default, left out for the same
 /// reason: a stroke nobody has trimmed writes the bytes it always wrote.
-fn is_static_full(p: &Property) -> bool {
+pub(crate) fn is_static_full(p: &Property) -> bool {
     matches!(p.animation, Animation::Static(v) if v == 100.0) && p.extra.is_empty()
 }
 
@@ -247,7 +248,7 @@ fn bounds_of(points: &[(f64, f64)], width: f64) -> Option<(f64, f64, f64, f64)> 
 /// of a write-on, not an error. A path with no length (a single dab, or one
 /// sample repeated) has nothing to cut, so it is drawn whole whenever anything
 /// of it is asked for.
-fn trimmed(points: &[(f64, f64)], start: f64, end: f64) -> Vec<(f64, f64)> {
+pub(crate) fn trimmed(points: &[(f64, f64)], start: f64, end: f64) -> Vec<(f64, f64)> {
     let from_pct = start.clamp(0.0, 100.0);
     let to_pct = end.clamp(0.0, 100.0);
     if to_pct <= from_pct {

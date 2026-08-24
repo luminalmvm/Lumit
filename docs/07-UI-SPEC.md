@@ -507,6 +507,9 @@ there is something to say.
   the art was drawn and MUST become the selection, so the next drag masks it.
 - A shape layer's art lists in its Timeline twirl-down under a **Contents** heading, above Masks
   and Effects: the art is the picture, the masks gate it, the effects process it.
+- Each item's **animatable numbers get a row each** under it, as a mask's and a stroke's do
+  (K-451): Trim start, Trim end and Trim offset. A row rather than another control on the item's
+  own row, because a property without a row has nowhere to put the stopwatch that animates it.
 - **All five shape tools drag out** between two opposite corners of the shape's box —
   whichever way round the drag went — with `Shift` keeping the box square. Rectangle and
   rounded rectangle fill the box; ellipse is inscribed in it; polygon and star are the regular
