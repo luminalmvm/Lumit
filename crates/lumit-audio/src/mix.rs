@@ -111,6 +111,28 @@ pub fn mix_stereo(sources: &[PlacedAudio], total_frames: usize) -> Vec<f32> {
     out
 }
 
+/// Fold an interleaved stereo buffer down to one channel.
+///
+/// **The law is sum-and-halve — `(L + R) / 2`**, which is each side attenuated
+/// by 6 dB before the sum. In plain terms: a mono fold-down has to answer
+/// "what does one loudspeaker play?", and the arithmetic mean is the answer
+/// that keeps a centred signal at exactly its own level, cannot clip a
+/// correlated pair on the way down, and leaves a signal present on one side
+/// only 6 dB quieter — which is what a listener in mono should hear when half
+/// the picture is missing.
+///
+/// The alternative, ×1/√2 on each side (−3 dB), preserves the *power* of two
+/// uncorrelated sides instead and is the right law for upmixing; it can
+/// overshoot full scale on a correlated pair, so delivery fold-downs take the
+/// mean. An odd trailing sample (a buffer that is not whole stereo frames) is
+/// dropped rather than guessed at.
+pub fn downmix_to_mono(interleaved: &[f32]) -> Vec<f32> {
+    interleaved
+        .chunks_exact(2)
+        .map(|f| (f[0] + f[1]) * 0.5)
+        .collect()
+}
+
 /// Where one layer's decoded audio lands on the comp strip. The footage
 /// audio's sample 0 is at comp time `offset_s` (the layer's start offset);
 /// the layer is only audible across its comp-timeline span `[in_s, out_s)`.
@@ -697,5 +719,21 @@ mod tests {
         assert!(out_pos.iter().all(|v| (v - MASTER_CEILING).abs() < 1e-6));
         assert!(out_neg.iter().all(|v| (v + MASTER_CEILING).abs() < 1e-6));
         assert!(out_pos.iter().all(|v| *v < 1.0));
+    }
+
+    /// The fold-down law, stated four ways: a centred signal keeps its level,
+    /// one side alone arrives 6 dB down, a correlated pair at full scale
+    /// cannot overshoot, and an odd trailing sample is dropped rather than
+    /// guessed at.
+    #[test]
+    fn the_mono_fold_down_is_sum_and_halve() {
+        assert_eq!(downmix_to_mono(&[0.5, 0.5, -0.25, -0.25]), vec![0.5, -0.25]);
+        assert_eq!(downmix_to_mono(&[1.0, 0.0]), vec![0.5]);
+        assert_eq!(downmix_to_mono(&[1.0, 1.0]), vec![1.0]);
+        assert_eq!(downmix_to_mono(&[0.25, 0.75]), vec![0.5]);
+        // Out of phase cancels, which is what one loudspeaker really does.
+        assert_eq!(downmix_to_mono(&[0.6, -0.6]), vec![0.0]);
+        assert_eq!(downmix_to_mono(&[0.25, 0.75, 0.5]), vec![0.5]);
+        assert!(downmix_to_mono(&[]).is_empty());
     }
 }

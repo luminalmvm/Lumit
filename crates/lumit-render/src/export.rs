@@ -212,6 +212,65 @@ impl ExportPreset {
     }
 }
 
+/// The sample rates an export can write. Three, and only three: the CD rate,
+/// the delivery rate every preset uses, and the high-resolution master rate.
+/// A rate outside this list is refused rather than nudged to the nearest one
+/// — an export that quietly wrote 48 kHz when 44.1 was asked for would be a
+/// file that is not what it says it is.
+pub const EXPORT_AUDIO_RATES: &[u32] = &[44_100, EXPORT_AUDIO_RATE, 96_000];
+
+/// How many bits one written sample carries.
+///
+/// In plain terms: this is the *file's* resolution, not the mix's. Lumit mixes
+/// in 32-bit floats whatever is chosen here; the depth decides how finely that
+/// mix is written down. It means something only for the uncompressed forms —
+/// a lossy codec stores coefficients, not samples, and has no sample width at
+/// all (see [`FormatCaps::audio_depths`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum AudioDepth {
+    /// Sixteen bits a sample — CD resolution, and what every delivery file
+    /// has always carried.
+    #[default]
+    Sixteen,
+    /// Twenty-four bits a sample — the master resolution, where the extra
+    /// headroom is wanted for further work.
+    TwentyFour,
+}
+
+impl AudioDepth {
+    pub const ALL: [AudioDepth; 2] = [AudioDepth::Sixteen, AudioDepth::TwentyFour];
+
+    pub fn bits(self) -> u32 {
+        match self {
+            AudioDepth::Sixteen => 16,
+            AudioDepth::TwentyFour => 24,
+        }
+    }
+}
+
+/// How many channels the written file carries.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum AudioLayout {
+    /// One channel: the comp's stereo mix folded down (see
+    /// [`lumit_audio::mix::downmix_to_mono`], which states the law).
+    Mono,
+    /// Two channels — the comp's mix as it is mixed and as it is played back.
+    #[default]
+    Stereo,
+}
+
+impl AudioLayout {
+    pub const ALL: [AudioLayout; 2] = [AudioLayout::Mono, AudioLayout::Stereo];
+
+    /// The interleave width every buffer downstream of the fold-down uses.
+    pub fn channels(self) -> u16 {
+        match self {
+            AudioLayout::Mono => 1,
+            AudioLayout::Stereo => 2,
+        }
+    }
+}
+
 /// The sound-only containers an export can write (docs/06 §7.4).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub enum AudioFormat {
@@ -237,10 +296,15 @@ impl AudioFormat {
         }
     }
 
-    pub fn codec(self) -> lumit_media::encode::AudioCodec {
-        match self {
-            AudioFormat::M4a => lumit_media::encode::AudioCodec::Aac,
-            AudioFormat::Wav => lumit_media::encode::AudioCodec::PcmS16,
+    /// The codec this container is written with. AAC is AAC whatever depth
+    /// was asked for — it stores no samples to give a width to — so the depth
+    /// only picks between the two PCM widths, and a depth AAC cannot honour
+    /// is refused by [`ExportSpec::check`] long before this is called.
+    pub fn codec(self, depth: AudioDepth) -> lumit_media::encode::AudioCodec {
+        match (self, depth) {
+            (AudioFormat::M4a, _) => lumit_media::encode::AudioCodec::Aac,
+            (AudioFormat::Wav, AudioDepth::Sixteen) => lumit_media::encode::AudioCodec::PcmS16,
+            (AudioFormat::Wav, AudioDepth::TwentyFour) => lumit_media::encode::AudioCodec::PcmS24,
         }
     }
 }
@@ -275,6 +339,19 @@ pub struct FormatCaps {
     pub alpha: bool,
     /// The colour depths this format can write, best last.
     pub depths: &'static [lumit_media::encode::BitDepth],
+    /// The sample rates this format's audio stream can be written at, empty
+    /// where it carries no sound at all.
+    pub audio_rates: &'static [u32],
+    /// The sample widths this format's audio stream can be written at, empty
+    /// where it carries no sound at all.
+    ///
+    /// AAC lists **sixteen only**, and that is not a claim about AAC's
+    /// precision: a lossy transform codec stores coefficients rather than
+    /// samples, so it has no sample width to set. Asking an `.mp4` or an
+    /// `.m4a` for twenty-four bits is therefore answered honestly — the
+    /// format cannot carry the choice — rather than by accepting the setting
+    /// and writing the same file either way.
+    pub audio_depths: &'static [AudioDepth],
     /// A video bitrate applies (lossless formats have none to choose).
     pub bit_rate: bool,
     /// The container holds metadata.
@@ -288,6 +365,10 @@ use lumit_media::encode::BitDepth;
 const EIGHT_ONLY: &[BitDepth] = &[BitDepth::Eight];
 /// The still formats carry either width.
 const EIGHT_OR_SIXTEEN: &[BitDepth] = &[BitDepth::Eight, BitDepth::Sixteen];
+/// AAC has no sample width of its own; only the delivery default stands.
+const AAC_DEPTH: &[AudioDepth] = &[AudioDepth::Sixteen];
+/// Uncompressed PCM in a `.wav` carries either width.
+const PCM_DEPTHS: &[AudioDepth] = &[AudioDepth::Sixteen, AudioDepth::TwentyFour];
 
 impl ExportFormat {
     /// This format's capability row.
@@ -300,6 +381,8 @@ impl ExportFormat {
                 audio: true,
                 alpha: false,
                 depths: EIGHT_ONLY,
+                audio_rates: EXPORT_AUDIO_RATES,
+                audio_depths: AAC_DEPTH,
                 bit_rate: true,
                 metadata: true,
             },
@@ -311,6 +394,8 @@ impl ExportFormat {
                 audio: false,
                 alpha: true,
                 depths: EIGHT_OR_SIXTEEN,
+                audio_rates: &[],
+                audio_depths: &[],
                 bit_rate: false,
                 metadata: false,
             },
@@ -319,6 +404,11 @@ impl ExportFormat {
                 audio: true,
                 alpha: false,
                 depths: &[],
+                audio_rates: EXPORT_AUDIO_RATES,
+                audio_depths: match f {
+                    AudioFormat::M4a => AAC_DEPTH,
+                    AudioFormat::Wav => PCM_DEPTHS,
+                },
                 // AAC has a bitrate; PCM is exactly what it is.
                 bit_rate: f == AudioFormat::M4a,
                 metadata: true,
@@ -797,6 +887,17 @@ pub struct ExportSpec {
     pub range: Option<(usize, usize)>,
     pub include_audio: bool,
     pub audio_bit_rate: i64,
+    /// The rate the mix is resampled to and the file is written at, in Hz.
+    /// Every source is decoded straight to this rate through the same
+    /// resampler the preview mix uses, so no second sampling step exists to
+    /// disagree with the first.
+    pub audio_rate: u32,
+    /// Bits per written sample. Meaningful only where the format has samples
+    /// to give a width to ([`FormatCaps::audio_depths`]).
+    pub audio_depth: AudioDepth,
+    /// One channel or two. Mono folds the comp's stereo mix down; the law is
+    /// stated on [`lumit_audio::mix::downmix_to_mono`].
+    pub audio_layout: AudioLayout,
     /// Bits per channel in the written file.
     pub depth: BitDepth,
     pub channels: Channels,
@@ -824,6 +925,9 @@ impl Default for ExportSpec {
             range: None,
             include_audio: true,
             audio_bit_rate: PRESET_AUDIO_BPS,
+            audio_rate: EXPORT_AUDIO_RATE,
+            audio_depth: AudioDepth::default(),
+            audio_layout: AudioLayout::default(),
             depth: BitDepth::default(),
             channels: Channels::default(),
             alpha: AlphaMode::default(),
@@ -860,6 +964,20 @@ impl ExportSpec {
             return Err(format!(
                 "the colour space \"{}\" is not available in this build",
                 self.colour_space.label()
+            ));
+        }
+        if caps.audio && !caps.audio_rates.contains(&self.audio_rate) {
+            return Err(format!(
+                "{} cannot be written at {} Hz",
+                self.format.extension(),
+                self.audio_rate
+            ));
+        }
+        if caps.audio && !caps.audio_depths.contains(&self.audio_depth) {
+            return Err(format!(
+                "{} cannot carry {}-bit sound",
+                self.format.extension(),
+                self.audio_depth.bits()
             ));
         }
         if !caps.video && !caps.audio {
@@ -1072,7 +1190,8 @@ fn run(
 
     // The comp's audio, mixed exactly as playback mixes it, then cut to the
     // export range and padded so sound and picture end together.
-    let rate = EXPORT_AUDIO_RATE;
+    let rate = spec.audio_rate;
+    let chans = usize::from(spec.audio_layout.channels());
     // Sound only joins a container that can hold it: a folder of stills has
     // nowhere to put it, and the dialogue says so rather than silently
     // dropping it. An audio-only export is nothing *but* sound, so the
@@ -1095,7 +1214,13 @@ fn run(
         let expect = audio_samples_through(total, out_fps, rate);
         let mut cut = full[start * 2..(start + expect).min(full.len() / 2) * 2].to_vec();
         cut.resize(expect * 2, 0.0);
-        Some(cut)
+        // The mix is stereo throughout — playback's own mix, so preview and
+        // export cannot disagree — and folds down once, at the very end,
+        // where nothing else reads it.
+        Some(match spec.audio_layout {
+            AudioLayout::Stereo => cut,
+            AudioLayout::Mono => lumit_audio::mix::downmix_to_mono(&cut),
+        })
     } else {
         None
     };
@@ -1147,6 +1272,7 @@ fn run(
                     rate,
                     bit_rate: spec.audio_bit_rate,
                     codec: lumit_media::encode::AudioCodec::Aac,
+                    channels: spec.audio_layout.channels(),
                 });
             let (bit_rate, max_rate) = match spec.resolved_bitrate((tw, th), out_fps) {
                 Some((target, peak)) => (Some(target), peak),
@@ -1223,10 +1349,10 @@ fn run(
         // Interleave: after each picture frame, the samples that cover it,
         // so the muxer keeps sound and picture together in the file.
         if let (Some(mix), Sink::Video { encoder, .. }) = (&audio_mix, &mut sink) {
-            let upto = audio_samples_through(frame_n + 1, out_fps, rate).min(mix.len() / 2);
+            let upto = audio_samples_through(frame_n + 1, out_fps, rate).min(mix.len() / chans);
             if upto > audio_fed {
                 encoder
-                    .write_audio(&mix[audio_fed * 2..upto * 2])
+                    .write_audio(&mix[audio_fed * chans..upto * chans])
                     .map_err(|e| e.to_string())?;
                 audio_fed = upto;
             }
@@ -1238,9 +1364,9 @@ fn run(
     }
     // Any samples the per-frame rounding left behind.
     if let (Some(mix), Sink::Video { encoder, .. }) = (&audio_mix, &mut sink) {
-        if mix.len() / 2 > audio_fed {
+        if mix.len() / chans > audio_fed {
             encoder
-                .write_audio(&mix[audio_fed * 2..])
+                .write_audio(&mix[audio_fed * chans..])
                 .map_err(|e| e.to_string())?;
         }
     }
@@ -1260,14 +1386,16 @@ fn run_audio_only(
     tx: &Sender<ExportEvent>,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
-    let rate = EXPORT_AUDIO_RATE;
+    let rate = spec.audio_rate;
+    let chans = usize::from(spec.audio_layout.channels());
     let mut encoder = lumit_media::Encoder::open(
         out_path,
         None,
         Some(&lumit_media::encode::AudioSettings {
             rate,
             bit_rate: spec.audio_bit_rate,
-            codec: format.codec(),
+            codec: format.codec(spec.audio_depth),
+            channels: spec.audio_layout.channels(),
         }),
         &spec.metadata,
     )
@@ -1284,7 +1412,7 @@ fn run_audio_only(
             &silence
         }
     };
-    let chunk = rate as usize * 2;
+    let chunk = rate as usize * chans;
     for (n, block) in mix.chunks(chunk).enumerate() {
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
@@ -1292,11 +1420,11 @@ fn run_audio_only(
         encoder.write_audio(block).map_err(|e| e.to_string())?;
         // Progress against the picture's own clock, so the queue row reads
         // the same way whatever an item writes.
-        let done = ((n + 1) * chunk / 2).min(mix.len() / 2);
+        let done = ((n + 1) * chunk / chans).min(mix.len() / chans);
         let frame = if mix.is_empty() {
             total
         } else {
-            (done * total / (mix.len() / 2).max(1)).min(total)
+            (done * total / (mix.len() / chans).max(1)).min(total)
         };
         let _ = tx.send(ExportEvent::Progress { frame, total });
     }
@@ -2187,6 +2315,169 @@ mod tests {
             "two seconds of silence, not {}",
             probe.duration_seconds
         );
+    }
+
+    /// Every sample rate, sample width and channel layout the dialog offers,
+    /// end to end through `run` and probed back off disk. The engine's answer
+    /// and the file's own header have to be the same answer.
+    #[test]
+    fn the_audio_options_reach_the_written_file() {
+        let (doc, comp) = solid_doc(32, 16);
+        let dir = tempfile::tempdir().unwrap();
+        for (format, ext) in [(AudioFormat::Wav, "wav"), (AudioFormat::M4a, "m4a")] {
+            for rate in EXPORT_AUDIO_RATES.iter().copied() {
+                for depth in AudioDepth::ALL {
+                    for layout in AudioLayout::ALL {
+                        let mut sp = spec(ExportFormat::Audio(format), 32, 16);
+                        sp.include_audio = true;
+                        sp.range = Some((0, 30)); // one second of a 30 fps comp
+                        sp.audio_rate = rate;
+                        sp.audio_depth = depth;
+                        sp.audio_layout = layout;
+                        // AAC has no sample width, so only the default stands
+                        // there — that refusal is its own test below.
+                        if sp.check().is_err() {
+                            continue;
+                        }
+                        let path = dir.path().join(format!(
+                            "mix-{ext}-{rate}-{}-{}.{ext}",
+                            depth.bits(),
+                            layout.channels()
+                        ));
+                        let (tx, _rx) = channel();
+                        let cancel = AtomicBool::new(false);
+                        run(&doc, comp, &[], &path, &sp, &tx, &cancel)
+                            .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
+
+                        let probe = lumit_media::probe::probe(&path).unwrap();
+                        let audio = probe.audio.expect("it is all sound");
+                        assert_eq!(
+                            (audio.sample_rate as u32, audio.channels as u16),
+                            (rate, layout.channels()),
+                            "{ext} at {rate} Hz, {:?}",
+                            layout
+                        );
+                        if format == AudioFormat::Wav {
+                            let want = match depth {
+                                AudioDepth::Sixteen => "pcm_s16le",
+                                AudioDepth::TwentyFour => "pcm_s24le",
+                            };
+                            assert_eq!(audio.codec, want);
+                        }
+                        assert!(
+                            (probe.duration_seconds - 1.0).abs() < 0.05,
+                            "one second, not {}",
+                            probe.duration_seconds
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// The capability table refuses rather than approximates: a width or a
+    /// rate the format cannot carry is an error before a frame is rendered,
+    /// and every offered combination the format *can* carry passes.
+    #[test]
+    fn the_audio_capability_table_refuses_what_the_format_cannot_carry() {
+        let aac = |f| {
+            let mut sp = ExportSpec {
+                format: f,
+                ..ExportSpec::default()
+            };
+            sp.audio_depth = AudioDepth::TwentyFour;
+            sp
+        };
+        // AAC stores coefficients, not samples: there is no width to set.
+        for f in [
+            ExportFormat::Video(VideoCodec::H264),
+            ExportFormat::Audio(AudioFormat::M4a),
+        ] {
+            let err = aac(f).check().expect_err("24-bit AAC is refused");
+            assert!(err.contains("24-bit sound"), "{err}");
+        }
+        // The uncompressed master carries both widths.
+        for depth in AudioDepth::ALL {
+            let sp = ExportSpec {
+                format: ExportFormat::Audio(AudioFormat::Wav),
+                audio_depth: depth,
+                ..ExportSpec::default()
+            };
+            assert!(sp.check().is_ok(), "{depth:?} in a wav");
+        }
+        // A rate off the list is refused, never nudged to the nearest one.
+        let odd = ExportSpec {
+            audio_rate: 22_050,
+            ..ExportSpec::default()
+        };
+        let err = odd.check().expect_err("22 050 Hz is not offered");
+        assert!(err.contains("22050"), "{err}");
+        for rate in EXPORT_AUDIO_RATES.iter().copied() {
+            for f in [
+                ExportFormat::Video(VideoCodec::H264),
+                ExportFormat::Audio(AudioFormat::M4a),
+                ExportFormat::Audio(AudioFormat::Wav),
+            ] {
+                let sp = ExportSpec {
+                    format: f,
+                    audio_rate: rate,
+                    ..ExportSpec::default()
+                };
+                assert!(sp.check().is_ok(), "{rate} Hz in {}", f.extension());
+            }
+        }
+        // A still sequence carries no sound at all, so the audio settings are
+        // unread there rather than a reason to refuse a picture.
+        let stills = ExportSpec {
+            format: ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
+            audio_rate: 22_050,
+            audio_depth: AudioDepth::TwentyFour,
+            ..ExportSpec::default()
+        };
+        assert!(stills.check().is_ok());
+    }
+
+    /// Two runs of the same audio export write the same bytes — the standing
+    /// determinism rule (docs/06 §7.3), asserted on the new options rather
+    /// than only on the old default.
+    #[test]
+    fn the_same_audio_spec_writes_the_same_bytes_twice() {
+        let (doc, comp) = solid_doc(32, 16);
+        let dir = tempfile::tempdir().unwrap();
+        let mut sp = spec(ExportFormat::Audio(AudioFormat::Wav), 32, 16);
+        sp.include_audio = true;
+        sp.range = Some((0, 30));
+        sp.audio_rate = 44_100;
+        sp.audio_depth = AudioDepth::TwentyFour;
+        sp.audio_layout = AudioLayout::Mono;
+
+        let mut written = Vec::new();
+        for n in 0..2 {
+            let path = dir.path().join(format!("twice-{n}.wav"));
+            let (tx, _rx) = channel();
+            let cancel = AtomicBool::new(false);
+            run(&doc, comp, &[], &path, &sp, &tx, &cancel).unwrap();
+            written.push(std::fs::read(&path).unwrap());
+        }
+        assert!(!written[0].is_empty());
+        assert_eq!(written[0], written[1], "two runs, two different files");
+    }
+
+    /// A spec stored before the sound options existed loads as the behaviour
+    /// it was saved under: 48 kHz, sixteen bits, stereo.
+    #[test]
+    fn a_preset_written_before_the_audio_options_loads_unchanged() {
+        let default = ExportSpec::default();
+        let mut json: serde_json::Value = serde_json::to_value(&default).unwrap();
+        let object = json.as_object_mut().unwrap();
+        for key in ["audio_rate", "audio_depth", "audio_layout"] {
+            assert!(object.remove(key).is_some(), "{key} is a spec field");
+        }
+        let old: ExportSpec = serde_json::from_value(json).unwrap();
+        assert_eq!(old, default);
+        assert_eq!(old.audio_rate, EXPORT_AUDIO_RATE);
+        assert_eq!(old.audio_depth, AudioDepth::Sixteen);
+        assert_eq!(old.audio_layout, AudioLayout::Stereo);
     }
 
     /// A crop really crops: the same comp exported with and without one

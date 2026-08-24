@@ -91,6 +91,10 @@ pub enum AudioCodec {
     /// Uncompressed signed 16-bit PCM — a `.wav` master, where "lossy" would
     /// be the wrong answer and a bitrate means nothing.
     PcmS16,
+    /// Uncompressed signed 24-bit PCM — the deeper `.wav` master. Fed as
+    /// 32-bit samples: `pcm_s24le` is the one FFmpeg encoder that takes
+    /// `AV_SAMPLE_FMT_S32` and writes the top three bytes of each.
+    PcmS24,
 }
 
 impl AudioCodec {
@@ -98,15 +102,18 @@ impl AudioCodec {
         match self {
             AudioCodec::Aac => ffi::AV_CODEC_ID_AAC,
             AudioCodec::PcmS16 => ffi::AV_CODEC_ID_PCM_S16LE,
+            AudioCodec::PcmS24 => ffi::AV_CODEC_ID_PCM_S24LE,
         }
     }
 
-    /// The sample format the encoder is fed: AAC takes planar float, PCM
-    /// takes packed 16-bit.
+    /// The sample format the encoder is fed: AAC takes planar float, 16-bit
+    /// PCM takes packed 16-bit, and 24-bit PCM takes packed 32-bit (FFmpeg's
+    /// `pcm_s24le` keeps the top three bytes of each sample).
     fn sample_fmt(self) -> i32 {
         match self {
             AudioCodec::Aac => ffi::AV_SAMPLE_FMT_FLTP,
             AudioCodec::PcmS16 => ffi::AV_SAMPLE_FMT_S16,
+            AudioCodec::PcmS24 => ffi::AV_SAMPLE_FMT_S32,
         }
     }
 
@@ -115,6 +122,7 @@ impl AudioCodec {
         match self {
             AudioCodec::Aac => "AAC",
             AudioCodec::PcmS16 => "PCM 16-bit",
+            AudioCodec::PcmS24 => "PCM 24-bit",
         }
     }
 }
@@ -128,6 +136,10 @@ pub struct AudioSettings {
     /// codecs that have no such thing — PCM is what it is.
     pub bit_rate: i64,
     pub codec: AudioCodec,
+    /// How many channels the stream carries: 1 (mono) or 2 (stereo). Every
+    /// buffer handed to [`Encoder::write_audio`] is interleaved at this
+    /// width, so a mono stream is one plain run of samples.
+    pub channels: u16,
 }
 
 /// Container metadata as an **ordered** key/value set (docs/06 §7.6): title,
@@ -458,6 +470,8 @@ struct AudioTrack {
     /// Output stream index (audio is 1 behind a video stream, 0 without one).
     stream_index: usize,
     rate: u32,
+    /// 1 or 2 — the interleave width of every buffer this track handles.
+    channels: usize,
     /// Samples per AAC frame (1024 for the FFmpeg encoder).
     frame_size: usize,
     /// Interleaved stereo samples not yet handed to the encoder.
@@ -550,6 +564,7 @@ impl Encoder {
             (None, Some(a)) => match a.codec {
                 AudioCodec::Aac => "aac",
                 AudioCodec::PcmS16 => "pcm_s16le",
+                AudioCodec::PcmS24 => "pcm_s24le",
             },
             (None, None) => "",
         }
@@ -610,7 +625,8 @@ impl Encoder {
         drain_packets(&mut track.ctx, output, 0, false)
     }
 
-    /// Queue interleaved stereo f32 samples (L R L R …) for the AAC track.
+    /// Queue interleaved f32 samples for the audio track — L R L R … at
+    /// stereo, one plain run at mono, always at the settings' channel count.
     /// Whole AAC frames are encoded immediately; a trailing partial frame
     /// waits for more samples (or for [`Self::finish`], which pads it with
     /// silence — at most one AAC frame, ~21 ms, of quiet tail).
@@ -846,11 +862,12 @@ fn open_audio(
     let rate =
         i32::try_from(a.rate).map_err(|_| MediaError::Ffmpeg("audio rate overflows".into()))?;
     ctx.set_sample_rate(rate);
-    ctx.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
+    let channels = i32::from(a.channels.clamp(1, 2));
+    ctx.set_ch_layout(AVChannelLayout::from_nb_channels(channels).into_inner());
     ctx.set_sample_fmt(a.codec.sample_fmt());
     // PCM has no bitrate to choose — it is exactly rate × channels × depth —
     // and asking for one confuses the encoder rather than obeying.
-    if a.codec != AudioCodec::PcmS16 {
+    if a.codec == AudioCodec::Aac {
         ctx.set_bit_rate(a.bit_rate);
     }
     ctx.set_time_base(AVRational { num: 1, den: rate });
@@ -873,6 +890,7 @@ fn open_audio(
         codec: a.codec,
         stream_index,
         rate: a.rate,
+        channels: channels as usize,
         frame_size,
         pending: Vec::new(),
         next_pts: 0,
@@ -887,7 +905,7 @@ fn pump_audio(
     output: &mut AVFormatContextOutput,
     at_eof: bool,
 ) -> Result<(), MediaError> {
-    let chunk = track.frame_size * 2;
+    let chunk = track.frame_size * track.channels;
     if at_eof {
         let partial = track.pending.len() % chunk;
         if partial != 0 {
@@ -916,9 +934,12 @@ fn encode_audio_frame(
     interleaved: &[f32],
 ) -> Result<(), MediaError> {
     let n = track.frame_size;
+    let chans = track.channels;
     let mut frame = AVFrame::new();
     frame.set_format(track.codec.sample_fmt());
-    frame.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
+    frame.set_ch_layout(
+        AVChannelLayout::from_nb_channels(i32::try_from(chans).unwrap_or(2)).into_inner(),
+    );
     frame.set_sample_rate(
         i32::try_from(track.rate).map_err(|_| MediaError::Ffmpeg("audio rate overflows".into()))?,
     );
@@ -930,23 +951,34 @@ fn encode_audio_frame(
         .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
     match track.codec {
         AudioCodec::Aac => {
-            // Planar float: plane 0 is all left samples, plane 1 all right.
-            let left = plane_f32_mut(frame.data[0], n)?;
-            for (dst, src) in left.iter_mut().zip(interleaved.iter().step_by(2)) {
-                *dst = *src;
-            }
-            let right = plane_f32_mut(frame.data[1], n)?;
-            for (dst, src) in right.iter_mut().zip(interleaved.iter().skip(1).step_by(2)) {
-                *dst = *src;
+            // Planar float: one plane per channel, de-interleaved. Stereo is
+            // plane 0 = left and plane 1 = right; mono is plane 0 and nothing
+            // else.
+            for ch in 0..chans {
+                let plane = plane_f32_mut(frame.data[ch], n)?;
+                for (dst, src) in plane
+                    .iter_mut()
+                    .zip(interleaved.iter().skip(ch).step_by(chans))
+                {
+                    *dst = *src;
+                }
             }
         }
         AudioCodec::PcmS16 => {
             // Packed 16-bit: one plane, L R L R …, each sample scaled and
             // clamped rather than wrapped — a signal over full scale must
             // clip, not fold over into the opposite sign.
-            let out = plane_i16_mut(frame.data[0], n * 2)?;
+            let out = plane_i16_mut(frame.data[0], n * chans)?;
             for (dst, src) in out.iter_mut().zip(interleaved.iter()) {
                 *dst = f32_to_i16(*src);
+            }
+        }
+        AudioCodec::PcmS24 => {
+            // Packed 32-bit, of which `pcm_s24le` writes the top three bytes:
+            // the same clamp, scaled to the wider full scale.
+            let out = plane_i32_mut(frame.data[0], n * chans)?;
+            for (dst, src) in out.iter_mut().zip(interleaved.iter()) {
+                *dst = f32_to_i32(*src);
             }
         }
     }
@@ -1110,6 +1142,33 @@ fn plane_i16_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i16], MediaErr
     unsafe {
         Ok(std::slice::from_raw_parts_mut(ptr.cast::<i16>(), len))
     }
+}
+
+/// View an audio plane as `len` i32 samples — the 24-bit twin of
+/// [`plane_i16_mut`], with the same null and alignment discipline.
+fn plane_i32_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i32], MediaError> {
+    if ptr.is_null() {
+        return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));
+    }
+    if !(ptr as usize).is_multiple_of(std::mem::align_of::<i32>()) {
+        return Err(MediaError::Ffmpeg("audio plane misaligned".into()));
+    }
+    // SAFETY: the frame was just filled by `alloc_buffer` with `nb_samples`
+    // samples of AV_SAMPLE_FMT_S32 across the track's channels in one packed
+    // plane (`len` i32s, 4 bytes each); the null and alignment checks above
+    // hold, and FFmpeg's allocator aligns planes far beyond 4 bytes.
+    #[allow(unsafe_code)]
+    unsafe {
+        Ok(std::slice::from_raw_parts_mut(ptr.cast::<i32>(), len))
+    }
+}
+
+/// One float sample as a signed 32-bit PCM word, whose top three bytes are
+/// what `pcm_s24le` writes. Full scale is 8388607 in the written 24 bits, so
+/// the shift lands each sample exactly where the encoder reads it — the same
+/// clip-not-wrap rule as [`f32_to_i16`].
+fn f32_to_i32(s: f32) -> i32 {
+    ((f64::from(s.clamp(-1.0, 1.0)) * 8_388_607.0).round() as i32) << 8
 }
 
 /// One float sample as signed 16-bit PCM: full scale is 32767, and anything
@@ -1390,6 +1449,78 @@ mod tests {
         assert_eq!((video.width, video.height), (320, 240));
     }
 
+    /// Every sample rate, sample width and channel layout the export dialog
+    /// offers, opened against the real encoders and read back with our own
+    /// probe. This is the capability table's evidence: the rates and depths
+    /// `lumit_render::export` refuses are refused because the encoders here
+    /// were asked, not because a list was guessed at.
+    #[test]
+    fn every_offered_rate_depth_and_layout_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        for (ext, codec, name) in [
+            ("m4a", AudioCodec::Aac, "aac"),
+            ("wav", AudioCodec::PcmS16, "pcm_s16le"),
+            ("wav", AudioCodec::PcmS24, "pcm_s24le"),
+        ] {
+            for rate in [44_100u32, 48_000, 96_000] {
+                for channels in [1u16, 2] {
+                    let path = dir
+                        .path()
+                        .join(format!("sound-{name}-{rate}-{channels}.{ext}"));
+                    let mut enc = Encoder::open(
+                        &path,
+                        None,
+                        Some(&AudioSettings {
+                            rate,
+                            bit_rate: 320_000,
+                            codec,
+                            channels,
+                        }),
+                        &Metadata::new(),
+                    )
+                    .unwrap_or_else(|e| panic!("{name} at {rate} Hz, {channels} ch: {e}"));
+                    // Half a second of a steady half-scale tone, interleaved
+                    // at this layout's own width.
+                    let frames = rate as usize / 2;
+                    let samples: Vec<f32> = vec![0.5; frames * usize::from(channels)];
+                    enc.write_audio(&samples).unwrap();
+                    enc.finish().unwrap();
+
+                    let probe = crate::probe::probe(&path).unwrap();
+                    let audio = probe.audio.expect("it is all sound");
+                    assert_eq!(
+                        (audio.sample_rate as u32, audio.channels as u16),
+                        (rate, channels),
+                        "{name} at {rate} Hz, {channels} ch came back wrong"
+                    );
+                    assert_eq!(audio.codec, name);
+
+                    // The uncompressed forms must come back at the level that
+                    // went in — which is what checks the 24-bit scaling.
+                    if codec != AudioCodec::Aac {
+                        let back = crate::audio::decode_all(&path, rate).unwrap();
+                        let mid = back.samples.len() / 2;
+                        // The reader always hands back stereo, so a mono file
+                        // arrives up-mixed — and swresample spreads one
+                        // channel across two at -3 dB, preserving its power.
+                        // That is the opposite direction from our own
+                        // fold-down and is allowed to use the opposite law.
+                        let expect = if channels == 1 {
+                            0.5 / std::f32::consts::SQRT_2
+                        } else {
+                            0.5
+                        };
+                        assert!(
+                            (back.samples[mid] - expect).abs() < 1e-3,
+                            "{name} at {channels} ch came back at {}",
+                            back.samples[mid]
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     /// Audio joins the container: a 440 Hz sine goes in as f32 samples and
     /// must come back out — probed as 48 kHz stereo AAC, decodable by our
     /// own audio reader, at the amplitude that went in (AAC is lossy, so a
@@ -1407,6 +1538,7 @@ mod tests {
                 rate,
                 bit_rate: 320_000,
                 codec: AudioCodec::Aac,
+                channels: 2,
             }),
             &Metadata::new(),
         )
@@ -1585,6 +1717,7 @@ mod tests {
                 rate,
                 bit_rate: 320_000,
                 codec: AudioCodec::Aac,
+                channels: 2,
             }),
             &Metadata::new(),
         )
@@ -1625,6 +1758,7 @@ mod tests {
                 rate,
                 bit_rate: 0,
                 codec: AudioCodec::PcmS16,
+                channels: 2,
             }),
             &Metadata::new(),
         )
@@ -1677,6 +1811,7 @@ mod tests {
                 rate: 48_000,
                 bit_rate: 320_000,
                 codec: AudioCodec::Aac,
+                channels: 2,
             }),
             &Metadata::new(),
         )

@@ -895,8 +895,9 @@ collection, the recording mode, the panel) is in the entry above.
 - **Export options still to build** ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)
     §7) - one-click vertical variants (centre-crop reframe), user presets
     serialised beside the built-ins, export priority and encoder preference order,
-    the 48 kHz-only audio rate becoming a choice, and free width/height boxes
-    (sizes are preset-driven today).
+    and free width/height boxes (sizes are preset-driven today). The sound
+    rate, width and layout are engine-real now and wait only on the seam
+    (`BridgeExportSpec` and `BridgeFormatCaps`) and the dialog's three rows.
 - **Export status still speaks the old idiom** - `export.rs` replies in JSON
     strings (`err_json`) polled on a timer; follow the worker's typed-stream way.
 

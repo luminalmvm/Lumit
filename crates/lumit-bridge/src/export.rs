@@ -303,6 +303,7 @@ pub(crate) fn to_export_spec(
         AlphaMode, Bitrate, Channels, ColourSpace, DiskCachePolicy, ExportSpec, RenderOptions,
         WhenDone,
     };
+    let default_spec = ExportSpec::default();
     let mut metadata = Metadata::new();
     for field in &spec.metadata {
         metadata.set(&field.key, &field.value);
@@ -332,6 +333,13 @@ pub(crate) fn to_export_spec(
         } else {
             PRESET_AUDIO_BPS
         },
+        // The sound rate, width and layout are real in the engine and are not
+        // on the seam yet, so they take today's answer — 48 kHz, sixteen bits,
+        // stereo — exactly as K-479 left the fields it had not yet exposed.
+        // One line to change when the dialogue's three faces come alive.
+        audio_rate: default_spec.audio_rate,
+        audio_depth: default_spec.audio_depth,
+        audio_layout: default_spec.audio_layout,
         depth: if spec.depth >= 16 {
             BitDepth::Sixteen
         } else {

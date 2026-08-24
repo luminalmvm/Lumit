@@ -928,10 +928,29 @@ space -> the preset's output space (Rec.709/sRGB in v1) as the final export tran
 export straight or premultiplied per output settings.
 
 **Audio-only output.** An export can carry sound and no picture: an **`.m4a`** (AAC, the same
-codec and the same mixdown a video export uses) or a **`.wav`** (uncompressed 16-bit PCM,
-where a bitrate means nothing and is not offered). The container opens with whichever streams
-it was given — video, audio, or both — and asking for neither is a typed error rather than an
-empty file.
+codec and the same mixdown a video export uses) or a **`.wav`** (uncompressed PCM, where a
+bitrate means nothing and is not offered). The container opens with whichever streams it was
+given — video, audio, or both — and asking for neither is a typed error rather than an empty
+file.
+
+**Sound settings.** Three of them, on every export that carries audio, each defaulting to
+what every export has always written:
+
+- **Sample rate** — 44 100, **48 000** or 96 000 Hz. Every source is decoded *straight to*
+  the chosen rate through the same resampler the preview mix uses, so there is no second
+  sampling step to disagree with the first, and a rate off the list is refused rather than
+  nudged to the nearest one.
+- **Sample width** — **16** or 24 bits, on the uncompressed forms only. AAC stores
+  coefficients rather than samples and has no width to set, so an `.mp4` or an `.m4a` asked
+  for 24 bits is refused, exactly as any other setting a format cannot carry (§7.4).
+- **Channel layout** — mono or **stereo**. The comp mixes in stereo, as playback does, and
+  a mono export folds that finished mix down once at the end. **The law is sum-and-halve,
+  `(L + R) / 2`**: a centred signal keeps its own level, a correlated pair cannot clip on
+  the way down, and a signal on one side only arrives 6 dB quieter, which is what one
+  loudspeaker really plays. (The ×1/√2 alternative preserves the power of two uncorrelated
+  sides and is the right law for *up*mixing, which is why the decoder uses it in the other
+  direction; it can overshoot full scale on a correlated pair, so the fold-down takes the
+  mean.)
 
 **Container metadata.** An export writes an **ordered** key/value set into the container:
 title, author, copyright, comment and creation time by default, and whatever else the
