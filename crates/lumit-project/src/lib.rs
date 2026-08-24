@@ -2106,7 +2106,6 @@ mod tests {
                 (NodeRef::Driver(wiggle_id), [120.5, -40.25]),
                 (NodeRef::Out, [640.0, 0.0]),
             ],
-            ..Default::default()
         };
         let wanted = layer.graph.clone();
         let mut wired = doc.clone();
