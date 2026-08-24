@@ -1065,7 +1065,7 @@ carries. The rules worth writing down:
   tree scrolls sideways under the strip that has always been drawn for it. The bottom
   bar's words are shed before its icons, per §12A.6's step 4.
 
-### 12A.3b Welcome screen (K-448, K-464, K-466)
+### 12A.3b Welcome screen (K-448, K-464, K-468)
 
 The page Lumit opens on, and the only surface that is the whole window rather than a panel
 in one. It renders **in-window** — a welcome *window* belongs to the multi-window phase
@@ -1086,15 +1086,15 @@ has said how they want to start. Somebody who double-clicked a `.lum` is never s
 - **The recents list is a kicker strip over a hairline well.** *Recent* is capitalised —
   it names the container under it — while *Clear* beside it is sentence case at 0.06em,
   because it is an action rather than a label. A row is **52** with a seam under all but
-  the last (K-466, superseding the 40 written here before): the picture, then the name in
+  the last (K-468, superseding the 40 written here before): the picture, then the name in
   body at 11 over the path in mono at 9 (`text_disabled`), then the date in mono at 10,
   muted, in a fixed 70 column.
-- **Every row opens with a thumbnail** (K-466): the project as it looked when it was last
+- **Every row opens with a thumbnail** (K-468): the project as it looked when it was last
   saved, **64×36** — 16:9 exactly, sized to the row with 8 of air above and below — at the
   radius the rest of the chrome carries, then 12 before the name. A project with no
   picture yet shows a `surface_0` well with the composition mark muted in it and **no
   words**: a list that explains its own blanks has stopped being a list.
-- **There is no format column** (K-466, superseding K-464's reserved 120px). It was drawn
+- **There is no format column** (K-468, superseding K-464's reserved 120px). It was drawn
   to hold `1920×1080 · 25` and left empty against an engine call that could read a
   project's size and rate without opening it — but that is per-*composition* data and a
   project holds as many compositions as it likes, so the column asked a question a project
@@ -1205,9 +1205,9 @@ a plain constant in the code rather than a token with two equal values.
 | Welcome: the column everything on the page sits in, and the air between its blocks | 560 wide / 28 apart | 560 wide / 28 apart |
 | Welcome: a start card (14 of padding round a 13px title, a 4px gap and the 9px note) | 63 | 63 |
 | Welcome: the kicker strip over the recents list | 18 | 18 |
-| Welcome: a recent project's row (a seam under all but the last, K-466) | 52 | 52 |
-| Welcome: a recent row's thumbnail — 16:9, 8 of air either side, 12 after it (K-466) | 64×36 | 64×36 |
-| Welcome: the recents' fixed columns — date, forget (no format column, K-466) | 70 / 12 | 70 / 12 |
+| Welcome: a recent project's row (a seam under all but the last, K-468) | 52 | 52 |
+| Welcome: a recent row's thumbnail — 16:9, 8 of air either side, 12 after it (K-468) | 64×36 | 64×36 |
+| Welcome: the recents' fixed columns — date, forget (no format column, K-468) | 70 / 12 | 70 / 12 |
 | Welcome: the footer strip, and the outlined links in it | 28 / 24 | 28 / 24 |
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |

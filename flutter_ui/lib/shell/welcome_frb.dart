@@ -22,6 +22,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
+import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
 import '../state/external_links.dart';
@@ -61,16 +62,37 @@ const EdgeInsets welcomeCardPadding = EdgeInsets.symmetric(
 /// The kicker strip over the recents well — the word and 6px under it.
 const double welcomeRecentHeaderHeight = 18;
 
-/// One recent project. The seam under it is drawn on top, so a row measures 40
-/// and the eye reads 41 for all but the last.
-const double welcomeRecentRowHeight = 40;
+/// One recent project. The seam under it is drawn on top, so a row measures 52
+/// and the eye reads 53 for all but the last.
+///
+/// 52 rather than the drawing's 40 because the row now carries a picture
+/// (K-468): 8 of air above and below a 36-tall thumbnail is what sets it.
+const double welcomeRecentRowHeight = 52;
 const EdgeInsets welcomeRecentRowPadding = EdgeInsets.symmetric(horizontal: 14);
 
-/// The recents' fixed columns: the format, the date, and the button that
-/// forgets the row. The name column takes whatever is left.
-const double welcomeFormatColumnWidth = 120;
+/// The thumbnail at the head of a row: the project as it looked when it was
+/// last saved. 16:9 exactly, and sized to the row — 36 tall leaves 8 either
+/// side of it, and 64 is the width that ratio asks for.
+const double welcomeThumbHeight = 36;
+const double welcomeThumbWidth = 64;
+
+/// The air between the thumbnail and the name column.
+const double welcomeThumbGap = 12;
+
+/// The recents' fixed columns: the date, and the button that forgets the row.
+/// The name column takes whatever is left.
+///
+/// **There is no format column** (K-468). It was drawn holding a project's size
+/// and rate and reserved 120px against an engine call that could report them
+/// without opening the file — but that is per-composition data and a project
+/// has as many of those as it likes, so the question the column asked was the
+/// wrong one. Its room went to the picture and to the name.
 const double welcomeDateColumnWidth = 70;
 const double welcomeForgetColumnWidth = 12;
+
+/// The air after the name column. The format column used to hold the name and
+/// the date apart; with it gone this is what keeps an elided path off the date.
+const double welcomeNameGap = 16;
 
 /// The gap between the date and the forget button. The drawing has no forget
 /// button — it is the owner's addition on top of it — so the name column is
@@ -87,8 +109,8 @@ const double welcomeButtonHeight = 24;
 /// the 0.12em a container label carries.
 TextStyle welcomeNote(LumitTheme t) => t.kicker.copyWith(letterSpacing: 0.54);
 
-/// A recent project's factual columns — its format and when it was last opened
-/// — mono at 10, muted, exactly as the drawing sets them.
+/// A recent project's factual column — when it was last opened — mono at 10,
+/// muted, exactly as the drawing sets it.
 TextStyle welcomeFact(LumitTheme t) =>
     t.mono.copyWith(fontSize: 10, color: t.textMuted);
 
@@ -414,8 +436,9 @@ class _WelcomeCardState extends State<_WelcomeCard> {
   }
 }
 
-/// One recent project: what it is called, where it lives, what shape it is,
-/// when it was last opened here, and the × that forgets it.
+/// One recent project: how it looked when it was last saved, what it is
+/// called, where it lives, when it was last opened here, and the × that
+/// forgets it.
 class _RecentRow extends StatefulWidget {
   final int index;
   final String path;
@@ -441,6 +464,11 @@ class _RecentRow extends StatefulWidget {
 class _RecentRowState extends State<_RecentRow> {
   bool _hover = false;
 
+  /// The project's saved picture, or null when it has none — asked for **once**
+  /// rather than per build. The row rebuilds on every hover, and a `stat` per
+  /// rebuild would put the file system in a pointer path.
+  late final File? _thumb = _savedThumbnail(widget.path);
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -465,6 +493,11 @@ class _RecentRowState extends State<_RecentRow> {
           ),
           child: Row(
             children: [
+              _RecentThumb(
+                key: ValueKey<String>('welcome-recent-thumb-${widget.index}'),
+                file: _thumb,
+              ),
+              const SizedBox(width: welcomeThumbGap),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -490,13 +523,7 @@ class _RecentRowState extends State<_RecentRow> {
                   ],
                 ),
               ),
-              // The `1920×1080 · 25` column. **Drawn empty, deliberately**: a
-              // project's size and rate belong to the document, the engine
-              // offers no way to read them without opening the file, and a
-              // recent project is by definition one that is not open. The seam
-              // it wants is listed in docs/TODO.md. The column keeps its room
-              // so the row does not change shape the day the engine answers.
-              const SizedBox(width: welcomeFormatColumnWidth),
+              const SizedBox(width: welcomeNameGap),
               SizedBox(
                 width: welcomeDateColumnWidth,
                 child: Text(
@@ -514,6 +541,62 @@ class _RecentRowState extends State<_RecentRow> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The project's saved picture, if it has one (K-468).
+///
+/// A file that is simply not there is the ordinary case, not an error: a
+/// project last saved before this feature existed has none, and neither does
+/// one whose capture failed or whose file has since been moved — the key is the
+/// path, so moving a project loses its picture until the next save.
+File? _savedThumbnail(String path) {
+  try {
+    final f = Workspace.thumbnailFile(path);
+    return f.existsSync() ? f : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// The picture at the head of a recent row — 16:9, sized to the row.
+///
+/// With no file it is a quiet well with the composition mark muted in it: the
+/// same `surface_0` inset the rest of the interface uses for "nothing here
+/// yet", and no words, because a row that has to explain its own empty picture
+/// is a row that has stopped being a list.
+class _RecentThumb extends StatelessWidget {
+  final File? file;
+
+  const _RecentThumb({super.key, required this.file});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final f = file;
+    final nothing = Center(
+      key: const ValueKey('welcome-recent-thumb-empty'),
+      child: lumitIcon(LumitIcon.comp, size: 14, color: t.textDisabled),
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+      child: Container(
+        width: welcomeThumbWidth,
+        height: welcomeThumbHeight,
+        color: t.surface0,
+        child: f == null
+            ? nothing
+            : Image.file(
+                f,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.medium,
+                // A file that vanished between the check and the decode, or
+                // was written half through, falls back rather than throwing:
+                // the picture is a nicety and the row still opens the project.
+                errorBuilder: (_, __, ___) => nothing,
+              ),
       ),
     );
   }

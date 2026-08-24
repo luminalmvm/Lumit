@@ -2155,7 +2155,7 @@ small image over each choice, remain the destination (polish tracked in TODO).
   *Import footage*, *New composition*, *Open project* — plus recent projects and a note
   that footage can be dropped anywhere in the window. Drag-and-drop import MUST work over
   every panel from first launch.
-- **The welcome screen** (K-448, K-464, K-466, superseding the card above once the redesigned
+- **The welcome screen** (K-448, K-464, K-468, superseding the card above once the redesigned
   shell lands): the launch window carries the **New**, **Blank** and **Open** project
   cards, with **Manual** and **What's new** as outlined buttons, and no "free and open
   source" line. With nothing open, the same three cards repeat in the empty Viewer until a
@@ -2163,7 +2163,7 @@ small image over each choice, remain the destination (polish tracked in TODO).
   It is **the window** between the boot splash and the shell rather than a card over
   either, and it is not shown at all when a `.lum` arrived on the command line. Under the
   cards sit the **recent projects** — a thumbnail of the project as it looked when it was
-  last saved, its name, its path, and when it was last opened here (K-466: no format
+  last saved, its name, its path, and when it was last opened here (K-468: no format
   column; a size and a rate are per-composition, and a project has many) — with a
   **Clear** that empties the list and a **×** on each row that forgets just that one.
   Neither asks first: nothing is deleted and File ▸ Open brings a project back.

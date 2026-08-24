@@ -22,6 +22,8 @@
 // currently binds to its action id, so rebinding in Settings ▸ Keymap changes
 // the menus too, and a row whose action has no binding simply shows nothing.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -34,12 +36,14 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/timeline_extras_frb.dart';
+import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/clipboard.dart';
 import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
 import '../state/viewer_view.dart';
+import '../state/workspace.dart' show Workspace;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
@@ -653,9 +657,12 @@ List<MenuSection> lumitMenus(
           // The three light kinds are their own rows rather than one row and
           // a dropdown: which kind you want is known before you make it, and
           // an area light is a different thing to reach for than a point.
-          MenuEntry(l10n.menuPointLight, onComp((c) => c.addLightLayer(kind: 0))),
-          MenuEntry(l10n.menuSpotLight, onComp((c) => c.addLightLayer(kind: 1))),
-          MenuEntry(l10n.menuAreaLight, onComp((c) => c.addLightLayer(kind: 2))),
+          MenuEntry(
+              l10n.menuPointLight, onComp((c) => c.addLightLayer(kind: 0))),
+          MenuEntry(
+              l10n.menuSpotLight, onComp((c) => c.addLightLayer(kind: 1))),
+          MenuEntry(
+              l10n.menuAreaLight, onComp((c) => c.addLightLayer(kind: 2))),
           MenuEntry(l10n.menuAdjustment, onComp((c) => c.addAdjustmentLayer())),
           MenuEntry(l10n.menuNull, onComp((c) => c.addNullLayer())),
           MenuEntry(l10n.menuSequence, onComp((c) => c.addSequenceLayer())),
@@ -1166,6 +1173,27 @@ Future<void> _recover(BuildContext context, LumitState app) async {
   await showRecoveryDialogFrb(context: context, state: app, projectPath: path);
 }
 
+/// Where the welcome screen's thumbnails come from (K-468). Replaced in a test
+/// the way [openExternalLink] is; the application's own is the Viewer's.
+Future<Uint8List?> Function() projectThumbnailCapture = captureViewerPicturePng;
+
+/// Keep a picture of the project just saved, for the welcome screen's recent
+/// row to show next launch (K-468).
+///
+/// **Nothing here may cost anybody a save.** It runs after the write has
+/// finished and the notice has been posted, and it swallows everything: a
+/// Viewer that is not up (saving from the welcome screen itself, before the
+/// shell exists), a boundary that has not painted, a driver that will not read
+/// the texture back, a read-only appdata folder. Every one of those costs one
+/// row its picture and shows the placeholder instead, which is a state the row
+/// is built for.
+Future<void> fileProjectThumbnail(String path) async {
+  try {
+    final png = await projectThumbnailCapture();
+    if (png != null) Workspace.writeThumbnail(path, png);
+  } catch (_) {}
+}
+
 /// Save the project, asking for a location only when there is not one already
 /// — or always, for Save as.
 ///
@@ -1202,6 +1230,10 @@ Future<void> saveProjectFrb(
     // and the title bar carries the name.
     ui.rememberSession();
     app.refreshWindowTitle();
+    // The welcome screen's picture of this project, taken *after* the save and
+    // never in front of it (K-468): the save is done, the notice is posted, and
+    // photographing the picture happens on its own time.
+    unawaited(fileProjectThumbnail(written));
   } catch (_) {
     // The work is still in the document and the journal; say so calmly and let
     // the user pick somewhere writable.

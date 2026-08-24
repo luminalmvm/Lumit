@@ -12558,3 +12558,42 @@ K-465 recorded as drawn-but-unbacked.
   instead of two, which is the whole of the choice.
 - **The row lives on Appearance, under Viewer**, beside the surround, because the Viewer
   page is about the *image* and this is about the chrome round it.
+
+## K-468 — A recent project is a picture, a name and a path; the format column goes
+
+**DECIDED 2026-08-24.** The owner overruled the approved welcome drawing directly, which
+K-458 reserves to them. It supersedes two parts of K-464 and nothing else.
+
+- **A recent row carries a thumbnail**: the project as it looked when it was last saved,
+  at the head of the row, 16:9 at **64×36** and sized to the row. The row grows from 40 to
+  **52** to carry it — 8 of air above and below — and the picture is followed by 12 before
+  the name.
+- **The format column is dropped entirely**, and with it K-464's reserved 120px and the
+  `project_summary(path)` seam that was written into docs/TODO.md to fill it. The column
+  asked for a size and a rate, and those belong to a *composition*: a project holds as
+  many as it likes, so the question had no single answer and the room was being kept for
+  one that could never come. A row now says the file name, the path, the date and the
+  picture.
+- **Thumbnails live in the application's own appdata folder**, beside the workspace store
+  — `%APPDATA%\lumit\thumbnails` — in a file named for a digest of the project's absolute
+  path, overwritten on every save. **Not inside the `.lum`**: it is this machine's picture
+  of the user's own work, and a project handed to somebody else has no business carrying a
+  still of the sender's screen into their copy. Keying by path means a moved project loses
+  its picture until the next save, which is the right answer — the picture belongs to the
+  file, not to the name.
+- **The picture is taken after the save, never in front of it.** The write finishes, the
+  notice is posted, and the capture happens on its own time; every failure is swallowed.
+  A row with no picture is an ordinary state, not an error.
+- **A row without one shows a quiet placeholder and no words**: a `surface_0` well with
+  the composition mark muted in it. A list that has to explain its own blanks has stopped
+  being a list.
+- **The picture is photographed from the Viewer, and that is not a shortcut.** A
+  composition frame never crosses the bridge as pixels — zero-copy is the only Viewer
+  transport (K-183) and the read-back path was deleted — so the `RepaintBoundary` the
+  Snapshot button already photographs (K-416) is the only place in the process where those
+  pixels are addressable at all. It follows that a project saved with no Viewer on screen
+  — from the welcome screen's own New project card, before the shell exists — simply has
+  no picture until the next save from the editor. Should the engine ever grow a call that
+  renders a composition to bytes off the playback path, `captureViewerPicturePng` is the
+  single function that changes.
+- **The × and the row's open behaviour are untouched** (K-464 stands on both).

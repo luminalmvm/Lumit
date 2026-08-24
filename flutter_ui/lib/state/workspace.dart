@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../l10n/strings.dart';
@@ -926,6 +927,59 @@ class Workspace extends ChangeNotifier {
     } catch (_) {
       // Persistence is best-effort; the session keeps working without it.
     }
+  }
+
+  // --- Project thumbnails ---------------------------------------------------
+  //
+  // The picture of a project as it looked when it was last saved (K-468), shown
+  // on the welcome screen's recent rows.
+  //
+  // **It lives beside the settings file, not inside the `.lum`.** It is this
+  // machine's snapshot of the user's own work, rewritten on every save, and a
+  // project handed to somebody else has no business carrying a still of the
+  // sender's screen into their copy. Beside the store also means the test
+  // redirect above covers it for nothing: a `flutter test` run writes its
+  // thumbnails into the same scratch folder its settings go to.
+
+  /// The folder the thumbnails live in — `%APPDATA%\lumit\thumbnails` in the
+  /// application, the scratch folder under [storeOverride] in a test.
+  static Directory thumbnailDir() => Directory(
+        '${storeFile().parent.path}${Platform.pathSeparator}thumbnails',
+      );
+
+  /// The key a project's thumbnail is filed under: a digest of its path, so no
+  /// part of a user's folder names reaches the file system here and two
+  /// projects both called `Untitled.lum` keep their own picture.
+  ///
+  /// The path is folded to one spelling first — back-slashes forward, and lower
+  /// case on Windows, where `C:\Work\a.lum` and `c:/work/A.LUM` are one file —
+  /// so a project saved through the picker and the same project listed on a
+  /// recent row land on the same key rather than on two.
+  static String thumbnailKey(String path) {
+    final forward = path.replaceAll('\\', '/');
+    final folded = Platform.isWindows ? forward.toLowerCase() : forward;
+    return sha1.convert(utf8.encode(folded)).toString();
+  }
+
+  /// Where the project at [path] keeps its thumbnail. The file may not exist:
+  /// a project not saved since the feature landed, or one whose picture failed
+  /// to capture, simply has none, and the row draws its placeholder.
+  static File thumbnailFile(String path) => File(
+        '${thumbnailDir().path}${Platform.pathSeparator}'
+        '${thumbnailKey(path)}.png',
+      );
+
+  /// File [png] as the project's thumbnail, replacing whatever was there.
+  ///
+  /// Best-effort, like every other write in this class: a read-only appdata
+  /// folder or a full disk costs the user a placeholder on one row, and must
+  /// never cost them a save.
+  static void writeThumbnail(String path, Uint8List png) {
+    try {
+      final f = thumbnailFile(path);
+      f.parent.createSync(recursive: true);
+      f.writeAsBytesSync(png);
+    } catch (_) {}
   }
 }
 

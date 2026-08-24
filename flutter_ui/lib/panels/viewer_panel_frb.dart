@@ -95,7 +95,7 @@ const List<double?> _zoomSteps = [null, 0.25, 0.5, 1.0, 2.0, 4.0];
 /// Which channel the picture shows.
 enum ViewerChannel { rgb, red, green, blue, alpha }
 
-// --- The project's own picture (K-466) --------------------------------------
+// --- The project's own picture (K-468) --------------------------------------
 //
 // In plain terms: when a project is saved, the welcome screen wants a small
 // picture of it to show on its recent row next time. The picture it wants is
@@ -125,7 +125,7 @@ GlobalKey? viewerPictureKey;
 const double projectThumbnailPixels = 128;
 
 /// Photograph the composition on screen as a small PNG, for the welcome
-/// screen's recent rows (K-466).
+/// screen's recent rows (K-468).
 ///
 /// Null whenever there is nothing honest to hand back: no Viewer up, a boundary
 /// that has not painted yet, or a driver that will not read the picture back.

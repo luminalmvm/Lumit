@@ -5459,16 +5459,55 @@ answered its question by opening the file, and asking again would be rude.
 `main()` spots the path on the command line and turns the screen off for that
 launch.
 
-Two small things are worth knowing about the recents list. **It is Lumit's own
+One thing is worth knowing about the recents list itself. **It is Lumit's own
 record, not the disk's**: the date beside each project is when *you* last opened
 it here, kept in the settings file (`Workspace.recentProjects` and its stamps),
 because asking the file system for each row's timestamp would make the screen
-wait on any project that lives on a network drive. And **the size-and-rate column
-is drawn but empty on purpose**. A project's shape lives inside the `.lum`, and
-today the only way to learn it is to open the file — which is exactly what a
-*recent* project has not been. Rather than have Dart invent an answer, the column
-keeps its space and waits for the engine to grow a way to peek. That gap is
-written down in `docs/TODO.md`.
+wait on any project that lives on a network drive.
+
+### The little picture on a recent row
+
+Every recent row opens with a thumbnail — the project as it looked the last time
+you saved it. Three questions are worth answering about it, because none of the
+answers is the obvious one.
+
+**Where does the picture live?** Not in the `.lum`. It goes in Lumit's own
+settings folder (`%APPDATA%\lumit\thumbnails` on Windows), in a file named after
+a scrambled version of the project's full path. Two reasons. The first is
+manners: if you email somebody a project, they should not receive a still of your
+screen inside it. The second is that the picture is about *your* copy of the file
+on *your* machine, which is exactly what the rest of the settings file is about.
+Naming the file after the path rather than after the project means two projects
+both called `Untitled.lum` in different folders keep their own pictures — and
+that moving a project loses its picture until the next save, which is the honest
+answer rather than showing you a stale one.
+
+**When is it taken?** Straight after a save finishes, and never before. The file
+is written, the "saved to…" notice appears, and only then does Lumit go and
+photograph the picture. That ordering is the whole point: taking a photograph is
+a few milliseconds of work that has nothing to do with your document being safe
+on disk, so it is not allowed to stand between you and the save. If it fails —
+and there are several ordinary ways it can — nothing is said. A row with no
+picture just shows a small grey placeholder, which is a perfectly normal thing
+for a row to show.
+
+**Where does the picture come from?** From the Viewer, by photographing what is
+already on screen. This sounds like a shortcut and is not one: it is the only
+option there is. A rendered composition frame **never crosses from Rust into
+Dart as pixels**. The frame is drawn on the graphics card and handed over as a
+*handle* to that card memory — the picture stays where it was made and Flutter
+draws it from there, which is the whole reason the Viewer is fast. There is no
+"give me the pixels" call to make, because giving Dart the pixels is precisely
+what that design avoids. So the picture on screen is the only copy of the frame
+that Dart can reach at all, and Lumit photographs it exactly where the Viewer's
+own **Snapshot** button already does.
+
+Two consequences follow, and both are fine. A project saved with no Viewer up —
+from the welcome screen's own *New project* card, before the editor has even been
+built — gets no picture until the next save from inside the editor. And if the
+engine ever *does* grow a way to render a composition straight to bytes, there is
+exactly one function to change (`captureViewerPicturePng`), and nothing else in
+the chain knows or cares where the bytes came from.
 
 The list is yours to prune: **Clear** empties it, and the **×** at the end of a row
 forgets that one. Neither asks you first, because neither destroys anything — the

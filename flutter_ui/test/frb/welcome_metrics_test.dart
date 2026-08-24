@@ -9,15 +9,32 @@
 // that opens what it lists, a Clear that empties it and a × that takes one row
 // off it. None of that is visible in a screenshot, and all of it is the point.
 
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/panels/viewer_panel_frb.dart'
+    show captureViewerPicturePng;
+import 'package:lumit_flutter/shell/menu_bar_frb.dart'
+    show projectThumbnailCapture, saveProjectFrb;
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/state/external_links.dart';
+import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
 import 'frb_test_support.dart';
+
+/// A real 1×1 PNG, so the widget that is handed it decodes rather than falling
+/// into its error builder — the point of the test that renders one is that a
+/// *picture* appears, not a placeholder wearing an `Image`'s name.
+final Uint8List onePixelPng = base64Decode(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8'
+  'z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+);
 
 void main() {
   setUpAll(initEngineForTests);
@@ -155,14 +172,17 @@ void main() {
       expect(styleOf(tester, l10n.welcomeClearRecent).letterSpacing, 0.54);
     });
 
-    /// 5. **Three rows measure 124 inside a hairline.** 40 apiece, with a seam
-    /// under all but the last, so the eye reads 41 / 41 / 40.
+    /// 5. **Three rows measure 160 inside a hairline.** 52 apiece (K-468: the
+    /// row grew from 40 to carry a picture), with a seam under all but the
+    /// last, so the eye reads 53 / 53 / 52.
     testWidgets('the recents well is the drawing\'s height', (tester) async {
       await mount(tester, recents: paths);
 
+      expect(welcomeRecentRowHeight, 52,
+          reason: '8 of air either side of a 36-tall thumbnail');
       final well = band(tester, 'welcome-recent-well');
-      expect(well.height, 124,
-          reason: '41 + 41 + 40, plus a hairline either '
+      expect(well.height, 160,
+          reason: '53 + 53 + 52, plus a hairline either '
               'side');
       expect(band(tester, 'welcome-recent-row-0').height,
           welcomeRecentRowHeight + 1);
@@ -174,6 +194,10 @@ void main() {
     /// 6. **A row's columns are the drawing's**, with the forget button the
     /// owner asked for taking its room out of the flexible name column — step
     /// 1 of §12A.6's ladder, which is where width is meant to come from.
+    ///
+    /// **And there is no format column** (K-468). The reserved 120px that held
+    /// `1920×1080 · 25` is gone entirely: a size and a rate belong to a
+    /// composition, and a project has as many of those as it likes.
     testWidgets('a recent row carries the drawing\'s columns', (tester) async {
       await mount(tester, recents: paths);
 
@@ -182,6 +206,39 @@ void main() {
       expect(close.width, welcomeForgetColumnWidth);
       expect(row.right - close.right, welcomeRecentRowPadding.right,
           reason: 'the forget button sits at the far right of the row');
+
+      // The picture opens the row: 16:9, sized to it, hard against the row's
+      // own padding, and 12 before the name begins.
+      final thumb = band(tester, 'welcome-recent-thumb-0');
+      expect(thumb.width, welcomeThumbWidth);
+      expect(thumb.height, welcomeThumbHeight);
+      expect(thumb.width / thumb.height, 16 / 9, reason: '64 × 36 is 16:9');
+      expect(thumb.left - row.left, welcomeRecentRowPadding.left);
+      // 8 of air above it. Measured from the row's top rather than its centre:
+      // this row carries the seam under it, so its rectangle is a pixel taller
+      // than the space the picture is centred in.
+      expect(thumb.top - row.top,
+          (welcomeRecentRowHeight - welcomeThumbHeight) / 2);
+
+      // Nothing sits between the name and the date but [welcomeNameGap]: with
+      // the format column gone the name column takes the room, and the date's
+      // 70 is the only fixed column left before the ×.
+      final date = tester.getRect(find.text(l10n.welcomeToday).first);
+      final nameBand = tester.getRect(find.text('Set me free'));
+      expect(date.left - nameBand.right, greaterThan(0),
+          reason: 'the name never runs into the date');
+      expect(
+          row.width -
+              welcomeRecentRowPadding.horizontal -
+              welcomeThumbWidth -
+              welcomeThumbGap -
+              welcomeNameGap -
+              welcomeDateColumnWidth -
+              welcomeForgetGap -
+              welcomeForgetColumnWidth,
+          348,
+          reason: 'the name column is 348 inside the well\'s hairline — 28 '
+              'wider than it was before the format column went (K-468)');
 
       // The newest project is the last one remembered.
       expect(find.text('Set me free'), findsOneWidget,
@@ -321,6 +378,137 @@ void main() {
       expect(done, isTrue, reason: 'the shell takes the window');
       expect(p.state.opening.value, isTrue,
           reason: 'and the document is already being read behind it');
+    });
+
+    // --- The picture on a row (K-468) -------------------------------------
+
+    /// A `.lum` to save to, and the thumbnail it would be filed under, both
+    /// cleaned up after the test. The thumbnails themselves land beside the
+    /// workspace store, which the harness has already redirected into a scratch
+    /// folder — so a test run never writes a picture into the developer's own
+    /// `%APPDATA%`.
+    ({String project, File thumb}) scratchProject(String name) {
+      final dir = Directory.systemTemp.createTempSync('lumit-thumb');
+      addTearDown(() {
+        try {
+          dir.deleteSync(recursive: true);
+        } catch (_) {}
+      });
+      final project = '${dir.path}${Platform.pathSeparator}$name.lum';
+      final thumb = Workspace.thumbnailFile(project);
+      addTearDown(() {
+        if (thumb.existsSync()) thumb.deleteSync();
+      });
+      return (project: project, thumb: thumb);
+    }
+
+    /// 14. **A project's saved picture is found by its path and drawn.** The
+    /// key is a digest of the path, so nothing about anybody's folder names
+    /// reaches the file system and two projects both called `Untitled.lum`
+    /// keep their own picture.
+    testWidgets('a saved thumbnail is found by the project\'s path',
+        (tester) async {
+      expect(Workspace.thumbnailKey(paths.first),
+          isNot(Workspace.thumbnailKey(paths.last)),
+          reason: 'two projects never share a key');
+      expect(Workspace.thumbnailFile(paths.last).path,
+          contains(Workspace.thumbnailKey(paths.last)));
+      expect(Workspace.thumbnailFile(paths.last).parent.path,
+          Workspace.thumbnailDir().path,
+          reason: 'beside the settings file, never inside the .lum');
+
+      // The newest project is the last one remembered, so it is row 0.
+      Workspace.writeThumbnail(paths.last, onePixelPng);
+      addTearDown(() => Workspace.thumbnailFile(paths.last).deleteSync());
+
+      await mount(tester, recents: paths);
+
+      final slot = find.byKey(const ValueKey('welcome-recent-thumb-0'));
+      expect(find.descendant(of: slot, matching: find.byType(Image)),
+          findsOneWidget,
+          reason: 'the saved picture is what the row shows');
+      expect(
+          find.descendant(
+              of: slot,
+              matching:
+                  find.byKey(const ValueKey('welcome-recent-thumb-empty'))),
+          findsNothing);
+    });
+
+    /// 15. **A project with no picture shows a quiet placeholder, and no
+    /// words.** Never saved since the feature landed, moved since it was, or a
+    /// capture that failed: all of them are ordinary, and a row that has to
+    /// explain its own blank has stopped being a list.
+    testWidgets('a project with no thumbnail shows the placeholder',
+        (tester) async {
+      await mount(tester, recents: paths);
+
+      for (var i = 0; i < paths.length; i++) {
+        final slot = find.byKey(ValueKey<String>('welcome-recent-thumb-$i'));
+        expect(
+            find.descendant(
+                of: slot,
+                matching:
+                    find.byKey(const ValueKey('welcome-recent-thumb-empty'))),
+            findsOneWidget,
+            reason: 'row $i has no picture on disk');
+        expect(find.descendant(of: slot, matching: find.byType(Image)),
+            findsNothing);
+      }
+      // The slot is the same size either way, so a well full of projects that
+      // have never been saved is the same shape as one full of pictures.
+      expect(band(tester, 'welcome-recent-thumb-0').width, welcomeThumbWidth);
+      expect(band(tester, 'welcome-recent-thumb-0').height, welcomeThumbHeight);
+    });
+
+    /// 16. **A save files the picture, and a later save replaces it.** One
+    /// file per project, overwritten, rather than a folder that grows a picture
+    /// for every save anybody ever made.
+    testWidgets('a save writes the thumbnail and overwrites it',
+        (tester) async {
+      final scratch = scratchProject('Saved');
+      var shot = onePixelPng;
+      projectThumbnailCapture = () async => shot;
+      addTearDown(() => projectThumbnailCapture = captureViewerPicturePng);
+
+      final p = await mount(tester);
+      // `runAsync`, because the write itself is a real bridge call on a worker
+      // thread: awaited inside the test's fake clock it would never finish.
+      await tester.runAsync(() => saveProjectFrb(p.state, p.uiState,
+          forcePicker: true, picker: () async => scratch.project));
+
+      expect(scratch.thumb.existsSync(), isTrue,
+          reason: 'the save filed the project\'s picture');
+      expect(scratch.thumb.readAsBytesSync(), onePixelPng);
+
+      // A different picture, saved again over the same project.
+      shot = Uint8List.fromList([...onePixelPng, 0, 1, 2]);
+      await tester.runAsync(() => saveProjectFrb(p.state, p.uiState));
+
+      expect(scratch.thumb.readAsBytesSync(), shot,
+          reason: 'the second save replaced the first picture');
+    });
+
+    /// 17. **A capture that fails costs a picture and nothing else.** No
+    /// Viewer up, a boundary that has not painted, a driver that will not read
+    /// the texture back — the save has already happened by then and must not
+    /// be told about any of it.
+    testWidgets('a failing capture does not fail the save', (tester) async {
+      final scratch = scratchProject('Unphotographed');
+      projectThumbnailCapture = () async => throw StateError('no Viewer');
+      addTearDown(() => projectThumbnailCapture = captureViewerPicturePng);
+
+      final p = await mount(tester);
+      await tester.runAsync(() => saveProjectFrb(p.state, p.uiState,
+          forcePicker: true, picker: () async => scratch.project));
+
+      expect(File(scratch.project).existsSync(), isTrue,
+          reason: 'the project itself was written');
+      expect(p.state.project!.path(), isNotNull);
+      expect(p.state.notice.value?.error, isNot(isTrue),
+          reason: 'the user is told the save worked, because it did');
+      expect(scratch.thumb.existsSync(), isFalse,
+          reason: 'and the row simply shows its placeholder');
     });
   }, skip: !engineAvailable);
 }
