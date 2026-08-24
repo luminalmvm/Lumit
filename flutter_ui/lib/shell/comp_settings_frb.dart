@@ -436,6 +436,11 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
           ),
           // The drawing's chain link between the two sides: the shape is kept
           // while it is joined, and each side is its own while it is not.
+          //
+          // **A link, not a padlock.** The drawing puts a chain here, and a
+          // chain is what the gesture means — these two numbers move together
+          // — where a padlock says the numbers cannot be changed at all, which
+          // is the opposite of true.
           LumitTooltip(
             message: _locked ? l10n.tipAspectLocked : l10n.tipAspectUnlocked,
             child: GestureDetector(
@@ -447,7 +452,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                 height: dialogControlHeight,
                 child: Center(
                   child: lumitIcon(
-                    _locked ? LumitIcon.lock : LumitIcon.unlock,
+                    _locked ? LumitIcon.link : LumitIcon.unlink,
                     size: 12,
                     color: _locked ? t.textPrimary : t.textMuted,
                   ),
@@ -489,6 +494,10 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               fill: t.surface0,
+              // The drawing right-aligns every numeric well it draws, and the
+              // rate is one: the digits line up with the size wells above it
+              // and the shutter angle below.
+              textAlign: TextAlign.right,
               onSubmitted: (_) => _confirm(),
             ),
           ),

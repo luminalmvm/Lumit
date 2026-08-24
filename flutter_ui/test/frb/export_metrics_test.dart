@@ -12,6 +12,7 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/shell/dialog_frame.dart';
 import 'package:lumit_flutter/shell/export_dialog_frb.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart';
@@ -82,6 +83,26 @@ void main() {
       expect(find.text('Opening titles'), findsOneWidget,
           reason: "the composition's own name, beside the kicker");
       expect(find.byKey(const ValueKey('export-close')), findsOneWidget);
+    });
+
+    /// 2a. **The close mark sits in the corner.** The drawing pads the strip
+    /// by 14 either side and pushes the mark to the far end of it, so the
+    /// glyph's right edge is 14 in from the frame — not somewhere in the
+    /// middle of the strip, which is where two competing flexible children
+    /// used to leave it whenever the composition's name was short.
+    testWidgets('the close mark is at the strip\'s far corner', (tester) async {
+      await open(tester);
+
+      final strip = band(tester, 'export-title-strip');
+      final mark = tester.getRect(find.descendant(
+        of: find.byKey(const ValueKey('export-close')),
+        matching: find.byType(glyph.LumitIcon),
+      ));
+      expect(strip.right - mark.right, closeTo(dialogPadding, 0.01),
+          reason: 'the drawing insets the mark by the strip\'s own 14');
+      expect(mark.width, dialogCloseGlyph);
+      expect(mark.center.dy, closeTo(strip.center.dy, 1),
+          reason: 'and centred in the strip\'s height');
     });
 
     /// 3. **A group** is a hairline box inset 14 from the dialog's edges —

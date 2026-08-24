@@ -99,6 +99,16 @@ class DialogFrame extends StatelessWidget {
 /// [subject] is the thing being acted on — the composition's name in the
 /// Export dialog — and it reads in the quiet colour beside the kicker, because
 /// it is the user's word rather than the application's.
+///
+/// **The subject takes the whole of the space and the close mark is pushed to
+/// the far end of it** — the drawing's own `margin-left: auto` on the mark.
+/// The strip used to hold a `Flexible` subject *and* a `Spacer`, which are two
+/// flexible children of equal flex: a `Row` hands each of them half the free
+/// space, a short composition name uses almost none of its half, and the
+/// leftover is not given back — it falls to the end of the row, behind the
+/// close mark. So the mark drifted inward by half of whatever the name did not
+/// need and only reached the corner when the name was long enough to fill its
+/// share. One flexible child cannot do that.
 Widget dialogTitleBar(
   LumitTheme t, {
   required String title,
@@ -113,21 +123,25 @@ Widget dialogTitleBar(
         color: t.surface2,
         border: Border(bottom: BorderSide(color: t.hairline)),
       ),
-      padding: const EdgeInsets.only(left: dialogPadding, right: 6),
+      // 14 either side, as the drawing computes it — the mark's own inset from
+      // the corner is the strip's, not a smaller one of its own.
+      padding: const EdgeInsets.symmetric(horizontal: dialogPadding),
       child: Row(
         children: [
           Text(title.toUpperCase(), style: t.kickerOn),
-          if (subject.isNotEmpty) ...[
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                subject,
-                style: t.body.copyWith(color: t.textMuted),
-                overflow: TextOverflow.ellipsis,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  subject,
+                  style: t.body.copyWith(color: t.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
-          ],
-          const Spacer(),
+          ),
           LumitTooltip(
             message: l10n.close,
             child: GestureDetector(
@@ -135,9 +149,14 @@ Widget dialogTitleBar(
               behavior: HitTestBehavior.opaque,
               onTap: onClose,
               child: SizedBox(
+                // The mark is 12 wide at the drawing's inset; the extra 8 of
+                // target hangs to its *left*, into the strip rather than into
+                // the corner, so a comfortable click area costs the glyph no
+                // part of the position the drawing gives it.
                 width: dialogCloseGlyph + 8,
                 height: dialogTitleStrip,
-                child: Center(
+                child: Align(
+                  alignment: Alignment.centerRight,
                   child: glyph.LumitIcon(
                     LumitIcons.close,
                     size: dialogCloseGlyph,

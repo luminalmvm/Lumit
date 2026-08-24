@@ -9,6 +9,8 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
+import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/shell/comp_settings_frb.dart';
 import 'package:lumit_flutter/shell/dialog_frame.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -352,6 +354,52 @@ void main() {
         expect(find.byKey(ValueKey<String>(key)), findsOneWidget,
             reason: '$key is on the drawing');
       }
+
+      await tester.tap(find.byKey(const ValueKey('comp-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The mark between width and height is a **chain**, as the drawing draws
+    /// it — not a padlock, which says the numbers cannot be changed at all
+    /// rather than that they move together. It reads the state, so tying and
+    /// untying swap the glyph.
+    testWidgets('the size link is the chain, not a padlock', (tester) async {
+      await open(tester);
+
+      String glyphIn(String key) => tester
+          .widget<glyph.LumitIcon>(find.descendant(
+            of: find.byKey(ValueKey<String>(key)),
+            matching: find.byType(glyph.LumitIcon),
+          ))
+          .glyph;
+
+      expect(glyphIn('comp-size-lock'), LumitIcons.link,
+          reason: 'the ratio is kept, so the two sides read as chained');
+      await tester.tap(find.byKey(const ValueKey('comp-size-lock')));
+      await tester.pumpAndSettle();
+      expect(glyphIn('comp-size-lock'), LumitIcons.unlink,
+          reason: 'untied, the chain is drawn broken');
+
+      await tester.tap(find.byKey(const ValueKey('comp-cancel')));
+      await tester.pumpAndSettle();
+    });
+
+    /// Every numeric well in this drawing reads from the right, so the digits
+    /// of one line up with the digits of the next. The rate is the one that
+    /// is typed rather than scrubbed, and it was reading from the left.
+    testWidgets('the frame rate reads from the right of its well',
+        (tester) async {
+      await open(tester);
+
+      expect(
+        tester
+            .widget<EditableText>(find.descendant(
+              of: find.byKey(const ValueKey('comp-fps')),
+              matching: find.byType(EditableText),
+            ))
+            .textAlign,
+        TextAlign.right,
+      );
 
       await tester.tap(find.byKey(const ValueKey('comp-cancel')));
       await tester.pumpAndSettle();
