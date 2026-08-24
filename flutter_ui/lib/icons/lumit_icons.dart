@@ -13,6 +13,7 @@
 // one.
 
 abstract final class LumitIcons {
+
   // --- Tools ---
   static const String select =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l10 6-4.5 1L6 13z"/></svg>';
@@ -88,6 +89,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4" r="2"/><circle cx="12" cy="12" r="2"/><path d="M5.5 5.5l5 5"/></svg>';
   static const String matte =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M2.5 2.5l11 11" /><path d="M2.5 13.5L13.5 2.5v11z" fill="currentColor" opacity=".4"/></svg>';
+  static const String label =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2.5h-5l-6 6 5 5 6-6z"/><circle cx="11" cy="5" r="1"/></svg>';
 
   // --- Transport ---
   static const String toStart =
@@ -190,7 +193,6 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6 2.5v11M10 2.5v11M2.5 6h11M2.5 10h11"/></svg>';
   static const String safeZones =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9"/><rect x="4.5" y="5.5" width="7" height="5" stroke-dasharray="1.5 1.5"/></svg>';
-
   /// Monochrome here; the Viewer colours the circles per viewed channel at runtime.
   static const String channels =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="9.5" r="3.8"/><circle cx="10" cy="9.5" r="3.8"/><circle cx="8" cy="5.5" r="3.8"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg>';
@@ -308,6 +310,7 @@ abstract final class LumitIcons {
     'Modes': modes,
     'Parent': parent,
     'Matte': matte,
+    'Label': label,
     'To start': toStart,
     'Previous frame': previousFrame,
     'Play': play,

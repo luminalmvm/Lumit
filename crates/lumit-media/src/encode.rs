@@ -51,13 +51,157 @@ pub struct VideoSettings {
     pub max_rate: Option<i64>,
 }
 
-/// Everything the AAC audio stream needs to open.
+/// How many bits each colour channel carries in the written file
+/// (docs/06-RENDER-PIPELINE.md §7.4). Only the still formats can carry more
+/// than eight today — see the capability table in `lumit_render::export`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Hash,
+)]
+pub enum BitDepth {
+    #[default]
+    Eight,
+    Sixteen,
+}
+
+impl BitDepth {
+    /// Bytes one channel occupies in a packed frame buffer.
+    pub fn bytes_per_channel(self) -> usize {
+        match self {
+            BitDepth::Eight => 1,
+            BitDepth::Sixteen => 2,
+        }
+    }
+
+    /// User-facing name (glossary voice: plain, no marketing).
+    pub fn label(self) -> &'static str {
+        match self {
+            BitDepth::Eight => "8-bit",
+            BitDepth::Sixteen => "16-bit",
+        }
+    }
+}
+
+/// The audio codec a container carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum AudioCodec {
+    /// AAC — what every delivery preset uses (docs/09 §8), and the only thing
+    /// an `.mp4`/`.m4a` wants.
+    #[default]
+    Aac,
+    /// Uncompressed signed 16-bit PCM — a `.wav` master, where "lossy" would
+    /// be the wrong answer and a bitrate means nothing.
+    PcmS16,
+}
+
+impl AudioCodec {
+    fn codec_id(self) -> ffi::AVCodecID {
+        match self {
+            AudioCodec::Aac => ffi::AV_CODEC_ID_AAC,
+            AudioCodec::PcmS16 => ffi::AV_CODEC_ID_PCM_S16LE,
+        }
+    }
+
+    /// The sample format the encoder is fed: AAC takes planar float, PCM
+    /// takes packed 16-bit.
+    fn sample_fmt(self) -> i32 {
+        match self {
+            AudioCodec::Aac => ffi::AV_SAMPLE_FMT_FLTP,
+            AudioCodec::PcmS16 => ffi::AV_SAMPLE_FMT_S16,
+        }
+    }
+
+    /// Calm user-facing name.
+    pub fn label(self) -> &'static str {
+        match self {
+            AudioCodec::Aac => "AAC",
+            AudioCodec::PcmS16 => "PCM 16-bit",
+        }
+    }
+}
+
+/// Everything the audio stream needs to open.
 #[derive(Debug, Clone)]
 pub struct AudioSettings {
     /// Sample rate in Hz (delivery presets use 48 000, docs/06 §7.5).
     pub rate: u32,
-    /// Bitrate in bits/second (delivery presets use 320 000).
+    /// Bitrate in bits/second (delivery presets use 320 000). Ignored by
+    /// codecs that have no such thing — PCM is what it is.
     pub bit_rate: i64,
+    pub codec: AudioCodec,
+}
+
+/// Container metadata as an **ordered** key/value set (docs/06 §7.6): title,
+/// author, copyright, comment, creation time — the classic set, plus whatever
+/// else a later page wants to write.
+///
+/// In plain terms: these are the fields a player or a file browser shows about
+/// a file. Ordered rather than a hash map for two reasons — the dialog page
+/// shows the rows in a fixed order, and an export must be deterministic
+/// (docs/06 §7.3): a map's iteration order is not, and it would land in the
+/// file's bytes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Metadata(Vec<(String, String)>);
+
+impl Metadata {
+    /// FFmpeg's own key for each of the classic fields, in the order the
+    /// Metadata page lists them. `artist` is FFmpeg's spelling of "author" —
+    /// using our own word here would write a field nothing reads.
+    pub const TITLE: &'static str = "title";
+    pub const AUTHOR: &'static str = "artist";
+    pub const COPYRIGHT: &'static str = "copyright";
+    pub const COMMENT: &'static str = "comment";
+    pub const CREATION_TIME: &'static str = "creation_time";
+
+    /// The classic set, in page order.
+    pub const STANDARD_KEYS: [&'static str; 5] = [
+        Self::TITLE,
+        Self::AUTHOR,
+        Self::COPYRIGHT,
+        Self::COMMENT,
+        Self::CREATION_TIME,
+    ];
+
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set `key`. An existing key keeps its position (so editing a field does
+    /// not reshuffle the page); a new one is appended. An empty value removes
+    /// the key rather than writing a blank field — an empty title in a file is
+    /// worse than no title.
+    pub fn set(&mut self, key: &str, value: &str) {
+        if value.is_empty() {
+            self.remove(key);
+            return;
+        }
+        match self.0.iter_mut().find(|(k, _)| k == key) {
+            Some((_, v)) => *v = value.to_owned(),
+            None => self.0.push((key.to_owned(), value.to_owned())),
+        }
+    }
+
+    pub fn remove(&mut self, key: &str) {
+        self.0.retain(|(k, _)| k != key);
+    }
+
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.0
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.0.iter().map(|(k, v)| (k.as_str(), v.as_str()))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 /// The encoder ladder for a codec, best first (docs/impl/media-io.md §7):
@@ -134,6 +278,26 @@ impl ImageFormat {
             ImageFormat::Tiff => ffi::AV_CODEC_ID_TIFF,
         }
     }
+
+    /// The pixel format each still codec is fed at a given depth. Both carry
+    /// full RGBA either way; the sixteen-bit forms differ in byte order
+    /// because the two file formats do — PNG is big-endian by specification,
+    /// TIFF (as FFmpeg writes it) little. The pack stage always hands over
+    /// little-endian samples and this says which of them needs swapping, so
+    /// callers never have to know a format's endianness.
+    pub fn pix_fmt(self, depth: BitDepth) -> i32 {
+        match (self, depth) {
+            (_, BitDepth::Eight) => ffi::AV_PIX_FMT_RGBA,
+            (ImageFormat::Png, BitDepth::Sixteen) => ffi::AV_PIX_FMT_RGBA64BE,
+            (ImageFormat::Tiff, BitDepth::Sixteen) => ffi::AV_PIX_FMT_RGBA64LE,
+        }
+    }
+
+    /// Whether [`Self::pix_fmt`] wants the pack stage's little-endian samples
+    /// byte-swapped on the way in.
+    fn swaps_16(self, depth: BitDepth) -> bool {
+        depth == BitDepth::Sixteen && self == ImageFormat::Png
+    }
 }
 
 /// The numbered-frame pattern for a sequence chosen as `name.ext`:
@@ -171,13 +335,18 @@ pub struct ImageSequenceEncoder {
     video: AVCodecContext,
     width: i32,
     height: i32,
+    pix_fmt: i32,
+    /// Bytes one pixel occupies in the buffer `write_rgba` is handed.
+    src_bytes_per_px: usize,
+    swap16: bool,
     next_pts: i64,
     finished: bool,
 }
 
 impl ImageSequenceEncoder {
     /// Open a sequence at `path` (e.g. `shot.png` — the numbered pattern is
-    /// derived beside it), sized `width`×`height`, stamped at `fps_num/fps_den`.
+    /// derived beside it), sized `width`×`height`, stamped at `fps_num/fps_den`,
+    /// carrying `depth` bits per channel.
     pub fn open(
         path: &Path,
         format: ImageFormat,
@@ -185,6 +354,7 @@ impl ImageSequenceEncoder {
         height: u32,
         fps_num: i32,
         fps_den: i32,
+        depth: BitDepth,
     ) -> Result<Self, MediaError> {
         let pattern = sequence_pattern(path);
         let cpath = CString::new(pattern.to_str().ok_or(MediaError::BadPath)?)
@@ -208,7 +378,8 @@ impl ImageSequenceEncoder {
             num: fps_den,
             den: fps_num,
         });
-        ctx.set_pix_fmt(ffi::AV_PIX_FMT_RGBA);
+        let pix_fmt = format.pix_fmt(depth);
+        ctx.set_pix_fmt(pix_fmt);
         ctx.open(None)?;
 
         {
@@ -226,14 +397,19 @@ impl ImageSequenceEncoder {
             video: ctx,
             width: w,
             height: h,
+            pix_fmt,
+            src_bytes_per_px: 4 * depth.bytes_per_channel(),
+            swap16: format.swaps_16(depth),
             next_pts: 0,
             finished: false,
         })
     }
 
-    /// Encode one tightly-packed RGBA frame into the next numbered file.
+    /// Encode one tightly-packed RGBA frame into the next numbered file. At
+    /// sixteen bits the samples are little-endian `u16`s, four per pixel —
+    /// what the pack stage produces, whatever byte order the file wants.
     pub fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), MediaError> {
-        let expect = rgba_frame_len(self.width, self.height)?;
+        let expect = frame_len(self.width, self.height, self.src_bytes_per_px)?;
         if rgba.len() != expect {
             return Err(MediaError::Ffmpeg(format!(
                 "frame size {} != expected {expect}",
@@ -243,11 +419,18 @@ impl ImageSequenceEncoder {
         let mut frame = AVFrame::new();
         frame.set_width(self.width);
         frame.set_height(self.height);
-        frame.set_format(ffi::AV_PIX_FMT_RGBA);
+        frame.set_format(self.pix_fmt);
         frame
             .alloc_buffer()
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        copy_rgba_into(&mut frame, rgba, self.width, self.height)?;
+        copy_pixels_into(
+            &mut frame,
+            rgba,
+            self.width,
+            self.height,
+            self.src_bytes_per_px,
+            self.swap16,
+        )?;
         frame.set_pts(self.next_pts);
         self.next_pts += 1;
 
@@ -271,7 +454,8 @@ impl ImageSequenceEncoder {
 /// The audio half of the muxer: AAC context plus the sample bookkeeping.
 struct AudioTrack {
     ctx: AVCodecContext,
-    /// Output stream index (video is 0, audio is 1).
+    codec: AudioCodec,
+    /// Output stream index (audio is 1 behind a video stream, 0 without one).
     stream_index: usize,
     rate: u32,
     /// Samples per AAC frame (1024 for the FFmpeg encoder).
@@ -282,124 +466,118 @@ struct AudioTrack {
     next_pts: i64,
 }
 
-pub struct Encoder {
-    output: AVFormatContextOutput,
-    video: AVCodecContext,
-    video_encoder: &'static str,
+/// The video half of the muxer: encoder context plus its frame bookkeeping.
+struct VideoTrack {
+    ctx: AVCodecContext,
+    encoder: &'static str,
     sws: SwsContext,
     encode_pix_fmt: i32,
     width: i32,
     height: i32,
     next_pts: i64,
+}
+
+pub struct Encoder {
+    output: AVFormatContextOutput,
+    video: Option<VideoTrack>,
     audio: Option<AudioTrack>,
     finished: bool,
 }
 
 impl Encoder {
-    /// Open an mp4 encoder: video per `video`, optional AAC audio per
-    /// `audio`. The video encoder is the first ladder rung that survives a
-    /// 16-frame test encode (docs/impl/media-io.md §7) — hardware that fails
-    /// at runtime falls through to the next rung, never to an error, and
-    /// software is always last so opening only fails when even that is
-    /// missing from the FFmpeg build.
+    /// Open a container: video per `video`, audio per `audio`, container
+    /// metadata per `metadata`. The video encoder is the first ladder rung
+    /// that survives a 16-frame test encode (docs/impl/media-io.md §7) —
+    /// hardware that fails at runtime falls through to the next rung, never
+    /// to an error, and software is always last so opening only fails when
+    /// even that is missing from the FFmpeg build.
+    ///
+    /// **Either stream may be absent, but not both.** `video: None` is the
+    /// audio-only export (an `.m4a` or a `.wav` of the comp's mix); `audio:
+    /// None` is a silent film. Nothing at all would be an empty file, which
+    /// is a caller bug and answers a typed error.
     pub fn open(
         path: &Path,
-        video: &VideoSettings,
+        video: Option<&VideoSettings>,
         audio: Option<&AudioSettings>,
+        metadata: &Metadata,
     ) -> Result<Self, MediaError> {
+        if video.is_none() && audio.is_none() {
+            return Err(MediaError::Ffmpeg(
+                "an export must carry a video or an audio stream".into(),
+            ));
+        }
         let cpath = CString::new(path.to_str().ok_or(MediaError::BadPath)?)
             .map_err(|_| MediaError::BadPath)?;
         let mut output = AVFormatContextOutput::create(&cpath)?;
         let global_header = (output.oformat().flags & ffi::AVFMT_GLOBALHEADER as i32) != 0;
 
-        // The ladder: prove each rung with a test encode, then open the real
-        // context; a rung that proves but won't re-open also falls through.
-        let mut opened: Option<AVCodecContext> = None;
-        let picked = pick_first_working(&encoder_candidates(video.codec), |name| {
-            test_encode(name, video).is_ok()
-                && match build_video_ctx(name, video, global_header) {
-                    Ok(ctx) => {
-                        opened = Some(ctx);
-                        true
-                    }
-                    Err(_) => false,
-                }
-        });
-        let (encoder, video_encoder) = match (opened, picked) {
-            (Some(ctx), Some(name)) => (ctx, name),
-            _ => {
-                return Err(MediaError::Ffmpeg(format!(
-                    "no working {} encoder in this FFmpeg build",
-                    video.codec.label()
-                )))
-            }
+        let video_track = match video {
+            Some(v) => Some(open_video(&mut output, v, global_header)?),
+            None => None,
         };
-
-        {
-            let mut stream = output.new_stream();
-            stream.set_codecpar(encoder.extract_codecpar());
-            stream.set_time_base(AVRational {
-                num: video.fps_den,
-                den: video.fps_num,
-            });
-        }
-
         let audio_track = match audio {
             Some(a) => Some(open_audio(&mut output, a, global_header)?),
             None => None,
         };
 
+        set_container_metadata(&mut output, metadata);
+
         // +faststart moves the index to the front of the file when the
         // trailer is written, so exports stream straight away (media-io §7).
-        let mut header_opts = dict_set(None, "movflags", "+faststart");
+        // Only the mp4/mov family understands it — which is exactly the family
+        // that wants a global header — and a stray option would sit unread in
+        // the dictionary rather than being an error, so the guard is honesty
+        // rather than necessity.
+        let mut header_opts = global_header
+            .then(|| dict_set(None, "movflags", "+faststart"))
+            .flatten();
         output.write_header(&mut header_opts)?;
-
-        let width = i32::try_from(video.width)
-            .map_err(|_| MediaError::Ffmpeg("frame width overflows".into()))?;
-        let height = i32::try_from(video.height)
-            .map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
-        let encode_pix_fmt = pix_fmt_for(video_encoder);
-        let sws = SwsContext::get_context(
-            width,
-            height,
-            ffi::AV_PIX_FMT_RGBA,
-            width,
-            height,
-            encode_pix_fmt,
-            ffi::SWS_BILINEAR,
-            None,
-            None,
-            None,
-        )
-        .ok_or_else(|| MediaError::Ffmpeg("swscale for encode".into()))?;
 
         Ok(Self {
             output,
-            video: encoder,
-            video_encoder,
-            sws,
-            encode_pix_fmt,
-            width,
-            height,
-            next_pts: 0,
+            video: video_track,
             audio: audio_track,
             finished: false,
         })
     }
 
-    /// The FFmpeg name of the encoder actually in use (e.g. "h264_nvenc").
+    /// The FFmpeg name of the video encoder actually in use (e.g.
+    /// "h264_nvenc"); the audio codec's own name on an audio-only export.
     pub fn encoder_name(&self) -> &'static str {
-        self.video_encoder
+        match (&self.video, &self.audio) {
+            (Some(v), _) => v.encoder,
+            (None, Some(a)) => match a.codec {
+                AudioCodec::Aac => "aac",
+                AudioCodec::PcmS16 => "pcm_s16le",
+            },
+            (None, None) => "",
+        }
     }
 
     /// Calm user-facing name of the encoder in use (e.g. "NVENC").
     pub fn encoder_label(&self) -> &'static str {
-        encoder_label(self.video_encoder)
+        match (&self.video, &self.audio) {
+            (Some(v), _) => encoder_label(v.encoder),
+            (None, Some(a)) => a.codec.label(),
+            (None, None) => "",
+        }
+    }
+
+    /// Whether this container carries a video stream.
+    pub fn has_video(&self) -> bool {
+        self.video.is_some()
     }
 
     /// Encode one tightly-packed RGBA frame (sRGB-encoded display output).
     pub fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), MediaError> {
-        let expect = rgba_frame_len(self.width, self.height)?;
+        let Self { output, video, .. } = self;
+        let Some(track) = video.as_mut() else {
+            return Err(MediaError::Ffmpeg(
+                "this export was opened without a video stream".into(),
+            ));
+        };
+        let expect = rgba_frame_len(track.width, track.height)?;
         if rgba.len() != expect {
             return Err(MediaError::Ffmpeg(format!(
                 "frame size {} != expected {expect}",
@@ -408,27 +586,28 @@ impl Encoder {
         }
         // RGBA source frame borrowing the caller's bytes via copy (v0).
         let mut src = AVFrame::new();
-        src.set_width(self.width);
-        src.set_height(self.height);
+        src.set_width(track.width);
+        src.set_height(track.height);
         src.set_format(ffi::AV_PIX_FMT_RGBA);
         src.alloc_buffer()
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        copy_rgba_into(&mut src, rgba, self.width, self.height)?;
+        copy_rgba_into(&mut src, rgba, track.width, track.height)?;
 
         let mut dst = AVFrame::new();
-        dst.set_width(self.width);
-        dst.set_height(self.height);
-        dst.set_format(self.encode_pix_fmt);
+        dst.set_width(track.width);
+        dst.set_height(track.height);
+        dst.set_format(track.encode_pix_fmt);
         dst.alloc_buffer()
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        self.sws
-            .scale_frame(&src, 0, self.height, &mut dst)
+        track
+            .sws
+            .scale_frame(&src, 0, track.height, &mut dst)
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        dst.set_pts(self.next_pts);
-        self.next_pts += 1;
+        dst.set_pts(track.next_pts);
+        track.next_pts += 1;
 
-        self.video.send_frame(Some(&dst))?;
-        drain_packets(&mut self.video, &mut self.output, 0, false)
+        track.ctx.send_frame(Some(&dst))?;
+        drain_packets(&mut track.ctx, output, 0, false)
     }
 
     /// Queue interleaved stereo f32 samples (L R L R …) for the AAC track.
@@ -453,9 +632,16 @@ impl Encoder {
             return Ok(());
         }
         self.finished = true;
-        self.video.send_frame(None)?;
-        drain_packets(&mut self.video, &mut self.output, 0, true)?;
-        let Self { output, audio, .. } = self;
+        let Self {
+            output,
+            video,
+            audio,
+            ..
+        } = self;
+        if let Some(track) = video.as_mut() {
+            track.ctx.send_frame(None)?;
+            drain_packets(&mut track.ctx, output, 0, true)?;
+        }
         if let Some(track) = audio.as_mut() {
             pump_audio(track, output, true)?;
             track.ctx.send_frame(None)?;
@@ -463,6 +649,111 @@ impl Encoder {
         }
         self.output.write_trailer()?;
         Ok(())
+    }
+}
+
+/// Run the encoder ladder and add the video stream to the container.
+fn open_video(
+    output: &mut AVFormatContextOutput,
+    video: &VideoSettings,
+    global_header: bool,
+) -> Result<VideoTrack, MediaError> {
+    // The ladder: prove each rung with a test encode, then open the real
+    // context; a rung that proves but won't re-open also falls through.
+    let mut opened: Option<AVCodecContext> = None;
+    let picked = pick_first_working(&encoder_candidates(video.codec), |name| {
+        test_encode(name, video).is_ok()
+            && match build_video_ctx(name, video, global_header) {
+                Ok(ctx) => {
+                    opened = Some(ctx);
+                    true
+                }
+                Err(_) => false,
+            }
+    });
+    let (ctx, encoder) = match (opened, picked) {
+        (Some(ctx), Some(name)) => (ctx, name),
+        _ => {
+            return Err(MediaError::Ffmpeg(format!(
+                "no working {} encoder in this FFmpeg build",
+                video.codec.label()
+            )))
+        }
+    };
+
+    {
+        let mut stream = output.new_stream();
+        stream.set_codecpar(ctx.extract_codecpar());
+        stream.set_time_base(AVRational {
+            num: video.fps_den,
+            den: video.fps_num,
+        });
+    }
+
+    let width = i32::try_from(video.width)
+        .map_err(|_| MediaError::Ffmpeg("frame width overflows".into()))?;
+    let height = i32::try_from(video.height)
+        .map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
+    let encode_pix_fmt = pix_fmt_for(encoder);
+    let sws = SwsContext::get_context(
+        width,
+        height,
+        ffi::AV_PIX_FMT_RGBA,
+        width,
+        height,
+        encode_pix_fmt,
+        ffi::SWS_BILINEAR,
+        None,
+        None,
+        None,
+    )
+    .ok_or_else(|| MediaError::Ffmpeg("swscale for encode".into()))?;
+
+    Ok(VideoTrack {
+        ctx,
+        encoder,
+        sws,
+        encode_pix_fmt,
+        width,
+        height,
+        next_pts: 0,
+    })
+}
+
+/// Write the container's metadata dictionary (docs/06 §7.6), in the order the
+/// [`Metadata`] set holds — an export is deterministic (docs/06 §7.3) and
+/// these bytes land in the file.
+fn set_container_metadata(output: &mut AVFormatContextOutput, metadata: &Metadata) {
+    if metadata.is_empty() {
+        return;
+    }
+    let mut dict: *mut ffi::AVDictionary = std::ptr::null_mut();
+    for (key, value) in metadata.iter() {
+        let (Ok(k), Ok(v)) = (CString::new(key), CString::new(value)) else {
+            // A key or value with an interior NUL cannot be a C string. Skip
+            // it rather than failing the export over one metadata field.
+            continue;
+        };
+        // SAFETY: `dict` starts null and is only ever handed to
+        // `av_dict_set`, which allocates on first use and reallocates after;
+        // both pointers are valid, NUL-terminated C strings alive for the
+        // call, and FFmpeg copies them (flags 0 = copy key and value).
+        #[allow(unsafe_code)]
+        unsafe {
+            ffi::av_dict_set(&mut dict, k.as_ptr(), v.as_ptr(), 0);
+        }
+    }
+    // Ownership passes to the format context, which frees it in
+    // `avformat_free_context`.
+    //
+    // SAFETY: `as_mut_ptr` yields the context this wrapper exclusively owns
+    // (no FFmpeg call is running concurrently), `metadata` is a plain pointer
+    // field `avformat_write_header` reads later, and it was null — a freshly
+    // created output context carries no metadata — so nothing is leaked by
+    // overwriting it.
+    #[allow(unsafe_code)]
+    unsafe {
+        (*output.as_mut_ptr()).metadata = dict;
     }
 }
 
@@ -543,21 +834,25 @@ fn discard_packets(ctx: &mut AVCodecContext, at_eof: bool) -> Result<(), MediaEr
     }
 }
 
-/// Open the AAC encoder and add its stream to the container.
+/// Open the audio encoder and add its stream to the container.
 fn open_audio(
     output: &mut AVFormatContextOutput,
     a: &AudioSettings,
     global_header: bool,
 ) -> Result<AudioTrack, MediaError> {
-    let codec = AVCodec::find_encoder(ffi::AV_CODEC_ID_AAC)
-        .ok_or_else(|| MediaError::Ffmpeg("no AAC encoder linked".into()))?;
+    let codec = AVCodec::find_encoder(a.codec.codec_id())
+        .ok_or_else(|| MediaError::Ffmpeg(format!("no {} encoder linked", a.codec.label())))?;
     let mut ctx = AVCodecContext::new(&codec);
     let rate =
         i32::try_from(a.rate).map_err(|_| MediaError::Ffmpeg("audio rate overflows".into()))?;
     ctx.set_sample_rate(rate);
     ctx.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
-    ctx.set_sample_fmt(ffi::AV_SAMPLE_FMT_FLTP);
-    ctx.set_bit_rate(a.bit_rate);
+    ctx.set_sample_fmt(a.codec.sample_fmt());
+    // PCM has no bitrate to choose — it is exactly rate × channels × depth —
+    // and asking for one confuses the encoder rather than obeying.
+    if a.codec != AudioCodec::PcmS16 {
+        ctx.set_bit_rate(a.bit_rate);
+    }
     ctx.set_time_base(AVRational { num: 1, den: rate });
     if global_header {
         ctx.set_flags(ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
@@ -575,6 +870,7 @@ fn open_audio(
 
     Ok(AudioTrack {
         ctx,
+        codec: a.codec,
         stream_index,
         rate: a.rate,
         frame_size,
@@ -621,7 +917,7 @@ fn encode_audio_frame(
 ) -> Result<(), MediaError> {
     let n = track.frame_size;
     let mut frame = AVFrame::new();
-    frame.set_format(ffi::AV_SAMPLE_FMT_FLTP);
+    frame.set_format(track.codec.sample_fmt());
     frame.set_ch_layout(AVChannelLayout::from_nb_channels(2).into_inner());
     frame.set_sample_rate(
         i32::try_from(track.rate).map_err(|_| MediaError::Ffmpeg("audio rate overflows".into()))?,
@@ -632,15 +928,26 @@ fn encode_audio_frame(
     frame
         .alloc_buffer()
         .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-    {
-        // Planar float: plane 0 is all left samples, plane 1 all right.
-        let left = plane_f32_mut(frame.data[0], n)?;
-        for (dst, src) in left.iter_mut().zip(interleaved.iter().step_by(2)) {
-            *dst = *src;
+    match track.codec {
+        AudioCodec::Aac => {
+            // Planar float: plane 0 is all left samples, plane 1 all right.
+            let left = plane_f32_mut(frame.data[0], n)?;
+            for (dst, src) in left.iter_mut().zip(interleaved.iter().step_by(2)) {
+                *dst = *src;
+            }
+            let right = plane_f32_mut(frame.data[1], n)?;
+            for (dst, src) in right.iter_mut().zip(interleaved.iter().skip(1).step_by(2)) {
+                *dst = *src;
+            }
         }
-        let right = plane_f32_mut(frame.data[1], n)?;
-        for (dst, src) in right.iter_mut().zip(interleaved.iter().skip(1).step_by(2)) {
-            *dst = *src;
+        AudioCodec::PcmS16 => {
+            // Packed 16-bit: one plane, L R L R …, each sample scaled and
+            // clamped rather than wrapped — a signal over full scale must
+            // clip, not fold over into the opposite sign.
+            let out = plane_i16_mut(frame.data[0], n * 2)?;
+            for (dst, src) in out.iter_mut().zip(interleaved.iter()) {
+                *dst = f32_to_i16(*src);
+            }
         }
     }
     frame.set_pts(track.next_pts);
@@ -786,14 +1093,48 @@ fn plane_f32_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [f32], MediaErr
     }
 }
 
+/// View an audio plane as `len` i16 samples — the packed-PCM twin of
+/// [`plane_f32_mut`], with the same null and alignment discipline.
+fn plane_i16_mut<'a>(ptr: *mut u8, len: usize) -> Result<&'a mut [i16], MediaError> {
+    if ptr.is_null() {
+        return Err(MediaError::Ffmpeg("audio frame has no data plane".into()));
+    }
+    if !(ptr as usize).is_multiple_of(std::mem::align_of::<i16>()) {
+        return Err(MediaError::Ffmpeg("audio plane misaligned".into()));
+    }
+    // SAFETY: the frame was just filled by `alloc_buffer` with `nb_samples`
+    // samples of AV_SAMPLE_FMT_S16 across two channels in one packed plane
+    // (`len` i16s, 2 bytes each); the null and alignment checks above hold,
+    // and FFmpeg's allocator aligns planes far beyond 2 bytes.
+    #[allow(unsafe_code)]
+    unsafe {
+        Ok(std::slice::from_raw_parts_mut(ptr.cast::<i16>(), len))
+    }
+}
+
+/// One float sample as signed 16-bit PCM: full scale is 32767, and anything
+/// past ±1.0 clips rather than wrapping (`as` on an out-of-range float
+/// saturates in Rust, but the clamp says so where a reader can see it).
+fn f32_to_i16(s: f32) -> i16 {
+    (s.clamp(-1.0, 1.0) * 32767.0).round() as i16
+}
+
 /// Exact byte length of one packed RGBA frame, checked against overflow so a
 /// nonsensical width/height (bad caller input, not file input, but the rule
 /// is the same: no panics — docs/14-ENGINEERING-RULES.md §4) errors instead
 /// of overflowing `i32` arithmetic.
 fn rgba_frame_len(width: i32, height: i32) -> Result<usize, MediaError> {
+    frame_len(width, height, 4)
+}
+
+/// Exact byte length of one packed frame at `bytes_per_px`, with the same
+/// overflow discipline [`rgba_frame_len`] has always had.
+fn frame_len(width: i32, height: i32, bytes_per_px: usize) -> Result<usize, MediaError> {
+    let bytes = i32::try_from(bytes_per_px)
+        .map_err(|_| MediaError::Ffmpeg("frame dimensions overflow".into()))?;
     width
         .checked_mul(height)
-        .and_then(|px| px.checked_mul(4))
+        .and_then(|px| px.checked_mul(bytes))
         .and_then(|len| usize::try_from(len).ok())
         .ok_or_else(|| MediaError::Ffmpeg("frame dimensions overflow".into()))
 }
@@ -806,8 +1147,23 @@ fn copy_rgba_into(
     width: i32,
     height: i32,
 ) -> Result<(), MediaError> {
+    copy_pixels_into(frame, rgba, width, height, 4, false)
+}
+
+/// As [`copy_rgba_into`], for any packed pixel size, optionally swapping each
+/// `u16` sample's two bytes on the way (the big-endian still formats).
+fn copy_pixels_into(
+    frame: &mut AVFrame,
+    rgba: &[u8],
+    width: i32,
+    height: i32,
+    bytes_per_px: usize,
+    swap16: bool,
+) -> Result<(), MediaError> {
     let stride = usize::try_from(frame.linesize[0]).unwrap_or(0);
-    let row = usize::try_from(width).unwrap_or(0).saturating_mul(4);
+    let row = usize::try_from(width)
+        .unwrap_or(0)
+        .saturating_mul(bytes_per_px);
     let height = usize::try_from(height).unwrap_or(0);
     if stride < row {
         return Err(MediaError::Ffmpeg(
@@ -831,7 +1187,13 @@ fn copy_rgba_into(
     #[allow(unsafe_code)]
     let dst = unsafe { std::slice::from_raw_parts_mut(frame.data[0], buf_len) };
     for y in 0..height {
-        dst[y * stride..y * stride + row].copy_from_slice(&rgba[y * row..(y + 1) * row]);
+        let line = &mut dst[y * stride..y * stride + row];
+        line.copy_from_slice(&rgba[y * row..(y + 1) * row]);
+        if swap16 {
+            for pair in line.chunks_exact_mut(2) {
+                pair.swap(0, 1);
+            }
+        }
     }
     Ok(())
 }
@@ -933,7 +1295,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("ladder.mp4");
         let v = video_settings(VideoCodec::H264, 320, 240);
-        let mut enc = Encoder::open(&path, &v, None).unwrap();
+        let mut enc = Encoder::open(&path, Some(&v), None, &Metadata::new()).unwrap();
         let candidates = encoder_candidates(VideoCodec::H264);
         assert!(
             candidates.contains(&enc.encoder_name()),
@@ -965,7 +1327,13 @@ mod tests {
         let path = dir.path().join("out.mp4");
         let (w, h, frames) = (320u32, 240u32, 90usize);
 
-        let mut enc = Encoder::open(&path, &video_settings(VideoCodec::H264, w, h), None).unwrap();
+        let mut enc = Encoder::open(
+            &path,
+            Some(&video_settings(VideoCodec::H264, w, h)),
+            None,
+            &Metadata::new(),
+        )
+        .unwrap();
         let mut rgba = vec![0u8; (w * h * 4) as usize];
         for f in 0..frames {
             for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
@@ -1003,8 +1371,13 @@ mod tests {
     fn hevc_round_trips_through_our_own_probe() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("out-hevc.mp4");
-        let mut enc =
-            Encoder::open(&path, &video_settings(VideoCodec::Hevc, 320, 240), None).unwrap();
+        let mut enc = Encoder::open(
+            &path,
+            Some(&video_settings(VideoCodec::Hevc, 320, 240)),
+            None,
+            &Metadata::new(),
+        )
+        .unwrap();
         eprintln!("hevc ladder picked: {}", enc.encoder_name());
         let rgba = vec![90u8; 320 * 240 * 4];
         for _ in 0..30 {
@@ -1029,11 +1402,13 @@ mod tests {
         let rate = 48_000u32;
         let mut enc = Encoder::open(
             &path,
-            &video_settings(VideoCodec::H264, w, h),
+            Some(&video_settings(VideoCodec::H264, w, h)),
             Some(&AudioSettings {
                 rate,
                 bit_rate: 320_000,
+                codec: AudioCodec::Aac,
             }),
+            &Metadata::new(),
         )
         .unwrap();
 
@@ -1098,7 +1473,9 @@ mod tests {
     fn a_png_sequence_writes_one_numbered_file_per_frame() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("shot.png");
-        let mut enc = ImageSequenceEncoder::open(&path, ImageFormat::Png, 32, 18, 30, 1).unwrap();
+        let mut enc =
+            ImageSequenceEncoder::open(&path, ImageFormat::Png, 32, 18, 30, 1, BitDepth::Eight)
+                .unwrap();
         for shade in [0u8, 128, 255] {
             enc.write_rgba(&vec![shade; 32 * 18 * 4]).unwrap();
         }
@@ -1121,7 +1498,9 @@ mod tests {
     fn a_tiff_sequence_writes_readable_frames() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("plate.tiff");
-        let mut enc = ImageSequenceEncoder::open(&path, ImageFormat::Tiff, 16, 16, 24, 1).unwrap();
+        let mut enc =
+            ImageSequenceEncoder::open(&path, ImageFormat::Tiff, 16, 16, 24, 1, BitDepth::Eight)
+                .unwrap();
         enc.write_rgba(&vec![64u8; 16 * 16 * 4]).unwrap();
         enc.finish().unwrap();
         let bytes = std::fs::read(sequence_frame_path(&path, 1)).unwrap();
@@ -1150,8 +1529,13 @@ mod tests {
     fn write_audio_without_an_audio_stream_errors() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("out-vo.mp4");
-        let mut enc =
-            Encoder::open(&path, &video_settings(VideoCodec::H264, 64, 64), None).unwrap();
+        let mut enc = Encoder::open(
+            &path,
+            Some(&video_settings(VideoCodec::H264, 64, 64)),
+            None,
+            &Metadata::new(),
+        )
+        .unwrap();
         assert!(enc.write_audio(&[0.0, 0.0]).is_err());
     }
 
@@ -1170,5 +1554,257 @@ mod tests {
     #[test]
     fn rgba_frame_len_rejects_negative_dimensions_without_panicking() {
         assert!(rgba_frame_len(-1, 100).is_err());
+    }
+
+    /// A stereo sine of `seconds`, interleaved — the audio fixture the
+    /// audio-only tests write and read back.
+    fn sine(rate: u32, seconds: f64) -> Vec<f32> {
+        let n = (seconds * f64::from(rate)).round() as usize;
+        (0..n)
+            .flat_map(|i| {
+                let s = (0.5
+                    * (2.0 * std::f64::consts::PI * 440.0 * (i as f64) / f64::from(rate)).sin())
+                    as f32;
+                [s, s]
+            })
+            .collect()
+    }
+
+    /// Audio-only export, AAC in an `.m4a`: no video stream at all — the case
+    /// `Encoder::open` could not express before — and it must probe as a
+    /// sound file with no picture and decode back at the level that went in.
+    #[test]
+    fn an_audio_only_m4a_carries_the_mix_and_no_video() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mix.m4a");
+        let rate = 48_000u32;
+        let mut enc = Encoder::open(
+            &path,
+            None,
+            Some(&AudioSettings {
+                rate,
+                bit_rate: 320_000,
+                codec: AudioCodec::Aac,
+            }),
+            &Metadata::new(),
+        )
+        .unwrap();
+        assert!(!enc.has_video());
+        assert_eq!(enc.encoder_label(), "AAC");
+        enc.write_audio(&sine(rate, 1.0)).unwrap();
+        enc.finish().unwrap();
+
+        let probe = crate::probe::probe(&path).unwrap();
+        assert!(probe.video.is_none(), "an audio-only export has no picture");
+        let audio = probe.audio.expect("it does have sound");
+        assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
+        assert_eq!(audio.codec, "aac");
+
+        let buf = crate::audio::decode_all(&path, rate).unwrap();
+        let mid = &buf.samples[buf.samples.len() / 4..buf.samples.len() / 2];
+        let rms = (mid
+            .iter()
+            .map(|s| f64::from(*s) * f64::from(*s))
+            .sum::<f64>()
+            / mid.len() as f64)
+            .sqrt();
+        assert!((rms - 0.3535).abs() < 0.035, "rms {rms}");
+    }
+
+    /// The other audio-only face: a `.wav` of uncompressed PCM. Lossless, so
+    /// the level assertion is tight where the AAC one had to be generous.
+    #[test]
+    fn an_audio_only_wav_is_lossless_pcm() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mix.wav");
+        let rate = 48_000u32;
+        let mut enc = Encoder::open(
+            &path,
+            None,
+            Some(&AudioSettings {
+                rate,
+                bit_rate: 0,
+                codec: AudioCodec::PcmS16,
+            }),
+            &Metadata::new(),
+        )
+        .unwrap();
+        enc.write_audio(&sine(rate, 1.0)).unwrap();
+        enc.finish().unwrap();
+
+        let probe = crate::probe::probe(&path).unwrap();
+        assert!(probe.video.is_none());
+        let audio = probe.audio.expect("a wav is all sound");
+        assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
+        assert_eq!(audio.codec, "pcm_s16le");
+
+        let buf = crate::audio::decode_all(&path, rate).unwrap();
+        let mid = &buf.samples[buf.samples.len() / 4..buf.samples.len() / 2];
+        let rms = (mid
+            .iter()
+            .map(|s| f64::from(*s) * f64::from(*s))
+            .sum::<f64>()
+            / mid.len() as f64)
+            .sqrt();
+        // Uncompressed: within one 16-bit step of the exact 0.5/√2.
+        assert!((rms - 0.3535).abs() < 1e-3, "rms {rms}");
+    }
+
+    /// Opening a container with neither stream is a caller bug and must be a
+    /// typed error, not a zero-stream file the muxer chokes on later.
+    #[test]
+    fn a_container_with_neither_stream_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(Encoder::open(
+            &dir.path().join("nothing.mp4"),
+            None,
+            None,
+            &Metadata::new()
+        )
+        .is_err());
+    }
+
+    /// Writing pictures to an audio-only export is the mirror of the existing
+    /// "audio without an audio stream" guard.
+    #[test]
+    fn write_rgba_without_a_video_stream_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sound.m4a");
+        let mut enc = Encoder::open(
+            &path,
+            None,
+            Some(&AudioSettings {
+                rate: 48_000,
+                bit_rate: 320_000,
+                codec: AudioCodec::Aac,
+            }),
+            &Metadata::new(),
+        )
+        .unwrap();
+        assert!(enc.write_rgba(&[0u8; 16]).is_err());
+    }
+
+    /// The metadata set is ordered, replaces in place, and drops a key rather
+    /// than writing it blank — the three rules the dialog page leans on.
+    #[test]
+    fn metadata_is_ordered_and_replaces_in_place() {
+        let mut m = Metadata::new();
+        m.set(Metadata::TITLE, "Scene 1");
+        m.set(Metadata::AUTHOR, "A Person");
+        m.set(Metadata::COMMENT, "first pass");
+        assert_eq!(
+            m.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            [Metadata::TITLE, Metadata::AUTHOR, Metadata::COMMENT]
+        );
+        // Editing a field keeps its row where it was.
+        m.set(Metadata::AUTHOR, "Someone Else");
+        assert_eq!(
+            m.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            [Metadata::TITLE, Metadata::AUTHOR, Metadata::COMMENT]
+        );
+        assert_eq!(m.get(Metadata::AUTHOR), Some("Someone Else"));
+        // Emptying one removes it.
+        m.set(Metadata::AUTHOR, "");
+        assert_eq!(m.get(Metadata::AUTHOR), None);
+        assert_eq!(m.len(), 2);
+    }
+
+    /// Metadata really lands in the container: written on the way out, read
+    /// back with FFmpeg's own reader on the way in.
+    #[test]
+    fn metadata_round_trips_into_the_container() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tagged.mp4");
+        let mut meta = Metadata::new();
+        meta.set(Metadata::TITLE, "Scene 1");
+        meta.set(Metadata::AUTHOR, "A Person");
+        meta.set(Metadata::COPYRIGHT, "© 2026");
+        meta.set(Metadata::COMMENT, "exported by Lumit");
+
+        let mut enc = Encoder::open(
+            &path,
+            Some(&video_settings(VideoCodec::H264, 64, 64)),
+            None,
+            &meta,
+        )
+        .unwrap();
+        for _ in 0..10 {
+            enc.write_rgba(&vec![32u8; 64 * 64 * 4]).unwrap();
+        }
+        enc.finish().unwrap();
+
+        let input = crate::probe::open_input(&path).unwrap();
+        let dict = input.metadata().expect("the file carries metadata");
+        let got = |key: &str| {
+            dict.get(&CString::new(key).unwrap(), None, 0)
+                .map(|e| e.value().to_string_lossy().into_owned())
+        };
+        assert_eq!(got(Metadata::TITLE).as_deref(), Some("Scene 1"));
+        assert_eq!(got(Metadata::AUTHOR).as_deref(), Some("A Person"));
+        assert_eq!(got(Metadata::COPYRIGHT).as_deref(), Some("© 2026"));
+        assert_eq!(got(Metadata::COMMENT).as_deref(), Some("exported by Lumit"));
+    }
+
+    /// The still formats' sixteen-bit pixel formats differ in byte order
+    /// because the file formats do; the pack stage never has to know.
+    #[test]
+    fn the_still_formats_pick_their_own_sixteen_bit_order() {
+        assert_eq!(
+            ImageFormat::Png.pix_fmt(BitDepth::Eight),
+            ffi::AV_PIX_FMT_RGBA
+        );
+        assert_eq!(
+            ImageFormat::Tiff.pix_fmt(BitDepth::Eight),
+            ffi::AV_PIX_FMT_RGBA
+        );
+        assert_eq!(
+            ImageFormat::Png.pix_fmt(BitDepth::Sixteen),
+            ffi::AV_PIX_FMT_RGBA64BE
+        );
+        assert_eq!(
+            ImageFormat::Tiff.pix_fmt(BitDepth::Sixteen),
+            ffi::AV_PIX_FMT_RGBA64LE
+        );
+        assert!(ImageFormat::Png.swaps_16(BitDepth::Sixteen));
+        assert!(!ImageFormat::Tiff.swaps_16(BitDepth::Sixteen));
+        assert!(!ImageFormat::Png.swaps_16(BitDepth::Eight));
+        assert_eq!(BitDepth::Eight.bytes_per_channel(), 1);
+        assert_eq!(BitDepth::Sixteen.bytes_per_channel(), 2);
+    }
+
+    /// A sixteen-bit still really writes sixteen-bit files, in both formats,
+    /// from little-endian `u16` samples — and a frame sized for eight bits is
+    /// refused rather than read past its end.
+    #[test]
+    fn sixteen_bit_stills_write_wide_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let (w, h) = (16u32, 8u32);
+        // Mid grey at full alpha, as little-endian u16 samples.
+        let px: Vec<u8> = [0x8000u16, 0x4000, 0x2000, 0xffff]
+            .iter()
+            .flat_map(|s| s.to_le_bytes())
+            .collect();
+        let frame: Vec<u8> = px.repeat((w * h) as usize);
+
+        for (name, format) in [
+            ("wide.png", ImageFormat::Png),
+            ("wide.tiff", ImageFormat::Tiff),
+        ] {
+            let path = dir.path().join(name);
+            let mut enc =
+                ImageSequenceEncoder::open(&path, format, w, h, 24, 1, BitDepth::Sixteen).unwrap();
+            enc.write_rgba(&frame).unwrap();
+            // An eight-bit-sized buffer is the wrong size now, and says so.
+            assert!(enc.write_rgba(&vec![0u8; (w * h * 4) as usize]).is_err());
+            enc.finish().unwrap();
+
+            let written = std::fs::read(sequence_frame_path(&path, 1)).unwrap();
+            assert!(!written.is_empty(), "{name} has bytes");
+            // Probe it back through our own reader: a 16-bit still decodes,
+            // and its dimensions survive.
+            let probe = crate::probe::probe(&sequence_frame_path(&path, 1)).unwrap();
+            let video = probe.video.expect("a still is a one-frame video");
+            assert_eq!((video.width, video.height), (w, h), "{name}");
+        }
     }
 }

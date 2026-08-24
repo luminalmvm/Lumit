@@ -915,12 +915,28 @@ codecs for interchange are planned but **not in v1** - v1 encodes H.264/HEVC onl
 space -> the preset's output space (Rec.709/sRGB in v1) as the final export transform; alpha
 export straight or premultiplied per output settings.
 
+**Audio-only output.** An export can carry sound and no picture: an **`.m4a`** (AAC, the same
+codec and the same mixdown a video export uses) or a **`.wav`** (uncompressed 16-bit PCM,
+where a bitrate means nothing and is not offered). The container opens with whichever streams
+it was given — video, audio, or both — and asking for neither is a typed error rather than an
+empty file.
+
+**Container metadata.** An export writes an **ordered** key/value set into the container:
+title, author, copyright, comment and creation time by default, and whatever else the
+Metadata page grows. Ordered rather than a map because the order lands in the file's bytes and
+export is deterministic (§7.3). The keys are FFmpeg's own (`title`, `artist`, `copyright`,
+`comment`, `creation_time`), so what is written is what a player reads; an emptied field is
+removed rather than written blank.
+
 **Image sequences (K-201).** Beside the video formats, an export can write one still per
 frame: **PNG** or **TIFF**, lossless RGBA, through the same ffmpeg seam (the image2 muxer) and
 the same frame walk — choose `shot.png` and the frames land beside it as `shot.00001.png`,
 `shot.00002.png`, … A sequence carries no audio (a folder of stills has nowhere to put it) and
 no bitrate (it is lossless); a cancelled or failed sequence removes the frames it wrote rather
-than leaving a folder that looks like a finished export.
+than leaving a folder that looks like a finished export. Both still formats can also carry
+**16 bits per channel** (`rgba64`), which the video codecs cannot; the pack stage hands the
+encoder little-endian samples either way and each format's own byte order is the encoder's
+business, not the caller's.
 
 **The export dialogue's own fields (K-201).** Beyond the preset stamp, the dialogue carries a
 **frame rate** (defaulting to the comp's own; a different rate resamples by nearest comp frame
