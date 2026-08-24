@@ -1899,20 +1899,31 @@ const double clipEdgeWidth = 2;
 /// the bar's marks and any waveform rather than over them.
 const double clipNameAlpha = 0.8;
 
-/// A ruler label: seconds under a minute as `5s`, above as `1:00s` — the
-/// approved mockup's own form (K-451). The seconds are **not** zero-padded:
-/// the mockup's ruler reads `0s 2s 4s`, and a leading zero on every label made
-/// a row of times look like a row of timecodes.
+/// A ruler label. Seconds and minutes are zero-padded (`00s 02s`, `01:05s`) so
+/// a row of labels keeps one rhythm; hours are not (`1:00:00s`) — the owner's
+/// ruling. Deep zoom labels fractions as decimals, at most two places and
+/// with trailing zeros dropped: `0.5s`, `0.25s`, `02.5s`.
 String rulerLabelOf(double seconds) {
   final whole = seconds.round();
+  final isWhole = (seconds - whole).abs() < 1e-9;
   if (seconds < 60) {
-    final text =
-        seconds == whole ? whole.toString() : seconds.toStringAsFixed(1);
-    return '${text}s';
+    if (!isWhole) {
+      var text = seconds.toStringAsFixed(2);
+      if (text.endsWith('0')) text = text.substring(0, text.length - 1);
+      final dot = text.indexOf('.');
+      // Sub-second labels keep their bare `0.` — `00.5s` reads as a timecode.
+      final head = seconds >= 1
+          ? text.substring(0, dot).padLeft(2, '0')
+          : text.substring(0, dot);
+      return '$head${text.substring(dot)}s';
+    }
+    return '${whole.toString().padLeft(2, '0')}s';
   }
-  final m = whole ~/ 60;
-  final s = whole % 60;
-  return '$m:${s.toString().padLeft(2, '0')}s';
+  final h = whole ~/ 3600;
+  final m = (whole % 3600) ~/ 60;
+  final ss = (whole % 60).toString().padLeft(2, '0');
+  final mm = m.toString().padLeft(2, '0');
+  return h > 0 ? '$h:$mm:${ss}s' : '$mm:${ss}s';
 }
 
 /// The ruler's ticks and time labels — the **upper half** of the double-height

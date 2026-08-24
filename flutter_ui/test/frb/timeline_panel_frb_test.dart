@@ -3116,11 +3116,14 @@ void main() {
       expect(rulerLabelStepSeconds(pixelsPerSecond: 20), 5);
       expect(rulerLabelStepSeconds(pixelsPerSecond: 2), 60);
       // Unpadded seconds, as the mockup's ruler reads them (K-451).
-      expect(rulerLabelOf(0), '0s');
-      expect(rulerLabelOf(5), '5s');
+      expect(rulerLabelOf(0), '00s');
+      expect(rulerLabelOf(5), '05s');
       expect(rulerLabelOf(0.5), '0.5s');
-      expect(rulerLabelOf(60), '1:00s');
-      expect(rulerLabelOf(90), '1:30s');
+      expect(rulerLabelOf(0.25), '0.25s');
+      expect(rulerLabelOf(2.5), '02.5s');
+      expect(rulerLabelOf(60), '01:00s');
+      expect(rulerLabelOf(90), '01:30s');
+      expect(rulerLabelOf(3600), '1:00:00s');
     });
 
     /// Minor ticks subdivide as the zoom grows, and stop at one frame: a ruler
