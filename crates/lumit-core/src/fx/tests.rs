@@ -3912,6 +3912,66 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
     );
 }
 
+/// **Rotation frequency drives the twist and nothing else** (K-441).
+///
+/// The twist was the one axis with an amount but no rate: x, y and z each
+/// multiplied the master Frequency, rotation read the noise at the master rate
+/// flat. This pins the row that fixes that, in the three ways it can go wrong.
+///
+/// The default is the load-bearing one. A shake saved before this row has no
+/// `rot_freq` at all, so it must resolve to the multiplier of one it always
+/// had — and *bit-for-bit*, not nearly, since a shake is a picture and a
+/// changed last bit is a changed frame.
+#[test]
+fn shake_rotation_frequency_moves_the_twist_alone() {
+    use effects::shake::Shaken;
+    let set = |e: &EffectInstance, id: &str, v: f64| {
+        let mut e = e.clone();
+        for p in &mut e.params {
+            if p.id == id {
+                p.value = EffectValue::Float(Property::fixed(v));
+            }
+        }
+        e
+    };
+    let plain = |e: &EffectInstance, lt: f64| match shake_packed(e, lt, 1000.0) {
+        Shaken::Plain { wobble, .. } => wobble,
+        Shaken::Blurred { .. } => panic!("the smear ships off"),
+    };
+
+    // A twist worth measuring; everything else left at its default.
+    let base = set(&instantiate("shake").unwrap(), "rotation", 10.0);
+    let (lt, freq) = (0.4, base.float_at("frequency", 0.4).unwrap());
+    let a = plain(&base, lt);
+    assert_ne!(a.rotation_deg, 0.0, "there is a twist to measure");
+
+    // Writing the default explicitly changes nothing — which is the same
+    // arithmetic an old project takes when the row is missing entirely.
+    assert_eq!(a, plain(&set(&base, "rot_freq", 1.0), lt));
+
+    // Doubled, the twist reads the same noise curve at twice the rate: its
+    // value now is the value it would have had at twice the time. The base is
+    // scaled by two, which is exact, so this is an equality and not a
+    // tolerance.
+    let fast = set(&base, "rot_freq", 2.0);
+    let at_double_time = plain(&base, lt * 2.0);
+    assert_eq!(
+        plain(&fast, lt).rotation_deg,
+        at_double_time.rotation_deg,
+        "twice the rotation frequency is twice the way along the twist"
+    );
+    assert!(
+        (lt * freq * 2.0 - (lt * 2.0) * freq).abs() == 0.0,
+        "the noise base scales exactly by two"
+    );
+
+    // And the other axes do not move with it.
+    let moved = plain(&fast, lt);
+    assert_eq!(moved.offset_px, a.offset_px, "x and y are untouched");
+    assert_eq!(moved.zoom, a.zoom, "the depth pump is untouched");
+    assert_ne!(moved.rotation_deg, a.rotation_deg, "the twist did move");
+}
+
 #[test]
 fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     let (w, h) = (17u32, 9u32);
@@ -4217,6 +4277,7 @@ fn shake_packs_the_wobble_the_old_arm_resolved() {
             "y_amp" => 1.4,
             "x_freq" => 1.3,
             "y_freq" => 0.6,
+            "rot_freq" => 2.2,
             "z_amp" => 12.0,
             "z_freq" => 1.7,
             _ => continue,
@@ -4240,6 +4301,7 @@ fn shake_packs_the_wobble_the_old_arm_resolved() {
         z_amp: ((fl("z_amp").unwrap() as f32) / 100.0).clamp(0.0, 1.0),
         x_freq: fl("x_freq").unwrap().max(0.0),
         y_freq: fl("y_freq").unwrap().max(0.0),
+        rot_freq: fl("rot_freq").unwrap().max(0.0),
         z_freq: fl("z_freq").unwrap().max(0.0),
     };
     let base = lt * fl("frequency").unwrap().max(0.0);

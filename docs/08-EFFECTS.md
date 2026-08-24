@@ -843,6 +843,7 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | Amplitude | 0–400 px@comp | 30 px@comp |
 | Frequency | 0.1–30 Hz | 8 Hz |
 | Rotation amount | 0–45° | 1° |
+| Rotation frequency | ×0–4 | ×1 |
 | *Per-axis wobble* (twirl) | | |
 | — X amount / X frequency | ×0–2 / ×0–4 | ×1 / ×1 |
 | — Y amount / Y frequency | ×0–2 / ×0–4 | ×1 / ×1 |
@@ -857,7 +858,9 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | Seed | seed | per-instance |
 
 The master Amplitude and Frequency drive the overall translational sway; the **Per-axis
-wobble** twirl (K-146) biases each axis and adds depth. X and Y amount/frequency are
+wobble** twirl (K-146) biases each axis and adds depth. **Rotation frequency** (K-441) is the
+twist's own rate multiplier, beside its amount, so a slow sway can carry a fast shudder;
+×1 is the master rate the twist had before the row existed. X and Y amount/frequency are
 dimensionless multipliers on the master values (×1 reproduces the plain uniform shake); Z
 is the depth/scale shake — Z amount is a scale-pump per cent (the old Zoom pump, same
 range), Z frequency a rate multiplier. **Edges** (K-145, the reusable control) governs the
@@ -870,7 +873,8 @@ effect's output is affected (not the layer or comp motion blur). The Shutter (0�
 far across the shutter window the samples spread; off, or Shutter 0, is the plain single
 resample. This is the streak the S_Shake feature wiggle expressions never had.
 
-**Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount, the
+**Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount and
+Rotation frequency, the
 Per-axis wobble twirl (X/Y/Z amount and frequency), the Motion blur twirl (T18/K-165), an
 Edges control (Transparent / Repeat / Mirror, default Mirror — pass 5 owner feedback: the
 reflected border reads most natural under a shake) and Seed (per-instance

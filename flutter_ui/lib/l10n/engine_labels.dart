@@ -498,6 +498,7 @@ Map<String, String> get _table => {
       "Roll speed": l10n.fxRollSpeed,
       "Rotation": l10n.fxRotation,
       "Rotation amount": l10n.fxRotationAmount,
+      "Rotation frequency": l10n.fxRotationFrequency,
       "Rotation °": l10n.fxRotationDeg,
       "Roughen": l10n.fxRoughen,
       "Roughen edges": l10n.fxRoughenEdges,

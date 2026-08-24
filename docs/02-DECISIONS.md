@@ -12097,3 +12097,34 @@ the carrying stops, the solve covering exactly the span that worked, the store r
 partial, and the linked camera holding through the tail (`lumit-render`); the span and the
 clip crossing the seam with the badge derived inside and held outside (`lumit-bridge`); and
 the partial sentence and the bar's two weights (Flutter).
+
+## K-441 — The Shake's twist gets a rate of its own
+
+**DECIDED 2026-08-24** (allocated on the safe-lane branch). Shake's per-axis wobble group
+(K-146) gave x, y and z each an amount *and* a frequency multiplier on the master
+Frequency. Rotation was left with an amount alone and read its noise channel at the master
+rate flat, so the one thing a handheld shot actually does — a slow translational sway
+carrying a faster shudder of twist — could not be dialled: raising the Frequency sped the
+twist up together with everything it was meant to differ from. **Rotation frequency** is
+that missing multiplier, a `×0–4` slider defaulting to 1, sitting beside Rotation amount
+rather than inside the per-axis group, because the twist is a master-level control in this
+effect's shape and the group is where the x/y/z biases live.
+
+**The default is exactly one, and that is the whole compatibility story.** The multiplier
+enters as `base × rot_freq` in the noise sample, and multiplying an `f64` by 1.0 is exact,
+so a shake made before this row renders the bits it always did. A project saved without the
+row reads the same 1.0 through the resolver's `unwrap_or`, so no file migration and no
+schema version bump are involved.
+
+**No parity work.** The noise is sampled host-side and handed to both paths as derived
+numbers (K-385/K-388), so the CPU reference and the WGSL kernel consume the same four
+floats and cannot disagree; nothing in the shaders changed.
+
+**Not done here:** rotation as three independent x/y/z twists. Shake resamples through the
+2D Transform kernel, whose affine carries exactly one rotation; separate pitch/yaw/roll
+dials would need a perspective warp and a different kernel, which is a new effect's worth
+of work rather than a dial.
+
+Regression tests: the default resolving bit-for-bit to the old wobble, doubling the rate
+reading the twist at twice the time, and x, y and z staying untouched while it moves
+(`lumit-core`).

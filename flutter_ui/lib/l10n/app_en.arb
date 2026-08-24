@@ -2177,6 +2177,10 @@
   "@fxRotationAmount": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxRotationFrequency": "Rotation frequency",
+  "@fxRotationFrequency": {
+    "description": "Effect controls — a control on Shake."
+  },
   "fxRotationDeg": "Rotation °",
   "@fxRotationDeg": {
     "description": "Effect controls — a control on Transform."

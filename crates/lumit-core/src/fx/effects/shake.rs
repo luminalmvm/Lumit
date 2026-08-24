@@ -109,6 +109,21 @@ pub struct Shake {
     )]
     pub rotation: f32,
 
+    /// × the master Frequency, for the twist alone (K-441). The twist used to
+    /// be the one axis with an amount but no rate of its own, so a slow drift
+    /// with a fast shudder in it — the handheld look — could not be dialled:
+    /// raising the master Frequency sped the twist up with everything else.
+    /// Defaults to 1, which multiplies the noise base by exactly one and so
+    /// leaves every shake made before this row bit-for-bit itself.
+    #[slider(
+        label = "Rotation frequency",
+        min = 0.0,
+        max = 4.0,
+        default = 1.0,
+        hard_min = 0.0
+    )]
+    pub rot_freq: f32,
+
     /// × the master Amplitude (0 stills this axis).
     #[slider(
         label = "X amount",
@@ -367,6 +382,7 @@ impl EffectDef for ShakeDef {
         let (e, lt) = (cx.inst, cx.lt);
         let fl = |id: &str| e.float_at_with_context(id, lt, cx.context.clone());
         let freq = fl("frequency").unwrap_or(8.0).max(0.0);
+        let rot_freq = fl("rot_freq").unwrap_or(1.0).max(0.0);
         let x_freq = fl("x_freq").unwrap_or(1.0).max(0.0);
         let y_freq = fl("y_freq").unwrap_or(1.0).max(0.0);
         let z_freq = fl("z_freq").unwrap_or(1.0).max(0.0);
@@ -383,7 +399,7 @@ impl EffectDef for ShakeDef {
             Value::Vec4([
                 shake_noise(seed, 0, b * x_freq) as f32,
                 shake_noise(seed, 1, b * y_freq) as f32,
-                shake_noise(seed, 2, b) as f32,
+                shake_noise(seed, 2, b * rot_freq) as f32,
                 shake_noise(seed, 3, b * z_freq) as f32,
             ])
         };

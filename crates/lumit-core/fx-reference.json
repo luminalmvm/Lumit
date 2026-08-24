@@ -3504,6 +3504,16 @@
           "hard_max": 360.0
         },
         {
+          "id": "rot_freq",
+          "label": "Rotation frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "x_amp",
           "label": "X amount",
           "kind": "float",

@@ -1882,6 +1882,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         z_amp: 0.08,
         x_freq: 1.0,
         y_freq: 1.3,
+        rot_freq: 1.6,
         z_freq: 0.7,
     };
     let base = 2.0f64;

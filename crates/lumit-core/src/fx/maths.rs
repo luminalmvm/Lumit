@@ -192,6 +192,9 @@ pub struct ShakeWobble {
     pub z_amp: f32,
     pub x_freq: f64,
     pub y_freq: f64,
+    /// Frequency multiplier for the twist (K-441). 1 is the rate the master
+    /// Frequency sets, which is what the twist had before it got a row.
+    pub rot_freq: f64,
     pub z_freq: f64,
 }
 
@@ -205,7 +208,7 @@ impl ShakeWobble {
                 self.amp_px * self.x_amp * shake_noise(self.seed, 0, base * self.x_freq) as f32,
                 self.amp_px * self.y_amp * shake_noise(self.seed, 1, base * self.y_freq) as f32,
             ],
-            self.rot_amount * shake_noise(self.seed, 2, base) as f32,
+            self.rot_amount * shake_noise(self.seed, 2, base * self.rot_freq) as f32,
             1.0 + self.z_amp * shake_noise(self.seed, 3, base * self.z_freq) as f32,
         )
     }
