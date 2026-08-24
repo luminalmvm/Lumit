@@ -224,7 +224,10 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('tl-tab-menu-settings')));
       await tester.pumpAndSettle();
-      expect(find.text('Composition settings'), findsOneWidget,
+      // The dialog frame sets its title as a capitals kicker (§12A.4), so
+      // the phrase on screen is the upper-cased form; the menu entry that got
+      // us here wears the trailing ellipsis and neither matches by accident.
+      expect(find.text('COMPOSITION SETTINGS'), findsOneWidget,
           reason: 'the dialog the Project panel opens, from the tab');
       expect(tester.takeException(), isNull);
     });
