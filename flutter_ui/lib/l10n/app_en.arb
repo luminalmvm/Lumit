@@ -6820,6 +6820,94 @@
   "@fxPointY": {
     "description": "Effect controls — the down half of the point Point control holds."
   },
+  "fxA": "A",
+  "@fxA": {
+    "description": "Effect controls — the left-hand number on the Math driver; a variable name, not a word."
+  },
+  "fxAudio": "Audio",
+  "@fxAudio": {
+    "description": "Effect controls — the layer whose sound the Audio level driver measures."
+  },
+  "fxAudioLevel": "Audio level",
+  "@fxAudioLevel": {
+    "description": "Driver name in the Graph panel — gives a layer's loudness as a number."
+  },
+  "fxB": "B",
+  "@fxB": {
+    "description": "Effect controls — the right-hand number on the Math driver; a variable name, not a word."
+  },
+  "fxClamp": "Clamp",
+  "@fxClamp": {
+    "description": "Effect controls — a switch on the Remap driver: hold the result inside the output range."
+  },
+  "fxColourCycle": "Colour cycle",
+  "@fxColourCycle": {
+    "description": "Driver name in the Graph panel — a colour that turns through the hue wheel."
+  },
+  "fxDrivers": "Drivers",
+  "@fxDrivers": {
+    "description": "Category heading for the nodes that make a value rather than a picture."
+  },
+  "fxInHigh": "In high",
+  "@fxInHigh": {
+    "description": "Effect controls — the top of the range the Remap driver's number arrives in."
+  },
+  "fxInLow": "In low",
+  "@fxInLow": {
+    "description": "Effect controls — the bottom of the range the Remap driver's number arrives in."
+  },
+  "fxMath": "Math",
+  "@fxMath": {
+    "description": "Driver name in the Graph panel — two numbers and one arithmetic sign."
+  },
+  "fxMaximum": "Maximum",
+  "@fxMaximum": {
+    "description": "Effect controls — a Math driver operation: the larger of the two numbers."
+  },
+  "fxMinimum": "Minimum",
+  "@fxMinimum": {
+    "description": "Effect controls — a Math driver operation: the smaller of the two numbers."
+  },
+  "fxOperation": "Operation",
+  "@fxOperation": {
+    "description": "Effect controls — which arithmetic the Math driver does."
+  },
+  "fxOutHigh": "Out high",
+  "@fxOutHigh": {
+    "description": "Effect controls — the top of the range the Remap driver's number leaves in."
+  },
+  "fxOutLow": "Out low",
+  "@fxOutLow": {
+    "description": "Effect controls — the bottom of the range the Remap driver's number leaves in."
+  },
+  "fxPower": "Power",
+  "@fxPower": {
+    "description": "Effect controls — a Math driver operation: the first number raised to the second."
+  },
+  "fxRate": "Rate",
+  "@fxRate": {
+    "description": "Effect controls — how many turns a second the Colour cycle driver makes."
+  },
+  "fxRemainder": "Remainder",
+  "@fxRemainder": {
+    "description": "Effect controls — a Math driver operation: what is left after dividing."
+  },
+  "fxRemap": "Remap",
+  "@fxRemap": {
+    "description": "Driver name in the Graph panel — maps one range of numbers onto another."
+  },
+  "fxSmooth": "Smooth",
+  "@fxSmooth": {
+    "description": "Driver name in the Graph panel — averages its input over a stretch of time."
+  },
+  "fxWiggle": "Wiggle",
+  "@fxWiggle": {
+    "description": "Driver name in the Graph panel — a number that wobbles."
+  },
+  "fxWindow": "Window",
+  "@fxWindow": {
+    "description": "Effect controls — how long a stretch of sound the Audio level driver measures."
+  },
   "menuImportAe": "After Effects project…",
   "@menuImportAe": {
     "description": "Item in the File menu's Import submenu — opens a file chooser for an After Effects .aep project, which Lumit reads directly."
