@@ -17,6 +17,8 @@ import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'dart:typed_data';
+
 import 'package:lumit_flutter/src/rust/api/folder.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -34,6 +36,12 @@ BridgeCompSettings _settings(String name, int seconds) => BridgeCompSettings(
       fpsNum: 25,
       fpsDen: 1,
       duration: BridgeRational(num: seconds, den: 1),
+      // The dialog's own defaults: black ground, the 180-degree shutter at
+      // its 16 samples (K-470). Stated here because the constructor requires
+      // every field, so the fixture cannot drift from what a new comp gets.
+      background: F32Array4(Float32List.fromList([0, 0, 0, 1])),
+      shutterAngle: 180,
+      motionBlurSamples: 16,
     );
 
 Future<void> main() async {
