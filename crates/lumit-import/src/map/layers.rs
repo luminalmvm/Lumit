@@ -142,6 +142,9 @@ pub(crate) fn map_layer(
         masks,
         paint: Vec::new(),
         effects,
+        // AE has no driver graph, so an import never produces one (K-471 §4);
+        // the round trip is untouched.
+        graph: Default::default(),
         switches: switches(conv, &path, ae),
         extra: ae_map(vec![
             ("index", serde_json::json!(index)),

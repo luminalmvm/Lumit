@@ -766,6 +766,7 @@ mod tests {
 
     fn test_layer(item: Uuid) -> Layer {
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "clip.mp4".into(),
@@ -1238,6 +1239,7 @@ mod tests {
                 comp: comp_id,
                 index: 0,
                 layer: Box::new(Layer {
+                    graph: Default::default(),
                     markers: Vec::new(),
                     id: seq_id,
                     name: "Seq".into(),
@@ -1427,6 +1429,7 @@ mod tests {
                 comp: comp_id,
                 index: 0,
                 layer: Box::new(Layer {
+                    graph: Default::default(),
                     markers: Vec::new(),
                     id: cam_id,
                     name: "Camera".into(),

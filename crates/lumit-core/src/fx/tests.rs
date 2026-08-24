@@ -62,6 +62,7 @@ fn resolve_stack_temporal_named(
 ) -> Vec<(uuid::Uuid, ShapedOp)> {
     let (ids, resolved) = super::resolve_stack_temporal_named(
         effects,
+        super::ResolvedDrivers::NONE,
         sample_lt,
         frame_lt,
         diag_px,
@@ -404,6 +405,7 @@ fn posterize_sample_times_snap_covered_layers_to_the_grid() {
     use crate::time::{CompTime, Rational};
     let secs = |n: i64, d: i64| CompTime(Rational::new(n, d).unwrap());
     let layer = |kind: LayerKind, effects: Vec<EffectInstance>| Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: uuid::Uuid::now_v7(),
         name: "l".into(),
@@ -4513,6 +4515,7 @@ fn marker_rig(
         extra: serde_json::Map::new(),
     };
     let layer = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: uuid::Uuid::now_v7(),
         name: "l".into(),
@@ -4804,6 +4807,7 @@ fn an_orchestration_only_effect_resolves_to_no_op_at_all() {
         let e = instantiate(name).unwrap_or_else(|| panic!("{name} does not instantiate"));
         let (ids, ops) = super::resolve_stack_temporal_named(
             std::slice::from_ref(&e),
+            super::ResolvedDrivers::NONE,
             0.0,
             0.0,
             1000.0,
@@ -8019,6 +8023,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
 
     let mut light_layer = |kind: LightKind, x: f64, half: f64, visible: bool| {
         let mut l = Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: uuid::Uuid::now_v7(),
             name: "Light".into(),
@@ -10781,13 +10786,16 @@ fn every_effect_carries_a_matte_row() {
     use crate::fx::MatteRole;
     for def in BUILTIN_DEFS.iter() {
         let s = def.schema();
-        // The Controls family opts out entirely (K-414), and so does the Camera
-        // track (K-417) — a handle for a background analysis rather than an
-        // image operation. They are the answer to the question `MatteRole::None`
-        // was written for: an effect that touches no pixel cannot be driven by a
-        // picture, so a Matte row on one would be a control that could never do
-        // anything. Every *image* effect below still has to carry one.
-        if s.category == FxCategory::Controls || s.match_name == "camera_track" {
+        // The Controls family opts out entirely (K-414), the Drivers family with
+        // it (K-471), and so does the Camera track (K-417) — a handle for a
+        // background analysis rather than an image operation. They are the
+        // answer to the question `MatteRole::None` was written for: an effect
+        // that touches no pixel cannot be driven by a picture, so a Matte row on
+        // one would be a control that could never do anything. Every *image*
+        // effect below still has to carry one.
+        if matches!(s.category, FxCategory::Controls | FxCategory::Drivers)
+            || s.match_name == "camera_track"
+        {
             assert_eq!(
                 s.matte,
                 MatteRole::None,
@@ -12163,6 +12171,7 @@ fn a_control_effect_holds_its_value_and_draws_nothing() {
 
         let (ids, ops) = super::resolve_stack_temporal_named(
             std::slice::from_ref(&e),
+            super::ResolvedDrivers::NONE,
             0.0,
             0.0,
             1000.0,
@@ -12283,6 +12292,7 @@ fn a_button_is_a_row_with_no_value() {
     assert!(!def.is_image_op(), "the Camera track draws nothing");
     let (ids, ops) = super::resolve_stack_temporal_named(
         std::slice::from_ref(&e),
+        super::ResolvedDrivers::NONE,
         0.0,
         0.0,
         1000.0,
@@ -12418,6 +12428,7 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
         // nothing about the undeclared rows reaches it.
         let (ids, ops) = super::resolve_stack_temporal_named(
             &list,
+            super::ResolvedDrivers::NONE,
             0.0,
             0.0,
             1000.0,

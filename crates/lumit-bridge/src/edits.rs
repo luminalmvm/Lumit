@@ -67,6 +67,7 @@ pub(crate) fn base_layer(
     };
     Layer {
         markers: Vec::new(),
+        graph: Default::default(),
         id: Uuid::now_v7(),
         name,
         kind,
@@ -165,5 +166,6 @@ pub(crate) fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
         FxCategory::Transition => "transition",
         FxCategory::Utility => "utility",
         FxCategory::Controls => "controls",
+        FxCategory::Drivers => "drivers",
     }
 }

@@ -74,6 +74,7 @@ fn solid(def: Uuid, name: &str, colour: [f32; 4], w: u32, h: u32) -> ProjectItem
 
 fn layer(name: &str, kind: LayerKind) -> Layer {
     Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: name.into(),

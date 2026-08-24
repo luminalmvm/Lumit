@@ -19,6 +19,14 @@
 //! effect's behaviour, its right side the parameter block `#[derive(Effect)]`
 //! generated the declaration from.
 
+use super::drivers::{
+    audio_level::{AudioLevel, AudioLevelDef},
+    colour_cycle::{ColourCycle, ColourCycleDef},
+    math::{Math, MathDef},
+    remap::{Remap, RemapDef},
+    smooth::{Smooth, SmoothDef},
+    wiggle::{Wiggle, WiggleDef},
+};
 use super::effects::{
     accumulation_mb::{AccumulationMb, AccumulationMbDef},
     add_grain::{AddGrain, AddGrainDef},
@@ -241,4 +249,14 @@ crate::catalogue![
     CheckboxControlDef => CheckboxControl,
     ColourControlDef => ColourControl,
     PointControlDef => PointControl,
+    // The Drivers family (K-471), last of all: a driver is added from the Graph
+    // panel's own search rather than from the Add-effect menu, and its entries
+    // declare a data signature instead of an image kernel. The order inside it
+    // is the order docs/impl/node-graph.md §1.3 lists them.
+    WiggleDef => Wiggle,
+    AudioLevelDef => AudioLevel,
+    ColourCycleDef => ColourCycle,
+    MathDef => Math,
+    RemapDef => Remap,
+    SmoothDef => Smooth,
 ];

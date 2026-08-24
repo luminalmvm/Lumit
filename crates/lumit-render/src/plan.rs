@@ -757,6 +757,7 @@ mod tests {
         use std::collections::HashMap;
 
         let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "l".into(),
@@ -902,6 +903,7 @@ mod tests {
         use std::collections::HashMap;
 
         let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "l".into(),
@@ -1013,6 +1015,7 @@ mod tests {
         use std::collections::HashMap;
 
         let layer = |kind: LayerKind| Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "l".into(),

@@ -665,15 +665,22 @@ pub fn build_comp_draws_at(
                 comp_time: t_comp,
                 current_depth: 0,
             });
+            // The referenced layer's own driver graph too (K-471): a wire
+            // substitutes where a keyframe would have been read, so it belongs
+            // to whichever stack is being resolved.
+            let drivers = lumit_core::fx::resolve_drivers(&src.graph, slt, context.clone(), None);
             (
-                lumit_core::fx::resolve_stack(
+                lumit_core::fx::resolve_stack_temporal_named(
                     &src.effects,
+                    &drivers,
+                    slt,
                     slt,
                     comp_diag * scale,
                     scale,
                     &markers,
                     context,
-                ),
+                )
+                .1,
                 lut_files(&src.effects, slt),
             )
         } else {
@@ -737,39 +744,52 @@ pub fn build_comp_draws_at(
     // are not special cases: they are effects whose matte means something deeper
     // than strength, and the only thing that differs is which parameter holds
     // the reference.
-    let mattes_for =
-        |owner: uuid::Uuid, effects: &[lumit_core::model::EffectInstance]| -> Vec<LayerInputDraw> {
-            use lumit_core::model::EffectNamespace;
-            effects
-                .iter()
-                .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-                .filter_map(|e| {
-                    let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
-                    let param = def.schema().matte.param()?;
-                    def.is_image_op().then_some((e, param))
-                })
-                .map(|(e, param)| {
-                    // A row the panel does not show, or shows greyed, is a row
-                    // nobody meant: the Lens flare's Matte rows only exist while
-                    // its Source type is Matte, and rendering the layer one names
-                    // in Manual mode would cost a whole pass per frame for a
-                    // picture the kernel ignores. One rule, every effect — the
-                    // flare's own named gate, generalised.
-                    if !lumit_core::fx::param_visible(e, param)
-                        || !lumit_core::fx::param_enabled(e, param)
-                    {
-                        return LayerInputDraw::Absent;
-                    }
-                    // "This layer" (K-288): a matte pointed at the layer the
-                    // effect is on is the effect's own input, not a re-render —
-                    // on an adjustment layer, the composite below.
-                    if e.layer_ref(param) == Some(owner) {
-                        return LayerInputDraw::ThisLayer;
-                    }
-                    layer_slot(e, param).map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
-                })
-                .collect()
-        };
+    // `graph` carries the layer's driver wiring: an in-graph **SourceMatte**
+    // edge (K-471 §1.4) feeds an effect the layer's OWN masked source alpha at
+    // that point in the chain, and overrides the Matte parameter while it
+    // exists. That is precisely what K-288's "this layer" already means to the
+    // render — the effect's own input rather than a second pass over another
+    // layer — so the wire lowers to the answer this builder has always had, and
+    // nothing downstream learns a new shape.
+    let mattes_for = |owner: uuid::Uuid,
+                      effects: &[lumit_core::model::EffectInstance],
+                      graph: &lumit_core::graph::LayerGraph|
+     -> Vec<LayerInputDraw> {
+        use lumit_core::model::EffectNamespace;
+        effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter_map(|e| {
+                let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                let param = def.schema().matte.param()?;
+                def.is_image_op().then_some((e, param))
+            })
+            .map(|(e, param)| {
+                // The wire wins over the parameter while it is there.
+                if graph.source_matte(e.id) {
+                    return LayerInputDraw::ThisLayer;
+                }
+                // A row the panel does not show, or shows greyed, is a row
+                // nobody meant: the Lens flare's Matte rows only exist while
+                // its Source type is Matte, and rendering the layer one names
+                // in Manual mode would cost a whole pass per frame for a
+                // picture the kernel ignores. One rule, every effect — the
+                // flare's own named gate, generalised.
+                if !lumit_core::fx::param_visible(e, param)
+                    || !lumit_core::fx::param_enabled(e, param)
+                {
+                    return LayerInputDraw::Absent;
+                }
+                // "This layer" (K-288): a matte pointed at the layer the
+                // effect is on is the effect's own input, not a re-render —
+                // on an adjustment layer, the composite below.
+                if e.layer_ref(param) == Some(owner) {
+                    return LayerInputDraw::ThisLayer;
+                }
+                layer_slot(e, param).map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
+            })
+            .collect()
+    };
 
     // **The mask paths — the geometry carriage** (K-408, docs/08 §1.2). One
     // polyline per enabled built-in whose declaration names a MaskPath row AND
@@ -983,6 +1003,12 @@ pub fn build_comp_draws_at(
                     let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
                     lumit_core::fx::resolve_stack_temporal_named(
                         &layer.effects,
+                        &lumit_core::fx::resolve_drivers(
+                            &layer.graph,
+                            effect_lt,
+                            context.clone(),
+                            None,
+                        ),
                         effect_lt,
                         frame_lt,
                         comp_diag,
@@ -1104,7 +1130,7 @@ pub fn build_comp_draws_at(
                     // `light_wrap` effects, 1:1 with the stack's
                     // layer-input-consuming ops (docs/08 §3.22, §3.28).
                     dof_inputs: dof_inputs_for(layer.id, &layer.effects),
-                    mattes: mattes_for(layer.id, &layer.effects),
+                    mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
                     mask_paths: mask_paths_for(layer, lt),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // The adjust stack resolves at comp scale but runs on
@@ -1183,15 +1209,20 @@ pub fn build_comp_draws_at(
                 let scale = m_w as f32 / m_nat.0.max(1.0);
 
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                let drivers =
+                    lumit_core::fx::resolve_drivers(&src.graph, mlt, context.clone(), None);
                 (
-                    lumit_core::fx::resolve_stack(
+                    lumit_core::fx::resolve_stack_temporal_named(
                         &src.effects,
+                        &drivers,
+                        mlt,
                         mlt,
                         comp_diag * scale,
                         scale,
                         &markers,
                         context.clone(),
-                    ),
+                    )
+                    .1,
                     lut_files(&src.effects, mlt),
                 )
             } else {
@@ -1250,6 +1281,12 @@ pub fn build_comp_draws_at(
                 let markers = lumit_core::fx::MarkerContext::for_layer(comp, layer);
                 lumit_core::fx::resolve_stack_temporal_named(
                     &layer.effects,
+                    &lumit_core::fx::resolve_drivers(
+                        &layer.graph,
+                        effect_lt,
+                        context.clone(),
+                        None,
+                    ),
                     effect_lt,
                     frame_lt,
                     comp_diag * scale,
@@ -1358,7 +1395,7 @@ pub fn build_comp_draws_at(
             // §3.22, §3.28); built the same way export does, so the two blur
             // identically (K-031).
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
-            mattes: mattes_for(layer.id, &layer.effects),
+            mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
             mask_paths: mask_paths_for(layer, lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
@@ -1696,6 +1733,7 @@ mod parent_placement_tests {
 
     fn layer(px: f64, py: f64, parent: Option<uuid::Uuid>) -> Layer {
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: uuid::Uuid::now_v7(),
             name: "l".into(),
@@ -1849,6 +1887,7 @@ mod render_below_at_tests {
 
     fn text_layer(x: f64) -> Layer {
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "t".into(),
@@ -2281,6 +2320,7 @@ mod render_below_at_tests {
             }
         }
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "posterize".into(),
@@ -2599,6 +2639,7 @@ mod render_below_at_tests {
             }
         }
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "accumulation".into(),

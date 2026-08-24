@@ -55,6 +55,88 @@ pub struct ResolveCx<'a> {
     pub context: Arc<ExpressionContext>,
 }
 
+/// What an entry in the catalogue *produces* (K-471 §1.3).
+///
+/// **In plain terms.** Everything in the catalogue has always been a picture
+/// operation: pixels in, pixels out. A **driver** is the other kind — no WGSL,
+/// no CPU pixel path, just a scalar or colour worked out at resolve time and
+/// handed to whichever parameter is wired to it. Declaring which one an entry
+/// is, rather than inferring it, is what lets the whole K-381 registry
+/// machinery carry drivers for free: schema-declared parameters, catalogue
+/// generation, `list_parameters`, and the Effect-controls rows all work
+/// unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signature {
+    /// A picture operation — every effect until now, and the default.
+    Image,
+    /// A driver: no image kernel, and these named output ports.
+    Data {
+        /// The output ports, in the order the node draws them.
+        outputs: &'static [(&'static str, super::schema::PortType)],
+    },
+}
+
+impl Signature {
+    /// The type of the named output port, or `None` for a port this signature
+    /// does not declare.
+    #[must_use]
+    pub fn output(self, port: &str) -> Option<super::schema::PortType> {
+        match self {
+            Signature::Image => None,
+            Signature::Data { outputs } => outputs
+                .iter()
+                .find(|(id, _)| *id == port)
+                .map(|(_, ty)| *ty),
+        }
+    }
+
+    /// This signature's output ports, empty for an image operation.
+    #[must_use]
+    pub fn outputs(self) -> &'static [(&'static str, super::schema::PortType)] {
+        match self {
+            Signature::Image => &[],
+            Signature::Data { outputs } => outputs,
+        }
+    }
+}
+
+/// What a driver is handed when it computes its outputs (K-471 §2.1).
+pub struct DriverCx<'a> {
+    /// The driver instance's id — Wiggle seeds its noise from it, which is what
+    /// makes two Wiggles on one layer wobble differently and the same Wiggle
+    /// wobble identically on every machine and in every render.
+    pub node: uuid::Uuid,
+    /// The driver instance itself — its stored properties in full, which is
+    /// what lets Audio level read its layer reference (a binding the resolved
+    /// bag deliberately does not carry, K-387).
+    pub inst: &'a EffectInstance,
+    /// Layer time, seconds.
+    pub lt: f64,
+    /// This driver's own parameters, already evaluated at `lt` and with any
+    /// incoming wires substituted in.
+    pub params: super::params::Params<'a>,
+    /// Decoded audio, where the host has any to offer. `None` — no host, no
+    /// footage, a dangling layer reference — reads as silence, which is the
+    /// documented degrade rather than a fault.
+    pub audio: Option<&'a dyn AudioTap>,
+    /// The value feeding the named **input** port at another layer time, for
+    /// the drivers that read their input over a window rather than at a point.
+    /// `None` when the port is unwired or the evaluation budget is spent.
+    pub sample_input: &'a dyn Fn(&str, f64) -> Option<super::params::Value>,
+}
+
+/// Where Audio level gets its samples (K-471 §1.3).
+///
+/// The engine model cannot decode audio — `lumit-core` knows nothing of media —
+/// so the host supplies this and the driver does the maths, which is what keeps
+/// the windowed RMS testable against a synthesised tone in this crate.
+pub trait AudioTap: Sync {
+    /// Mono samples of `layer`'s audio covering `[from, to)` in **layer time**,
+    /// appended to `out` in order, and the rate they were taken at. `None` for
+    /// a layer with no audio, or a reference that names nothing.
+    fn samples(&self, layer: uuid::Uuid, from: f64, to: f64, out: &mut Vec<f32>) -> Option<f64>;
+}
+
 /// One effect's behaviour: everything the engine needs of it that is not the
 /// declaration itself.
 ///
@@ -93,6 +175,37 @@ pub trait EffectDef: Sync + Send + 'static {
     /// registry-agreement test excuses from needing a GPU entry.
     fn is_image_op(&self) -> bool {
         true
+    }
+
+    /// What this entry produces (K-471 §1.3). Every effect is
+    /// [`Signature::Image`]; a driver declares its output ports.
+    fn signature(&self) -> Signature {
+        Signature::Image
+    }
+
+    /// Compute a driver's outputs, pushing `(port id, value)` for each one it
+    /// declares. Every image effect pushes nothing, which is the default.
+    ///
+    /// **Deterministic by construction**: it sees the frame's time, its own
+    /// parameters and its own node id, and nothing else — no wall clock, no
+    /// render order, no shared state. Two renders of the same project agree bit
+    /// for bit, and export equals preview (K-031).
+    fn eval_driver(
+        &self,
+        _cx: &DriverCx<'_>,
+        _push: &mut dyn FnMut(&'static str, super::params::Value),
+    ) {
+    }
+
+    /// How far either side of the frame this driver reads its input, in seconds
+    /// (K-471 §2.3) — the **temporal declaration**.
+    ///
+    /// Zero for a pointwise driver, which is all but two of them: Smooth reads
+    /// its input over a window, and Audio level reads sound around the frame.
+    /// The declared window folds the sampled range into the frame key, so a
+    /// cached frame can never outlive the thing it was smoothed from.
+    fn driver_window(&self, _p: super::params::Params<'_>) -> f64 {
+        0.0
     }
 }
 

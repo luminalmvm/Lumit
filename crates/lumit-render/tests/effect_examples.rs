@@ -300,6 +300,7 @@ fn rat(num: i64, den: i64) -> Rational {
 
 fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
     Layer {
+        graph: Default::default(),
         id: id(name),
         name: name.into(),
         kind,

@@ -100,6 +100,40 @@ pub struct ParamPair {
     pub y: &'static str,
 }
 
+/// What a socket on the graph canvas carries (K-472,
+/// [impl/node-graph.md](../../../docs/impl/node-graph.md) §6.1).
+///
+/// # In plain terms
+///
+/// Seven kinds of thing can travel down a wire, and the wire's **colour is its
+/// kind** — that is the whole legend, so nothing has to be labelled. Seven
+/// types wear five colours, grouped as the approved NodeGraph drawing groups
+/// them: image with matte, number, colour, shape with points, audio. The colour
+/// itself is a theme token the frontend picks from this enum; **no colour ever
+/// crosses the bridge**.
+///
+/// [`PortType::Points`] lands with the first engine commit even though nothing
+/// emits one yet, so the type system is complete before Particulate (K-446)
+/// arrives to consume it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortType {
+    /// A picture.
+    Image,
+    /// Coverage — a picture read for how much of it there is, not what colour.
+    Matte,
+    /// One number.
+    Number,
+    /// Scene-linear RGBA.
+    Colour,
+    /// Vector geometry.
+    Shape,
+    /// A points stream: one frame's particles or instances (K-446). Evaluated
+    /// data like an image, never stored in the document.
+    Points,
+    /// Sound.
+    Audio,
+}
+
 /// Parameter type + defaults/ranges (docs/08 §1.2: sliders may be exceeded
 /// by typing; hard ranges may not).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -324,6 +358,34 @@ pub enum ParamKind {
     Action,
 }
 
+impl ParamKind {
+    /// The socket type a driver wire may land on, or `None` for a control no
+    /// wire can drive (K-472 §6.1).
+    ///
+    /// Number accepts number and colour accepts colour; nothing else is
+    /// drivable in v1. A switch, a dropdown, a seed, a file, a layer, a mask,
+    /// a curve and a button all answer `None` — deliberately, because a wire
+    /// into one of them would be a wire whose meaning nobody has decided.
+    #[must_use]
+    pub const fn port_type(self) -> Option<PortType> {
+        match self {
+            ParamKind::Float { .. }
+            | ParamKind::Slider { .. }
+            | ParamKind::Int { .. }
+            | ParamKind::Angle { .. } => Some(PortType::Number),
+            ParamKind::Colour { .. } => Some(PortType::Colour),
+            ParamKind::Bool { .. }
+            | ParamKind::Choice { .. }
+            | ParamKind::Seed
+            | ParamKind::File { .. }
+            | ParamKind::Layer { .. }
+            | ParamKind::MaskPath { .. }
+            | ParamKind::Curve
+            | ParamKind::Action => None,
+        }
+    }
+}
+
 /// How a transform- or displacement-domain effect treats the border pixels
 /// its warp reveals (P3, K-145): the one reusable Edges control, shared by
 /// the blur family (docs/08 §3.8) and Shake (§3.4). The `u32` codes are the
@@ -492,6 +554,17 @@ pub enum FxCategory {
     /// rigs in the world are wired through them. They render nothing at all, so
     /// no other category describes them.
     Controls,
+    /// The **drivers** (K-471): the nodes that make a *value* rather than a
+    /// picture — Wiggle, Audio level, Colour cycle, Math, Remap, Smooth. Each
+    /// declares a [`Signature::Data`](crate::fx::Signature::Data) instead of an
+    /// image kernel, and a wire from one into an effect's socket makes that
+    /// parameter follow the value instead of its keyframes.
+    ///
+    /// Kin to [`FxCategory::Controls`] and deliberately not folded into it: a
+    /// Slider control *holds* a number someone typed, a driver *computes* one
+    /// every frame, and a menu that mixed the two would be a menu that could
+    /// not say which.
+    Drivers,
 }
 
 impl FxCategory {
@@ -507,11 +580,12 @@ impl FxCategory {
             FxCategory::Transition => "Transition",
             FxCategory::Utility => "Utility",
             FxCategory::Controls => "Controls",
+            FxCategory::Drivers => "Drivers",
         }
     }
 
     /// Every category, in menu order.
-    pub const ALL: [FxCategory; 9] = [
+    pub const ALL: [FxCategory; 10] = [
         FxCategory::BlurSharpen,
         FxCategory::Colour,
         FxCategory::Distortion,
@@ -524,6 +598,10 @@ impl FxCategory {
         // appearance in the catalogue, and the Controls family is appended at
         // the end of it (K-137, K-414).
         FxCategory::Controls,
+        // Last of all: a driver is added from the Graph panel's own search
+        // rather than from the Add-effect menu, so it sits after the family it
+        // is kin to (K-471).
+        FxCategory::Drivers,
     ];
 }
 

@@ -3576,6 +3576,15 @@ mod tests {
             if !has_file && !extra_layer {
                 continue;
             }
+            // A **driver** reads its layer reference on the CPU, at resolve
+            // time (K-471): Audio level measures the referenced layer's sound
+            // and hands out a number, so there is no pass to receive a picture
+            // and no side table to fill. Anything that draws nothing is excused
+            // for the same reason `every_migrated_effect_has_a_gpu_entry`
+            // excuses it.
+            if !def.is_image_op() {
+                continue;
+            }
             let gpu = gpu_effect(name).unwrap_or_else(|| {
                 panic!("{name} takes a file or layer input but has no GPU pass to receive it")
             });

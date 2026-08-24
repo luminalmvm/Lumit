@@ -32,6 +32,11 @@ pub enum OpError {
     /// the link with [`Op::SetCameraSolveLink`] is always allowed.
     #[error("the camera's transform is derived from its solve link")]
     CameraLinked,
+    /// The driver graph breaks one of §1.5's rules (K-471). Refusal rather than
+    /// degradation: none of these states can be reached by deleting some other
+    /// entity, so each one is an edit to decline.
+    #[error("{0}")]
+    InvalidGraph(#[from] crate::graph::GraphError),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -128,6 +133,26 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         effects: Vec<crate::model::EffectInstance>,
+    },
+    /// Replace a layer's whole **driver graph** (K-471 §3): its drivers, its
+    /// wires and its canvas positions.
+    ///
+    /// The whole-graph commit, shaped exactly like `SetLayerEffects` is the
+    /// whole-stack commit. Add a driver, remove one, connect, disconnect, drag a
+    /// node, toggle exposure: each gesture is one of these and one undo step.
+    /// Auto-wire folds its edge into the same commit as the add; healing a
+    /// deleted driver is dropping its edges in the same commit.
+    ///
+    /// **Refused, not degraded**, when the graph breaks a rule
+    /// ([`crate::graph::LayerGraph::validate`]): a wire to a missing node or
+    /// port, two ports of different types, a socket given a second wire, or a
+    /// loop among the drivers. Every one of those can only be reached by an
+    /// edit this application made, so a calm message is the honest answer where
+    /// a dangling matte's silent no-op is not.
+    SetLayerGraph {
+        comp: Uuid,
+        layer: Uuid,
+        graph: Box<crate::graph::LayerGraph>,
     },
     /// The fx switch: bypass a layer's whole effect stack (docs/08 §1.5).
     SetLayerFx {
@@ -422,6 +447,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerPaint { comp, layer, .. }
         | Op::SetShapeContents { comp, layer, .. }
         | Op::SetLayerEffects { comp, layer, .. }
+        | Op::SetLayerGraph { comp, layer, .. }
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
         | Op::SetSequenceClips { comp, layer, .. }
@@ -735,6 +761,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 effects: previous,
+            })
+        }
+        Op::SetLayerGraph { comp, layer, graph } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            // Checked against the stack it will sit beside, before anything is
+            // swapped: a refused graph must leave the document exactly as it
+            // was, or an undo would restore a state that was never on screen.
+            graph.validate(&l.effects)?;
+            let previous = std::mem::replace(&mut l.graph, (**graph).clone());
+            Ok(Op::SetLayerGraph {
+                comp: *comp,
+                layer: *layer,
+                graph: Box::new(previous),
             })
         }
         Op::SetLayerFx { comp, layer, fx } => {

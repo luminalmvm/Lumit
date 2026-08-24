@@ -2473,6 +2473,7 @@ mod tests {
         }));
         let comp_id = Uuid::now_v7();
         let layer = lumit_core::model::Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "Solid".into(),
@@ -2577,6 +2578,7 @@ mod tests {
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
     fn push_layer(doc: &mut Document, comp: Uuid, kind: LayerKind) {
         let layer = lumit_core::model::Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "layer".into(),
@@ -3152,6 +3154,7 @@ mod tests {
             .find(|i| matches!(i, ProjectItem::Composition(_)))
         {
             c.layers.push(lumit_core::model::Layer {
+                graph: Default::default(),
                 markers: Vec::new(),
                 id: Uuid::now_v7(),
                 name: "gone.mp4".into(),
@@ -4142,6 +4145,7 @@ surfaces:
     /// own natural size, everything else the model's defaults.
     fn matrix_layer(name: &str, kind: LayerKind, w: u32, h: u32) -> lumit_core::model::Layer {
         lumit_core::model::Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: name.into(),

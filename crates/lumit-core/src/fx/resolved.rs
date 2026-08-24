@@ -3,6 +3,7 @@ use std::sync::Arc;
 use super::*;
 use crate::{
     expression::ExpressionContext,
+    graph::NodeRef,
     model::{EffectInstance, EffectNamespace, EffectValue},
 };
 use uuid::Uuid;
@@ -228,7 +229,17 @@ pub fn resolve_stack(
 ) -> ResolvedStack {
     // The same walk, handed one time for every effect: when `sample_lt ==
     // frame_lt` the temporal branch cannot fire, so this is the plain resolve.
-    resolve_stack_temporal_named(effects, lt, lt, diag_px, px_scale, markers, context).1
+    resolve_stack_temporal_named(
+        effects,
+        ResolvedDrivers::NONE,
+        lt,
+        lt,
+        diag_px,
+        px_scale,
+        markers,
+        context,
+    )
+    .1
 }
 
 /// Resolve a layer's live stack for a held/sub-frame re-render (docs/impl/
@@ -249,7 +260,14 @@ pub fn resolve_stack_temporal(
     context: Arc<ExpressionContext>,
 ) -> ResolvedStack {
     resolve_stack_temporal_named(
-        effects, sample_lt, frame_lt, diag_px, px_scale, markers, context,
+        effects,
+        ResolvedDrivers::NONE,
+        sample_lt,
+        frame_lt,
+        diag_px,
+        px_scale,
+        markers,
+        context,
     )
     .1
 }
@@ -263,9 +281,16 @@ pub fn resolve_stack_temporal(
 /// drops placeholders, unknown names and the orchestration-only effects. So the
 /// one walk that knows both answers reports both, and everything else stays 1:1
 /// by construction.
+///
+/// `drivers` is the layer's driver graph, already evaluated at this frame
+/// ([`resolve_drivers`](crate::fx::resolve_drivers)): a parameter a wire feeds
+/// takes the wire's value instead of its own keyframes, substituted here, before
+/// anything packs into a uniform (K-471 §2.1). [`ResolvedDrivers::NONE`] is
+/// every layer that has never opened the Graph panel.
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_stack_temporal_named(
     effects: &[EffectInstance],
+    drivers: &ResolvedDrivers,
     sample_lt: f64,
     frame_lt: f64,
     diag_px: f32,
@@ -302,12 +327,14 @@ pub fn resolve_stack_temporal_named(
             resolve_into_arena(
                 def,
                 e,
+                NodeRef::Effect(e.id),
                 lt,
                 diag_px,
                 px_scale,
                 markers,
                 &mut out,
                 context.clone(),
+                drivers,
             );
             ids.push(e.id);
         }
@@ -347,19 +374,33 @@ pub fn resolve_stack_temporal_named(
 /// carry: values derived from layer time, the marker context or a whole
 /// keyframed track ([`EffectDef::resolve_derived`], K-385). Almost every effect
 /// pushes nothing there.
+///
+/// **A driven parameter never reads its keyframes.** A wire from a driver into
+/// a socket substitutes here — after the property would have been evaluated,
+/// before the raster conversion and before anything packs — so a driven number
+/// travels through the identical `Unit` arm a typed one does, and the kernels
+/// cannot tell the two apart (K-471 §2.1). This is also the one walk drivers
+/// themselves resolve through, `node` naming which of the two they are.
 #[allow(clippy::too_many_arguments)]
-fn resolve_into_arena(
+pub(super) fn resolve_into_arena(
     def: &'static dyn EffectDef,
     e: &EffectInstance,
+    node: NodeRef,
     lt: f64,
     diag_px: f32,
     px_scale: f32,
     markers: &MarkerContext,
     bags: &mut ResolvedStack,
     context: Arc<ExpressionContext>,
+    drivers: &ResolvedDrivers,
 ) {
     bags.begin(def, e.id);
     for p in def.schema().params {
+        let driven = if drivers.is_empty() {
+            None
+        } else {
+            drivers.param(node, ParamId::new(p.id))
+        };
         // A number the instance does not carry reads its declared default: a
         // project saved before the parameter existed simply renders (K-258).
         let spatial = |v: f64| -> f32 {
@@ -386,11 +427,15 @@ fn resolve_into_arena(
             ParamKind::Float { default, .. }
             | ParamKind::Slider { default, .. }
             | ParamKind::Angle { default, .. } => Value::Float(spatial(
-                e.float_at_with_context(p.id, lt, context.clone())
+                driven
+                    .map(|v| f64::from(v.as_f32()))
+                    .or_else(|| e.float_at_with_context(p.id, lt, context.clone()))
                     .unwrap_or(default),
             )),
             ParamKind::Int { default, .. } => Value::Int(
-                e.float_at_with_context(p.id, lt, context.clone())
+                driven
+                    .map(|v| f64::from(v.as_f32()))
+                    .or_else(|| e.float_at_with_context(p.id, lt, context.clone()))
                     .map_or(default as i32, |v| v.round() as i32),
             ),
             ParamKind::Bool { default } => Value::Bool(e.bool_of(p.id).unwrap_or(default)),
@@ -398,9 +443,14 @@ fn resolve_into_arena(
                 Some(EffectValue::Choice(c)) => *c,
                 _ => default,
             }),
-            ParamKind::Colour { default, .. } => {
-                Value::Colour(e.colour_at(p.id, lt).unwrap_or(default).map(|c| c as f32))
-            }
+            ParamKind::Colour { default, .. } => match driven {
+                // A colour socket takes a colour and nothing else (K-472 §6.1);
+                // a wire of any other type was refused at commit, and a stale
+                // one falls through to the stored keyframes rather than
+                // painting a number.
+                Some(Value::Colour(c)) => Value::Colour(c),
+                _ => Value::Colour(e.colour_at(p.id, lt).unwrap_or(default).map(|c| c as f32)),
+            },
             ParamKind::Seed => Value::Int(match e.param(p.id) {
                 Some(EffectValue::Seed(s)) => *s as i32,
                 _ => 0,

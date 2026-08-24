@@ -44,6 +44,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
 
     let comp_id = Uuid::now_v7();
     let layer = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "clip.mp4".into(),

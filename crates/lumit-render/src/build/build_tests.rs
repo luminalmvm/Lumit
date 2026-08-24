@@ -23,6 +23,7 @@ use uuid::Uuid;
 fn footage_geometry_uses_native_size_not_decoded_size() {
     let item = Uuid::now_v7();
     let layer = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "clip".into(),
@@ -101,6 +102,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
 fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     use lumit_core::model::{ProjectItem, TextDocument};
     let text_layer = || Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "inner".into(),
@@ -251,6 +253,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
     use lumit_core::model::TransformProp;
     let item = Uuid::now_v7();
     let layer = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "clip".into(),
@@ -328,6 +331,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
 fn a_live_adjustment_layer_emits_a_staging_draw() {
     let solid_def = Uuid::now_v7();
     let base = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "under".into(),
@@ -448,6 +452,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
 
     let solid_def = Uuid::now_v7();
     let base = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "under".into(),
@@ -589,6 +594,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
 fn a_paint_stroke_reaches_the_layers_pixels() {
     let solid_id = Uuid::now_v7();
     let mut layer = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "solid".into(),
@@ -701,6 +707,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
         },
     ));
     let base = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "under".into(),
@@ -829,6 +836,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
         },
     ));
     let mut layer = Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: "masked".into(),

@@ -425,6 +425,7 @@ mod tests {
         transform.position_x.animation = Animation::Expression(expression.into());
 
         crate::model::Layer {
+            graph: Default::default(),
             id: Uuid::now_v7(),
             name: name.into(),
             kind: LayerKind::Solid {

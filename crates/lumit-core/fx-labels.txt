@@ -1,6 +1,7 @@
 # Every user-facing label the effects schema can send (K-303).
 # Generated - do not edit. To refresh after a schema change:
 #   cargo test -p lumit-core regenerate_fx_label_fixture -- --ignored
+A
 Add
 Add grain
 All edges
@@ -25,6 +26,9 @@ Arch
 As the lens file
 Aspect ratio
 Asymmetric
+Audio
+Audio level
+B
 Background
 Backwards
 Basic
@@ -71,6 +75,7 @@ Checkbox
 Checkbox control
 Chromatic aberration
 Circle
+Clamp
 Clip black
 Clip rollback
 Clip white
@@ -84,6 +89,7 @@ Colour balance
 Colour burn
 Colour control
 Colour correction
+Colour cycle
 Colour dodge
 Colour edge
 Colour noise
@@ -142,6 +148,7 @@ Distribution
 Divide
 Dominant motion
 Draft
+Drivers
 Drop shadow
 Duration
 Echo
@@ -261,6 +268,8 @@ Hue
 Hue and saturation
 Hue shift
 In front
+In high
+In low
 Inflate
 Inner radius
 Input black
@@ -330,13 +339,16 @@ Map white to
 Mask
 Mask/Path
 Master
+Math
 Matte
 Matte key
 Max ghosts
+Maximum
 Maximum signal
 Median
 Midtone contrast
 Midtones
+Minimum
 Mirror
 Mirror edges
 Mix
@@ -362,10 +374,13 @@ On transparent
 Opacity
 Opacity %
 Operate on alpha
+Operation
 Orange
 Orientation
 Origin x
 Origin y
+Out high
+Out low
 Outer radius
 Output black
 Output height
@@ -393,6 +408,7 @@ Position x
 Position y
 Posterize
 Posterize time
+Power
 Preserve luminance
 Preserve luminosity
 Producer x
@@ -407,6 +423,7 @@ Radius
 Ramp
 Random
 Randomness
+Rate
 Rectangular to polar
 Red
 Red blur
@@ -414,6 +431,8 @@ Reds
 Reduce brightness
 Reduce saturation
 Relief
+Remainder
+Remap
 Remove edge leak
 Rendered
 Repeat
@@ -483,6 +502,7 @@ Size
 Slice repeat
 Slider
 Slider control
+Smooth
 Soft colour
 Soft light
 Softness
@@ -602,9 +622,11 @@ Wave warp
 Wave width
 Wavelength
 Width
+Wiggle
 Wiggle type
 Wiggles per second
 Wiggly
+Window
 Wipe
 Wipe angle
 Wipe centre x

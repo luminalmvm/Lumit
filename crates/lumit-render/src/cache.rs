@@ -300,6 +300,7 @@ mod tests {
             background: LinearColour::BLACK,
             work_area: None,
             layers: vec![Layer {
+                graph: Default::default(),
                 markers: Vec::new(),
                 id: Uuid::now_v7(),
                 name: "clip".into(),

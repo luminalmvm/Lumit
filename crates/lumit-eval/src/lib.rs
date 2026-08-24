@@ -275,6 +275,57 @@ fn feed_comp(
     Some(())
 }
 
+/// Fold one wire into the frame key (K-471 §2.3).
+///
+/// Where it comes from and where it goes, tag byte first so two shapes cannot
+/// hash alike, and every port id length-prefixed so `a` into `bc` and `ab` into
+/// `c` are different wires. Node **ids** are hashed here — unlike a mask, where
+/// the position is what counts — because a wire has no position: the id is the
+/// only thing that says which of two identical drivers is feeding the socket.
+fn feed_edge(h: &mut blake3::Hasher, edge: &lumit_core::graph::Edge) {
+    use lumit_core::graph::{InputRef, NodeRef, OutputRef};
+    let name = |h: &mut blake3::Hasher, s: &str| {
+        h.update(&(s.len() as u64).to_le_bytes());
+        h.update(s.as_bytes());
+    };
+    match &edge.from {
+        OutputRef::SourceMatte => {
+            h.update(&[0]);
+        }
+        OutputRef::Driver { node, port } => {
+            h.update(&[1]);
+            h.update(node.as_bytes());
+            name(h, port);
+        }
+    }
+    match &edge.to {
+        InputRef::Matte { effect } => {
+            h.update(&[0]);
+            h.update(effect.as_bytes());
+        }
+        InputRef::Param { node, port } => {
+            h.update(&[1]);
+            match node {
+                NodeRef::Source => {
+                    h.update(&[0]);
+                }
+                NodeRef::Effect(id) => {
+                    h.update(&[1]);
+                    h.update(id.as_bytes());
+                }
+                NodeRef::Driver(id) => {
+                    h.update(&[2]);
+                    h.update(id.as_bytes());
+                }
+                NodeRef::Out => {
+                    h.update(&[3]);
+                }
+            }
+            name(h, port);
+        }
+    }
+}
+
 /// Fold an effect stack into the frame key (docs/08): each live effect's
 /// identity, version and evaluated parameters, plus the local time for seeded
 /// and marker-driven effects (their pixels depend on time even when parameters
@@ -311,11 +362,63 @@ fn feed_effect_stack(
     }
     h.update(b"effects/");
 
+    // **The driver graph** (K-471 §2.3). A wire substitutes a value where a
+    // keyframe would have been read, so the pixels depend on it and the key
+    // must too. The drivers are hashed as the effects are — identity, version
+    // and evaluated parameters, through the very same arms below — which is
+    // what folds Audio level's referenced layer, and with it its audio
+    // fingerprint, into the key for free.
+    //
+    // Three things a driver needs that an effect does not:
+    //
+    // - **The layer time**, because a driver's output moves with it even when
+    //   every stored number holds still. Wiggle wobbles and Colour cycle turns
+    //   on a stack whose parameters are all static, and without this two frames
+    //   of such a layer would share a name.
+    // - **The declared temporal window** (§2.3), so the *range* Smooth averages
+    //   over and Audio level measures across is in the key, not merely the
+    //   number that sets it.
+    // - **The wires themselves**, since moving one changes which parameter
+    //   follows what while changing no stored value anywhere.
+    //
+    // What this does NOT do is substitute: the *stored* value of a driven
+    // parameter is still hashed by the loop below, though the picture no longer
+    // uses it. That costs a needless miss when somebody edits a keyframe under
+    // a live wire, and it can never cause a stale hit — the safe direction, and
+    // far cheaper than running the whole graph inside the key walk.
+    let driven = !marker_layer.graph.edges.is_empty();
+    let drivers: &[lumit_core::model::EffectInstance] = if driven {
+        &marker_layer.graph.nodes
+    } else {
+        &[]
+    };
+    if driven {
+        h.update(b"graph/");
+        feed_f64(h, lt);
+        feed_f64(
+            h,
+            lumit_core::fx::temporal_window(
+                &marker_layer.graph,
+                lt,
+                std::sync::Arc::new(lumit_core::expression::ExpressionContext {
+                    document: doc.clone(),
+                    comp: Some(comp.id),
+                    layer: Some(marker_layer.id),
+                    comp_time: t,
+                    current_depth: 0,
+                }),
+            ),
+        );
+        for edge in &marker_layer.graph.edges {
+            feed_edge(h, edge);
+        }
+    }
+
     // The §1.4 marker context, built lazily (only marker-driven effects read
     // it) by the same shared constructor resolution uses (K-031), so the key
     // hashes exactly the beat times resolution sees.
     let mut mctx: Option<lumit_core::fx::MarkerContext> = None;
-    for e in effects.iter().filter(|e| e.enabled) {
+    for e in effects.iter().chain(drivers).filter(|e| e.enabled) {
         h.update(&[match e.effect.namespace {
             lumit_core::model::EffectNamespace::Builtin => 0,
             lumit_core::model::EffectNamespace::Ofx => 1,
@@ -1337,6 +1440,7 @@ mod tests {
 
     fn text_layer(text: &str, in_s: f64, out_s: f64, offset_s: f64) -> Layer {
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "t".into(),

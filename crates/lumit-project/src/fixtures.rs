@@ -175,6 +175,7 @@ pub fn stress_document(p: &StressParams) -> Document {
                 masks: Vec::new(),
                 paint: Vec::new(),
                 effects: Vec::new(),
+                graph: Default::default(),
                 switches: Switches::default(),
                 extra: serde_json::Map::new(),
             });

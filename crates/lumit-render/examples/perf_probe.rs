@@ -21,6 +21,7 @@ const N: u64 = 90;
 
 fn layer(kind: LayerKind, name: &str) -> lumit_core::model::Layer {
     lumit_core::model::Layer {
+        graph: Default::default(),
         markers: Vec::new(),
         id: Uuid::now_v7(),
         name: name.into(),

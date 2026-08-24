@@ -1575,6 +1575,18 @@ pub struct Layer {
     /// masks, before transform — docs/06 render order).
     #[serde(default)]
     pub effects: Vec<EffectInstance>,
+    /// The layer's **driver graph** (K-471): the drivers it carries, the wires
+    /// from them into parameters and mattes, and where the boxes sit on the
+    /// Graph panel's canvas.
+    ///
+    /// **Additive, and empty by default.** [`Self::effects`] above remains the
+    /// only authority for the picture — the graph's image-path nodes are
+    /// *derived* from it — so this field only ever adds wiring beside the list.
+    /// A layer that has never opened the Graph panel carries an empty one, it
+    /// is left out of the saved file entirely, and every project written before
+    /// drivers existed loads to it and saves back the same bytes.
+    #[serde(default, skip_serializing_if = "crate::graph::LayerGraph::is_empty")]
+    pub graph: crate::graph::LayerGraph,
     pub switches: Switches,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
@@ -2540,6 +2552,7 @@ mod tests {
             extra: serde_json::Map::new(),
         };
         let cam = |name: &str, zoom: f64, z_pos: f64, visible: bool, in_s: i64, out_s: i64| Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: name.into(),
@@ -2879,6 +2892,7 @@ mod tests {
     /// One layer of `kind`, in span for the comp's whole length.
     fn bare_layer(kind: LayerKind) -> Layer {
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "layer".into(),

@@ -19,6 +19,9 @@ mod builtins;
 mod catalogue;
 /// Spectral colour tables for the Lens flare (docs/impl/lens-flare.md §5).
 pub mod cie;
+/// The drivers and the driver-graph evaluation (K-471): one module per driver,
+/// plus the demand-driven walk that works out what every wire carries.
+pub mod drivers;
 /// One module per migrated built-in: its declaration and its behaviour (§2.1).
 pub mod effects;
 /// The in-house FFT / fractional Fourier transform the Lens flare bakes use.
@@ -56,6 +59,7 @@ mod tests;
 
 pub use builtins::*;
 pub use catalogue::*;
+pub use drivers::{resolve_drivers, temporal_window, ResolvedDrivers};
 pub use markers::*;
 pub use maths::*;
 pub use params::*;

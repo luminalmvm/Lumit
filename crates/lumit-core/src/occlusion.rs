@@ -198,6 +198,7 @@ mod tests {
 
     fn layer(kind: LayerKind, w: u32, h: u32) -> Layer {
         Layer {
+            graph: Default::default(),
             markers: Vec::new(),
             id: Uuid::now_v7(),
             name: "l".into(),

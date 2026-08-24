@@ -36,6 +36,10 @@
     {
       "slug": "controls",
       "label": "Controls"
+    },
+    {
+      "slug": "drivers",
+      "label": "Drivers"
     }
   ],
   "effects": [
@@ -14618,6 +14622,262 @@
           "default": 540.0,
           "slider_min": 0.0,
           "slider_max": 2160.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "wiggle",
+      "match_name": "wiggle",
+      "label": "Wiggle",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "amount",
+          "label": "Amount",
+          "kind": "float",
+          "unit": "raw",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "frequency",
+          "label": "Frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "audio-level",
+      "match_name": "audio_level",
+      "label": "Audio level",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "audio",
+          "label": "Audio",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "window",
+          "label": "Window",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.05,
+          "slider_min": 0.01,
+          "slider_max": 1.0,
+          "hard_min": 0.001,
+          "hard_max": 10.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "colour-cycle",
+      "match_name": "colour_cycle",
+      "label": "Colour cycle",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "phase",
+          "label": "Phase",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "rate",
+          "label": "Rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.2,
+          "slider_min": -2.0,
+          "slider_max": 2.0
+        },
+        {
+          "id": "saturation",
+          "label": "Saturation",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "brightness",
+          "label": "Brightness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "math",
+      "match_name": "math",
+      "label": "Math",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "a",
+          "label": "A",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "b",
+          "label": "B",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": -100.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "operation",
+          "label": "Operation",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Add",
+            "Subtract",
+            "Multiply",
+            "Divide",
+            "Minimum",
+            "Maximum",
+            "Remainder",
+            "Power"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "remap",
+      "match_name": "remap",
+      "label": "Remap",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "value",
+          "label": "Value",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "in_low",
+          "label": "In low",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "in_high",
+          "label": "In high",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
+          "id": "out_low",
+          "label": "Out low",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "out_high",
+          "label": "Out high",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "clamp",
+          "label": "Clamp",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "smooth",
+      "match_name": "smooth",
+      "label": "Smooth",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "value",
+          "label": "Value",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0
+        },
+        {
+          "id": "time",
+          "label": "Time",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.2,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0,
+          "hard_max": 10.0
         }
       ],
       "groups": [],

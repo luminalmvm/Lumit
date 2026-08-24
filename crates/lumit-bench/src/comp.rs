@@ -252,6 +252,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         masks: Vec::new(),
         paint: Vec::new(),
         effects: Vec::new(),
+        graph: Default::default(),
         switches: Switches::default(),
         extra: serde_json::Map::new(),
     }

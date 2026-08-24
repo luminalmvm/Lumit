@@ -54,6 +54,12 @@ pub struct BridgeEffectInfo {
 pub fn list_effects() -> Vec<BridgeEffectInfo> {
     lumit_core::fx::BUILTINS
         .iter()
+        // The Drivers family is in the catalogue (K-471 WP1) but is not an
+        // Add-effect entry: a driver belongs in the Graph panel's own search,
+        // where a wire can be drawn from it, and dropping one on a stack would
+        // add a node that changes no pixel. WP2 gives the family its own listing
+        // and this filter goes with it (docs/impl/node-graph.md §8).
+        .filter(|schema| schema.category != lumit_core::fx::FxCategory::Drivers)
         .map(|schema| BridgeEffectInfo {
             name: schema.match_name.to_owned(),
             label: schema.label.to_owned(),
