@@ -34,6 +34,11 @@ void main() {
         // Deliberately NOT a token: the Viewer surround is strictly neutral
         // by spec (15-DESIGN §2.1/§11) — a grade cannot be judged against a
         // tinted surround, so it is the one colour taste does not reach.
+        //
+        // Nor are the five `port.*` wire colours (K-472), for the same kind of
+        // reason: on the Graph panel colour *is* the legend — the strip along
+        // the canvas says "amber is a number" — so a palette taste could
+        // retint would be a legend that lies. See [PortColours].
       };
       final listed = themeTokens.map((t) => t.key).toSet();
       expect(listed, onTheStruct);

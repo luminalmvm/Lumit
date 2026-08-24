@@ -256,6 +256,48 @@ class ScopeColours {
   );
 }
 
+/// What a wire and its sockets are painted in on the Graph panel's canvas
+/// (K-472, 15-DESIGN §4.1/§12A.7). Seven port types wear **five** colours,
+/// grouped as the approved NodeGraph drawing's legend groups them:
+/// image·matte, number, colour, shape·points, audio.
+///
+/// One fixed set shared by every theme, and **deliberately not an editable
+/// token** — the same reasoning that keeps `viewerSurround` out of the
+/// editor's reach. Colour *is* the legend here (K-445): the strip along the
+/// canvas's bottom edge, the manual and the drawings all say "amber is a
+/// number", so a palette taste could retint would be a legend that lies. The
+/// five are the layer palette's own azure, amber, magenta, teal and mint, which
+/// were picked to be told apart at a glance and already read on both grounds.
+class PortColours {
+  /// Image and matte — the picture's own path down the stack.
+  final Color image;
+
+  /// Number: the type nearly every driven parameter is.
+  final Color number;
+  final Color colour;
+
+  /// Shape and points (K-472 §6.2) — geometry, whether it is one outline or a
+  /// stream of thousands.
+  final Color geometry;
+  final Color audio;
+
+  const PortColours({
+    required this.image,
+    required this.number,
+    required this.colour,
+    required this.geometry,
+    required this.audio,
+  });
+
+  static const standard = PortColours(
+    image: Color(0xff4aa3e0),
+    number: Color(0xffe0a33c),
+    colour: Color(0xffd45cb8),
+    geometry: Color(0xff3cc9c0),
+    audio: Color(0xff46c98e),
+  );
+}
+
 /// The colours a waveform draws in (docs/15-DESIGN.md §6.4). Split out of the
 /// roles the lanes used to borrow when the waveform lane learned to follow the
 /// zoom and to stack its bands (K-280) — §6.4's standing direction is that each
@@ -356,6 +398,11 @@ class LumitTheme {
   /// time, per the §6.4 direction.
   final WaveformColours waveform;
 
+  /// What the Graph panel's wires and sockets draw in, by port type (K-472).
+  /// Fixed rather than per-scheme, and not offered to the theme editor — see
+  /// [PortColours].
+  final PortColours port;
+
   /// Comp markers on the time ruler (K-254). A plain grey, not a role colour:
   /// a marker says *here*, not *good* or *careful*, and the ruler already has
   /// the accent doing the work area. Light on a dark scheme and dark on a light
@@ -402,6 +449,7 @@ class LumitTheme {
     required this.cacheDisk,
     required this.curve,
     required this.layer,
+    this.port = PortColours.standard,
     Color? timelineOutOfRange,
     Color? selectionFill,
     Color? marker,
