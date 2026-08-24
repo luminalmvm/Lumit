@@ -3908,14 +3908,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   dropdown on the Settings window's Appearance page — the old separate light/dark and
   background-ramp rows folded into it. An older save that used the two-row picker migrates its
   choice into the new one automatically, so nobody's theme resets on upgrade.
-- `flutter_ui/lib/icons/icons.dart` — **the icons: Iconoir** (K-085).
-  Little pictures like the play triangle or the padlock come from Iconoir, a free
-  professionally drawn icon family, so every glyph stays crisp at any size and always
-  takes the theme colour (dimming on hover, turning accent when active) exactly like text
-  does. Emoji are banned: a glyph is either from this set or deliberately drawn, never a
-  character we hope the user's fonts carry — that's how the invisible stopwatch/arrow bugs
-  happened. To add one, add a name to the `LumitIcon` list and its Iconoir widget in the
-  lookup.
+- `flutter_ui/lib/icons/icons.dart` — **the icons, by name** (K-085, K-440).
+  Little pictures like the play triangle or the padlock are asked for here by name: the
+  `LumitIcon` list is the set of names the panels use, and this file decides what each one
+  draws. Every glyph takes the theme colour (dimming on hover, turning accent when active)
+  exactly like text does. Emoji are banned: a glyph is either from the icon set or
+  deliberately drawn, never a character we hope the user's fonts carry — that's how the
+  invisible stopwatch/arrow bugs happened.
+  Most of those names now draw **Lumit's own glyph** from `lumit_icons.dart` (below). The
+  handful the new set has no drawing for yet — the puppet, roto, vertex and camera-navigation
+  tools, the star, the solid, the fx switch, the label tag, the snap magnet, tone map, the
+  node panel's mark — still come from Iconoir, the free icon family Lumit started with, so
+  nothing on screen is a glyph borrowed to mean something it doesn't. A few marks are drawn
+  by hand rather than looked up at all, because they are Lumit's own artwork: the Null
+  layer's crossed square, the rounded-rectangle tool, the Viewer's layer-controls box, and
+  the zoom slider's two hills. As the new set gains those missing drawings, the names move
+  across one line at a time and no panel changes.
 - `flutter_ui/lib/main.dart` + `lib/shell/` — **the window**: panels, menus, shortcuts,
   and the state glue (current project, selection, the render worker's reply stream).
 - **Layers can hang over the edges of the composition** (K-153, GEN-3). Think of a

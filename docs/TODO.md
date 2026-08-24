@@ -388,6 +388,18 @@ does not gate the four. Delete each phase here when it lands, as with everything
     old bundle-the-household-fonts item under *Later - Design*); the icon set drawn
     on its 16 px grammar and embedded as Flutter icons; the three-way Chrome labels
     setting with its word-carrying tooltips.
+- **The glyphs the set still owes** (K-440). The set is adopted application-wide, but
+    thirty of the names in `flutter_ui/lib/icons/icons.dart` have no drawing in it yet and
+    still show an Iconoir stand-in or a painter-drawn mark: the puppet tools (pin, starch,
+    overlap, bend), the roto pair (roto brush, refine edge), the pen group's vertex tools
+    (add, delete, convert) and mask feather, the camera navigation tools (orbit, pan,
+    dolly), clone stamp, eraser, vertical type, rotate, star, solid, the fx switch (the
+    add-effect plus is right on a button and wrong on a layer's switch, and one name draws
+    both), collapse transformations, the label tag, the snap magnet, tone map, the node
+    panel's mark, the filled keyframe, and four marks that are Lumit's own artwork and stay
+    painter-drawn on purpose (the Null layer, the rounded-rectangle tool, the Viewer's
+    layer-controls box, the zoom slider's hills). Draw each in `tool/icons/glyphs.json`,
+    re-run the generator, and move its one line in `icons.dart`; no panel changes.
 - **Phase 2 - panels and windows** (K-441, K-442, K-443, K-444, K-449): the effect controls
     (fixed columns, square stopwatch, reserved keyframe-nav slot, linked vector
     wells, the crosshair point picker, Mix row with blend mode and matte channel,

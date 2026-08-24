@@ -24,7 +24,13 @@ void main() {
   /// The nudge: a one-pixel stroke drawn along a whole-pixel coordinate covers
   /// half of the pixel each side, so it comes out doubled and grey. Half a
   /// pixel across puts it on a pixel centre.
-  testWidgets('a one-pixel stroke is nudged onto the grid, a two-pixel one is'
+  ///
+  /// Drawn here with the magnet, which is one of the icons Lumit's own set has
+  /// no glyph for yet and so still comes from Iconoir: the nudge is Iconoir's
+  /// 24-unit grid meeting the pixel grid. The own set carries its offset in the
+  /// drawings, and is deliberately not nudged again.
+  testWidgets(
+      'a one-pixel stroke is nudged onto the grid, a two-pixel one is'
       ' left alone', (tester) async {
     Future<Offset> translationAt(double ratio, double size) async {
       await tester.pumpWidget(MediaQuery(
@@ -32,7 +38,7 @@ void main() {
         child: Directionality(
           textDirection: TextDirection.ltr,
           child: Center(
-            child: lumitIcon(LumitIcon.eye,
+            child: lumitIcon(LumitIcon.magnet,
                 size: size, color: const Color(0xffffffff)),
           ),
         ),
@@ -41,8 +47,7 @@ void main() {
         of: find.byType(SizedBox).first,
         matching: find.byType(Transform),
       ));
-      return Offset(
-          transform.transform.getTranslation().x,
+      return Offset(transform.transform.getTranslation().x,
           transform.transform.getTranslation().y);
     }
 
@@ -57,7 +62,6 @@ void main() {
     expect(await translationAt(1.5, iconSize), Offset.zero);
     expect(await translationAt(1.5, iconSizeTransport), Offset.zero);
     // 300% on a panel icon: 3 device pixels, odd again, so half of one.
-    expect(await translationAt(3.0, iconSize),
-        Offset(0.5 / 3.0, 0.5 / 3.0));
+    expect(await translationAt(3.0, iconSize), Offset(0.5 / 3.0, 0.5 / 3.0));
   });
 }

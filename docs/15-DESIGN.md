@@ -338,8 +338,12 @@ is no shared palette to promote them to any more.
 
 ## 5. Iconography
 
-**Lumit draws its own icon set** (K-440, superseding K-085's Iconoir pick — Iconoir stays in
-place until the redesign's own glyphs land). The set's grammar is fixed:
+**Lumit draws its own icon set** (K-440, superseding K-085's Iconoir pick). The set is drawn
+and adopted application-wide: `flutter_ui/lib/icons/icons.dart` resolves each name the panels
+ask for to its glyph. Iconoir stays only where the set still owes a drawing — the deep tools
+(puppet, roto, vertex, camera navigation), the star and solid marks, the fx switch, the label
+tag, the snap magnet, tone map and the node panel's mark — listed in `docs/TODO.md`; a name
+crosses over the day its glyph exists, and no panel changes. The set's grammar is fixed:
 
 - **16px grid, 1.5px stroke, round caps, one weight.** Every glyph is drawn on the same
   16-unit grid with the same stroke; there are no filled and outlined variants of one idea,
