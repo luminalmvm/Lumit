@@ -54,7 +54,7 @@ const double switchCellWidth = 22;
 const double cellGap = 4;
 
 /// The gap between the pieces of the **identity** cluster — the twirl, the
-/// layer number and the label dot (K-458). The mockup's rows set every one of
+/// layer number and the label dot (K-461). The mockup's rows set every one of
 /// them at 8; the outline ran the twirl hard against the dot and gave the
 /// number 4, which packed the three smallest marks in the panel into the one
 /// place they most need air.
@@ -71,7 +71,7 @@ const double switchesGroupWidth = 5 * switchCellWidth;
 /// simply as wide as the column they sit under.
 const double renderGroupWidth = 5 * switchCellWidth;
 
-/// The compose group's cells — **the mockup's own dropdown widths** (K-458):
+/// The compose group's cells — **the mockup's own dropdown widths** (K-461):
 /// 84 for the matte and blend faces, 64 for the parent's. They were 118 / 112 /
 /// 96, which left every picker sitting in slack it never used; a dropdown is
 /// as wide as the word it holds plus its inset, and the column is as wide as

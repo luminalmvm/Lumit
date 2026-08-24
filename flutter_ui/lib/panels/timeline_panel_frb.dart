@@ -5906,7 +5906,7 @@ class _ColumnHeader extends StatelessWidget {
           children: [
             // The twirl and the label dot have no heading of their own — but
             // the `#` has to stand over the number, so the blanks either side
-            // of it are the row's own cells and gaps (K-458): the twirl's
+            // of it are the row's own cells and gaps (K-461): the twirl's
             // slot before it, the dot's slot after.
             const SizedBox(width: 16 + identityGap),
             title(l10n.columnNumber, l10n.columnNumber, _numberCellWidth),
@@ -6784,7 +6784,7 @@ class _OutlineRowState extends State<_OutlineRow> {
     );
   }
 
-  /// Group 2: twirl · layer number · label dot · name (K-458 — the mockup's
+  /// Group 2: twirl · layer number · label dot · name (K-461 — the mockup's
   /// own order; the dot and the number used to stand the other way round).
   Widget _identityCells(
       BuildContext context, LumitTheme t, BridgeLayerInfo info) {
@@ -6816,7 +6816,7 @@ class _OutlineRowState extends State<_OutlineRow> {
         const SizedBox(width: identityGap),
         // The layer number: **mono**, because it is a number (§7.1's rule has
         // no exceptions), muted, and in the same 18px cell the header's `#`
-        // stands in. It comes **before** the label dot (K-458): the number is
+        // stands in. It comes **before** the label dot (K-461): the number is
         // the row's address and the dot belongs to the name it colours, which
         // is how the mockup's rows read and how they are indexed aloud.
         SizedBox(

@@ -857,13 +857,13 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   The bottom bar's toggles carry the same words as the headings they show and hide.
 - **A layer number column** sits between the twirl and the label dot, in muted mono; the
   dot follows it and belongs to the name it colours, so the cluster reads twirl · number ·
-  dot · name (K-458). **The three marks stand 8 apart** — the mockup's own row gap, where
+  dot · name (K-461). **The three marks stand 8 apart** — the mockup's own row gap, where
   the outline had run the twirl hard against the dot and given the number 4.
 - **A key's mark says its interpolation, half by half** (K-457): diamond linear, hourglass
   bezier, square hold, all at one height, split at the vertical centre so the left half is
   the side coming in and the right half the side going out. The same marks at the same
   **11px** in Layers mode and in Keys (K-459); a shut layer's summary diamonds stay small.
-- **The matte, blend and parent columns start at their content's width** (K-458): the
+- **The matte, blend and parent columns start at their content's width** (K-461): the
   mockup's 84 / 84 / 64 dropdown faces, the matte cell carrying its two mode toggles on top
   of that. Each seam still drags wider and stays where it is put.
 - **The open composition tab carries no accent tick** — the seated surface colour alone

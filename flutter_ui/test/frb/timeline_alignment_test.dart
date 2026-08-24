@@ -704,7 +704,7 @@ void main() {
       expectLevel(tester, layer, why: 'under Compact');
     });
 
-    /// 10d-bis. **The identity cluster is the drawing's** (K-458): twirl,
+    /// 10d-bis. **The identity cluster is the drawing's** (K-461): twirl,
     /// then the layer number, then the label dot, then the name — and 8 px of
     /// air between each of the three marks, where the outline used to run the
     /// twirl hard against the dot. Measured as edges rather than as widget
@@ -730,7 +730,7 @@ void main() {
           reason: 'the twirl opens the cluster');
       expect(number.right, lessThanOrEqualTo(dot.left),
           reason: 'the number is the row\'s address and comes before the dot '
-              '(K-458 — they used to stand the other way round)');
+              '(K-461 — they used to stand the other way round)');
       expect(dot.right, lessThanOrEqualTo(name.left),
           reason: 'and the dot belongs to the name it colours');
 
@@ -743,7 +743,7 @@ void main() {
       expect(identityGap, 8, reason: 'which is the constant\'s own value');
     });
 
-    /// 10d-ter. **The compose columns start at their content** (K-458): the
+    /// 10d-ter. **The compose columns start at their content** (K-461): the
     /// drawing's 84 / 84 / 64 faces, the matte cell carrying its two mode
     /// toggles on top of its own 84. They had been 118 / 112 / 96, which is
     /// slack no picker ever used.

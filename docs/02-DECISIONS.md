@@ -12244,30 +12244,6 @@ centre: the left half draws the incoming interpolation's shape, the right half t
 outgoing, so a key that eases in and holds out reads as half hourglass, half square.
 Colours unchanged (animated; selected brightens as today).
 
-## K-458 — The outline's identity cluster: the mockup's order, its room, and columns cut to their content
-
-**DECIDED 2026-08-24.** The owner's ruling on the Timeline outline, superseding §12A.1's
-"a layer number column sits between the label dot and the name" (K-441/K-451) and the
-compose column defaults that shipped with it.
-
-- **The label dot and the layer number change places**: the cluster reads **twirl ·
-  number · dot · name**, as the approved Main drawing has it. The number is the row's
-  address; the dot belongs to the name it colours.
-- **The cluster's gaps are the drawing's 8**, between the twirl and the number and
-  between the number and the dot. They had been 0 and 4 — the three smallest marks in
-  the panel packed into the one place that most needs air. The dot keeps its 16px cell
-  as a hit target (K-452), whose inset is also the drawing's dot-to-name gap.
-- **Matte, blend and parent start at their content's width**: the drawing's 84 / 84 / 64
-  dropdown faces plus the group's normal gaps, with the matte cell carrying its two mode
-  toggles on top of its 84. They were 118 / 112 / 96, which bought each picker slack it
-  never used. Only the defaults move: every seam still drags, and a project with long
-  layer names widens the group once and keeps it.
-- **The Timeline's type is the drawing's throughout**, re-audited row by row: 11px mono
-  for the timecode, 10 for the frame count, the layer number and the picker faces, 11 for
-  every name, 9 for the kickers over the columns and in the bottom bar. Two numbers had
-  drifted and are corrected — the Retime clock, at `mono`'s bare 12 rather than the value
-  well's 11, and the render-time readout at a kicker's 9 rather than a value's 10.
-
 ## K-458 — The drawing is authoritative; Keys mode carries everything its drawing shows
 
 **DECIDED 2026-08-24.** Two rulings from the owner. First, the general one, sharpening
@@ -12316,3 +12292,27 @@ field it opens holds `48`, and the letter is worn again the moment the edit comm
 stepping over a letter began wrong. `/ 250` stays outside the well: the comp's length is
 not edited there, and a recess round it would say it was. Commit on Enter, Escape reverts
 (§12A.3).
+
+## K-461 — The outline's identity cluster: the mockup's order, its room, and columns cut to their content
+
+**DECIDED 2026-08-24.** The owner's ruling on the Timeline outline, superseding §12A.1's
+"a layer number column sits between the label dot and the name" (K-441/K-451) and the
+compose column defaults that shipped with it.
+
+- **The label dot and the layer number change places**: the cluster reads **twirl ·
+  number · dot · name**, as the approved Main drawing has it. The number is the row's
+  address; the dot belongs to the name it colours.
+- **The cluster's gaps are the drawing's 8**, between the twirl and the number and
+  between the number and the dot. They had been 0 and 4 — the three smallest marks in
+  the panel packed into the one place that most needs air. The dot keeps its 16px cell
+  as a hit target (K-452), whose inset is also the drawing's dot-to-name gap.
+- **Matte, blend and parent start at their content's width**: the drawing's 84 / 84 / 64
+  dropdown faces plus the group's normal gaps, with the matte cell carrying its two mode
+  toggles on top of its 84. They were 118 / 112 / 96, which bought each picker slack it
+  never used. Only the defaults move: every seam still drags, and a project with long
+  layer names widens the group once and keeps it.
+- **The Timeline's type is the drawing's throughout**, re-audited row by row: 11px mono
+  for the timecode, 10 for the frame count, the layer number and the picker faces, 11 for
+  every name, 9 for the kickers over the columns and in the bottom bar. Two numbers had
+  drifted and are corrected — the Retime clock, at `mono`'s bare 12 rather than the value
+  well's 11, and the render-time readout at a kicker's 9 rather than a value's 10.
