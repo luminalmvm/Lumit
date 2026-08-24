@@ -442,6 +442,17 @@ does not gate the four. Delete each phase here when it lands, as with everything
 
 ## Next - engine/bridge follow-ups
 
+**A recent project's shape, without opening it** (K-464). The welcome screen draws a
+`1920×1080 · 25` column beside every recent project and leaves it **empty**, because the
+size and rate live inside the `.lum` and the only way to learn them today is to open the
+whole document — which is precisely what a recent project has not been. The seam wanted is
+one call that reads a project file's header and answers its main composition's dimensions
+and frame rate without adopting it, registering a worker or touching any media:
+`project_summary(path) -> Option<{ width, height, fps }>`, cheap enough to run for ten
+paths while the screen is being built and forgiving of a file that has moved or gone. The
+column keeps its 120px so the row does not change shape the day it can be filled; the
+place it is drawn is `flutter_ui/lib/shell/welcome_frb.dart`.
+
 **The Lens flare's `ghost_softness` is a fraction of the frame diagonal**, which K-419
 outlawed for distances (docs/08 §2.3: every distance is px@comp). Noticed while every
 parameter was learning its unit (K-443) and left alone there: converting it changes

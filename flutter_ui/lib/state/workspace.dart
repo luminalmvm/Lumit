@@ -199,7 +199,10 @@ Map<String, List<double>> _regionsFromJson(Object? raw) {
     final k = e.key;
     final v = e.value;
     if (k is! String || v is! List || v.length != 4) continue;
-    final nums = [for (final n in v) if (n is num) n.toDouble()];
+    final nums = [
+      for (final n in v)
+        if (n is num) n.toDouble()
+    ];
     if (nums.length == 4 && nums.every((n) => n.isFinite)) out[k] = nums;
   }
   return out;
@@ -666,21 +669,60 @@ class Workspace extends ChangeNotifier {
     recentProjects
       ..remove(path)
       ..insert(0, path);
+    _recentOpened[path] = DateTime.now().toIso8601String();
     if (recentProjects.length > maxRecentProjects) {
       recentProjects.removeRange(maxRecentProjects, recentProjects.length);
     }
+    _pruneRecentOpened();
     save();
   }
 
   /// The projects opened or saved most recently, newest first — File ▸ Open
-  /// recent. Paths only: whether the file is still there is not asked until
-  /// someone picks it, because a network drive that is slow to answer must not
-  /// hold up a menu opening.
+  /// recent, and the welcome screen's list. Paths only: whether the file is
+  /// still there is not asked until someone picks it, because a network drive
+  /// that is slow to answer must not hold up a menu opening.
   final List<String> recentProjects = [];
 
   /// How many the list keeps. Ten is the length every editor settled on: long
   /// enough to reach last week's work, short enough to read at a glance.
   static const int maxRecentProjects = 10;
+
+  /// When each remembered project was last opened **here**, ISO-8601 by path.
+  ///
+  /// Kept beside the list rather than inside it so nothing that reads
+  /// [recentProjects] has to change. It is this machine's own record of when
+  /// the user last had the project open — not the file's timestamp, which would
+  /// cost a `stat` per row on a network drive to answer a question about
+  /// *their* work rather than the file's.
+  final Map<String, String> _recentOpened = {};
+
+  /// When [path] was last opened here, or null for a project remembered before
+  /// this was recorded (or never opened on this machine).
+  DateTime? recentOpenedAt(String path) =>
+      DateTime.tryParse(_recentOpened[path] ?? '');
+
+  /// Forget one project — the × at the end of its row on the welcome screen.
+  /// No question asked: the file is untouched and File ▸ Open brings it back.
+  void forgetProject(String path) {
+    if (!recentProjects.remove(path)) return;
+    _recentOpened.remove(path);
+    notifyListeners();
+    save();
+  }
+
+  /// Forget the lot — the Clear beside the welcome screen's Recent heading.
+  void clearRecentProjects() {
+    if (recentProjects.isEmpty) return;
+    recentProjects.clear();
+    _recentOpened.clear();
+    notifyListeners();
+    save();
+  }
+
+  /// Drop the stamps of projects that have fallen off the end of the list, so
+  /// the store does not grow a timestamp for every project ever opened.
+  void _pruneRecentOpened() =>
+      _recentOpened.removeWhere((path, _) => !recentProjects.contains(path));
 
   /// Remember [session] for the project at [path], persisted immediately so the
   /// next open restores it. A no-op write when the session is unchanged, so the
@@ -759,6 +801,7 @@ class Workspace extends ChangeNotifier {
         'precompose_open_new_comp': precomposeOpenNewComp,
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
+        'recent_opened': _recentOpened,
         'sessions': {
           for (final e in sessions.entries) e.key: e.value.toJson(),
         },
@@ -822,6 +865,16 @@ class Workspace extends ChangeNotifier {
     final rawRecent = j['recent_projects'];
     if (rawRecent is List) {
       recentProjects.addAll(rawRecent.whereType<String>());
+    }
+    // Absent for a settings file written before the welcome screen recorded
+    // these: the dates simply read blank until each project is next opened.
+    _recentOpened.clear();
+    final rawOpened = j['recent_opened'];
+    if (rawOpened is Map) {
+      rawOpened.forEach((key, value) {
+        if (key is String && value is String) _recentOpened[key] = value;
+      });
+      _pruneRecentOpened();
     }
     sessions.clear();
     final rawSessions = j['sessions'];

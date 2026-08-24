@@ -12389,3 +12389,35 @@ whose every other gap is 8 (K-462).
   call in a rebuild path — and the header and the rows are handed the same answer, so they
   cannot disagree about where a column starts. The seam still drags, and a dragged width
   keeps the same behaviour: the toggles' room is added on top of whatever the group is at.
+
+## K-464 — The welcome screen, built to its drawing, with a per-row forget
+
+**DECIDED 2026-08-24.** Fills in K-448's one-line welcome rule from the approved drawing,
+and records the owner's one addition on top of it. Nothing here reverses an earlier entry.
+
+- **The welcome is the window after the boot splash**, not a card over a half-built
+  shell — the same handover the splash already makes (K-008). It stays in-window: a
+  welcome *window* is the multi-window phase's (K-449), and nothing waits on that.
+- **It is not put to somebody who has already answered it.** A `.lum` on the command
+  line — a double-clicked project — goes straight to the shell.
+- **One centred 560px column, four blocks 28 apart**: the wordmark in mono at 22, three
+  180×63 start cards 10 apart (New project / Blank project / Open), the recents list, and
+  a footer carrying the version and two outlined links (Manual, What's new).
+- **No filled action anywhere on it.** §3.1's accent rule is a ceiling of one, not a
+  floor, and the drawing spends none of it here.
+- **A recent row is name, path, format, date and a forget button**, in a 40px row inside a
+  hairline well. The format column (`1920×1080 · 25`) is drawn but **empty**: the size and
+  rate live inside the `.lum`, and the engine has no way to read them without opening the
+  file. Dart does not guess one — the seam is listed in docs/TODO.md and the column keeps
+  its room until the engine can answer.
+- **Recents carry a last-opened stamp** in the workspace store, written when a project is
+  adopted. It is this machine's record of the user's own work, not the file's timestamp:
+  a `stat` per row would make opening the screen wait on a network drive.
+- **The list is emptied by Clear and thinned by a per-row ×** (owner, beyond the drawing).
+  The × is the composition tabs' close mark — muted, no box, brightening under the
+  pointer — and it is the innermost hit on the row, so pressing it never also opens the
+  project. Its room comes out of the flexible name column, which is step 1 of §12A.6's
+  ladder.
+- **Neither asks first.** The one destructive control that asks is the disk cache
+  (`shell/cache_confirm_frb.dart`), because that one throws away a night's rendering with
+  nothing to undo. Forgetting a path deletes nothing and File ▸ Open brings it back.

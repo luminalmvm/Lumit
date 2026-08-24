@@ -2131,11 +2131,18 @@ small image over each choice, remain the destination (polish tracked in TODO).
   *Import footage*, *New composition*, *Open project* — plus recent projects and a note
   that footage can be dropped anywhere in the window. Drag-and-drop import MUST work over
   every panel from first launch.
-- **The welcome screen** (K-448, superseding the card above once the redesigned shell
-  lands): the launch window carries the **New**, **Blank** and **Open** project cards,
-  with **Manual** and **What's new** as outlined buttons, and no "free and open source"
-  line. With nothing open, the same three cards repeat in the empty Viewer until a
+- **The welcome screen** (K-448, K-464, superseding the card above once the redesigned
+  shell lands): the launch window carries the **New**, **Blank** and **Open** project
+  cards, with **Manual** and **What's new** as outlined buttons, and no "free and open
+  source" line. With nothing open, the same three cards repeat in the empty Viewer until a
   composition is viewed.
+  It is **the window** between the boot splash and the shell rather than a card over
+  either, and it is not shown at all when a `.lum` arrived on the command line. Under the
+  cards sit the **recent projects** — name, path, format, and when each was last opened
+  here — with a **Clear** that empties the list and a **×** on each row that forgets just
+  that one. Neither asks first: nothing is deleted and File ▸ Open brings a project back.
+  A footer carries the version and the two links. The shape and every measurement are in
+  [15-DESIGN.md](15-DESIGN.md) §12A.3b.
 - **Comp with no layers**: the Timeline shows one line of hint text (drag footage here, or
   press the new-Sequence-layer / new-Solid shortcuts). Hints disappear at first content
   and never return unprompted.

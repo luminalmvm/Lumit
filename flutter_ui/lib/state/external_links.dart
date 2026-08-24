@@ -21,6 +21,11 @@ const String lumitDocsUrl = 'https://docs.lumitlab.com/';
 const String lumitGuidesUrl =
     'https://docs.lumitlab.com/start/first-composition/';
 
+/// What shipped in each version — the welcome screen's *What's new*. It is on
+/// the main site rather than the documentation one, because the release notes
+/// are `web/src/pages/releases/` (K-279), not a docs page.
+const String lumitReleasesUrl = 'https://lumitlab.com/releases/';
+
 /// How Lumit opens a web page, and the seam a test replaces.
 ///
 /// A top-level function rather than a parameter threaded through every caller:

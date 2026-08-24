@@ -7430,5 +7430,68 @@
   "tipPasteKeysAtPlayhead": "Paste at the playhead",
   "@tipPasteKeysAtPlayhead": {
     "description": "Timeline, Keys mode bottom bar: hover hint on Paste at playhead."
+  },
+  "welcomeNewProject": "New project",
+  "@welcomeNewProject": {
+    "description": "Welcome screen: the title of the first of three start cards. It makes a project and asks where on disk to keep it. Fits a 180px card on one line."
+  },
+  "welcomeNewProjectNote": "Choose a project folder",
+  "@welcomeNewProjectNote": {
+    "description": "Welcome screen: the small note under New project, saying what pressing it will ask for. One line in a 180px card."
+  },
+  "welcomeBlankProject": "Blank project",
+  "@welcomeBlankProject": {
+    "description": "Welcome screen: the title of the second start card. It goes straight into the editor with an empty project that has no file yet."
+  },
+  "welcomeBlankProjectNote": "Save later",
+  "@welcomeBlankProjectNote": {
+    "description": "Welcome screen: the small note under Blank project, saying the project has no file until the user saves it. Two words if possible."
+  },
+  "welcomeOpenProject": "Open",
+  "@welcomeOpenProject": {
+    "description": "Welcome screen: the title of the third start card, which opens an existing project from disk."
+  },
+  "welcomeOpenProjectNote": ".lum file",
+  "@welcomeOpenProjectNote": {
+    "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
+  },
+  "welcomeRecent": "Recent",
+  "@welcomeRecent": {
+    "description": "Welcome screen: the heading over the list of recently opened projects. Drawn in capitals, so give the sentence-case word."
+  },
+  "welcomeClearRecent": "Clear",
+  "@welcomeClearRecent": {
+    "description": "Welcome screen: the quiet word beside the Recent heading that empties the whole list. The projects themselves are untouched."
+  },
+  "welcomeNoRecent": "No recent projects",
+  "@welcomeNoRecent": {
+    "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
+  },
+  "welcomeForgetProject": "Remove from recent",
+  "@welcomeForgetProject": {
+    "description": "Welcome screen: hover hint on the small cross at the end of a recent project's row, which takes that one row off the list. The file is not deleted."
+  },
+  "welcomeToday": "Today",
+  "@welcomeToday": {
+    "description": "Welcome screen: shown in a recent project's date column when it was last opened today. Fits 70px of mono type."
+  },
+  "welcomeRecentDate": "{when}",
+  "@welcomeRecentDate": {
+    "description": "Welcome screen: the date a recent project was last opened, for anything older than today. Day and short month only — it has 70px of room.",
+    "placeholders": {
+      "when": {
+        "type": "DateTime",
+        "format": "d MMM",
+        "isCustomDateFormat": true
+      }
+    }
+  },
+  "welcomeManual": "Manual",
+  "@welcomeManual": {
+    "description": "Welcome screen: the outlined button at the bottom right that opens the documentation site in the machine's own browser."
+  },
+  "welcomeWhatsNew": "What's new",
+  "@welcomeWhatsNew": {
+    "description": "Welcome screen: the outlined button at the bottom right that opens the release notes page in the machine's own browser."
   }
 }

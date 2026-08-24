@@ -1065,6 +1065,41 @@ carries. The rules worth writing down:
   tree scrolls sideways under the strip that has always been drawn for it. The bottom
   bar's words are shed before its icons, per §12A.6's step 4.
 
+### 12A.3b Welcome screen (K-448, K-464)
+
+The page Lumit opens on, and the only surface that is the whole window rather than a panel
+in one. It renders **in-window** — a welcome *window* belongs to the multi-window phase
+(K-449) — taking over from the boot splash and giving way to the shell as soon as somebody
+has said how they want to start. Somebody who double-clicked a `.lum` is never shown it.
+
+- **One centred column, 560 wide, four blocks 28 apart**: the wordmark, the start cards,
+  the recents list, the footer. Everything on the page is that width, which is what makes
+  it read as one thing rather than three.
+- **The wordmark is mono at 22 with 0.08em of tracking**, in `text_primary`. It is a brand
+  mark, not a phrase, so it is the same in every language.
+- **Three start cards, 180×63, ten apart** — New project (choose a folder), Blank project
+  (save later), Open (a `.lum`). Each is a `surface_1` well behind a plain hairline with a
+  13px title and a sentence-case kicker note under it at 0.06em; hover takes fill and edge
+  up one step, exactly as a house button's does.
+- **No filled action anywhere on the page.** §3.1's rule is a ceiling of one, not a floor,
+  and this screen spends none of the accent.
+- **The recents list is a kicker strip over a hairline well.** *Recent* is capitalised —
+  it names the container under it — while *Clear* beside it is sentence case at 0.06em,
+  because it is an action rather than a label. A row is 40 with a seam under all but the
+  last: the name in body at 11 over the path in mono at 9 (`text_disabled`), then the
+  format and the date in mono at 10, muted, in fixed 120 and 70 columns.
+- **The format column is drawn and left empty** until the engine can report a project's
+  size and rate without opening it (K-464). The room stays reserved; Dart does not guess.
+- **A × at the far right forgets one row**, and its room comes out of the flexible name
+  column — step 1 of §12A.6's ladder. It is the composition tabs' close mark: muted, no
+  box, brightening under the pointer, and the innermost hit on the row.
+- **Neither Clear nor the × asks first** (§12A.5): nothing is destroyed, the file is
+  untouched, and File ▸ Open brings a forgotten project back. The disk cache stays the one
+  control that asks, because it is the one with nothing to undo.
+- **The footer is a 28px strip**: the version at the left in the sentence-case kicker face,
+  and Manual and What's new at the right as 24px outlined buttons with their labels in
+  `text_secondary`.
+
 ### 12A.4 Dialogs (K-444, K-449)
 
 Every popup is built in-window today and becomes a **real OS window** when multi-window
@@ -1129,6 +1164,12 @@ a plain constant in the code rather than a token with two equal values.
 | Project panel: bottom bar (new-item controls and the item count) | 20 | 20 |
 | Project panel: glyphs — the twirl and type marks in a row (K-456) | 13 | 13 |
 | Project panel: glyphs — the bottom bar's new-item controls (K-456) | 13 | 13 |
+| Welcome: the column everything on the page sits in, and the air between its blocks | 560 wide / 28 apart | 560 wide / 28 apart |
+| Welcome: a start card (14 of padding round a 13px title, a 4px gap and the 9px note) | 63 | 63 |
+| Welcome: the kicker strip over the recents list | 18 | 18 |
+| Welcome: a recent project's row (a seam under all but the last) | 40 | 40 |
+| Welcome: the recents' fixed columns — format, date, forget | 120 / 70 / 12 | 120 / 70 / 12 |
+| Welcome: the footer strip, and the outlined links in it | 28 / 24 | 28 / 24 |
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
 | Dialog value wells and dropdowns | 22 | 22 |

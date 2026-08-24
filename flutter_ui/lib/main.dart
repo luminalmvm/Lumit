@@ -32,6 +32,7 @@ import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
+import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -231,7 +232,9 @@ Future<void> main(List<String> args) async {
   // degraded-but-alive behaviour as a failed File → Open.
   final fromArgs = projectPathFromArgs(args);
   if (fromArgs != null) state.openProject(fromArgs);
-  runApp(LumitAppNew(state, LumitUiState(state)));
+  // Somebody who double-clicked a `.lum` has already answered the welcome
+  // screen's question, so it is not put to them (K-464).
+  runApp(LumitAppNew(state, LumitUiState(state), welcome: fromArgs == null));
 }
 
 class LumitState extends ChangeNotifier {
@@ -2136,7 +2139,11 @@ class LumitAppNew extends StatelessWidget {
   final LumitState state;
   final LumitUiState uiState;
 
-  const LumitAppNew(this.state, this.uiState, {super.key});
+  /// Whether to open on the welcome screen (K-464). False when a project came
+  /// in on the command line: that is already the answer the screen asks for.
+  final bool welcome;
+
+  const LumitAppNew(this.state, this.uiState, {super.key, this.welcome = true});
 
   @override
   Widget build(BuildContext context) {
@@ -2177,7 +2184,8 @@ class LumitAppNew extends StatelessWidget {
                   child: UiScaleView(
                     scale: uiState.workspace.interface.uiScale,
                     child: Overlay(initialEntries: [
-                      OverlayEntry(builder: (context) => const BootGate())
+                      OverlayEntry(
+                          builder: (context) => BootGate(welcome: welcome))
                     ]),
                   ),
                 ),
@@ -2190,26 +2198,34 @@ class LumitAppNew extends StatelessWidget {
   }
 }
 
-/// The boot splash, and the shell behind it once boot is over (K-008).
+/// The boot splash, the welcome screen, and the shell behind them once both are
+/// done (K-008, K-464).
 ///
-/// **The splash is the window while it is up**, not a card floating over a
-/// half-built application: the shell is not put in the tree until the splash
-/// has finished, so nothing of the application shows through, no dialogue —
-/// the first-run question above all — can appear underneath it, and no panel
-/// starts asking the engine for pictures nobody can see yet.
+/// **Each of the three is the window in turn**, never a card floating over a
+/// half-built application: the shell is not put in the tree until boot has
+/// finished and the user has said how they want to start, so nothing of the
+/// application shows through, no dialogue — the first-run question above all —
+/// can appear underneath, and no panel starts asking the engine for pictures
+/// nobody can see yet.
 ///
-/// The lines it streams are the engine's own boot log: the library version, the
-/// ABI, and what this build was compiled with. That is the only thing the
-/// engine can say about starting up — there is no notice stream to subscribe
-/// to, only `boot_log` (docs/TODO.md) — so it is what the splash shows, and a
-/// build with no bridge at all falls back to the canned list in splash.dart.
+/// The lines the splash streams are the engine's own boot log: the library
+/// version, the ABI, and what this build was compiled with. That is the only
+/// thing the engine can say about starting up — there is no notice stream to
+/// subscribe to, only `boot_log` (docs/TODO.md) — so it is what the splash
+/// shows, and a build with no bridge at all falls back to the canned list in
+/// splash.dart.
 class BootGate extends StatefulWidget {
   /// Whether to show the splash at all. False in the tests that drive the
   /// whole shell, which have no boot to wait for and would otherwise spend a
   /// second and a third of simulated time watching one.
   final bool splash;
 
-  const BootGate({super.key, this.splash = true});
+  /// Whether to show the welcome screen after it. False when a `.lum` came in
+  /// on the command line — somebody who double-clicked a project has already
+  /// said what they want to open — and in the tests that drive the shell.
+  final bool welcome;
+
+  const BootGate({super.key, this.splash = true, this.welcome = true});
 
   @override
   State<BootGate> createState() => _BootGateState();
@@ -2217,6 +2233,7 @@ class BootGate extends StatefulWidget {
 
 class _BootGateState extends State<BootGate> {
   late bool _booting = widget.splash;
+  late bool _welcoming = widget.welcome;
 
   /// The engine's boot log, or empty where there is no engine to ask — a
   /// placeholder build, or a widget test with no library loaded. Read once:
@@ -2232,14 +2249,24 @@ class _BootGateState extends State<BootGate> {
   }
 
   @override
-  Widget build(BuildContext context) => _booting
-      ? SplashOverlay(
-          lines: _lines,
-          onDone: () {
-            if (mounted) setState(() => _booting = false);
-          },
-        )
-      : const LumitAppView();
+  Widget build(BuildContext context) {
+    if (_booting) {
+      return SplashOverlay(
+        lines: _lines,
+        onDone: () {
+          if (mounted) setState(() => _booting = false);
+        },
+      );
+    }
+    if (_welcoming) {
+      return WelcomeScreenFrb(
+        onDone: () {
+          if (mounted) setState(() => _welcoming = false);
+        },
+      );
+    }
+    return const LumitAppView();
+  }
 }
 
 class LumitAppView extends StatefulWidget {

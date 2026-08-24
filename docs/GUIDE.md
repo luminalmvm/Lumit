@@ -5440,6 +5440,42 @@ cannot report a module that took its time or came up degraded. Noted in
 engine behind it at all falls back to a canned list, so the placeholder still
 opens on something honest rather than a blank rectangle.
 
+### The second second: the welcome screen
+
+When the splash finishes it does not hand the window to the editor. It hands it
+to one more page — `shell/welcome_frb.dart` — which asks the only question worth
+asking before any work starts: what would you like to open? Three cards along the
+top (make a project and choose where to keep it, start blank and save later, open
+a `.lum` that already exists), the projects you had open recently under them, and
+two links at the bottom to the manual and the release notes.
+
+`BootGate` keeps the same rule here it keeps for the splash: **the welcome is the
+window while it is up**. The shell is not built behind it, for exactly the reasons
+above. Press any card and the welcome comes down, the shell goes up, and — if a
+document is being read — the shell's own progress card is already over it.
+
+Somebody who double-clicked a `.lum` in Explorer never sees the screen. They have
+answered its question by opening the file, and asking again would be rude.
+`main()` spots the path on the command line and turns the screen off for that
+launch.
+
+Two small things are worth knowing about the recents list. **It is Lumit's own
+record, not the disk's**: the date beside each project is when *you* last opened
+it here, kept in the settings file (`Workspace.recentProjects` and its stamps),
+because asking the file system for each row's timestamp would make the screen
+wait on any project that lives on a network drive. And **the size-and-rate column
+is drawn but empty on purpose**. A project's shape lives inside the `.lum`, and
+today the only way to learn it is to open the file — which is exactly what a
+*recent* project has not been. Rather than have Dart invent an answer, the column
+keeps its space and waits for the engine to grow a way to peek. That gap is
+written down in `docs/TODO.md`.
+
+The list is yours to prune: **Clear** empties it, and the **×** at the end of a row
+forgets that one. Neither asks you first, because neither destroys anything — the
+project files are untouched, and File ▸ Open brings any of them straight back. The
+one control in Lumit that *does* stop and ask is the disk cache, and it asks
+because emptying it can throw away a night's rendering with no way back.
+
 ### Opening a project, and why the old one stays on screen
 
 Opening a `.lum` is not a small read. The engine parses the whole document and
