@@ -198,7 +198,7 @@ abstract final class LumitIcons {
   static const String channels =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="9.5" r="3.8"/><circle cx="10" cy="9.5" r="3.8"/><circle cx="8" cy="5.5" r="3.8"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></svg>';
   static const String exposure =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="5.5"/><path d="M8.00 2.50L6.10 7.11M3.24 5.25L6.28 9.20M3.24 10.75L8.18 10.09M8.00 13.50L9.90 8.89M12.76 10.75L9.72 6.80M12.76 5.25L7.82 5.91"/></svg>';
   static const String snapshot =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h3l1.5-2h3L11 5h3v8H2z"/><circle cx="8" cy="9" r="2.5"/></svg>';
   static const String colourSpace =
