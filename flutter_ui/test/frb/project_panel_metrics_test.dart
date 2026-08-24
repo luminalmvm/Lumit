@@ -105,6 +105,9 @@ void main() {
           reason: 'item rows are 22 under both densities');
       expect(band(tester, 'project-search-row').height, projectSearchRowHeight,
           reason: 'the search row is 34 under both densities');
+      expect(band(tester, 'project-search').height, 20,
+          reason: 'the well itself renders the stated 20 - it once '
+              'shrink-wrapped its text to 16');
       expect(band(tester, 'project-footer').height, projectFooterHeight,
           reason: 'the bottom bar is 20 under both densities');
     });

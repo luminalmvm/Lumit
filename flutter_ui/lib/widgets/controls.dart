@@ -1649,6 +1649,11 @@ class _HouseTextFieldState extends State<HouseTextField>
     return Container(
       width: widget.width,
       padding: widget.padding,
+      // Fill the height the caller gives (a well is its stated height, not
+      // its text's): with an alignment the box expands to bounded
+      // constraints instead of shrink-wrapping the 11px line — the project
+      // panel's 20px search well rendered 16 without this.
+      alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         color: widget.fill ?? t.surface0,
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
