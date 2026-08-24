@@ -45,6 +45,25 @@ sealed class ItemReference with _$ItemReference {
   bool equals({required ItemReference item}) => BridgeLib.instance.api
       .crateApiProjectItemItemReferenceEquals(that: this, item: item);
 
+  /// Whether any composition places this item as a layer — the panel's
+  /// `in use` badge (docs/07 §3.1, docs/15 §12A.3a).
+  ///
+  /// Direct placement only, deliberately, and that rule is the engine's
+  /// ([`lumit_core::Document::item_is_used`]): the badge says "a layer
+  /// somewhere names this", not "some render might reach it", so it does not
+  /// come and go as an unrelated comp is nested elsewhere.
+  bool isUsed() =>
+      BridgeLib.instance.api.crateApiProjectItemItemReferenceIsUsed(
+        that: this,
+      );
+
+  /// This item's colour tag: an index into the same label palette a layer's
+  /// chip uses, `0` for untagged (K-451). Every item of a project saved
+  /// before tags existed answers 0.
+  int label() => BridgeLib.instance.api.crateApiProjectItemItemReferenceLabel(
+        that: this,
+      );
+
   /// Move the item back to the panel root: remove it from every folder that
   /// lists it, as one undo step. Already at the root is a calm no-op.
   void moveToRoot() =>
@@ -62,4 +81,13 @@ sealed class ItemReference with _$ItemReference {
   /// the old name instead of the row losing its label.
   void rename({required String name}) => BridgeLib.instance.api
       .crateApiProjectItemItemReferenceRename(that: this, name: name);
+
+  /// Tag this item, or untag it with `0`. One undo step.
+  ///
+  /// Untagging leaves the document exactly as it was found — the engine
+  /// stores tags as a map beside the items and removes the entry rather than
+  /// writing a zero — so a project nobody has tagged gains no line in the
+  /// file (K-258).
+  void setLabel({required int label}) => BridgeLib.instance.api
+      .crateApiProjectItemItemReferenceSetLabel(that: this, label: label);
 }

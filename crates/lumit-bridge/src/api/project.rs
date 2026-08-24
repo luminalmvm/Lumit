@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::api::{
     composition::{BridgeCompSettings, CompositionReference},
+    folder::FolderReference,
     footage::FootageReference,
     project_item::{item_reference, ItemReference},
     state::{WorkerResponseStream, PROJECTS, STREAMS},
@@ -129,6 +130,34 @@ impl ProjectReference {
             .filter(|i| matches!(i, lumit_core::model::ProjectItem::Composition(_)))
             .count();
         format!("Comp {}", existing + 1)
+    }
+
+    /// Add a folder, as one undo step — the Project panel's bottom-bar Folder
+    /// button (K-451, docs/07 §3.1).
+    ///
+    /// Both decisions are the engine's ([`lumit_core::ops::new_folder_ops`]):
+    /// a blank name becomes the next unused "Folder N", counted past the names
+    /// already taken rather than off the number of folders, and `parent` files
+    /// the new folder inside that one. A `parent` that no longer names a folder
+    /// leaves it at the panel root rather than erroring — a stale selection is
+    /// not a reason to refuse to make a folder.
+    ///
+    /// The ops are committed as one `Op::Batch`, which is what makes the folder
+    /// and its filing arrive and leave together.
+    #[frb(sync)]
+    pub fn new_folder(
+        &self,
+        name: String,
+        parent: Option<Uuid>,
+    ) -> Result<FolderReference, BridgeError> {
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        let (id, ops) = lumit_core::ops::new_folder_ops(&state.store.snapshot(), &name, parent);
+        state
+            .store
+            .commit(Op::Batch { ops })
+            .map_err(BridgeError::OpError)?;
+        Ok(FolderReference::new(self.id, id))
     }
 
     /// Add a composition, filed into the Compositions auto-folder, as one undo

@@ -45,6 +45,27 @@ pub struct BridgeMediaInfo {
     pub fps_num: u32,
     pub fps_den: u32,
     pub duration: crate::api::effect::BridgeRational,
+    /// The picture stream's codec as the container names it (`h264`, `png`),
+    /// or `None` when there is no picture. The *user's* word for the file, not
+    /// a display string of ours, so it crosses untranslated (K-303).
+    pub video_codec: Option<String>,
+    /// The sound stream's codec, or `None` when the file is silent.
+    pub audio_codec: Option<String>,
+    /// The sound's channel count and rate in hertz. Both zero when there is no
+    /// sound — the panel says nothing rather than "0 channels".
+    pub channels: u32,
+    pub sample_rate: u32,
+    /// Whether the picture is a **still** rather than something that runs
+    /// (K-246). A still probes with a video stream too — one frame of it — so
+    /// the question is whether the stream lasts, and the engine
+    /// ([`lumit_media::MediaProbe::runs_as_video`]) is the one place it is
+    /// asked, so the panel cannot call a file a still while the Timeline cuts
+    /// it as a clip.
+    ///
+    /// This is what replaced the panel's zero-picture-width inference: a file
+    /// with no picture is `video_codec: None`, which is a different fact from
+    /// a picture that does not move.
+    pub is_still: bool,
 }
 
 impl FootageReference {
@@ -295,7 +316,40 @@ impl FootageReference {
                 num: duration.num(),
                 den: duration.den(),
             },
+            video_codec: video.map(|v| v.codec.clone()),
+            audio_codec: info.audio.as_ref().map(|a| a.codec.clone()),
+            channels: info
+                .audio
+                .as_ref()
+                .and_then(|a| u32::try_from(a.channels).ok())
+                .unwrap_or(0),
+            sample_rate: info
+                .audio
+                .as_ref()
+                .and_then(|a| u32::try_from(a.sample_rate).ok())
+                .unwrap_or(0),
+            // Has a picture, but it does not run.
+            is_still: info.has_picture() && !info.runs_as_video(),
         }))
+    }
+
+    /// Where this item's file is, as the *project* records it: the relative
+    /// path a saved project actually carries (K-173), falling back to the
+    /// absolute one only when the project has never been saved and there is
+    /// nothing to be relative to.
+    ///
+    /// Display data — the Project panel's Path column. It says where the
+    /// reference points, not whether anything is there; `get_status` is the
+    /// question about the disk, and this deliberately touches none.
+    #[frb(sync)]
+    pub fn file_path(&self) -> Result<String, BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let snapshot = proj.store.snapshot();
+        let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(self.id) else {
+            return Err(BridgeError::InvalidItem);
+        };
+        Ok(footage.media.display_path().to_owned())
     }
 
     pub fn get_status(&self) -> Result<LumitMediaStatus, BridgeError> {

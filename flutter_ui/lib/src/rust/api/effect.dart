@@ -11,8 +11,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `document_for`, `param`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `bridge_unit`, `document_for`, `param`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in effect, in schema order — the Add-effect menu's source of
@@ -79,6 +79,17 @@ Float64List sampleScalarRangeWithContext(
 List<BridgeParamInfo> listParameters({required String effect}) =>
     BridgeLib.instance.api.crateApiEffectListParameters(effect: effect);
 
+/// An effect's vector pairs, in schema order — the fourth static list beside
+/// [`list_parameters`], and memoised on the Dart side for the same reason
+/// (K-183: the schema never changes, and a fetch per card per rebuild is
+/// exactly the traffic the budget test forbids).
+///
+/// An unknown match name is an empty list rather than an error, like every
+/// other schema read: a project carrying an effect this build does not know
+/// still opens.
+List<BridgeParamPair> listPairs({required String effect}) =>
+    BridgeLib.instance.api.crateApiEffectListPairs(effect: effect);
+
 /// Every parameter group `effect` declares, in schema order (empty for an
 /// effect with none, or an unknown name). The panel inserts each group's
 /// twirl at its first member's position and hides the members it covers from
@@ -114,12 +125,27 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
 
   String name();
 
+  /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
+  /// effect has no pair for is unlinked, never an error.
+  bool pairLinked({required String stem});
+
   String serialize();
 
   /// Stage the user's own name for this instance (K-321) — an empty or
   /// whitespace name clears it back to the effect's label. Staging only, like
   /// `set_value`: `LayerReference::set_effects` is the commit.
   void setCustomName({required String name});
+
+  /// Chain or unchain the vector pair keyed by `stem`, on the **staged**
+  /// copy — `LayerReference::set_effects` is the commit, exactly as
+  /// `set_custom_name` and `set_value` are, so a toggle is one op and one
+  /// undo step like every other effect-stack edit.
+  ///
+  /// Answers whether anything moved, so a caller can skip a commit that
+  /// would undo to itself. The proportional drag a chained pair takes is
+  /// deliberately **not** here: it is UI-time arithmetic while a gesture is
+  /// live, and the document's business is only which pairs are tied.
+  bool setPairLinked({required String stem, required bool linked});
 
   /// Overwrite a parameter on this staged copy. Nothing is committed — see the
   /// type's own documentation; `LayerReference::set_effects` is the commit.
@@ -231,12 +257,21 @@ class BridgeEffectInstanceInfo {
   final bool enabled;
   final List<BridgeParamValue> values;
 
+  /// The stems of the vector pairs this instance has chained (K-443), sorted.
+  /// Empty is "every pair unlinked", which is what every older project means.
+  ///
+  /// In the read model rather than asked per pair, for the reason every other
+  /// field here is: a chain glyph is drawn per point row per rebuild, and a
+  /// call apiece is exactly the hover-hot traffic the budget test forbids.
+  final List<String> linkedPairs;
+
   const BridgeEffectInstanceInfo({
     required this.id,
     required this.name,
     this.customName,
     required this.enabled,
     required this.values,
+    required this.linkedPairs,
   });
 
   @override
@@ -245,7 +280,8 @@ class BridgeEffectInstanceInfo {
       name.hashCode ^
       customName.hashCode ^
       enabled.hashCode ^
-      values.hashCode;
+      values.hashCode ^
+      linkedPairs.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -256,7 +292,8 @@ class BridgeEffectInstanceInfo {
           name == other.name &&
           customName == other.customName &&
           enabled == other.enabled &&
-          values == other.values;
+          values == other.values &&
+          linkedPairs == other.linkedPairs;
 }
 
 @freezed
@@ -479,14 +516,22 @@ class BridgeParamInfo {
   final String label;
   final BridgeParamKind kind;
 
+  /// What the number *is* (K-443): the rider the row draws beside the value,
+  /// and — on a point pair — the unit a Viewer pick has to write in. Declared
+  /// per parameter engine-side, so `centre_x` can be px@comp on one effect
+  /// and a per cent of the frame on another without the panel guessing.
+  final BridgeUnit unit;
+
   const BridgeParamInfo({
     required this.id,
     required this.label,
     required this.kind,
+    required this.unit,
   });
 
   @override
-  int get hashCode => id.hashCode ^ label.hashCode ^ kind.hashCode;
+  int get hashCode =>
+      id.hashCode ^ label.hashCode ^ kind.hashCode ^ unit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -495,7 +540,8 @@ class BridgeParamInfo {
           runtimeType == other.runtimeType &&
           id == other.id &&
           label == other.label &&
-          kind == other.kind;
+          kind == other.kind &&
+          unit == other.unit;
 }
 
 @freezed
@@ -597,6 +643,38 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   /// [`BridgeEffectInstanceInfo::values`] — because a press is an event and
   /// not a number that could be keyframed, undone or interpolated.
   const factory BridgeParamKind.action() = BridgeParamKind_Action;
+}
+
+/// One **vector pair** of an effect: two adjacent `_x`/`_y` Float parameters
+/// the panel draws as one row of two wells with a chain between them (K-443).
+///
+/// The convention used to be read off the ids at the seam, by whoever needed
+/// it; [`lumit_core::fx::EffectSchema::pairs`] is the declaration answering it
+/// now, so the panel, the link flag on the instance and the engine all get one
+/// answer. `stem` is the key the link flag is stored under, so it is the
+/// pair's identity rather than either half's id.
+class BridgeParamPair {
+  final String stem;
+  final String x;
+  final String y;
+
+  const BridgeParamPair({
+    required this.stem,
+    required this.x,
+    required this.y,
+  });
+
+  @override
+  int get hashCode => stem.hashCode ^ x.hashCode ^ y.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeParamPair &&
+          runtimeType == other.runtimeType &&
+          stem == other.stem &&
+          x == other.x &&
+          y == other.y;
 }
 
 /// One parameter's current value, as [`BridgeEffectInstance::get_info`]
@@ -724,4 +802,29 @@ sealed class BridgeSideInterp with _$BridgeSideInterp {
   const factory BridgeSideInterp.bezier(
     BridgeBezierSide field0,
   ) = BridgeSideInterp_Bezier;
+}
+
+/// The unit a parameter's number is in (K-443) — what the row draws as its
+/// rider beside the value, and what a point pick has to write in.
+///
+/// Mirrors [`lumit_core::fx::Unit`] with the two the seam has no use for
+/// folded away: `Unset` is a build failure engine-side, so nothing that ships
+/// can carry it, and `PctDiag` is forbidden to every parameter (K-419). Both
+/// arrive here as [`BridgeUnit::Raw`] — the panel draws no rider, which is the
+/// honest answer for a unit that must not exist.
+enum BridgeUnit {
+  /// A plain number: a gamma, a count, a stop, a rate in Hz. No rider.
+  raw,
+
+  /// Per cent, where 100 is the whole of whatever it is a share of.
+  percent,
+
+  /// Pixels at composition size (px@comp) — the one spatial unit (K-419).
+  px,
+  degrees,
+  seconds,
+
+  /// Comp-rate frames.
+  frames,
+  ;
 }

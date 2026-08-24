@@ -180,16 +180,84 @@ other side of this boundary.
     volume curve, a staged `BridgeEffectInstance` — carries the same conversion. Read raw,
     every key on a layer that had been moved drew at the start of the composition.
 
-### The effect schema crosses as three lists, not one
+### The Project panel's item reads (K-451)
+
+An item handle answers what the redesigned panel draws, and each is one call because each is
+one question the document already knows the answer to:
+
+- `ProjectReference::new_folder(name, parent)` — the bottom bar's Folder button. Both
+    decisions are the engine's (`ops::new_folder_ops`): a blank name becomes the next unused
+    "Folder N", and `parent` files it. The ops commit as one `Op::Batch`, which is what makes
+    the folder and its filing arrive and leave together; a `parent` that no longer names a
+    folder leaves it at the root rather than erroring.
+- `FootageReference::file_path()` — the Path column: the relative path a saved project
+    actually carries (K-173), falling back to the absolute one when a project has never been
+    saved. **Display data, and it touches no disk** — `get_status` is the question about the
+    filesystem, and keeping the two apart is what makes drawing the column free.
+- `ItemReference::is_used()` — the `in use` badge. Direct placement only, and the rule is
+    `Document::item_is_used`: a layer somewhere names this, not "some render might reach it".
+    No cache on either side of the seam — the engine's sweep of a document far past any real
+    one is well inside a frame, and a cache would be machinery bought with nothing.
+- `ItemReference::label()` / `set_label(u8)` — the colour tag, an index into the same palette
+    a layer's chip uses, `0` untagged. Untagging removes the entry rather than writing a zero,
+    so a project nobody has tagged gains no line in its file (K-258).
+- `BridgeMediaInfo` carries the container's own **codec names** (`video_codec`,
+    `audio_codec`, each `None` when that stream is absent), the sound's `channels` and
+    `sample_rate`, and an `is_still` flag. The flag exists because a still image probes *with*
+    a video stream — one frame of it — so "is this a still" is `MediaProbe::runs_as_video`'s
+    answer and never something a panel may infer. It replaced the panel's zero-picture-width
+    guess, which could only say "there are no pixels" and said "this is sound". Codec names
+    are the *file's* words, not ours, so they cross untranslated (K-303).
+
+### The Timeline's three drawing facts (K-441)
+
+- **A marker's span crosses as frames.** `BridgeMarker.duration_frames` is `None` for a
+    moment — which is what a plain cue is, and what every marker of a file written before
+    markers could span opens as — and otherwise how many frames of the owner's own rate the
+    pill's bar runs for. Frames rather than the exact rational the *time* crosses as, because
+    frames are what the ruler draws with. The write-back still rides `core_markers`' id merge
+    (K-270), with one rule the frames make necessary: a duration that still reads as the same
+    number of frames keeps the document's **exact** rational, so a rename or a drag cannot
+    quantise away a span finer than a frame that nobody resized.
+- **A cache-bar frame is one byte in two nibbles.** `cached_frames` answers
+    `framecache::bar::read_packed`: the low nibble is the storage state the bar has always
+    drawn (`0` nothing, `1` held coarser, `2` held here, `3` parked coarser, `4` parked here)
+    and the high nibble is the preview **divisor** the found picture was actually made at
+    relative to the scale asked about (`1` full, `2` half, `3` third, `4` quarter, `0`
+    nothing held). Tiers are probed finest first, so the answer is the best picture there is
+    of that frame whatever order the tiers filled in. Two truths the painter carries rather
+    than papers over: a frame held at a scale no adaptive tier renders at reads as nothing
+    held, and on a sampled composition an unrefined frame wears its sample's tier.
+- **A Sequence clip carries its source reach.** `BridgeClip.reach_start_frame` /
+    `reach_end_frame` are where the whole source would sit on the **comp's** clock if none of
+    it had been trimmed away — the ghost §12A.1 asks for, in the same comp frames
+    `start_frame` already crosses in, so drawing it costs no time↔frame trip. `None` is the
+    engine's own "not knowable" (`Clip::source_reach`): a **retimed** clip has no reach,
+    because its map decides which source moment each frame shows, and a source whose length
+    could not be read has none either rather than one pinned to a guess. Nothing is clamped.
+    The source's length is the one thing the model cannot look up — a nested comp's is on the
+    comp, a footage item's comes from the media probe — so the **seam** supplies it, which is
+    why `read_layer_info` now takes the project's state and its document.
+
+### The effect schema crosses as four lists, not one
 
 An effect's parameters are one question; how the panel *arranges* them is another, and they
-have different lifetimes. Three `#[frb(sync)]` free functions answer them, each keyed by the
+have different lifetimes. Four `#[frb(sync)]` free functions answer them, each keyed by the
 effect's match name and each memoised on the Dart side for the life of the process — the
 schema is static, and re-fetching it per card per rebuild was real hover-hot bridge traffic
 (K-183, and the budget test that forbids bridge calls in a rebuild path):
 
 - `list_parameters(effect)` — one `BridgeParamInfo` per declared parameter, in schema order:
-    its id, its label, and its **kind**, which is what decides the control drawn. The kinds
+    its id, its label, its **unit**, and its **kind**, which is what decides the control drawn.
+    The **unit** (`BridgeUnit`, K-443) is what the row draws as its rider beside the value —
+    `Raw` (no rider), `Percent`, `Px` (px@comp), `Degrees`, `Seconds`, `Frames` — and it is
+    also what a point pick has to write in. It crosses because the *declaration* is the only
+    thing that can tell Radial blur's per-cent `centre_x` from the dozen effects whose
+    `centre_x` is px@comp; a Dart map keyed by parameter id could not, and was deleted with
+    this. `Unit::Unset` and `Unit::PctDiag` never reach the seam — the first fails the engine
+    build, the second is forbidden to every parameter (K-419) — and both would arrive as
+    `Raw`, which draws no rider.
+    The kinds
     are Float, Int, **Angle**, Choice, Bool, Colour, Seed, File, Layer, **MaskPath**,
     **Curve** and **Slider**.
     A `MaskPath` names one of the *owning layer's* masks (K-408) and crosses as a
@@ -234,14 +302,31 @@ schema is static, and re-fetching it per card per rebuild was real hover-hot bri
     write to a greyed parameter is still accepted, and the resolve step implements the real
     branch independently and never consults these rules, so the two cannot drift into
     disagreeing about pixels.
+- `list_pairs(effect)` — the **vector pairs** (K-443): one `BridgeParamPair` per two adjacent
+    `_x`/`_y` Float parameters, carrying the pair's `stem` and both halves' ids. The
+    convention used to be read off the ids at the seam, in Dart, by whoever happened to need
+    it; `EffectSchema::pairs()` is the declaration answering it now, so the panel's row
+    folding, the link flag on the instance and the engine all get one answer.
 
 **There is no `Point` kind, and that is deliberate.** A 2-D point crosses as two adjacent
 `_x`/`_y` Float parameters that the panel folds into one row with a crosshair pick
-([07-UI-SPEC.md](07-UI-SPEC.md) §6.1) — the naming convention is the whole mechanism. The
-Lens flare's Light, Radial blur's Centre and Depth of field's Focus point all ride it. An
+([07-UI-SPEC.md](07-UI-SPEC.md) §6.1) — the naming convention is the whole mechanism, and
+`list_pairs` is where it is now written down. The Lens flare's Light, Radial blur's Centre and
+Depth of field's Focus point all ride it. An
 `Angle` **is** its own kind, because no arrangement of existing rows draws a dial; its value
 still crosses as a `BridgeEffectValue::Float`, since an angle is a number of degrees and the
 kind only says which control to draw.
+
+**A pair's chain is instance state, and rides the staging shape.**
+`BridgeEffectInstanceInfo.linked_pairs` carries the stems this instance has chained (empty is
+"all unlinked", which is every older project), in the **read model** so a chain glyph is drawn
+per point row per rebuild with no call of its own.
+`BridgeEffectInstance::set_pair_linked(stem, linked)` toggles it on the **staged** copy and
+answers whether anything moved, exactly as `set_custom_name` does;
+`LayerReference::set_effects` is the commit, so a toggle is one `SetLayerEffects` op and one
+undo step like every other effect-stack edit. The **proportional drag itself is not on the
+seam at all**: scaling y as x is dragged is UI-time arithmetic for the life of a gesture, and
+the document's business is only which pairs are tied together.
 
 ### The camera track: an event down, readings up (K-417)
 

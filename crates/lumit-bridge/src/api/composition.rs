@@ -19,28 +19,46 @@ use crate::api::{
     BridgeError,
 };
 
-/// One timeline marker (docs/03 §11): a cue on the comp's timebase.
+/// One timeline marker (docs/03 §11): a cue on the comp's timebase, and — when
+/// it spans — how long it runs for.
 ///
-/// The engine's marker also carries a duration, a kind and any unknown fields
-/// a newer Lumit wrote (docs/10 §1.1); none of the three has a control, so none
-/// of them crosses. They are **not** lost on a write-back: [`core_markers`]
-/// merges each incoming marker onto the one the document already holds under
-/// that id, so the panel edits what it can see and the rest survives untouched
-/// (K-270).
+/// The engine's marker also carries a kind and any unknown fields a newer Lumit
+/// wrote (docs/10 §1.1); neither has a control, so neither crosses. They are
+/// **not** lost on a write-back: [`core_markers`] merges each incoming marker
+/// onto the one the document already holds under that id, so the panel edits
+/// what it can see and the rest survives untouched (K-270).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BridgeMarker {
     pub id: Uuid,
     pub time: BridgeRational,
     pub label: String,
+    /// How many frames of the owner's own rate the marker spans, or `None` for
+    /// a **moment** — which is what a plain cue is, and what every marker in a
+    /// file written before markers could span opens as.
+    ///
+    /// Frames rather than the exact rational the time crosses as, because this
+    /// is what the ruler draws with: a pill's bar is `duration_frames` frames
+    /// wide, and the panel would otherwise do the time↔frame trip itself for
+    /// every marker of every rebuild. The merge below is what keeps a duration
+    /// finer than a frame from being rounded away by a drag that never touched
+    /// it.
+    pub duration_frames: Option<i64>,
 }
 
 /// A core marker as the bridge carries it. One conversion each way, shared by
 /// the composition's list and by every layer's own (K-254) — two copies of this
 /// mapping is two chances for a marker to mean something different depending on
 /// which row it is drawn on.
+///
+/// `rate` is the owner's frame rate, which is the clock the duration is counted
+/// on. Taken as an argument rather than defaulted, so a new reader cannot
+/// forget one — the same habit the keyframe offset takes (K-213).
 #[frb(ignore)]
-pub(crate) fn bridge_marker(m: &lumit_core::markers::Marker) -> BridgeMarker {
+pub(crate) fn bridge_marker(
+    m: &lumit_core::markers::Marker,
+    rate: lumit_core::time::FrameRate,
+) -> BridgeMarker {
     BridgeMarker {
         id: m.id,
         time: BridgeRational {
@@ -48,39 +66,47 @@ pub(crate) fn bridge_marker(m: &lumit_core::markers::Marker) -> BridgeMarker {
             den: m.time.0.den(),
         },
         label: m.label.clone(),
+        duration_frames: m
+            .duration
+            .map(|d| rate.frame_at(lumit_core::time::CompTime(d))),
     }
 }
 
 /// A whole marker list coming back from the panel, merged onto the list the
 /// document holds (K-270).
 ///
-/// **Why a merge and not a conversion.** The bridge marker carries the three
-/// fields a panel can edit — id, time, label — and the engine's marker carries
-/// three more it cannot: the *kind* (a detected beat's provenance, plus its
-/// confidence), a spanning marker's *duration*, and the `extra` map that keeps
-/// fields a newer Lumit wrote (docs/10 §1.1's forward-compatibility promise).
-/// Rebuilding each marker from the bridge's three fields alone flattened all
-/// three to their defaults, so **dragging or renaming a beat marker on the
-/// ruler turned it into an ordinary cue** — and then *Clear beat markers* could
-/// no longer find it, because there was nothing left to say it had ever been
-/// one. K-254's ruler markers made that a click away.
+/// **Why a merge and not a conversion.** The bridge marker carries what a panel
+/// can edit — id, time, label and the span — and the engine's marker carries
+/// two more it cannot: the *kind* (a detected beat's provenance, plus its
+/// confidence) and the `extra` map that keeps fields a newer Lumit wrote
+/// (docs/10 §1.1's forward-compatibility promise). Rebuilding each marker from
+/// the bridge's fields alone flattened those to their defaults, so **dragging
+/// or renaming a beat marker on the ruler turned it into an ordinary cue** —
+/// and then *Clear beat markers* could no longer find it, because there was
+/// nothing left to say it had ever been one. K-254's ruler markers made that a
+/// click away.
 ///
 /// So each incoming marker is matched by id against what the document already
-/// holds: found, and it keeps that marker's kind, duration and extra; new, and
-/// it is a plain user marker, which is exactly what a marker the panel just
-/// created is. Nothing about the frb surface changes — the panel has no use for
-/// a kind it cannot edit, and inventing a control for one to fix a data-loss
-/// bug would be the wrong order.
+/// holds: found, and it keeps that marker's kind and extra; new, and it is a
+/// plain user marker, which is exactly what a marker the panel just created is.
+///
+/// **The duration crosses now, and still rides the merge.** It crosses as
+/// *frames* — what the ruler draws with — so a straight conversion back would
+/// round a marker whose span is finer than a frame down to the frame boundary
+/// every time an unrelated drag wrote the list. So a duration that still reads
+/// as the same number of frames keeps the document's exact rational, and only a
+/// span the panel actually changed is rebuilt from frames.
 #[frb(ignore)]
 pub(crate) fn core_markers(
     incoming: Vec<BridgeMarker>,
     existing: &[lumit_core::markers::Marker],
+    rate: lumit_core::time::FrameRate,
 ) -> Result<Vec<lumit_core::markers::Marker>, BridgeError> {
     incoming
         .into_iter()
         .map(|m| {
             let was = existing.iter().find(|e| e.id == m.id);
-            core_marker(m, was)
+            core_marker(m, was, rate)
         })
         .collect()
 }
@@ -89,18 +115,30 @@ pub(crate) fn core_markers(
 pub(crate) fn core_marker(
     m: BridgeMarker,
     existing: Option<&lumit_core::markers::Marker>,
+    rate: lumit_core::time::FrameRate,
 ) -> Result<lumit_core::markers::Marker, BridgeError> {
     use lumit_core::time::{CompTime, Rational};
+    let was = existing.and_then(|e| e.duration);
+    let duration = match m.duration_frames {
+        // Unchanged in frames: keep the exact span the document holds, so a
+        // rename or a drag cannot quantise a marker nobody resized.
+        Some(frames) if was.map(|d| rate.frame_at(CompTime(d))) == Some(frames) => was,
+        // A span the panel set. Nought frames or fewer is a moment, which is
+        // what "no span" means everywhere else.
+        Some(frames) if frames > 0 => rate.time_of_frame(frames).ok().map(|t| t.0),
+        Some(_) => None,
+        None => None,
+    };
     Ok(lumit_core::markers::Marker {
         id: m.id,
         time: CompTime(
             Rational::new(m.time.num, m.time.den).map_err(|_| BridgeError::InvalidTime)?,
         ),
+        duration,
+        label: m.label,
         // Everything the panel cannot edit is carried from the marker that was
         // already there; a marker it has just made has nothing to carry, and
         // takes the plain-user defaults.
-        duration: existing.and_then(|e| e.duration),
-        label: m.label,
         kind: existing.map(|e| e.kind).unwrap_or_default(),
         extra: existing.map(|e| e.extra.clone()).unwrap_or_default(),
     })
@@ -354,7 +392,12 @@ impl CompositionReference {
     /// pure-interface change, costs zero bridge calls.
     #[frb(sync)]
     pub fn get_model(&self) -> Result<BridgeCompModel, BridgeError> {
-        let comp = self.composition()?;
+        let proj = self.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        let Some(lumit_core::model::ProjectItem::Composition(comp)) = doc.item(self.id) else {
+            return Err(BridgeError::InvalidComp);
+        };
         Ok(BridgeCompModel {
             duration_frames: comp
                 .frame_rate
@@ -369,7 +412,7 @@ impl CompositionReference {
                 .iter()
                 .map(|layer| BridgeLayerEntry {
                     layer: LayerReference::new(self.project, self.id, layer.id),
-                    info: crate::api::layer::read_layer_info(&comp, layer),
+                    info: crate::api::layer::read_layer_info(&state, &doc, comp, layer),
                 })
                 .collect(),
         })
@@ -1100,11 +1143,11 @@ impl CompositionReference {
     /// Every marker on this comp, in the order the document holds them.
     #[frb(sync)]
     pub fn get_markers(&self) -> Result<Vec<BridgeMarker>, BridgeError> {
-        Ok(self
-            .composition()?
+        let comp = self.composition()?;
+        Ok(comp
             .markers
             .iter()
-            .map(bridge_marker)
+            .map(|m| bridge_marker(m, comp.frame_rate))
             .collect())
     }
 
@@ -1114,7 +1157,8 @@ impl CompositionReference {
     pub fn set_markers(&self, markers: Vec<BridgeMarker>) -> Result<(), BridgeError> {
         // Merged onto what the comp already holds, so a dragged or renamed beat
         // marker stays a beat marker (K-270).
-        let markers = core_markers(markers, &self.composition()?.markers)?;
+        let comp = self.composition()?;
+        let markers = core_markers(markers, &comp.markers, comp.frame_rate)?;
 
         self.commit(lumit_core::Op::SetCompMarkers {
             comp: self.id,

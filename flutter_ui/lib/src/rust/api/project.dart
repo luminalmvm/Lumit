@@ -175,6 +175,22 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceNewComposition(
           that: this, name: name, settings: settings);
 
+  /// Add a folder, as one undo step — the Project panel's bottom-bar Folder
+  /// button (K-451, docs/07 §3.1).
+  ///
+  /// Both decisions are the engine's ([`lumit_core::ops::new_folder_ops`]):
+  /// a blank name becomes the next unused "Folder N", counted past the names
+  /// already taken rather than off the number of folders, and `parent` files
+  /// the new folder inside that one. A `parent` that no longer names a folder
+  /// leaves it at the panel root rather than erroring — a stale selection is
+  /// not a reason to refuse to make a folder.
+  ///
+  /// The ops are committed as one `Op::Batch`, which is what makes the folder
+  /// and its filing arrive and leave together.
+  FolderReference newFolder({required String name, UuidValue? parent}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNewFolder(
+          that: this, name: name, parent: parent);
+
   /// The name a comp made right now would get, if nobody typed one — "Comp 3"
   /// when the project holds two. What the New composition dialog puts in its
   /// Name field before the user touches it, so the field shows the same name

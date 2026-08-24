@@ -776,8 +776,12 @@ pub(crate) mod bar {
     }
 
     /// The storage state out of a strip byte. Its twin — the divisor — is
-    /// `byte >> 4`, and has no reader here because nothing in Rust asks for it:
-    /// the strip crosses whole and the bar's painter splits it.
+    /// `byte >> 4`.
+    ///
+    /// Test-only: the strip crosses whole and the bar's painter splits it, so
+    /// neither half has a reader in Rust. It stays because the split is what
+    /// the packing is proved against.
+    #[cfg(test)]
     pub(crate) const fn storage_of(byte: u8) -> u8 {
         byte & 0x0F
     }
@@ -822,6 +826,12 @@ pub(crate) mod bar {
     ///
     /// All zeros when the worker has not published this composition at this
     /// scale yet — the honest answer, and one the next worker turn corrects.
+    ///
+    /// Test-only since K-441 put both nibbles across the seam: the bar reads
+    /// [`read_packed`] and splits them itself, so nothing in the shipped
+    /// library still asks for the storage half alone. It stays because it is
+    /// what the masking is proved against.
+    #[cfg(test)]
     pub(crate) fn read(comp: uuid::Uuid, frames: u64, scale_q: u16) -> Vec<u8> {
         let mut out = read_packed(comp, frames, scale_q);
         for byte in &mut out {
@@ -1224,11 +1234,10 @@ mod tests {
     /// kept and *how big* it is, and the two must stay separable — the bar
     /// draws its storage states from one nibble and its hue from the other.
     ///
-    /// The half that matters is [`bar::read`]: it keeps answering `0`..=`4`
-    /// however large the divisor grows, because that is what every consumer
-    /// written before the resolution tier existed reads. A packed byte
-    /// reaching one of those unmasked draws a frame held at quarter as some
-    /// storage state nobody has ever defined.
+    /// [`bar::storage_of`] is the split, and it keeps answering `0`..=`4`
+    /// however large the divisor grows. A packed byte read as a storage state
+    /// unmasked draws a frame held at quarter as some state nobody has ever
+    /// defined, which is what the painter would do given the wrong half.
     #[test]
     fn a_strip_byte_carries_the_storage_state_and_the_resolution_tier() {
         let _guard = cache_test_guard();

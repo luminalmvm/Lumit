@@ -2298,6 +2298,7 @@ fn markers_and_the_work_area_round_trip() {
 
     assert!(comp.get_markers().expect("markers").is_empty());
     comp.set_markers(vec![BridgeMarker {
+        duration_frames: None,
         id: Uuid::now_v7(),
         time: BridgeRational {
             num: 1001,
@@ -4524,6 +4525,7 @@ fn clearing_beats_keeps_the_markers_a_person_made() {
     let comp = CompositionReference::new(project.id, layer.comp_id());
 
     comp.set_markers(vec![BridgeMarker {
+        duration_frames: None,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
         label: "Chorus".into(),
@@ -4602,13 +4604,21 @@ fn dragging_a_beat_marker_leaves_it_a_beat_marker() {
             .expect("seeded");
     }
 
-    // The panel's write-back: same marker, moved and renamed.
-    comp.set_markers(vec![BridgeMarker {
-        id: beat_id,
-        time: BridgeRational { num: 3, den: 2 },
-        label: "Moved".into(),
-    }])
-    .expect("dragged");
+    // The panel's write-back: the list it read, with this marker moved and
+    // renamed. Read first, exactly as the ruler does — the span crosses now
+    // (K-441), so a write built from nothing would be the panel saying "make
+    // this a moment" rather than the panel not knowing about it.
+    let dragged: Vec<BridgeMarker> = comp
+        .get_markers()
+        .expect("markers")
+        .into_iter()
+        .map(|m| BridgeMarker {
+            time: BridgeRational { num: 3, den: 2 },
+            label: "Moved".into(),
+            ..m
+        })
+        .collect();
+    comp.set_markers(dragged).expect("dragged");
 
     let stored = comp.composition().expect("comp").markers;
     assert_eq!(stored.len(), 1);
@@ -4630,7 +4640,7 @@ fn dragging_a_beat_marker_leaves_it_a_beat_marker() {
     assert_eq!(
         stored[0].duration,
         Some(lumit_core::Rational::new(1, 4).expect("a quarter second")),
-        "a spanning marker keeps its span"
+        "a span nobody resized keeps its exact length, sub-frame and all"
     );
     assert_eq!(
         stored[0].extra.get("from_a_newer_lumit"),
@@ -4653,6 +4663,7 @@ fn a_marker_the_panel_just_made_is_a_user_marker() {
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
     comp.set_markers(vec![BridgeMarker {
+        duration_frames: None,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
         label: "Mine".into(),
@@ -4684,6 +4695,7 @@ fn dropping_a_comp_in_copies_its_markers_onto_the_layer() {
     let seeded = Uuid::now_v7();
     source
         .set_markers(vec![BridgeMarker {
+            duration_frames: None,
             id: seeded,
             time: BridgeRational { num: 1, den: 2 },
             label: "Drop".into(),
@@ -4717,6 +4729,7 @@ fn precompose_carries_markers_in_and_leaves_the_layer_bare() {
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
     comp.set_markers(vec![BridgeMarker {
+        duration_frames: None,
         id: Uuid::now_v7(),
         time: BridgeRational { num: 1, den: 2 },
         label: "Chorus".into(),
@@ -6010,4 +6023,285 @@ fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {
     // A layer with no Camera track has no analysis to read.
     let solid = comp.add_solid_layer().expect("a solid");
     assert_eq!(track_status(solid).stage, BridgeTrackStage::Idle);
+}
+
+// ---------------------------------------------------------------------------
+// The Project panel's five engine answers, across the seam (K-451,
+// docs/07 §3.1, docs/15 §12A.3a).
+// ---------------------------------------------------------------------------
+
+/// The bottom bar's Folder button. One call, one undo step, and both of the
+/// engine's decisions — the default name and the filing — honoured through it.
+#[test]
+fn new_folder_names_itself_files_itself_and_undoes_in_one_step() {
+    let (project, folder, _filed, _loose) = project_with_folder();
+    let ItemReference::Folder(parent) = &folder else {
+        panic!("the fixture built a folder");
+    };
+
+    // A blank name takes the next unused "Folder N".
+    let made = project.new_folder(String::new(), None).expect("a folder");
+    assert_eq!(
+        ItemReference::Folder(FolderReference::new(project.id, made.id))
+            .name()
+            .expect("name"),
+        "Folder 1"
+    );
+
+    // Filed inside a parent, and the whole thing is one undo step: undoing
+    // takes the folder away rather than leaving it behind unfiled.
+    let filed = project
+        .new_folder("Renders".into(), Some(parent.id))
+        .expect("a filed folder");
+    let filed_ref = ItemReference::Folder(FolderReference::new(project.id, filed.id));
+    assert!(
+        parent
+            .get_children()
+            .expect("children")
+            .iter()
+            .any(|c| c.equals(&filed_ref)),
+        "the new folder is listed by its parent"
+    );
+    project.undo().expect("undone");
+    assert!(
+        !parent
+            .get_children()
+            .expect("children")
+            .iter()
+            .any(|c| c.equals(&filed_ref)),
+        "one undo takes the folder and its filing together"
+    );
+
+    // A parent that is not a folder any more leaves it at the root rather
+    // than refusing to make it at all.
+    let orphan = project
+        .new_folder("Loose".into(), Some(Uuid::now_v7()))
+        .expect("still made");
+    let orphan_ref = ItemReference::Folder(FolderReference::new(project.id, orphan.id));
+    assert!(project
+        .get_items()
+        .expect("roots")
+        .iter()
+        .any(|r| r.equals(&orphan_ref)));
+}
+
+/// The Path column. Display data: it says where the reference points, and
+/// asks the disk nothing.
+#[test]
+fn file_path_reports_the_reference_the_project_carries() {
+    let (_project, _folder, filed, _loose) = project_with_folder();
+    let ItemReference::Footage(footage) = &filed else {
+        panic!("the fixture built footage");
+    };
+    assert_eq!(footage.file_path().expect("a path"), "filed.mp4");
+}
+
+/// The `in use` badge. Direct placement only, whatever the switches say.
+#[test]
+fn is_used_answers_for_a_placed_item_and_only_a_placed_one() {
+    let (project, _folder, filed, loose) = project_with_folder();
+    assert!(!filed.is_used().expect("asked"), "nothing places it yet");
+
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let ItemReference::Footage(footage) = &filed else {
+        panic!("the fixture built footage");
+    };
+    comp.add_footage_layer(&FootageReference::new(project.id, footage.id), false)
+        .expect("placed");
+    assert!(filed.is_used().expect("asked"), "a layer names it");
+    assert!(!loose.is_used().expect("asked"), "and only that one");
+
+    // A hidden layer still places the asset: the badge says "a layer names
+    // this", not "a render reaches it".
+    let layer = comp.get_layers().expect("layers")[0];
+    layer
+        .set_switch(crate::api::layer::BridgeLayerSwitch::Visible, false)
+        .expect("hidden");
+    assert!(filed.is_used().expect("asked"), "hidden is still placed");
+}
+
+/// The colour tag. Untagging leaves the document exactly as it was found, so
+/// tagging and untagging is not an edit that shows up in the file.
+#[test]
+fn a_label_round_trips_and_untagging_leaves_no_trace() {
+    let (_project, _folder, filed, loose) = project_with_folder();
+    assert_eq!(filed.label().expect("asked"), 0, "untagged by default");
+
+    filed.set_label(4).expect("tagged");
+    assert_eq!(filed.label().expect("asked"), 4);
+    assert_eq!(loose.label().expect("asked"), 0, "and only that one");
+
+    filed.set_label(0).expect("untagged");
+    assert_eq!(filed.label().expect("asked"), 0);
+}
+
+// ---------------------------------------------------------------------------
+// The Timeline's three (K-441, docs/15 §6.3, §12A.1).
+// ---------------------------------------------------------------------------
+
+/// A marker's span crosses as frames and comes back unharmed, and a marker
+/// nobody resized keeps the exact duration the document holds even when the
+/// panel writes the whole list for some other reason (K-270).
+#[test]
+fn a_markers_span_crosses_as_frames_and_survives_a_rename() {
+    use crate::api::composition::BridgeMarker;
+
+    let project = LumitBridgeState::new_project(None).expect("a project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+
+    comp.set_markers(vec![
+        BridgeMarker {
+            id: Uuid::now_v7(),
+            time: BridgeRational { num: 0, den: 1 },
+            label: "moment".into(),
+            duration_frames: None,
+        },
+        BridgeMarker {
+            id: Uuid::now_v7(),
+            time: BridgeRational { num: 1, den: 1 },
+            label: "span".into(),
+            duration_frames: Some(12),
+        },
+    ])
+    .expect("written");
+
+    let read = comp.get_markers().expect("markers");
+    assert_eq!(read[0].duration_frames, None, "a moment stays a moment");
+    assert_eq!(read[1].duration_frames, Some(12), "and a span its length");
+
+    // Renaming writes the whole list back. The span must not be quantised or
+    // dropped by a write that never touched it.
+    let renamed: Vec<BridgeMarker> = read
+        .into_iter()
+        .map(|m| BridgeMarker {
+            label: format!("{} renamed", m.label),
+            ..m
+        })
+        .collect();
+    comp.set_markers(renamed).expect("written");
+    let read = comp.get_markers().expect("markers");
+    assert_eq!(read[1].duration_frames, Some(12));
+    assert_eq!(read[1].label, "span renamed");
+
+    // Nought frames is a moment, which is what "no span" means everywhere.
+    let mut back = comp.get_markers().expect("markers");
+    back[1].duration_frames = Some(0);
+    comp.set_markers(back).expect("written");
+    assert_eq!(
+        comp.get_markers().expect("markers")[1].duration_frames,
+        None
+    );
+}
+
+/// The cache strip crosses whole: the storage state the bar has always drawn
+/// in the low nibble, and the divisor the picture was made at in the high one.
+#[test]
+fn the_cache_strip_crosses_with_both_nibbles() {
+    let project = LumitBridgeState::new_project(None).expect("a project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let scale_q = lumit_render::preview_scale_q(crate::render::quality_for(1.0));
+    crate::framecache::bar::publish(
+        comp.id,
+        scale_q,
+        vec![
+            crate::framecache::bar::pack(2, 1),
+            crate::framecache::bar::pack(1, 2),
+            crate::framecache::bar::pack(3, 4),
+            crate::framecache::bar::pack(0, 0),
+        ],
+    );
+
+    assert_eq!(
+        comp.cached_frames(4, 1.0),
+        vec![0x12, 0x21, 0x43, 0x00],
+        "the painter gets both halves, not the storage one alone"
+    );
+    crate::framecache::bar::invalidate();
+}
+
+// ---------------------------------------------------------------------------
+// The Effect controls' unit rider and vector-pair chain (K-443,
+// docs/15 §12A.3).
+// ---------------------------------------------------------------------------
+
+/// Every declared parameter says what its number is, so the row's rider is
+/// read off the declaration rather than off a table keyed by parameter id —
+/// which could not tell Radial blur's per-cent Centre from the effects whose
+/// `centre_x` is px@comp.
+#[test]
+fn a_parameter_declares_its_unit_across_the_seam() {
+    use crate::api::effect::{list_parameters, BridgeUnit};
+
+    let unit = |effect: &str, id: &str| {
+        list_parameters(effect.to_owned())
+            .into_iter()
+            .find(|p| p.id == id)
+            .unwrap_or_else(|| panic!("{effect} declares {id}"))
+            .unit
+    };
+
+    assert_eq!(unit("blur", "radius"), BridgeUnit::Px);
+    assert_eq!(unit("blur", "mix"), BridgeUnit::Percent);
+    // The same parameter id, two different units — the whole reason this
+    // crosses at all.
+    assert_eq!(unit("radial_blur", "centre_x"), BridgeUnit::Percent);
+    assert_eq!(unit("mirror", "centre_x"), BridgeUnit::Px);
+    assert_eq!(unit("lens_flare", "light_x"), BridgeUnit::Px);
+    assert_eq!(unit("dof", "focus_point_x"), BridgeUnit::Px);
+    // A control that carries no number carries no unit, and neither does a
+    // number that genuinely has none.
+    assert_eq!(unit("blur", "blend"), BridgeUnit::Raw);
+}
+
+/// The pairs the panel folds rows by come from the declaration, and a pair's
+/// chain is stored under its stem, staged like every other effect edit and
+/// committed as one undo step by `set_effects`.
+#[test]
+fn vector_pairs_and_their_chains_cross_the_seam() {
+    use crate::api::effect::list_pairs;
+
+    let pairs = list_pairs("lens_flare".to_owned());
+    let light = pairs
+        .iter()
+        .find(|p| p.stem == "light")
+        .expect("the flare declares a Light pair");
+    assert_eq!(light.x, "light_x");
+    assert_eq!(light.y, "light_y");
+    assert!(
+        list_pairs("nonesuch".to_owned()).is_empty(),
+        "an effect this build does not know has no pairs, not an error"
+    );
+
+    let project = LumitBridgeState::new_project(None).expect("a project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let layer = comp.add_solid_layer().expect("a solid");
+    layer.add_effect("lens_flare".into()).expect("added");
+
+    // Default unlinked, which is what every older project means.
+    assert!(layer.get_info().expect("info").effects[0]
+        .linked_pairs
+        .is_empty());
+
+    let mut staged = layer.get_effects().expect("stack");
+    assert!(
+        staged[0].set_pair_linked("light".into(), true),
+        "linking an unlinked pair moves something"
+    );
+    assert!(
+        !staged[0].set_pair_linked("light".into(), true),
+        "and linking it again does not, so no op is committed"
+    );
+    layer.set_effects(staged).expect("committed");
+
+    assert_eq!(
+        layer.get_info().expect("info").effects[0].linked_pairs,
+        vec!["light".to_owned()],
+        "the read model carries the chain, so a row draws it with no call"
+    );
+
+    // One undo step, like every other effect-stack edit.
+    project.undo().expect("undone");
+    assert!(layer.get_info().expect("info").effects[0]
+        .linked_pairs
+        .is_empty());
 }

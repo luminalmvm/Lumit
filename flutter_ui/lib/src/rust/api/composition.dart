@@ -219,27 +219,41 @@ class BridgeLayerEntry {
           info == other.info;
 }
 
-/// One timeline marker (docs/03 §11): a cue on the comp's timebase.
+/// One timeline marker (docs/03 §11): a cue on the comp's timebase, and — when
+/// it spans — how long it runs for.
 ///
-/// The engine's marker also carries a duration, a kind and any unknown fields
-/// a newer Lumit wrote (docs/10 §1.1); none of the three has a control, so none
-/// of them crosses. They are **not** lost on a write-back: [`core_markers`]
-/// merges each incoming marker onto the one the document already holds under
-/// that id, so the panel edits what it can see and the rest survives untouched
-/// (K-270).
+/// The engine's marker also carries a kind and any unknown fields a newer Lumit
+/// wrote (docs/10 §1.1); neither has a control, so neither crosses. They are
+/// **not** lost on a write-back: [`core_markers`] merges each incoming marker
+/// onto the one the document already holds under that id, so the panel edits
+/// what it can see and the rest survives untouched (K-270).
 class BridgeMarker {
   final UuidValue id;
   final BridgeRational time;
   final String label;
 
+  /// How many frames of the owner's own rate the marker spans, or `None` for
+  /// a **moment** — which is what a plain cue is, and what every marker in a
+  /// file written before markers could span opens as.
+  ///
+  /// Frames rather than the exact rational the time crosses as, because this
+  /// is what the ruler draws with: a pill's bar is `duration_frames` frames
+  /// wide, and the panel would otherwise do the time↔frame trip itself for
+  /// every marker of every rebuild. The merge below is what keeps a duration
+  /// finer than a frame from being rounded away by a drag that never touched
+  /// it.
+  final PlatformInt64? durationFrames;
+
   const BridgeMarker({
     required this.id,
     required this.time,
     required this.label,
+    this.durationFrames,
   });
 
   @override
-  int get hashCode => id.hashCode ^ time.hashCode ^ label.hashCode;
+  int get hashCode =>
+      id.hashCode ^ time.hashCode ^ label.hashCode ^ durationFrames.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -248,7 +262,8 @@ class BridgeMarker {
           runtimeType == other.runtimeType &&
           id == other.id &&
           time == other.time &&
-          label == other.label;
+          label == other.label &&
+          durationFrames == other.durationFrames;
 }
 
 /// How playback should behave when the machine cannot render at the
@@ -473,7 +488,12 @@ class CompositionReference {
         that: this,
       );
 
-  /// Which frames of this composition are held, one byte each:
+  /// Which frames of this composition are held, one byte each — **two
+  /// nibbles**, because the bar says not just "cached" but "cached at what
+  /// size" (K-441, docs/15 §6.3).
+  ///
+  /// The **low** nibble (`byte & 0x0F`) is the storage state the bar has
+  /// always drawn:
   ///
   /// * `0` — nothing held.
   /// * `1` — held in memory or on the graphics card, but only at a coarser
@@ -483,9 +503,20 @@ class CompositionReference {
   /// * `4` — parked on disk only, at this resolution: promotable, not yet
   ///   playable.
   ///
+  /// The **high** nibble (`byte >> 4`) is the preview **divisor** the picture
+  /// that was found was actually made at, relative to `scale`: `1` full, `2`
+  /// half, `3` third, `4` quarter, and `0` when nothing is held. The tiers are
+  /// probed finest first, so the answer is the best picture there is of that
+  /// frame and does not depend on the order the tiers filled.
+  ///
+  /// Two truths to carry over rather than paper over: a frame held at a scale
+  /// no adaptive tier renders at reads as **nothing held**, and on a sampled
+  /// composition a frame the refinement sweep has not reached wears its
+  /// sample's tier.
+  ///
   /// This is what the Timeline's cache bar draws (docs/07-UI-SPEC.md §3.2,
-  /// docs/06-RENDER-PIPELINE.md §5.6): green for the first two, steel blue for
-  /// the disk pair, dimmed for the coarser one of each.
+  /// docs/06-RENDER-PIPELINE.md §5.6): mint for the memory pair, steel blue
+  /// for the disk pair, stepped down as the divisor coarsens.
   ///
   /// **A mirror read, not a query.** Frames are named by a hash of their
   /// content (docs/06 §5.2), so answering "is frame 12 held?" means *naming*

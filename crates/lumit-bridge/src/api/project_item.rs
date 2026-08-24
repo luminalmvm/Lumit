@@ -172,4 +172,53 @@ impl ItemReference {
 
         Ok(item.name().to_string())
     }
+
+    /// Whether any composition places this item as a layer — the panel's
+    /// `in use` badge (docs/07 §3.1, docs/15 §12A.3a).
+    ///
+    /// Direct placement only, deliberately, and that rule is the engine's
+    /// ([`lumit_core::Document::item_is_used`]): the badge says "a layer
+    /// somewhere names this", not "some render might reach it", so it does not
+    /// come and go as an unrelated comp is nested elsewhere.
+    #[frb(sync)]
+    pub fn is_used(&self) -> Result<bool, BridgeError> {
+        let proj = self.project()?;
+        let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = p.store.snapshot();
+        let id = self.item_id();
+        if doc.item(id).is_none() {
+            return Err(BridgeError::InvalidItem);
+        }
+        Ok(doc.item_is_used(id))
+    }
+
+    /// This item's colour tag: an index into the same label palette a layer's
+    /// chip uses, `0` for untagged (K-451). Every item of a project saved
+    /// before tags existed answers 0.
+    #[frb(sync)]
+    pub fn label(&self) -> Result<u8, BridgeError> {
+        let proj = self.project()?;
+        let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = p.store.snapshot();
+        let id = self.item_id();
+        if doc.item(id).is_none() {
+            return Err(BridgeError::InvalidItem);
+        }
+        Ok(doc.item_label(id))
+    }
+
+    /// Tag this item, or untag it with `0`. One undo step.
+    ///
+    /// Untagging leaves the document exactly as it was found — the engine
+    /// stores tags as a map beside the items and removes the entry rather than
+    /// writing a zero — so a project nobody has tagged gains no line in the
+    /// file (K-258).
+    #[frb(sync)]
+    pub fn set_label(&self, label: u8) -> Result<(), BridgeError> {
+        self.item()?;
+        self.commit(lumit_core::Op::SetItemLabel {
+            id: self.item_id(),
+            label,
+        })
+    }
 }

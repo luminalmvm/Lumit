@@ -185,7 +185,12 @@ pub fn clear_cache() -> BridgeCacheStats {
 }
 
 impl crate::api::composition::CompositionReference {
-    /// Which frames of this composition are held, one byte each:
+    /// Which frames of this composition are held, one byte each — **two
+    /// nibbles**, because the bar says not just "cached" but "cached at what
+    /// size" (K-441, docs/15 §6.3).
+    ///
+    /// The **low** nibble (`byte & 0x0F`) is the storage state the bar has
+    /// always drawn:
     ///
     /// * `0` — nothing held.
     /// * `1` — held in memory or on the graphics card, but only at a coarser
@@ -195,9 +200,20 @@ impl crate::api::composition::CompositionReference {
     /// * `4` — parked on disk only, at this resolution: promotable, not yet
     ///   playable.
     ///
+    /// The **high** nibble (`byte >> 4`) is the preview **divisor** the picture
+    /// that was found was actually made at, relative to `scale`: `1` full, `2`
+    /// half, `3` third, `4` quarter, and `0` when nothing is held. The tiers are
+    /// probed finest first, so the answer is the best picture there is of that
+    /// frame and does not depend on the order the tiers filled.
+    ///
+    /// Two truths to carry over rather than paper over: a frame held at a scale
+    /// no adaptive tier renders at reads as **nothing held**, and on a sampled
+    /// composition a frame the refinement sweep has not reached wears its
+    /// sample's tier.
+    ///
     /// This is what the Timeline's cache bar draws (docs/07-UI-SPEC.md §3.2,
-    /// docs/06-RENDER-PIPELINE.md §5.6): green for the first two, steel blue for
-    /// the disk pair, dimmed for the coarser one of each.
+    /// docs/06-RENDER-PIPELINE.md §5.6): mint for the memory pair, steel blue
+    /// for the disk pair, stepped down as the divisor coarsens.
     ///
     /// **A mirror read, not a query.** Frames are named by a hash of their
     /// content (docs/06 §5.2), so answering "is frame 12 held?" means *naming*
@@ -211,7 +227,7 @@ impl crate::api::composition::CompositionReference {
     #[frb(sync)]
     pub fn cached_frames(&self, frames: u64, scale: f32) -> Vec<u8> {
         let scale_q = lumit_render::preview_scale_q(crate::render::quality_for(scale));
-        crate::framecache::bar::read(self.id, frames, scale_q)
+        crate::framecache::bar::read_packed(self.id, frames, scale_q)
     }
 }
 

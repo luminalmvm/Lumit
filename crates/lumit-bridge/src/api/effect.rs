@@ -296,6 +296,11 @@ pub struct BridgeParamInfo {
     pub id: String,
     pub label: String,
     pub kind: BridgeParamKind,
+    /// What the number *is* (K-443): the rider the row draws beside the value,
+    /// and — on a point pair — the unit a Viewer pick has to write in. Declared
+    /// per parameter engine-side, so `centre_x` can be px@comp on one effect
+    /// and a per cent of the frame on another without the panel guessing.
+    pub unit: BridgeUnit,
 }
 
 /// What kind of control a parameter wants, and the numbers that control needs.
@@ -493,7 +498,88 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
                 id: param.id.to_owned(),
                 label: param.label.to_owned(),
                 kind,
+                unit: bridge_unit(param.unit),
             }
+        })
+        .collect()
+}
+
+/// The unit a parameter's number is in (K-443) — what the row draws as its
+/// rider beside the value, and what a point pick has to write in.
+///
+/// Mirrors [`lumit_core::fx::Unit`] with the two the seam has no use for
+/// folded away: `Unset` is a build failure engine-side, so nothing that ships
+/// can carry it, and `PctDiag` is forbidden to every parameter (K-419). Both
+/// arrive here as [`BridgeUnit::Raw`] — the panel draws no rider, which is the
+/// honest answer for a unit that must not exist.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeUnit {
+    /// A plain number: a gamma, a count, a stop, a rate in Hz. No rider.
+    Raw,
+    /// Per cent, where 100 is the whole of whatever it is a share of.
+    Percent,
+    /// Pixels at composition size (px@comp) — the one spatial unit (K-419).
+    Px,
+    Degrees,
+    Seconds,
+    /// Comp-rate frames.
+    Frames,
+}
+
+#[frb(ignore)]
+pub(crate) fn bridge_unit(unit: lumit_core::fx::Unit) -> BridgeUnit {
+    use lumit_core::fx::Unit as U;
+    match unit {
+        U::Percent => BridgeUnit::Percent,
+        U::Px => BridgeUnit::Px,
+        U::Degrees => BridgeUnit::Degrees,
+        U::Seconds => BridgeUnit::Seconds,
+        U::Frames => BridgeUnit::Frames,
+        // See [`BridgeUnit`]: neither can reach a shipped parameter, and
+        // "no rider" is what a panel should draw if one ever did.
+        U::Raw | U::Unset | U::PctDiag => BridgeUnit::Raw,
+    }
+}
+
+/// One **vector pair** of an effect: two adjacent `_x`/`_y` Float parameters
+/// the panel draws as one row of two wells with a chain between them (K-443).
+///
+/// The convention used to be read off the ids at the seam, by whoever needed
+/// it; [`lumit_core::fx::EffectSchema::pairs`] is the declaration answering it
+/// now, so the panel, the link flag on the instance and the engine all get one
+/// answer. `stem` is the key the link flag is stored under, so it is the
+/// pair's identity rather than either half's id.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeParamPair {
+    pub stem: String,
+    pub x: String,
+    pub y: String,
+}
+
+/// An effect's vector pairs, in schema order — the fourth static list beside
+/// [`list_parameters`], and memoised on the Dart side for the same reason
+/// (K-183: the schema never changes, and a fetch per card per rebuild is
+/// exactly the traffic the budget test forbids).
+///
+/// An unknown match name is an empty list rather than an error, like every
+/// other schema read: a project carrying an effect this build does not know
+/// still opens.
+#[frb(sync)]
+pub fn list_pairs(effect: String) -> Vec<BridgeParamPair> {
+    let Some(schema) = lumit_core::fx::BUILTINS
+        .iter()
+        .find(|s| s.match_name == effect)
+    else {
+        return Vec::new();
+    };
+    schema
+        .pairs()
+        .map(|p| BridgeParamPair {
+            stem: p.stem.to_owned(),
+            x: p.x.to_owned(),
+            y: p.y.to_owned(),
         })
         .collect()
 }
@@ -1047,6 +1133,13 @@ pub struct BridgeEffectInstanceInfo {
     pub custom_name: Option<String>,
     pub enabled: bool,
     pub values: Vec<BridgeParamValue>,
+    /// The stems of the vector pairs this instance has chained (K-443), sorted.
+    /// Empty is "every pair unlinked", which is what every older project means.
+    ///
+    /// In the read model rather than asked per pair, for the reason every other
+    /// field here is: a chain glyph is drawn per point row per rebuild, and a
+    /// call apiece is exactly the hover-hot traffic the budget test forbids.
+    pub linked_pairs: Vec<String>,
 }
 
 /// Build one instance's [`BridgeEffectInstanceInfo`] — the shared body of
@@ -1080,6 +1173,7 @@ pub(crate) fn read_instance_info(
                 value: BridgeEffectValue::read_at(&p.value, offset),
             })
             .collect(),
+        linked_pairs: effect.linked_pairs.clone(),
     }
 }
 
@@ -1141,6 +1235,27 @@ impl BridgeEffectInstance {
     pub fn set_custom_name(&mut self, name: String) {
         let trimmed = name.trim();
         self.effect.custom_name = (!trimmed.is_empty()).then(|| trimmed.to_string());
+    }
+
+    /// Whether the vector pair keyed by `stem` is chained (K-443). A stem this
+    /// effect has no pair for is unlinked, never an error.
+    #[frb(sync)]
+    pub fn pair_linked(&self, stem: String) -> bool {
+        self.effect.pair_linked(&stem)
+    }
+
+    /// Chain or unchain the vector pair keyed by `stem`, on the **staged**
+    /// copy — `LayerReference::set_effects` is the commit, exactly as
+    /// `set_custom_name` and `set_value` are, so a toggle is one op and one
+    /// undo step like every other effect-stack edit.
+    ///
+    /// Answers whether anything moved, so a caller can skip a commit that
+    /// would undo to itself. The proportional drag a chained pair takes is
+    /// deliberately **not** here: it is UI-time arithmetic while a gesture is
+    /// live, and the document's business is only which pairs are tied.
+    #[frb(sync)]
+    pub fn set_pair_linked(&mut self, stem: String, linked: bool) -> bool {
+        self.effect.set_pair_linked(&stem, linked)
     }
 
     #[frb(ignore)]

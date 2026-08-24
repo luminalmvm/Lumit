@@ -31,12 +31,42 @@ class BridgeMediaInfo {
   final int fpsDen;
   final BridgeRational duration;
 
+  /// The picture stream's codec as the container names it (`h264`, `png`),
+  /// or `None` when there is no picture. The *user's* word for the file, not
+  /// a display string of ours, so it crosses untranslated (K-303).
+  final String? videoCodec;
+
+  /// The sound stream's codec, or `None` when the file is silent.
+  final String? audioCodec;
+
+  /// The sound's channel count and rate in hertz. Both zero when there is no
+  /// sound — the panel says nothing rather than "0 channels".
+  final int channels;
+  final int sampleRate;
+
+  /// Whether the picture is a **still** rather than something that runs
+  /// (K-246). A still probes with a video stream too — one frame of it — so
+  /// the question is whether the stream lasts, and the engine
+  /// ([`lumit_media::MediaProbe::runs_as_video`]) is the one place it is
+  /// asked, so the panel cannot call a file a still while the Timeline cuts
+  /// it as a clip.
+  ///
+  /// This is what replaced the panel's zero-picture-width inference: a file
+  /// with no picture is `video_codec: None`, which is a different fact from
+  /// a picture that does not move.
+  final bool isStill;
+
   const BridgeMediaInfo({
     required this.width,
     required this.height,
     required this.fpsNum,
     required this.fpsDen,
     required this.duration,
+    this.videoCodec,
+    this.audioCodec,
+    required this.channels,
+    required this.sampleRate,
+    required this.isStill,
   });
 
   @override
@@ -45,7 +75,12 @@ class BridgeMediaInfo {
       height.hashCode ^
       fpsNum.hashCode ^
       fpsDen.hashCode ^
-      duration.hashCode;
+      duration.hashCode ^
+      videoCodec.hashCode ^
+      audioCodec.hashCode ^
+      channels.hashCode ^
+      sampleRate.hashCode ^
+      isStill.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -56,7 +91,12 @@ class BridgeMediaInfo {
           height == other.height &&
           fpsNum == other.fpsNum &&
           fpsDen == other.fpsDen &&
-          duration == other.duration;
+          duration == other.duration &&
+          videoCodec == other.videoCodec &&
+          audioCodec == other.audioCodec &&
+          channels == other.channels &&
+          sampleRate == other.sampleRate &&
+          isStill == other.isStill;
 }
 
 class FootageReference {
@@ -67,6 +107,19 @@ class FootageReference {
     required this.internalproject,
     required this.internalid,
   });
+
+  /// Where this item's file is, as the *project* records it: the relative
+  /// path a saved project actually carries (K-173), falling back to the
+  /// absolute one only when the project has never been saved and there is
+  /// nothing to be relative to.
+  ///
+  /// Display data — the Project panel's Path column. It says where the
+  /// reference points, not whether anything is there; `get_status` is the
+  /// question about the disk, and this deliberately touches none.
+  String filePath() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceFilePath(
+        that: this,
+      );
 
   Future<LumitMediaStatus> getStatus() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceGetStatus(

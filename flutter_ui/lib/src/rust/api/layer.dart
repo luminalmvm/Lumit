@@ -17,7 +17,7 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_kind`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
@@ -128,6 +128,24 @@ class BridgeClip {
   /// of its media the moment it was ramped.
   final BridgeScalar retime;
 
+  /// Where the **whole source** would sit on the comp's clock if none of it
+  /// had been trimmed away, in frames — the faint ghost a trimmed clip draws
+  /// inside a Sequence lane (K-441, docs/15 §12A.1), the clip-level twin of
+  /// the outline a trimmed *layer* already wears.
+  ///
+  /// `None` when the reach is not knowable, and the engine
+  /// ([`lumit_core::sequence::Clip::source_reach`]) decides which cases those
+  /// are: a **retimed** clip has none, because its map decides for itself
+  /// which source moment each frame shows, and a source whose length could
+  /// not be read has none either rather than one pinned to a guess. Nothing
+  /// is clamped, so a clip dragged so its source would begin before the row's
+  /// origin reports a negative first frame — exactly as a layer's bounds do.
+  ///
+  /// Carried in comp frames, like `start_frame`/`end_frame` beside it, so the
+  /// ghost is one more positioned box and no time↔frame trip rides a rebuild.
+  final PlatformInt64? reachStartFrame;
+  final PlatformInt64? reachEndFrame;
+
   const BridgeClip({
     required this.id,
     required this.placeStart,
@@ -137,6 +155,8 @@ class BridgeClip {
     this.speedPercent,
     required this.retimed,
     required this.retime,
+    this.reachStartFrame,
+    this.reachEndFrame,
   });
 
   @override
@@ -148,7 +168,9 @@ class BridgeClip {
       endFrame.hashCode ^
       speedPercent.hashCode ^
       retimed.hashCode ^
-      retime.hashCode;
+      retime.hashCode ^
+      reachStartFrame.hashCode ^
+      reachEndFrame.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -162,7 +184,9 @@ class BridgeClip {
           endFrame == other.endFrame &&
           speedPercent == other.speedPercent &&
           retimed == other.retimed &&
-          retime == other.retime;
+          retime == other.retime &&
+          reachStartFrame == other.reachStartFrame &&
+          reachEndFrame == other.reachEndFrame;
 }
 
 /// Everything the Timeline outline, its bars, and the Hierarchy draw for one
@@ -1048,15 +1072,28 @@ class LayerReference {
       .crateApiLayerLayerReferenceAddStroke(that: this, stroke: stroke);
 
   /// The layer's source audio summarised across `[start_seconds,
-  /// end_seconds)` of the **source's own clock**, in `buckets` buckets
+  /// end_seconds)` of the **layer's own clock**, in `buckets` buckets
   /// (K-280, superseding the fixed 2 048 of K-172).
   ///
-  /// Source time, not comp time, is what makes a trim or a drag free: the
-  /// peaks belong to the file, so the Timeline's lane maps them through the
-  /// live in/out/offset each paint and the transients travel with the bar. The
-  /// *window* is what makes the resolution follow the zoom — a lane showing
-  /// two seconds asks for two seconds, and gets a bucket per pixel column of
-  /// them, however far in the Timeline is zoomed.
+  /// Layer time, not comp time, is what makes a trim or a drag free: the
+  /// window is fixed to where the layer starts its source, so the Timeline's
+  /// lane maps it through the live in/out/offset each paint and the
+  /// transients travel with the bar. The *window* is what makes the
+  /// resolution follow the zoom — a lane showing two seconds asks for two
+  /// seconds, and gets a bucket per pixel column of them, however far in the
+  /// Timeline is zoomed.
+  ///
+  /// **A retimed layer's wave stretches with its map** (K-436). Layer time
+  /// and source time are the same line only while the layer plays at speed
+  /// 1; once it has a Retime ([`lumit_core::model::Layer::source_time_at`])
+  /// they are not, and buckets taken evenly in source time would put the
+  /// transients in the wrong columns — a half-speed layer's wave would fill
+  /// half its bar and stop. So each bucket's edges are mapped through that
+  /// map here, exactly as a Sequence clip's are through its own
+  /// ([`Self::clip_audio_peaks`]): the lane still draws bucket `i` at column
+  /// `i`, and a slow passage is drawn wide because it *is* wide. An
+  /// un-retimed layer maps through the identity and takes the straight,
+  /// one-pass path it always did.
   ///
   /// `multiwave` asks for the three-band stack (bass, middle, treble) instead
   /// of the single full-range wave.

@@ -12,6 +12,7 @@ use crate::api::{
     effect::{
         BridgeEffectInstance, BridgeKeyframe, BridgeRational, BridgeScalar, BridgeSideInterp,
     },
+    footage::FootageReference,
     project_item::ItemReference,
     state::{LumitBridgeState, PROJECTS},
     BridgeError,
@@ -612,6 +613,98 @@ pub struct BridgeClip {
     /// frontend that assumed zero sent every clip after a cut back to the top
     /// of its media the moment it was ramped.
     pub retime: crate::api::effect::BridgeScalar,
+    /// Where the **whole source** would sit on the comp's clock if none of it
+    /// had been trimmed away, in frames — the faint ghost a trimmed clip draws
+    /// inside a Sequence lane (K-441, docs/15 §12A.1), the clip-level twin of
+    /// the outline a trimmed *layer* already wears.
+    ///
+    /// `None` when the reach is not knowable, and the engine
+    /// ([`lumit_core::sequence::Clip::source_reach`]) decides which cases those
+    /// are: a **retimed** clip has none, because its map decides for itself
+    /// which source moment each frame shows, and a source whose length could
+    /// not be read has none either rather than one pinned to a guess. Nothing
+    /// is clamped, so a clip dragged so its source would begin before the row's
+    /// origin reports a negative first frame — exactly as a layer's bounds do.
+    ///
+    /// Carried in comp frames, like `start_frame`/`end_frame` beside it, so the
+    /// ghost is one more positioned box and no time↔frame trip rides a rebuild.
+    pub reach_start_frame: Option<i64>,
+    pub reach_end_frame: Option<i64>,
+}
+
+/// How long a clip's source runs, which is the one thing
+/// [`lumit_core::sequence::Clip::source_reach`] cannot work out for itself: a
+/// nested comp's length is on the comp, and a footage item's comes from the
+/// media probe, so only a caller holding the project can answer.
+///
+/// `None` — a source this document no longer has, or a file that will not probe
+/// — is the honest "no reach", and that is exactly how the reach is drawn.
+#[frb(ignore)]
+fn clip_source_duration(
+    state: &LumitBridgeState,
+    doc: &lumit_core::Document,
+    source: lumit_core::sequence::ClipSource,
+) -> Option<lumit_core::time::Rational> {
+    match source {
+        lumit_core::sequence::ClipSource::Comp(id) => Some(doc.comp(id)?.duration.0),
+        lumit_core::sequence::ClipSource::Footage(id) => {
+            let lumit_core::model::ProjectItem::Footage(footage) = doc.item(id)? else {
+                return None;
+            };
+            let _path = FootageReference::resolve_path(state, footage)?;
+            #[cfg(not(feature = "media"))]
+            {
+                // No decoder, so no honest length — and a guess here would put
+                // a ghost on the row that no build with a decoder agrees with.
+                None
+            }
+            #[cfg(feature = "media")]
+            {
+                let probed = crate::probe::ensure_probed(&_path)?;
+                // The only sanctioned route back from the container's
+                // floating-point duration is an explicit grid
+                // (docs/impl/rational-time.md §4) — the same millisecond grid
+                // `media_info` reports on, so the two cannot disagree.
+                lumit_core::time::Rational::from_f64_on_grid(probed.duration_seconds, 1000).ok()
+            }
+        }
+    }
+}
+
+/// One clip as the Timeline draws it. The one place the mapping lives: the
+/// comp read model, `get_info` and `get_clips` all build clips through here,
+/// and three copies of it is three chances for a clip to sit somewhere
+/// different depending on which read found it.
+#[frb(ignore)]
+fn bridge_clip(
+    comp: &lumit_core::model::Composition,
+    layer: &Layer,
+    clip: &lumit_core::sequence::Clip,
+    source_duration: Option<lumit_core::time::Rational>,
+) -> BridgeClip {
+    use lumit_core::time::CompTime;
+    // A clip's `place_*` are in layer time; every frame below carries the
+    // layer's own zero already added.
+    let at = |t: lumit_core::time::Rational| {
+        comp.frame_rate
+            .frame_at(CompTime(layer.start_offset.0.checked_add(t).unwrap_or(t)))
+    };
+    let reach = clip.source_reach(source_duration);
+    BridgeClip {
+        id: clip.id,
+        place_start: rational_of(clip.place_start),
+        place_duration: rational_of(clip.place_duration),
+        start_frame: at(clip.place_start),
+        end_frame: at(clip.place_end()),
+        speed_percent: clip.constant_speed().map(|s| s * 100.0),
+        retimed: clip.retime.is_some(),
+        // Keyed in clip time, so it crosses with no offset applied — unlike a
+        // layer's, which the bridge carries out by the layer's own zero
+        // (K-213). A clip's zero *is* its start.
+        retime: BridgeScalar::read_at(&clip.effective_retime(), lumit_core::time::Rational::ZERO),
+        reach_start_frame: reach.map(|(start, _)| at(start)),
+        reach_end_frame: reach.map(|(_, end)| at(end)),
+    }
 }
 
 /// Everything the Timeline outline, its bars, and the Hierarchy draw for one
@@ -701,6 +794,8 @@ pub struct BridgeLayerMarker {
 /// [`crate::api::composition::CompositionReference::get_model`] (K-184).
 #[frb(ignore)]
 pub(crate) fn read_layer_info(
+    state: &LumitBridgeState,
+    doc: &lumit_core::Document,
     comp: &lumit_core::model::Composition,
     layer: &Layer,
 ) -> BridgeLayerInfo {
@@ -718,34 +813,7 @@ pub(crate) fn read_layer_info(
     let clips = match &layer.kind {
         K::Sequence { clips } => clips
             .iter()
-            .map(|c| BridgeClip {
-                id: c.id,
-                place_start: rational_of(c.place_start),
-                place_duration: rational_of(c.place_duration),
-                start_frame: comp.frame_rate.frame_at(lumit_core::time::CompTime(
-                    layer
-                        .start_offset
-                        .0
-                        .checked_add(c.place_start)
-                        .unwrap_or(c.place_start),
-                )),
-                end_frame: comp.frame_rate.frame_at(lumit_core::time::CompTime(
-                    layer
-                        .start_offset
-                        .0
-                        .checked_add(c.place_end())
-                        .unwrap_or(c.place_end()),
-                )),
-                speed_percent: c.constant_speed().map(|s| s * 100.0),
-                retimed: c.retime.is_some(),
-                // Keyed in clip time, so it crosses with no offset applied —
-                // unlike a layer's, which the bridge carries out by the
-                // layer's own zero (K-213). A clip's zero *is* its start.
-                retime: BridgeScalar::read_at(
-                    &c.effective_retime(),
-                    lumit_core::time::Rational::ZERO,
-                ),
-            })
+            .map(|c| bridge_clip(comp, layer, c, clip_source_duration(state, doc, c.source)))
             .collect(),
         _ => Vec::new(),
     };
@@ -811,7 +879,7 @@ pub(crate) fn read_layer_info(
             .markers
             .iter()
             .map(|m| BridgeLayerMarker {
-                marker: bridge_marker(m),
+                marker: bridge_marker(m, comp.frame_rate),
                 // A layer marker's time is the layer's own, so where it lands
                 // on the comp is that time carried out by the layer's start
                 // offset — exactly as a Sequence clip's is. That is what makes
@@ -1150,13 +1218,18 @@ impl LayerReference {
     /// each per field.
     #[frb(sync)]
     pub fn get_info(&self) -> Result<BridgeLayerInfo, BridgeError> {
-        let comp = self.composition()?;
+        let proj = self.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        let Some(lumit_core::model::ProjectItem::Composition(comp)) = doc.item(self.comp_id) else {
+            return Err(BridgeError::InvalidItem);
+        };
         let layer = comp
             .layers
             .iter()
             .find(|l| l.id == self.layer_id)
             .ok_or(BridgeError::InvalidLayer)?;
-        Ok(read_layer_info(&comp, layer))
+        Ok(read_layer_info(&state, &doc, comp, layer))
     }
 
     #[frb(sync)]
@@ -1770,33 +1843,21 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Sequence { clips } = &layer.kind else {
             return Ok(Vec::new());
         };
-        let comp = self.composition()?;
+        let proj = self.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        let Some(lumit_core::model::ProjectItem::Composition(comp)) = doc.item(self.comp_id) else {
+            return Err(BridgeError::InvalidItem);
+        };
         Ok(clips
             .iter()
-            .map(|c| BridgeClip {
-                id: c.id,
-                place_start: rational_of(c.place_start),
-                place_duration: rational_of(c.place_duration),
-                start_frame: comp.frame_rate.frame_at(lumit_core::time::CompTime(
-                    layer
-                        .start_offset
-                        .0
-                        .checked_add(c.place_start)
-                        .unwrap_or(c.place_start),
-                )),
-                end_frame: comp.frame_rate.frame_at(lumit_core::time::CompTime(
-                    layer
-                        .start_offset
-                        .0
-                        .checked_add(c.place_end())
-                        .unwrap_or(c.place_end()),
-                )),
-                speed_percent: c.constant_speed().map(|s| s * 100.0),
-                retimed: c.retime.is_some(),
-                retime: BridgeScalar::read_at(
-                    &c.effective_retime(),
-                    lumit_core::time::Rational::ZERO,
-                ),
+            .map(|c| {
+                bridge_clip(
+                    comp,
+                    &layer,
+                    c,
+                    clip_source_duration(&state, &doc, c.source),
+                )
             })
             .collect())
     }
@@ -2616,7 +2677,13 @@ impl LayerReference {
     /// (K-254). Deleting one here never reaches into another composition.
     #[frb(sync)]
     pub fn get_markers(&self) -> Result<Vec<BridgeMarker>, BridgeError> {
-        Ok(self.item()?.markers.iter().map(bridge_marker).collect())
+        let rate = self.composition()?.frame_rate;
+        Ok(self
+            .item()?
+            .markers
+            .iter()
+            .map(|m| bridge_marker(m, rate))
+            .collect())
     }
 
     /// Replace this layer's whole marker list — one op, trivially invertible,
@@ -2625,7 +2692,11 @@ impl LayerReference {
     pub fn set_markers(&self, markers: Vec<BridgeMarker>) -> Result<(), BridgeError> {
         // Merged onto the layer's current list, so a marker's kind, duration
         // and unknown fields survive a drag or a rename (K-270).
-        let markers = core_markers(markers, &self.item()?.markers)?;
+        let markers = core_markers(
+            markers,
+            &self.item()?.markers,
+            self.composition()?.frame_rate,
+        )?;
         let (comp, layer) = (self.comp_id, self.layer_id);
         self.commit(lumit_core::Op::SetLayerMarkers {
             comp,
