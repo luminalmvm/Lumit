@@ -845,7 +845,13 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   Blend · Parent · ms. A column header names a container, and §7.1 sets every container
   label as a kicker; the switch cells keep their marks, because those are the controls.
   The bottom bar's toggles carry the same words as the headings they show and hide.
-- **A layer number column** sits between the label dot and the name, in muted mono.
+- **A layer number column** sits between the twirl and the label dot, in muted mono; the
+  dot follows it and belongs to the name it colours, so the cluster reads twirl · number ·
+  dot · name (K-458). **The three marks stand 8 apart** — the mockup's own row gap, where
+  the outline had run the twirl hard against the dot and given the number 4.
+- **The matte, blend and parent columns start at their content's width** (K-458): the
+  mockup's 84 / 84 / 64 dropdown faces, the matte cell carrying its two mode toggles on top
+  of that. Each seam still drags wider and stays where it is put.
 - **The open composition tab carries no accent tick** — the seated surface colour alone
   marks it, as the mockup draws it. (The workspace tabs keep their accent underline;
   §3.1's "active tab tick" means those.)

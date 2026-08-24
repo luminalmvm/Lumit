@@ -704,6 +704,84 @@ void main() {
       expectLevel(tester, layer, why: 'under Compact');
     });
 
+    /// 10d-bis. **The identity cluster is the drawing's** (K-458): twirl,
+    /// then the layer number, then the label dot, then the name — and 8 px of
+    /// air between each of the three marks, where the outline used to run the
+    /// twirl hard against the dot. Measured as edges rather than as widget
+    /// classes, because the claim is about what a reader sees in what order.
+    testWidgets(
+        'the outline reads twirl, number, dot, name at the drawing\'s '
+        'gaps', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = idOf(layer);
+
+      final row = find.byKey(ValueKey<String>('tl-row-$id'));
+      final twirl =
+          tester.getRect(find.byKey(ValueKey<String>('tl-twirl-$id')));
+      final number = tester
+          .getRect(find.descendant(of: row, matching: find.text('1')).first);
+      final dot = tester.getRect(find.byKey(ValueKey<String>('tl-label-$id')));
+      final name = tester.getRect(find.byKey(ValueKey<String>('tl-name-$id')));
+
+      expect(twirl.right, lessThanOrEqualTo(number.left),
+          reason: 'the twirl opens the cluster');
+      expect(number.right, lessThanOrEqualTo(dot.left),
+          reason: 'the number is the row\'s address and comes before the dot '
+              '(K-458 — they used to stand the other way round)');
+      expect(dot.right, lessThanOrEqualTo(name.left),
+          reason: 'and the dot belongs to the name it colours');
+
+      // The number's cell is 18 wide, so its glyph does not fill it: the gaps
+      // are measured off the cells, which is what the drawing dimensions.
+      expect(number.left - twirl.right, closeTo(identityGap, 0.5),
+          reason: 'the drawing sets 8 between the twirl and the number');
+      expect(dot.left - (number.left + 18), closeTo(identityGap, 0.5),
+          reason: 'and 8 between the number\'s 18px cell and the dot\'s');
+      expect(identityGap, 8, reason: 'which is the constant\'s own value');
+    });
+
+    /// 10d-ter. **The compose columns start at their content** (K-458): the
+    /// drawing's 84 / 84 / 64 faces, the matte cell carrying its two mode
+    /// toggles on top of its own 84. They had been 118 / 112 / 96, which is
+    /// slack no picker ever used.
+    testWidgets('matte, blend and parent start at the drawing\'s widths',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      expect((matteCellWidth, blendCellWidth, parentCellWidth), (112.0, 84, 64),
+          reason: 'the drawing\'s dropdown faces, the matte plus its toggles');
+      expect(composeGroupWidth, 112 + cellGap + 84 + cellGap + 64,
+          reason: 'and the group is the three of them and the gaps between');
+      expect(composeGroupWidth, lessThan(334),
+          reason: 'which is narrower than the 334 that shipped');
+
+      // With no matte set the dropdown takes the toggles' room, so the face
+      // measured here is the whole cell — the point being that the *column*
+      // no longer leaves the picker sitting in a gap.
+      for (final (cell, width) in [
+        ('matte', matteCellWidth),
+        ('blend', blendCellWidth),
+        ('parent', parentCellWidth),
+      ]) {
+        expect(
+            tester
+                .getRect(find.byKey(
+                    ValueKey<String>('tl-$cell-${layer.internallayerId}')))
+                .width,
+            closeTo(width, 1.0),
+            reason: 'the $cell cell is its default width at rest');
+      }
+      expect(minGroupWidth(TimelineGroup.compose),
+          lessThanOrEqualTo(composeGroupWidth),
+          reason: 'and the group can still be dragged narrower than it starts');
+    });
+
     /// 10e. **Keys mode is the same table** (K-455): the dope sheet swaps the
     /// body under the shared ruler, so its rows take the density's lane row
     /// on both sides and its own filter row stands exactly where the column

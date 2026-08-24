@@ -5021,7 +5021,11 @@ class _RetimeRowState extends State<_RetimeRow> {
                       parse: (text) =>
                           framesOfTimecodeSigned(text, fpsNum, fpsDen),
                       widthChars: timecodeChars(fpsNum, fpsDen) + 1,
-                      style: t.mono,
+                      // A value in a property row, so the value well's own
+                      // 11px mono (§12A.6) — `t.mono` bare is 12, a size no
+                      // mockup draws anywhere and the one number in the
+                      // Timeline that still read a step larger than the rest.
+                      style: t.mono.copyWith(fontSize: wellTextSize),
                       minFrame: -100000,
                       maxFrame: 100000,
                       draggable: true,
@@ -5839,9 +5843,13 @@ class _ColumnHeader extends StatelessWidget {
         title(l10n.columnSwitches, l10n.columnSwitches, width),
       TimelineGroup.identity => Row(
           children: [
-            // The twirl and the label chip have no heading of their own.
-            const SizedBox(width: 16 + 16 + 4),
+            // The twirl and the label dot have no heading of their own — but
+            // the `#` has to stand over the number, so the blanks either side
+            // of it are the row's own cells and gaps (K-458): the twirl's
+            // slot before it, the dot's slot after.
+            const SizedBox(width: 16 + identityGap),
             title(l10n.columnNumber, l10n.columnNumber, _numberCellWidth),
+            const SizedBox(width: identityGap + 16),
             Expanded(
               child: Text(l10n.columnLayer.toUpperCase(),
                   style: t.kicker,
@@ -6715,7 +6723,8 @@ class _OutlineRowState extends State<_OutlineRow> {
     );
   }
 
-  /// Group 2: twirl · label chip · layer number · name.
+  /// Group 2: twirl · layer number · label dot · name (K-458 — the mockup's
+  /// own order; the dot and the number used to stand the other way round).
   Widget _identityCells(
       BuildContext context, LumitTheme t, BridgeLayerInfo info) {
     final id = layer.internallayerId.toString();
@@ -6743,18 +6752,21 @@ class _OutlineRowState extends State<_OutlineRow> {
             ),
           )),
         ),
-        LumitTooltip(
-          message: l10n.tipLabelColour,
-          child: _ownClick(_labelSwatch(context, t, id, info.label)),
-        ),
-        const SizedBox(width: 4),
+        const SizedBox(width: identityGap),
         // The layer number: **mono**, because it is a number (§7.1's rule has
         // no exceptions), muted, and in the same 18px cell the header's `#`
-        // stands in.
+        // stands in. It comes **before** the label dot (K-458): the number is
+        // the row's address and the dot belongs to the name it colours, which
+        // is how the mockup's rows read and how they are indexed aloud.
         SizedBox(
           width: _numberCellWidth,
           child: Text('${index + 1}',
               style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+        ),
+        const SizedBox(width: identityGap),
+        LumitTooltip(
+          message: l10n.tipLabelColour,
+          child: _ownClick(_labelSwatch(context, t, id, info.label)),
         ),
         // The name is also the stack handle: drag it up or down to reorder
         // the layer (docs/07 §4.7). A locked layer holds its place.
@@ -7001,6 +7013,10 @@ class _OutlineRowState extends State<_OutlineRow> {
         widget.onChanged();
       },
       child: SizedBox(
+        // 16, not the dot's 6: the swatch opens a picker, so the cell is the
+        // hit target (K-452) and the dot is what is drawn in the middle of
+        // it. Its 5px of inset either side is also the mockup's own gap
+        // between the dot and the name that follows it.
         width: 16,
         height: t.density.laneRow,
         child: Center(

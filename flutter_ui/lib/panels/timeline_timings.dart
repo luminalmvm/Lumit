@@ -159,8 +159,10 @@ class TimingsCell extends StatelessWidget {
             child: Text(
               ms == null ? '—' : formatRenderMs(ms),
               // Mono, because it is a number, and §7.1's mono-for-numbers rule
-              // has no exceptions anywhere in the UI.
-              style: t.mono.copyWith(fontSize: 9, color: t.textMuted),
+              // has no exceptions anywhere in the UI. **10**, the size every
+              // other number in an outline row takes and the size the mockup
+              // draws this one at; it was 9, a kicker's size on a value.
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
               maxLines: 1,
               overflow: TextOverflow.clip,
             ),
