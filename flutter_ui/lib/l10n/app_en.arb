@@ -364,6 +364,10 @@
   "@fxInsideColour": {
     "description": "Effect controls — a control on Beam: the colour of the beam's core."
   },
+  "fxInsideMask": "Inside mask",
+  "@fxInsideMask": {
+    "description": "Effect controls — a control on Matte key: a mask of this layer's whose inside is forced opaque."
+  },
   "fxInterpolation": "Interpolation",
   "@fxInterpolation": {
     "description": "Effect controls — a control on Polar coordinates."
@@ -459,6 +463,10 @@
   "fxOutsideColour": "Outside colour",
   "@fxOutsideColour": {
     "description": "Effect controls — a control on Beam: the colour of the beam's rim."
+  },
+  "fxOutsideMask": "Outside mask",
+  "@fxOutsideMask": {
+    "description": "Effect controls — a control on Matte key: a mask of this layer's whose inside is forced transparent."
   },
   "fxPaintStyle": "Paint style",
   "@fxPaintStyle": {
@@ -1565,6 +1573,14 @@
   "@fxDespillBias": {
     "description": "Effect controls — a control on Matte key."
   },
+  "fxDespotBlack": "Despot black",
+  "@fxDespotBlack": {
+    "description": "Effect controls — a control on Matte key."
+  },
+  "fxDespotWhite": "Despot white",
+  "@fxDespotWhite": {
+    "description": "Effect controls — a control on Matte key."
+  },
   "fxDetail": "Detail",
   "@fxDetail": {
     "description": "Effect controls — a control on Lens flare."
@@ -2256,6 +2272,18 @@
   "fxScreenMatte": "Screen matte",
   "@fxScreenMatte": {
     "description": "Effect controls — a control on Posterize time."
+  },
+  "fxScreenPreBlur": "Screen pre-blur",
+  "@fxScreenPreBlur": {
+    "description": "Effect controls — a control on Matte key: how far the picture the key is judged from is softened before the matte is measured."
+  },
+  "fxScreenShrinkGrow": "Screen shrink/grow",
+  "@fxScreenShrinkGrow": {
+    "description": "Effect controls — a control on Matte key: marches the matte's edge outward (positive) or inward (negative)."
+  },
+  "fxScreenSoftness": "Screen softness",
+  "@fxScreenSoftness": {
+    "description": "Effect controls — a control on Matte key: how far the matte itself is blurred."
   },
   "fxSeed": "Seed",
   "@fxSeed": {

@@ -892,15 +892,25 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
     let drawn = draws.first().expect("one layer, one draw");
     // The consumption side's own rule, spelled out: `run_ops` advances its
     // path counter for exactly the ops whose schema declares a path row.
-    let want = drawn
+    let want: usize = drawn
         .fx
         .iter()
-        .filter(|op| op.def.schema().mask_path().is_some())
-        .count();
+        .map(|op| op.def.schema().mask_path_count())
+        .sum();
+    // The catalogue really does declare more than one row somewhere, or the
+    // count below would agree for the trivial reason (K-446).
+    assert!(
+        want > drawn
+            .fx
+            .iter()
+            .filter(|op| op.def.schema().mask_path().is_some())
+            .count(),
+        "no effect declares a second path row - the per-row rule is untested"
+    );
     assert_eq!(
         drawn.mask_paths.len(),
         want,
-        "one polyline per resolved op that declares a mask path — no more, no \
+        "one polyline per mask-path row of every resolved op — no more, no \
          fewer ({} ops in all)",
         drawn.fx.len()
     );

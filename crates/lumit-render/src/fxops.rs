@@ -406,13 +406,15 @@ pub fn render_layer_input(
 /// saved before K-395) runs no extra pass at all, so the picture is
 /// byte-for-byte what it was (K-258).
 ///
-/// `mask_paths` is the parallel **mask-path** list (K-408, docs/08 §1.2): one
-/// flattened polyline per op whose effect declares a
-/// [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) row, exactly as
-/// `build.rs`'s `mask_paths_for` enumerates them. Its own counter, not the
-/// matte's: every op takes a matte and almost none takes a path, so one shared
-/// index would hand a path to whichever effect happened to sit above. An empty
-/// polyline is the effect's documented no-op.
+/// `mask_paths` is the parallel **mask-path** list (K-408, K-446, docs/08 §1.2):
+/// one flattened polyline per
+/// [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) **row** of every
+/// op that declares any, exactly as `build.rs`'s `mask_paths_for` enumerates
+/// them — an op takes as many in a row as its schema declares (one for the three
+/// line-drawing effects, two for the Matte key's garbage mattes). Its own
+/// counter, not the matte's: every op takes a matte and almost none takes a
+/// path, so one shared index would hand a path to whichever effect happened to
+/// sit above. An empty polyline is the effect's documented no-op.
 ///
 /// `cache` is the per-effect intermediate cache (K-421) and the content name
 /// of `tex` — the layer's source as the draw builder named it. `None` (no
@@ -521,20 +523,19 @@ pub fn run_ops(
     // second predicate; it advances outside the GPU lookup below because
     // `build.rs` fills a slot per *op*, not per kernel.
     let mut matte_i = 0usize;
-    // The mask path's own counter (K-408), for the same reason: `build.rs`
-    // flattens one polyline per op whose schema declares a path row, and this
-    // advances on exactly that predicate — `EffectSchema::mask_path`, the one
-    // both sides call, so there is no second rule to keep in step.
+    // The mask path's own counter (K-408, K-446), for the same reason:
+    // `build.rs` flattens one polyline per path **row** of every op that
+    // declares any, and this advances on exactly that count —
+    // `EffectSchema::mask_paths`, the one enumeration both sides run, so there
+    // is no second rule to keep in step.
     let mut path_i = 0usize;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
-        let mask_path = if resolved.def.schema().mask_path().is_some() {
-            let slot = mask_paths.get(path_i);
-            path_i += 1;
-            slot
-        } else {
-            None
-        };
+        let paths_n = resolved.def.schema().mask_path_count();
+        let mask_paths_of_op = mask_paths
+            .get(path_i..(path_i + paths_n).min(mask_paths.len()))
+            .unwrap_or(&[]);
+        path_i += paths_n;
         let matte = if role.param().is_some() {
             let slot = mattes.get(matte_i);
             matte_i += 1;
@@ -680,7 +681,12 @@ pub fn run_ops(
                 w,
                 h,
                 params,
-                AuxSlot::new(data, own_matte, fitted_layer_input.as_ref(), mask_path),
+                AuxSlot::new(
+                    data,
+                    own_matte,
+                    fitted_layer_input.as_ref(),
+                    mask_paths_of_op,
+                ),
             );
             // A grown raster (K-442). The two passes below and every op after
             // this one read texel by texel, so the pictures they compare against
@@ -777,9 +783,11 @@ fn op_keys(
             resolved.feed_hash(&mut |b| {
                 h.update(b);
             });
-            if schema.mask_path().is_some() {
+            for _ in 0..schema.mask_path_count() {
                 if let Some(p) = mask_paths.get(path_i) {
                     h.update(&[u8::from(p.closed)]);
+                    h.update(&p.feather.to_le_bytes());
+                    h.update(&p.expansion.to_le_bytes());
                     for pt in &p.points {
                         h.update(&pt[0].to_le_bytes());
                         h.update(&pt[1].to_le_bytes());

@@ -89,23 +89,13 @@ fn primary_of(c: vec3<f32>) -> f32 {
     return axis_split(c).x;
 }
 
-@compute @workgroup_size(8, 8)
-fn matte_key(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let size = vec2<i32>(textureDimensions(src));
-    let xy = vec2<i32>(gid.xy);
-    if (xy.x >= size.x || xy.y >= size.y) {
-        return;
-    }
-    let o = textureLoad(src, xy, 0);
-    let a = o.a;
-    let u = unpremult(o);
-
-    // Alpha-bias neutral, the screen's own biased difference (floored), and the
-    // despill-bias offset -- all derived from uniforms, exactly as the CPU does.
+// The screen matte of one straight colour, clips and rollback included
+// (== cpu::matte_key_matte). 1 on the neutral, 0 on the screen colour.
+fn screen_matte(u: vec3<f32>) -> f32 {
+    // Alpha-bias neutral and the screen's own biased difference (floored) --
+    // both derived from uniforms, exactly as the CPU does.
     let ab_off = primary_of(p.alpha_bias.rgb) - secref(p.alpha_bias.rgb);
     let sd = max((primary_of(p.key.rgb) - secref(p.key.rgb)) - ab_off, 1e-6);
-    let db_off = primary_of(p.despill_bias.rgb) - secref(p.despill_bias.rgb);
-
     // Screen matte, before clips: 1 on the neutral, 0 on the screen colour.
     let pd = (primary_of(u) - secref(u)) - ab_off;
     let raw = pd / sd;
@@ -113,7 +103,18 @@ fn matte_key(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Clip black/white, then rollback recovers detail toward the pre-clip matte.
     let den = max(p.clip_white - p.clip_black, 1e-6);
     let mc = clamp((m0 - p.clip_black) / den, 0.0, 1.0);
-    let m = mc + p.clip_rollback * (m0 - mc);
+    return mc + p.clip_rollback * (m0 - mc);
+}
+
+// Everything after the matte is settled (== cpu::matte_key_shade): unspill, the
+// Replace method, the View select and the host Mix. `o` is the premultiplied
+// pixel that arrived, `u` its straight colour, `m` its matte -- whether that
+// matte came straight from `screen_matte` or through the spatial stages.
+fn shade(o: vec4<f32>, u: vec3<f32>, m: f32) -> vec4<f32> {
+    let a = o.a;
+    let ab_off = primary_of(p.alpha_bias.rgb) - secref(p.alpha_bias.rgb);
+    let sd = max((primary_of(p.key.rgb) - secref(p.key.rgb)) - ab_off, 1e-6);
+    let db_off = primary_of(p.despill_bias.rgb) - secref(p.despill_bias.rgb);
 
     // Unspill: pull the primary down toward the (bias-shifted) reference.
     let spill_target = secref(u) + db_off;
@@ -154,5 +155,50 @@ fn matte_key(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Mix against the untouched premultiplied input; Mix 0 is the identity.
     let outv = o.rgb * (1.0 - p.mix_amt) + proc_rgb * p.mix_amt;
     let outa = a * (1.0 - p.mix_amt) + proc_a * p.mix_amt;
-    textureStore(dst, xy, vec4<f32>(outv, outa));
+    return vec4<f32>(outv, outa);
+}
+
+// The whole keyer in one pointwise pass -- the path taken whenever no spatial
+// control is asked for and neither garbage mask is set, which is the default.
+@compute @workgroup_size(8, 8)
+fn matte_key(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let size = vec2<i32>(textureDimensions(src));
+    let xy = vec2<i32>(gid.xy);
+    if (xy.x >= size.x || xy.y >= size.y) {
+        return;
+    }
+    let o = textureLoad(src, xy, 0);
+    let u = unpremult(o);
+    textureStore(dst, xy, shade(o, u, screen_matte(u)));
+}
+
+// STAGE 2 of the spatial pipeline (K-446): the screen matte on its own, written
+// out as an ordinary picture with the same number in every channel -- which is
+// what lets the Softness stage be the shared Gaussian blur rather than a second
+// blur written for one channel. `src` is the picture the key is judged from
+// (pre-blurred, or not).
+@compute @workgroup_size(8, 8)
+fn matte_key_screen(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let size = vec2<i32>(textureDimensions(src));
+    let xy = vec2<i32>(gid.xy);
+    if (xy.x >= size.x || xy.y >= size.y) {
+        return;
+    }
+    let o = textureLoad(src, xy, 0);
+    textureStore(dst, xy, vec4<f32>(screen_matte(unpremult(o))));
+}
+
+// STAGE 7 (K-446): spend the finished matte on the original colour. `src` is the
+// picture that arrived -- sharp, never the pre-blurred one -- and `orig` carries
+// the matte the tidying stages produced.
+@compute @workgroup_size(8, 8)
+fn matte_key_combine(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let size = vec2<i32>(textureDimensions(src));
+    let xy = vec2<i32>(gid.xy);
+    if (xy.x >= size.x || xy.y >= size.y) {
+        return;
+    }
+    let o = textureLoad(src, xy, 0);
+    let m = textureLoad(orig, xy, 0).r;
+    textureStore(dst, xy, shade(o, unpremult(o), m));
 }

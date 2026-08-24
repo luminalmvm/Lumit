@@ -771,11 +771,13 @@ pub fn build_comp_draws_at(
                 .collect()
         };
 
-    // **The mask paths — the geometry carriage** (K-408, docs/08 §1.2). One
-    // polyline per enabled built-in whose declaration names a MaskPath row AND
-    // resolves to an op at all — the same two conditions `mattes_for` applies,
-    // so this list stays 1:1 with the ops `run_ops` walks, with its own counter
-    // there because the predicate is a different one.
+    // **The mask paths — the geometry carriage** (K-408, K-446, docs/08 §1.2).
+    // One polyline per MaskPath **row** of every enabled built-in that resolves
+    // to an op at all — the same two conditions `mattes_for` applies, so this
+    // list stays in step with the ops `run_ops` walks, with its own counter
+    // there because the predicate is a different one. Per row, not per op: the
+    // Matte key declares two (an inside hold-out and an outside one), and
+    // `EffectSchema::mask_paths` is the one enumeration both sides run.
     //
     // The masks are the *layer's own*: a mask belongs to the layer it is drawn
     // on, and an effect walking another layer's shape is a question nobody has
@@ -792,8 +794,13 @@ pub fn build_comp_draws_at(
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|e| {
                 let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
-                let (param, self_default) = def.schema().mask_path()?;
-                def.is_image_op().then_some((e, param, self_default))
+                def.is_image_op().then_some((e, def))
+            })
+            .flat_map(|(e, def)| {
+                def.schema()
+                    .mask_paths()
+                    .map(move |(param, self_default)| (e, param, self_default))
+                    .collect::<Vec<_>>()
             })
             .map(|(e, param, self_default)| {
                 // A row the panel does not show, or shows greyed, is a row

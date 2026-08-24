@@ -395,10 +395,17 @@ fn feed_effect_stack(
                     // it for free". What is left is the choice, and a choice
                     // that changed the picture without changing the key would
                     // be a stale frame nobody could explain.
+                    //
+                    // Asked of **this row**, not of the effect's first one
+                    // (K-446): the Matte key declares two path rows, and its
+                    // garbage mattes are `self_default = false` where the
+                    // line-drawing effects' single row is true — reading the
+                    // first row's answer for the second would key an unset
+                    // hold-out as though it named the layer's first mask.
                     let self_default = lumit_core::fx::BUILTINS
                         .iter()
                         .find(|s| s.match_name == e.effect.match_name)
-                        .and_then(lumit_core::fx::EffectSchema::mask_path)
+                        .and_then(|s| s.mask_paths().find(|(id, _)| *id == p.id))
                         .is_some_and(|(_, sd)| sd);
                     match lumit_core::mask::mask_index_for_path_param(
                         &marker_layer.masks,

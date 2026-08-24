@@ -12395,3 +12395,90 @@ Regression tests: in `lumit-core`, `lighten_and_darken_take_the_greater_and_the_
 gives them back`. New strings: `maskModeLighten`, `maskModeDarken`, `maskVertexFeather`,
 `maskFeatherPerPoint`, `maskFeatherOneWidth`; `aeMaskModeUnavailable` is deleted with its
 reason.
+
+## K-446 — The keyer gains the half of Keylight that needs neighbours
+
+**DECIDED 2026-08-24.** Allocated on safe-lane. Closes the "deferred to a follow-up (K-155)"
+list 08 §3.21 has carried since the keyer landed, for its spatial half: **Screen pre-blur**,
+**Screen shrink/grow**, **Screen softness**, **Despot black** and **Despot white**, and the
+**Inside/Outside garbage masks**. The Colour correction twirls and the Source crops stay
+deferred; they are pointwise and need no pipeline.
+
+**Why they were deferred and what changed.** Every control the keyer had judged a pixel on its
+own, which is why it was one pointwise pass and `roi = Exact`. Each of these judges a pixel by
+its neighbours, so the matte has to stop being a number computed inside the colour loop and
+become a **picture of its own** for the length of the effect. That is the whole of the
+landing: `cpu::matte_key_spatial` computes the matte into a buffer, tidies it as a picture,
+and only then spends it on the colour, and the WGSL side does the same in as many as seven
+passes. `cost` becomes `moderate` and `roi` becomes `PaddedPx(251)` — 100 px pre-blur + 50 px
+shrink/grow + 100 px softness + the despot's one pixel, each control's own hard maximum,
+exactly as the Gaussian blur sizes its padding from its Radius' (K-433).
+
+**The defaults are byte-identical, and that is a branch rather than a promise.** With nothing
+spatial asked for and neither mask bound, `matte_key_spatial` hands straight over to the
+pointwise `matte_key` and the GPU dispatches the single fused kernel it always did. Not "the
+neutral settings happen to come out the same" — the staged path is *not taken*, so there is no
+fp16 intermediate to round differently. `matte_key` was split into `MatteKeyConst`,
+`matte_key_matte` and `matte_key_shade` so both paths read one derivation of the screen axis
+and one shading step; the fused kernel is those three called in a row.
+
+**The matte travels as an ordinary four-channel picture**, the same number in every channel.
+That is the decision that keeps the landing small: Screen softness is then the **shared**
+Gaussian blur — CPU and WGSL, already written and already parity-tested — rather than a second
+blur written for one channel, and on the GPU the matte is an ordinary working texture that
+every existing pass can take. Screen pre-blur is the same blur again, on the picture the key is
+judged from rather than on the matte.
+
+**Shrink/grow is morphological and separable; softness is the blur.** Two passes of a min
+(shrink) or max (grow) over a square, with the outermost ring eased in by the fractional part
+of the radius so the control is continuous and the §1.6 ULP oracle still holds over it. Keeping
+the two controls distinct is the point: a grow that softened would be a blur with a level shift,
+and a colourist reaches for shrink precisely when the edge must stay hard.
+
+**Despot is an amount, not a size, and the test is "disagrees with all eight".** Keylight's
+despots are sizes; Lumit's are per cent, and they reach exactly one pixel. A speck is a pixel
+every one of whose eight neighbours is on the other side of it, so black despot lifts such a
+pixel to the *darkest* of its neighbours and white despot drops it to the *brightest*, both
+blended by the amount. A pixel on a real edge always has a neighbour on its own side and is
+left alone — which is what lets the control run at 100 % without eating the matte, and what a
+radius would have taken away. A larger reach, if it is ever wanted, is an opening and a closing
+built from the shrink/grow pass already here.
+
+**The garbage masks are two `ParamKind::MaskPath` rows (K-408), not a layer holdout.** §3.21's
+own deferral guessed at "a layer-input holdout, reusing the DoF layer-reference pattern"; this
+entry supersedes that. A garbage matte is a shape drawn *on this layer*, which is exactly what
+the K-408 carriage delivers, and it costs no extra texture: the outline arrives as geometry —
+a closed polyline in raster pixels, built host-side by `cpu::mask_fill_params`, the very
+function the oracle calls — and the kernel answers inside/outside with an even-odd crossing
+count and softens with a signed distance to the nearest piece. Inside forces the matte opaque
+(a max), Outside forces it transparent (a min against the complement). Both rows are
+`self_default = false`: an unset garbage matte must be no garbage matte, where a line-drawing
+effect's single row sensibly means "the first mask".
+
+**The soft edge comes from the mask, not from a control of its own.** `MaskPolyline` gains
+`feather` and `expansion`, filled by `mask_path_at` from the mask's own values at that frame
+and read through the same ramp `mask_coverage` reads — so a hold-out and the mask it was drawn
+from soften and slide alike, and there are no two numbers to keep in step. The K-445 per-vertex
+widths are deliberately **not** carried: a varying width would have to ride per segment, and
+one width is what the eye is comparing a hold-out against.
+
+**The carriage now counts rows, not effects.** `EffectSchema::mask_paths` enumerates every
+path row an effect declares and `mask_path_count` says how many; `build.rs` flattens one
+polyline per row and `fxops::run_ops` consumes one per row, in that order — the K-387 rule
+unchanged, applied one level down. `AuxSlot::mask_path` still answers the first row for the
+three effects that walk one line; `mask_path_n` answers the rest. The frame key hashes each
+row's chosen mask *and* the feather and expansion that now ride with the curve, and asks
+`self_default` of **that row** rather than of the effect's first one.
+
+Regression tests: in `lumit-core`, `the_keyers_defaults_are_the_pointwise_keyer_byte_for_byte`,
+`the_screen_pre_blur_judges_a_soft_picture_and_returns_a_sharp_one`,
+`the_screen_shrink_and_grow_march_the_mattes_edge`, `the_screen_softness_ramps_the_mattes_edge`,
+`the_despots_take_specks_and_leave_edges`, `the_garbage_masks_hold_the_matte_open_and_shut`,
+`a_mask_path_carries_its_own_feather_and_expansion`, and the extended
+`a_mask_path_row_declares_itself_and_defaults_to_the_first_mask` and
+`every_parameter_declares_a_unit`; in `lumit-gpu`,
+`wgsl_matte_key_spatial_matches_the_cpu_oracle` (one case per control, the two masks, all of
+them at once, Mix 0, and the default pinned against the pointwise kernel); in `lumit-render`,
+the extended `the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path`. New strings:
+`fxScreenPreBlur`, `fxScreenShrinkGrow`, `fxScreenSoftness`, `fxDespotBlack`, `fxDespotWhite`,
+`fxInsideMask`, `fxOutsideMask`.

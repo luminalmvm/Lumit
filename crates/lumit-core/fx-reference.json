@@ -9326,6 +9326,17 @@
           "hard_max": 100.0
         },
         {
+          "id": "pre_blur",
+          "label": "Screen pre-blur",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
           "id": "clip_black",
           "label": "Clip black",
           "kind": "float",
@@ -9357,6 +9368,64 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "shrink_grow",
+          "label": "Screen shrink/grow",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0,
+          "hard_min": -50.0,
+          "hard_max": 50.0
+        },
+        {
+          "id": "softness",
+          "label": "Screen softness",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "despot_black",
+          "label": "Despot black",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "despot_white",
+          "label": "Despot white",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "inside_mask",
+          "label": "Inside mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "outside_mask",
+          "label": "Outside mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": false
         },
         {
           "id": "replace_method",
@@ -9438,9 +9507,16 @@
         {
           "label": "Screen matte",
           "params": [
+            "pre_blur",
             "clip_black",
             "clip_white",
             "clip_rollback",
+            "shrink_grow",
+            "softness",
+            "despot_black",
+            "despot_white",
+            "inside_mask",
+            "outside_mask",
             "replace_method",
             "replace_colour"
           ],

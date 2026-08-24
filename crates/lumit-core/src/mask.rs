@@ -1080,6 +1080,21 @@ pub struct MaskPolyline {
     /// point is the first one repeated, so the final `arc` entry is the full
     /// perimeter and a consumer never has to special-case the join.
     pub closed: bool,
+    /// The mask's own soft-edge width at this frame, px@comp — total width,
+    /// half either side of the curve, exactly as the mask itself draws it
+    /// (K-446). Zero for a hard edge, and for every way of naming nothing.
+    ///
+    /// It rides here because an effect that *fills* the shape has to feather
+    /// its fill the way the mask feathers its coverage; an effect that merely
+    /// walks the curve ignores it. One number, not the K-445 per-vertex
+    /// widths: a varying width would have to ride per segment, and the only
+    /// consumer so far is a garbage matte, where the mask's own uniform width
+    /// is what the eye is comparing against.
+    pub feather: f32,
+    /// The mask's own grow (+) / shrink (−) at this frame, px@comp — where the
+    /// edge sits relative to the drawn curve (K-446). Zero for an unexpanded
+    /// mask.
+    pub expansion: f32,
 }
 
 impl MaskPolyline {
@@ -1206,6 +1221,10 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
         points,
         arc,
         closed: path.closed,
+        // The curve alone. Whoever knows which *mask* this came from fills the
+        // widths in (see `mask_path_at`); flattening a bare path does not.
+        feather: 0.0,
+        expansion: 0.0,
     }
 }
 
@@ -1251,7 +1270,19 @@ pub fn mask_path_at(
     t: f64,
 ) -> MaskPolyline {
     match mask_index_for_path_param(masks, named, self_default).and_then(|i| masks.get(i)) {
-        Some(mask) => flatten_path(&mask.path_at(t), MASK_PATH_TOLERANCE_PX),
+        Some(mask) => {
+            let path = mask.path_at(t);
+            let mut poly = flatten_path(&path, MASK_PATH_TOLERANCE_PX);
+            // The soft edge and the expansion travel with the curve (K-446):
+            // an effect filling the shape has to soften and slide its fill
+            // exactly where the mask itself would. Read through the same
+            // accessors `mask_coverage` reads, so a garbage matte and the
+            // mask's own coverage never disagree about how wide the edge is.
+            let finite = |v: f64| if v.is_finite() { v } else { 0.0 };
+            poly.feather = mask.feather_widths_at(path.vertices.len(), t).0 as f32;
+            poly.expansion = finite(mask.expansion.value_at(t)) as f32;
+            poly
+        }
         None => MaskPolyline::default(),
     }
 }

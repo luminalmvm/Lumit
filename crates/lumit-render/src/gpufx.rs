@@ -74,7 +74,7 @@ pub struct AuxSlot<'a> {
     data: AuxData<'a>,
     matte: Option<&'a Tex>,
     layer: Option<&'a Tex>,
-    path: Option<&'a lumit_core::mask::MaskPolyline>,
+    paths: &'a [lumit_core::mask::MaskPolyline],
 }
 
 /// The borrowed slot itself, as [`crate::fxops::run_ops`] resolved it.
@@ -116,13 +116,13 @@ impl<'a> AuxSlot<'a> {
         data: AuxData<'a>,
         matte: Option<&'a Tex>,
         layer: Option<&'a Tex>,
-        path: Option<&'a lumit_core::mask::MaskPolyline>,
+        paths: &'a [lumit_core::mask::MaskPolyline],
     ) -> Self {
         Self {
             data,
             matte,
             layer,
-            path,
+            paths,
         }
     }
 
@@ -146,7 +146,18 @@ impl<'a> AuxSlot<'a> {
     /// own layout, since a kernel that walks a curve and a kernel that builds a
     /// distance field over one want different things in the buffer.
     pub fn mask_path(self) -> Option<&'a lumit_core::mask::MaskPolyline> {
-        self.path
+        self.paths.first()
+    }
+
+    /// This op's **n-th** mask path (K-446), in the order the effect declares
+    /// its [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) rows.
+    ///
+    /// Three effects walk one line and answer with [`Self::mask_path`]; the
+    /// Matte key takes two, an inside hold-out and an outside one, so the slot
+    /// is a slice. Past the end is `None`, which is the same no-op an unset row
+    /// already is.
+    pub fn mask_path_n(self, i: usize) -> Option<&'a lumit_core::mask::MaskPolyline> {
+        self.paths.get(i)
     }
 
     /// **This op's Matte** (K-395), already resolved against the picture the
@@ -2767,6 +2778,19 @@ impl GpuEffect for MotionBlur {
     }
 }
 
+/// One garbage mask's outline, as the kernel takes it (K-446): the CPU builds
+/// the geometry — the same function the oracle calls — and this only re-labels
+/// the fields for the GPU crate, exactly as `path_draw_op` does for the three
+/// line-drawing effects.
+fn mask_fill_op(built: &lumit_core::fx::cpu::MaskFillParams) -> lumit_gpu::fx::MaskFillOp {
+    lumit_gpu::fx::MaskFillOp {
+        segments: built.segments,
+        count: built.count,
+        ramp: built.ramp,
+        expansion: built.expansion,
+    }
+}
+
 struct MatteKey;
 impl GpuEffect for MatteKey {
     fn match_name(&self) -> &'static str {
@@ -2780,9 +2804,18 @@ impl GpuEffect for MatteKey {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let k = effects::matte_key::MatteKey::read(p).packed();
+        // The two garbage masks, in declaration order: inside then outside.
+        // Built here, host-side, exactly once a frame and by the very function
+        // the §1.6 oracle calls — neither path generates geometry, so neither
+        // can generate it differently (K-408's rule, K-446's second row).
+        let px_scale = effects::matte_key::MatteKey::px_scale_of(p);
+        let unset = lumit_core::mask::MaskPolyline::default();
+        let fill = |i: usize| {
+            lumit_core::fx::cpu::mask_fill_params(aux.mask_path_n(i).unwrap_or(&unset), px_scale)
+        };
         fx.matte_key(
             ctx,
             tex,
@@ -2801,8 +2834,15 @@ impl GpuEffect for MatteKey {
                 clip_rollback: k.clip_rollback,
                 replace_method: k.replace_method,
                 replace_colour: k.replace_colour,
+                pre_blur: k.pre_blur,
+                shrink_grow: k.shrink_grow,
+                softness: k.softness,
+                despot_black: k.despot_black,
+                despot_white: k.despot_white,
                 mix: k.mix,
             },
+            &mask_fill_op(&fill(0)),
+            &mask_fill_op(&fill(1)),
         )
     }
 }

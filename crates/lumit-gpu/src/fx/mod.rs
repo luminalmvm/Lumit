@@ -71,6 +71,14 @@ pub struct FxEngine {
     saturation: wgpu::ComputePipeline,
     vibrancy: wgpu::ComputePipeline,
     matte_key: wgpu::ComputePipeline,
+    /// The spatial keyer's stages (K-446): the screen matte on its own, the
+    /// separable shrink/grow, the despot, one garbage mask, and the pass that
+    /// spends the finished matte on the original colour.
+    matte_key_screen: wgpu::ComputePipeline,
+    matte_key_combine: wgpu::ComputePipeline,
+    matte_morph: wgpu::ComputePipeline,
+    matte_despot: wgpu::ComputePipeline,
+    matte_mask: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
     /// The lighting pass (docs/06, K-361). Not an effect — the realiser calls

@@ -283,8 +283,9 @@ pub struct CompLayerDraw {
     /// `MatteRole` answers both — so nothing here needs to know.
     pub mattes: Vec<LayerInputDraw>,
     /// **Every path op's mask** (K-408, docs/08 §1.2): one flattened polyline
-    /// per op whose effect declares a [`ParamKind::MaskPath`](lumit_core::fx::
-    /// ParamKind::MaskPath) row, 1:1 and in stack order with them — the same
+    /// per [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) **row**
+    /// of every op that declares any (K-446: the Matte key declares two), in
+    /// stack order and then declaration order within an op — the same
     /// one-predicate, one-order rule [`Self::mattes`] follows, with its own
     /// counter because its predicate is a different one (most effects take a
     /// matte; almost none takes a path).

@@ -950,6 +950,11 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
         clip_black: 0.0,
         clip_white: 1.0,
         clip_rollback: 0.0,
+        pre_blur: 0.0,
+        shrink_grow: 0.0,
+        softness: 0.0,
+        despot_black: 0.0,
+        despot_white: 0.0,
         replace_method: 2,
         replace_colour: grey,
         mix: 1.0,
@@ -965,6 +970,11 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
         clip_black: p.clip_black,
         clip_white: p.clip_white,
         clip_rollback: p.clip_rollback,
+        pre_blur: p.pre_blur,
+        shrink_grow: p.shrink_grow,
+        softness: p.softness,
+        despot_black: p.despot_black,
+        despot_white: p.despot_white,
         replace_method: p.replace_method,
         replace_colour: p.replace_colour,
         mix: p.mix,
@@ -1023,7 +1033,8 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = to_op(&p);
-        let out = fx.matte_key(&ctx, &tex, w, h, &op);
+        let blank = MaskFillOp::blank();
+        let out = fx.matte_key(&ctx, &tex, w, h, &op, &blank, &blank);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1033,10 +1044,269 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "Mix 0 must be the bit-exact identity");
         }
 
-        let out2 = fx.matte_key(&ctx, &tex, w, h, &op);
+        let out2 = fx.matte_key(&ctx, &tex, w, h, &op, &blank, &blank);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU matte key must be bit-stable");
     }
+}
+
+/// **The §1.6 oracle for the Matte key's spatial controls** (K-446): Screen
+/// pre-blur, shrink/grow, softness, despot black/white and the two garbage
+/// masks agree with the CPU reference, one control at a time and then all at
+/// once, and the GPU is bit-stable (§2.4).
+///
+/// Moderate-class now rather than cheap: the matte becomes a picture of its own
+/// and travels through as many as seven fp16 passes, so the comparison is the
+/// perceptual epsilon §1.6 allows a moderate effect, the one the Gaussian blur's
+/// own oracle uses, scaled for an HDR corpus.
+///
+/// **The defaults are pinned bit-for-bit against the pointwise kernel**, which
+/// is what "adding these controls changed nothing" means: with nothing asked for
+/// and neither mask set, the staged path is not taken at all.
+#[test]
+fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
+    use lumit_core::fx::MatteKeyParams;
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    // Corpus (§1.6): a green field sliding to red, brightness rising down the
+    // frame, alpha in bands — plus two single-pixel specks, one black hole in
+    // the kept side and one green fleck in the keyed side, so the despot has
+    // something to find, and an HDR spike.
+    let mut img = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let fx_ = x as f32 / (w - 1) as f32;
+            let fy = y as f32 / (h - 1) as f32;
+            let a = 0.25 + 0.75 * fy;
+            img[i] = fx_ * a;
+            img[i + 1] = (1.0 - fx_) * (0.4 + 0.6 * fy) * a;
+            img[i + 2] = 0.25 * fx_ * a;
+            img[i + 3] = a;
+        }
+    }
+    // A lone screen-coloured pixel deep in the foreground (a hole), and a lone
+    // foreground-coloured pixel deep in the screen (a fleck).
+    let hole = ((12 * w + 26) * 4) as usize;
+    img[hole..hole + 4].copy_from_slice(&[0.0, 0.6, 0.0, 1.0]);
+    let fleck = ((12 * w + 4) * 4) as usize;
+    img[fleck..fleck + 4].copy_from_slice(&[0.7, 0.1, 0.6, 1.0]);
+    let spike = ((10 * w + 20) * 4) as usize;
+    img[spike..spike + 4].copy_from_slice(&[6.0, 3.0, 1.5, 0.5]);
+    let img: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+
+    let grey = [0.5f32, 0.5, 0.5, 1.0];
+    let base = MatteKeyParams {
+        view: 0,
+        key: [0.0, 0.6, 0.0, 1.0],
+        gain: 1.0,
+        balance: 0.5,
+        despill_bias: grey,
+        alpha_bias: grey,
+        spill: 1.0,
+        clip_black: 0.0,
+        clip_white: 1.0,
+        clip_rollback: 0.0,
+        pre_blur: 0.0,
+        shrink_grow: 0.0,
+        softness: 0.0,
+        despot_black: 0.0,
+        despot_white: 0.0,
+        replace_method: 2,
+        replace_colour: grey,
+        mix: 1.0,
+    };
+    let to_op = |p: &MatteKeyParams| MatteKeyOp {
+        view: p.view,
+        key: p.key,
+        gain: p.gain,
+        balance: p.balance,
+        despill_bias: p.despill_bias,
+        alpha_bias: p.alpha_bias,
+        spill: p.spill,
+        clip_black: p.clip_black,
+        clip_white: p.clip_white,
+        clip_rollback: p.clip_rollback,
+        pre_blur: p.pre_blur,
+        shrink_grow: p.shrink_grow,
+        softness: p.softness,
+        despot_black: p.despot_black,
+        despot_white: p.despot_white,
+        replace_method: p.replace_method,
+        replace_colour: p.replace_colour,
+        mix: p.mix,
+    };
+    let to_fill = |m: &lumit_core::fx::cpu::MaskFillParams| MaskFillOp {
+        segments: m.segments,
+        count: m.count,
+        ramp: m.ramp,
+        expansion: m.expansion,
+    };
+
+    // Two real masks off the mask model, flattened exactly as the carriage
+    // flattens them (K-408): a rectangle over the left half to hold in, and one
+    // over the top-right corner to cut out. The feather and expansion are set on
+    // the polyline directly, which is where `mask_path_at` puts a mask's own.
+    let rect = |x: f64, y: f64, rw: f64, rh: f64, feather: f32, expansion: f32| {
+        let masks = vec![lumit_core::mask::Mask::rectangle(x, y, rw, rh)];
+        let mut poly = lumit_core::mask::mask_path_at(&masks, None, true, 0.0);
+        poly.feather = feather;
+        poly.expansion = expansion;
+        poly
+    };
+    let inside_poly = rect(2.0, 2.0, 10.0, 20.0, 3.0, 0.0);
+    let outside_poly = rect(20.0, 1.0, 10.0, 8.0, 0.0, -1.5);
+    let blank = lumit_core::fx::cpu::MaskFillParams::blank();
+    let inside = lumit_core::fx::cpu::mask_fill_params(&inside_poly, 1.0);
+    let outside = lumit_core::fx::cpu::mask_fill_params(&outside_poly, 1.0);
+    assert!(inside.count >= 4, "the hold-out flattened to nothing");
+    assert!(outside.count >= 4, "the cut-out flattened to nothing");
+
+    for (name, p, ins, outs) in [
+        (
+            "pre_blur",
+            MatteKeyParams {
+                pre_blur: 3.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "grow",
+            MatteKeyParams {
+                shrink_grow: 2.5,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "shrink",
+            MatteKeyParams {
+                shrink_grow: -1.75,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "softness",
+            MatteKeyParams {
+                softness: 4.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "despot_black",
+            MatteKeyParams {
+                despot_black: 1.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "despot_white",
+            MatteKeyParams {
+                despot_white: 1.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        ("inside_mask", base, inside, blank),
+        ("outside_mask", base, blank, outside),
+        (
+            "both_masks_matte_view",
+            MatteKeyParams { view: 1, ..base },
+            inside,
+            outside,
+        ),
+        (
+            "everything_at_once",
+            MatteKeyParams {
+                pre_blur: 2.0,
+                shrink_grow: -1.5,
+                softness: 2.5,
+                despot_black: 0.75,
+                despot_white: 0.5,
+                clip_black: 0.1,
+                clip_white: 0.9,
+                ..base
+            },
+            inside,
+            outside,
+        ),
+        (
+            "identity_mix0",
+            MatteKeyParams {
+                pre_blur: 3.0,
+                softness: 3.0,
+                mix: 0.0,
+                ..base
+            },
+            inside,
+            outside,
+        ),
+    ] {
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::matte_key_spatial(&mut cpu, w, h, &p, &ins, &outs);
+
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let op = to_op(&p);
+        let out = fx.matte_key(&ctx, &tex, w, h, &op, &to_fill(&ins), &to_fill(&outs));
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("matte key spatial {name}: worst {worst}");
+        assert!(worst < 2e-2, "{name}: worst diff {worst}");
+        if name == "identity_mix0" {
+            assert_eq!(gpu, img, "Mix 0 must be the identity through the pipeline");
+        }
+
+        let out2 = fx.matte_key(&ctx, &tex, w, h, &op, &to_fill(&ins), &to_fill(&outs));
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "GPU spatial matte key must be bit-stable");
+    }
+
+    // **The default is the old picture.** Nothing spatial, no masks: both paths
+    // must produce exactly what the pointwise kernel produces, bit for bit — on
+    // the CPU because `matte_key_spatial` hands straight over, and on the GPU
+    // because the staged pipeline is not dispatched at all.
+    let mut fused = img.clone();
+    lumit_core::fx::cpu::matte_key(&mut fused, &base);
+    let mut staged = img.clone();
+    lumit_core::fx::cpu::matte_key_spatial(&mut staged, w, h, &base, &blank, &blank);
+    assert_eq!(fused, staged, "the defaults took a different CPU path");
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    let bl = MaskFillOp::blank();
+    let a = readback_linear_f32(
+        &ctx,
+        &fx.matte_key(&ctx, &tex, w, h, &to_op(&base), &bl, &bl),
+        w,
+        h,
+    )
+    .unwrap();
+    let worst = fused
+        .iter()
+        .zip(&a)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0f32, f32::max);
+    assert!(
+        worst <= 1e-3,
+        "the default GPU picture moved: worst {worst}"
+    );
 }
 
 /// The §1.6 oracle for vignette: a cheap pointwise effect, so the CPU

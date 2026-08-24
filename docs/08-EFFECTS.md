@@ -1610,9 +1610,16 @@ oracle, unlike a hard threshold.
   what counts as neutral for the matte; grey is a no-op).
 - **Despill amount** (%, default 100, the Keylight screen despill).
 
-**Screen matte** twirl (collapsed): **Clip black** (%, default 0, matte at/below maps to 0),
-**Clip white** (%, default 100, matte at/above maps to 1), **Clip rollback** (%, default 0,
-eases the clips back toward the un-clipped matte to recover fine edge detail), **Replace
+**Screen matte** twirl (collapsed), in the order the pipeline runs them: **Screen pre-blur**
+(px@comp, default 0, softens the picture the key is *judged from*, never the picture that comes
+out), **Clip black** (%, default 0, matte at/below maps to 0), **Clip white** (%, default 100,
+matte at/above maps to 1), **Clip rollback** (%, default 0, eases the clips back toward the
+un-clipped matte to recover fine edge detail), **Screen shrink/grow** (px@comp, default 0,
+marches the matte's edge inward at negative values and outward at positive ones — morphological,
+so the edge stays as crisp as it was), **Screen softness** (px@comp, default 0, blurs the matte
+and only the matte), **Despot black** and **Despot white** (%, default 0, remove isolated dark
+and bright specks), **Inside mask** and **Outside mask** (mask-path rows, default unset — the
+garbage mattes: inside forces the matte opaque, outside forces it transparent), **Replace
 method** (choice: Source / Hard colour / Soft colour / None, default Soft colour) and
 **Replace colour** (colour, default grey). Then the shared **Mix**.
 
@@ -1629,8 +1636,32 @@ ends and **Clip rollback** blends back toward the un-clipped matte. **Despill** 
 primary channel down toward the (despill-bias shifted) secondary reference by the despill
 fraction, draining screen tint; **Replace method** then recolours where spill was removed —
 Source keeps the original colour, Hard/Soft blend in the replace colour (Soft scaled by the
-pixel's brightness), None leaves the despilled colour. `cheap` cost, `exact` ROI, `{0}`
-temporal. Category **Utility**, beside Transform.
+pixel's brightness), None leaves the despilled colour.
+
+**The spatial stages (K-446).** Every control above judges a pixel on its own; these judge it
+by its neighbours, so the matte becomes a **picture of its own** for the length of the effect
+and is only spent on the colour at the end. Seven stages, in this order: pre-blur the picture
+the key is judged from → the screen matte, clips and rollback → shrink/grow → softness →
+despot → the garbage masks → despill, Replace, View and Mix on the *original* colour. The
+matte is carried as an ordinary four-channel picture with the same number in every channel, so
+Softness and the pre-blur are the **shared** Gaussian blur rather than second implementations.
+Shrink/grow is a separable morphological min or max over a square, with the outermost ring
+eased in by the fractional part of the radius so the control stays continuous. A **despot** is
+an amount rather than a size and reaches exactly one pixel: a speck is a pixel every one of
+whose eight neighbours is on the other side of it, so black lifts such a pixel to the darkest
+of them and white drops it to the brightest, which leaves a real edge — always with a
+neighbour on its own side — untouched. The **garbage masks** are two `ParamKind::MaskPath`
+rows (§1.2, K-408) on this layer's own masks: the outline arrives as geometry, inside/outside
+is an even-odd crossing count, and the soft edge is the **mask's own feather and expansion**
+read through the same ramp the mask's ordinary coverage is read through, so a hold-out and the
+shape it was drawn from soften alike. Both rows are unset by default and an unset row means no
+garbage matte, never "the first mask".
+
+**Nothing spatial asked for is the pointwise keyer**, byte for byte: the staged path is not
+taken at all, on either the CPU or the GPU, so an existing project keys exactly what it keyed
+before. `moderate` cost, `padded_px(251)` ROI — pre-blur, shrink/grow and softness at their own
+hard maxima plus the despot's one pixel — `{0}` temporal. Category **Utility**, beside
+Transform.
 
 **Status (K-154, shipped — supersedes the K-121 chroma-distance key):** the colour-difference
 screen matte, clips, despill and replace model above, with the default green screen + 100 %
@@ -1648,13 +1679,18 @@ Screen colour (`key`) and Spill (now Despill amount); its old Tolerance/Softness
 superseded by gain/balance/clip and simply go unread, and the new controls take their Keylight
 defaults (version bumped 1 → 2, so the frame cache re-keys).
 
-**Deferred to a follow-up (K-155):** the **spatial** Keylight controls — Screen pre-blur,
-Screen shrink/grow, Screen softness, Screen despot black/white — need a multi-pass
-morphology/blur pipeline with its own oracle and are out of scope of this pointwise landing;
-the **Inside/Outside garbage masks** (a layer-input holdout, reusing the DoF layer-reference
-pattern, §3.22); the **Colour correction** twirls (Foreground/Edge saturation, contrast,
-brightness, colour balance); and the **Source crops** (per-axis edge method + crop amounts).
-The core keyer above is what "properly key footage" needs; these refine it.
+**Status (K-446, shipped — the spatial half):** Screen pre-blur, Screen shrink/grow, Screen
+softness, Despot black/white and the Inside/Outside garbage masks, described above. The
+garbage mattes are mask-path rows rather than the layer-input holdout the K-155 deferral
+guessed at — a garbage matte is a shape drawn on this layer, which is what the K-408 carriage
+already delivers. The §1.6 oracle is `cpu::matte_key_spatial`, matched by the WGSL pipeline one
+control at a time, all of them at once, and with the two masks bound; the defaults are pinned
+bit-for-bit against the pointwise kernel.
+
+**Deferred still:** the **Colour correction** twirls (Foreground/Edge saturation, contrast,
+brightness, colour balance) and the **Source crops** (per-axis edge method + crop amounts).
+Both are pointwise and need no pipeline; the keyer above is what "properly key footage" needs,
+and these refine it.
 
 ### 3.22 Depth of field — depth-driven lens blur with an iris (Frischluft / Camera Lens Blur-class)
 

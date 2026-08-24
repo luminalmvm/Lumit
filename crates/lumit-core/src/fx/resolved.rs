@@ -205,8 +205,40 @@ pub struct MatteKeyParams {
     pub replace_method: u32,
     /// Scene-linear RGBA replace colour used by the Hard/Soft replace methods.
     pub replace_colour: [f32; 4],
+    /// Screen pre-blur radius in **raster** pixels (K-446): how far the picture
+    /// the key is *judged from* is softened. The colour that comes out is still
+    /// the sharp original. 0 is the neutral, and the whole stage is skipped.
+    pub pre_blur: f32,
+    /// Screen matte shrink (−) / grow (+) in **raster** pixels (K-446): a
+    /// morphological march of the matte's edge, inward or outward. 0 is the
+    /// neutral.
+    pub shrink_grow: f32,
+    /// Screen matte softness in **raster** pixels (K-446): a Gaussian blur of
+    /// the matte, and only the matte. 0 is the neutral.
+    pub softness: f32,
+    /// Despot black, 0..1 (K-446): how far an isolated dark speck is lifted to
+    /// its neighbours. 0 is the neutral.
+    pub despot_black: f32,
+    /// Despot white, 0..1 (K-446): how far an isolated bright speck is dropped
+    /// to its neighbours. 0 is the neutral.
+    pub despot_white: f32,
     /// 0..1, blended against the untouched premultiplied input; 0 is the identity.
     pub mix: f32,
+}
+
+impl MatteKeyParams {
+    /// Whether any **spatial** stage is asked for (K-446) — the one predicate
+    /// both render paths branch on, so the fast pointwise kernel and the staged
+    /// pipeline are chosen identically. The garbage masks are asked separately,
+    /// because they come from the mask carriage rather than from these numbers.
+    #[must_use]
+    pub fn spatial(&self) -> bool {
+        self.pre_blur > 0.0
+            || self.shrink_grow != 0.0
+            || self.softness > 0.0
+            || self.despot_black > 0.0
+            || self.despot_white > 0.0
+    }
 }
 
 /// Resolve a layer's live stack at layer time `lt` for a raster whose

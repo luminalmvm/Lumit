@@ -8229,6 +8229,83 @@ The same change added the two mask combine modes that were missing, **Lighten** 
 **Darken**: where **Add** sums two overlapping masks and can saturate, Lighten simply keeps
 whichever of the two is more opaque, and Darken whichever is less.
 
+### The keyer's second half: tidying the matte as a picture (K-446)
+
+Everything the Matte key did until now decided one pixel at a time. It looked at a pixel's
+colour, worked out how much like the green screen it was, and turned that into how transparent
+the pixel should be — and then it was finished with that pixel and moved on. That is a fast,
+simple shape, and it is why the effect was one pass over the frame.
+
+The controls a colourist reaches for next cannot work that way, because every one of them is a
+question about a pixel's **neighbours**:
+
+- **Screen pre-blur** — "ignore the grain: judge this pixel by the average of the area around
+  it." The catch is that only the *judgement* is softened. What comes out is still the sharp
+  original picture; it has just been told its transparency by a blurry twin. Blurring the layer
+  and keying the result would be a different, worse thing.
+- **Screen shrink/grow** — "pull the whole edge of the cut-out in by a pixel and a half" (a
+  green fringe disappears), or push it out. Not a blur: the edge moves and stays crisp.
+- **Screen softness** — "blur the cut-out itself", so the join with the new background is a
+  gradient rather than a line. The picture keeps its own sharpness; only the transparency is
+  softened.
+- **Despot black / white** — "there is a single stray dot in the middle of a clean area, get
+  rid of it." A dark speck in the kept subject is a pinhole; a bright speck out in the
+  background is a fleck.
+- **Inside / Outside masks** — "never mind what the key thinks, *this* shape is always kept and
+  *that* shape is always cut." The rig in the corner of frame, the hole in the screen behind
+  the actor's shoulder.
+
+**How they are made to fit.** The trick is to stop treating the transparency as a number inside
+the colour loop and start treating it as a **picture of its own** — a greyscale image, white
+where the subject is kept and black where the screen was, exactly what the effect's Screen
+matte view already shows you. Once it is a picture, all five controls become ordinary picture
+operations, and the effect runs as a short assembly line:
+
+1. Soften the picture the key is judged from (if pre-blur asks).
+2. Work out the matte from it and draw it into its own greyscale image.
+3. March that image's edge in or out.
+4. Blur it.
+5. Remove its specks.
+6. Paint the garbage masks into it — white inside the Inside mask, black inside the Outside one.
+7. Only now, go back to the *original* sharp colour and spend the finished matte on it.
+
+There is a real saving in step 2 being a picture. The blur Lumit already has works on pictures,
+so steps 1 and 4 are that same blur, called twice on different things — no second blur was
+written, and the two paths (the plain-code reference and the graphics-card version) were
+already proven to agree. The matte is stored with the same grey in all four of its channels
+precisely so that any existing picture operation can be pointed at it without noticing that it
+is a matte rather than a photograph.
+
+**Shrinking without softening.** Growing a shape by a pixel is "take the brightest value in the
+little square around each pixel"; shrinking is "take the darkest". Do it once across and once
+down and you have moved the whole edge, and — unlike a blur — a pixel's answer is always one of
+its neighbours' actual values, so nothing in between gets invented and the edge stays hard.
+Because the control is a slider and not a whole number of pixels, the outermost ring of the
+square is faded in gradually, so dragging it is smooth rather than a series of jumps.
+
+**What counts as a speck.** A speck is a pixel that **every single one** of its eight
+neighbours disagrees with. That definition does the work: a dot alone in a clean area has no
+ally, so it is pulled to whatever its neighbours agree on, while a pixel sitting on the real
+edge of the subject always has neighbours on its own side and is left completely alone. It is
+why the control can be turned all the way up without eating the edges — and why it is a
+strength rather than a size. If a wider reach is ever wanted, it is built from the shrink/grow
+step, not from a bigger despot.
+
+**The garbage masks come from the mask you drew.** The two rows pick one of the layer's own
+masks — the same shapes you draw with the pen tool. What travels to the effect is not a picture
+of the shape but the shape itself: the list of straight pieces its outline is made of. The
+kernel then asks, for each pixel, "how many times does a ray from here cross the outline?" —
+odd means inside, even means outside — and how far the pixel is from the nearest piece, which
+is what lets the edge be soft. The softness is the mask's **own** feather, and the mask's own
+grow/shrink slides it, so a garbage mask fades exactly the way the shape it was drawn from
+fades. There is nothing extra to set, and nothing that can drift out of step.
+
+**And nothing changed for anybody who does not touch them.** Every one of these controls is off
+by default, and when they are all off the effect takes the old single pass — not "the new path
+with neutral settings", the *old path*, so an existing project keys the identical pixels it
+keyed before. That is checked by a test rather than promised: the two paths are run side by
+side at the defaults and compared for exact equality.
+
 ## 13. The two public web sites
 
 `web/` and `web-docs/` are the public face of the project: **lumitlab.com**,

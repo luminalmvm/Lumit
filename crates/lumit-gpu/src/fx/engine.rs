@@ -265,6 +265,8 @@ impl FxEngine {
         let saturation_mod = module(include_str!("../fx_saturation.wgsl"), "fx-saturation");
         let vibrancy_mod = module(include_str!("../fx_vibrancy.wgsl"), "fx-vibrancy");
         let matte_key_mod = module(include_str!("../fx_matte_key.wgsl"), "fx-matte-key");
+        let matte_tidy_mod = module(include_str!("../fx_matte_tidy.wgsl"), "fx-matte-tidy");
+        let matte_mask_mod = module(include_str!("../fx_matte_mask.wgsl"), "fx-matte-mask");
         let vignette_mod = module(include_str!("../fx_vignette.wgsl"), "fx-vignette");
         let exposure_mod = module(include_str!("../fx_exposure.wgsl"), "fx-exposure");
         let lighting_mod = module(include_str!("../fx_lighting.wgsl"), "fx-lighting");
@@ -400,6 +402,12 @@ impl FxEngine {
         let saturation = pipeline(&saturation_mod, "fx-saturation", "saturate_fx");
         let vibrancy = pipeline(&vibrancy_mod, "fx-vibrancy", "vibrance_fx");
         let matte_key = pipeline(&matte_key_mod, "fx-matte-key", "matte_key");
+        let matte_key_screen = pipeline(&matte_key_mod, "fx-matte-key-screen", "matte_key_screen");
+        let matte_key_combine =
+            pipeline(&matte_key_mod, "fx-matte-key-combine", "matte_key_combine");
+        let matte_morph = pipeline(&matte_tidy_mod, "fx-matte-morph", "matte_morph");
+        let matte_despot = pipeline(&matte_tidy_mod, "fx-matte-despot", "matte_despot");
+        let matte_mask = pipeline(&matte_mask_mod, "fx-matte-mask", "matte_mask");
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
         let lighting = pipeline(&lighting_mod, "fx-lighting", "lighting");
@@ -606,6 +614,11 @@ impl FxEngine {
             saturation,
             vibrancy,
             matte_key,
+            matte_key_screen,
+            matte_key_combine,
+            matte_morph,
+            matte_despot,
+            matte_mask,
             vignette,
             exposure,
             lighting,

@@ -124,6 +124,8 @@ Depth map
 Depth of field
 Despill amount
 Despill bias
+Despot black
+Despot white
 Detail
 Detect edge threshold
 Diagonal
@@ -267,6 +269,7 @@ Input black
 Input space
 Input white
 Inside colour
+Inside mask
 Intensity
 Interlace offset
 Interpolation
@@ -373,6 +376,7 @@ Output height
 Output white
 Output width
 Outside colour
+Outside mask
 Overlay
 PAL
 Paint style
@@ -458,6 +462,9 @@ Screen balance
 Screen colour
 Screen gain
 Screen matte
+Screen pre-blur
+Screen shrink/grow
+Screen softness
 Scribble
 Seed
 Segment length
