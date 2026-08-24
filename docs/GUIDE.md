@@ -8384,6 +8384,35 @@ single dab has no length to divide, so it appears whole the moment any of it is 
 numbers are left out of the saved file until somebody moves them, so nothing changes for a
 project that has never used them.
 
+### A stroke that blends (K-450)
+
+Every layer has a **blend mode** — the list with Multiply, Screen, Overlay and the rest in it —
+which decides how its picture combines with everything underneath. A paint stroke now has one
+too, on its own row in the Timeline, chosen from the same list.
+
+What that means in practice: a Multiply stroke darkens what it is drawn over instead of covering
+it, so it reads as ink soaking into the picture rather than paint sitting on top. Screen does the
+opposite and only lightens, which is how a highlight is brushed on without flattening what was
+there. Overlay keeps the darks dark and the lights light and pushes the colour through the
+middle. They are the same words doing the same thing they do on a layer, which is the point:
+nobody should have to learn a second vocabulary because the mark happens to be a brush stroke.
+
+The part that mattered when building it is that a blend changes **what colour the mark is**, and
+never **how much of the pixel it covers**. Those are two separate things and it is easy to
+confuse them. The brush works out coverage first — how solidly this pixel is inside the mark,
+given the brush's size, its hardness and the stroke's opacity — and that number is untouched by
+the mode. Then the mode decides what colour to put there, by combining the brush's colour with
+the colour already on the layer. Finally that colour is laid down at the coverage worked out in
+step one, by exactly the same source-over the brush has always used. So a half-opacity Multiply
+stroke is genuinely half of the way to the multiplied result, and a soft edge is still a soft
+edge.
+
+None of the arithmetic is new. Lumit already had every one of these formulas written once, for
+the blend row on an effect, which itself matches the compositor's — so the stroke calls that
+same code rather than growing a third copy that could drift. And the eraser ignores the setting
+entirely, because an eraser has no colour to combine: it takes transparency away, and a mode
+there would only be a second way of saying nothing.
+
 ## 13. The two public web sites
 
 `web/` and `web-docs/` are the public face of the project: **lumitlab.com**,

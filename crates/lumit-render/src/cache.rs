@@ -495,6 +495,7 @@ mod tests {
             start: lumit_core::anim::Property::zero(),
             end: lumit_core::anim::Property::fixed(100.0),
             mode: PaintMode::Paint,
+            blend: lumit_core::model::BlendMode::Normal,
             clone_offset: (0.0, 0.0),
             extra: serde_json::Map::new(),
         };

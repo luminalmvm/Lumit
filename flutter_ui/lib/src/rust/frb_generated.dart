@@ -9417,8 +9417,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeStroke dco_decode_bridge_stroke(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return BridgeStroke(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -9431,8 +9431,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       start: dco_decode_bridge_scalar(arr[8]),
       end: dco_decode_bridge_scalar(arr[9]),
       mode: dco_decode_bridge_paint_mode(arr[10]),
-      cloneOffsetX: dco_decode_f_64(arr[11]),
-      cloneOffsetY: dco_decode_f_64(arr[12]),
+      blend: dco_decode_u_32(arr[11]),
+      cloneOffsetX: dco_decode_f_64(arr[12]),
+      cloneOffsetY: dco_decode_f_64(arr[13]),
     );
   }
 
@@ -11820,6 +11821,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_start = sse_decode_bridge_scalar(deserializer);
     var var_end = sse_decode_bridge_scalar(deserializer);
     var var_mode = sse_decode_bridge_paint_mode(deserializer);
+    var var_blend = sse_decode_u_32(deserializer);
     var var_cloneOffsetX = sse_decode_f_64(deserializer);
     var var_cloneOffsetY = sse_decode_f_64(deserializer);
     return BridgeStroke(
@@ -11834,6 +11836,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         start: var_start,
         end: var_end,
         mode: var_mode,
+        blend: var_blend,
         cloneOffsetX: var_cloneOffsetX,
         cloneOffsetY: var_cloneOffsetY);
   }
@@ -14340,6 +14343,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.start, serializer);
     sse_encode_bridge_scalar(self.end, serializer);
     sse_encode_bridge_paint_mode(self.mode, serializer);
+    sse_encode_u_32(self.blend, serializer);
     sse_encode_f_64(self.cloneOffsetX, serializer);
     sse_encode_f_64(self.cloneOffsetY, serializer);
   }

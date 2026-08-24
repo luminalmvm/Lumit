@@ -829,6 +829,12 @@ class BridgeStroke {
   final BridgeScalar end;
   final BridgePaintMode mode;
 
+  /// How the mark combines with what is already on the layer (K-450), as an
+  /// index into [`list_blend_modes`] — the same list and the same convention
+  /// a layer's own blend crosses on. Ignored by an eraser, which takes alpha
+  /// away and never touches colour.
+  final int blend;
+
   /// Where a clone's pixels are copied from, as an offset in layer pixels.
   final double cloneOffsetX;
   final double cloneOffsetY;
@@ -845,6 +851,7 @@ class BridgeStroke {
     required this.start,
     required this.end,
     required this.mode,
+    required this.blend,
     required this.cloneOffsetX,
     required this.cloneOffsetY,
   });
@@ -862,6 +869,7 @@ class BridgeStroke {
       start.hashCode ^
       end.hashCode ^
       mode.hashCode ^
+      blend.hashCode ^
       cloneOffsetX.hashCode ^
       cloneOffsetY.hashCode;
 
@@ -881,6 +889,7 @@ class BridgeStroke {
           start == other.start &&
           end == other.end &&
           mode == other.mode &&
+          blend == other.blend &&
           cloneOffsetX == other.cloneOffsetX &&
           cloneOffsetY == other.cloneOffsetY;
 }

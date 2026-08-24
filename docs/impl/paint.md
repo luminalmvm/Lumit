@@ -20,7 +20,7 @@ stroke, because a stroke is one thing rather than a smear of changed pixels.
 ## The shape of a stroke
 
 `lumit_core::paint::PaintStroke` — id, name, `points` (layer space, in the order drawn),
-`colour`, `width` (diameter), `hardness`, `shape`, `opacity`, `start`, `end`, `mode`,
+`colour`, `width` (diameter), `hardness`, `shape`, `opacity`, `start`, `end`, `mode`, `blend`,
 `clone_offset`.
 
 A **polyline**, not a bezier. Masks and shape layers are the bezier things; nobody edits a
@@ -73,6 +73,18 @@ this frame is being rendered at.
      erase reversible by lowering its opacity later.
    * **Clone** — sample the layer at `pixel + clone_offset × scale`, source-over. Off the layer
      copies nothing (wrapping reads as a bug).
+
+**The blend is a colour, never a coverage** (K-450). `blend` is a
+`lumit_core::model::BlendMode` — the layer list, the same words in the same order — and it
+decides what colour the mark lays down, not how much of the pixel it lays it on. Per pixel,
+when the mode is anything but Normal: decode the destination and the mark's colour to linear
+light, run `fx::cpu::blend_pixel` (the one shared kernel, the same one an effect's Blend row
+uses, so the domains are the compositor's — docs/06 §blend domains), encode the answer back, and
+hand *that* colour to the same source-over. Normal takes an early exit, so an unblended stroke
+is byte for byte what it was, and `blend` is absent from the file until it is chosen.
+
+Erase ignores it: an erase has no colour, and a mode there would be a second way of saying
+nothing. Clone honours it, blending the *sampled* colour.
 
 **The clone trap.** Clone reads a copy of the raster taken *before any stroke in the pass was
 stamped*. Sampling the live buffer means a clone picks up paint laid down earlier in the same
@@ -150,7 +162,9 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
   corners a round one leaves, softens at its flat edge by the same ramp, and is absent from the
   file until it is chosen; Start and End trim by length at either end, an End at or below Start
   draws nothing, the trim measures length rather than samples, a single dab has nothing to trim,
-  and an untrimmed stroke is absent from the file; opacity scales the mark;
+  and an untrimmed stroke is absent from the file; a blend combines the mark with what is under
+  it, changes the colour and not the coverage, does nothing on an erase, and is absent from the
+  file at Normal; opacity scales the mark;
   the same stroke at half resolution is half the size in pixels; erase takes alpha and leaves
   colour; clone copies from its offset; clone reads the layer as it was; empty, zero-width and
   zero-opacity strokes do nothing; a stroke off the layer is skipped; bounds include the brush
@@ -161,17 +175,18 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
   edit and delete by id with a calm error for a stale id; the last stroke can be taken back; an
   empty stroke is refused; absurd numbers are clamped; all three modes and a clone offset round
   trip; both brush shapes round trip and an unstated one reads back Round; a stroke's Start and
-  End round trip, keep their keys, and are clamped to 0..100 key by key.
+  End round trip, keep their keys, and are clamped to 0..100 key by key; a blend round trips by
+  index and an index nobody has heard of reads back as Normal.
 * **Frontend**: `thinStroke` and `paintModeFor` as pure tests; a brush drag paints one stroke
   that undoes in one step; the brush commits the shape chosen in the tool options; the eraser
   and clone stamp commit their own modes and the clone refuses without a source; painting with
   nothing selected says what to do; the Timeline grows its Paint heading and its rows write
-  through, and a stroke's Start and End rows write through under it.
+  through, and a stroke's Start and End rows write through under it; a stroke's row picks a
+  blend from the layer list.
 
 ## Not built
 
-Pressure and tilt; spacing and scatter; per-stroke blending modes; painting in Layer view
-rather than on the composite; a stroke's Start/End **curve in the graph editor** (the lane
+Pressure and tilt; spacing and scatter; painting in Layer view rather than on the composite; a stroke's Start/End **curve in the graph editor** (the lane
 draws its diamonds and they drag, but `graphChannels` walks transform, effect and mask paths
 only in v1); and a GPU stamping path. The last one is the only one that would change any code
 here rather than adding to it — and it changes the *rasteriser*, not the stored stroke, which is why the

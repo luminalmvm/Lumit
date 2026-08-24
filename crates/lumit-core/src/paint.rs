@@ -27,6 +27,11 @@
 //! makes "mask off the part I painted" and "blur what I painted" both mean the
 //! obvious thing.
 //!
+//! **A stroke blends.** `blend` is the layer blend list (K-450) — the same
+//! words on the same maths, through the one shared kernel — deciding what
+//! colour the mark lays down. It never changes how the mark *covers*, and an
+//! eraser ignores it, having no colour to combine.
+//!
 //! **What is deliberately not here.** Pressure, tilt, spacing curves and any
 //! GPU path. Each is a real feature; none of them changes the shape of what is
 //! stored, which is what this first cut is for.
@@ -46,7 +51,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::anim::{Animation, Property};
-use crate::model::LinearColour;
+use crate::model::{BlendMode, LinearColour};
 use crate::pixels::over;
 
 /// What a stroke does to the pixels under it.
@@ -87,6 +92,12 @@ impl BrushShape {
     fn is_round(&self) -> bool {
         matches!(self, BrushShape::Round)
     }
+}
+
+/// True for the blend every stroke had before there was a choice — left out of
+/// the file entirely, so an unblended stroke writes the bytes it always wrote.
+fn is_normal(mode: &BlendMode) -> bool {
+    matches!(mode, BlendMode::Normal)
 }
 
 /// serde default for [`PaintStroke::end`]: the whole stroke.
@@ -148,6 +159,16 @@ pub struct PaintStroke {
     )]
     pub end: Property,
     pub mode: PaintMode,
+    /// How the mark combines with what is already on the layer (K-450) — the
+    /// layer blend list, the same words on the same maths. `Normal` is
+    /// source-over, which is what every stroke did before there was a choice
+    /// and what the rasteriser still runs byte for byte.
+    ///
+    /// Meaningless on [`PaintMode::Erase`], which takes alpha away and never
+    /// touches colour; it is ignored there rather than being a second way to
+    /// say nothing.
+    #[serde(default, skip_serializing_if = "is_normal")]
+    pub blend: BlendMode,
     /// For [`PaintMode::Clone`]: where the copied pixels come from, as an offset
     /// in layer pixels from the point being painted.
     #[serde(default)]
@@ -174,6 +195,7 @@ impl PaintStroke {
             start: Property::zero(),
             end: full(),
             mode: PaintMode::Paint,
+            blend: BlendMode::Normal,
             clone_offset: (0.0, 0.0),
             extra: serde_json::Map::new(),
         }
@@ -555,6 +577,44 @@ fn composite(
     // The clone source is the same raster, so its height is implied by its
     // length and the shared width.
     let h = rgba.len() / 4 / (w as usize).max(1);
+    // The blend, as the index into `BlendMode::ALL` the shared kernel takes.
+    // Worked out once per stroke; `None` for Normal, which is the early exit
+    // that keeps every unblended stroke byte for byte what it was (K-450).
+    let blend = (stroke.blend != BlendMode::Normal).then(|| {
+        BlendMode::ALL
+            .iter()
+            .position(|m| *m == stroke.blend)
+            .unwrap_or(0) as u32
+    });
+    // Lay `rgb` down on `px` at coverage-alpha `a`, by the stroke's blend.
+    //
+    // The blend runs in the domains the compositor and the effect Blend run in
+    // (docs/06 §blend domains), through the one shared kernel — decode both
+    // sides to linear light, `blend_pixel`, encode the answer back. What comes
+    // out is a *colour*, which is then laid down by exactly the source-over the
+    // rasteriser has always used, so a mode changes what the mark is, never how
+    // it covers.
+    let marked = |px: &[u8], rgb: [u8; 3]| -> [u8; 3] {
+        let Some(mode) = blend else { return rgb };
+        let d = [
+            crate::pixels::srgb_decode(px[0]),
+            crate::pixels::srgb_decode(px[1]),
+            crate::pixels::srgb_decode(px[2]),
+            1.0,
+        ];
+        let src = [
+            crate::pixels::srgb_decode(rgb[0]),
+            crate::pixels::srgb_decode(rgb[1]),
+            crate::pixels::srgb_decode(rgb[2]),
+            1.0,
+        ];
+        let b = crate::fx::cpu::blend_pixel(mode, d, src);
+        [
+            crate::pixels::srgb_encode(b[0]),
+            crate::pixels::srgb_encode(b[1]),
+            crate::pixels::srgb_encode(b[2]),
+        ]
+    };
 
     for y in y0..=y1 {
         let row = (y as usize) * (w as usize);
@@ -568,9 +628,12 @@ fn composite(
             match stroke.mode {
                 PaintMode::Paint => {
                     let a = c * opacity * colour_alpha;
-                    over(px, [colour[0], colour[1], colour[2]], a);
+                    let rgb = marked(px, [colour[0], colour[1], colour[2]]);
+                    over(px, rgb, a);
                 }
                 PaintMode::Erase => {
+                    // No colour to blend: an erase takes alpha away, which is
+                    // what makes it reversible by lowering its opacity later.
                     let keep = 1.0 - c * opacity;
                     px[3] = (f32::from(px[3]) * keep).round().clamp(0.0, 255.0) as u8;
                 }
@@ -586,7 +649,8 @@ fn composite(
                     let j = (oy as usize) * (w as usize) + (ox as usize);
                     let src = &source[j * 4..j * 4 + 4];
                     let a = c * opacity * (f32::from(src[3]) / 255.0);
-                    over(px, [src[0], src[1], src[2]], a);
+                    let rgb = marked(px, [src[0], src[1], src[2]]);
+                    over(px, rgb, a);
                 }
             }
         }
@@ -839,6 +903,114 @@ mod tests {
         let back: PaintStroke = serde_json::from_str(&json).expect("read back");
         assert_eq!(back.end.value_at(0.0), 40.0);
         assert_eq!(back.start.value_at(0.0), 0.0, "the default comes back");
+    }
+
+    /// A stroke's blend is the layer blend list on the layer blend maths
+    /// (K-450), run through the one shared kernel.
+    #[test]
+    fn a_strokes_blend_combines_it_with_what_is_under_it() {
+        let dab = |blend: BlendMode, colour: LinearColour| {
+            // A mid-grey layer to mark. Opaque, so the source-over that lays
+            // the blended colour down is the blended colour.
+            let mut rgba = raster(20, 20, [128, 128, 128, 255]);
+            let mut stroke = PaintStroke::new("Dab", vec![(10.0, 10.0)]);
+            stroke.width = 8.0;
+            stroke.hardness = 1.0;
+            stroke.colour = colour;
+            stroke.blend = blend;
+            apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
+            rgb_at(&rgba, 20, 10, 10)
+        };
+        let white = LinearColour([1.0, 1.0, 1.0, 1.0]);
+        let black = LinearColour([0.0, 0.0, 0.0, 1.0]);
+
+        assert_eq!(dab(BlendMode::Normal, white), [255, 255, 255], "over");
+        assert_eq!(
+            dab(BlendMode::Multiply, white),
+            [128, 128, 128],
+            "white multiplied into grey leaves the grey"
+        );
+        assert_eq!(
+            dab(BlendMode::Multiply, black),
+            [0, 0, 0],
+            "and black takes it to black"
+        );
+        assert_eq!(
+            dab(BlendMode::Lighten, black),
+            [128, 128, 128],
+            "the lighter of black and grey is the grey"
+        );
+        assert_eq!(
+            dab(BlendMode::Darken, white),
+            [128, 128, 128],
+            "and the darker of white and grey is the grey"
+        );
+        // Difference against itself is black, whatever the grey happens to be.
+        let grey = LinearColour([
+            crate::pixels::srgb_decode(128),
+            crate::pixels::srgb_decode(128),
+            crate::pixels::srgb_decode(128),
+            1.0,
+        ]);
+        let diff = dab(BlendMode::Difference, grey);
+        assert!(
+            diff.iter().all(|&c| c <= 1),
+            "a colour differenced with itself is black, got {diff:?}"
+        );
+    }
+
+    /// A blend does not change how the mark *covers*, only what colour it
+    /// lays down — so half opacity is still half the way there (K-450).
+    #[test]
+    fn a_blend_changes_the_colour_and_not_the_coverage() {
+        let mut rgba = raster(20, 20, [128, 128, 128, 255]);
+        let mut stroke = PaintStroke::new("Dab", vec![(10.0, 10.0)]);
+        stroke.width = 8.0;
+        stroke.hardness = 1.0;
+        stroke.opacity = 50.0;
+        stroke.colour = LinearColour([0.0, 0.0, 0.0, 1.0]);
+        stroke.blend = BlendMode::Multiply;
+        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
+        // Black multiplied into grey is black; laid down at half coverage that
+        // is halfway between the grey and black, in the encoded domain the
+        // rasteriser has always composited in.
+        let got = rgb_at(&rgba, 20, 10, 10);
+        assert!(
+            (62..=66).contains(&got[0]),
+            "half of the way to black, got {got:?}"
+        );
+        assert_eq!(alpha_at(&rgba, 20, 10, 10), 255, "and the layer is opaque");
+    }
+
+    /// An erase has no colour to blend, so a mode on one is ignored rather
+    /// than being a second way of saying nothing (K-450).
+    #[test]
+    fn a_blend_on_an_erase_changes_nothing() {
+        let rub = |blend: BlendMode| {
+            let mut rgba = raster(20, 20, [200, 100, 50, 255]);
+            let mut stroke = PaintStroke::new("Rub", vec![(10.0, 10.0)]);
+            stroke.width = 8.0;
+            stroke.mode = PaintMode::Erase;
+            stroke.blend = blend;
+            apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
+            rgba
+        };
+        assert_eq!(rub(BlendMode::Normal), rub(BlendMode::Difference));
+    }
+
+    /// Normal is left out of the file, so an unblended stroke writes exactly
+    /// the bytes it wrote before there was a choice.
+    #[test]
+    fn an_unblended_stroke_is_absent_from_the_file() {
+        let stroke = PaintStroke::new("Dab", vec![(1.0, 2.0)]);
+        let json = serde_json::to_string(&stroke).expect("serialise");
+        assert!(!json.contains("blend"), "nothing about blend: {json}");
+
+        let mut screened = stroke.clone();
+        screened.blend = BlendMode::Screen;
+        let json = serde_json::to_string(&screened).expect("serialise");
+        let back: PaintStroke = serde_json::from_str(&json).expect("read back");
+        assert_eq!(back.blend, BlendMode::Screen);
     }
 
     #[test]

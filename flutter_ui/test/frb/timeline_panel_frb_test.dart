@@ -1089,6 +1089,7 @@ void main() {
           start: const BridgeScalar.static_(0),
           end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
+          blend: 0,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
         ),
@@ -1136,6 +1137,7 @@ void main() {
           start: const BridgeScalar.static_(0),
           end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
+          blend: 0,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
         ),
@@ -1164,6 +1166,50 @@ void main() {
           reason: 'and Start is left where it was');
     });
 
+    /// A stroke's blend mode is the layer blend list, on its own row (K-450).
+    testWidgets('a stroke row picks a blend mode from the layer list',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.addStroke(
+        stroke: BridgeStroke(
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: 'Brush 1',
+          points: const [
+            BridgeStrokePoint(x: 10, y: 10),
+            BridgeStrokePoint(x: 40, y: 25),
+          ],
+          colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+          width: 20,
+          hardness: 0.8,
+          shape: BridgeBrushShape.round,
+          opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
+          mode: BridgePaintMode.paint,
+          blend: 0,
+          cloneOffsetX: 0,
+          cloneOffsetY: 0,
+        ),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'paint', settle: true);
+
+      final id = layer.getPaint().single.id;
+      final picker = find.byKey(ValueKey<String>('tl-stroke-blend-$id'));
+      expect(picker, findsOneWidget);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      // The same words the layer's own picker offers, from the engine's table.
+      await tester.tap(find.text('Multiply').last);
+      await tester.pumpAndSettle();
+
+      final modes = listBlendModes();
+      expect(layer.getPaint().single.blend, modes.indexOf('Multiply'));
+    });
+
     /// **A stroke's opacity was not undoable.** The same fault the mask row had
     /// under K-234, and for the same reason: the row was written from the mask
     /// row as it stood *before* that fix, so it committed on every tick of the
@@ -1188,6 +1234,7 @@ void main() {
           start: const BridgeScalar.static_(0),
           end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
+          blend: 0,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
         ),
@@ -1242,6 +1289,7 @@ void main() {
           start: const BridgeScalar.static_(0),
           end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
+          blend: 0,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
         ),

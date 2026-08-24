@@ -333,6 +333,7 @@ BridgeStroke strokeWithScalar(
       start: value == StrokeValue.start ? to : stroke.start,
       end: value == StrokeValue.end ? to : stroke.end,
       mode: stroke.mode,
+      blend: stroke.blend,
       cloneOffsetX: stroke.cloneOffsetX,
       cloneOffsetY: stroke.cloneOffsetY,
     );

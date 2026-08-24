@@ -204,6 +204,9 @@ pub fn rasterise_contents(
                     start: crate::anim::Property::zero(),
                     end: crate::anim::Property::fixed(100.0),
                     mode: crate::paint::PaintMode::Paint,
+                    // A shape item's outline lays its colour down; a blend of
+                    // its own would be a shape-layer feature (K-450).
+                    blend: crate::model::BlendMode::Normal,
                     clone_offset: (0.0, 0.0),
                     extra: serde_json::Map::new(),
                 };

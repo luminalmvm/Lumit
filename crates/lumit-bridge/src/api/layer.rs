@@ -209,6 +209,11 @@ pub struct BridgeStroke {
     pub start: BridgeScalar,
     pub end: BridgeScalar,
     pub mode: BridgePaintMode,
+    /// How the mark combines with what is already on the layer (K-450), as an
+    /// index into [`list_blend_modes`] — the same list and the same convention
+    /// a layer's own blend crosses on. Ignored by an eraser, which takes alpha
+    /// away and never touches colour.
+    pub blend: u32,
     /// Where a clone's pixels are copied from, as an offset in layer pixels.
     pub clone_offset_x: f64,
     pub clone_offset_y: f64,
@@ -240,6 +245,10 @@ impl BridgeStroke {
                 lumit_core::paint::PaintMode::Erase => BridgePaintMode::Erase,
                 lumit_core::paint::PaintMode::Clone => BridgePaintMode::Clone,
             },
+            blend: lumit_core::model::BlendMode::ALL
+                .iter()
+                .position(|b| *b == stroke.blend)
+                .unwrap_or(0) as u32,
             clone_offset_x: stroke.clone_offset.0,
             clone_offset_y: stroke.clone_offset.1,
         }
@@ -275,6 +284,13 @@ impl BridgeStroke {
                 BridgePaintMode::Erase => lumit_core::paint::PaintMode::Erase,
                 BridgePaintMode::Clone => lumit_core::paint::PaintMode::Clone,
             },
+            // An index past the end of the list is Normal rather than an
+            // error: it is a frontend that has fallen behind, and a stroke
+            // that lays its colour down is the honest reading of one.
+            blend: lumit_core::model::BlendMode::ALL
+                .get(self.blend as usize)
+                .copied()
+                .unwrap_or_default(),
             clone_offset: (self.clone_offset_x, self.clone_offset_y),
             extra: serde_json::Map::new(),
         })

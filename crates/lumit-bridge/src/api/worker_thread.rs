@@ -4688,6 +4688,7 @@ mod tests {
             start: crate::api::effect::BridgeScalar::Static(0.0),
             end: crate::api::effect::BridgeScalar::Static(100.0),
             mode: BridgePaintMode::Paint,
+            blend: 0,
             clone_offset_x: 0.0,
             clone_offset_y: 0.0,
         };

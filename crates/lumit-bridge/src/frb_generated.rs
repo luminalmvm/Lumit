@@ -10134,6 +10134,7 @@ impl SseDecode for crate::api::layer::BridgeStroke {
         let mut var_start = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_end = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_mode = <crate::api::layer::BridgePaintMode>::sse_decode(deserializer);
+        let mut var_blend = <u32>::sse_decode(deserializer);
         let mut var_cloneOffsetX = <f64>::sse_decode(deserializer);
         let mut var_cloneOffsetY = <f64>::sse_decode(deserializer);
         return crate::api::layer::BridgeStroke {
@@ -10148,6 +10149,7 @@ impl SseDecode for crate::api::layer::BridgeStroke {
             start: var_start,
             end: var_end,
             mode: var_mode,
+            blend: var_blend,
             clone_offset_x: var_cloneOffsetX,
             clone_offset_y: var_cloneOffsetY,
         };
@@ -13890,6 +13892,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeStroke {
             self.start.into_into_dart().into_dart(),
             self.end.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
+            self.blend.into_into_dart().into_dart(),
             self.clone_offset_x.into_into_dart().into_dart(),
             self.clone_offset_y.into_into_dart().into_dart(),
         ]
@@ -15701,6 +15704,7 @@ impl SseEncode for crate::api::layer::BridgeStroke {
         <crate::api::effect::BridgeScalar>::sse_encode(self.start, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.end, serializer);
         <crate::api::layer::BridgePaintMode>::sse_encode(self.mode, serializer);
+        <u32>::sse_encode(self.blend, serializer);
         <f64>::sse_encode(self.clone_offset_x, serializer);
         <f64>::sse_encode(self.clone_offset_y, serializer);
     }

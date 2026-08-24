@@ -329,6 +329,9 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
           start: const BridgeScalar.static_(0),
           end: const BridgeScalar.static_(100),
           mode: paintModeFor(widget.tool),
+          // A fresh mark lays its colour down; the blend is chosen after the
+          // fact on the stroke's own row (K-450). Index 0 is Normal.
+          blend: 0,
           cloneOffsetX: offsetX,
           cloneOffsetY: offsetY,
         ),

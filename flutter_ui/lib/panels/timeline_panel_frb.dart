@@ -4291,6 +4291,11 @@ class _ItemOpacityRow extends StatefulWidget {
   final VoidCallback onDelete;
   final String deleteLabel;
 
+  /// A control of the item's own, drawn between the name and the value column
+  /// — a paint stroke's blend mode (K-450). Null for a shape item, which has
+  /// no such choice.
+  final Widget? extra;
+
   const _ItemOpacityRow({
     required this.icon,
     required this.name,
@@ -4303,6 +4308,7 @@ class _ItemOpacityRow extends StatefulWidget {
     this.onRename,
     required this.onDelete,
     required this.deleteLabel,
+    this.extra,
   });
 
   @override
@@ -4360,6 +4366,10 @@ class _ItemOpacityRowState extends State<_ItemOpacityRow>
                     style: t.body,
                   ),
           ),
+          if (widget.extra != null) ...[
+            widget.extra!,
+            const SizedBox(width: 6),
+          ],
           SizedBox(
             width: widget.valueColumn.width,
             child: Row(
@@ -4533,7 +4543,7 @@ class _StrokeRow extends StatelessWidget {
     required this.comp,
   });
 
-  static BridgeStroke _withOpacity(BridgeStroke s, double opacity) =>
+  static BridgeStroke _with(BridgeStroke s, {double? opacity, int? blend}) =>
       BridgeStroke(
         id: s.id,
         name: s.name,
@@ -4542,10 +4552,11 @@ class _StrokeRow extends StatelessWidget {
         width: s.width,
         hardness: s.hardness,
         shape: s.shape,
-        opacity: opacity,
+        opacity: opacity ?? s.opacity,
         start: s.start,
         end: s.end,
         mode: s.mode,
+        blend: blend ?? s.blend,
         cloneOffsetX: s.cloneOffsetX,
         cloneOffsetY: s.cloneOffsetY,
       );
@@ -4580,7 +4591,7 @@ class _StrokeRow extends StatelessWidget {
             layer: layer,
             strokes: [
               for (final s in layer.getPaint())
-                if (s.id == stroke.id) _withOpacity(s, opacity) else s,
+                if (s.id == stroke.id) _with(s, opacity: opacity) else s,
             ],
           );
         } catch (_) {
@@ -4589,7 +4600,7 @@ class _StrokeRow extends StatelessWidget {
       },
       onCommit: (opacity) {
         try {
-          layer.setStroke(stroke: _withOpacity(stroke, opacity));
+          layer.setStroke(stroke: _with(stroke, opacity: opacity));
           onChanged();
         } catch (_) {
           // The stroke or its layer went away between the draw and the
@@ -4603,6 +4614,55 @@ class _StrokeRow extends StatelessWidget {
         } catch (_) {}
       },
       deleteLabel: l10n.deleteStroke,
+      // The layer blend list, on a stroke (K-450) — the same words, from the
+      // same engine table, so a mark blends by the name it blends by
+      // everywhere else.
+      extra: _StrokeBlendPicker(
+        layer: layer,
+        stroke: stroke,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// A stroke's blend mode (K-450), on the stroke's own Timeline row.
+///
+/// The engine's list, read once and held: `listBlendModes` is a table of
+/// English words the engine owns, and every one of them has a translation
+/// entry already because a layer's own picker shows the same list.
+class _StrokeBlendPicker extends StatelessWidget {
+  final LayerReference layer;
+  final BridgeStroke stroke;
+  final VoidCallback onChanged;
+
+  const _StrokeBlendPicker({
+    required this.layer,
+    required this.stroke,
+    required this.onChanged,
+  });
+
+  static List<String>? _modes;
+
+  @override
+  Widget build(BuildContext context) {
+    final modes = _modes ??= listBlendModes();
+    return SizedBox(
+      width: 96,
+      child: BareDropdown<int>(
+        key: ValueKey<String>('tl-stroke-blend-${stroke.id}'),
+        value: stroke.blend < modes.length ? stroke.blend : 0,
+        options: [for (var i = 0; i < modes.length; i++) i],
+        label: (i) => engineLabel(modes[i]),
+        onChanged: (i) {
+          try {
+            layer.setStroke(stroke: _StrokeRow._with(stroke, blend: i));
+            onChanged();
+          } catch (_) {
+            // The stroke or its layer went away between the draw and the click.
+          }
+        },
+      ),
     );
   }
 }

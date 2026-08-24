@@ -3608,6 +3608,7 @@ fn stroke(name: &str, points: &[(f64, f64)]) -> crate::api::layer::BridgeStroke 
         start: crate::api::effect::BridgeScalar::Static(0.0),
         end: crate::api::effect::BridgeScalar::Static(100.0),
         mode: BridgePaintMode::Paint,
+        blend: 0,
         clone_offset_x: 0.0,
         clone_offset_y: 0.0,
     }
@@ -3786,6 +3787,30 @@ fn both_brush_shapes_round_trip() {
     let strokes = layer.get_paint().expect("paint");
     assert_eq!(strokes[0].shape, BridgeBrushShape::Round);
     assert_eq!(strokes[1].shape, BridgeBrushShape::Square);
+}
+
+/// A stroke's blend crosses as an index into the same list a layer's does, and
+/// an index nobody has heard of reads back as Normal rather than erroring
+/// (K-450).
+#[test]
+fn a_strokes_blend_round_trips_by_index() {
+    let (_project, layer) = project_with_layer();
+    let screen = lumit_core::model::BlendMode::ALL
+        .iter()
+        .position(|b| *b == lumit_core::model::BlendMode::Screen)
+        .expect("Screen is in the list") as u32;
+
+    let mut blended = stroke("Screened", &[(1.0, 1.0)]);
+    blended.blend = screen;
+    layer.add_stroke(blended).expect("added");
+
+    let mut wild = stroke("Wild", &[(2.0, 2.0)]);
+    wild.blend = 9_999;
+    layer.add_stroke(wild).expect("added");
+
+    let strokes = layer.get_paint().expect("paint");
+    assert_eq!(strokes[0].blend, screen);
+    assert_eq!(strokes[1].blend, 0, "a mode nobody has is Normal");
 }
 
 /// A stroke's Start and End round trip, animate, and are clamped to the

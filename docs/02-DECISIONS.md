@@ -12593,3 +12593,39 @@ Regression tests: in `lumit-core`, `start_and_end_trim_the_stroke_by_its_length`
 `a_strokes_trim_round_trips_and_is_clamped` (every key clamped to 0..100, not just the first);
 in Flutter, `a stroke grows Start and End rows that write through`. New strings: `strokeStart`,
 `strokeEnd`.
+
+## K-450 — A stroke blends by the layer list, through the one blend kernel
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. `PaintStroke` gains `blend:
+lumit_core::model::BlendMode` — the layer list, the same words in the same order, chosen from a
+dropdown on the stroke's own Timeline row and carried across the seam as an index into
+`list_blend_modes`, exactly as a layer's own blend is.
+
+**No third copy of the arithmetic.** The composite calls `fx::cpu::blend_pixel`, the kernel the
+effect Blend row already uses (K-425) and the CPU twin of `fx_blend_mix.wgsl`, whose domains
+follow the compositor's (docs/06 §blend domains): Add, Multiply, Lighten, Darken and Subtract
+per channel in linear light, everything else encoded to sRGB, W3C formula, decoded. A second set
+of formulas written for paint would be a third description of one behaviour and a parity suite
+to keep three things honest.
+
+**A blend is a colour, never a coverage.** Coverage — brush size, hardness, stroke opacity — is
+worked out exactly as before and is untouched by the mode. The mode decides what colour the mark
+lays down; that colour is then composited by the same source-over the rasteriser has always run.
+So a half-opacity Multiply is genuinely half of the way to the multiplied result and a soft edge
+is still soft, rather than the mode quietly re-shaping the mark.
+
+**Erase ignores it**, having no colour to combine — a mode there would be a second way of saying
+nothing. **Clone honours it**, blending the sampled colour.
+
+**Normal takes an early exit** — the per-pixel path is the untouched `over` — and `blend` is
+`#[serde(default, skip_serializing_if)]` at Normal, so an unblended stroke renders and writes
+byte for byte what it always did. An index past the end of the list reads back as Normal rather
+than erroring: that is a frontend behind the engine, and a mark that lays its colour down is the
+honest reading of one.
+
+Regression tests: in `lumit-core`, `a_strokes_blend_combines_it_with_what_is_under_it`,
+`a_blend_changes_the_colour_and_not_the_coverage`, `a_blend_on_an_erase_changes_nothing`,
+`an_unblended_stroke_is_absent_from_the_file`; in the bridge,
+`a_strokes_blend_round_trips_by_index`; in Flutter, `a stroke row picks a blend mode from the
+layer list`. No new strings — the mode names come from the engine's own table, which a layer's
+picker already shows and `engine_labels.dart` already covers.
