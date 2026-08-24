@@ -2511,11 +2511,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               playhead: ui.playheadFrame,
                               onSeek: ui.scrubTo,
                               graph: _graph,
-                              onToggleGraph: () =>
-                                  setState(() {
-                                    _graph = !_graph;
-                                    _publishEasingClaim();
-                                  }),
+                              onToggleGraph: () => setState(() {
+                                _graph = !_graph;
+                                _publishEasingClaim();
+                              }),
                               razor: _razorArmed(ui),
                               onToggleRazor: () => _toggleRazor(ui),
                               hideShy: _hideShy,
@@ -4962,10 +4961,12 @@ class BarEndMarksPainter extends CustomPainter {
       old.atIn != atIn || old.atOut != atOut || old.colour != colour;
 }
 
-/// The outline's toolbar (docs/07 §4.1): the timecode and frame readouts, the
-/// layer search, the master motion-blur and shy-filter buttons, the Lane and
-/// Graph view buttons, and the ⋯ menu holding the layer/work-area/marker
-/// commands the old full-width toolbar carried.
+/// The outline's toolbar (docs/07 §4.1, §12A.1): the timecode and frame
+/// readouts at the far left, the layer search stretched across the middle as
+/// an inset well, and the Layers / Graph mode segments at the far right — with
+/// the master motion-blur and shy-filter buttons and the ⋯ menu (the
+/// layer/work-area/marker commands the old full-width toolbar carried) between
+/// the well and the segments.
 class _Toolbar extends StatelessWidget {
   final CompositionReference comp;
 
@@ -5034,7 +5035,10 @@ class _Toolbar extends StatelessWidget {
                   frame: frame,
                   format: (f) => timecodeOfRate(f, fpsNum, fpsDen),
                   widthChars: timecodeChars(fpsNum, fpsDen),
-                  style: t.mono,
+                  // The clock is the row's first fact and reads at full
+                  // strength; the frame count beside it is the same moment
+                  // said again, so it stays muted (§12A.1).
+                  style: t.mono.copyWith(color: t.textPrimary),
                   parse: (text) => framesOfTimecode(text, fpsNum, fpsDen),
                   onCommit: onSeek,
                   minFrame: 0,
@@ -5082,26 +5086,6 @@ class _Toolbar extends StatelessWidget {
             tip: hideShy ? l10n.tipShyHidden : l10n.tipHideShy,
             onPressed: onToggleHideShy,
           ),
-          const SizedBox(width: 6),
-          _iconButton(
-            context,
-            keyName: 'tl-view-lanes',
-            icon: LumitIcon.timelineBars,
-            on: !graph,
-            tip: l10n.tipLaneView,
-            onPressed: graph ? onToggleGraph : () {},
-          ),
-          _iconButton(
-            context,
-            // Keeps the key the old Graph toolbar button had, so the graph
-            // editor's own tests and muscle memory both still find it.
-            keyName: 'tl-graph',
-            icon: LumitIcon.graphCurve,
-            on: graph,
-            tip: l10n.tipGraphView,
-            onPressed: graph ? () {} : onToggleGraph,
-          ),
-          const SizedBox(width: 6),
           HouseButton(
             key: const ValueKey('tl-more'),
             small: true,
@@ -5109,7 +5093,56 @@ class _Toolbar extends StatelessWidget {
             onPressed: () => _showMoreMenu(context),
             child: Text('⋯', style: t.small),
           ),
+          const SizedBox(width: 6),
+          // The two modes, at the far right of the row (§12A.1). Kicker
+          // segments rather than icons: "Layers" and "Graph" are the names of
+          // two shapes of the same panel, and a word says which one is in
+          // force where two small glyphs made the reader guess.
+          _modeTab(
+            context,
+            keyName: 'tl-view-lanes',
+            label: l10n.timelineModeLayers,
+            tip: l10n.tipLaneView,
+            active: !graph,
+            onPressed: graph ? onToggleGraph : () {},
+          ),
+          _modeTab(
+            context,
+            // Keeps the key the old Graph toolbar button had, so the graph
+            // editor's own tests and muscle memory both still find it.
+            keyName: 'tl-graph',
+            label: l10n.timelineModeGraph,
+            tip: l10n.tipGraphView,
+            active: graph,
+            onPressed: graph ? () {} : onToggleGraph,
+          ),
         ],
+      ),
+    );
+  }
+
+  /// One of the two mode segments. The one in force wears the secondary
+  /// button's outline and a `kickerOn` label; the other is frameless and
+  /// muted. **No accent**: §3.1's accent list is closed, and a mode segment is
+  /// not on it — which of the two is in force reads from the frame.
+  Widget _modeTab(
+    BuildContext context, {
+    required String keyName,
+    required String label,
+    required String tip,
+    required bool active,
+    required VoidCallback onPressed,
+  }) {
+    final t = ThemeScope.of(context).theme;
+    return LumitTooltip(
+      message: tip,
+      child: HouseButton(
+        key: ValueKey<String>(keyName),
+        small: true,
+        frameless: !active,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        onPressed: onPressed,
+        child: Text(label.toUpperCase(), style: active ? t.kickerOn : t.kicker),
       ),
     );
   }
@@ -6147,8 +6180,7 @@ class _OutlineRowState extends State<_OutlineRow> {
             // because that is what flow *is* underneath (K-088: "the option
             // surfaces the policy").
             _switch(context, id, 'flow', LumitIcon.flow, info.flow, null,
-                tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff,
-                onTap: () {
+                tip: info.flow ? l10n.tipFlowOn : l10n.tipFlowOff, onTap: () {
               layer.setFlowEnabled(on_: !info.flow);
               widget.onChanged();
             })
@@ -6168,8 +6200,8 @@ class _OutlineRowState extends State<_OutlineRow> {
           // Accepts lights (K-361). The light's own icon, because that is what
           // the switch is about; it does nothing in a comp with no lights, so
           // it costs a glance rather than a decision.
-          _switch(context, id, 'lit', LumitIcon.aperture, switches.acceptsLights,
-              BridgeLayerSwitch.acceptsLights,
+          _switch(context, id, 'lit', LumitIcon.aperture,
+              switches.acceptsLights, BridgeLayerSwitch.acceptsLights,
               tip: switches.acceptsLights
                   ? l10n.switchAcceptsLightsOn
                   : l10n.switchAcceptsLightsOff),

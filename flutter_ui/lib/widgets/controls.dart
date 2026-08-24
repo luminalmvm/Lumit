@@ -1376,6 +1376,11 @@ class HouseTextField extends StatefulWidget {
   /// *for*, on fields whose surroundings do not already say.
   final String? hint;
 
+  /// A mark inside the well, before the text — the search glyph on a field
+  /// whose job is searching (§12A.1). Decorative: it takes no pointer, so a
+  /// click on it still lands in the field behind it.
+  final Widget? leading;
+
   const HouseTextField({
     super.key,
     required this.controller,
@@ -1389,6 +1394,7 @@ class HouseTextField extends StatefulWidget {
     this.focusNode,
     this.style,
     this.hint,
+    this.leading,
   });
 
   @override
@@ -1578,6 +1584,7 @@ class _HouseTextFieldState extends State<HouseTextField>
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final hint = widget.hint;
+    final leading = widget.leading;
 
     return Container(
       width: widget.width,
@@ -1587,52 +1594,64 @@ class _HouseTextFieldState extends State<HouseTextField>
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
         border: Border.all(color: t.hairline),
       ),
-      child: Stack(
-        children: [
-          if (hint != null && widget.controller.text.isEmpty)
-            Text(hint, style: t.body.copyWith(color: t.textMuted)),
-          // Focus on the *down* stroke, not the resolved tap: a press that
-          // slides straight into a drag is someone selecting text in one
-          // motion, and the field must already be theirs when the drag's
-          // highlight starts (K-319).
-          Listener(
-            onPointerDown: (_) {
-              if (!_focus.hasFocus) _focus.requestFocus();
-            },
-            child: TextSelectionGestureDetectorBuilder(delegate: this)
-                .buildGestureDetector(
-              child: CompositedTransformTarget(
-                link: layerLink,
-                child: EditableText(
-                  key: textFieldKey,
-                  controller: widget.controller,
-                  focusNode: _focus,
-                  autofocus: widget.autofocus,
-                  style: widget.style ?? t.bodyPrimary,
-                  cursorColor: t.accent,
-                  backgroundCursorColor: t.surface2,
-                  selectionColor: t.accent.withValues(alpha: 0.5),
-                  onSubmitted: widget.onSubmitted,
-                  selectionControls: desktopTextSelectionHandleControls,
-                  onTapOutside: (event) {
-                    if (widget.submitOnLostFocus) {
-                      widget.onSubmitted?.call(widget.controller.text);
-                    }
-                    // K-243: clicking away is a person finishing the edit, so an
-                    // inline rename commits on it rather than throwing the work
-                    // away for everyone who does not press Enter.
-                    widget.onTapOutside?.call();
-                    _focus.unfocus();
-                    hideOverlay();
-                  },
+      child: _withLeading(
+        leading,
+        Stack(
+          children: [
+            if (hint != null && widget.controller.text.isEmpty)
+              Text(hint, style: t.body.copyWith(color: t.textMuted)),
+            // Focus on the *down* stroke, not the resolved tap: a press that
+            // slides straight into a drag is someone selecting text in one
+            // motion, and the field must already be theirs when the drag's
+            // highlight starts (K-319).
+            Listener(
+              onPointerDown: (_) {
+                if (!_focus.hasFocus) _focus.requestFocus();
+              },
+              child: TextSelectionGestureDetectorBuilder(delegate: this)
+                  .buildGestureDetector(
+                child: CompositedTransformTarget(
+                  link: layerLink,
+                  child: EditableText(
+                    key: textFieldKey,
+                    controller: widget.controller,
+                    focusNode: _focus,
+                    autofocus: widget.autofocus,
+                    style: widget.style ?? t.bodyPrimary,
+                    cursorColor: t.accent,
+                    backgroundCursorColor: t.surface2,
+                    selectionColor: t.accent.withValues(alpha: 0.5),
+                    onSubmitted: widget.onSubmitted,
+                    selectionControls: desktopTextSelectionHandleControls,
+                    onTapOutside: (event) {
+                      if (widget.submitOnLostFocus) {
+                        widget.onSubmitted?.call(widget.controller.text);
+                      }
+                      // K-243: clicking away is a person finishing the edit, so an
+                      // inline rename commits on it rather than throwing the work
+                      // away for everyone who does not press Enter.
+                      widget.onTapOutside?.call();
+                      _focus.unfocus();
+                      hideOverlay();
+                    },
+                  ),
                 ),
               ),
-            ),
-          )
-        ],
+            )
+          ],
+        ),
       ),
     );
   }
+
+  /// The well's contents, with [leading] before them when there is one.
+  static Widget _withLeading(Widget? leading, Widget field) => leading == null
+      ? field
+      : Row(children: [
+          IgnorePointer(child: leading),
+          const SizedBox(width: 5),
+          Expanded(child: field),
+        ]);
 
   @override
   GlobalKey<EditableTextState> get editableTextKey => textFieldKey;

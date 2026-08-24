@@ -19,6 +19,7 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
+import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/icons/icons.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
@@ -231,6 +232,61 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(p.uiState.playheadFrame.value, last);
+    });
+
+    /// §12A.1's order for the row above the outline: the two readouts at the
+    /// far left, the search well stretched across the middle, the Layers and
+    /// Graph mode segments at the far right. The search field is the part that
+    /// has been proposed for removal more than once — it stays.
+    testWidgets('the search well sits between the readouts and the mode tabs',
+        (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+
+      final search = find.byKey(const ValueKey('tl-search'));
+      expect(search, findsOneWidget, reason: 'the layer search stays (§12A.1)');
+
+      final timecode =
+          tester.getRect(find.byKey(const ValueKey('tl-timecode')));
+      final frame = tester.getRect(find.byKey(const ValueKey('tl-frame')));
+      final well = tester.getRect(search);
+      final layers =
+          tester.getRect(find.byKey(const ValueKey('tl-view-lanes')));
+      final graph = tester.getRect(find.byKey(const ValueKey('tl-graph')));
+
+      // Left to right, no overlaps.
+      expect(timecode.right, lessThanOrEqualTo(frame.left));
+      expect(frame.right, lessThanOrEqualTo(well.left));
+      expect(well.right, lessThanOrEqualTo(layers.left));
+      expect(layers.right, lessThanOrEqualTo(graph.left));
+
+      // All of them on one row, and the well is the part that stretches: it
+      // takes what is left over, so it is wider than both readouts together.
+      expect(well.center.dy, moreOrLessEquals(timecode.center.dy, epsilon: 2));
+      expect(graph.center.dy, moreOrLessEquals(timecode.center.dy, epsilon: 2));
+      expect(well.width, greaterThan(timecode.width + frame.width));
+    });
+
+    /// The two modes are words, not glyphs, and the one in force is the one
+    /// wearing the frame (§12A.1). Clicking the other switches; §3.1 keeps the
+    /// accent off both.
+    testWidgets('the mode tabs read Layers and Graph, and switch',
+        (tester) async {
+      final p = withComp();
+      await mount(tester, p);
+
+      expect(find.text('LAYERS'), findsOneWidget);
+      expect(find.text('GRAPH'), findsOneWidget);
+
+      // Layers is in force to begin with, so the graph editor is not up.
+      expect(find.byType(GraphEditorFrb), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('tl-graph')));
+      await tester.pumpAndSettle();
+      expect(find.byType(GraphEditorFrb), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('tl-view-lanes')));
+      await tester.pumpAndSettle();
+      expect(find.byType(GraphEditorFrb), findsNothing);
     });
 
     testWidgets('the razor is the toolbar tool, and undoes as one step',
@@ -3258,8 +3314,8 @@ void main() {
       final before = workAreaFrames(p.comp);
       expect(before.whole, isFalse);
 
-      final start = tester
-          .getCenter(find.byKey(const ValueKey('tl-work-start')));
+      final start =
+          tester.getCenter(find.byKey(const ValueKey('tl-work-start')));
       final end = tester.getCenter(find.byKey(const ValueKey('tl-work-end')));
       final gesture = await tester.startGesture(end);
       await tester.pump();
@@ -4295,14 +4351,17 @@ void main() {
 
       final audioId = audioLayer.internallayerId;
       expect(find.byKey(ValueKey<String>('tl-visible-$audioId')), findsNothing,
-          reason: 'an Audio layer has nothing to show, so it is offered no eye');
-      expect(find.byKey(ValueKey<String>('tl-audible-$audioId')), findsOneWidget,
+          reason:
+              'an Audio layer has nothing to show, so it is offered no eye');
+      expect(
+          find.byKey(ValueKey<String>('tl-audible-$audioId')), findsOneWidget,
           reason: 'but it does have sound, so it keeps its speaker');
 
       final solidId = silent.internallayerId;
       expect(find.byKey(ValueKey<String>('tl-audible-$solidId')), findsNothing,
           reason: 'a solid can never be heard, so it is offered no speaker');
-      expect(find.byKey(ValueKey<String>('tl-visible-$solidId')), findsOneWidget,
+      expect(
+          find.byKey(ValueKey<String>('tl-visible-$solidId')), findsOneWidget,
           reason: 'but it does draw, so it keeps its eye');
 
       // The cells still line up: the switches after the missing one sit in the
@@ -4476,8 +4535,8 @@ void main() {
       // Double-clicking the bar opens the clip view. Retried: the first tap
       // selects and can rebuild the row under the second, which on a loaded
       // runner reads as two singles rather than a double.
-      final bar = find
-          .byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
+      final bar =
+          find.byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
       final view =
           find.byKey(ValueKey<String>('tl-seq-${layer.internallayerId}'));
       for (var attempt = 0; attempt < 3; attempt++) {
@@ -4495,8 +4554,8 @@ void main() {
       await settleFrb(tester,
           until: () => wave.evaluate().isNotEmpty, maxRounds: 60);
       expect(wave, findsOneWidget, reason: 'the clip draws its waveform');
-      final painter = (tester.widget<CustomPaint>(wave).painter)
-          as WaveformPainter;
+      final painter =
+          (tester.widget<CustomPaint>(wave).painter) as WaveformPainter;
       expect(painter.peaks?.values.any((v) => v.abs() > 0.01), isTrue,
           reason: 'and what it draws is the sound, not silence');
     });

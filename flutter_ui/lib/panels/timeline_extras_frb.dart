@@ -19,6 +19,10 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+// The K-440 set's drawing widget, under a prefix: `LumitIcon` is also the name
+// of the older Iconoir enum this file uses for layer kinds.
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
@@ -289,17 +293,23 @@ class _CompTab extends StatelessWidget {
         padding: const EdgeInsets.only(left: 10, right: 4),
         decoration: BoxDecoration(
           // Round fills the fronted tab with the accent (K-394, §12.1); Sharp
-          // keeps the darker seat and the accent rule under it.
+          // seats the fronted tab in the panel's own surface, so the tab and
+          // the comp under it read as one thing, with the accent rule beneath.
           color: dropping
               ? t.accent.withValues(alpha: 0.18)
-              : (active ? (round ? t.accent : t.surface0) : null),
+              : (active ? (round ? t.accent : t.surface1) : null),
           // Uniform under Round, because a BoxDecoration refuses a corner
           // radius on a border that is only one side. Transparent and the same
           // 2 px either way, so the label sits where it always did and the
           // capsule's curved ends never crowd it.
+          //
+          // Sharp carries a hairline down each seam as well as the accent tick
+          // (§12A.1): the strip runs the full width of the panel header, and
+          // without a rule the inactive tabs run together into one grey band.
           border: round
               ? Border.all(color: t.accent.withValues(alpha: 0), width: 2)
               : Border(
+                  right: BorderSide(color: t.hairline),
                   bottom: BorderSide(
                     color: active ? t.accent : const Color(0x00000000),
                     width: 2,
@@ -334,8 +344,7 @@ class _CompTab extends StatelessWidget {
                   // where muted grey is barely there. Same flip as the label.
                   child: Text('×',
                       style: t.small.copyWith(
-                          color:
-                              round && active ? t.surface0 : t.textMuted)),
+                          color: round && active ? t.surface0 : t.textMuted)),
                 ),
               ),
             ),
@@ -372,12 +381,20 @@ class _LayerSearchFrbState extends State<LayerSearchFrb> {
   }
 
   @override
-  Widget build(BuildContext context) => HouseTextField(
-        key: const ValueKey('tl-search'),
-        controller: _controller,
-        width: widget.width,
-        hint: l10n.searchLayers,
-      );
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return HouseTextField(
+      key: const ValueKey('tl-search'),
+      controller: _controller,
+      width: widget.width,
+      hint: l10n.searchLayers,
+      // The well says "editable"; the glyph says *what* it edits — the field
+      // stretches the width of the outline (§12A.1), and a bare well that wide
+      // reads as a name box rather than as a search.
+      leading: glyph.LumitIcon(LumitIcons.search,
+          size: iconSize, colour: t.textMuted),
+    );
+  }
 }
 
 /// The parent picker: every *other* layer in the comp, plus None.

@@ -4856,6 +4856,14 @@
   "@timelineEmpty": {
     "description": "Empty state in the Timeline panel."
   },
+  "timelineModeGraph": "Graph",
+  "@timelineModeGraph": {
+    "description": "Label on the right-hand mode segment in the Timeline's top row: the view showing each animated property as a curve. Drawn in capitals; one word."
+  },
+  "timelineModeLayers": "Layers",
+  "@timelineModeLayers": {
+    "description": "Label on the left-hand mode segment in the Timeline's top row: the view showing each layer as a bar against time. Drawn in capitals; one word."
+  },
   "tipAddKeyframe": "Add keyframe",
   "@tipAddKeyframe": {
     "description": "Tooltip. Under five words."
