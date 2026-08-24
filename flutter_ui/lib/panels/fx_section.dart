@@ -262,7 +262,7 @@ class FxSection extends StatelessWidget {
             : (details) => onContextMenu!(details.globalPosition),
         child: Container(
           color: selected ? t.selectionFill : t.surface2,
-          padding: const EdgeInsets.fromLTRB(4, 4, 6, 4),
+          padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
           child: Row(
             children: [
               SizedBox(
@@ -271,9 +271,14 @@ class FxSection extends StatelessWidget {
                   children: [
                     // Enable switch, twirl, name — the order the redesign's
                     // heading reads in (K-443): what the effect *is doing*
-                    // before what the heading does to the list under it.
+                    // before what the heading does to the list under it. The
+                    // switch sits centred in the stopwatch column so the two
+                    // glyphs share an axis down the panel.
                     if (leading case final widget?) ...[
-                      widget,
+                      SizedBox(
+                        width: fxStopwatchColumn,
+                        child: Center(child: widget),
+                      ),
                       const SizedBox(width: 4),
                     ],
                     GestureDetector(

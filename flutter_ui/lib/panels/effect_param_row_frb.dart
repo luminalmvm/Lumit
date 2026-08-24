@@ -1092,19 +1092,43 @@ class EffectParamRowFrb extends StatelessWidget {
   /// says its own value, and a one-word tooltip names it.
   Widget _withRiders(LumitTheme t, UuidValue id, Widget control) {
     if (riders.isEmpty) return control;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Flexible, so a narrow panel shrinks the host and its riders rather
-        // than overflowing the row; at the panel's working width every one
-        // of them gets its natural size.
-        Flexible(flex: 3, child: control),
+    // Below this width the riders' words start eliding into "Nor…"; a value
+    // nobody can read is worse than a second line, so the riders drop onto
+    // one of their own instead (still inside the control column, so the
+    // fixed label edge holds).
+    const wrapBelow = 230.0;
+    return LayoutBuilder(builder: (context, constraints) {
+      final riderRow = [
         for (final (p, v) in riders) ...[
           const SizedBox(width: 6),
           ..._rider(t, id, p, v),
         ],
-      ],
-    );
+      ];
+      if (constraints.maxWidth >= wrapBelow) {
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Flexible, so a narrow panel shrinks the host and its riders
+            // rather than overflowing the row; at the panel's working width
+            // every one of them gets its natural size.
+            Flexible(flex: 3, child: control),
+            ...riderRow,
+          ],
+        );
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          control,
+          const SizedBox(height: 2),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            // The leading 6px spacer indents the run to match the gap the
+            // riders keep beside the control on the one-line layout.
+            ...riderRow,
+          ]),
+        ],
+      );
+    });
   }
 
   List<Widget> _rider(
