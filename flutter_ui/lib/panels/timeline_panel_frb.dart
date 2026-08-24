@@ -149,11 +149,12 @@ const double _hScrollbarHeight = 7;
 /// Half a keyframe diamond's width on a property's own lane.
 const double _keyHalf = 4;
 
-/// The same on a **shut layer's** row (§12A.1): half the scale, because these
-/// are a summary of everything keyed inside the layer rather than the keys you
-/// take hold of. Twirl the layer open and each property draws its own at full
-/// size, where they can be dragged.
-const double _summaryKeyHalf = _keyHalf / 2;
+/// The same on a **shut layer's** row: smaller than the keys you take hold
+/// of, because these are a summary of everything keyed inside the layer. The
+/// mockup draws them as a 4px square stood on its corner, so point to point
+/// they span 4√2 ≈ 5.7px — half of that here. Twirl the layer open and each
+/// property draws its own at full size, where they can be dragged.
+const double _summaryKeyHalf = 2.8;
 
 /// The two landscapes flanking the zoom slider (K-293). Painter-drawn, so
 /// K-209's 16px floor — which is about an icon-set glyph's 1.5-unit stroke

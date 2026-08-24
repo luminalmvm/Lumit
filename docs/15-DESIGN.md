@@ -944,8 +944,8 @@ when a panel is too short, its content scrolls.
 
 **The pieces inside a row are the mockups' too**, and are pinned by
 `timeline_alignment_test`: a layer's label colour is a **6px dot**, its number stands in an
-**18px column** set in muted mono at 10, the keyframe diamond on a shut layer's row is **4px
-across** (half the 8px one a property's own lane draws), a labelled ruler tick is **7px** tall
+**18px column** set in muted mono at 10, the keyframe diamond on a shut layer's row is a **4px square stood
+on its corner** (≈5.7px point to point, against the 8px one a property's own lane draws), a labelled ruler tick is **7px** tall
 against a minor tick's **4**, and under Sharp a bar's ends are **square** — the stadium ends are
 Round's, and are the whole of that shape's difference here.
 

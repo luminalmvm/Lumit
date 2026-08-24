@@ -1837,17 +1837,17 @@ void main() {
             matching: find.byType(CustomPaint),
           ))
           .painter as dynamic;
-      expect(painter.half * 2, lane.half,
-          reason: 'the summary is half the scale of the lane it summarises');
+      expect(painter.half, lessThan(lane.half),
+          reason: 'the summary is smaller than the lane it summarises');
       expect(lane.colour, LumitTheme.dark().animated,
           reason: 'and both are animated');
 
       // The sizes themselves, not only their ratio: a diamond that shrank at
       // both ends would keep the ratio and lose the mark. A property's own
-      // key is 8 across (half 4) and the mockup's summary diamond is 4
-      // (half 2) — the same pair the redesign draws (K-451).
+      // key is 8 across (half 4); the mockup's summary diamond is a 4px
+      // square on its corner, 4√2 ≈ 5.7 point to point (half 2.8).
       expect(lane.half, 4.0, reason: 'a lane diamond is 8 across');
-      expect(painter.half, 2.0, reason: 'a summary diamond is 4');
+      expect(painter.half, 2.8, reason: 'a summary diamond is 5.7 across');
     });
 
     /// Keyframes draw as diamonds on the lane (docs/07 §4.3), and a marquee
