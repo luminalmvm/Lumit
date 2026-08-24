@@ -340,7 +340,8 @@ void main() {
     /// 6d. **The preset strip is chrome, not a row** (K-487). A preset sets
     /// and saves every section of this dialog, so it sits in a band of its own
     /// under the tab row and above the scrolling body — full width, 8 above a
-    /// 22px control and 8 below it, over a hairline.
+    /// 22px control and 8 below it. No rule under it (owner): standing
+    /// outside every section already says it is global.
     testWidgets('the preset strip is a band under the tabs', (tester) async {
       await open(tester);
 
@@ -352,8 +353,8 @@ void main() {
           reason: 'the strip is the dialog\'s full width, as the tab row is');
       expect(strip.top, tabs.bottom,
           reason: 'it sits directly under the tab row');
-      expect(strip.height, exportPresetStrip + 1,
-          reason: '8 above a 22px control and 8 below, over its hairline');
+      expect(strip.height, exportPresetStrip,
+          reason: '8 above a 22px control and 8 below, and no rule under it');
       expect(output.top, greaterThanOrEqualTo(strip.bottom),
           reason: 'and above the body, which scrolls under it');
 
@@ -376,9 +377,9 @@ void main() {
       final saveAs = band(tester, 'export-preset-save-as');
 
       expect(list.left - strip.left,
-          dialogPadding + exportLabelColumn + exportRowGap,
-          reason: 'inset 14 like every band, then the body\'s own 100 and 10, '
-              'so the strip and the rows under it share a left edge');
+          dialogPadding + 12 + exportLabelColumn + exportRowGap,
+          reason: 'inset to the group rows own edge (14 + their inner 12), '
+              'then the 100 and 10, so Preset lines up with the labels below');
       expect(list.width, exportPresetDropdown,
           reason: 'the list itself is 220');
       expect(edit.left - list.right, exportPresetStripGap);
@@ -393,7 +394,7 @@ void main() {
       expect(saveAs.width, closeTo(label.width + 24 + 2, 0.01),
           reason: '§12A.4: 12 either side of an outlined label — and the '
               'button\'s own 1px edge either side of that — no less');
-      expect(strip.right - dialogPadding - saveAs.right, greaterThan(80),
+      expect(strip.right - dialogPadding - saveAs.right, greaterThan(60),
           reason: 'and the row still has air after it at 640');
     });
 

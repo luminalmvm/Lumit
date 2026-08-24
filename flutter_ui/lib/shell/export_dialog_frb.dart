@@ -749,11 +749,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// scroll-spy neither reads it nor is read by it.
   Widget _presetStrip(LumitTheme t) => Container(
         key: const ValueKey('export-preset-strip'),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: t.hairline)),
-        ),
+        // No rule under the strip (owner): standing outside every section
+        // already says it is global. The extra 12 is the groups' own inner
+        // inset, so Preset's label and controls share the exact left edges
+        // of every row below it.
         padding: const EdgeInsets.fromLTRB(
-            dialogPadding, exportPresetStripGap, dialogPadding, 0),
+            dialogPadding + 12, exportPresetStripGap, dialogPadding, 0),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
