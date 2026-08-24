@@ -5576,7 +5576,7 @@ class _Toolbar extends StatelessWidget {
                 TimeReadout(
                   key: const ValueKey('tl-frame'),
                   frame: frame,
-                  format: (f) => 'f$f',
+                  format: (f) => 'F$f',
                   // The `f`, the digits of the last frame, and one spare so a
                   // comp that grows past a power of ten does not start to
                   // twitch before the next rebuild.
@@ -5588,7 +5588,7 @@ class _Toolbar extends StatelessWidget {
                   maxFrame: lastFrame,
                   tooltip: l10n.tipFrameNumber,
                   well: true,
-                  // Rests as `f48`, edits as `48` (K-460). The `f` names the
+                  // Rests as `F48`, edits as `48` (K-460, capital by owner ruling). The `f` names the
                   // clock rather than counting in it, so the field holds the
                   // bare number and wears the letter again on commit — an
                   // edit that began by stepping over a letter began wrong.
@@ -5686,7 +5686,9 @@ class _Toolbar extends StatelessWidget {
   /// anything that is not a number at all, which leaves the readout alone.
   static int? _frameOfTyped(String text) {
     var trimmed = text.trim().toLowerCase();
-    if (trimmed.startsWith('f')) trimmed = trimmed.substring(1);
+    if (trimmed.startsWith('f') || trimmed.startsWith('F')) {
+      trimmed = trimmed.substring(1);
+    }
     return int.tryParse(trimmed.trim());
   }
 }

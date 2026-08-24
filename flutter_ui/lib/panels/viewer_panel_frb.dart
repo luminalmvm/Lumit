@@ -2484,26 +2484,24 @@ class _ViewerBar extends StatelessWidget {
         // and a green mark is a thing to see. The menu still lists the names.
         _ChannelPicker(channel: channel, onChannel: onChannel),
         viewerBarGapBox(viewerBarGap),
-        // **The way back to nothing**, and only while there is somewhere to
-        // come back from. The drawing puts no reset beside the exposure, which
-        // is right at rest: a mark that is always there says a control is
-        // engaged when it is not. Standing to the left of the number, it
-        // appears with the value it undoes and goes with it.
-        if (look.stops != 0) ...[
-          viewerBarMark(
-            key: const ValueKey('viewer-exposure-reset'),
-            icon: LumitIcon.reset,
-            colour: t.textMuted,
-            onPressed: () => onStops(0),
-            tip: l10n.tipViewerExposureReset,
-          ),
-          // One edge to allow for rather than two: the exposure is text.
-          SizedBox(width: viewerBarGap - viewerMarkEdge),
-        ],
-        // The exposure (K-314, docs/07 §2.2 item 12), bare: the drawing sets
-        // it as the number alone, with no aperture beside it and no well
-        // under it. Preview only, and the header's colour picker is what says
-        // so while it is engaged.
+        // **The aperture names the number, and is the way back to nothing**
+        // (owner ruling, superseding the appears-with-the-value reading):
+        // the mark stands always, left of the stops, so the bare number has
+        // its identity — and clicking it resets to 0. It brightens while a
+        // value is engaged, so at rest it reads as a label rather than as an
+        // armed control.
+        viewerBarMark(
+          key: const ValueKey('viewer-exposure-reset'),
+          icon: LumitIcon.aperture,
+          colour: look.stops != 0 ? t.textPrimary : t.textMuted,
+          onPressed: () => onStops(0),
+          tip: l10n.tipViewerExposureReset,
+        ),
+        // One edge to allow for rather than two: the exposure is text.
+        SizedBox(width: viewerBarGap - viewerMarkEdge),
+        // The exposure (K-314, docs/07 §2.2 item 12), bare: the number with
+        // no well under it. Preview only, and the header's colour picker is
+        // what says so while it is engaged.
         LumitTooltip(
           message: l10n.tipViewerExposure,
           child: DragValueField(

@@ -452,7 +452,7 @@ void main() {
       expect(barKeys(tester), [
         // The ways of looking, then the seam and the snapshot.
         'viewer-grid', 'viewer-guides-menu', 'viewer-channel',
-        'viewer-exposure', 'viewer-snapshot',
+        'viewer-exposure-reset', 'viewer-exposure', 'viewer-snapshot',
         // The transport and its clock.
         'viewer-home', 'viewer-step-back', 'viewer-play',
         'viewer-step-forward', 'viewer-end', 'viewer-timecode',

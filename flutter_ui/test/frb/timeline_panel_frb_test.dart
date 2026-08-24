@@ -308,7 +308,7 @@ void main() {
       p.uiState.playheadFrame.value = 48;
       p.uiState.model.refresh();
       await mount(tester, p);
-      expect(find.text('f48'), findsOneWidget,
+      expect(find.text('F48'), findsOneWidget,
           reason: 'at rest it wears the f');
 
       await tester.tap(find.byKey(const ValueKey('tl-frame')));
@@ -321,7 +321,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(p.uiState.playheadFrame.value, 60);
-      expect(find.text('f60'), findsOneWidget,
+      expect(find.text('F60'), findsOneWidget,
           reason: 'and it wears the f again the moment the edit lands');
 
       // Escape puts it back, exactly as §12A.3 says an edit is abandoned.
@@ -332,12 +332,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(p.uiState.playheadFrame.value, 60,
           reason: 'Escape reverts, and the playhead never moved');
-      expect(find.text('f60'), findsOneWidget);
+      expect(find.text('F60'), findsOneWidget);
     });
 
     /// **The frame counter says how many frames there are** (§12A.1): the
-    /// mockup's `f48 / 250`, the whole phrase in one muted colour. It said
-    /// only `f48`, which left the reader with no idea how far in that was.
+    /// mockup's `F48 / 250`, the whole phrase in one muted colour. It said
+    /// only `F48`, which left the reader with no idea how far in that was.
     testWidgets('the frame counter carries the comp\'s total', (tester) async {
       final p = withComp();
       p.uiState.playheadFrame.value = 3;
@@ -345,7 +345,7 @@ void main() {
       await mount(tester, p);
 
       final total = p.comp.durationFrames();
-      expect(find.text('f3'), findsOneWidget);
+      expect(find.text('F3'), findsOneWidget);
       expect(find.text('/ $total'), findsOneWidget,
           reason: 'the comp\'s whole length, after the frame in hand');
       expect(tester.widget<Text>(find.text('/ $total')).style?.color,
@@ -4334,13 +4334,13 @@ void main() {
       await mount(tester, p);
 
       expect(find.text('00:00:00:00'), findsOneWidget);
-      expect(find.text('f0'), findsOneWidget);
+      expect(find.text('F0'), findsOneWidget);
 
       // 60 fps is the default comp rate: frame 90 is a second and a half in.
       p.uiState.playheadFrame.value = 90;
       await tester.pump();
       expect(find.text('00:00:01:30'), findsOneWidget);
-      expect(find.text('f90'), findsOneWidget);
+      expect(find.text('F90'), findsOneWidget);
     });
 
     /// The master motion-blur button writes the comp's shutter enable — one

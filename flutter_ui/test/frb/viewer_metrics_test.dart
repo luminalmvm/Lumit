@@ -380,20 +380,21 @@ void main() {
       expect(faceNow().channel, ViewerChannel.green);
     });
 
-    /// **The exposure's way back to nothing** (owner review): a reset mark to
-    /// the left of the number, there only while there is something to undo.
-    testWidgets('the exposure reset appears with a value and clears it',
+    /// **The aperture names the number and is the way back to nothing**
+    /// (owner ruling): the mark stands always to the left of the stops,
+    /// muted at rest and bright while a value is engaged, and clicking it
+    /// resets to zero.
+    testWidgets('the aperture stands by the exposure and clears it',
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
       final reset = find.byKey(const ValueKey('viewer-exposure-reset'));
 
-      expect(reset, findsNothing,
-          reason: 'the drawing puts no reset beside a resting exposure');
+      expect(reset, findsOneWidget,
+          reason: 'the aperture names the number, always there');
 
       p.uiState.setViewerStops(1.5);
       await tester.pump();
-      expect(reset, findsOneWidget);
       expect(find.text('+1.5'), findsOneWidget);
       expect(tester.getRect(reset).right,
           lessThanOrEqualTo(tester.getRect(find.text('+1.5')).left),
@@ -402,7 +403,7 @@ void main() {
       await tester.tap(reset);
       await tester.pump();
       expect(p.uiState.viewerLook.stops, 0);
-      expect(reset, findsNothing, reason: 'and goes with the value');
+      expect(reset, findsOneWidget, reason: 'and stays, back at rest');
     });
 
     /// **What the reading sheds, and in what order** (§12A.6, K-451). The two
