@@ -642,7 +642,9 @@ Widget _dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         face ?? Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-        const SizedBox(width: 4),
+        // 6, the gap every `.dd` the mockups compute leaves between its label
+        // and its caret.
+        const SizedBox(width: 6),
         // A small quiet mark: the border already says this is a control, so
         // the caret only has to say which kind (§12A, no raised look).
         CustomPaint(
@@ -652,12 +654,12 @@ Widget _dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
       ],
     );
 
-/// The **in-row** dropdown's height and label size (§12A.6's table, K-451):
-/// the pickers that sit inside a 22px Timeline row — matte, blend and parent —
-/// are 16 tall with a 10px label, as the approved mockup draws them. A dialog's
-/// or a toolbar's dropdown is a different thing in a taller row and keeps the
-/// standard face below.
-const double inRowDropdownHeight = 16;
+/// The **in-row** dropdown's label size (§12A.6's table): the pickers that sit
+/// inside a Timeline row — matte, blend and parent — carry a 10px label, as the
+/// approved mockups draw them. Their *height* is a density token
+/// (`DensityTokens.inRowPicker`, K-454) because it is one of the handful of
+/// measurements the Compact setting moves; the label size is not, and never
+/// will be — Compact takes room out of rows, never legibility out of words.
 const double inRowDropdownTextSize = 10;
 
 /// The closed face of every bare dropdown, in its two sizes.
@@ -670,28 +672,35 @@ const double inRowDropdownTextSize = 10;
 /// and centres there with room for the tails on p, q and g. Horizontal is the
 /// button's own, so nothing moves sideways.
 ///
-/// **[dense] is the in-row face**: the height is stated rather than left to the
-/// text, because the mockup's 16 is a measurement and not a consequence — 1px
-/// of border each way leaves the 10px label 14 to centre in, which is the same
-/// room the standard face gives an 11px one.
+/// **Both heights are stated rather than left to the text**, because the
+/// mockups' measurements are measurements and not consequences: a face that
+/// grew out of its own font drifted every time the type did. [dense] is the
+/// in-row face — the pickers inside a Timeline row — and the other is every
+/// dropdown in a panel row or a bar. Both come from the density tokens
+/// (K-454), so the Compact setting moves them together.
+///
+/// **Horizontal 6, not the button's 8**: every `.dd` the mockups compute pads
+/// its label by exactly 6 either side, in both sizes.
 Widget _dropdownButton({
+  required LumitTheme t,
   required bool dense,
   required VoidCallback? onPressed,
   required Widget face,
-}) {
-  final button = HouseButton(
-    padding: EdgeInsets.symmetric(horizontal: 8, vertical: dense ? 0 : 1),
-    onPressed: onPressed,
-    dropdown: true,
-    child: dense
-        ? DefaultTextStyle.merge(
-            style: const TextStyle(fontSize: inRowDropdownTextSize),
-            child: face,
-          )
-        : face,
-  );
-  return dense ? SizedBox(height: inRowDropdownHeight, child: button) : button;
-}
+}) =>
+    SizedBox(
+      height: dense ? t.density.inRowPicker : t.density.dropdownFace,
+      child: HouseButton(
+        padding: EdgeInsets.symmetric(horizontal: 6, vertical: dense ? 0 : 1),
+        onPressed: onPressed,
+        dropdown: true,
+        child: dense
+            ? DefaultTextStyle.merge(
+                style: const TextStyle(fontSize: inRowDropdownTextSize),
+                child: face,
+              )
+            : face,
+      ),
+    );
 
 /// A dropdown drawn as a bare label + caret; the open list floats on the
 /// standard menu surface (`bare_dropdown` in the Rust settings window).
@@ -736,6 +745,7 @@ class BareDropdown<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return _dropdownButton(
+      t: t,
       dense: dense,
       onPressed: onChanged == null ? null : () => _open(context, t),
       face: _dropdownFace(t, label(value), face: face),
@@ -1021,6 +1031,7 @@ class BareLazyDropdown<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return _dropdownButton(
+      t: t,
       dense: dense,
       onPressed: () async {
         final box = context.findRenderObject()! as RenderBox;
@@ -1419,11 +1430,21 @@ class HouseTextField extends StatefulWidget {
   /// row), where the default 3 px above and below would burst it.
   final EdgeInsets padding;
 
+  /// The well's fill, for the two grounds the mockups actually draw. The
+  /// default `surface0` is the recess every well takes (§2.1) — the Timeline's
+  /// layer search, the ease popup's fields, an inline rename. A search well
+  /// that sits *on* `surface1` with nothing else in its row takes `surface2`
+  /// instead, which is the Project panel's (K-454: the manifests decide, and
+  /// they disagree about this one on purpose — a well over a busy row has to
+  /// sink, a well alone in its own row only has to be a well).
+  final Color? fill;
+
   const HouseTextField({
     super.key,
     required this.controller,
     this.width = 200,
     this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+    this.fill,
     this.onSubmitted,
     this.submitOnLostFocus = false,
     this.onTapOutside,
@@ -1629,7 +1650,7 @@ class _HouseTextFieldState extends State<HouseTextField>
       width: widget.width,
       padding: widget.padding,
       decoration: BoxDecoration(
-        color: t.surface0,
+        color: widget.fill ?? t.surface0,
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
         border: Border.all(color: t.hairline),
       ),
@@ -2099,6 +2120,12 @@ double scrubFactor() => HardwareKeyboard.instance.isShiftPressed
 /// Dialog wells are 22 and set their own; they do not come through here yet.
 const double wellHeight = 20;
 
+/// The number inside a well: **11px mono**, the size the approved mockups
+/// compute for every `.well` they draw (§7.1's mono row, K-454). It had been
+/// 13, which is a size the mockups use nowhere and which crowded the well's
+/// 20 from the inside.
+const double wellTextSize = 11;
+
 /// The **value well** (docs/15-DESIGN.md §2.1/§3.1, K-439): drag horizontally
 /// to adjust, click to type, right-click for Reset / Copy / Paste.
 ///
@@ -2106,9 +2133,9 @@ const double wellHeight = 20;
 /// a raised box — a `surface0` fill, darker than the panel around it, inside a
 /// hairline. The well is what says "editable", so a resting panel keeps to its
 /// three greys however many numbers it carries, and no colour has to be spent
-/// saying it. The number itself is mono at 13px (§7.1's absolute rule, and its
-/// property-value row) and turns `accent` while it is actually being dragged,
-/// `animated` when the property is keyed ([keyed]).
+/// saying it. The number itself is mono at [wellTextSize] (§7.1's absolute
+/// rule, and its property-value row) and turns `accent` while it is actually
+/// being dragged, `animated` when the property is keyed ([keyed]).
 ///
 /// [resetTo] is the field's known default — Reset appears only when a call site
 /// supplies one.
@@ -2385,9 +2412,10 @@ class _DragValueFieldState extends State<DragValueField>
                 controller: _controller,
                 focusNode: _focus,
                 // Mono while focused too — the number must not change width
-                // between reading it and typing over it (§7.1) — same 13px as
-                // the resting number, so nothing reflows on the click either.
-                style: t.mono.copyWith(fontSize: 13, color: t.textPrimary),
+                // between reading it and typing over it (§7.1) — the same
+                // size as the resting number, so nothing reflows on the click.
+                style:
+                    t.mono.copyWith(fontSize: wellTextSize, color: t.textPrimary),
                 cursorColor: t.accent,
                 backgroundCursorColor: t.surface2,
                 selectionColor: t.accent.withValues(alpha: 0.5),
@@ -2494,7 +2522,7 @@ class _DragValueFieldState extends State<DragValueField>
               _format(widget.value),
               textAlign: TextAlign.right,
               style: t.mono.copyWith(
-                fontSize: 13,
+                fontSize: wellTextSize,
                 color: _dragging
                     ? t.accent
                     : widget.keyed
@@ -2621,9 +2649,14 @@ class _HouseSliderState extends State<HouseSlider> {
             height: 16,
             child: CustomPaint(
               painter: _SliderPainter(
-                track: t.surface0,
+                // The mockups' own track and knob: a `hairline_strong` rule
+                // with a `text_secondary` handle on it. The track had been a
+                // `surface0` recess, which spends a fourth grey on a groove
+                // two pixels tall (§2.1), and the knob a `text_primary` dot,
+                // which read brighter than the value it points at.
+                track: t.hairlineStrong,
                 fill: t.accent,
-                knob: t.textPrimary,
+                knob: t.textSecondary,
                 frac: frac,
               ),
             ),

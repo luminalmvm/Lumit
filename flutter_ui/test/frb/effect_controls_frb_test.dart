@@ -65,12 +65,14 @@ void main() {
       // still this panel's to test, so the tests that want them ask for it
       // exactly as a user would.
       bool transform = true,
+      DensityTokens density = DensityTokens.regular,
     }) async {
       p.uiState.workspace.interface.transformInEffectControls = transform;
       await tester.pumpWidget(hostPanel(
         child: const EffectControlsPanelFrb(),
         state: p.state,
         uiState: p.uiState,
+        density: density,
       ));
       await tester.pump();
     }
@@ -1030,6 +1032,7 @@ void main() {
         WidgetTester tester,
         ({LumitState state, LumitUiState uiState, LayerReference layer}) p, {
         required bool animated,
+        DensityTokens density = DensityTokens.regular,
       }) async {
         p.layer.addEffect(name: 'blur');
         if (animated) {
@@ -1053,7 +1056,7 @@ void main() {
           );
           p.layer.setEffects(effects: staged);
         }
-        await mount(tester, p, transform: false);
+        await mount(tester, p, transform: false, density: density);
         return p.layer.getEffects().single.id();
       }
 
@@ -1126,8 +1129,8 @@ void main() {
           for (var i = 0; i < rows.length; i++)
             tester.getRect(find.byType(EffectParamRowFrb).at(i)).top,
         ]..sort();
-        expect(tops[1] - tops[0], closeTo(26, 0.5),
-            reason: 'a parameter row occupies 26');
+        expect(tops[1] - tops[0], closeTo(27, 0.5),
+            reason: 'a parameter row occupies 27 under Regular (K-454)');
 
         // The heading's own box: the nearest Container above its kicker.
         expect(
@@ -1146,6 +1149,40 @@ void main() {
         expect(tester.getRect(find.byType(DragValueField).first).height,
             closeTo(20, 0.5),
             reason: 'a value well in a panel is 20');
+      });
+
+      /// K-454's other column. Compact takes a pixel off the row pitch and
+      /// nothing else: the heading and the well measure the same, because
+      /// §12A.6's two columns agree about both.
+      testWidgets('Compact takes a pixel off the row and leaves the rest',
+          (tester) async {
+        await mountBlur(tester, withLayer(),
+            animated: false, density: DensityTokens.compact);
+
+        final tops = [
+          for (var i = 0;
+              i < tester.widgetList(find.byType(EffectParamRowFrb)).length;
+              i++)
+            tester.getRect(find.byType(EffectParamRowFrb).at(i)).top,
+        ]..sort();
+        expect(tops[1] - tops[0], closeTo(26, 0.5),
+            reason: 'a parameter row occupies 26 under Compact');
+
+        expect(
+          tester
+              .getRect(find
+                  .ancestor(
+                    of: heading('Gaussian blur'),
+                    matching: find.byType(Container),
+                  )
+                  .first)
+              .height,
+          closeTo(24, 0.5),
+          reason: 'a heading is 24 under both densities',
+        );
+        expect(tester.getRect(find.byType(DragValueField).first).height,
+            closeTo(20, 0.5),
+            reason: 'a well is 20 under both densities');
       });
 
       /// The stopwatch is one of `animated`'s closed job list (§3.1) — never

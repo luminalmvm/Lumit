@@ -73,9 +73,12 @@ const double fxKeyframeGutter = 18;
 /// face), and a stack of parameters visibly stepped in and out. One fixed
 /// height for the content box settles it.
 ///
-/// It is the *content* box: the section adds its own 2 px above and below and
-/// the hairline under the row, so a row occupies the **26 px** the mockups
-/// make canonical (K-451, docs/15 §12A.6) — 21 + 2 + 2 + 1.
+/// It is the *content* box, which is why it is a function of the density
+/// rather than one of its values: what §12A.6's table states is the height a
+/// row **occupies**, and the section spends [_fxRowChrome] of that on its own
+/// 2 px above, 2 px below and the hairline under the row. So the content box
+/// is whatever is left — 22 of 27 under Regular, 21 of 26 under Compact
+/// (K-454).
 ///
 /// Controls taller than this than sit inside it rather than pushing it out —
 /// their padding is squeezed by the constraint, never their text. The one
@@ -85,7 +88,12 @@ const double fxKeyframeGutter = 18;
 ///
 /// Not shared with the Timeline: its lanes have their own heights, and its
 /// fold-out rows take the other branch of these row widgets entirely.
-const double fxRowHeight = 21;
+double fxRowHeight(LumitTheme t) => t.density.propertyRow - _fxRowChrome;
+
+/// What a row spends on itself before its content gets any: 2 above, 2 below,
+/// and the 1 px hairline beneath it. Declared once so the two numbers in
+/// §12A.6's table and the box inside them cannot drift apart.
+const double _fxRowChrome = 5;
 
 /// A section heading's height (K-451, docs/15 §12A.6): **24**, fixed, so a
 /// stack of effects steps at one pitch whatever each heading carries. Its
@@ -196,7 +204,7 @@ class FxSection extends StatelessWidget {
             Container(
               decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(color: t.hairline))),
-              padding: const EdgeInsets.fromLTRB(8, 2, 6, 2),
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
               child: row,
             ),
       ],
@@ -268,8 +276,15 @@ class FxSection extends StatelessWidget {
             : (details) => onContextMenu!(details.globalPosition),
         child: Container(
           height: fxHeadingHeight,
-          color: selected ? t.selectionFill : t.surface2,
-          padding: const EdgeInsets.fromLTRB(8, 2, 6, 2),
+          // Bypassed and unpicked, the heading has no fill at all: the dashed
+          // outline is left standing on the panel's own ground, so the effect
+          // reads as absent rather than as another live row.
+          color: selected
+              ? t.selectionFill
+              : enabled
+                  ? t.surface2
+                  : null,
+          padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
           child: Row(
             children: [
               SizedBox(
@@ -315,7 +330,8 @@ class FxSection extends StatelessWidget {
                               onCancel: onRenameCancelled ?? () {},
                             )
                           : Text(title.toUpperCase(),
-                              style: t.kickerOn,
+                              // Bypassed, the name drops to muted with the fill.
+                              style: enabled ? t.kickerOn : t.kicker,
                               overflow: TextOverflow.ellipsis),
                     ),
                   ],
@@ -392,7 +408,7 @@ Widget fxTwoColumnRow({
   required Widget control,
 }) =>
     SizedBox(
-      height: fxRowHeight,
+      height: fxRowHeight(ThemeScope.of(context).theme),
       child: Row(
         children: [
           SizedBox(
@@ -439,7 +455,7 @@ Widget fxGroupHeaderRow(
     behavior: HitTestBehavior.opaque,
     onTap: onToggle,
     child: SizedBox(
-      height: fxRowHeight,
+      height: fxRowHeight(t),
       child: Row(
         children: [
           SizedBox(
@@ -490,7 +506,9 @@ Widget fxTextAction(
       small: true,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       onPressed: onPressed,
-      child: Text(label, style: t.small.copyWith(color: t.textMuted)),
+      // A little word beside a value is plain mono, not body text (§7.1).
+      child:
+          Text(label, style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
     ),
   );
 }

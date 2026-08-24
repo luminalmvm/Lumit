@@ -625,27 +625,31 @@ class _TabPillState extends State<_TabPill> {
     final round = t.shape == ThemeShape.round;
     final Color fill;
     final Color textColour;
-    Border? border;
     if (widget.active) {
-      // Round's filled accent pill (K-394, §12.1): which tab is fronted reads
-      // from the fill, so the accent outline it wore instead has nothing left
-      // to say. The border stays, transparent — a border insets its child, and
-      // dropping it would shrink the active pill by 2 px and shuffle every tab
-      // beside it each time the front tab changed.
-      fill = round ? t.accent : t.surface1;
+      // Round keeps its filled accent pill (K-394, §12.1). **Sharp draws no
+      // box at all**: the mockups' `.kick.on` is bare text on the strip's own
+      // grey — transparent fill, no border — and which tab is fronted reads
+      // from the word brightening to `text_primary` alone. It had worn an
+      // accent outline, which spends the accent on a resting state and makes
+      // the strip's one lit tab look like a control to press.
+      fill = round ? t.accent : const Color(0x00000000);
       textColour = round ? t.surface0 : t.textPrimary;
-      border = Border.all(
-        color: round ? t.accent.withValues(alpha: 0) : t.accent,
-        width: 1,
-      );
     } else if (_hover) {
       fill = t.surface3;
       textColour = t.textPrimary;
-      border = Border.all(color: t.hairlineStrong, width: 1);
     } else {
-      fill = t.surface2;
+      fill = const Color(0x00000000);
       textColour = t.textMuted;
     }
+    // Always a border, transparent unless hover has something to show: a
+    // border insets its child, so letting one appear would shrink the pill by
+    // 2 px and shuffle every tab beside it as the pointer crossed the strip.
+    final border = Border.all(
+      color: _hover && !widget.active
+          ? t.hairlineStrong
+          : const Color(0x00000000),
+      width: 1,
+    );
     // A panel's name is a container label, so it is a kicker (§7.1, K-438):
     // one size, one weight, capitals applied here rather than in the arb file.
     // Which tab is fronted reads from the colour and the accent tick alone —

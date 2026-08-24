@@ -84,10 +84,10 @@ const double timingsGroupWidth = 56;
 /// fixed geometry either way, so the layout maths count it.
 const double groupDividerWidth = 7;
 
-/// A dropdown's text inset — [HouseButton]'s horizontal padding plus its
+/// A dropdown's text inset — [HouseButton]'s horizontal padding (6) plus its
 /// always-there 1 px border. The compose group's header titles carry the same
 /// inset so each sits directly over the text in the cell below it.
-const double dropdownTextInset = 9;
+const double dropdownTextInset = 7;
 
 /// The gutter down the right of the lane area (and, in graph view, the
 /// outline): where the vertical scrollbar lives. Reserved in the column
@@ -132,9 +132,13 @@ double minGroupWidth(TimelineGroup group) => switch (group) {
     };
 
 /// The outline's total width for a set of group widths: the groups, the seam
-/// between each pair, and the row's own edge padding.
+/// between each pair, and the widest edge padding anything in the outline
+/// carries — the column header's 10 + 8, two more than the layer rows' 8 + 8
+/// (both the mockups' own values). Sized to the header, because a row that
+/// does not fit its box overflows; the layer rows keep the two spare pixels at
+/// their trailing end, where nothing is drawn.
 double outlineWidthOf(Map<TimelineGroup, double> widths) =>
-    8 +
+    18 +
     widths.values.fold(0.0, (a, b) => a + b) +
     (widths.length - 1) * groupDividerWidth;
 
@@ -225,7 +229,7 @@ ValueColumn timingsColumnFor(
 /// property's twirl sits just inside its layer's (docs/07 §4.3).
 double identityStart(
     List<TimelineGroup> order, Map<TimelineGroup, double> widths) {
-  var x = 4.0; // the row's edge padding
+  var x = 8.0; // the row's edge padding
   for (final group in order) {
     if (group == TimelineGroup.identity) return x;
     x += (widths[group] ?? 0) + groupDividerWidth;

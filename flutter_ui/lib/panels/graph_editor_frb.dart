@@ -2316,7 +2316,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         comp: Provider.of<LumitUiState>(context, listen: false)
                             .model,
                         grid: t.hairline,
-                        label: t.small.copyWith(color: t.textMuted),
+                        // The axis numbers are numbers, so they are set in the
+                        // mono face at the mockup's own 8 — Hanken at 10 read
+                        // as body text ruling the graph.
+                        label: t.mono.copyWith(fontSize: 8, color: t.textMuted),
                         viewportLeft: _viewportLeft,
                         vegas: widget.vegas,
                       ),

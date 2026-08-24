@@ -8206,6 +8206,30 @@ Dialogs built the ordinary way today, as overlays inside the one window, are exa
 ones that turn into real windows when the toolkit is ready — the same code, re-parented,
 rather than rewritten.
 
+**How much room a row gets.** Every row in Lumit has a fixed height, and those heights are
+read off the approved mockups rather than chosen in code. There turned out to be two
+reasonable answers to "how tall is a layer row", and the difference between them is a
+pixel or two: the mockup draws 22 pixels of row with a hairline seam under it, so what the
+eye actually receives is 23. Lumit now takes the roomier reading as its default and keeps
+the tighter one behind a setting called **Compact**, in Settings → Interface → Display.
+Turn it on and rows lose that pixel or two back, so four or five more layers fit on a
+short screen. Nothing else moves: no colour changes, no word changes size, no control
+changes what it does.
+
+The way this is built is worth a sentence, because it is deliberately dull. The two sets of
+numbers live side by side in one small object (`DensityTokens`, in
+`flutter_ui/lib/theme/theme.dart`) — one instance holding the roomy values, one holding the
+tight ones — and that object rides on the theme, the same parcel of colours and shapes every
+part of the interface already has in hand when it draws. Switching the setting rebuilds the
+theme, and everything repaints from the new numbers on the next frame. There is no
+per-panel switch and no third setting, on purpose: a panel that could disagree with its
+neighbour about row height is a panel whose halves stop lining up, and the Timeline in
+particular is two lists side by side that have to agree row for row or the whole thing
+shears. Only the handful of rows that genuinely differ are in that object at all — a
+header strip, a clip bar and a value box measure the same either way, so they stay plain
+fixed numbers where they are written. A dial with two identical settings is a dial that
+does nothing.
+
 **The mockups are the reference.** Each panel was designed as a full-size picture first
 and approved by the owner before any code moves. When a question comes up about where
 something sits or how big it is, the answer is read off the approved mockup, not

@@ -84,10 +84,14 @@ const double projectSearchRowHeight = 34;
 const double _searchPadTop = 8;
 const double _searchPadBottom = 6;
 
-/// The column-header row — a secondary row's 18, plus its own hairline.
-const double projectColumnHeaderHeight = 19;
+/// The column-header row: a **secondary row**, and so a density token
+/// (K-454) — 19 under Regular, where the hairline beneath it is counted in,
+/// and 18 under Compact.
+double projectColumnHeaderHeight(LumitTheme t) => t.density.secondaryRow;
 
-/// One item row. An outline row, and so 22 (§12A.6).
+/// One item row. The mockup draws the Project panel's rows without the seam
+/// the Timeline's outline carries, so this is a plain 22 under both densities
+/// (§12A.6) rather than the lane row's token.
 const double projectRowHeight = 22;
 
 /// The state badge ("missing"): 14 tall, 4px of padding either side, its text
@@ -708,6 +712,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               // mockup renders it exactly 20 tall, and the default 3px above
               // and below would burst that.
               padding: const EdgeInsets.symmetric(horizontal: 6),
+              // `surface2`, not the well's usual recess: this well has its own
+              // row to itself over the panel's `surface1`, and the mockup
+              // computes it a shade lighter rather than a shade darker.
+              fill: t.surface2,
               hint: l10n.searchProject,
             ),
           ),
@@ -718,7 +726,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// by the same [ProjectColumns.cells] call, so they cannot come apart.
   Widget _columnHeader(LumitTheme t, ProjectColumns cols) => Container(
         key: const ValueKey('project-column-header'),
-        height: projectColumnHeaderHeight,
+        height: projectColumnHeaderHeight(t),
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: t.hairline)),
         ),

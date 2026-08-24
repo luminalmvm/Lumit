@@ -4159,6 +4159,10 @@
   "@settingsColourScheme": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsCompact": "Compact",
+  "@settingsCompact": {
+    "description": "Settings window: the name of one setting."
+  },
   "settingsCorners": "Corners",
   "@settingsCorners": {
     "description": "Settings window: the name of one setting."
@@ -4274,6 +4278,10 @@
   "settingsHelpColourScheme": "The palette every panel draws from.",
   "@settingsHelpColourScheme": {
     "description": "Settings window: the sentence under the settingsColourScheme setting."
+  },
+  "settingsHelpCompact": "Draw rows a little tighter, so more of a layer stack and more parameters fit on screen. Nothing else changes.",
+  "@settingsHelpCompact": {
+    "description": "Settings window: the sentence under the settingsCompact setting."
   },
   "settingsHelpCorners": "How rounded controls and panels are.",
   "@settingsHelpCorners": {

@@ -423,8 +423,12 @@ class Workspace extends ChangeNotifier {
   }
 
   void recompose() {
+    // Density rides on every theme this method can build, preview included:
+    // it is a setting about rows rather than about colours, so no colour
+    // choice — a scheme, a custom theme, a live preview — gets to lose it.
+    final density = DensityTokens.of(interface.compact);
     if (_preview != null) {
-      _theme = _preview!;
+      _theme = _preview!.copyWith(density: density);
       notifyListeners();
       return;
     }
@@ -433,13 +437,13 @@ class Workspace extends ChangeNotifier {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
       // a choice the user made in the editor.
-      _theme = custom.build(themeShape);
+      _theme = custom.build(themeShape).copyWith(density: density);
     } else {
       _theme = LumitTheme.forScheme(
         colorScheme,
         themeShape,
         accentOverride: accentOverride,
-      );
+      ).copyWith(density: density);
     }
     notifyListeners();
   }

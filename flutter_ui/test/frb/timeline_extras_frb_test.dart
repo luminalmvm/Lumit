@@ -107,8 +107,11 @@ void main() {
       expect([border.left.color, border.right.color, border.bottom.color],
           isNot(contains(t.accent)),
           reason: 'nothing on this tab is drawn in the accent');
-      expect(border.left.color, t.hairline,
-          reason: 'only the seams either side of it');
+      // And no seams either: the manifest computes no border on any comp tab.
+      // The sides are still reserved so a tab keeps its width in both shapes,
+      // but they are drawn in nothing.
+      expect([border.left.color.a, border.right.color.a], [0.0, 0.0],
+          reason: 'the seams are reserved, not drawn');
     });
 
     testWidgets('the comp tabs show the open comps and front one',

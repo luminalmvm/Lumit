@@ -65,6 +65,41 @@ void main() {
     expect(InterfaceSettings.fromJson(popup.toJson()).easingInPopup, isTrue);
   });
 
+  /// K-454. Regular is the default and Compact is the deviation, so a
+  /// settings file written by a build that only ever drew the tight rows
+  /// opens roomy — the mockups' room is the decision, not an opt-in.
+  test('rows are roomy unless a settings file asks for Compact', () {
+    expect(InterfaceSettings().compact, isFalse);
+    expect(InterfaceSettings.fromJson(const {'ui_scale': 1.25}).compact, isFalse,
+        reason: 'a file written before the field existed gets the roomy rows');
+    final tight = InterfaceSettings()..compact = true;
+    expect(InterfaceSettings.fromJson(tight.toJson()).compact, isTrue);
+  });
+
+  /// The two densities are the two the design doc's §12A.6 table lists, and
+  /// Regular is the one a theme carries when nobody has chosen.
+  test('the density tokens are the table, and Regular is the default', () {
+    expect(LumitTheme.dark().density, DensityTokens.regular);
+    expect(DensityTokens.of(false), DensityTokens.regular);
+    expect(DensityTokens.of(true), DensityTokens.compact);
+
+    expect(DensityTokens.regular.laneRow, 23);
+    expect(DensityTokens.regular.secondaryRow, 19);
+    expect(DensityTokens.regular.inRowPicker, 18);
+    expect(DensityTokens.regular.dropdownFace, 20);
+    expect(DensityTokens.regular.propertyRow, 27);
+    // Derived, never declared: the ruler is what the outline's two secondary
+    // rows cost, which is what makes the Timeline's halves meet.
+    expect(DensityTokens.regular.ruler, 38);
+
+    expect(DensityTokens.compact.laneRow, 22);
+    expect(DensityTokens.compact.secondaryRow, 18);
+    expect(DensityTokens.compact.inRowPicker, 16);
+    expect(DensityTokens.compact.dropdownFace, 18);
+    expect(DensityTokens.compact.propertyRow, 26);
+    expect(DensityTokens.compact.ruler, 36);
+  });
+
   test('the Retime seconds preference round-trips', () {
     final i = InterfaceSettings(retimeInSeconds: true);
     expect(InterfaceSettings.fromJson(i.toJson()).retimeInSeconds, isTrue);

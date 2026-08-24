@@ -88,7 +88,8 @@ void main() {
 
       final style = numberOf(tester);
       expect(style.fontFamily, LumitTheme.monoFontFamily);
-      expect(style.fontSize, 13, reason: '§7.1: property values are 13px mono');
+      expect(style.fontSize, wellTextSize,
+          reason: '§7.1: property values are 11px mono, the mockups\' own');
       expect(style.color, t.textPrimary);
     });
 

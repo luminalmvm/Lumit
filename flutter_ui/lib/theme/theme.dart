@@ -139,6 +139,83 @@ class ShapeTokens {
       shape == ThemeShape.sharp ? sharp : round;
 }
 
+/// **How much room a row gets** (K-454, docs/15-DESIGN.md §12A.6).
+///
+/// In plain terms: the same panels, drawn with a little more or a little less
+/// air between their lines. There are exactly two settings of this dial and
+/// there will not be a third — a slider would let a user land on a half-pixel
+/// row and misalign the Timeline's two halves.
+///
+/// [regular] is the default, and it is what the approved mockups actually
+/// render: their *effective* heights, meaning the content plus the seams and
+/// borders painted around it. [compact] is a pixel or two tighter per row,
+/// for someone who would rather see more layers at once than have the room —
+/// it is the set of values the app shipped before this dial existed.
+///
+/// Only the rows that genuinely differ are listed. A panel header strip, a
+/// clip bar, a value well and an effect heading measure the same under both
+/// densities, so they stay plain constants where they are declared: a token
+/// whose two values are equal is a knob that does nothing.
+class DensityTokens {
+  /// A layer's row in the outline, and its lane beside it. The mockups draw
+  /// 22 of row with a 1px seam under it and the eye reads 23; the tighter
+  /// setting fits the seam inside the 22.
+  final double laneRow;
+
+  /// The thin rows that frame a panel — the Timeline's timecode/search/mode
+  /// row, column-group headers, filter rows, panel bottom bars. 18 of content;
+  /// Regular counts the hairline beneath it in, as §12A.6 already does for the
+  /// Project panel's column header.
+  final double secondaryRow;
+
+  /// The pickers that sit *inside* a layer's row: matte, blend and parent.
+  final double inRowPicker;
+
+  /// A dropdown's closed face anywhere else — a panel row, a bar.
+  final double dropdownFace;
+
+  /// A property or effect-parameter row in the Effect controls.
+  final double propertyRow;
+
+  const DensityTokens({
+    required this.laneRow,
+    required this.secondaryRow,
+    required this.inRowPicker,
+    required this.dropdownFace,
+    required this.propertyRow,
+  });
+
+  /// The Timeline ruler, which is **derived and not declared**: the lane side
+  /// gives the ruler exactly the height the outline side spends on its two
+  /// secondary rows, and that is the whole reason the two halves of the panel
+  /// line up row for row. The mockup's own ruler measures a pixel under the
+  /// sum of the two rows it faces — the artboard is inconsistent with itself
+  /// there — and of the two readings only this one can be true of a panel
+  /// whose halves have to meet.
+  double get ruler => secondaryRow * 2;
+
+  /// What the mockups render. The default (K-454).
+  static const regular = DensityTokens(
+    laneRow: 23,
+    secondaryRow: 19,
+    inRowPicker: 18,
+    dropdownFace: 20,
+    propertyRow: 27,
+  );
+
+  /// A pixel or two off each row, for more visible at once. What the app drew
+  /// before the setting existed.
+  static const compact = DensityTokens(
+    laneRow: 22,
+    secondaryRow: 18,
+    inRowPicker: 16,
+    dropdownFace: 18,
+    propertyRow: 26,
+  );
+
+  static DensityTokens of(bool isCompact) => isCompact ? compact : regular;
+}
+
 /// Per-layer-type identity colours (docs/15-DESIGN.md §6.1).
 class LayerColours {
   final Color footage, sequence, precomp, solid, text, camera;
@@ -223,6 +300,11 @@ class LumitTheme {
   final ThemeShape shape;
   final ShapeTokens tokens;
 
+  /// How much room a row gets (K-454). It rides on the theme because that is
+  /// what every widget already has in hand, and because changing it has to
+  /// repaint everything at once — the same journey a shape change makes.
+  final DensityTokens density;
+
   // Surfaces (near-neutral ramp; direction depends on mode).
   final Color surface0, surface1, surface2, surface3, surface4;
 
@@ -296,6 +378,7 @@ class LumitTheme {
     required this.mode,
     this.shape = ThemeShape.sharp,
     this.tokens = ShapeTokens.sharp,
+    this.density = DensityTokens.regular,
     required this.surface0,
     required this.surface1,
     required this.surface2,
@@ -440,6 +523,7 @@ class LumitTheme {
   LumitTheme copyWith({
     ThemeShape? shape,
     ShapeTokens? tokens,
+    DensityTokens? density,
     Color? accent,
     Color? accentHover,
   }) =>
@@ -447,6 +531,7 @@ class LumitTheme {
         mode: mode,
         shape: shape ?? this.shape,
         tokens: tokens ?? this.tokens,
+        density: density ?? this.density,
         surface0: surface0,
         surface1: surface1,
         surface2: surface2,

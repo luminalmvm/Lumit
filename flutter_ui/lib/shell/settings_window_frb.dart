@@ -682,6 +682,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           settings.showTooltips = on;
           ui.workspace.settingsChanged();
         }),
+        // `recompose`, not `settingsChanged`: density lives on the built
+        // theme (K-454), so the theme has to be rebuilt before anything is
+        // told to redraw. `recompose` notifies; `save` is still ours to call.
+        _flag(t, 'settings-compact', l10n.settingsCompact,
+            l10n.settingsHelpCompact, value: settings.compact, set: (on) {
+          settings.compact = on;
+          ui.workspace.recompose();
+          ui.workspace.save();
+        }),
       ]),
       settingsSection(t, l10n.settingsGroupPanels, [
         _flag(

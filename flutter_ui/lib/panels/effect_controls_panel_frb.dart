@@ -435,12 +435,12 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       color: t.surface1,
       child: Row(
         children: [
           lumitIcon(LumitIcon.fx, size: iconSize, color: t.textMuted),
-          const SizedBox(width: 6),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(layerName,
                 style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
@@ -451,8 +451,12 @@ class _Header extends StatelessWidget {
             builder: (buttonContext) => HouseButton(
               key: const ValueKey('fx-add'),
               small: true,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               onPressed: () => _showAddMenu(buttonContext, onAdd),
-              child: Text(l10n.addEffect, style: t.small),
+              // Add effect is a container label like every other kicker, so the
+              // capitals live here rather than in the arb file.
+              child: Text(l10n.addEffect.toUpperCase(),
+                  style: t.kicker.copyWith(color: t.textSecondary)),
             ),
           ),
         ],

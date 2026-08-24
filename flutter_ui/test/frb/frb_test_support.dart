@@ -119,6 +119,12 @@ Widget hostPanel({
   /// that is what every behaviour test wants to assert against; a test about
   /// Round's own geometry (K-394) asks for it.
   ThemeShape shape = ThemeShape.sharp,
+
+  /// How much room a row gets (K-454). Regular by default, because that is
+  /// what the editor ships as and what every mockup renders; a test about the
+  /// **Compact** setting passes `DensityTokens.compact` and asserts the
+  /// tighter column of §12A.6's table.
+  DensityTokens density = DensityTokens.regular,
 }) =>
     Directionality(
       textDirection: TextDirection.ltr,
@@ -129,7 +135,8 @@ Widget hostPanel({
           child: ChangeNotifierProvider<LumitUiState>.value(
             value: uiState,
             child: ThemeScope(
-              theme: LumitTheme.forScheme(LumitColorScheme.dark, shape),
+              theme: LumitTheme.forScheme(LumitColorScheme.dark, shape)
+                  .copyWith(density: density),
               animationLevel: animationLevel,
               showTooltips: false,
               // The application's root is a MaterialApp, which puts one of

@@ -552,8 +552,9 @@ chrome sits above 13px except dialog body emphasis**:
 | 9px | Geist Mono, caps, +0.12em, `surface_0` on the `accent` fill | **The filled primary action's label** — the one filled button a surface is allowed (§3.1, §12A.4). A kicker in every respect but its colour, which the fill under it decides |
 | 10px | Hanken Grotesk | Secondary notes and hints (`small`); field captions — never for anything the user has to act on; **layer bar labels** and the labels of the in-row pickers beside them (matte, blend, parent), both the approved mockups' own size (K-451) |
 | 11px | Hanken Grotesk | Panel body copy, property names, menus, buttons |
-| 11px | Geist Mono | Axis numbers, units |
-| 13px | Geist Mono | Property values, timecode fields, frame numbers, speed percentages |
+| 11px | Geist Mono | **Property values in wells, timecode fields, frame numbers, speed percentages** — the approved mockups compute every `.well` and every timecode at 11 (K-454). It had been recorded here as 13, a size the mockups use nowhere |
+| 10px | Geist Mono | Units beside a value (`px`, `%`, `°`), and the readouts in an outline row — a layer's number, a property's value, the ms column |
+| 9px | Geist Mono, letter-spacing normal | Ruler labels, per-effect cost readouts, the status bar. Plain mono, **not** a kicker: same size, no tracking, no capitals |
 | 13–14px | Hanken Grotesk Medium | Dialog body emphasis — the one thing in chrome above 13px |
 | 24px+ | Hanken Grotesk | About box, onboarding, empty states only — outside chrome |
 
@@ -781,6 +782,14 @@ and shape-conditional widget geometry; colours, strings and Sharp are untouched.
 - **The header dot.** Each panel header carries a small accent dot under Round — the
   reference's quiet live-mark. Decorative, never a status light; it does not blink,
   fill or change colour.
+- **Under Sharp a panel's tab is bare text.** The header strip's tabs are kickers on the
+  strip's own grey — no fill, no outline, no tick — and the fronted one is marked by its
+  word brightening to `text_primary` while the rest stay `text_muted`, exactly as the
+  mockups compute them. It had worn an accent outline, which spends the accent on a
+  resting state and makes the one lit tab read as a button to press. This is the same
+  ruling the composition tabs already carry (§12A.1): §3.1's "active tab tick" means the
+  workspace tabs, and nothing else. Round is untouched — its filled accent pill (K-394)
+  says the same thing with the fill.
 
 Rejected cues, with the reasons (K-394): uppercase panel titles *as display text* (since
 K-438 panel titles are mono-caps kickers, §7.1 — a typographic pattern, not the reference's
@@ -954,37 +963,48 @@ bottom. K-411's instrument grouping carries over whichever arrangement is set
 values, not approximations of them; a mismatch is a defect. Vertical metrics never squish —
 when a panel is too short, its content scrolls.
 
-| Element | Height |
-|---|---|
-| Panel header strip (title and tabs, composition tabs) | 22 |
-| Secondary rows: timecode/search/mode row, column headers, filter rows, panel bottom bars | 18 |
-| Outline and lane rows | 22 |
-| Clip bars within a lane row | 16 |
-| In-row pickers (the Timeline's matte, blend and parent cells), label at 10px | 16 |
-| Property and effect-parameter rows | 26 |
-| Effect section headings | 24 |
-| Timeline ruler (times above, markers and work area below) | 36 |
-| Cache bar (counted inside the ruler's 36, so the clock above it is 33) | 3 |
-| Value wells in panels | 20 |
-| Project panel: preview card (10 of padding round a 96×54 poster frame, plus its hairline) | 75 |
-| Project panel: search row (8 above the well, its 20, 6 below) | 34 |
-| Project panel: column-header row (a secondary row's 18 with its own hairline counted in) | 19 |
-| Project panel: state badges (`in use`, `missing`) | 14 |
-| Project panel: horizontal scrollbar strip (a 4px track inset 8 either side) | 6 |
-| Project panel: bottom bar (new-item controls and the item count) | 20 |
-| Dialog title strip and dialog rows | 30 |
-| Dialog page-tab row | 26 |
-| Dialog value wells and dropdowns | 22 |
-| Status bar | 18 |
-| Graph-side horizontal scrollbar | 7 |
+**Two densities, and Regular is the default** (K-454). Regular is what the mockups actually
+render — their *effective* heights, content plus the seams and borders painted around it.
+**Compact** is the settings toggle, a pixel or two off the rows that carry stacks, for
+someone who would rather see four more layers than the air between them. Where the two
+columns agree there is nothing to choose: that row measures the same either way, and it is
+a plain constant in the code rather than a token with two equal values.
 
-**The project panel's rows correct two of the table's own numbers** (K-454: a mockup's
-*rendered* height is the default density, and the roomier reading wins). Its bottom bar
-renders at **20**, not the 18 the "panel bottom bars" line gives every other one, and its
-column header at **19**, not 18, because the mockup counts the hairline under it inside the
-row. Both are the mockup's own computed values; the earlier readings are recorded here so the
-change is visible rather than silent. A slimmer variant is a future **Compact** setting's
-business, not a licence to shave these.
+| Element | Regular | Compact |
+|---|---|---|
+| Panel header strip (title and tabs, composition tabs) | 22 | 22 |
+| Secondary rows: timecode/search/mode row, column headers, filter rows, panel bottom bars | 19 | 18 |
+| Outline and lane rows | 23 | 22 |
+| Clip bars within a lane row | 16 | 16 |
+| In-row pickers (the Timeline's matte, blend and parent cells), label at 10px | 18 | 16 |
+| Dropdown closed face elsewhere in a panel or a bar | 20 | 18 |
+| Property and effect-parameter rows | 27 | 26 |
+| Effect section headings | 24 | 24 |
+| Timeline ruler (times above, markers and work area below) | 38 | 36 |
+| Cache bar (counted inside the ruler, so the clock above it is the rest) | 3 | 3 |
+| Value wells in panels, the number inside them 11px mono | 20 | 20 |
+| Project panel: preview card (10 of padding round a 96×54 poster frame, plus its hairline) | 75 | 75 |
+| Project panel: search row (8 above the well, its 20, 6 below) | 34 | 34 |
+| Project panel: item rows (the mockup draws these without the Timeline's seam) | 22 | 22 |
+| Project panel: column-header row (a secondary row, hairline counted in) | 19 | 18 |
+| Project panel: state badges (`in use`, `missing`) | 14 | 14 |
+| Project panel: horizontal scrollbar strip (a 4px track inset 8 either side) | 6 | 6 |
+| Project panel: bottom bar (new-item controls and the item count) | 20 | 20 |
+| Dialog title strip and dialog rows | 30 | 30 |
+| Dialog page-tab row | 26 | 26 |
+| Dialog value wells and dropdowns | 22 | 22 |
+| Status bar | 18 | 18 |
+| Graph-side horizontal scrollbar | 7 | 7 |
+
+**The ruler is derived, not declared.** The lane side gives the ruler exactly what the
+outline side spends on its two secondary rows, which is the whole reason the two halves of
+the Timeline line up row for row. The mockup's own ruler measures a pixel under the sum of
+the two rows it faces — the artboard disagrees with itself there — and of the two readings
+only this one can be true of a panel whose halves have to meet.
+
+**The Compact column is the set of values the editor shipped with** before the toggle
+existed. Nothing about it is a second design: no colour, no size of type, no spacing across
+a row changes with it, and the degradation ladder below is the same under both.
 
 **The pieces inside a row are the mockups' too**, and are pinned by
 `timeline_alignment_test` and, for the Project panel, `project_panel_metrics_test`: a layer's label colour is a **6px dot**, its number stands in an

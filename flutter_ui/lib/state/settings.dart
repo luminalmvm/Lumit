@@ -213,6 +213,16 @@ class InterfaceSettings {
   /// and dismissed where the button is.
   bool easingInPopup;
 
+  /// Whether rows are drawn a pixel or two tighter than the approved mockups
+  /// render them (K-454, `DensityTokens` in `theme/theme.dart`).
+  ///
+  /// Off by default, and that default is the point of the setting: the
+  /// mockups' own room is what the editor should look like, and this is the
+  /// escape hatch for someone working on a short screen who would rather have
+  /// four more layers in view than the air around them. It changes nothing but
+  /// heights — no colour, no size of type, nothing about what anything means.
+  bool compact;
+
   /// The interface language, as a BCP-47 tag (`en`, `de`, `zh`), or null to
   /// follow whatever the machine is set to (K-303).
   ///
@@ -237,6 +247,7 @@ class InterfaceSettings {
     this.waveformsFromBottom = false,
     this.showToneMap = false,
     this.easingInPopup = false,
+    this.compact = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -253,6 +264,7 @@ class InterfaceSettings {
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
+        'compact': compact,
       };
   factory InterfaceSettings.fromJson(Map<String, dynamic> j) =>
       InterfaceSettings(
@@ -295,5 +307,12 @@ class InterfaceSettings {
         // this replaced never shipped in a release, so no settings file can be
         // asking for it by silence.
         easingInPopup: j['easing_in_popup'] as bool? ?? false,
+        // Absent means off, which is the roomy default — and every settings
+        // file written before this field existed was written by a build that
+        // drew the tight rows. Those users get the extra pixel or two back,
+        // deliberately: the mockups' room is the decision (K-454), and the
+        // tight set is now something to ask for rather than something to
+        // inherit by silence.
+        compact: j['compact'] as bool? ?? false,
       );
 }

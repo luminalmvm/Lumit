@@ -622,7 +622,7 @@ void main() {
     /// 10c. **The pickers inside a row are 16 with a 10px label** (§12A.6's
     /// table, K-451): matte, blend and parent are cells in a 22px row, not
     /// dialog controls, and the mockup draws all three at the shorter face.
-    testWidgets('the matte, blend and parent pickers are 16 tall',
+    testWidgets('the matte, blend and parent pickers are the density\'s',
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -633,11 +633,13 @@ void main() {
       for (final cell in ['matte', 'blend', 'parent']) {
         final picker =
             find.byKey(ValueKey<String>('tl-$cell-${layer.internallayerId}'));
-        expect(tester.getRect(picker).height, closeTo(inRowDropdownHeight, 0.5),
-            reason: 'the $cell picker is the mockup\'s 16, not the 18 a '
-                'dialog\'s dropdown stands at');
+        expect(tester.getRect(picker).height,
+            closeTo(DensityTokens.regular.inRowPicker, 0.5),
+            reason: 'the $cell picker is the mockup\'s 18 under Regular, '
+                'against the 20 a dropdown elsewhere in a panel stands at '
+                '(K-454)');
         expect(tester.getRect(picker).center.dy, closeTo(row.center.dy, 0.5),
-            reason: 'and is centred in its 22px row');
+            reason: 'and is centred in its row');
         expect(
             tester
                 .renderObject<RenderParagraph>(

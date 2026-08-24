@@ -239,9 +239,8 @@ void main() {
     });
 
     /// **The frame counter says how many frames there are** (§12A.1): the
-    /// mockup's `f48 / 250`, the count quieter again than the number beside
-    /// it. It said only `f48`, which left the reader with no idea how far in
-    /// that was.
+    /// mockup's `f48 / 250`, the whole phrase in one muted colour. It said
+    /// only `f48`, which left the reader with no idea how far in that was.
     testWidgets('the frame counter carries the comp\'s total', (tester) async {
       final p = withComp();
       p.uiState.playheadFrame.value = 3;
@@ -253,8 +252,8 @@ void main() {
       expect(find.text('/ $total'), findsOneWidget,
           reason: 'the comp\'s whole length, after the frame in hand');
       expect(tester.widget<Text>(find.text('/ $total')).style?.color,
-          LumitTheme.dark().textDisabled,
-          reason: 'and quieter than the frame number it follows');
+          LumitTheme.dark().textMuted,
+          reason: 'in the same muted colour as the frame number it follows');
     });
 
     /// §12A.1's order for the row above the outline: the two readouts at the

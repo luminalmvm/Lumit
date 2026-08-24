@@ -48,7 +48,8 @@ void main() {
     }
 
     Future<void> mount(WidgetTester tester, dynamic p,
-        {double width = 480}) async {
+        {double width = 480,
+        DensityTokens density = DensityTokens.regular}) async {
       tester.view.physicalSize = Size(width, 760);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -57,6 +58,7 @@ void main() {
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
         size: Size(width, 760),
+        density: density,
       ));
       await tester.pump();
     }
@@ -76,8 +78,8 @@ void main() {
       expect(band(tester, 'project-search-row').height, projectSearchRowHeight,
           reason: '8 above the well, the well\'s 20, 6 below it');
       expect(band(tester, 'project-column-header').height,
-          projectColumnHeaderHeight,
-          reason: 'a secondary row\'s 18 with its hairline counted in');
+          projectColumnHeaderHeight(theme),
+          reason: 'a secondary row: 19 under Regular, hairline counted in');
       expect(band(tester, 'project-scroll-strip').height,
           projectScrollStripHeight);
       expect(band(tester, 'project-footer').height, projectFooterHeight,
@@ -85,6 +87,44 @@ void main() {
 
       final row = band(tester, 'project-row-${p.compId}');
       expect(row.height, projectRowHeight, reason: 'an outline row is 22');
+    });
+
+    /// 1b. **Compact takes the pixel back, and takes nothing else.** The only
+    /// band the setting moves in this panel is the column header, because it
+    /// is the only secondary row here; the item rows, the search row and the
+    /// bottom bar measure the same either way (K-454, §12A.6's two columns).
+    testWidgets('Compact slims the column header and nothing else',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, density: DensityTokens.compact);
+      await settleFrb(tester, minRounds: 6);
+
+      expect(band(tester, 'project-column-header').height, 18,
+          reason: 'Compact drops the hairline back inside the row');
+      expect(band(tester, 'project-row-${p.compId}').height, projectRowHeight,
+          reason: 'item rows are 22 under both densities');
+      expect(band(tester, 'project-search-row').height, projectSearchRowHeight,
+          reason: 'the search row is 34 under both densities');
+      expect(band(tester, 'project-footer').height, projectFooterHeight,
+          reason: 'the bottom bar is 20 under both densities');
+    });
+
+    /// 1c. **The search well takes `surface_2`.** It is the one well in the
+    /// app that sits a shade *lighter* than the panel rather than sunk into
+    /// it: it has a row to itself over `surface_1`, so it only has to be a
+    /// well, not a recess in a busy row (the mockup's own computed fill).
+    testWidgets('the search well rests on surface 2', (tester) async {
+      final p = withItems();
+      await mount(tester, p);
+      await settleFrb(tester, minRounds: 6);
+
+      final well = tester.widget<Container>(find
+          .descendant(
+            of: find.byKey(const ValueKey<String>('project-search')),
+            matching: find.byType(Container),
+          )
+          .first);
+      expect((well.decoration! as BoxDecoration).color, theme.surface2);
     });
 
     /// 2. **The preview card's poster frame is 96x54.**

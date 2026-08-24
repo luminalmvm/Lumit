@@ -865,7 +865,7 @@ class EffectParamRowFrb extends StatelessWidget {
         AngleDial(
           key: ValueKey<String>('fx-dial-$keyName'),
           // Row height, not the standalone 34: it is a grip beside a number.
-          size: fxRowHeight,
+          size: fxRowHeight(ThemeScope.of(context).theme),
           degrees: shown,
           step: step,
           enabled: enabled,
@@ -962,7 +962,7 @@ class EffectParamRowFrb extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           // The dropper: lift this colour off the picture instead of choosing
           // it (docs/07 §6.1).
           _DropperButton(
@@ -1152,7 +1152,7 @@ class EffectParamRowFrb extends StatelessWidget {
           Flexible(
             child: Text(
               engineLabel(p.label),
-              style: t.small,
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -1341,10 +1341,10 @@ class EffectPointRowFrb extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         field(xParam, sx),
-        const SizedBox(width: 4),
+        const SizedBox(width: 6),
         field(yParam, sy),
         if (pickPixels != null) ...[
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           _DropperButton(
             id: 'fx-$id-${xParam.id}',
             glyph: LumitIcons.pointPicker,

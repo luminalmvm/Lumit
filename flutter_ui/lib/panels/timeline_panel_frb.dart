@@ -5122,7 +5122,7 @@ class _Toolbar extends StatelessWidget {
         color: t.surface1,
         border: Border(bottom: BorderSide(color: t.hairline)),
       ),
-      padding: const EdgeInsets.only(left: 10, right: 6),
+      padding: const EdgeInsets.only(left: 10, right: 8),
       child: Row(
         children: [
           // The clock face and the frame count, both zero-based: frame 0 is
@@ -5172,19 +5172,21 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           // How many frames there are in all, after the frame the playhead is
-          // on: `f48 / 250`, as the mockup writes it (§12A.1). Quieter again
-          // than the frame counter — the count is context for the number
-          // beside it, not a second reading — and outside the listener,
-          // because a comp's length does not move as the playhead does.
+          // on: `f48 / 250`, as the mockup writes it (§12A.1). The mockup
+          // draws that whole phrase in one muted colour, so the count matches
+          // the frame counter rather than fading a step further. Outside the
+          // listener, because a comp's length does not move as the playhead
+          // does.
           Text(
             '/ ${model.durationFrames}',
-            style: t.mono.copyWith(fontSize: 10, color: t.textDisabled),
+            style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
           ),
           // The search well, stretched between the frame counter and the mode
-          // tabs (§12A.1) — the mockup's own 10px margin either side.
-          const SizedBox(width: 10),
+          // tabs (§12A.1) — at the row's own 2px gap, like everything else in
+          // it; the well's own inset is what keeps the text off its edge.
+          const SizedBox(width: 2),
           Expanded(child: LayerSearchFrb(onChanged: onSearch, width: 1e9)),
-          const SizedBox(width: 10),
+          const SizedBox(width: 2),
           // The two modes, at the far right of the row (§12A.1). Kicker
           // segments rather than icons: "Layers" and "Graph" are the names of
           // two shapes of the same panel, and a word says which one is in
@@ -5197,6 +5199,7 @@ class _Toolbar extends StatelessWidget {
             active: !graph,
             onPressed: graph ? onToggleGraph : () {},
           ),
+          const SizedBox(width: 2),
           _modeTab(
             context,
             // Keeps the key the old Graph toolbar button had, so the graph
@@ -5231,7 +5234,7 @@ class _Toolbar extends StatelessWidget {
         key: ValueKey<String>(keyName),
         small: true,
         frameless: !active,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
         onPressed: onPressed,
         child: Text(label.toUpperCase(), style: active ? t.kickerOn : t.kicker),
       ),
@@ -5446,7 +5449,9 @@ class _GutterScrollbar extends StatelessWidget {
                       ? const EdgeInsets.symmetric(horizontal: 3)
                       : const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: t.hairlineStrong,
+                    // `surface_4`, the mockup's own thumb value: a raised
+                    // block, not a rule. `hairline_strong` is for lines.
+                    color: t.surface4,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -5553,7 +5558,7 @@ class _ColumnHeader extends StatelessWidget {
         color: t.surface1,
         border: Border(bottom: BorderSide(color: t.hairline)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.only(left: 10, right: 8),
       child: Row(
         children: [
           for (var i = 0; i < order.length; i++) ...[
@@ -6105,7 +6110,7 @@ class _OutlineRowState extends State<_OutlineRow> {
           // table scrolled and the outline's rows read a hair taller than the
           // lanes beside them.
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(
           children: [
             // The cells come in the four column groups, in whatever order
@@ -6426,8 +6431,12 @@ class _OutlineRowState extends State<_OutlineRow> {
         height: _rowHeight,
         child: Align(
           alignment: Alignment.centerLeft,
-          child:
-              Text(info.name, style: t.body, overflow: TextOverflow.ellipsis),
+          // The chosen layer's name is the one thing on its row read at full
+          // strength — the mockup brightens the name, and only the name, on
+          // the selected row; every other row keeps `body`.
+          child: Text(info.name,
+              style: widget.selected ? t.bodyPrimary : t.body,
+              overflow: TextOverflow.ellipsis),
         ),
       ),
     );
@@ -7685,7 +7694,7 @@ class _ColumnToggles extends StatelessWidget {
     return Container(
       height: _laneBottomBarHeight,
       color: t.surface2,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       // Scrolls sideways when the outline is narrow — the same answer the
       // toolbar and the lane bar give; an overflow stripe is a layout fault.
       child: SingleChildScrollView(
@@ -7837,15 +7846,16 @@ class _LaneBottomBar extends StatelessWidget {
         child: HouseButton(
           key: ValueKey<String>(keyName),
           small: true,
-          frameless: true,
+          // The one in force wears the button's own `hairline_strong` idle
+          // edge; the rest are frameless. **No accent** — §3.1's accent list
+          // is closed and a lens or an ease is not on it, so which is in force
+          // reads from the frame and the brighter label, as the mode tabs do.
+          frameless: !on,
           // 18px bottom bar (K-451): one pixel of the button's own edge is
-          // all the room a 10px label leaves above and below it.
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          // all the room a 9px kicker leaves above and below it.
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           onPressed: onPressed,
-          child: Text(label,
-              style: TextStyle(
-                  color: on ? t.accent : t.textMuted,
-                  fontSize: t.small.fontSize)),
+          child: Text(label.toUpperCase(), style: on ? t.kickerOn : t.kicker),
         ),
       );
 
@@ -7857,7 +7867,7 @@ class _LaneBottomBar extends StatelessWidget {
       // A panel bottom bar, and so `surface_2` — the same value the panel
       // header wears at the other end of the panel (K-451).
       color: t.surface2,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       child: LayoutBuilder(
         builder: (context, constraints) {
           // The buttons scroll sideways when the panel is narrow — the same
@@ -7877,6 +7887,11 @@ class _LaneBottomBar extends StatelessWidget {
                       if (lens != null) ...[
                         // The selected keys' easing, one click each — the F9 family's
                         // buttons (docs/07 §5.3).
+                        //
+                        // Two gaps run through this bar: 2 between the chips
+                        // of one segmented run, 12 between one run and the
+                        // next, so the runs read as groups rather than as one
+                        // long strip of buttons.
                         _graphButton(t,
                             keyName: 'graph-interp-linear',
                             label: l10n.easeLinear,
@@ -7884,12 +7899,14 @@ class _LaneBottomBar extends StatelessWidget {
                             on: false,
                             onPressed: () => onInterp
                                 ?.call(const BridgeSideInterp.linear())),
+                        const SizedBox(width: 2),
                         _graphButton(t,
                             keyName: 'graph-interp-bezier',
                             label: l10n.easeBezier,
                             tip: l10n.tipEasyEase,
                             on: false,
                             onPressed: () => onInterp?.call(easyEase)),
+                        const SizedBox(width: 2),
                         _graphButton(t,
                             keyName: 'graph-interp-hold',
                             label: l10n.easeHold,
@@ -7908,7 +7925,8 @@ class _LaneBottomBar extends StatelessWidget {
                         // change the user cannot see in the view they drew it
                         // in. The one-click three above stay in both lenses: a
                         // side's interp means the same thing either way.
-                        if (lens == GraphLens.value)
+                        if (lens == GraphLens.value) ...[
+                          const SizedBox(width: 2),
                           Builder(
                             builder: (buttonContext) => _graphButton(t,
                                 keyName: 'graph-interp-easing',
@@ -7918,20 +7936,22 @@ class _LaneBottomBar extends StatelessWidget {
                                 onPressed: () =>
                                     onOpenEasing?.call(buttonContext)),
                           ),
-                        const SizedBox(width: 6),
+                        ],
+                        const SizedBox(width: 12),
                         _graphButton(t,
                             keyName: 'graph-lens-value',
                             label: l10n.clipboardValueColumn,
                             tip: l10n.tipValueGraph,
                             on: lens == GraphLens.value,
                             onPressed: () => onLens?.call(GraphLens.value)),
+                        const SizedBox(width: 2),
                         _graphButton(t,
                             keyName: 'graph-lens-speed',
                             label: l10n.graphSpeed,
                             tip: l10n.tipSpeedGraph,
                             on: lens == GraphLens.speed,
                             onPressed: () => onLens?.call(GraphLens.speed)),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 12),
                         _graphButton(t,
                             keyName: 'graph-autofit',
                             label: l10n.graphAutoFit,
@@ -7940,7 +7960,7 @@ class _LaneBottomBar extends StatelessWidget {
                                 : l10n.tipAutoFitOff,
                             on: autoFit,
                             onPressed: () => onToggleAutoFit?.call()),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 12),
                       ],
                       ...[
                         // The zoom, as a slider between a small landscape and
@@ -8346,12 +8366,15 @@ class _BarState extends State<_Bar> {
                         ),
                       ),
                       // The layer's name, on its bar (§6.1, §7.1): **Hanken at
-                      // 10**, the mockup's own size (K-451), quiet enough to
-                      // sit under the marks and the waveform and clear of the
+                      // 10**, the mockup's own size (K-451), set clear of the
                       // leading edge. It was mono at 11 — but a layer's name is
                       // something the *user* named, and §7.1 sets those in
                       // sentence-case Hanken; the mono row keeps the axis
                       // numbers and units, which are numbers.
+                      //
+                      // Full `text_primary`, no alpha: the mockup draws the
+                      // name opaque. Quieting it only made a name over a pale
+                      // label colour harder to read than the bar it sits on.
                       Positioned(
                         left: clipEdgeWidth + 4,
                         right: 2,
@@ -8364,10 +8387,7 @@ class _BarState extends State<_Bar> {
                               info.name,
                               key: ValueKey<String>(
                                   'tl-bar-name-${widget.entry.layer.internallayerId}'),
-                              style: t.small.copyWith(
-                                color: t.textPrimary
-                                    .withValues(alpha: clipNameAlpha),
-                              ),
+                              style: t.small.copyWith(color: t.textPrimary),
                               maxLines: 1,
                               overflow: TextOverflow.clip,
                               softWrap: false,

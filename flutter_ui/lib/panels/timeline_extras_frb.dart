@@ -342,7 +342,7 @@ class _CompTab extends StatelessWidget {
       onTap: onTap,
       onSecondaryTapUp: (d) => onMenu(d.globalPosition),
       child: Container(
-        padding: const EdgeInsets.only(left: 10, right: 4),
+        padding: const EdgeInsets.only(left: 10, right: 10),
         decoration: BoxDecoration(
           // Round fills the fronted tab with the accent (K-394, §12.1); Sharp
           // seats the fronted tab in the panel's own surface, so the tab and
@@ -350,20 +350,20 @@ class _CompTab extends StatelessWidget {
           color: dropping
               ? t.accent.withValues(alpha: 0.18)
               : (active ? (round ? t.accent : t.surface1) : null),
-          // **No accent tick** (§12A.1): the seated surface colour alone marks
-          // the open composition, exactly as the mockup draws it. The accent's
-          // "active tab tick" (§3.1) is the workspace tabs', not these.
+          // **No accent tick, and no seams** (§12A.1): the seated surface
+          // colour alone marks the open composition, exactly as the mockup
+          // draws it — it computes no border on any tab. The accent's "active
+          // tab tick" (§3.1) is the workspace tabs', not these, and the
+          // hairlines that used to rule each seam only turned the strip into a
+          // grid over a header that already reads as one row.
           //
-          // Sharp carries a hairline down each seam: the strip runs the full
-          // width of the panel header, and without a rule the inactive tabs run
-          // together into one grey band. The fronted tab is ruled on both
-          // sides, so the seated block reads as a block.
+          // The sides are still *reserved*, transparent: a tab that lost its
+          // border would be two pixels narrower than the same tab in Round,
+          // and every tab would shift the moment the shape changed.
           border: round
               ? Border.all(color: t.accent.withValues(alpha: 0), width: 2)
-              : Border(
-                  left: BorderSide(
-                      color: active ? t.hairline : const Color(0x00000000)),
-                  right: BorderSide(color: t.hairline),
+              : Border.symmetric(
+                  vertical: BorderSide(color: t.hairline.withValues(alpha: 0)),
                 ),
           borderRadius:
               round ? BorderRadius.circular(t.tokens.controlRadius) : null,
@@ -1894,10 +1894,6 @@ const double clipFillSelectedAlpha = 0.62;
 /// The solid mark at a bar's or a clip's start, in the label's full colour:
 /// what makes a desaturated fill still land with a snap.
 const double clipEdgeWidth = 2;
-
-/// The layer name on its own bar: `text_primary`, quieted so it sits under
-/// the bar's marks and any waveform rather than over them.
-const double clipNameAlpha = 0.8;
 
 /// A ruler label. Seconds and minutes are zero-padded (`00s 02s`, `01:05s`) so
 /// a row of labels keeps one rhythm; hours are not (`1:00:00s`) — the owner's
