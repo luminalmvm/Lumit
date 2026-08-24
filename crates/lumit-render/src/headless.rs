@@ -923,18 +923,18 @@ impl HeadlessRenderer {
         frame: u64,
         quality: Quality,
     ) -> Result<(wgpu::Texture, u32, u32), String> {
-        self.preview_display_texture_fmt(doc, comp_id, frame, quality, false)
+        self.preview_display_texture_fmt(doc, comp_id, frame, quality, Present::Rgba8)
     }
 
-    /// [`Self::preview_display_texture`] with the output channel order chosen:
-    /// `bgra` is for the shared-texture Viewer only (see `render_to_shared`).
+    /// [`Self::preview_display_texture`] with the display target chosen — see
+    /// [`Present`].
     fn preview_display_texture_fmt(
         &mut self,
         doc: &Arc<Document>,
         comp_id: Uuid,
         frame: u64,
         quality: Quality,
-        bgra: bool,
+        present: Present,
     ) -> Result<(wgpu::Texture, u32, u32), String> {
         let comp = doc
             .comp(comp_id)
@@ -1092,10 +1092,17 @@ impl HeadlessRenderer {
             }
             // The one place the Viewer's own way of looking is applied: on the
             // linear composite, on its way to display bytes (docs/06 §3.3).
-            Ok(if bgra {
-                parts.colour.display_bgra(&self.gpu, &linear, self.view)
-            } else {
-                parts.colour.display(&self.gpu, &linear, self.view)
+            Ok(match present {
+                Present::Bgra8 => parts.colour.display_bgra(&self.gpu, &linear, self.view),
+                Present::Rgba8 => parts.colour.display(&self.gpu, &linear, self.view),
+                // The deep pass resamples on its way out where the eight-bit
+                // caller would have resampled afterwards (`render_preview`'s
+                // `display_scaled`), so a coarse tier still delivers the comp's
+                // own raster and only one pass ever touches these pixels.
+                Present::Rgba16 => {
+                    let size = ((linear.width(), linear.height()) != (cw, ch)).then_some((cw, ch));
+                    parts.colour.display16(&self.gpu, &linear, size, self.view)
+                }
             })
         };
         // Return the engines to the pool even on error, so one failed frame does
@@ -1184,6 +1191,31 @@ impl HeadlessRenderer {
             .colour
             .readback8(&self.gpu, &reduced)
             .map(|rgba| (rgba, sw, sh))
+            .map_err(|e| format!("headless preview: {e}"))
+    }
+
+    /// [`Self::render_preview`] at sixteen bits a channel: the same walk, the
+    /// same colour, read back as `0..=65535` codes instead of bytes — what a
+    /// sixteen-bit export packs (docs/06 §7.4).
+    ///
+    /// No `scale`: the only caller is the export, which always wants the comp's
+    /// own raster and does its own crop and letterbox afterwards.
+    pub fn render_preview16(
+        &mut self,
+        doc: &Arc<Document>,
+        comp_id: Uuid,
+        frame: u64,
+        quality: Quality,
+    ) -> Result<(Vec<u16>, u32, u32), String> {
+        let (shown, cw, ch) =
+            self.preview_display_texture_fmt(doc, comp_id, frame, quality, Present::Rgba16)?;
+        let Some(parts) = self.parts.as_ref() else {
+            return Err("headless preview: renderer is unavailable after an earlier fault".into());
+        };
+        parts
+            .colour
+            .readback16(&self.gpu, &shown)
+            .map(|px| (px, cw, ch))
             .map_err(|e| format!("headless preview: {e}"))
     }
 
@@ -1446,8 +1478,13 @@ impl HeadlessRenderer {
         // content, which no later edit or undo can clear (K-178). Counted, so
         // only the frames it actually happened to are dropped (K-431).
         let subs_before = self.flare_substitutions();
-        let (texture, _, _) =
-            self.preview_display_texture_fmt(doc, comp_id, frame, quality, bgra)?;
+        let (texture, _, _) = self.preview_display_texture_fmt(
+            doc,
+            comp_id,
+            frame,
+            quality,
+            if bgra { Present::Bgra8 } else { Present::Rgba8 },
+        )?;
         let key = key.filter(|_| self.flare_substitutions() == subs_before);
         let texture = std::sync::Arc::new(texture);
         if let Some(key) = key {
@@ -2259,6 +2296,21 @@ impl AudioJobsBuilder {
         self.has_audio.insert(item, has);
         has
     }
+}
+
+/// Which display target a composite is presented into: the Viewer's own
+/// RGBA8, the shared-texture Viewer's BGRA8 (ANGLE matches share handles
+/// against B8G8R8A8 configs and declines silently otherwise), or the
+/// sixteen-bit target an export at that depth reads back.
+///
+/// Composite, colour and view are identical in all three — only the bucket the
+/// finished frame lands in differs, which is what keeps preview and export the
+/// same picture (K-031).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Present {
+    Rgba8,
+    Bgra8,
+    Rgba16,
 }
 
 /// The scale the compositor should composite at for `quality`: the Viewer's

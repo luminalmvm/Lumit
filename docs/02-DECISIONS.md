@@ -13366,3 +13366,41 @@ is decided, changing buffer strides and nothing in the consumption or evaluation
 contracts. The layout is otherwise confirmed as particulate.md §4 finalised it,
 `life` buffer and id-is-birth-index included.
 
+## K-496 — Sixteen-bit export is sixteen real bits: a deep display target, and the pack stage stops widening
+
+**DECIDED 2026-08-25**, completing K-479's one recorded ceiling. A 16-bit export used to
+take the 8-bit display read-back and multiply every sample by 257 — arithmetically exact
+and worth nothing, because the fineness had already been thrown away by the byte-wide
+display target. The float pipeline's precision now reaches the file.
+
+**The export has a display target of its own.** `ColourEngine::display16` runs the same
+display pass into a frame-sized 16-bit target and `readback16` brings it back as
+`0..=65535` codes; `HeadlessRenderer::render_preview16` is the export's entry to it, and
+`export::run` takes that branch when `BitDepth::Sixteen`. Nothing about the walk, the
+colour or the view differs from the 8-bit path — same composite, same neutral
+`DisplayParams` — so K-031's preview-equals-export identity is untouched at 8 bits and the
+16-bit file is the same picture, more finely written.
+
+**The depth is a type, not a setting.** `pack_frame` is generic over the channel width:
+`&[u8]` packs an eight-bit file, `&[u16]` a sixteen-bit one. There is no longer a `depth`
+argument, and therefore nowhere for a signal that was never deep to be stretched — the
+class of bug the ×257 path was. `Crop::apply` and `letterbox_resize` are generic the same
+way, so both depths crop and letterbox through one implementation with one rounding rule
+(`lumit_core::pixels::Channel`), rather than two that can drift.
+
+**The deep target is `Rgba16Float`, and the sRGB curve is spelled in the shader.** There is
+no sixteen-bit sRGB texture format for the hardware to encode into, so the choice was a
+hand-written transfer in the display shader against an optional `Rgba16Unorm` behind
+`TEXTURE_FORMAT_16BIT_NORM` with a fallback for adapters that lack it. The float target
+needs no feature, no fallback and no second code path, and it carries the *working
+format's own* precision — which is the honest ceiling, since that is what the compositor
+computed: about eleven bits in the top octave and finer below, against the eight the
+widened path could ever hold. The duplicated curve is the real cost, so it is guarded:
+`the_deep_display_agrees_with_the_eight_bit_one` puts one frame through both targets and
+holds them to a code of each other. `Rgba16Unorm` is the recorded upgrade if banding ever
+appears in a delivered gradient.
+
+**The cost is stated.** One extra frame-sized target and one read-back buffer, 8 bytes a
+pixel each — 33 MB the pair at 1080p, 133 MB at 4K — transient, during a sixteen-bit
+export only. An eight-bit export allocates nothing new, and no cache, preview or playback
+path widens.

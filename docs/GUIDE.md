@@ -8695,6 +8695,23 @@ Files want other shapes, and the small piece of code that converts is the **pack
 - **8-bit or 16-bit** is how finely each of those numbers is written. Only the still formats
   can carry sixteen; every video codec Lumit writes today is eight.
 
+**Why sixteen bits needed a second target.** The compositor works in floating-point numbers,
+which are far finer than either file depth — but the last step before a frame leaves the
+graphics card puts it into a *bucket*, and the ordinary bucket is the one the screen uses:
+one byte a channel, 256 possible values. For a while a "16-bit" export took that bucket and
+stretched it, writing each of those 256 values as one of 65,536 — arithmetically tidy, and
+completely pointless, because the fineness had already been thrown away. So the export now
+has a **bucket of its own**, twice as wide, and asks the graphics card for the frame in that
+one instead; the file finally gets what the compositor actually computed. A long, shallow
+sky gradient is where you see the difference: in eight bits it comes out as visible bands,
+and no amount of stretching afterwards can put back the values between them.
+
+One wrinkle worth knowing, because it explains an oddity in the code: the graphics card can
+apply the screen's brightness curve for free when it writes into the ordinary byte bucket,
+and there is no wide bucket it will do that for. So for the wide one the curve is written out
+by hand in the shader — the one place in Lumit where that sum is spelled twice — and a test
+puts the same frame through both buckets and insists they agree, so the two cannot drift.
+
 **Crop, and the region of interest.** A crop takes pixels off each edge — top, left, bottom,
 right — counted in the composition's own pixels, and it decides the size of the file unless
 you named a different frame. The **region of interest** is the rectangle you can sweep on the

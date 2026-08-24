@@ -74,6 +74,36 @@ fn tone_map_rgb(c: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_copy(in: VsOut) -> @location(0) vec4<f32> {
+    return shade(in);
+}
+
+/// The display pass for a SIXTEEN-bit export target.
+//
+// The trick at the top of this file — let the texture format do the gamma —
+// has one gap: there is no sixteen-bit sRGB format for the hardware to encode
+// into. So the deep display target is Rgba16Float and this applies the same
+// curve the hardware applies on an Rgba8UnormSrgb write, in the one place it
+// can be compared against it (`the_deep_display_agrees_with_the_eight_bit_one`
+// does exactly that, to within a code). Alpha is not encoded, matching the
+// hardware, and the clamp matches what a unorm write does to a value past
+// full scale.
+@fragment
+fn fs_display16(in: VsOut) -> @location(0) vec4<f32> {
+    let s = shade(in);
+    return vec4<f32>(srgb_encode(s.r), srgb_encode(s.g), srgb_encode(s.b), s.a);
+}
+
+/// Linear → sRGB, the IEC 61966-2-1 transfer the hardware writes.
+fn srgb_encode(c: f32) -> f32 {
+    let v = clamp(c, 0.0, 1.0);
+    if (v <= 0.0031308) {
+        return v * 12.92;
+    }
+    return 1.055 * pow(v, 1.0 / 2.4) - 0.055;
+}
+
+/// What both fragment entry points draw, before any encoding.
+fn shade(in: VsOut) -> vec4<f32> {
     let s = textureSample(src, samp, in.uv);
     // The neutral point, bit-exact: the linearise pass and every export take
     // this branch, so they are the copy they always were.

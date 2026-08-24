@@ -542,9 +542,13 @@ impl Crop {
     /// A buffer too small for the frame it claims to be comes back unchanged,
     /// which is the calm answer: no panic, and a caller bug shows as a
     /// full-size frame rather than a crash mid-export.
-    pub fn apply(self, frame: &[u8], w: u32, h: u32, bytes_per_px: usize) -> Vec<u8> {
+    ///
+    /// `per_px` counts *elements* of `T` in a pixel — four bytes for an
+    /// eight-bit frame, four codes for a sixteen-bit one — so one row copy
+    /// serves both depths.
+    pub fn apply<T: Copy>(self, frame: &[T], w: u32, h: u32, per_px: usize) -> Vec<T> {
         let (x, y, out_w, out_h) = self.window(w, h);
-        let src_row = (w as usize).saturating_mul(bytes_per_px);
+        let src_row = (w as usize).saturating_mul(per_px);
         // Nothing to crop, an empty frame, or a buffer smaller than the frame
         // it claims to be: hand it back whole. No panics in engine crates
         // (docs/14 §4), and a caller bug must show as a full-size frame rather
@@ -552,8 +556,8 @@ impl Crop {
         if self.is_none() || w == 0 || h == 0 || frame.len() < src_row.saturating_mul(h as usize) {
             return frame.to_vec();
         }
-        let dst_row = (out_w as usize) * bytes_per_px;
-        let skip = (x as usize) * bytes_per_px;
+        let dst_row = (out_w as usize) * per_px;
+        let skip = (x as usize) * per_px;
         let mut out = Vec::with_capacity(dst_row * out_h as usize);
         for row in 0..out_h as usize {
             let start = (y as usize + row) * src_row + skip;
@@ -785,50 +789,46 @@ pub fn play_done_sound() -> bool {
 /// The pack stage: the finished display frame turned into the exact bytes the
 /// encoder is fed (docs/06 §7.4).
 ///
-/// In plain terms: the compositor's answer is one 8-bit RGBA pixel per pixel,
-/// premultiplied and already display-encoded. What a file wants may be
-/// narrower (no alpha), differently related (straight alpha) or wider (16 bits
-/// a channel). This is where that conversion happens, on the CPU, once per
-/// frame, and it is pure — which is why it is the one part of colour handling
-/// that can be tested without a graphics card.
+/// In plain terms: the compositor's answer is one premultiplied,
+/// display-encoded RGBA pixel per pixel, at whichever width the export asked
+/// the renderer for — eight bits a channel or sixteen. What a file wants may be
+/// narrower (no alpha) or differently related (straight alpha). This is where
+/// that conversion happens, on the processor, once per frame, and it is pure —
+/// which is why it is the one part of colour handling that can be tested
+/// without a graphics card.
 ///
-// ponytail: the input is the 8-bit display read-back, so a 16-bit file today
-// carries an exactly-widened 8-bit signal (v × 257 — every 8-bit value maps to
-// its own 16-bit one and back without loss, so nothing is invented). The extra
-// bits start meaning something the moment the display read-back widens; the
-// upgrade path is a 16-bit display target in lumit-gpu and a `readback16`
-// beside `readback8`, and nothing else here changes. docs/TODO.md carries it.
-pub fn pack_frame(rgba8: &[u8], channels: Channels, alpha: AlphaMode, depth: BitDepth) -> Vec<u8> {
+/// The depth is the *input type*, not a setting: `&[u8]` packs an eight-bit
+/// file and `&[u16]` a sixteen-bit one, each channel little-endian (the byte
+/// order the encoder seam expects). There is nowhere left to widen a signal
+/// that was never deep, which is the point of it being typed.
+pub fn pack_frame<C: lumit_core::pixels::Channel>(
+    px: &[C],
+    channels: Channels,
+    alpha: AlphaMode,
+) -> Vec<u8> {
     let straight = channels == Channels::RgbAlpha && alpha == AlphaMode::Straight;
     let opaque = channels == Channels::Rgb;
-    let mut out = Vec::with_capacity(rgba8.len() * depth.bytes_per_channel());
-    for px in rgba8.chunks_exact(4) {
-        let a = px[3];
-        let mut rgba = [px[0], px[1], px[2], a];
+    let mut out = Vec::with_capacity(px.len() * C::BYTES);
+    for chunk in px.chunks_exact(4) {
+        let a = chunk[3].to_f64();
+        let mut rgba = [chunk[0], chunk[1], chunk[2], chunk[3]];
         if opaque {
-            rgba[3] = 255;
-        } else if straight && a > 0 && a < 255 {
+            rgba[3] = C::FULL;
+        } else if straight && a > 0.0 && a < C::SCALE {
             // Un-multiply: colour back to full strength wherever there is any
             // coverage. Rounded, and clamped because a premultiplied pixel
             // whose colour exceeds its own coverage (an additive blend can
             // make one) would divide past full scale.
             for c in &mut rgba[..3] {
-                *c = ((f32::from(*c) * 255.0 / f32::from(a)).round()).clamp(0.0, 255.0) as u8;
+                *c = C::from_f64(c.to_f64() * C::SCALE / a);
             }
-        } else if straight && a == 0 {
+        } else if straight && a == 0.0 {
             // No coverage: no colour to recover. Zero rather than a division
             // that has no answer.
-            rgba[..3].fill(0);
+            rgba[..3].fill(C::from_f64(0.0));
         }
-        match depth {
-            BitDepth::Eight => out.extend_from_slice(&rgba),
-            // × 257 maps 0→0 and 255→65535 exactly, so the widening is
-            // reversible and adds nothing that was not there.
-            BitDepth::Sixteen => {
-                for c in rgba {
-                    out.extend_from_slice(&(u16::from(c) * 257).to_le_bytes());
-                }
-            }
+        for c in rgba {
+            c.write_le(&mut out);
         }
     }
     out
@@ -1328,18 +1328,36 @@ fn run(
         // (the rounding is then of an integer), nearest otherwise.
         let src = first + ((frame_n as f64) * fps / out_fps).round() as usize;
         let src = src.min(end.saturating_sub(1));
-        let (rgba, _, _) =
-            renderer.render_preview(doc, comp_id, src as u64, spec.render.quality, 1.0)?;
         // Crop in composition pixels first, then letterbox into the delivery
         // frame when the size was changed, then pack to what the file carries.
-        let rgba = spec.crop.apply(&rgba, comp.width, comp.height, 4);
+        // The two arms differ only in how wide a channel is: a sixteen-bit
+        // export reads the composite back at sixteen bits and stays there, so
+        // the extra width is the pipeline's own rather than a stretched byte.
         let (tw, th) = sink.size();
-        let rgba = if resize {
-            lumit_core::pixels::letterbox_resize(&rgba, crop_w, crop_h, tw, th)
-        } else {
-            rgba
+        let rgba = match spec.depth {
+            BitDepth::Eight => {
+                let (px, _, _) =
+                    renderer.render_preview(doc, comp_id, src as u64, spec.render.quality, 1.0)?;
+                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
+                let px = if resize {
+                    lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th)
+                } else {
+                    px
+                };
+                pack_frame(&px, spec.channels, spec.alpha)
+            }
+            BitDepth::Sixteen => {
+                let (px, _, _) =
+                    renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
+                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
+                let px = if resize {
+                    lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th)
+                } else {
+                    px
+                };
+                pack_frame(&px, spec.channels, spec.alpha)
+            }
         };
-        let rgba = pack_frame(&rgba, spec.channels, spec.alpha, spec.depth);
         if let Err(e) = sink.write_rgba(&rgba) {
             // A folder of stills that failed half-way is tidied rather than
             // left as a trap that looks like a finished export.
@@ -1628,6 +1646,32 @@ mod tests {
             motion_blur: lumit_core::model::MotionBlur::default(),
             extra: serde_json::Map::new(),
         }));
+        (Arc::new(doc), comp_id)
+    }
+
+    /// [`solid_doc`] with a top-to-bottom Gradient over it: a smooth ramp in
+    /// scene-linear float, which is the only kind of picture that can show
+    /// whether a sixteen-bit export is really sixteen bits.
+    fn gradient_doc(w: u32, h: u32) -> (Arc<Document>, Uuid) {
+        let (doc, comp_id) = solid_doc(w, h);
+        let mut doc = Document::clone(&doc);
+        let mut fx = lumit_core::fx::instantiate("gradient").expect("gradient is a built-in");
+        for p in &mut fx.params {
+            let set = match p.id.as_str() {
+                // White at the top row to black at the bottom, straight down.
+                "start_x" | "start_y" | "end_x" => 0.0,
+                "end_y" => f64::from(h),
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(set));
+        }
+        for item in &mut doc.items {
+            if let ProjectItem::Composition(comp) = item {
+                if comp.id == comp_id {
+                    comp.layers[0].effects.push(fx.clone());
+                }
+            }
+        }
         (Arc::new(doc), comp_id)
     }
 
@@ -2013,8 +2057,8 @@ mod tests {
         assert_eq!(Crop::NONE.apply(&frame, 4, 3, 1), frame);
         assert_eq!(one_off_each_side.apply(&[1, 2, 3], 4, 3, 1), vec![1, 2, 3]);
         // Regression: a zero-sized frame used to index past an empty buffer.
-        assert!(one_off_each_side.apply(&[], 0, 0, 4).is_empty());
-        assert!(one_off_each_side.apply(&[], 4, 0, 4).is_empty());
+        assert!(one_off_each_side.apply::<u8>(&[], 0, 0, 4).is_empty());
+        assert!(one_off_each_side.apply::<u8>(&[], 4, 0, 4).is_empty());
     }
 
     /// The region of interest crosses as fractions (K-362) and becomes pixel
@@ -2057,38 +2101,23 @@ mod tests {
         );
     }
 
-    /// The pack stage: what each channel/alpha/depth choice does to the
-    /// finished pixels, on the CPU, without a graphics card in sight.
+    /// The pack stage: what each channel/alpha choice does to the finished
+    /// pixels, on the CPU, without a graphics card in sight.
     #[test]
     fn the_pack_stage_writes_what_each_choice_asks_for() {
         // One half-covered premultiplied pixel and one opaque one.
         let src = [100u8, 50, 0, 128, 10, 20, 30, 255];
 
         // RGB: alpha forced opaque, colour untouched.
-        let rgb = pack_frame(
-            &src,
-            Channels::Rgb,
-            AlphaMode::Premultiplied,
-            BitDepth::Eight,
-        );
+        let rgb = pack_frame(&src, Channels::Rgb, AlphaMode::Premultiplied);
         assert_eq!(rgb, [100, 50, 0, 255, 10, 20, 30, 255]);
 
         // Premultiplied RGBA: exactly what the compositor produced.
-        let pre = pack_frame(
-            &src,
-            Channels::RgbAlpha,
-            AlphaMode::Premultiplied,
-            BitDepth::Eight,
-        );
+        let pre = pack_frame(&src, Channels::RgbAlpha, AlphaMode::Premultiplied);
         assert_eq!(pre, src);
 
         // Straight RGBA: colour divided back up by its coverage.
-        let straight = pack_frame(
-            &src,
-            Channels::RgbAlpha,
-            AlphaMode::Straight,
-            BitDepth::Eight,
-        );
+        let straight = pack_frame(&src, Channels::RgbAlpha, AlphaMode::Straight);
         assert_eq!(straight[3], 128, "coverage itself is unchanged");
         assert_eq!(straight[0], 199, "100 / (128/255) rounds to 199");
         assert_eq!(straight[1], 100);
@@ -2097,32 +2126,38 @@ mod tests {
         // A colour beyond its own coverage clamps rather than overflowing,
         // and zero coverage has no colour to recover.
         let odd = [200u8, 0, 0, 100, 9, 9, 9, 0];
-        let straight = pack_frame(
-            &odd,
-            Channels::RgbAlpha,
-            AlphaMode::Straight,
-            BitDepth::Eight,
-        );
+        let straight = pack_frame(&odd, Channels::RgbAlpha, AlphaMode::Straight);
         assert_eq!(straight[0], 255);
         assert_eq!(&straight[4..], &[0, 0, 0, 0]);
 
-        // Sixteen bits: × 257, little-endian, exactly reversible.
-        let wide = pack_frame(
-            &src,
-            Channels::RgbAlpha,
-            AlphaMode::Premultiplied,
-            BitDepth::Sixteen,
-        );
-        assert_eq!(wide.len(), src.len() * 2);
+        // Sixteen bits: the same rules on sixteen-bit input, written
+        // little-endian and NOT widened from anything — the codes the deep
+        // read-back gave are the codes the file gets.
+        let deep = [40_000u16, 500, 0, 32_768, 1, 2, 3, 65_535];
+        let wide = pack_frame(&deep, Channels::RgbAlpha, AlphaMode::Premultiplied);
+        assert_eq!(wide.len(), deep.len() * 2);
         let samples: Vec<u16> = wide
             .chunks_exact(2)
             .map(|b| u16::from_le_bytes([b[0], b[1]]))
             .collect();
-        assert_eq!(samples[0], 100 * 257);
-        assert_eq!(samples[7], 65_535, "255 widens to full scale");
+        assert_eq!(samples, deep, "premultiplied sixteen-bit is a copy");
+
+        // Straight alpha at sixteen bits divides by sixteen-bit full scale,
+        // and a value past its own coverage still clamps.
+        let straight16 = pack_frame(&deep, Channels::RgbAlpha, AlphaMode::Straight);
+        let first: Vec<u16> = straight16[..8]
+            .chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect();
+        assert_eq!(first[0], 65_535, "40000 over half coverage clamps to full");
+        assert_eq!(first[1], 1_000, "500 over half coverage doubles");
+        assert_eq!(first[3], 32_768, "coverage itself is unchanged");
+        // A sixteen-bit frame carries values eight bits cannot hold at all:
+        // the odd codes here survive, where the old widened path could only
+        // ever have written multiples of 257.
         assert!(
-            samples.iter().zip(src).all(|(w, n)| (w / 257) as u8 == n),
-            "the widening is reversible: nothing is invented"
+            samples.iter().any(|v| v % 257 != 0),
+            "nothing here is a stretched byte"
         );
     }
 
@@ -2540,6 +2575,56 @@ mod tests {
             let video = probe.video.expect("frame {n} reads back");
             assert_eq!((video.width, video.height), (32, 16));
         }
+    }
+
+    /// A smooth float gradient exported at sixteen bits carries **more than
+    /// 256 distinct values a channel** — the assertion that fails on the old
+    /// widened path, where every value was a multiple of 257 and there were
+    /// never more than 256 of them (K-479's recorded ceiling).
+    ///
+    /// These are the two calls `run`'s frame loop makes at that depth, in that
+    /// order, so the bytes counted here are the bytes the file gets; the file
+    /// itself is proven by `a_sixteen_bit_still_export_runs_end_to_end`.
+    #[test]
+    fn a_sixteen_bit_export_carries_more_than_eight_bits_of_a_gradient() {
+        let (doc, comp_id) = gradient_doc(512, 512);
+        let mut renderer = match crate::headless::HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let quality = crate::plan::Quality::default();
+        let (deep, w, h) = renderer
+            .render_preview16(&doc, comp_id, 0, quality)
+            .expect("the deep read-back runs");
+        assert_eq!((w, h), (512, 512));
+        let bytes = pack_frame(&deep, Channels::RgbAlpha, AlphaMode::Premultiplied);
+        assert_eq!(bytes.len(), deep.len() * 2, "two bytes a channel");
+        let reds: Vec<u16> = bytes
+            .chunks_exact(8)
+            .map(|px| u16::from_le_bytes([px[0], px[1]]))
+            .collect();
+        let distinct: std::collections::BTreeSet<u16> = reds.iter().copied().collect();
+        assert!(
+            distinct.len() > 256,
+            "a sixteen-bit gradient must hold more than eight bits' worth: {} values",
+            distinct.len()
+        );
+        assert!(
+            reds.iter().any(|v| v % 257 != 0),
+            "values no widened byte could produce"
+        );
+
+        // The same frame at eight bits cannot, by construction — which is why
+        // widening it was a ceiling rather than an implementation.
+        let (shallow, _, _) = renderer
+            .render_preview(&doc, comp_id, 0, quality, 1.0)
+            .expect("the eight-bit read-back runs");
+        let shallow: std::collections::BTreeSet<u8> =
+            shallow.chunks_exact(4).map(|px| px[0]).collect();
+        assert!(shallow.len() <= 256);
     }
 
     /// Metadata reaches the file an export writes, not just the encoder that

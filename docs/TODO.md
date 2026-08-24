@@ -558,11 +558,6 @@ disk cache, effects, solo switches) and the *when done* hook are all on
 the dialog's one scrolling page, with a per-format capability table refusing what a format
 cannot carry. What is left:
 
-- **Wider than eight bits, honestly.** The pack stage writes 16-bit stills, but its input is
-  the 8-bit display read-back, so today's 16-bit file carries an exactly-widened 8-bit
-  signal. Making the extra bits mean something wants a 16-bit display target in lumit-gpu
-  and a `readback16` beside `readback8`; nothing in the export path changes when it lands.
-  Marked `ponytail:` at `pack_frame`.
 - **The *Still* output type is withdrawn** (K-485): a still is an image sequence of one
   frame, which the span already says, so the fourth chip the drawing offered is gone rather
   than pending. What is genuinely missing is only the *naming* — a one-frame sequence is

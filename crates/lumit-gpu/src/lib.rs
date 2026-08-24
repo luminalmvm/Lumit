@@ -661,6 +661,11 @@ pub struct ColourEngine {
     /// against its own B8G8R8A8 configs. Same shader, same hardware sRGB
     /// encode; only the channel order of the render target differs.
     display_bgra: wgpu::RenderPipeline,
+    /// The display pass again, targeting [`DEEP_DISPLAY_FORMAT`] — the export's
+    /// sixteen-bit route. Its shader does the sRGB encode by hand because no
+    /// sixteen-bit sRGB format exists for the hardware to do it (see
+    /// `colour.wgsl`); everything else about the pass is the same.
+    display16: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     linear_sampler: wgpu::Sampler,
@@ -762,6 +767,20 @@ struct ViewParamsRaw {
 pub const WORKING_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// Source/display byte format: sRGB-encoded, hardware-converted at the edges.
 pub const SRGB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+/// The display target a sixteen-bit export reads back from
+/// ([`ColourEngine::display16`]). Display-ENCODED values in a float format —
+/// the one place in the pipeline where those two words sit together, and only
+/// because there is no `Rgba16UnormSrgb` to write instead.
+///
+// ponytail: fp16 holds an encoded value to about eleven bits in the top
+// octave (its step near 1.0 is 1/2048, which is 32 sixteen-bit codes), so a
+// sixteen-bit file carries the working format's own precision rather than a
+// full sixteen bits of it — eight times finer than the widened eight-bit path
+// it replaces, and far finer below the highlights. The upgrade, if banding
+// ever appears in a delivered gradient, is `Rgba16Unorm` behind the optional
+// `TEXTURE_FORMAT_16BIT_NORM` feature, with this as the fallback for adapters
+// that lack it.
+pub const DEEP_DISPLAY_FORMAT: wgpu::TextureFormat = WORKING_FORMAT;
 
 /// A read-back in flight: the copy is already on the graphics card's queue and
 /// the buffer is being mapped, with nobody waiting. Started by
@@ -883,7 +902,7 @@ impl ColourEngine {
                 bind_group_layouts: &[&layout],
                 push_constant_ranges: &[],
             });
-        let make = |target: wgpu::TextureFormat, label: &str| {
+        let make = |target: wgpu::TextureFormat, label: &str, entry: &str| {
             ctx.device
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some(label),
@@ -896,7 +915,7 @@ impl ColourEngine {
                     },
                     fragment: Some(wgpu::FragmentState {
                         module: &shader,
-                        entry_point: Some("fs_copy"),
+                        entry_point: Some(entry),
                         targets: &[Some(target.into())],
                         compilation_options: Default::default(),
                     }),
@@ -923,9 +942,14 @@ impl ColourEngine {
             ..Default::default()
         });
         Self {
-            linearise: make(WORKING_FORMAT, "linearise"),
-            display: make(SRGB_FORMAT, "display"),
-            display_bgra: make(wgpu::TextureFormat::Bgra8UnormSrgb, "display-bgra"),
+            linearise: make(WORKING_FORMAT, "linearise", "fs_copy"),
+            display: make(SRGB_FORMAT, "display", "fs_copy"),
+            display_bgra: make(
+                wgpu::TextureFormat::Bgra8UnormSrgb,
+                "display-bgra",
+                "fs_copy",
+            ),
+            display16: make(DEEP_DISPLAY_FORMAT, "display16", "fs_display16"),
             layout,
             sampler,
             linear_sampler,
@@ -1165,6 +1189,94 @@ impl ColourEngine {
             "display-scaled",
             view,
         )
+    }
+
+    /// Linear working texture → display-encoded **sixteen-bit** texture, for a
+    /// sixteen-bit export ([`Self::readback16`] takes it from here).
+    ///
+    /// In plain terms: the same pass [`Self::display`] runs, ending in a wider
+    /// bucket. The eight-bit display target rounds every channel to one of 256
+    /// values before anything can read it, so a file asking for sixteen bits
+    /// could only ever be handed those 256 values stretched out; this keeps the
+    /// float pipeline's own precision as far as the file.
+    ///
+    /// `size` resamples on the way, exactly as [`Self::display_scaled`] does —
+    /// the export composites at the comp's raster and may deliver another.
+    pub fn display16(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        size: Option<(u32, u32)>,
+        view: DisplayParams,
+    ) -> wgpu::Texture {
+        self.pass_sized(
+            ctx,
+            &self.display16,
+            src,
+            size,
+            DEEP_DISPLAY_FORMAT,
+            wgpu::TextureUsages::COPY_SRC,
+            "display16",
+            view,
+        )
+    }
+
+    /// Read a [`Self::display16`] texture back as tight RGBA16 codes — four
+    /// per pixel, `0..=65535`, which is what the export's pack stage packs.
+    ///
+    /// The texture holds half floats, so this quantises: one rounding, here,
+    /// rather than one on the card and another later.
+    pub fn readback16(&self, ctx: &GpuContext, tex: &wgpu::Texture) -> Result<Vec<u16>, GpuError> {
+        let size = tex.size();
+        let row = size.width * 8;
+        let padded =
+            row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("readback16"),
+            size: u64::from(padded) * u64::from(size.height),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        // Hand over anything the frame batch is still holding: what is read
+        // below may have been recorded into it (a no-op outside a batch).
+        ctx.flush();
+        let mut encoder = ctx.device.create_command_encoder(&Default::default());
+        encoder.copy_texture_to_buffer(
+            tex.as_image_copy(),
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded),
+                    rows_per_image: Some(size.height),
+                },
+            },
+            size,
+        );
+        ctx.submit([encoder.finish()]);
+
+        let slice = buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        ctx.device.poll(wgpu::Maintain::Wait);
+        rx.recv()
+            .map_err(|e| GpuError::Readback(e.to_string()))?
+            .map_err(|e| GpuError::Readback(e.to_string()))?;
+
+        let data = slice.get_mapped_range();
+        let mut out = Vec::with_capacity((size.width * size.height * 4) as usize);
+        for r in 0..size.height {
+            let start = (r * padded) as usize;
+            for texel in data[start..start + row as usize].chunks_exact(2) {
+                let v = crate::fx::f16_to_f32(u16::from_le_bytes([texel[0], texel[1]]));
+                out.push((v.clamp(0.0, 1.0) * 65_535.0).round() as u16);
+            }
+        }
+        drop(data);
+        buffer.unmap();
+        Ok(out)
     }
 
     /// Upload display-encoded bytes back into a display texture — the way UP the
@@ -1556,6 +1668,91 @@ mod tests {
             let d = (i16::from(*a) - i16::from(*b)).abs();
             assert!(d <= 1, "dark byte {i}: {a} → {b}");
         }
+    }
+
+    /// A smooth linear ramp, 4096 steps of it, through the deep display target:
+    /// far more than the 256 values an eight-bit read-back can hold, which is
+    /// the whole point of the sixteen-bit export path. Fails on the widened
+    /// eight-bit path — every value there is a multiple of 257.
+    #[test]
+    fn the_deep_display_keeps_more_than_eight_bits_of_a_gradient() {
+        let Ok(ctx) = GpuContext::headless() else {
+            crate::no_adapter();
+            return;
+        };
+        let engine = ColourEngine::new(&ctx);
+        let (w, h) = (64u32, 64u32);
+        let mut linear = Vec::with_capacity((w * h * 4) as usize);
+        for i in 0..(w * h) {
+            let v = i as f32 / ((w * h - 1) as f32);
+            linear.extend_from_slice(&[v, v, v, 1.0]);
+        }
+        let src = crate::fx::upload_linear_f32(&ctx, &linear, w, h);
+
+        let deep = engine.readback16(
+            &ctx,
+            &engine.display16(&ctx, &src, None, DisplayParams::NEUTRAL),
+        );
+        let deep = deep.unwrap();
+        assert_eq!(deep.len(), (w * h * 4) as usize);
+        let distinct: std::collections::BTreeSet<u16> =
+            deep.chunks_exact(4).map(|p| p[0]).collect();
+        assert!(
+            distinct.len() > 256,
+            "a sixteen-bit export must carry more than eight bits' worth: {} values",
+            distinct.len()
+        );
+        assert!(
+            deep.chunks_exact(4).any(|p| p[0] % 257 != 0),
+            "values a widened byte could never produce"
+        );
+
+        // The eight-bit path on the same ramp, for contrast and as the reason
+        // the ceiling was recorded in the first place.
+        let shallow = engine
+            .readback8(&ctx, &engine.display(&ctx, &src, DisplayParams::NEUTRAL))
+            .unwrap();
+        let shallow: std::collections::BTreeSet<u8> =
+            shallow.chunks_exact(4).map(|p| p[0]).collect();
+        assert!(shallow.len() <= 256);
+    }
+
+    /// The deep display's hand-written sRGB curve is the hardware's own: the
+    /// same frame through both targets agrees to within a code of eight bits.
+    /// This is the guard on the one place a gamma curve is spelled twice.
+    #[test]
+    fn the_deep_display_agrees_with_the_eight_bit_one() {
+        let Ok(ctx) = GpuContext::headless() else {
+            crate::no_adapter();
+            return;
+        };
+        let engine = ColourEngine::new(&ctx);
+        let (w, h) = (16u32, 16u32);
+        // Every eight-bit sRGB value, decoded to linear light and back.
+        let mut bytes = Vec::with_capacity((w * h * 4) as usize);
+        for i in 0..256u32 {
+            bytes.extend_from_slice(&[i as u8, (255 - i) as u8, ((i * 7) % 256) as u8, 255]);
+        }
+        let linear = engine.linearise(&ctx, &engine.upload_srgb8(&ctx, &bytes, w, h));
+        let shallow = engine
+            .readback8(&ctx, &engine.display(&ctx, &linear, DisplayParams::NEUTRAL))
+            .unwrap();
+        let deep = engine
+            .readback16(
+                &ctx,
+                &engine.display16(&ctx, &linear, None, DisplayParams::NEUTRAL),
+            )
+            .unwrap();
+
+        for (i, (a, b)) in shallow.iter().zip(deep.iter()).enumerate() {
+            // The deep code back down to eight bits, the way a reader of the
+            // file would: 65535 → 255.
+            let narrowed = (f64::from(*b) * 255.0 / 65_535.0).round() as i16;
+            let d = (i16::from(*a) - narrowed).abs();
+            assert!(d <= 1, "channel {i}: 8-bit {a} vs deep {b} → {narrowed}");
+        }
+        // Alpha is not encoded by either, so full coverage stays full.
+        assert_eq!(deep[3], 65_535);
     }
 }
 

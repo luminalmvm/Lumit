@@ -62,9 +62,66 @@ pub fn fit_contain(src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> (u32, u32,
     ((w), (h), (dst_w - w) / 2, (dst_h - h) / 2)
 }
 
-/// Bilinearly sample RGBA8 `src` (`w × h`) at continuous `(x, y)`, clamping to
+/// One colour channel as the processor carries it on the way to a file: eight
+/// bits or sixteen.
+///
+/// # In plain terms
+///
+/// A frame is a pile of numbers, and the only difference between an eight-bit
+/// frame and a sixteen-bit one is how big each number is allowed to be. Rather
+/// than write every pixel routine twice — once counting to 255 and once to
+/// 65535, with two chances to round differently — the routines are written
+/// once and this says what "full" means and how a channel is written into a
+/// file. Nothing here decides colour; it is arithmetic about width.
+pub trait Channel: Copy {
+    /// Full scale: white, opaque, all the way up.
+    const FULL: Self;
+    /// Full scale as a float, for the arithmetic that has to normalise.
+    const SCALE: f64;
+    /// How many bytes one channel occupies in a file.
+    const BYTES: usize;
+    fn to_f64(self) -> f64;
+    /// Rounded to the nearest code and clamped into range — one rule, so no
+    /// two callers can round a channel differently.
+    fn from_f64(v: f64) -> Self;
+    /// Append this channel to a file buffer, little-endian (the byte order the
+    /// encoder seam expects; each format's own order is its business).
+    fn write_le(self, out: &mut Vec<u8>);
+}
+
+impl Channel for u8 {
+    const FULL: Self = u8::MAX;
+    const SCALE: f64 = 255.0;
+    const BYTES: usize = 1;
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+    fn from_f64(v: f64) -> Self {
+        v.round().clamp(0.0, Self::SCALE) as Self
+    }
+    fn write_le(self, out: &mut Vec<u8>) {
+        out.push(self);
+    }
+}
+
+impl Channel for u16 {
+    const FULL: Self = u16::MAX;
+    const SCALE: f64 = 65_535.0;
+    const BYTES: usize = 2;
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+    fn from_f64(v: f64) -> Self {
+        v.round().clamp(0.0, Self::SCALE) as Self
+    }
+    fn write_le(self, out: &mut Vec<u8>) {
+        out.extend_from_slice(&self.to_le_bytes());
+    }
+}
+
+/// Bilinearly sample RGBA `src` (`w × h`) at continuous `(x, y)`, clamping to
 /// the edges. Returns the four channels.
-fn sample_bilinear(src: &[u8], w: u32, h: u32, x: f64, y: f64) -> [u8; 4] {
+fn sample_bilinear<C: Channel>(src: &[C], w: u32, h: u32, x: f64, y: f64) -> [C; 4] {
     let x = x.clamp(0.0, f64::from(w - 1));
     let y = y.clamp(0.0, f64::from(h - 1));
     let x0 = x.floor() as u32;
@@ -73,24 +130,33 @@ fn sample_bilinear(src: &[u8], w: u32, h: u32, x: f64, y: f64) -> [u8; 4] {
     let y1 = (y0 + 1).min(h - 1);
     let fx = x - f64::from(x0);
     let fy = y - f64::from(y0);
-    let at = |px: u32, py: u32, c: usize| f64::from(src[((py * w + px) * 4) as usize + c]);
-    let mut out = [0u8; 4];
+    let at = |px: u32, py: u32, c: usize| src[((py * w + px) * 4) as usize + c].to_f64();
+    let mut out = [C::FULL; 4];
     for (c, o) in out.iter_mut().enumerate() {
         let top = at(x0, y0, c) * (1.0 - fx) + at(x1, y0, c) * fx;
         let bot = at(x0, y1, c) * (1.0 - fx) + at(x1, y1, c) * fx;
-        *o = (top * (1.0 - fy) + bot * fy).round().clamp(0.0, 255.0) as u8;
+        *o = C::from_f64(top * (1.0 - fy) + bot * fy);
     }
     out
 }
 
-/// Resize RGBA8 `src` (`src_w × src_h`) into a fresh `dst_w × dst_h` RGBA8
-/// frame, contain-fitted and centred on opaque black (letterbox). Used by the
-/// export resolution presets; bilinear sampling, so it up- and down-scales.
-/// Returns opaque black if `src` is too short for its stated size.
-pub fn letterbox_resize(src: &[u8], src_w: u32, src_h: u32, dst_w: u32, dst_h: u32) -> Vec<u8> {
-    let mut out = vec![0u8; (dst_w as usize) * (dst_h as usize) * 4];
+/// Resize RGBA `src` (`src_w × src_h`) into a fresh `dst_w × dst_h` frame,
+/// contain-fitted and centred on opaque black (letterbox). Used by the export
+/// resolution presets; bilinear sampling, so it up- and down-scales. Returns
+/// opaque black if `src` is too short for its stated size.
+///
+/// Generic over the channel width, so an eight-bit and a sixteen-bit export
+/// letterbox through the identical arithmetic (docs/06 §7.4).
+pub fn letterbox_resize<C: Channel>(
+    src: &[C],
+    src_w: u32,
+    src_h: u32,
+    dst_w: u32,
+    dst_h: u32,
+) -> Vec<C> {
+    let mut out = vec![C::from_f64(0.0); (dst_w as usize) * (dst_h as usize) * 4];
     for px in out.chunks_exact_mut(4) {
-        px[3] = 255; // opaque black background
+        px[3] = C::FULL; // opaque black background
     }
     let (w, h, ox, oy) = fit_contain(src_w, src_h, dst_w, dst_h);
     if w == 0 || h == 0 || src.len() < (src_w as usize) * (src_h as usize) * 4 {

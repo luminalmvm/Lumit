@@ -977,12 +977,23 @@ silently dropped: a delivered file that is not what was asked for is worse than 
 did not run. ProRes 4444 and DNxHR, which is where deeper video and video alpha live, remain
 out of v1 (above), so RGB + alpha is a still-sequence answer today.
 
-**The pack stage.** The compositor's answer is one display-encoded, premultiplied RGBA8 pixel
-per pixel. What the file carries may be narrower (**RGB**, the alpha written opaque),
-differently related (**straight alpha**, the colour divided back up by its coverage — §3.4),
-or wider (**16 bits**, each sample widened ×257, which maps 0→0 and 255→65535 exactly and so
-invents nothing). This conversion is a pure CPU pass and is where the channels, alpha and
-depth settings act.
+**Sixteen bits are sixteen real bits.** A deep export does not widen the eight-bit display
+read-back: the display pass runs into a **16-bit display target** of its own
+(`ColourEngine::display16`) and is read back through `readback16` as `0..=65535` codes, so
+the float pipeline's precision reaches the file. That target is `Rgba16Float` — there is no
+sixteen-bit sRGB format for the hardware to encode into, so the sRGB transfer is spelled once
+in the display shader and held to the hardware's own by a test that compares the two targets
+on the same frame. It costs one extra frame-sized target and one read-back buffer, 8 bytes a
+pixel each (33 MB the pair at 1080p, 133 MB at 4K), during a sixteen-bit export only; nothing
+else in the pipeline changes width, and an eight-bit export allocates nothing new.
+
+**The pack stage.** The compositor's answer is one display-encoded, premultiplied RGBA pixel
+per pixel, eight or sixteen bits a channel as the export asked. What the file carries may be
+narrower (**RGB**, the alpha written opaque) or differently related (**straight alpha**, the
+colour divided back up by its coverage — §3.4). The depth is the pack stage's *input type*,
+not a setting it applies, so there is nowhere left for a signal that was never deep to be
+stretched. This conversion is a pure CPU pass and is where the channels and alpha settings
+act.
 
 **Colour space.** The export's final transform is a setting, not an assumption: the built-in
 working-space → sRGB/Rec.709 encode, and a **named** output space from the project's OCIO
