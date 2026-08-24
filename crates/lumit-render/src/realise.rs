@@ -321,6 +321,7 @@ impl Realiser<'_> {
         natural_w: f64,
         natural_h: f64,
         strokes: &[lumit_core::paint::PaintStroke],
+        t: f64,
     ) -> wgpu::Texture {
         if strokes.is_empty() {
             return tex;
@@ -334,7 +335,7 @@ impl Realiser<'_> {
             // picture is the calm answer; engine crates do not panic.
             return tex;
         };
-        lumit_core::paint::apply_strokes(&mut rgba, w, h, natural_w, natural_h, strokes);
+        lumit_core::paint::apply_strokes(&mut rgba, w, h, natural_w, natural_h, strokes, t);
         let src = self.engine.upload_srgb8(&self.ctx, &rgba, w, h);
         self.engine.linearise(&self.ctx, &src)
     }
@@ -684,10 +685,17 @@ impl Realiser<'_> {
                     camera,
                     key,
                     paint,
+                    paint_time,
                 } => {
                     let nested =
                         self.realise_nested(*key, *camera, *width, *height, *background, draws);
-                    self.paint_over(nested, f64::from(*width), f64::from(*height), paint)
+                    self.paint_over(
+                        nested,
+                        f64::from(*width),
+                        f64::from(*height),
+                        paint,
+                        *paint_time,
+                    )
                 }
                 DrawSource::Adjust => {
                     // realise splits segments at every Adjust draw, so none

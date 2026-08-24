@@ -140,6 +140,21 @@ final class FoldStrokeRow extends LayerFoldRow {
   const FoldStrokeRow(this.stroke, {required int depth}) : super(depth);
 }
 
+/// Which of a stroke's animatable values a [FoldStrokeValueRow] carries
+/// (K-449). Both are a per cent of the stroke's own length.
+enum StrokeValue { start, end }
+
+/// A stroke's Start or End on a row of its own under it (K-449) — the pair
+/// that makes a stroke draw itself on. A row rather than another number on the
+/// stroke's own row, for the reason [FoldMaskValueRow] gives: a property
+/// without a row has nowhere to put the stopwatch that animates it.
+final class FoldStrokeValueRow extends LayerFoldRow {
+  final BridgeStroke stroke;
+  final StrokeValue value;
+  const FoldStrokeValueRow(this.stroke, this.value, {required int depth})
+      : super(depth);
+}
+
 /// One control of a footage layer's Flow group (K-088, K-331). Which control
 /// is the [kind]; all of them read and write the whole group in one op, so a
 /// row needs nothing but its own identity.
@@ -232,6 +247,11 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
                 BridgeScalar_Keyframed(:final field0) => field0,
                 _ => const [],
               },
+      FoldStrokeValueRow(:final stroke, :final value) =>
+        switch (strokeScalarOf(stroke, value)) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
       _ => const [],
     };
 
@@ -282,6 +302,39 @@ BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to,
           : mask.vertexFeather,
       expansion: value == MaskValue.expansion ? to : mask.expansion,
       pathKeys: mask.pathKeys,
+    );
+
+/// What a stroke's value row is called — shared by the row and the graph
+/// channel, exactly as [maskValueLabel] is.
+String strokeValueLabel(StrokeValue value) => switch (value) {
+      StrokeValue.start => l10n.strokeStart,
+      StrokeValue.end => l10n.strokeEnd,
+    };
+
+/// Which of a stroke's two animatable numbers [value] names (K-449).
+BridgeScalar strokeScalarOf(BridgeStroke stroke, StrokeValue value) =>
+    switch (value) {
+      StrokeValue.start => stroke.start,
+      StrokeValue.end => stroke.end,
+    };
+
+/// [stroke] with the one number [value] names replaced.
+BridgeStroke strokeWithScalar(
+        BridgeStroke stroke, StrokeValue value, BridgeScalar to) =>
+    BridgeStroke(
+      id: stroke.id,
+      name: stroke.name,
+      points: stroke.points,
+      colour: stroke.colour,
+      width: stroke.width,
+      hardness: stroke.hardness,
+      shape: stroke.shape,
+      opacity: stroke.opacity,
+      start: value == StrokeValue.start ? to : stroke.start,
+      end: value == StrokeValue.end ? to : stroke.end,
+      mode: stroke.mode,
+      cloneOffsetX: stroke.cloneOffsetX,
+      cloneOffsetY: stroke.cloneOffsetY,
     );
 
 /// A key's position on the comp's frame axis, computed Dart-side from its
@@ -408,6 +461,16 @@ bool moveLaneKey({
       );
       return true;
 
+    case FoldStrokeValueRow(:final stroke, :final value):
+      final scalar = strokeScalarOf(stroke, value);
+      if (scalar is! BridgeScalar_Keyframed) return false;
+      final next = moved(scalar.field0);
+      if (next == null) return false;
+      entry.layer.setStroke(
+        stroke: strokeWithScalar(stroke, value, BridgeScalar.keyframed(next)),
+      );
+      return true;
+
     case _:
       return false;
   }
@@ -434,6 +497,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
         '${masksPath(layerId)}/${mask.id}/${value.name}'
             '${vertex < 0 ? '' : '/$vertex'}',
       FoldStrokeRow(:final stroke) => '${paintPath(layerId)}/${stroke.id}',
+      FoldStrokeValueRow(:final stroke, :final value) =>
+        '${paintPath(layerId)}/${stroke.id}/${value.name}',
       FoldShapeRow(:final item) => '${contentsPath(layerId)}/${item.id}',
     };
 
@@ -648,6 +713,12 @@ List<LayerFoldRow> layerFoldRows({
     if (paintOpen) {
       for (final stroke in info.paint) {
         rows.add(FoldStrokeRow(stroke, depth: 2));
+        // Its two trim values sit under it, the way a mask's numbers sit under
+        // the mask (K-449) — and in the order they read: where the mark
+        // begins, then where it ends.
+        for (final value in StrokeValue.values) {
+          rows.add(FoldStrokeValueRow(stroke, value, depth: 3));
+        }
       }
     }
   }

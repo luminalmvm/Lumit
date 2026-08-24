@@ -105,7 +105,7 @@ fn is_static_zero(p: &Property) -> bool {
 /// grows the object. Reading accepts either, so a project written by any build
 /// opens here, and one written by this build opens in an older one as long as
 /// nobody keyed the mask.
-mod still_or_keyed {
+pub(crate) mod still_or_keyed {
     use super::{Animation, Property};
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 

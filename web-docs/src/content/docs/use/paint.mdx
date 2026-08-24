@@ -35,10 +35,13 @@ effects will operate upon strokes as if they were part of the original layers so
   layer is twirled open.
 - Each stroke is a single undo.
 - An brush/clone/erase's strength can be reduced later by lowering it's opacity.
+- **Start** and **End** under each stroke trim it by a percentage of its own length, and both
+  are keyframable: hold Start at 0 and animate End from 0 to 100 and the stroke draws itself on.
 
 :::note[Not built yet]
 There is currently no support for drawing via tablet, so pressure and tilt are missing.
-Keyframing a stroke's start and end time is not built either, nor are per-stroke blend modes.
+Per-stroke blend modes aren't built either, and a keyframed **Start**/**End** draws its
+diamonds on the Timeline lane but has no curve in the graph editor yet.
 :::
 
 ## Related

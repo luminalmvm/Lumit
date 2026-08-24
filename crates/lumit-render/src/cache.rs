@@ -492,6 +492,8 @@ mod tests {
             hardness: 1.0,
             shape: lumit_core::paint::BrushShape::Round,
             opacity: 100.0,
+            start: lumit_core::anim::Property::zero(),
+            end: lumit_core::anim::Property::fixed(100.0),
             mode: PaintMode::Paint,
             clone_offset: (0.0, 0.0),
             extra: serde_json::Map::new(),

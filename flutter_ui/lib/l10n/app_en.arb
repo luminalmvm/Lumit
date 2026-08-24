@@ -5655,6 +5655,14 @@
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "strokeStart": "Start",
+  "@strokeStart": {
+    "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark begins, as a percentage."
+  },
+  "strokeEnd": "End",
+  "@strokeEnd": {
+    "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark ends, as a percentage."
+  },
   "toolShape": "Shape",
   "@toolShape": {
     "description": "Toolbar options strip — label beside the brush shape picker."

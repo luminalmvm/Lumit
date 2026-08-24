@@ -3351,6 +3351,16 @@ class _FoldRow extends StatelessWidget {
           valueColumn: valueColumn,
           onChanged: onChanged,
         ),
+      FoldStrokeValueRow(:final stroke, :final value) => _StrokeValueRow(
+          comp: comp,
+          layer: layer,
+          stroke: stroke,
+          value: value,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
+          onChanged: onChanged,
+        ),
       FoldStrokeRow(:final stroke) => _StrokeRow(
           comp: comp,
           layer: layer,
@@ -4533,6 +4543,8 @@ class _StrokeRow extends StatelessWidget {
         hardness: s.hardness,
         shape: s.shape,
         opacity: opacity,
+        start: s.start,
+        end: s.end,
         mode: s.mode,
         cloneOffsetX: s.cloneOffsetX,
         cloneOffsetY: s.cloneOffsetY,
@@ -4591,6 +4603,162 @@ class _StrokeRow extends StatelessWidget {
         } catch (_) {}
       },
       deleteLabel: l10n.deleteStroke,
+    );
+  }
+}
+
+/// A stroke's Start or End (K-449) — the pair that draws a stroke on.
+///
+/// The same shape as [_MaskValueRow], and for the same reasons: the value is
+/// staged and previewed through the paint preview while it is dragged, the
+/// release commits one op, and an edit on an animated one lands on the key
+/// under the playhead rather than flattening the curve.
+class _StrokeValueRow extends StatefulWidget {
+  final CompositionReference comp;
+  final LayerReference layer;
+  final BridgeStroke stroke;
+  final StrokeValue value;
+  final ValueColumn valueColumn;
+  final int playheadFrame;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onChanged;
+
+  const _StrokeValueRow({
+    required this.comp,
+    required this.layer,
+    required this.stroke,
+    required this.value,
+    required this.valueColumn,
+    required this.playheadFrame,
+    required this.onSeek,
+    required this.onChanged,
+  });
+
+  @override
+  State<_StrokeValueRow> createState() => _StrokeValueRowState();
+}
+
+class _StrokeValueRowState extends State<_StrokeValueRow> {
+  double? _staged;
+  final PreviewThrottle _throttle = PreviewThrottle();
+
+  BridgeScalar get _scalar => strokeScalarOf(widget.stroke, widget.value);
+
+  String get _rowKey => 'tl-stroke-${widget.value.name}-${widget.stroke.id}';
+
+  @override
+  void dispose() {
+    _throttle.cancel();
+    super.dispose();
+  }
+
+  /// Show the value the drag is passing through without writing it (K-240).
+  /// The whole stroke list is sent with this one number replaced, because
+  /// paint is stored and committed as a whole list.
+  void _preview(BridgeScalar v) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithPaintPreview(
+          frame: BigInt.from(ui.playheadFrame.value),
+          scale: ui.viewerScale,
+          layer: widget.layer,
+          strokes: [
+            for (final s in widget.layer.getPaint())
+              if (s.id == widget.stroke.id)
+                strokeWithScalar(s, widget.value, v)
+              else
+                s,
+          ],
+        );
+      } catch (_) {
+        // A preview is a courtesy; the drag carries on without it.
+      }
+    });
+  }
+
+  void _write(BridgeScalar v) {
+    setState(() => _staged = null);
+    try {
+      widget.layer
+          .setStroke(stroke: strokeWithScalar(widget.stroke, widget.value, v));
+      widget.onChanged();
+    } catch (_) {
+      // The stroke or its layer went away mid-drag.
+    }
+  }
+
+  void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
+
+  void _commitKeyed(double v) =>
+      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      children: [
+        KeyframeControlsFrb(
+          scalars: [_scalar],
+          onWrite: (s) => _write(s.first),
+          comp: widget.comp,
+          playheadFrame: widget.playheadFrame,
+          onSeek: widget.onSeek,
+          rowKey: _rowKey,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(strokeValueLabel(widget.value),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
+        SizedBox(
+          width: widget.valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 72, child: _field()),
+          ),
+        ),
+        SizedBox(width: widget.valueColumn.rightInset),
+      ],
+    );
+  }
+
+  Widget _field() {
+    final key = ValueKey<String>(_rowKey);
+    final scalar = _scalar;
+    if (scalar is! BridgeScalar_Keyframed) {
+      final stored =
+          _staged ?? (scalar is BridgeScalar_Static ? scalar.field0 : 0.0);
+      return DragValueField(
+        key: key,
+        value: stored,
+        min: 0,
+        max: 100,
+        decimals: 1,
+        suffix: '%',
+        onChanged: _commitStatic,
+        onChangeLive: (v) {
+          setState(() => _staged = v.toDouble());
+          _preview(BridgeScalar.static_(v.toDouble()));
+        },
+        onChangeEnd: _commitStatic,
+        onDragCancel: () {
+          setState(() => _staged = null);
+          _preview(scalar);
+        },
+      );
+    }
+    // Animated: the field shows what the curve reads at the playhead, and an
+    // edit writes the key there.
+    return KeyedValueField(
+      fieldKey: key,
+      value:
+          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      min: 0,
+      max: 100,
+      decimals: 1,
+      suffix: '%',
+      onCommit: _commitKeyed,
     );
   }
 }

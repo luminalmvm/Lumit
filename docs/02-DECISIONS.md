@@ -12549,3 +12549,47 @@ Regression tests: in `lumit-core`, `a_square_brush_marks_its_corners_and_a_round
 `a_soft_square_fades_at_its_flat_edge`, `a_round_brush_is_absent_from_the_file`; in Flutter,
 `the brush commits the shape chosen in the tool options`. New strings: `toolShape`,
 `tipBrushShape`, `brushShapeRound`, `brushShapeSquare` — English only until Crowdin is fed.
+
+## K-449 — A stroke can draw itself on, and the trim is measured in length
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. `PaintStroke` gains `start` and `end`, each a
+`Property` holding a per cent of the stroke's own length and animatable like any other value
+(K-340's shape, on the layer's own clock, K-213). Start held at 0 with End keyed 0 → 100 is
+write-on — the reason paint animates at all — and the pair also trims a stroke back at either
+end without repainting it.
+
+**Per cent of arc length, never of the samples.** A stroke is a record of a gesture, so its
+points bunch up wherever the hand slowed down. Trimming by sample count would make a write-on
+crawl through the carefully drawn parts and leap through the fast ones. `trimmed` walks the
+polyline accumulating segment lengths, finds the segment each cut falls in, and interpolates
+that one segment at the exact fraction — the same small walk shape layers' trim paths need, and
+deliberately duplicated in `paint.rs` rather than shared through a seam that does not exist yet:
+it is nine lines, and a stroke is a polyline while a shape item is a bezier.
+
+**Where it happens.** In `fill_coverage`, before anything else: `drawn_at(t)` is measured for
+the bounding box *and* walked for the dabs, so a write-on reserves only the pixels it has
+actually drawn rather than the whole stroke's rectangle from the first frame. `apply_strokes`
+and `coverage_of` therefore take a time, threaded from `build.rs` as `lt` — the same clock the
+layer's masks and transform read at — and carried to a Precomp's paint on `DrawSource::Nested`
+as `paint_time` (K-447).
+
+**Two honesties.** An `end` at or below `start` draws nothing, because that is a write-on's
+first frame and not an error. A path with no length (a single dab, or one sample repeated) has
+nothing to cut and is drawn whole as soon as any of it is asked for.
+
+**Old projects are untouched.** Both are `#[serde(default, skip_serializing_if = ...)]` at 0 and
+100 with mask.rs's `still_or_keyed` bare-number encoding (now `pub(crate)`), so an untrimmed
+stroke writes exactly the bytes it wrote and every banked frame stays valid.
+
+**In the Timeline**, each stroke grows two rows under it — `FoldStrokeValueRow`, built the way
+`FoldMaskValueRow` is — with the stopwatch, the diamonds, the staged-and-previewed drag and the
+lane-key drag every other animatable row has. What they do **not** have yet is a curve in the
+graph editor: `graphChannels` walks transform, effect and mask paths by path prefix and a
+stroke's path is not one of them. The lane is the v1 surface; the graph is a follow-up.
+
+Regression tests: in `lumit-core`, `start_and_end_trim_the_stroke_by_its_length`,
+`the_trim_measures_length_and_not_samples`, `a_dab_has_no_length_to_trim`,
+`an_untrimmed_stroke_is_absent_from_the_file`; in the bridge,
+`a_strokes_trim_round_trips_and_is_clamped` (every key clamped to 0..100, not just the first);
+in Flutter, `a stroke grows Start and End rows that write through`. New strings: `strokeStart`,
+`strokeEnd`.

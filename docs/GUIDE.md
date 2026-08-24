@@ -8354,6 +8354,36 @@ And a stroke that is round says nothing about its shape in the saved file, so ev
 ever saved still writes exactly the bytes it wrote before and every frame the cache holds for
 it stays valid.
 
+### A stroke that draws itself on (K-449)
+
+Every paint stroke now has two numbers under it in the Timeline, **Start** and **End**, each a
+percentage of the stroke's own length. Leave them at 0 and 100 and the whole mark is drawn, as
+before. Hold Start at 0 and animate End from 0 to 100 across a second, and the stroke appears as
+if a hand were making it — a signature writing itself, an arrow growing across a diagram. That
+is the effect After Effects calls write-on, and it is why paint animates at all.
+
+The only subtlety worth explaining is what "half the stroke" means, because there are two
+plausible answers and one of them is wrong.
+
+A stroke is stored as the path the pointer took: a list of positions, sampled as the drag
+happened. Those samples are **not** evenly spaced. Move the mouse slowly and a hundred of them
+pile into one inch; whip it across and a single sample spans a foot. So "half the samples" is
+not half the drawing at all — a stroke trimmed that way would crawl through the part you drew
+carefully and leap through the part you drew fast, and the write-on would appear to speed up and
+slow down for no visible reason.
+
+The right answer is half the **distance**. Lumit walks the path adding up the length of each
+straight piece, works out how far along the total the cut should fall, finds the piece the cut
+lands in, and cuts that one piece at exactly the right fraction of the way across it. The result
+travels at a steady pace regardless of how the stroke was drawn — and because the same walk
+handles both ends, the mark can be trimmed from the front, from the back, or from both at once.
+
+Two small honesties. An End that has not passed Start yet draws nothing, which is exactly what
+the first frame of a write-on should look like rather than an error. And a stroke that is a
+single dab has no length to divide, so it appears whole the moment any of it is asked for. Both
+numbers are left out of the saved file until somebody moves them, so nothing changes for a
+project that has never used them.
+
 ## 13. The two public web sites
 
 `web/` and `web-docs/` are the public face of the project: **lumitlab.com**,

@@ -3097,7 +3097,13 @@ fn render_comp_with_preview(
         apply_text_preview(&mut comp.layers[index].kind, document);
     }
     if let Some(paint) = req.paint {
-        comp.layers[index].paint = paint.into_iter().map(|s| s.write()).collect();
+        // Keys cross the seam on the comp clock (K-213), so the layer's own
+        // zero comes back off on the way in, exactly as the retime below does.
+        let offset = comp.layers[index].start_offset.0;
+        comp.layers[index].paint = paint
+            .into_iter()
+            .map(|s| s.write_at(offset))
+            .collect::<Result<Vec<_>, _>>()?;
     }
     if let Some(map) = req.retime {
         // Keys cross the seam on the comp clock (K-213), so the layer's own
@@ -4679,12 +4685,16 @@ mod tests {
             // Mid-drag values are provisional, so an out-of-range one must be
             // clamped rather than rendered — the same rule the commit follows.
             opacity: 140.0,
+            start: crate::api::effect::BridgeScalar::Static(0.0),
+            end: crate::api::effect::BridgeScalar::Static(100.0),
             mode: BridgePaintMode::Paint,
             clone_offset_x: 0.0,
             clone_offset_y: 0.0,
         };
 
-        let written = stroke.write();
+        let written = stroke
+            .write_at(lumit_core::time::Rational::ZERO)
+            .expect("a valid stroke");
         assert_eq!(written.name, "Brush 1");
         assert_eq!(written.points.len(), 2);
         assert_eq!(written.points[1], (40.0, 50.0));

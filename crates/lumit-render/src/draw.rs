@@ -155,6 +155,11 @@ pub enum DrawSource {
         /// Empty on the overwhelming majority of Precomp layers, which is
         /// the case that costs nothing.
         paint: Vec<lumit_core::paint::PaintStroke>,
+        /// The layer time `paint`'s keyed Start and End are read at (K-449),
+        /// which is the same clock every other animated value on this layer
+        /// is read at (K-213). Meaningless — and unread — when `paint` is
+        /// empty.
+        paint_time: f64,
     },
     /// An adjustment layer's staging point (docs/06 §1.5): no pixels of its
     /// own — the draw's `fx` runs on the composite of every draw before it,

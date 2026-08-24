@@ -20,7 +20,8 @@ stroke, because a stroke is one thing rather than a smear of changed pixels.
 ## The shape of a stroke
 
 `lumit_core::paint::PaintStroke` — id, name, `points` (layer space, in the order drawn),
-`colour`, `width` (diameter), `hardness`, `shape`, `opacity`, `mode`, `clone_offset`.
+`colour`, `width` (diameter), `hardness`, `shape`, `opacity`, `start`, `end`, `mode`,
+`clone_offset`.
 
 A **polyline**, not a bezier. Masks and shape layers are the bezier things; nobody edits a
 stroke vertex by vertex, and the points are samples of a gesture rather than a designed shape.
@@ -38,10 +39,19 @@ this frame is being rendered at.
 1. **Scale.** The stroke is in layer coordinates; the buffer is `w × h` for a layer whose
    natural size is `natural_w × natural_h`. One scale factor per axis, and the *smaller* is
    used for the brush radius so a round brush stays round.
-2. **Dabs.** Each segment of the polyline is walked at a quarter of the brush radius and a dab
-   is stamped at each step, plus one at the far end so a stroke never falls short of where the
-   pointer stopped. A one-point stroke is one dab.
-3. **Coverage.** Each dab writes a soft falloff into a 0..255 coverage buffer, taking the
+2. **Trim** (K-449). `PaintStroke::drawn_at(t)` cuts the path down to the piece between `start`
+   and `end` per cent of its own **arc length** at this frame, and everything below works on
+   that piece — the bounding box included, so a write-on reserves only what it has drawn. Per
+   cent of *length*, not of the sample count: a gesture's samples bunch up wherever the hand
+   slowed down, so counting them would make a write-on speed up and slow down with the drawing.
+   An `end` at or below `start` is an empty path and the stroke is skipped — that is a
+   write-on's first frame, not an error. A path with no length (a single dab) has nothing to
+   cut, so it is drawn whole as soon as anything of it is asked for. Both are absent from the
+   file at their defaults (0 and 100), so an untrimmed stroke writes the bytes it always wrote.
+3. **Dabs.** Each segment of the trimmed polyline is walked at a quarter of the brush radius
+   and a dab is stamped at each step, plus one at the far end so a stroke never falls short of
+   where the pointer stopped. A one-point stroke is one dab.
+4. **Coverage.** Each dab writes a soft falloff into a 0..255 coverage buffer, taking the
    **greatest** value at each pixel rather than adding. Greatest, not sum: the dabs overlap
    heavily by design, and adding them would make the middle of a slow stroke opaque and its ends
    thin. The stroke's own opacity is applied once, at composite time.
@@ -57,7 +67,7 @@ this frame is being rendered at.
    whole feature: no bitmap tip, no angle, no roundness, and no `if` waiting for them. `shape`
    is left out of the file while it is Round, so a project nobody has re-shaped writes the bytes
    it always wrote and keeps the frames the cache has banked.
-4. **Composite,** by mode:
+5. **Composite,** by mode:
    * **Paint** — source-over with the stroke's colour, alpha `coverage × opacity × colour α`.
    * **Erase** — `dst.a ×= 1 − coverage × opacity`. Colour untouched, which is what makes an
      erase reversible by lowering its opacity later.
@@ -138,7 +148,9 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
 * **Core** (`paint.rs`): a dab marks where it was put and nowhere else; a stroke joins its
   points up with no gaps; soft and hard brushes differ halfway out; a square brush fills the
   corners a round one leaves, softens at its flat edge by the same ramp, and is absent from the
-  file until it is chosen; opacity scales the mark;
+  file until it is chosen; Start and End trim by length at either end, an End at or below Start
+  draws nothing, the trim measures length rather than samples, a single dab has nothing to trim,
+  and an untrimmed stroke is absent from the file; opacity scales the mark;
   the same stroke at half resolution is half the size in pixels; erase takes alpha and leaves
   colour; clone copies from its offset; clone reads the layer as it was; empty, zero-width and
   zero-opacity strokes do nothing; a stroke off the layer is skipped; bounds include the brush
@@ -148,17 +160,20 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
 * **Bridge** (`api/tests.rs`): add/read/undo/redo in one step; strokes ride the read model;
   edit and delete by id with a calm error for a stale id; the last stroke can be taken back; an
   empty stroke is refused; absurd numbers are clamped; all three modes and a clone offset round
-  trip.
+  trip; both brush shapes round trip and an unstated one reads back Round; a stroke's Start and
+  End round trip, keep their keys, and are clamped to 0..100 key by key.
 * **Frontend**: `thinStroke` and `paintModeFor` as pure tests; a brush drag paints one stroke
   that undoes in one step; the brush commits the shape chosen in the tool options; the eraser
-  and clone stamp commit their own modes and the clone refuses without a source; painting with nothing selected says what to do; the Timeline grows
-  its Paint heading and its rows write through.
+  and clone stamp commit their own modes and the clone refuses without a source; painting with
+  nothing selected says what to do; the Timeline grows its Paint heading and its rows write
+  through, and a stroke's Start and End rows write through under it.
 
 ## Not built
 
-Pressure and tilt; spacing and scatter; write-on (a stroke's
-own start and end times, which is what makes paint animate in After Effects); per-stroke
-blending modes; painting in Layer view rather than on the composite; and a GPU stamping path. The last one is the only one that would change any code here rather
-than adding to it — and it changes the *rasteriser*, not the stored stroke, which is why the
+Pressure and tilt; spacing and scatter; per-stroke blending modes; painting in Layer view
+rather than on the composite; a stroke's Start/End **curve in the graph editor** (the lane
+draws its diamonds and they drag, but `graphChannels` walks transform, effect and mask paths
+only in v1); and a GPU stamping path. The last one is the only one that would change any code
+here rather than adding to it — and it changes the *rasteriser*, not the stored stroke, which is why the
 storage was decided first. It is also what would retire the 8-bit read-back a painted Precomp
 pays (K-447).

@@ -10131,6 +10131,8 @@ impl SseDecode for crate::api::layer::BridgeStroke {
         let mut var_hardness = <f64>::sse_decode(deserializer);
         let mut var_shape = <crate::api::layer::BridgeBrushShape>::sse_decode(deserializer);
         let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_start = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_end = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_mode = <crate::api::layer::BridgePaintMode>::sse_decode(deserializer);
         let mut var_cloneOffsetX = <f64>::sse_decode(deserializer);
         let mut var_cloneOffsetY = <f64>::sse_decode(deserializer);
@@ -10143,6 +10145,8 @@ impl SseDecode for crate::api::layer::BridgeStroke {
             hardness: var_hardness,
             shape: var_shape,
             opacity: var_opacity,
+            start: var_start,
+            end: var_end,
             mode: var_mode,
             clone_offset_x: var_cloneOffsetX,
             clone_offset_y: var_cloneOffsetY,
@@ -13883,6 +13887,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeStroke {
             self.hardness.into_into_dart().into_dart(),
             self.shape.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
+            self.start.into_into_dart().into_dart(),
+            self.end.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
             self.clone_offset_x.into_into_dart().into_dart(),
             self.clone_offset_y.into_into_dart().into_dart(),
@@ -15692,6 +15698,8 @@ impl SseEncode for crate::api::layer::BridgeStroke {
         <f64>::sse_encode(self.hardness, serializer);
         <crate::api::layer::BridgeBrushShape>::sse_encode(self.shape, serializer);
         <f64>::sse_encode(self.opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.start, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.end, serializer);
         <crate::api::layer::BridgePaintMode>::sse_encode(self.mode, serializer);
         <f64>::sse_encode(self.clone_offset_x, serializer);
         <f64>::sse_encode(self.clone_offset_y, serializer);

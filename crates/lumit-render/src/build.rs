@@ -534,6 +534,9 @@ pub fn build_comp_draws_at(
                 f64::from(natural.0),
                 f64::from(natural.1),
                 &layer.paint,
+                // The layer's own clock, as a mask's keys are read on (K-213):
+                // a stroke keyed to draw itself on travels with the layer.
+                lt,
             );
             lumit_core::mask::apply_masks(
                 &mut rgba,
@@ -978,6 +981,10 @@ pub fn build_comp_draws_at(
                         // forced off by any paint (`collapse_state`), so the
                         // strokes always have an intermediate to land in.
                         paint: layer.paint.clone(),
+                        // The layer's own clock, so a keyed Start/End on a
+                        // Precomp's paint reads where every other keyed value
+                        // on that layer reads (K-213, K-449).
+                        paint_time: lt,
                     },
                     (nested.width as f32, nested.height as f32),
                 )

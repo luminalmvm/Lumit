@@ -198,6 +198,11 @@ pub fn rasterise_contents(
                     // is what the round brush already draws.
                     shape: crate::paint::BrushShape::Round,
                     opacity: item.opacity,
+                    // A vector outline is drawn whole; a shape item's own trim
+                    // paths are a shape-layer feature, not the brush's (K-449),
+                    // so the whole path every time and no clock to read.
+                    start: crate::anim::Property::zero(),
+                    end: crate::anim::Property::fixed(100.0),
                     mode: crate::paint::PaintMode::Paint,
                     clone_offset: (0.0, 0.0),
                     extra: serde_json::Map::new(),
@@ -209,6 +214,7 @@ pub fn rasterise_contents(
                     max_x - min_x,
                     max_y - min_y,
                     std::slice::from_ref(&brush),
+                    0.0,
                 );
             }
         }

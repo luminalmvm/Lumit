@@ -201,6 +201,13 @@ pub struct BridgeStroke {
     pub shape: BridgeBrushShape,
     /// 0..100.
     pub opacity: f64,
+    /// Where along the path the mark begins and ends, as a per cent of the
+    /// stroke's own length (K-449). Animatable exactly as a mask's opacity is,
+    /// on the layer's own clock (K-213), so the Timeline row carries the same
+    /// stopwatch and the same diamonds. Hold Start at 0 and key End 0 → 100
+    /// and the stroke draws itself on.
+    pub start: BridgeScalar,
+    pub end: BridgeScalar,
     pub mode: BridgePaintMode,
     /// Where a clone's pixels are copied from, as an offset in layer pixels.
     pub clone_offset_x: f64,
@@ -209,7 +216,7 @@ pub struct BridgeStroke {
 
 impl BridgeStroke {
     #[frb(ignore)]
-    fn read(stroke: &lumit_core::paint::PaintStroke) -> Self {
+    fn read_at(stroke: &lumit_core::paint::PaintStroke, offset: Rational) -> Self {
         Self {
             id: stroke.id,
             name: stroke.name.clone(),
@@ -226,6 +233,8 @@ impl BridgeStroke {
                 lumit_core::paint::BrushShape::Square => BridgeBrushShape::Square,
             },
             opacity: stroke.opacity,
+            start: BridgeScalar::read_at(&stroke.start, offset),
+            end: BridgeScalar::read_at(&stroke.end, offset),
             mode: match stroke.mode {
                 lumit_core::paint::PaintMode::Paint => BridgePaintMode::Paint,
                 lumit_core::paint::PaintMode::Erase => BridgePaintMode::Erase,
@@ -240,8 +249,11 @@ impl BridgeStroke {
     /// wrongly for ever after is clamped here rather than trusted, exactly as
     /// a mask's opacity is.
     #[frb(ignore)]
-    pub(crate) fn write(&self) -> lumit_core::paint::PaintStroke {
-        lumit_core::paint::PaintStroke {
+    pub(crate) fn write_at(
+        &self,
+        offset: Rational,
+    ) -> Result<lumit_core::paint::PaintStroke, BridgeError> {
+        Ok(lumit_core::paint::PaintStroke {
             id: self.id,
             name: self.name.clone(),
             points: self.points.iter().map(|p| (p.x, p.y)).collect(),
@@ -253,6 +265,11 @@ impl BridgeStroke {
                 BridgeBrushShape::Square => lumit_core::paint::BrushShape::Square,
             },
             opacity: self.opacity.clamp(0.0, 100.0),
+            // Per cent of the stroke's own length, so anything outside 0..100
+            // is a number that could only ever render wrongly — clamped here,
+            // every key of it, exactly as a mask's opacity is (K-449).
+            start: clamped_property(&self.start, offset, 0.0, 100.0)?,
+            end: clamped_property(&self.end, offset, 0.0, 100.0)?,
             mode: match self.mode {
                 BridgePaintMode::Paint => lumit_core::paint::PaintMode::Paint,
                 BridgePaintMode::Erase => lumit_core::paint::PaintMode::Erase,
@@ -260,7 +277,7 @@ impl BridgeStroke {
             },
             clone_offset: (self.clone_offset_x, self.clone_offset_y),
             extra: serde_json::Map::new(),
-        }
+        })
     }
 }
 
@@ -856,7 +873,11 @@ pub(crate) fn read_layer_info(
             .iter()
             .map(|m| BridgeMask::read_at(m, layer.start_offset.0))
             .collect(),
-        paint: layer.paint.iter().map(BridgeStroke::read).collect(),
+        paint: layer
+            .paint
+            .iter()
+            .map(|s| BridgeStroke::read_at(s, layer.start_offset.0))
+            .collect(),
         markers: layer
             .markers
             .iter()
@@ -1637,7 +1658,13 @@ impl LayerReference {
     /// This layer's paint strokes, oldest first (K-227).
     #[frb(sync)]
     pub fn get_paint(&self) -> Result<Vec<BridgeStroke>, BridgeError> {
-        Ok(self.item()?.paint.iter().map(BridgeStroke::read).collect())
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        Ok(layer
+            .paint
+            .iter()
+            .map(|s| BridgeStroke::read_at(s, offset))
+            .collect())
     }
 
     /// Add `stroke` on top of this layer's paint.
@@ -1653,8 +1680,10 @@ impl LayerReference {
         if stroke.points.is_empty() {
             return Err(BridgeError::EmptyStroke);
         }
-        let mut strokes = self.item()?.paint;
-        strokes.push(stroke.write());
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let mut strokes = layer.paint;
+        strokes.push(stroke.write_at(offset)?);
         self.commit_paint(strokes)
     }
 
@@ -1666,12 +1695,14 @@ impl LayerReference {
         if stroke.points.is_empty() {
             return Err(BridgeError::EmptyStroke);
         }
-        let mut strokes = self.item()?.paint;
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let mut strokes = layer.paint;
         let at = strokes
             .iter()
             .position(|s| s.id == stroke.id)
             .ok_or(BridgeError::NoSuchStroke)?;
-        strokes[at] = stroke.write();
+        strokes[at] = stroke.write_at(offset)?;
         self.commit_paint(strokes)
     }
 

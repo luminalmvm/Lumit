@@ -1084,7 +1084,10 @@ void main() {
           colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
           width: 20,
           hardness: 0.8,
+          shape: BridgeBrushShape.round,
           opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
@@ -1111,6 +1114,56 @@ void main() {
       expect(layer.getPaint().single.opacity, 40);
     });
 
+    /// A stroke's Start and End (K-449) get rows of their own under it, and
+    /// both write through — the pair that makes a stroke draw itself on.
+    testWidgets('a stroke grows Start and End rows that write through',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.addStroke(
+        stroke: BridgeStroke(
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: 'Brush 1',
+          points: const [
+            BridgeStrokePoint(x: 10, y: 10),
+            BridgeStrokePoint(x: 40, y: 25),
+          ],
+          colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+          width: 20,
+          hardness: 0.8,
+          shape: BridgeBrushShape.round,
+          opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
+          mode: BridgePaintMode.paint,
+          cloneOffsetX: 0,
+          cloneOffsetY: 0,
+        ),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'paint', settle: true);
+
+      expect(find.text('Start'), findsOneWidget);
+      expect(find.text('End'), findsOneWidget);
+
+      final id = layer.getPaint().single.id;
+      final end = find.byKey(ValueKey<String>('tl-stroke-end-$id'));
+      await tester.tap(end);
+      await tester.pumpAndSettle();
+      await tester.enterText(end, '40');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final written = layer.getPaint().single.end;
+      expect(written, isA<BridgeScalar_Static>());
+      expect((written as BridgeScalar_Static).field0, 40);
+      expect(layer.getPaint().single.start,
+          isA<BridgeScalar_Static>(),
+          reason: 'and Start is left where it was');
+    });
+
     /// **A stroke's opacity was not undoable.** The same fault the mask row had
     /// under K-234, and for the same reason: the row was written from the mask
     /// row as it stood *before* that fix, so it committed on every tick of the
@@ -1130,7 +1183,10 @@ void main() {
           colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
           width: 20,
           hardness: 0.8,
+          shape: BridgeBrushShape.round,
           opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
@@ -1181,7 +1237,10 @@ void main() {
           colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
           width: 20,
           hardness: 0.8,
+          shape: BridgeBrushShape.round,
           opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
           cloneOffsetX: 0,
           cloneOffsetY: 0,

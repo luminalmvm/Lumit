@@ -17,7 +17,7 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_kind`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_kind`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
@@ -819,6 +819,14 @@ class BridgeStroke {
 
   /// 0..100.
   final double opacity;
+
+  /// Where along the path the mark begins and ends, as a per cent of the
+  /// stroke's own length (K-449). Animatable exactly as a mask's opacity is,
+  /// on the layer's own clock (K-213), so the Timeline row carries the same
+  /// stopwatch and the same diamonds. Hold Start at 0 and key End 0 → 100
+  /// and the stroke draws itself on.
+  final BridgeScalar start;
+  final BridgeScalar end;
   final BridgePaintMode mode;
 
   /// Where a clone's pixels are copied from, as an offset in layer pixels.
@@ -834,6 +842,8 @@ class BridgeStroke {
     required this.hardness,
     required this.shape,
     required this.opacity,
+    required this.start,
+    required this.end,
     required this.mode,
     required this.cloneOffsetX,
     required this.cloneOffsetY,
@@ -849,6 +859,8 @@ class BridgeStroke {
       hardness.hashCode ^
       shape.hashCode ^
       opacity.hashCode ^
+      start.hashCode ^
+      end.hashCode ^
       mode.hashCode ^
       cloneOffsetX.hashCode ^
       cloneOffsetY.hashCode;
@@ -866,6 +878,8 @@ class BridgeStroke {
           hardness == other.hardness &&
           shape == other.shape &&
           opacity == other.opacity &&
+          start == other.start &&
+          end == other.end &&
           mode == other.mode &&
           cloneOffsetX == other.cloneOffsetX &&
           cloneOffsetY == other.cloneOffsetY;

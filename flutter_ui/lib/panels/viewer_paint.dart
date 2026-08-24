@@ -27,6 +27,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeScalar;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
@@ -323,6 +324,10 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
           hardness: tools.brushHardness / 100,
           shape: tools.brushShape,
           opacity: tools.brushOpacity,
+          // A fresh stroke is drawn whole; Start and End are trimmed
+          // afterwards, on their own Timeline rows (K-449).
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: paintModeFor(widget.tool),
           cloneOffsetX: offsetX,
           cloneOffsetY: offsetY,

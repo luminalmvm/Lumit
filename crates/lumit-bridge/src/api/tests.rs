@@ -3605,6 +3605,8 @@ fn stroke(name: &str, points: &[(f64, f64)]) -> crate::api::layer::BridgeStroke 
         hardness: 0.8,
         shape: crate::api::layer::BridgeBrushShape::Round,
         opacity: 100.0,
+        start: crate::api::effect::BridgeScalar::Static(0.0),
+        end: crate::api::effect::BridgeScalar::Static(100.0),
         mode: BridgePaintMode::Paint,
         clone_offset_x: 0.0,
         clone_offset_y: 0.0,
@@ -3784,6 +3786,48 @@ fn both_brush_shapes_round_trip() {
     let strokes = layer.get_paint().expect("paint");
     assert_eq!(strokes[0].shape, BridgeBrushShape::Round);
     assert_eq!(strokes[1].shape, BridgeBrushShape::Square);
+}
+
+/// A stroke's Start and End round trip, animate, and are clamped to the
+/// 0..100 they mean — every key of them (K-449).
+#[test]
+fn a_strokes_trim_round_trips_and_is_clamped() {
+    use crate::api::effect::{BridgeKeyframe, BridgeScalar, BridgeSideInterp};
+
+    let (_project, layer) = project_with_layer();
+    let mut written = stroke("Write-on", &[(0.0, 0.0), (50.0, 0.0)]);
+    written.start = BridgeScalar::Static(-40.0);
+    written.end = BridgeScalar::Keyframed(vec![
+        BridgeKeyframe {
+            time: BridgeRational { num: 0, den: 1 },
+            value: -10.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+        BridgeKeyframe {
+            time: BridgeRational { num: 1, den: 1 },
+            value: 400.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+    ]);
+    layer.add_stroke(written).expect("added");
+
+    let got = &layer.get_paint().expect("paint")[0];
+    assert_eq!(
+        got.start,
+        BridgeScalar::Static(0.0),
+        "a Start below zero could only ever render wrongly"
+    );
+    let BridgeScalar::Keyframed(keys) = &got.end else {
+        panic!("End keeps its keys");
+    };
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[0].value, 0.0);
+    assert_eq!(
+        keys[1].value, 100.0,
+        "and every key is clamped, not just one"
+    );
 }
 
 // --- Assets: what a layer is made of --------------------------------------

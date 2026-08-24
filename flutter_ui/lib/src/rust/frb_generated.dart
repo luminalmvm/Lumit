@@ -9417,8 +9417,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeStroke dco_decode_bridge_stroke(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return BridgeStroke(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -9428,9 +9428,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       hardness: dco_decode_f_64(arr[5]),
       shape: dco_decode_bridge_brush_shape(arr[6]),
       opacity: dco_decode_f_64(arr[7]),
-      mode: dco_decode_bridge_paint_mode(arr[8]),
-      cloneOffsetX: dco_decode_f_64(arr[9]),
-      cloneOffsetY: dco_decode_f_64(arr[10]),
+      start: dco_decode_bridge_scalar(arr[8]),
+      end: dco_decode_bridge_scalar(arr[9]),
+      mode: dco_decode_bridge_paint_mode(arr[10]),
+      cloneOffsetX: dco_decode_f_64(arr[11]),
+      cloneOffsetY: dco_decode_f_64(arr[12]),
     );
   }
 
@@ -11815,6 +11817,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_hardness = sse_decode_f_64(deserializer);
     var var_shape = sse_decode_bridge_brush_shape(deserializer);
     var var_opacity = sse_decode_f_64(deserializer);
+    var var_start = sse_decode_bridge_scalar(deserializer);
+    var var_end = sse_decode_bridge_scalar(deserializer);
     var var_mode = sse_decode_bridge_paint_mode(deserializer);
     var var_cloneOffsetX = sse_decode_f_64(deserializer);
     var var_cloneOffsetY = sse_decode_f_64(deserializer);
@@ -11827,6 +11831,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         hardness: var_hardness,
         shape: var_shape,
         opacity: var_opacity,
+        start: var_start,
+        end: var_end,
         mode: var_mode,
         cloneOffsetX: var_cloneOffsetX,
         cloneOffsetY: var_cloneOffsetY);
@@ -14331,6 +14337,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_f_64(self.hardness, serializer);
     sse_encode_bridge_brush_shape(self.shape, serializer);
     sse_encode_f_64(self.opacity, serializer);
+    sse_encode_bridge_scalar(self.start, serializer);
+    sse_encode_bridge_scalar(self.end, serializer);
     sse_encode_bridge_paint_mode(self.mode, serializer);
     sse_encode_f_64(self.cloneOffsetX, serializer);
     sse_encode_f_64(self.cloneOffsetY, serializer);
