@@ -2377,6 +2377,30 @@ void main() {
       expect(p.layer.getPaint(), isEmpty, reason: 'one undo step');
     });
 
+    /// The brush shape chosen in the tool options is the shape the stroke is
+    /// committed with (K-448). Round unless somebody picks otherwise, so a
+    /// project painted before there was a choice reads back the way it was.
+    testWidgets('the brush commits the shape chosen in the tool options',
+        (tester) async {
+      final p = withLayer();
+      p.uiState.tools.select(ToolMode.brush);
+      await mount(tester, p);
+
+      final fitted = fittedRect(tester, p.comp);
+      await tester.tapAt(fitted.center);
+      await tester.pumpAndSettle();
+      expect(p.layer.getPaint().single.shape, BridgeBrushShape.round,
+          reason: 'the shape everything was painted with before');
+
+      p.uiState.tools.brushShape = BridgeBrushShape.square;
+      await tester.pumpAndSettle();
+      await tester.tapAt(fitted.center + const Offset(0, 30));
+      await tester.pumpAndSettle();
+      expect(p.layer.getPaint().last.shape, BridgeBrushShape.square);
+      expect(p.layer.getPaint().first.shape, BridgeBrushShape.round,
+          reason: 'and the one already painted keeps the shape it was made with');
+    });
+
     testWidgets('the eraser and the clone stamp commit their own modes',
         (tester) async {
       final p = withLayer();

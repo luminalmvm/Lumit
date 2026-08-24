@@ -194,6 +194,9 @@ pub fn rasterise_contents(
                     // half a pixel of falloff whatever this says, which is the
                     // anti-aliasing rather than a soft brush.
                     hardness: 1.0,
+                    // A vector outline is round-capped and round-joined, which
+                    // is what the round brush already draws.
+                    shape: crate::paint::BrushShape::Round,
                     opacity: item.opacity,
                     mode: crate::paint::PaintMode::Paint,
                     clone_offset: (0.0, 0.0),

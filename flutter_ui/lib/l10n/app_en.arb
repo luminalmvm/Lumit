@@ -29,6 +29,14 @@
   "@armRazor": {
     "description": "Menu item: pick up the blade that cuts a layer where you click."
   },
+  "brushShapeRound": "Round",
+  "@brushShapeRound": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a circular brush tip."
+  },
+  "brushShapeSquare": "Square",
+  "@brushShapeSquare": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a square brush tip."
+  },
   "bringForward": "Bring forward",
   "@bringForward": {
     "description": "Context-menu item: move a layer one place up the stack."
@@ -5030,6 +5038,10 @@
   "@tipEdgeHardness": {
     "description": "Tooltip. Keep it to the control's name — under five words."
   },
+  "tipBrushShape": "Brush shape",
+  "@tipBrushShape": {
+    "description": "Tooltip. Keep it to the control's name — under five words."
+  },
   "tipEnable": "Enable",
   "@tipEnable": {
     "description": "Tooltip on the checkbox that switches an effect on. Under five words."
@@ -5642,6 +5654,10 @@
   "toolHand": "Hand",
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
+  },
+  "toolShape": "Shape",
+  "@toolShape": {
+    "description": "Toolbar options strip — label beside the brush shape picker."
   },
   "toolHardness": "Hardness",
   "@toolHardness": {

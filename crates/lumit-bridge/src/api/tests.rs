@@ -3603,6 +3603,7 @@ fn stroke(name: &str, points: &[(f64, f64)]) -> crate::api::layer::BridgeStroke 
         },
         width: 12.0,
         hardness: 0.8,
+        shape: crate::api::layer::BridgeBrushShape::Round,
         opacity: 100.0,
         mode: BridgePaintMode::Paint,
         clone_offset_x: 0.0,
@@ -3764,6 +3765,25 @@ fn every_paint_mode_round_trips() {
     assert_eq!(strokes[2].mode, BridgePaintMode::Clone);
     assert_eq!(strokes[2].clone_offset_x, -20.0);
     assert_eq!(strokes[2].clone_offset_y, 7.5);
+}
+
+/// Both brush shapes survive the crossing, and Round is what a stroke that
+/// says nothing comes back as (K-448).
+#[test]
+fn both_brush_shapes_round_trip() {
+    use crate::api::layer::BridgeBrushShape;
+
+    let (_project, layer) = project_with_layer();
+    layer
+        .add_stroke(stroke("Round", &[(1.0, 1.0)]))
+        .expect("added");
+    let mut square = stroke("Square", &[(2.0, 2.0)]);
+    square.shape = BridgeBrushShape::Square;
+    layer.add_stroke(square).expect("added");
+
+    let strokes = layer.get_paint().expect("paint");
+    assert_eq!(strokes[0].shape, BridgeBrushShape::Round);
+    assert_eq!(strokes[1].shape, BridgeBrushShape::Square);
 }
 
 // --- Assets: what a layer is made of --------------------------------------

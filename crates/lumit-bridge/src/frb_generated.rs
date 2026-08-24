@@ -8673,6 +8673,18 @@ impl SseDecode for crate::api::effect::BridgeBezierSide {
     }
 }
 
+impl SseDecode for crate::api::layer::BridgeBrushShape {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::layer::BridgeBrushShape::Round,
+            1 => crate::api::layer::BridgeBrushShape::Square,
+            _ => unreachable!("Invalid variant for BridgeBrushShape: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::cache::BridgeCacheLocation {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -10117,6 +10129,7 @@ impl SseDecode for crate::api::layer::BridgeStroke {
         let mut var_colour = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
         let mut var_width = <f64>::sse_decode(deserializer);
         let mut var_hardness = <f64>::sse_decode(deserializer);
+        let mut var_shape = <crate::api::layer::BridgeBrushShape>::sse_decode(deserializer);
         let mut var_opacity = <f64>::sse_decode(deserializer);
         let mut var_mode = <crate::api::layer::BridgePaintMode>::sse_decode(deserializer);
         let mut var_cloneOffsetX = <f64>::sse_decode(deserializer);
@@ -10128,6 +10141,7 @@ impl SseDecode for crate::api::layer::BridgeStroke {
             colour: var_colour,
             width: var_width,
             hardness: var_hardness,
+            shape: var_shape,
             opacity: var_opacity,
             mode: var_mode,
             clone_offset_x: var_cloneOffsetX,
@@ -11932,6 +11946,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeBezierSide>
     for crate::api::effect::BridgeBezierSide
 {
     fn into_into_dart(self) -> crate::api::effect::BridgeBezierSide {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeBrushShape {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Round => 0.into_dart(),
+            Self::Square => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::layer::BridgeBrushShape
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeBrushShape>
+    for crate::api::layer::BridgeBrushShape
+{
+    fn into_into_dart(self) -> crate::api::layer::BridgeBrushShape {
         self
     }
 }
@@ -13846,6 +13881,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeStroke {
             self.colour.into_into_dart().into_dart(),
             self.width.into_into_dart().into_dart(),
             self.hardness.into_into_dart().into_dart(),
+            self.shape.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
             self.clone_offset_x.into_into_dart().into_dart(),
@@ -14547,6 +14583,22 @@ impl SseEncode for crate::api::effect::BridgeBezierSide {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <f64>::sse_encode(self.speed, serializer);
         <f64>::sse_encode(self.influence, serializer);
+    }
+}
+
+impl SseEncode for crate::api::layer::BridgeBrushShape {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::layer::BridgeBrushShape::Round => 0,
+                crate::api::layer::BridgeBrushShape::Square => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -15638,6 +15690,7 @@ impl SseEncode for crate::api::layer::BridgeStroke {
         <crate::api::assets::BridgeColourRgba>::sse_encode(self.colour, serializer);
         <f64>::sse_encode(self.width, serializer);
         <f64>::sse_encode(self.hardness, serializer);
+        <crate::api::layer::BridgeBrushShape>::sse_encode(self.shape, serializer);
         <f64>::sse_encode(self.opacity, serializer);
         <crate::api::layer::BridgePaintMode>::sse_encode(self.mode, serializer);
         <f64>::sse_encode(self.clone_offset_x, serializer);

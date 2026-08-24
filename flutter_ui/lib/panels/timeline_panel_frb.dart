@@ -4531,6 +4531,7 @@ class _StrokeRow extends StatelessWidget {
         colour: s.colour,
         width: s.width,
         hardness: s.hardness,
+        shape: s.shape,
         opacity: opacity,
         mode: s.mode,
         cloneOffsetX: s.cloneOffsetX,

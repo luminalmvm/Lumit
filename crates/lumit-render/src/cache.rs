@@ -490,6 +490,7 @@ mod tests {
             colour: lumit_core::model::LinearColour([1.0, 0.0, 0.0, 1.0]),
             width,
             hardness: 1.0,
+            shape: lumit_core::paint::BrushShape::Round,
             opacity: 100.0,
             mode: PaintMode::Paint,
             clone_offset: (0.0, 0.0),

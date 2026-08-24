@@ -48,6 +48,13 @@ const double paintSampleDistance = 2;
 /// The mark drawn where a clone stamp will copy from.
 const double cloneSourceMarkSize = 7;
 
+/// What a brush shape is called in the tool options and on a stroke's row
+/// (K-448).
+String brushShapeLabel(BridgeBrushShape shape) => switch (shape) {
+      BridgeBrushShape.round => l10n.brushShapeRound,
+      BridgeBrushShape.square => l10n.brushShapeSquare,
+    };
+
 /// Which engine mode each painting tool commits.
 BridgePaintMode paintModeFor(ToolMode tool) => switch (tool) {
       ToolMode.eraser => BridgePaintMode.erase,
@@ -314,6 +321,7 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
           colour: tools.fillRgba,
           width: tools.brushSize,
           hardness: tools.brushHardness / 100,
+          shape: tools.brushShape,
           opacity: tools.brushOpacity,
           mode: paintModeFor(widget.tool),
           cloneOffsetX: offsetX,

@@ -8329,6 +8329,31 @@ on; an unpainted precomp does not pay a thing. Doing the stamping on the card is
 if it ever shows up in a measurement, and nothing about what is *stored* would change when it
 arrives.
 
+### A square brush, and why that is one line of arithmetic (K-448)
+
+The brush had one shape: a circle. Adding a square one sounds like adding a second rasteriser,
+and it is not — it is a change to what the word *distance* means.
+
+Here is how a dab is stamped. Lumit walks the pixels near where the dab landed and asks each
+one "how far are you from the middle?". Inside a certain distance the pixel is fully painted;
+beyond the brush's radius it is untouched; in between it fades, and how wide that fading band
+is *is* the hardness control. Nothing else about a dab exists.
+
+So the shape is not a separate drawing routine, it is the answer to that one question. Measure
+the distance as the straight line to the middle and the fully-painted region is a circle.
+Measure it as *the larger of the two directions* — how far across plus how far up, whichever is
+bigger — and the same fully-painted region is a square. Every other part of the brush is
+written in terms of that number and needs no case of its own: the hardness ramp softens a
+square exactly as it softens a round, outwards from a flat-sided core; the spacing between dabs
+along a stroke is unchanged; even the box the stroke reserves in the picture is the same, since
+a square of a given width and a circle of the same width fit in the same box.
+
+Two shapes is the whole of it. There is no brush-tip system here — no imported tip images, no
+angle, no squashing a round tip into an ellipse — and deliberately no half-built room for one.
+And a stroke that is round says nothing about its shape in the saved file, so every project
+ever saved still writes exactly the bytes it wrote before and every frame the cache holds for
+it stays valid.
+
 ## 13. The two public web sites
 
 `web/` and `web-docs/` are the public face of the project: **lumitlab.com**,

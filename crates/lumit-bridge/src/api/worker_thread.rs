@@ -4675,6 +4675,7 @@ mod tests {
             },
             width: 12.0,
             hardness: 0.8,
+            shape: crate::api::layer::BridgeBrushShape::Round,
             // Mid-drag values are provisional, so an out-of-range one must be
             // clamped rather than rendered — the same rule the commit follows.
             opacity: 140.0,

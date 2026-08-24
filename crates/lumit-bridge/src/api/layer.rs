@@ -156,6 +156,18 @@ pub enum BridgePaintMode {
     Clone,
 }
 
+/// The shape one dab of the brush leaves (K-448). Not a brush-tip system:
+/// two shapes, both measured from the dab's centre out to half the stroke's
+/// width and both softened by the same hardness ramp.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeBrushShape {
+    /// A circle — the brush every stroke had before there was a choice.
+    Round,
+    /// A square with flat sides and square corners.
+    Square,
+}
+
 /// One point of a stroke's path, in layer pixels.
 ///
 /// Named for the stroke rather than called `BridgePoint`, because that name is
@@ -184,8 +196,9 @@ pub struct BridgeStroke {
     pub colour: crate::api::assets::BridgeColourRgba,
     /// The brush's diameter in layer pixels.
     pub width: f64,
-    /// 0 fully soft, 1 a hard edge.
+    /// 0 fully soft, 1 a hard edge. The same ramp whatever the shape is.
     pub hardness: f64,
+    pub shape: BridgeBrushShape,
     /// 0..100.
     pub opacity: f64,
     pub mode: BridgePaintMode,
@@ -208,6 +221,10 @@ impl BridgeStroke {
             colour: crate::api::assets::colour_of(stroke.colour),
             width: stroke.width,
             hardness: stroke.hardness,
+            shape: match stroke.shape {
+                lumit_core::paint::BrushShape::Round => BridgeBrushShape::Round,
+                lumit_core::paint::BrushShape::Square => BridgeBrushShape::Square,
+            },
             opacity: stroke.opacity,
             mode: match stroke.mode {
                 lumit_core::paint::PaintMode::Paint => BridgePaintMode::Paint,
@@ -231,6 +248,10 @@ impl BridgeStroke {
             colour: crate::api::assets::linear_of(self.colour),
             width: self.width.clamp(0.0, 10_000.0),
             hardness: self.hardness.clamp(0.0, 1.0),
+            shape: match self.shape {
+                BridgeBrushShape::Round => lumit_core::paint::BrushShape::Round,
+                BridgeBrushShape::Square => lumit_core::paint::BrushShape::Square,
+            },
             opacity: self.opacity.clamp(0.0, 100.0),
             mode: match self.mode {
                 BridgePaintMode::Paint => lumit_core::paint::PaintMode::Paint,

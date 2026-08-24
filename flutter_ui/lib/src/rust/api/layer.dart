@@ -18,7 +18,7 @@ import 'solid.dart';
 import 'state.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_kind`, `clamped_property`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// One window of a source's waveform, summarised to exactly the buckets the
@@ -83,6 +83,18 @@ class BridgeAudioPeaks {
           bands == other.bands &&
           buckets == other.buckets &&
           values == other.values;
+}
+
+/// The shape one dab of the brush leaves (K-448). Not a brush-tip system:
+/// two shapes, both measured from the dab's centre out to half the stroke's
+/// width and both softened by the same hardness ramp.
+enum BridgeBrushShape {
+  /// A circle — the brush every stroke had before there was a choice.
+  round,
+
+  /// A square with flat sides and square corners.
+  square,
+  ;
 }
 
 /// One clip on a Sequence layer, as the Timeline needs to draw it: where it
@@ -801,8 +813,9 @@ class BridgeStroke {
   /// The brush's diameter in layer pixels.
   final double width;
 
-  /// 0 fully soft, 1 a hard edge.
+  /// 0 fully soft, 1 a hard edge. The same ramp whatever the shape is.
   final double hardness;
+  final BridgeBrushShape shape;
 
   /// 0..100.
   final double opacity;
@@ -819,6 +832,7 @@ class BridgeStroke {
     required this.colour,
     required this.width,
     required this.hardness,
+    required this.shape,
     required this.opacity,
     required this.mode,
     required this.cloneOffsetX,
@@ -833,6 +847,7 @@ class BridgeStroke {
       colour.hashCode ^
       width.hashCode ^
       hardness.hashCode ^
+      shape.hashCode ^
       opacity.hashCode ^
       mode.hashCode ^
       cloneOffsetX.hashCode ^
@@ -849,6 +864,7 @@ class BridgeStroke {
           colour == other.colour &&
           width == other.width &&
           hardness == other.hardness &&
+          shape == other.shape &&
           opacity == other.opacity &&
           mode == other.mode &&
           cloneOffsetX == other.cloneOffsetX &&

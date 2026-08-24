@@ -26,11 +26,13 @@
 // when there is snapping for it to govern.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeBrushShape;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
+import '../panels/viewer_paint.dart' show brushShapeLabel;
 import '../state/dock.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
@@ -178,6 +180,7 @@ class _ToolOptions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
     return Row(
       children: [
         _Swatch(
@@ -195,6 +198,26 @@ class _ToolOptions extends StatelessWidget {
             max: 2000,
             suffix: ' px',
             onChanged: (v) => tools.brushSize = v,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: LumitTooltip(
+              message: l10n.tipBrushShape,
+              child: Row(
+                children: [
+                  Text(l10n.toolShape,
+                      style: t.small.copyWith(color: t.textSecondary)),
+                  const SizedBox(width: 5),
+                  BareDropdown<BridgeBrushShape>(
+                    key: const ValueKey<String>('tool-brush-shape'),
+                    value: tools.brushShape,
+                    options: BridgeBrushShape.values,
+                    label: brushShapeLabel,
+                    onChanged: (v) => tools.brushShape = v,
+                  ),
+                ],
+              ),
+            ),
           ),
           _Number(
             label: l10n.toolHardness,

@@ -12519,3 +12519,33 @@ Regression tests: in `lumit-render`,
 precomp, end to end on a real device) and the extended
 `collapsed_precomp_splices_inner_draws_with_parent_placement`, which holds the draw-side half
 on a machine with no adapter. No new strings.
+
+## K-448 — The brush gets a square, and the shape is one substitution
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. `PaintStroke` gains `shape`
+(`BrushShape::Round | Square`), picked in the paint tool options and committed with the
+stroke like its width, hardness and opacity.
+
+**Not a brush-tip system, and no room left for one.** No bitmap tip, no angle, no roundness,
+no spacing or scatter. The shape is a single substitution: `Dab::distance` answers "how far is
+this pixel from the dab's centre" — the straight line for Round, `max(|dx|, |dy|)` for Square —
+and *every* number downstream is already written in terms of that answer. The radius, the
+hardness ramp, the stroke's bounding box and the dab spacing are untouched, so a square softens
+exactly as a round does and there is no second case anywhere in the rasteriser. A square of a
+given width and a circle of the same width occupy the same box, so `PaintStroke::bounds` did
+not move either.
+
+**Hardness was already the soft/hard control** and stays one ramp for both shapes:
+`feather = radius × (1 − hardness)`, floored at half a pixel. Nothing was added for it; the
+toolbar field has driven it since K-227.
+
+**Old projects write the bytes they wrote.** `shape` is `#[serde(default,
+skip_serializing_if = "BrushShape::is_round")]`, so a round stroke is absent from the file
+(the K-445 habit) and every frame the cache has banked for an unre-shaped project stays valid.
+`shape` is not editable on a stroke's Timeline row, for the same reason width and hardness are
+not: it is a property of the mark that was made, set before the drag.
+
+Regression tests: in `lumit-core`, `a_square_brush_marks_its_corners_and_a_round_one_does_not`,
+`a_soft_square_fades_at_its_flat_edge`, `a_round_brush_is_absent_from_the_file`; in Flutter,
+`the brush commits the shape chosen in the tool options`. New strings: `toolShape`,
+`tipBrushShape`, `brushShapeRound`, `brushShapeSquare` — English only until Crowdin is fed.

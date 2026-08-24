@@ -27,10 +27,14 @@
 //! makes "mask off the part I painted" and "blur what I painted" both mean the
 //! obvious thing.
 //!
-//! **What is deliberately not here.** Pressure, tilt, spacing curves, brush
-//! shapes other than round, stroke start/end times (After Effects' write-on) and
-//! any GPU path. Each is a real feature; none of them changes the shape of what
-//! is stored, which is what this first cut is for.
+//! **What is deliberately not here.** Pressure, tilt, spacing curves, stroke
+//! start/end times (After Effects' write-on) and any GPU path. Each is a real
+//! feature; none of them changes the shape of what is stored, which is what
+//! this first cut is for.
+//!
+//! The brush tip itself is round or square ([`BrushShape`], K-448) and softens
+//! by one hardness ramp either way. That is deliberately not a brush-*tip*
+//! system: no bitmap, no angle, no roundness, and no room made for one.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -50,6 +54,34 @@ pub enum PaintMode {
     Clone,
 }
 
+/// The shape one dab of the brush leaves.
+///
+/// Not a brush-tip system — there is no bitmap, no angle and no roundness, and
+/// there is deliberately no room for one here. Two shapes, both measured from
+/// the dab's centre out to [`PaintStroke::width`] ÷ 2, and both softened by the
+/// same [`PaintStroke::hardness`] ramp: what changes is only *how the distance
+/// to the centre is measured*.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BrushShape {
+    /// The usual brush: distance is the straight line to the centre, so the
+    /// mark is a circle.
+    #[default]
+    Round,
+    /// Distance is the greater of the two axes, so the mark is a square with
+    /// flat sides and square corners — the chisel that draws a clean rectangular
+    /// patch, and the tip a clone stamp wants when it is copying architecture.
+    Square,
+}
+
+impl BrushShape {
+    /// True for the shape every stroke had before there was a choice — the one
+    /// left out of the file entirely, so a project nobody has re-shaped writes
+    /// exactly the bytes it wrote yesterday.
+    fn is_round(&self) -> bool {
+        matches!(self, BrushShape::Round)
+    }
+}
+
 /// One stroke: the path the pointer took and how it was painted.
 ///
 /// The path is a **polyline** rather than a bezier: it is a record of a gesture,
@@ -66,8 +98,12 @@ pub struct PaintStroke {
     /// The brush's **diameter** in layer pixels.
     pub width: f64,
     /// 0 = fully soft (fades from the centre out), 1 = a hard edge with only
-    /// enough falloff left to keep it from stair-stepping.
+    /// enough falloff left to keep it from stair-stepping. The same ramp
+    /// whatever the [`shape`](Self::shape) is.
     pub hardness: f64,
+    /// Round (the default, and what every stroke was before K-448) or square.
+    #[serde(default, skip_serializing_if = "BrushShape::is_round")]
+    pub shape: BrushShape,
     /// 0..100, like every other opacity in the document.
     pub opacity: f64,
     pub mode: PaintMode,
@@ -92,6 +128,7 @@ impl PaintStroke {
             colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
             width: 20.0,
             hardness: 0.8,
+            shape: BrushShape::default(),
             opacity: 100.0,
             mode: PaintMode::Paint,
             clone_offset: (0.0, 0.0),
@@ -236,7 +273,19 @@ fn fill_coverage(
     for (cx, cy) in dabs(&stroke.points, radius) {
         let px = cx * sx;
         let py = cy * sy;
-        stamp(coverage, w, h, px, py, radius, solid, feather);
+        stamp(
+            coverage,
+            w,
+            h,
+            px,
+            py,
+            Dab {
+                radius,
+                solid,
+                feather,
+                shape: stroke.shape,
+            },
+        );
     }
     Some((x0, y0, x1, y1))
 }
@@ -277,23 +326,52 @@ fn dabs(points: &[(f64, f64)], radius_px: f64) -> Vec<(f64, f64)> {
     out
 }
 
-/// One round dab into the coverage buffer, taking the greatest coverage at each
+/// One dab's measurements: everything about the brush that does not move as it
+/// is walked along the stroke. Worked out once per stroke rather than passed as
+/// four more arguments per dab.
+#[derive(Debug, Clone, Copy)]
+struct Dab {
+    /// Half the brush's width on the raster being drawn, in pixels.
+    radius: f64,
+    /// Inside this distance the coverage is full.
+    solid: f64,
+    /// The width of the ramp from full to nothing: `radius - solid`, never less
+    /// than [`MIN_FEATHER`].
+    feather: f64,
+    shape: BrushShape,
+}
+
+impl Dab {
+    /// How far a pixel at `(dx, dy)` from the dab's centre counts as being,
+    /// **in the brush's own idea of distance** — a straight line for a round
+    /// brush, the greater of the two axes for a square one.
+    ///
+    /// That one substitution is the whole of the shape: everything downstream —
+    /// the radius, the hardness ramp, the bounding box, the dab spacing — is
+    /// written in terms of this number and needs no case of its own. A square
+    /// brush therefore softens exactly as a round one does, outwards from a
+    /// flat-sided core rather than a circular one.
+    fn distance(&self, dx: f64, dy: f64) -> f64 {
+        match self.shape {
+            BrushShape::Round => (dx * dx + dy * dy).sqrt(),
+            BrushShape::Square => dx.abs().max(dy.abs()),
+        }
+    }
+}
+
+/// One dab into the coverage buffer, taking the greatest coverage at each
 /// pixel rather than adding.
 ///
 /// Greatest, not sum: the dabs along a stroke overlap heavily by design, and
 /// adding them would make the middle of a slow stroke opaque and its ends thin.
 /// A stroke's *own* opacity is applied once, when it is composited.
-#[allow(clippy::too_many_arguments)]
-fn stamp(
-    coverage: &mut [u8],
-    w: u32,
-    h: u32,
-    cx: f64,
-    cy: f64,
-    radius: f64,
-    solid: f64,
-    feather: f64,
-) {
+fn stamp(coverage: &mut [u8], w: u32, h: u32, cx: f64, cy: f64, dab: Dab) {
+    let Dab {
+        radius,
+        solid,
+        feather,
+        ..
+    } = dab;
     let x0 = ((cx - radius).floor()).max(0.0) as u32;
     let y0 = ((cy - radius).floor()).max(0.0) as u32;
     let x1 = ((cx + radius).ceil()).min(f64::from(w) - 1.0);
@@ -308,7 +386,7 @@ fn stamp(
             // The pixel's centre, which is what a round brush is measured to.
             let dx = f64::from(x) + 0.5 - cx;
             let dy = f64::from(y) + 0.5 - cy;
-            let d = (dx * dx + dy * dy).sqrt();
+            let d = dab.distance(dx, dy);
             let a = if d <= solid {
                 1.0
             } else if d >= radius {
@@ -456,6 +534,88 @@ mod tests {
             dab(0.0)
         );
         assert!(dab(0.0) > 0, "but has not vanished");
+    }
+
+    /// A square brush fills its corners; a round one does not. Same width, same
+    /// hardness, same place — the only difference is how the distance to the
+    /// centre is measured (K-448).
+    #[test]
+    fn a_square_brush_marks_its_corners_and_a_round_one_does_not() {
+        let dab = |shape: BrushShape| {
+            let mut rgba = raster(40, 40, [0, 0, 0, 0]);
+            let mut stroke = PaintStroke::new("Dab", vec![(20.0, 20.0)]);
+            stroke.width = 20.0;
+            stroke.hardness = 1.0;
+            stroke.shape = shape;
+            apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke]);
+            rgba
+        };
+        let round = dab(BrushShape::Round);
+        let square = dab(BrushShape::Square);
+        // Just inside the corner of the 20×20 box, which is 14 px from the
+        // centre in a straight line — outside a radius-10 circle, inside a
+        // half-width-10 square.
+        assert_eq!(
+            alpha_at(&round, 40, 28, 28),
+            0,
+            "a round brush leaves its corners alone"
+        );
+        assert_eq!(
+            alpha_at(&square, 40, 28, 28),
+            255,
+            "a square one fills them"
+        );
+        // And the two agree straight out from the middle, where the two ways
+        // of measuring distance give the same answer.
+        assert_eq!(alpha_at(&round, 40, 25, 20), alpha_at(&square, 40, 25, 20));
+        assert_eq!(
+            alpha_at(&square, 40, 20, 32),
+            0,
+            "the square stops at its own edge rather than growing"
+        );
+    }
+
+    /// Hardness is one ramp, and it softens a square exactly as it softens a
+    /// round (K-448): the shape decides what "distance from the centre" means
+    /// and nothing else.
+    #[test]
+    fn a_soft_square_fades_at_its_flat_edge() {
+        let dab = |hardness: f64| {
+            let mut rgba = raster(40, 40, [0, 0, 0, 0]);
+            let mut stroke = PaintStroke::new("Dab", vec![(20.0, 20.0)]);
+            stroke.width = 20.0;
+            stroke.hardness = hardness;
+            stroke.shape = BrushShape::Square;
+            apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke]);
+            alpha_at(&rgba, 40, 25, 20)
+        };
+        assert_eq!(dab(1.0), 255, "a hard square is solid to its edge");
+        assert!(
+            dab(0.0) < 200,
+            "a soft one has faded by halfway: {}",
+            dab(0.0)
+        );
+        assert!(dab(0.0) > 0, "but has not vanished");
+    }
+
+    /// The shape is left out of the file until somebody picks the other one, so
+    /// every project ever saved writes exactly the bytes it wrote before — and
+    /// one written before there was a choice reads back as Round.
+    #[test]
+    fn a_round_brush_is_absent_from_the_file() {
+        let stroke = PaintStroke::new("Dab", vec![(1.0, 2.0)]);
+        let json = serde_json::to_string(&stroke).expect("serialise");
+        assert!(
+            !json.contains("shape"),
+            "a round brush writes nothing: {json}"
+        );
+
+        let mut square = stroke.clone();
+        square.shape = BrushShape::Square;
+        let json = serde_json::to_string(&square).expect("serialise");
+        assert!(json.contains("Square"), "a square one does: {json}");
+        let back: PaintStroke = serde_json::from_str(&json).expect("read back");
+        assert_eq!(back.shape, BrushShape::Square);
     }
 
     #[test]

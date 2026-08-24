@@ -17,7 +17,8 @@ import Shot from "../../../components/Shot.astro";
 | **Clone stamp** | Copies pixels from elsewhere on the same layer. `Alt`-click sets the origin point it copies from, then paint. |
 | **Eraser** | Similar to Brush, but instead makes the area of the layer the stroke covers transparent. |
 
-Brush **size**, **hardness**, and **opacity** appear in the tool options while using a paint tool.
+Brush **size**, **shape** (round or square), **hardness**, and **opacity** appear in the tool
+options while using a paint tool.
 
 ## Strokes are paths
 
@@ -37,8 +38,7 @@ effects will operate upon strokes as if they were part of the original layers so
 
 :::note[Not built yet]
 There is currently no support for drawing via tablet, so pressure and tilt are missing.
-Currently brush shapes other than round aren't implemented. Keyframing a stroke's start 
-and end time is not built either, nor are per-stroke blend modes.
+Keyframing a stroke's start and end time is not built either, nor are per-stroke blend modes.
 :::
 
 ## Related

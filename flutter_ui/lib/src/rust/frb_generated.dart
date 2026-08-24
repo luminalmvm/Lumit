@@ -8298,6 +8298,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeBrushShape dco_decode_bridge_brush_shape(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return BridgeBrushShape.values[raw as int];
+  }
+
+  @protected
   BridgeCacheLocation dco_decode_bridge_cache_location(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return BridgeCacheLocation.values[raw as int];
@@ -9411,8 +9417,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeStroke dco_decode_bridge_stroke(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 11)
+      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
     return BridgeStroke(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -9420,10 +9426,11 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       colour: dco_decode_bridge_colour_rgba(arr[3]),
       width: dco_decode_f_64(arr[4]),
       hardness: dco_decode_f_64(arr[5]),
-      opacity: dco_decode_f_64(arr[6]),
-      mode: dco_decode_bridge_paint_mode(arr[7]),
-      cloneOffsetX: dco_decode_f_64(arr[8]),
-      cloneOffsetY: dco_decode_f_64(arr[9]),
+      shape: dco_decode_bridge_brush_shape(arr[6]),
+      opacity: dco_decode_f_64(arr[7]),
+      mode: dco_decode_bridge_paint_mode(arr[8]),
+      cloneOffsetX: dco_decode_f_64(arr[9]),
+      cloneOffsetY: dco_decode_f_64(arr[10]),
     );
   }
 
@@ -10662,6 +10669,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeBrushShape sse_decode_bridge_brush_shape(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return BridgeBrushShape.values[inner];
+  }
+
+  @protected
   BridgeCacheLocation sse_decode_bridge_cache_location(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -11799,6 +11813,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_colour = sse_decode_bridge_colour_rgba(deserializer);
     var var_width = sse_decode_f_64(deserializer);
     var var_hardness = sse_decode_f_64(deserializer);
+    var var_shape = sse_decode_bridge_brush_shape(deserializer);
     var var_opacity = sse_decode_f_64(deserializer);
     var var_mode = sse_decode_bridge_paint_mode(deserializer);
     var var_cloneOffsetX = sse_decode_f_64(deserializer);
@@ -11810,6 +11825,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         colour: var_colour,
         width: var_width,
         hardness: var_hardness,
+        shape: var_shape,
         opacity: var_opacity,
         mode: var_mode,
         cloneOffsetX: var_cloneOffsetX,
@@ -13415,6 +13431,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_brush_shape(
+      BridgeBrushShape self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_cache_location(
       BridgeCacheLocation self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -14306,6 +14329,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_colour_rgba(self.colour, serializer);
     sse_encode_f_64(self.width, serializer);
     sse_encode_f_64(self.hardness, serializer);
+    sse_encode_bridge_brush_shape(self.shape, serializer);
     sse_encode_f_64(self.opacity, serializer);
     sse_encode_bridge_paint_mode(self.mode, serializer);
     sse_encode_f_64(self.cloneOffsetX, serializer);
