@@ -22,6 +22,7 @@
 // the document, and this is where the document knowledge lives.
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
 
@@ -447,17 +448,40 @@ void saveSnapshotFrb(LumitState app, LumitUiState ui) {
   );
   try {
     comp.startExport(
+      // Every field of the spec, because a snapshot is an export like any
+      // other and the seam carries the whole of one (K-485): the composition's
+      // own frame and rate, one frame of range, no sound, and every picture
+      // and render setting at what an ordinary export takes.
       spec: BridgeExportSpec(
         preset: '',
         codec: 'png',
         width: 0,
         height: 0,
         bitrateMbps: 0,
+        peakMbps: 0,
+        bitrateAuto: false,
         fps: 0,
         rangeStartFrame: ui.playheadFrame.value,
         rangeEndFrame: ui.playheadFrame.value + 1,
         includeAudio: false,
         audioBitRate: 0,
+        depth: 8,
+        alphaChannel: false,
+        straightAlpha: false,
+        colourSpace: '',
+        cropTop: 0,
+        cropLeft: 0,
+        cropBottom: 0,
+        cropRight: 0,
+        useRegionOfInterest: false,
+        region: Float64List(0),
+        metadata: const [],
+        qualityDivisor: 1,
+        diskCacheReadOnly: false,
+        effects: true,
+        honourSolo: true,
+        makeANoise: false,
+        openFolder: false,
       ),
       path: path,
     );

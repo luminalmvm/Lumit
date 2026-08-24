@@ -588,6 +588,20 @@ that read-back is gone.
 - **Export** runs on its own encode thread inside `lumit-bridge::export`, driving
     `lumit-render` (K-017). The bridge holds the handle and drains progress on
     `api::export::export_poll`.
+    **`BridgeExportSpec` is the whole of `lumit_render::export::ExportSpec`** (K-485),
+    flattened: format key, frame, bitrate (auto / a typed rate and its peak / blank for the
+    encoder's own quality), rate, range, sound, depth, channels and alpha, colour space,
+    the four crop insets plus *use region of interest* and the Viewer's region, ordered
+    metadata, the render options, and the two *when done* ticks. `to_export_spec` is the
+    one place it becomes the engine's type, and the queue stores the spec itself rather
+    than a serialised copy of it, so a queued item can be read back exactly as it was
+    added. Four sync calls let the dialogue ask the engine rather than re-deriving its
+    answers in Dart — `export_format_caps`, `export_spec_check`, `export_crop_for`,
+    `export_resolved_bitrate` — and four more are the preset store
+    (`export_preset_list`/`_get`/`_save`/`_delete`, over `lumit_render::export_presets`).
+    Naming a codec needs the `media` feature: without it the conversion answers a calm
+    "this build has no encoder" and every capability reads false, which disables the
+    dialogue rather than removing a call.
 - **Playback / realtime tier.** A genuine render reports its measured cost to
     `lumit-eval`'s realtime controller (K-171); the frontend reads the current tier
     and scale back through `api::shell::playback_tier` to drive the Auto

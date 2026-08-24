@@ -18,23 +18,34 @@ use serde_json::Value;
 
 use crate::api::{composition::CompositionReference, BridgeError};
 
-/// What the export dialogue is asking for.
+/// What the export dialogue is asking for — the whole of
+/// `lumit_render::export::ExportSpec`, in the flat shape the seam carries
+/// (K-479, K-485).
 ///
 /// `width`/`height` of zero mean "the composition's own size", which is what the
 /// dialogue shows until somebody types over it. `bitrate_mbps` of zero means the
 /// encoder's own default — a quality nobody chose is better than a number this
-/// layer invented.
+/// layer invented — and is a *different answer* from `bitrate_auto`, which works
+/// a delivery-quality rate out from the frame and the rate (K-479).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeExportSpec {
-    /// A delivery preset name, or empty for a custom export.
+    /// A preset name from the store, or empty for a custom export.
     pub preset: String,
     /// The output format key: `h264` / `hevc` for an `.mp4`, `png` / `tiff`
-    /// for a numbered image sequence (K-201).
+    /// for a numbered image sequence (K-201), `m4a` / `wav` for sound alone.
     pub codec: String,
     pub width: u32,
     pub height: u32,
     pub bitrate_mbps: u32,
+    /// The VBR peak in Mb/s; zero takes the customary 1.5× of the target. A
+    /// preset carries its own peak, which is why this crosses rather than being
+    /// worked out from the target on the way over.
+    pub peak_mbps: u32,
+    /// Work the bitrate out from the frame and the rate. Overrides
+    /// `bitrate_mbps`; a blank field (zero) with this off means the encoder
+    /// chooses its own quality, which is what blank has always meant (K-119).
+    pub bitrate_auto: bool,
     /// Output frame rate; zero means the composition's own. A different rate
     /// resamples by nearest comp frame over the same wall-clock span.
     pub fps: f64,
@@ -44,8 +55,145 @@ pub struct BridgeExportSpec {
     /// Export range end (exclusive), in comp frames. Negative = the default.
     pub range_end_frame: i64,
     pub include_audio: bool,
-    /// Audio bits per second; zero takes the preset's own rate.
+    /// Audio bits per second; zero takes the delivery-preset rate.
     pub audio_bit_rate: i64,
+    /// Bits per channel in the written file: 8 or 16.
+    pub depth: u32,
+    /// Write the composite's own coverage as an alpha channel, rather than an
+    /// opaque one.
+    pub alpha_channel: bool,
+    /// Un-multiply the colour on the way out (docs/06 §3.4). Meaningless
+    /// without `alpha_channel`, and ignored there.
+    pub straight_alpha: bool,
+    /// The output colour space: empty for the built-in sRGB / Rec.709
+    /// transform, otherwise the name of an OCIO output space (post-v1; an
+    /// export that asks for one before OCIO exists is refused).
+    pub colour_space: String,
+    /// Pixels taken off each edge, at composition size (K-419).
+    pub crop_top: u32,
+    pub crop_left: u32,
+    pub crop_bottom: u32,
+    pub crop_right: u32,
+    /// Take the crop from the Viewer's region of interest instead.
+    pub use_region_of_interest: bool,
+    /// That region as comp fractions `[x0, y0, x1, y1]` (K-362), or empty for
+    /// none. Anything that is not four increasing finite numbers is no region.
+    pub region: Vec<f64>,
+    /// What is written into the container about the file, in the order the
+    /// Metadata section lists it — the order lands in the file.
+    pub metadata: Vec<BridgeMetadataField>,
+    /// The preview-resolution divisor the export renders at: 1 = Full, 2 =
+    /// Half, 3 = Third, 4 = Quarter (docs/01 §5).
+    pub quality_divisor: u32,
+    /// Read frames already banked in the disk cache (nothing is ever written).
+    pub disk_cache_read_only: bool,
+    /// Run each layer's effect stack.
+    pub effects: bool,
+    /// Honour solo switches (K-105).
+    pub honour_solo: bool,
+    /// Play the completion sound when this export lands. Silent — never an
+    /// error — when no sound has been supplied.
+    pub make_a_noise: bool,
+    /// Show the finished file in the desktop's own file manager.
+    pub open_folder: bool,
+}
+
+/// One key/value pair written into the container.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BridgeMetadataField {
+    /// FFmpeg's own key — `title`, `artist`, `copyright`, `comment`,
+    /// `creation_time`, or any other the container will take.
+    pub key: String,
+    pub value: String,
+}
+
+impl Default for BridgeExportSpec {
+    /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
+    /// meant (K-119) — mirroring `ExportSpec::default()` field for field.
+    fn default() -> Self {
+        Self {
+            preset: String::new(),
+            codec: "h264".to_owned(),
+            width: 0,
+            height: 0,
+            bitrate_mbps: 0,
+            peak_mbps: 0,
+            bitrate_auto: true,
+            fps: 0.0,
+            range_start_frame: -1,
+            range_end_frame: -1,
+            include_audio: true,
+            audio_bit_rate: crate::export::PRESET_AUDIO_BPS,
+            depth: 8,
+            alpha_channel: false,
+            straight_alpha: false,
+            colour_space: String::new(),
+            crop_top: 0,
+            crop_left: 0,
+            crop_bottom: 0,
+            crop_right: 0,
+            use_region_of_interest: false,
+            region: Vec::new(),
+            metadata: Vec::new(),
+            quality_divisor: 1,
+            disk_cache_read_only: false,
+            effects: true,
+            honour_solo: true,
+            make_a_noise: false,
+            open_folder: false,
+        }
+    }
+}
+
+/// What one output format can and cannot carry — `ExportFormat::caps()` as the
+/// dialogue reads it (K-479).
+///
+/// A control the format cannot honour is **disabled**, not live: the dialogue
+/// reads this row to decide, and the engine refuses the same combinations as a
+/// backstop, so the two cannot disagree about what a file will hold.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BridgeFormatCaps {
+    /// Carries a picture at all.
+    pub video: bool,
+    /// Can carry the composition's sound.
+    pub audio: bool,
+    /// Can carry an alpha channel.
+    pub alpha: bool,
+    /// The colour depths this format writes, best last: `[8]`, `[8, 16]`, or
+    /// empty for a format with no picture.
+    pub depths: Vec<u32>,
+    /// A video bitrate applies (lossless formats have none to choose).
+    pub bit_rate: bool,
+    /// An audio bitrate applies — AAC has one, uncompressed PCM is exactly
+    /// what it is.
+    pub audio_bit_rate: bool,
+    /// The container holds metadata.
+    pub metadata: bool,
+}
+
+/// The crop an export actually applies, and the frame it leaves — the answer
+/// `crop_for` gives for the typed insets and the Viewer's region together.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BridgeCrop {
+    pub top: u32,
+    pub left: u32,
+    pub bottom: u32,
+    pub right: u32,
+    /// The frame that survives the crop, in pixels.
+    pub width: u32,
+    pub height: u32,
+}
+
+/// One row of the preset list: its name, and whether it is one of the
+/// read-only built-ins.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BridgeExportPresetEntry {
+    pub name: String,
+    pub read_only: bool,
 }
 
 /// What a delivery preset fills the export dialogue with.
@@ -101,43 +249,73 @@ impl CompositionReference {
             state.store.snapshot()
         };
 
-        let spec_json = spec_json(&spec);
-        let reply = crate::export::start_export_with_document(document, self.id, &spec_json, &path);
+        let reply = crate::export::start_export_with_document(document, self.id, &spec, &path);
         reply_ok(&reply).then_some(()).ok_or_else(|| {
             BridgeError::ExportFailed(reply_error(&reply).unwrap_or_else(|| "export".into()))
         })
     }
 }
 
-/// The dialogue's own JSON shape, which is also what the egui frontend sends —
-/// one spec parser, so the two frontends cannot export differently.
-#[frb(ignore)]
-fn spec_json(spec: &BridgeExportSpec) -> String {
-    serde_json::json!({
-            "preset": spec.preset,
-            "codec": spec.codec,
-            "size": if spec.width == 0 || spec.height == 0 {
-                Value::Null
-            } else {
-                serde_json::json!([spec.width, spec.height])
-            },
-            "bitrate_mbps": if spec.bitrate_mbps == 0 {
-                String::new()
-            } else {
-                spec.bitrate_mbps.to_string()
-            },
-            "fps": spec.fps,
-            "range": if spec.range_start_frame < 0
-                || spec.range_end_frame <= spec.range_start_frame
-            {
-                Value::Null
-            } else {
-                serde_json::json!([spec.range_start_frame, spec.range_end_frame])
-            },
-            "include_audio": spec.include_audio,
-            "audio_bit_rate": spec.audio_bit_rate,
-    })
-    .to_string()
+/// What one output format can and cannot carry (K-479). The dialogue asks this
+/// of every format key it offers and disables what the answer refuses.
+#[frb(sync)]
+pub fn export_format_caps(codec: String) -> BridgeFormatCaps {
+    crate::export::format_caps(&codec)
+}
+
+/// Refuse a spec the chosen format cannot honour, in the dialogue's own words —
+/// empty when the spec is exportable.
+///
+/// The engine refuses the same combinations before a frame is rendered; asking
+/// here only means the message arrives while the user is looking at the fields
+/// rather than minutes later from the queue.
+#[frb(sync)]
+pub fn export_spec_check(spec: BridgeExportSpec) -> String {
+    crate::export::spec_check(&spec)
+}
+
+/// The crop this spec actually applies to a `comp_width` × `comp_height` frame,
+/// and the frame that survives it — the typed insets, or the Viewer's region of
+/// interest when that is asked for and exists (K-362, K-479).
+#[frb(sync)]
+pub fn export_crop_for(spec: BridgeExportSpec, comp_width: u32, comp_height: u32) -> BridgeCrop {
+    crate::export::crop_for(&spec, comp_width, comp_height)
+}
+
+/// The video bitrate this spec runs with, in bits per second, for a frame of
+/// `width` × `height` at `fps` — the typed number, or the one *Auto* works out.
+/// Zero when the format has no bitrate to choose or the encoder is choosing its
+/// own quality, which is when the footer offers no size estimate.
+#[frb(sync)]
+pub fn export_resolved_bitrate(spec: BridgeExportSpec, width: u32, height: u32, fps: f64) -> i64 {
+    crate::export::resolved_bitrate(&spec, width, height, fps)
+}
+
+/// Every preset the dialogue's list shows — the read-only built-ins first, then
+/// the user's own in the order they were saved.
+#[frb(sync)]
+pub fn export_preset_list() -> Vec<BridgeExportPresetEntry> {
+    crate::export::preset_list()
+}
+
+/// The settings behind a preset name, or `None` when there is no such preset.
+#[frb(sync)]
+pub fn export_preset_get(name: String) -> Option<BridgeExportSpec> {
+    crate::export::preset_get(&name)
+}
+
+/// Save the current settings under `name`, replacing a preset of that name in
+/// its own row. A built-in's name is refused rather than shadowed.
+#[frb(sync)]
+pub fn export_preset_save(name: String, spec: BridgeExportSpec) -> Result<(), BridgeError> {
+    crate::export::preset_save(&name, &spec).map_err(BridgeError::ExportFailed)
+}
+
+/// Forget a preset of one's own. A built-in and an unknown name both answer an
+/// error rather than a silent no-op, so the dialogue can say why.
+#[frb(sync)]
+pub fn export_preset_delete(name: String) -> Result<(), BridgeError> {
+    crate::export::preset_delete(&name).map_err(BridgeError::ExportFailed)
 }
 
 /// What a delivery preset stamps into the dialogue, and what to call the file.
@@ -275,15 +453,16 @@ impl CompositionReference {
     /// The two footer actions are this one call: *Add to queue* leaves the
     /// item waiting, *Export* sets it running. Either way the document is
     /// snapshotted here, so the export renders what the composition was when
-    /// it was queued. `open_folder` is the dialogue's *Open folder* tick,
-    /// honoured as the item lands rather than by whatever window is watching.
+    /// it was queued. The spec's *when done* ticks — the noise and the folder —
+    /// are honoured as the item lands rather than by whatever window is
+    /// watching, so an export that finishes after its dialogue closed still
+    /// does what it was asked to.
     #[frb(sync)]
     pub fn queue_export(
         &self,
         spec: BridgeExportSpec,
         path: String,
         start: bool,
-        open_folder: bool,
     ) -> Result<u32, BridgeError> {
         if path.trim().is_empty() {
             return Err(BridgeError::NoProjectPath);
@@ -294,16 +473,8 @@ impl CompositionReference {
             state.store.snapshot()
         };
         let comp_name = self.get_settings()?.name;
-        crate::export::queue_add(
-            document,
-            self.id,
-            comp_name,
-            &spec_json(&spec),
-            &path,
-            start,
-            open_folder,
-        )
-        .map_err(BridgeError::ExportFailed)
+        crate::export::queue_add(document, self.id, comp_name, &spec, &path, start)
+            .map_err(BridgeError::ExportFailed)
     }
 }
 

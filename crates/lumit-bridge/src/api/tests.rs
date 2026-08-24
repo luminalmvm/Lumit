@@ -3132,18 +3132,7 @@ fn the_export_surface_refuses_calmly_and_never_panics() {
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
-    let spec = BridgeExportSpec {
-        preset: String::new(),
-        codec: "h264".into(),
-        width: 0,
-        height: 0,
-        bitrate_mbps: 0,
-        fps: 0.0,
-        range_start_frame: -1,
-        range_end_frame: -1,
-        include_audio: true,
-        audio_bit_rate: 0,
-    };
+    let spec = BridgeExportSpec::default();
 
     // Nowhere to write is refused before any work starts.
     assert!(matches!(
@@ -3191,29 +3180,25 @@ fn the_queue_holds_its_items_until_it_is_started() {
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
     let spec = BridgeExportSpec {
-        preset: "youtube_1080p60".into(),
-        codec: "h264".into(),
-        width: 0,
-        height: 0,
+        preset: "YouTube 1080p60".into(),
+        bitrate_auto: false,
         bitrate_mbps: 16,
-        fps: 0.0,
         range_start_frame: 4,
         range_end_frame: 12,
-        include_audio: true,
-        audio_bit_rate: 320_000,
+        ..BridgeExportSpec::default()
     };
 
     // Nowhere to write is refused before anything is added.
     assert!(matches!(
-        comp.queue_export(spec.clone(), "  ".into(), false, false),
+        comp.queue_export(spec.clone(), "  ".into(), false),
         Err(BridgeError::NoProjectPath)
     ));
 
     let first = comp
-        .queue_export(spec.clone(), "queued-one.mp4".into(), false, false)
+        .queue_export(spec.clone(), "queued-one.mp4".into(), false)
         .expect("the item is queued");
     let second = comp
-        .queue_export(spec, "queued-two.mp4".into(), false, false)
+        .queue_export(spec, "queued-two.mp4".into(), false)
         .expect("and so is the second");
 
     let rows = export_queue_list();
@@ -3224,7 +3209,7 @@ fn the_queue_holds_its_items_until_it_is_started() {
     assert_eq!(mine.len(), 2, "both items are in the list");
     let row = mine[0];
     assert_eq!(row.state, BridgeExportQueueState::Waiting);
-    assert_eq!(row.preset, "youtube_1080p60");
+    assert_eq!(row.preset, "YouTube 1080p60");
     assert_eq!(row.codec, "h264");
     assert_eq!(row.range_start_frame, 4);
     assert_eq!(row.range_end_frame, 12);
@@ -3241,6 +3226,55 @@ fn the_queue_holds_its_items_until_it_is_started() {
         !after.iter().any(|row| row.id == first || row.id == second),
         "a cancelled or removed item leaves the queue"
     );
+}
+
+/// The preset store over the seam: the built-ins lead the list and are
+/// read-only, a preset of one's own saves and comes back as the settings that
+/// saved it, and deleting it leaves the list as it was.
+///
+/// The store is one file in the application's data directory, so this test
+/// cleans up after itself and uses a name nobody would type.
+#[test]
+fn the_preset_store_lists_saves_and_forgets() {
+    use crate::api::export::{
+        export_preset_delete, export_preset_get, export_preset_list, export_preset_save,
+        BridgeExportSpec,
+    };
+
+    let list = export_preset_list();
+    assert!(
+        list.first()
+            .is_some_and(|row| row.name == "Master" && row.read_only),
+        "the built-ins lead the list, and every one of them is read-only"
+    );
+    assert!(
+        export_preset_save("Master".into(), BridgeExportSpec::default()).is_err(),
+        "a built-in's name is refused rather than shadowed"
+    );
+
+    let name = "lumit-test-preset-do-not-keep";
+    let mine = BridgeExportSpec {
+        codec: "png".into(),
+        width: 1280,
+        height: 720,
+        bitrate_auto: false,
+        depth: 16,
+        alpha_channel: true,
+        ..BridgeExportSpec::default()
+    };
+    if export_preset_save(name.into(), mine.clone()).is_ok() {
+        let back = export_preset_get(name.into()).expect("the saved preset is there");
+        assert_eq!(back.codec, "png");
+        assert_eq!((back.width, back.height), (1280, 720));
+        assert_eq!(back.depth, 16);
+        assert!(back.alpha_channel);
+        assert_eq!(back.preset, name, "a preset names itself on the way back");
+        assert!(export_preset_delete(name.into()).is_ok());
+        assert!(export_preset_get(name.into()).is_none());
+    }
+    // A machine with nowhere to keep presets says so and keeps the built-ins,
+    // which is why the save above is allowed to fail rather than asserted.
+    assert!(export_preset_delete("never existed".into()).is_err());
 }
 
 // --- Journalling ----------------------------------------------------------

@@ -840,32 +840,221 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    /// An image sequence is stills: the video-only rows leave rather than
-    /// sitting greyed, and the note says what will be written.
-    testWidgets('choosing a sequence sheds the video-only rows',
+    /// What a format can carry decides what is live (K-479, K-485): an mp4 has
+    /// no alpha and only eight bits, a PNG sequence has both but no sound and
+    /// no bitrate, and a WAV has no picture at all. Every one of those controls
+    /// is **drawn** in each case — a control that vanished would leave the
+    /// person wondering whether they had imagined it — and dead where the
+    /// format cannot honour it.
+    testWidgets('the format decides what is live and what is dead',
         (tester) async {
       await open(tester);
 
-      expect(find.byKey(const ValueKey('export-audio')), findsOneWidget);
-      expect(find.byKey(const ValueKey('export-bitrate')), findsOneWidget);
-      // The dialog opens on the delivery preset, not a blank Custom (docs/06
-      // §7.5): a fresh export showing a bit rate of 0 read as broken, and the
-      // preset's 16 Mb/s stamp is the proof it applied.
-      expect(find.textContaining('16 Mb/s'), findsOneWidget,
-          reason: "the YouTube 1080p60 preset's bit rate is stamped on open");
-      expect(find.byKey(const ValueKey('export-audio-rate')), findsOneWidget,
-          reason: 'audio has its own rate once audio is on');
+      // A dropdown's face is a HouseButton: no `onPressed` is the disabled
+      // face, which is exactly what a format that cannot honour the row asks
+      // for (K-479).
+      bool live(String key) =>
+          tester
+              .widget<HouseButton>(find.descendant(
+                of: find.byKey(ValueKey<String>(key)),
+                matching: find.byType(HouseButton),
+              ))
+              .onPressed !=
+          null;
+
+      // An mp4: sound and a bitrate, no alpha and one depth.
+      expect(live('export-audio'), isTrue);
+      expect(live('export-channels'), isFalse,
+          reason: 'no v1 codec in an mp4 carries alpha (docs/06 §7.4)');
+      expect(live('export-depth'), isFalse, reason: 'an mp4 is eight bits');
+      expect(
+          tester
+              .widget<HouseCheckbox>(
+                  find.byKey(const ValueKey('export-bitrate-auto')))
+              .value,
+          isTrue,
+          reason: 'the bitrate starts on Auto, which is the preset default');
 
       await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
       await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('export-bitrate')), findsNothing,
-          reason: 'stills are lossless');
+      expect(live('export-channels'), isTrue, reason: 'stills carry alpha');
+      expect(live('export-depth'), isTrue, reason: 'and either depth');
+      expect(live('export-audio'), isFalse,
+          reason: 'a folder of stills is mute');
       expect(find.textContaining('One numbered PNG per frame'), findsOneWidget,
           reason: 'the dialog says what a sequence writes');
-      // The rate and span stay: stills have both.
+
+      await tester.tap(find.byKey(const ValueKey('export-type-audioOnly')));
+      await tester.pumpAndSettle();
+      expect(live('export-audio'), isTrue);
+      expect(live('export-channels'), isFalse,
+          reason: 'a sound file has no picture to put channels in');
+      // The rate and span stay whatever the format: every export has both.
       expect(find.byKey(const ValueKey('export-fps')), findsOneWidget);
       expect(find.byKey(const ValueKey('export-span')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// *Still* is gone (K-485): an image sequence of one frame is a still, and
+    /// the span already says how many frames there are.
+    testWidgets('there is no Still output type', (tester) async {
+      await open(tester);
+      expect(find.byKey(const ValueKey('export-type-still')), findsNothing);
+      expect(find.text('STILL'), findsNothing);
+      expect(find.text('AUDIO ONLY'), findsOneWidget,
+          reason: 'the drawing\'s fourth type is the one that stayed');
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The bitrate is three answers, not two (K-479). *Auto* works one out from
+    /// the frame and the rate; unticking it hands over a field, and a **blank**
+    /// field means the encoder chooses its own quality — which is why the
+    /// footer stops estimating a size the moment it is blank.
+    testWidgets('Auto, a typed rate and a blank field are three answers',
+        (tester) async {
+      await open(tester);
+
+      expect(find.textContaining('≈'), findsOneWidget,
+          reason: 'Auto knows the rate, so the footer can estimate a size');
+
+      await tester.tap(find.byKey(const ValueKey('export-bitrate-auto')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('export-bitrate')), findsOneWidget,
+          reason: 'unticking Auto hands over the field');
+      expect(find.textContaining('≈'), findsNothing,
+          reason: 'a blank field is a quality nobody chose and a size nobody '
+              'can estimate (K-119)');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The crop is four numbers in pixels at composition size (K-419), and the
+    /// engine resolves them: the Picture group's reading and the footer's size
+    /// are one answer, from `crop_for`.
+    testWidgets('a crop takes pixels off the delivered frame', (tester) async {
+      await open(tester);
+
+      expect(find.text('Final 1920 × 1080'), findsOneWidget);
+      await tester.drag(
+          find.byKey(const ValueKey('export-crop-left')), const Offset(120, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Final 1920 × 1080'), findsNothing,
+          reason: 'the crop changed the frame that will be written');
+      expect(find.byKey(const ValueKey('export-crop-reading')), findsOneWidget,
+          reason: 'and the group says what it left');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// A spec the format cannot carry is refused *here*, in the footer, before
+    /// anything is queued — and the actions go inert until it is answered. The
+    /// engine refuses the same thing as a backstop; the point of asking early
+    /// is that the message arrives while the fields are still on screen.
+    testWidgets('a refusal stands in the footer and holds the actions',
+        (tester) async {
+      final target = '${Directory.systemTemp.path}/refused.mp4';
+      await open(tester, picker: () async => target);
+      await tester.tap(find.byKey(const ValueKey('export-choose')));
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<HouseButton>(find.byKey(const ValueKey('export-start')))
+              .onPressed,
+          isNotNull);
+
+      // Sixteen bits in an mp4: the Depth row is dead for exactly this reason,
+      // so the refusal is reached through a preset instead — a stored spec is
+      // not filtered by the dialog on the way in.
+      await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('export-depth')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('16 bit').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('export-type-video')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('16-bit'), findsOneWidget,
+          reason:
+              "the engine's own words, in the footer where the summary was");
+      expect(
+          tester
+              .widget<HouseButton>(find.byKey(const ValueKey('export-start')))
+              .onPressed,
+          isNull,
+          reason: 'nothing is queued that the file cannot carry');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// A preset is the whole settings payload under a name (K-479's store):
+    /// saving one lists it, applying it fills the fields back in, and deleting
+    /// it takes it off the list. The built-ins are read-only and say so.
+    testWidgets('a preset saves, applies and is forgotten again',
+        (tester) async {
+      await open(tester);
+
+      // A built-in refuses to be edited rather than opening a field that
+      // cannot be used.
+      await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('built-in'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('export-preset-save-as')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('export-preset-name')), 'Test stills');
+      await tester.tap(find.byKey(const ValueKey('export-preset-save')));
+      await tester.pumpAndSettle();
+
+      // Back to a video export, then the preset puts the stills back.
+      await tester.tap(find.byKey(const ValueKey('export-type-video')));
+      await tester.pumpAndSettle();
+      expect(find.text('H.264 video (.mp4)'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('export-preset')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Test stills').last);
+      await tester.pumpAndSettle();
+      expect(find.text('PNG image sequence'), findsOneWidget,
+          reason: 'the preset carried the format it was saved with');
+
+      // And it can be taken off the list again.
+      await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('export-preset-delete')));
+      await tester.pumpAndSettle();
+      expect(exportPresetList().any((p) => p.name == 'Test stills'), isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// Metadata is an ordered key/value set, because the order lands in the
+    /// file (docs/06 §7.4). The five classic fields lead; an empty one writes
+    /// nothing at all, which is why they can sit there unfilled.
+    testWidgets('metadata keeps the order it was typed in', (tester) async {
+      await open(tester);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('export-metadata-0')), 'Opening titles');
+      await tester.enterText(
+          find.byKey(const ValueKey('export-metadata-1')), 'Nobody');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Opening titles'), findsWidgets);
+      expect(find.text('Nobody'), findsWidgets);
+      expect(find.byKey(const ValueKey('export-metadata-remove-0')),
+          findsOneWidget,
+          reason: 'every field can be taken off the list');
 
       await tester.tap(find.byKey(const ValueKey('export-close')));
       await tester.pumpAndSettle();

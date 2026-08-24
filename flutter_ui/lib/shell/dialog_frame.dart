@@ -223,11 +223,16 @@ Widget dialogTabs<T>(
 /// The drawing puts a *box* round each group here rather than the rule the
 /// Settings pages use — a dialog read once wants its areas fenced, a settings
 /// page lived in wants them separated (K-458: each drawing decides its own).
+/// [highlighted] lights the box's edge for a moment — what a section tab does
+/// to the section it jumps to on a dialog that scrolls rather than paging
+/// (K-485). The accent is doing here exactly what it does in the tab strip:
+/// saying *this is the one you asked for*, and only while you are asking.
 Widget dialogGroup(
   LumitTheme t,
   String title,
   List<Widget> rows, {
   Key? key,
+  bool highlighted = false,
 }) =>
     Padding(
       key: key,
@@ -237,7 +242,7 @@ Widget dialogGroup(
         children: [
           Container(
             decoration: BoxDecoration(
-              border: Border.all(color: t.hairline),
+              border: Border.all(color: highlighted ? t.accent : t.hairline),
               borderRadius: BorderRadius.circular(dialogGroupRadius),
             ),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),

@@ -8734,9 +8734,50 @@ so they follow you between projects. If that file goes missing or gets damaged, 
 as "no saved presets" and carries on: losing your presets should cost you a re-save, never an
 export.
 
-**When done** is what happens at the end: nothing, a short sound, or opening the folder the
-file landed in. The sound is a file that ships with Lumit — and when it is not there, the hook
-simply does nothing, because a missing ding must never make a finished export look failed.
+**When done** is what happens at the end: two independent ticks — play a short sound, and
+open the folder the file landed in — so a long export left running can do both, one, or
+neither. The sound is a file that ships with Lumit, and when it is not there the hook simply
+does nothing, because a missing ding must never make a finished export look failed. Both are
+honoured by the *queue* as the item finishes rather than by the dialog that set them, so an
+export whose dialog you closed an hour ago still does what it was asked to.
+
+### 19.2 The export dialog, in plain terms
+
+The dialog is where all of the above is chosen. Three things about it are worth knowing,
+because none of them is the obvious way to build such a window.
+
+**It is one page, not six.** The strip of words under the title — Output, Time, Picture,
+Colour, Audio, Metadata — looks like tabs and behaves like a table of contents: everything
+is on one page that scrolls, and the strip tells you *where you are* on it. Scroll down past
+the Time section and the strip moves to Time on its own; click a word and the page scrolls
+that section into view (unless it is already fully in front of you, in which case moving the
+page would only be disorienting) and outlines it for half a second so your eye can find it.
+The reason for one page rather than six is that an export is one decision: a window that put
+the picture on one page and the sound on another would hide half of what you are about to
+write from the person deciding it.
+
+**A control it cannot honour is dead, not missing.** Choose an `.mp4` and the alpha-channel
+row does not disappear — it greys out. Hover it and it says why. This is deliberate and it
+is the opposite of what most programs do: a row that vanishes leaves you wondering whether
+you imagined it, or looking for the setting in a menu that has not got it either. A greyed
+row with a reason answers the question where the question is asked. The same face carries
+the handful of rows the *engine* cannot back yet — proxies, guide layers, motion blur at
+export — so "not built" and "not possible in this format" look the same on purpose: in both
+cases the honest answer is that this file will not do that.
+
+**The dialog does not work anything out for itself.** What a format can carry, whether the
+settings add up to a file that can be written, what the crop leaves, what bitrate *Auto*
+comes to — every one of those answers comes from the engine, through a call, and is
+remembered until a field changes. Two reasons. The first is that a second opinion is a
+second thing to be wrong: if the dialog worked out its own bitrate estimate, the day the
+engine's changed it would quietly disagree. The second is speed — asking the engine while
+Flutter is drawing would put a call across the boundary into the middle of every frame, so
+the asking happens when you *change* something, which is thousands of times less often.
+
+Whatever the engine refuses is printed in the footer, where the summary line usually is, and
+the two buttons go inert until it is answered. That is the whole point of asking early: the
+refusal arrives while the fields that caused it are still in front of you, rather than
+minutes later from a queue you have stopped watching.
 
 ## 20. The node graph, in plain terms
 

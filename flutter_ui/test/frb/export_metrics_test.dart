@@ -26,8 +26,8 @@ void main() {
   group('Export metrics (frb)', () {
     /// Open the dialog the way the application does, in a view large enough to
     /// hold every group at once.
-    Future<void> open(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1200, 1000);
+    Future<void> open(WidgetTester tester, {double height = 1000}) async {
+      tester.view.physicalSize = Size(1200, height);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final p = freshProject();
@@ -43,7 +43,7 @@ void main() {
         ),
         state: p.state,
         uiState: p.uiState,
-        size: const Size(1200, 1000),
+        size: Size(1200, height),
       ));
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('open-export')));
@@ -52,6 +52,29 @@ void main() {
 
     Rect band(WidgetTester tester, String key) =>
         tester.getRect(find.byKey(ValueKey<String>(key)));
+
+    /// The colour a group's own box is outlined in — hairline at rest, the
+    /// accent while a tab is pointing at it.
+    Color? groupBorder(WidgetTester tester, String name) {
+      final box = tester.widget<Container>(find
+          .descendant(
+            of: find.byKey(ValueKey<String>('export-group-$name')),
+            matching: find.byType(Container),
+          )
+          .first);
+      return (box.decoration! as BoxDecoration).border?.top.color;
+    }
+
+    /// The colour one tab's word is drawn in — bright for the section in force.
+    Color? tabColour(WidgetTester tester, ExportSection section) => tester
+        .widget<Text>(find
+            .descendant(
+              of: find.byKey(ValueKey<String>('export-tab-$section')),
+              matching: find.byType(Text),
+            )
+            .first)
+        .style
+        ?.color;
 
     /// 1. **The frame.** 640 wide, a 30px title strip over its hairline, a
     /// 26px tab row over its own, and a 45px footer at the bottom.
@@ -163,23 +186,120 @@ void main() {
           reason: "the filled action's label is a kicker (K-450)");
     });
 
-    /// 6. **The tabs.** The drawing's row of pages, with Output in force.
-    /// Colour and Metadata are not here: there is nothing to put on them yet,
-    /// and an empty page is a promise the dialog cannot keep (K-465).
-    testWidgets('the page tabs front one group at a time', (tester) async {
+    /// 6. **The tabs name the sections, and the page holds them all.** The
+    /// dialog is one scrolling page (K-485), so every group is in the tree at
+    /// once and a tab is a place on it rather than a page of its own.
+    testWidgets('the page holds every section at once', (tester) async {
       await open(tester);
 
-      expect(find.byKey(const ValueKey('export-tab-ExportPage.output')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey('export-group-audio')), findsOneWidget,
-          reason: 'the Output page holds every group, as the drawing draws it');
+      for (final section in ExportSection.values) {
+        expect(
+            find.byKey(ValueKey<String>('export-tab-$section')), findsOneWidget,
+            reason: 'the drawing gives the strip six tabs');
+      }
+      for (final group in const [
+        'output',
+        'composition',
+        'time',
+        'picture',
+        'colour',
+        'audio',
+        'metadata',
+      ]) {
+        expect(
+            find.byKey(ValueKey<String>('export-group-$group')), findsOneWidget,
+            reason: 'one page holds every group, Composition included');
+      }
+      expect(find.text('STILL'), findsNothing,
+          reason: 'a still is an image sequence of one frame (K-485)');
+    });
+
+    /// 6a. **Clicking a tab brings its section to the top of the body** and
+    /// lights the box it landed on, so the eye knows where it was taken.
+    testWidgets('a tab scrolls its section into view and lights it',
+        (tester) async {
+      // A window short enough that the last sections are genuinely off-screen.
+      await open(tester, height: 520);
+
+      final bodyTop =
+          tester.getRect(find.byKey(const ValueKey('export-group-output'))).top;
+      final before =
+          tester.getRect(find.byKey(const ValueKey('export-group-metadata')));
+      expect(before.top, greaterThan(bodyTop + 400),
+          reason: 'Metadata is a long way down the page to begin with');
 
       await tester
-          .tap(find.byKey(const ValueKey('export-tab-ExportPage.time')));
+          .tap(find.byKey(const ValueKey('export-tab-ExportSection.metadata')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('export-group-time')), findsOneWidget);
-      expect(find.byKey(const ValueKey('export-group-output')), findsNothing,
-          reason: 'a page other than Output fronts the group it names');
+
+      final after =
+          tester.getRect(find.byKey(const ValueKey('export-group-metadata')));
+      expect(after.top, lessThan(before.top),
+          reason: 'the page scrolled to the section the tab names');
+      // The box it landed on is lit for a moment, in the accent the tab strip
+      // already uses to say "this one".
+      final t = ThemeScope.of(tester
+              .element(find.byKey(const ValueKey('export-group-metadata'))))
+          .theme;
+      expect(groupBorder(tester, 'metadata'), t.accent,
+          reason: 'the section it jumped to is lit while you look for it');
+      await tester.pump(exportSectionFlash);
+      await tester.pumpAndSettle();
+      expect(groupBorder(tester, 'metadata'), t.hairline,
+          reason: 'and settles back to an ordinary group directly after');
+    });
+
+    /// 6b. **The strip follows the page.** Scrolling the body down to a later
+    /// section moves the selected tab with it — the tab says where you are, not
+    /// where you last clicked.
+    testWidgets('the tab strip follows the scroll', (tester) async {
+      await open(tester, height: 520);
+      final t = ThemeScope.of(tester.element(find.byType(DialogFrame))).theme;
+      expect(tabColour(tester, ExportSection.output), t.kickerOn.color);
+
+      final before = band(tester, 'export-group-output').top;
+      await tester.drag(find.byKey(const ValueKey('export-group-output')),
+          const Offset(0, -900));
+      await tester.pumpAndSettle();
+      expect(band(tester, 'export-group-output').top, lessThan(before),
+          reason: 'the body scrolls under the drag');
+
+      expect(tabColour(tester, ExportSection.output), isNot(t.kickerOn.color),
+          reason: 'Output is behind you once the page has moved past it');
+      expect(
+        ExportSection.values
+            .where((s) => tabColour(tester, s) == t.kickerOn.color),
+        hasLength(1),
+        reason: 'exactly one tab is in force, whatever the scroll',
+      );
+    });
+
+    /// 6c. **The right column of a paired row.** Its label column is the
+    /// narrower 78 so the frame rate's value well always fits beside its list,
+    /// and every control in that column shares one left edge and one right
+    /// (K-485: the drawing asks for 212 of control in a 173 column).
+    testWidgets('the paired right column aligns and fits its value well',
+        (tester) async {
+      await open(tester);
+
+      final rate = band(tester, 'export-rate-source');
+      final well = band(tester, 'export-fps');
+      final effects = band(tester, 'export-effects');
+      expect(well.width, exportNumberWell,
+          reason: "the drawing's value well is 56, and it never shrinks");
+      expect(well.right, closeTo(rate.right + 6 + exportNumberWell, 0.01),
+          reason: 'the well stands 6 after the list, inside the same row');
+      expect(effects.right, closeTo(well.right, 0.01),
+          reason: 'every right-column control ends at one edge');
+      expect(effects.left, closeTo(rate.left, 0.01),
+          reason: 'and begins at one edge');
+
+      final label = tester.getRect(find
+          .ancestor(
+              of: find.text('Frame rate'), matching: find.byType(SizedBox))
+          .first);
+      expect(label.width, exportLabelColumnPaired,
+          reason: 'the right column extends its control left into its label');
     });
 
     /// 6b. **A short window scrolls rather than squishing** (§12A.6). An

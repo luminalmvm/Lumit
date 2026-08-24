@@ -2045,8 +2045,23 @@ Export window. Export never blocks editing; the queue runs in the background.
   making a second row of the same name; the library is one small JSON file in the
   application's data directory, so it follows the user between projects, and a missing or
   damaged one reads as an empty library rather than an error.
-- **When done**: nothing, make a noise, or open the containing folder. The noise plays a
-  bundled sound file when there is one and is silent when there is not.
+- **When done**: two ticks, not a list (K-485) — *make a noise* and *open folder* — because
+  they are independent answers and a long export left running wants both. The noise plays a
+  bundled sound file when there is one and is silent when there is not. Both are honoured by
+  the **queue** as the item lands, so an export that finishes after its dialogue closed still
+  does what it was asked to.
+- **The dialogue is one scrolling page** (K-485), and its tab strip — Output / Time /
+  Picture / Colour / Audio / Metadata — says *where you are* rather than which page is
+  shown: it follows the section last touched or scrolled to, and clicking a tab scrolls
+  that section into view when it is not already fully visible and lights its box for a
+  moment. The output types are **Video, Image sequence and Audio only**: a still is an
+  image sequence of one frame, which the span already says.
+- **A control the chosen format cannot honour is disabled, never hidden and never live**
+  (K-479's capability table): an `.mp4` has no alpha channel and no sixteenth bit, an image
+  sequence has no sound and no bitrate, a `.wav` has no picture at all. The same face
+  carries the two rows no *subsystem* backs — guide layers and proxies — each with a short
+  reason on hover. Whatever the engine would refuse is said **in the footer, before
+  anything is queued**, and the two actions stay inert until it is answered.
 - **Progress**: overall queue progress in the window and on the OS taskbar icon; per-item
   progress bars; completion raises a non-blocking notification with *Reveal in folder*.
 - Export uses full quality always — adaptive degradation and preview resolution MUST NOT

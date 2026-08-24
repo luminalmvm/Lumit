@@ -479,26 +479,25 @@ export rework did **not** bring with it (K-469): the queue's engine half remembe
 between sessions, so a defaults store is still the first thing that page needs. Each is
 engine-first work; the rows are drawn and waiting.
 
-**The Export drawing's rows: the engine half has landed, the seam has not** (K-469,
-docs/06 §7.4–§7.5, docs/15-DESIGN.md §12A.4). The engine now models and tests every one of
-these — audio-only output (`.m4a`/`.wav`), colour depth, channels and alpha, the output
-colour space, crop and *use region of interest*, container metadata, the named preset store,
-the auto bitrate, the render settings (quality, disk cache, effects, solo switches) and the
-*when done* hook — all on `lumit_render::export::ExportSpec`, with a per-format capability
-table refusing what a format cannot carry. What is left:
+**The Export drawing's rows are built, both halves** (K-479 engine, K-485 interface,
+docs/06 §7.4–§7.5, docs/15-DESIGN.md §12A.4). Audio-only output (`.m4a`/`.wav`), colour
+depth, channels and alpha, the output colour space, crop and *use region of interest*,
+container metadata, the named preset store, the auto bitrate, the render settings (quality,
+disk cache, effects, solo switches) and the *when done* hook are all on
+`lumit_render::export::ExportSpec`, all across the seam on `BridgeExportSpec`, and all on
+the dialog's one scrolling page, with a per-format capability table refusing what a format
+cannot carry. What is left:
 
-- **Expose it over the seam.** `BridgeExportSpec` carries eight fields of the twenty-odd
-  the engine now has; `to_export_spec` fills the rest with `..ExportSpec::default()`, which
-  is where the one change goes. The preset store (`lumit_render::export_presets`) needs
-  list/get/save/delete endpoints, and the *when done* hook needs the queue runner to call
-  `play_done_sound` / `reveal_in_folder` at completion.
 - **Wider than eight bits, honestly.** The pack stage writes 16-bit stills, but its input is
   the 8-bit display read-back, so today's 16-bit file carries an exactly-widened 8-bit
   signal. Making the extra bits mean something wants a 16-bit display target in lumit-gpu
   and a `readback16` beside `readback8`; nothing in the export path changes when it lands.
   Marked `ponytail:` at `pack_frame`.
-- **The *Still* output type** — one frame written under its own name rather than as a
-  numbered sequence. The frame walk and the encoders already do everything but the naming.
+- **The *Still* output type is withdrawn** (K-485): a still is an image sequence of one
+  frame, which the span already says, so the fourth chip the drawing offered is gone rather
+  than pending. What is genuinely missing is only the *naming* — a one-frame sequence is
+  written `shot.00001.png` rather than `shot.png` — and that is a rule in the encoder's
+  file naming, not an output type.
 - **Reordering the queue** (docs/07 §11: "items are reorderable"). The engine holds the
   list in the order things were added; nothing moves a row up it.
 - **A disk-cache policy with something to govern.** The setting exists and defaults to Off,
@@ -528,6 +527,14 @@ faking either at export would be worse than the empty row:
   proxies (a background transcode queue reusing the exporter) and an honest answer for a
   proxy whose dimensions or duration disagree with the original. Only then is "use
   proxies / use full resolution" an export override worth drawing.
+
+Both rows **are** on the page now, disabled and with a reason on hover (K-485), because the
+drawing shows them and an honest dead control says more than an absent one. Two more sit
+beside them for the same reason and want the same kind of work: **motion blur** and
+**Retime blend** at export are comp-wide settings with no export override in
+`RenderOptions` — an export renders what the composition renders — and giving them one
+means an override that survives into nested comps, exactly as *effects off* and *solo
+ignored* already do in `apply_render_overrides`.
 
 **Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
 drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it

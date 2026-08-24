@@ -3,13 +3,70 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../api.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'export.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`, `spec_json`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// What one output format can and cannot carry (K-479). The dialogue asks this
+/// of every format key it offers and disables what the answer refuses.
+BridgeFormatCaps exportFormatCaps({required String codec}) =>
+    BridgeLib.instance.api.crateApiExportExportFormatCaps(codec: codec);
+
+/// Refuse a spec the chosen format cannot honour, in the dialogue's own words —
+/// empty when the spec is exportable.
+///
+/// The engine refuses the same combinations before a frame is rendered; asking
+/// here only means the message arrives while the user is looking at the fields
+/// rather than minutes later from the queue.
+String exportSpecCheck({required BridgeExportSpec spec}) =>
+    BridgeLib.instance.api.crateApiExportExportSpecCheck(spec: spec);
+
+/// The crop this spec actually applies to a `comp_width` × `comp_height` frame,
+/// and the frame that survives it — the typed insets, or the Viewer's region of
+/// interest when that is asked for and exists (K-362, K-479).
+BridgeCrop exportCropFor(
+        {required BridgeExportSpec spec,
+        required int compWidth,
+        required int compHeight}) =>
+    BridgeLib.instance.api.crateApiExportExportCropFor(
+        spec: spec, compWidth: compWidth, compHeight: compHeight);
+
+/// The video bitrate this spec runs with, in bits per second, for a frame of
+/// `width` × `height` at `fps` — the typed number, or the one *Auto* works out.
+/// Zero when the format has no bitrate to choose or the encoder is choosing its
+/// own quality, which is when the footer offers no size estimate.
+PlatformInt64 exportResolvedBitrate(
+        {required BridgeExportSpec spec,
+        required int width,
+        required int height,
+        required double fps}) =>
+    BridgeLib.instance.api.crateApiExportExportResolvedBitrate(
+        spec: spec, width: width, height: height, fps: fps);
+
+/// Every preset the dialogue's list shows — the read-only built-ins first, then
+/// the user's own in the order they were saved.
+List<BridgeExportPresetEntry> exportPresetList() =>
+    BridgeLib.instance.api.crateApiExportExportPresetList();
+
+/// The settings behind a preset name, or `None` when there is no such preset.
+BridgeExportSpec? exportPresetGet({required String name}) =>
+    BridgeLib.instance.api.crateApiExportExportPresetGet(name: name);
+
+/// Save the current settings under `name`, replacing a preset of that name in
+/// its own row. A built-in's name is refused rather than shadowed.
+void exportPresetSave({required String name, required BridgeExportSpec spec}) =>
+    BridgeLib.instance.api
+        .crateApiExportExportPresetSave(name: name, spec: spec);
+
+/// Forget a preset of one's own. A built-in and an unknown name both answer an
+/// error rather than a silent no-op, so the dialogue can say why.
+void exportPresetDelete({required String name}) =>
+    BridgeLib.instance.api.crateApiExportExportPresetDelete(name: name);
 
 /// What a delivery preset stamps into the dialogue, and what to call the file.
 ///
@@ -53,6 +110,52 @@ void exportQueueCancel({required int id}) =>
 void exportQueueRemove({required int id}) =>
     BridgeLib.instance.api.crateApiExportExportQueueRemove(id: id);
 
+/// The crop an export actually applies, and the frame it leaves — the answer
+/// `crop_for` gives for the typed insets and the Viewer's region together.
+class BridgeCrop {
+  final int top;
+  final int left;
+  final int bottom;
+  final int right;
+
+  /// The frame that survives the crop, in pixels.
+  final int width;
+  final int height;
+
+  const BridgeCrop({
+    required this.top,
+    required this.left,
+    required this.bottom,
+    required this.right,
+    required this.width,
+    required this.height,
+  });
+
+  static Future<BridgeCrop> default_() =>
+      BridgeLib.instance.api.crateApiExportBridgeCropDefault();
+
+  @override
+  int get hashCode =>
+      top.hashCode ^
+      left.hashCode ^
+      bottom.hashCode ^
+      right.hashCode ^
+      width.hashCode ^
+      height.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCrop &&
+          runtimeType == other.runtimeType &&
+          top == other.top &&
+          left == other.left &&
+          bottom == other.bottom &&
+          right == other.right &&
+          width == other.width &&
+          height == other.height;
+}
+
 /// What a delivery preset fills the export dialogue with.
 class BridgeExportPreset {
   final String codec;
@@ -93,6 +196,32 @@ class BridgeExportPreset {
           height == other.height &&
           bitrateMbps == other.bitrateMbps &&
           defaultName == other.defaultName;
+}
+
+/// One row of the preset list: its name, and whether it is one of the
+/// read-only built-ins.
+class BridgeExportPresetEntry {
+  final String name;
+  final bool readOnly;
+
+  const BridgeExportPresetEntry({
+    required this.name,
+    required this.readOnly,
+  });
+
+  static Future<BridgeExportPresetEntry> default_() =>
+      BridgeLib.instance.api.crateApiExportBridgeExportPresetEntryDefault();
+
+  @override
+  int get hashCode => name.hashCode ^ readOnly.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExportPresetEntry &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          readOnly == other.readOnly;
 }
 
 /// One item in the export queue.
@@ -179,22 +308,35 @@ sealed class BridgeExportQueueState with _$BridgeExportQueueState {
   }) = BridgeExportQueueState_Failed;
 }
 
-/// What the export dialogue is asking for.
+/// What the export dialogue is asking for — the whole of
+/// `lumit_render::export::ExportSpec`, in the flat shape the seam carries
+/// (K-479, K-485).
 ///
 /// `width`/`height` of zero mean "the composition's own size", which is what the
 /// dialogue shows until somebody types over it. `bitrate_mbps` of zero means the
 /// encoder's own default — a quality nobody chose is better than a number this
-/// layer invented.
+/// layer invented — and is a *different answer* from `bitrate_auto`, which works
+/// a delivery-quality rate out from the frame and the rate (K-479).
 class BridgeExportSpec {
-  /// A delivery preset name, or empty for a custom export.
+  /// A preset name from the store, or empty for a custom export.
   final String preset;
 
   /// The output format key: `h264` / `hevc` for an `.mp4`, `png` / `tiff`
-  /// for a numbered image sequence (K-201).
+  /// for a numbered image sequence (K-201), `m4a` / `wav` for sound alone.
   final String codec;
   final int width;
   final int height;
   final int bitrateMbps;
+
+  /// The VBR peak in Mb/s; zero takes the customary 1.5× of the target. A
+  /// preset carries its own peak, which is why this crosses rather than being
+  /// worked out from the target on the way over.
+  final int peakMbps;
+
+  /// Work the bitrate out from the frame and the rate. Overrides
+  /// `bitrate_mbps`; a blank field (zero) with this off means the encoder
+  /// chooses its own quality, which is what blank has always meant (K-119).
+  final bool bitrateAuto;
 
   /// Output frame rate; zero means the composition's own. A different rate
   /// resamples by nearest comp frame over the same wall-clock span.
@@ -208,8 +350,61 @@ class BridgeExportSpec {
   final PlatformInt64 rangeEndFrame;
   final bool includeAudio;
 
-  /// Audio bits per second; zero takes the preset's own rate.
+  /// Audio bits per second; zero takes the delivery-preset rate.
   final PlatformInt64 audioBitRate;
+
+  /// Bits per channel in the written file: 8 or 16.
+  final int depth;
+
+  /// Write the composite's own coverage as an alpha channel, rather than an
+  /// opaque one.
+  final bool alphaChannel;
+
+  /// Un-multiply the colour on the way out (docs/06 §3.4). Meaningless
+  /// without `alpha_channel`, and ignored there.
+  final bool straightAlpha;
+
+  /// The output colour space: empty for the built-in sRGB / Rec.709
+  /// transform, otherwise the name of an OCIO output space (post-v1; an
+  /// export that asks for one before OCIO exists is refused).
+  final String colourSpace;
+
+  /// Pixels taken off each edge, at composition size (K-419).
+  final int cropTop;
+  final int cropLeft;
+  final int cropBottom;
+  final int cropRight;
+
+  /// Take the crop from the Viewer's region of interest instead.
+  final bool useRegionOfInterest;
+
+  /// That region as comp fractions `[x0, y0, x1, y1]` (K-362), or empty for
+  /// none. Anything that is not four increasing finite numbers is no region.
+  final Float64List region;
+
+  /// What is written into the container about the file, in the order the
+  /// Metadata section lists it — the order lands in the file.
+  final List<BridgeMetadataField> metadata;
+
+  /// The preview-resolution divisor the export renders at: 1 = Full, 2 =
+  /// Half, 3 = Third, 4 = Quarter (docs/01 §5).
+  final int qualityDivisor;
+
+  /// Read frames already banked in the disk cache (nothing is ever written).
+  final bool diskCacheReadOnly;
+
+  /// Run each layer's effect stack.
+  final bool effects;
+
+  /// Honour solo switches (K-105).
+  final bool honourSolo;
+
+  /// Play the completion sound when this export lands. Silent — never an
+  /// error — when no sound has been supplied.
+  final bool makeANoise;
+
+  /// Show the finished file in the desktop's own file manager.
+  final bool openFolder;
 
   const BridgeExportSpec({
     required this.preset,
@@ -217,12 +412,36 @@ class BridgeExportSpec {
     required this.width,
     required this.height,
     required this.bitrateMbps,
+    required this.peakMbps,
+    required this.bitrateAuto,
     required this.fps,
     required this.rangeStartFrame,
     required this.rangeEndFrame,
     required this.includeAudio,
     required this.audioBitRate,
+    required this.depth,
+    required this.alphaChannel,
+    required this.straightAlpha,
+    required this.colourSpace,
+    required this.cropTop,
+    required this.cropLeft,
+    required this.cropBottom,
+    required this.cropRight,
+    required this.useRegionOfInterest,
+    required this.region,
+    required this.metadata,
+    required this.qualityDivisor,
+    required this.diskCacheReadOnly,
+    required this.effects,
+    required this.honourSolo,
+    required this.makeANoise,
+    required this.openFolder,
   });
+
+  /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
+  /// meant (K-119) — mirroring `ExportSpec::default()` field for field.
+  static Future<BridgeExportSpec> default_() =>
+      BridgeLib.instance.api.crateApiExportBridgeExportSpecDefault();
 
   @override
   int get hashCode =>
@@ -231,11 +450,30 @@ class BridgeExportSpec {
       width.hashCode ^
       height.hashCode ^
       bitrateMbps.hashCode ^
+      peakMbps.hashCode ^
+      bitrateAuto.hashCode ^
       fps.hashCode ^
       rangeStartFrame.hashCode ^
       rangeEndFrame.hashCode ^
       includeAudio.hashCode ^
-      audioBitRate.hashCode;
+      audioBitRate.hashCode ^
+      depth.hashCode ^
+      alphaChannel.hashCode ^
+      straightAlpha.hashCode ^
+      colourSpace.hashCode ^
+      cropTop.hashCode ^
+      cropLeft.hashCode ^
+      cropBottom.hashCode ^
+      cropRight.hashCode ^
+      useRegionOfInterest.hashCode ^
+      region.hashCode ^
+      metadata.hashCode ^
+      qualityDivisor.hashCode ^
+      diskCacheReadOnly.hashCode ^
+      effects.hashCode ^
+      honourSolo.hashCode ^
+      makeANoise.hashCode ^
+      openFolder.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -247,11 +485,30 @@ class BridgeExportSpec {
           width == other.width &&
           height == other.height &&
           bitrateMbps == other.bitrateMbps &&
+          peakMbps == other.peakMbps &&
+          bitrateAuto == other.bitrateAuto &&
           fps == other.fps &&
           rangeStartFrame == other.rangeStartFrame &&
           rangeEndFrame == other.rangeEndFrame &&
           includeAudio == other.includeAudio &&
-          audioBitRate == other.audioBitRate;
+          audioBitRate == other.audioBitRate &&
+          depth == other.depth &&
+          alphaChannel == other.alphaChannel &&
+          straightAlpha == other.straightAlpha &&
+          colourSpace == other.colourSpace &&
+          cropTop == other.cropTop &&
+          cropLeft == other.cropLeft &&
+          cropBottom == other.cropBottom &&
+          cropRight == other.cropRight &&
+          useRegionOfInterest == other.useRegionOfInterest &&
+          region == other.region &&
+          metadata == other.metadata &&
+          qualityDivisor == other.qualityDivisor &&
+          diskCacheReadOnly == other.diskCacheReadOnly &&
+          effects == other.effects &&
+          honourSolo == other.honourSolo &&
+          makeANoise == other.makeANoise &&
+          openFolder == other.openFolder;
 }
 
 @freezed
@@ -277,4 +534,98 @@ sealed class BridgeExportState with _$BridgeExportState {
   const factory BridgeExportState.failed({
     required String error,
   }) = BridgeExportState_Failed;
+}
+
+/// What one output format can and cannot carry — `ExportFormat::caps()` as the
+/// dialogue reads it (K-479).
+///
+/// A control the format cannot honour is **disabled**, not live: the dialogue
+/// reads this row to decide, and the engine refuses the same combinations as a
+/// backstop, so the two cannot disagree about what a file will hold.
+class BridgeFormatCaps {
+  /// Carries a picture at all.
+  final bool video;
+
+  /// Can carry the composition's sound.
+  final bool audio;
+
+  /// Can carry an alpha channel.
+  final bool alpha;
+
+  /// The colour depths this format writes, best last: `[8]`, `[8, 16]`, or
+  /// empty for a format with no picture.
+  final Uint32List depths;
+
+  /// A video bitrate applies (lossless formats have none to choose).
+  final bool bitRate;
+
+  /// An audio bitrate applies — AAC has one, uncompressed PCM is exactly
+  /// what it is.
+  final bool audioBitRate;
+
+  /// The container holds metadata.
+  final bool metadata;
+
+  const BridgeFormatCaps({
+    required this.video,
+    required this.audio,
+    required this.alpha,
+    required this.depths,
+    required this.bitRate,
+    required this.audioBitRate,
+    required this.metadata,
+  });
+
+  static Future<BridgeFormatCaps> default_() =>
+      BridgeLib.instance.api.crateApiExportBridgeFormatCapsDefault();
+
+  @override
+  int get hashCode =>
+      video.hashCode ^
+      audio.hashCode ^
+      alpha.hashCode ^
+      depths.hashCode ^
+      bitRate.hashCode ^
+      audioBitRate.hashCode ^
+      metadata.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFormatCaps &&
+          runtimeType == other.runtimeType &&
+          video == other.video &&
+          audio == other.audio &&
+          alpha == other.alpha &&
+          depths == other.depths &&
+          bitRate == other.bitRate &&
+          audioBitRate == other.audioBitRate &&
+          metadata == other.metadata;
+}
+
+/// One key/value pair written into the container.
+class BridgeMetadataField {
+  /// FFmpeg's own key — `title`, `artist`, `copyright`, `comment`,
+  /// `creation_time`, or any other the container will take.
+  final String key;
+  final String value;
+
+  const BridgeMetadataField({
+    required this.key,
+    required this.value,
+  });
+
+  static Future<BridgeMetadataField> default_() =>
+      BridgeLib.instance.api.crateApiExportBridgeMetadataFieldDefault();
+
+  @override
+  int get hashCode => key.hashCode ^ value.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeMetadataField &&
+          runtimeType == other.runtimeType &&
+          key == other.key &&
+          value == other.value;
 }

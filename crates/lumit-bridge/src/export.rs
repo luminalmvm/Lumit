@@ -18,24 +18,20 @@
 //! its own: the next item starts when the one before it finishes.
 //!
 //! Two pieces are pure and always compiled (and unit-tested without a GPU):
-//! - the **spec resolver** — the preset stamp plus the VBR-peak-preserved-while-
-//!   unedited rule and the 1.5× peak fallback, a faithful port of
-//!   `ExportDialogState::apply`/`spec`;
+//! - the **spec conversion** — `BridgeExportSpec` (the dialogue's flat fields)
+//!   into `lumit_render::export::ExportSpec` and back, plus the four questions
+//!   the dialogue asks the engine rather than answering itself: what a format
+//!   can carry, whether a spec is exportable, what a crop leaves, and what
+//!   bitrate it will run at (K-479, K-485);
 //! - the **filename template** — `{comp}`/`{preset}`/`{date}` substitution, the
 //!   Windows sanitiser and the `.mp4` guarantee, a faithful port of
 //!   `shell::export_default_file_name`/`render_filename_template`/
 //!   `sanitise_windows_filename`. A blank template reproduces each preset's own
 //!   default file name byte-for-byte (K-119, load-bearing).
 //!
-//! The driving surface (start/poll/cancel) is gated behind the `render` feature;
-//! without it the pure resolver and filename endpoints still work, and starting
-//! an export answers a calm "unavailable in this build".
-
-// The spec resolver and its `ResolvedSpec`/`SpecInputs`/parse/resolve helpers are
-// always compiled and unit-tested (unconditionally), but only *wired* into the
-// export driver under the `render` feature. Without it — and outside the test
-// build — they are dead, so silence the warning there rather than gate the code
-// (the tests must run in every feature configuration).
+//! Naming a codec needs the `media` feature; without it the conversion answers
+//! a calm "this build has no encoder" and every capability reads false, so the
+//! dialogue disables rather than offering choices no file would honour.
 
 use crate::err_json;
 use serde_json::{json, Value};
@@ -103,145 +99,355 @@ fn preset_default_file_name(name: &str) -> &'static str {
     }
 }
 
-/// The resolved export spec — the bridge's pure mirror of
-/// `lumit_render::export::ExportSpec` (codec as a name string). Produced by
-/// [`resolve_spec`] and, under the `render` feature, converted into the real
-/// `ExportSpec` the exporter runs with.
-#[derive(Clone, PartialEq, Debug)]
-pub(crate) struct ResolvedSpec {
-    /// `h264` / `hevc` for mp4, `png` / `tiff` for an image sequence (K-201).
-    pub codec: String,
-    pub target: (u32, u32),
-    pub bit_rate: Option<i64>,
-    pub max_rate: Option<i64>,
-    /// Output frame rate; None = the comp's own.
-    pub fps: Option<f64>,
-    /// Export range in comp frames, end exclusive; None = work area / whole comp.
-    pub range: Option<(usize, usize)>,
-    pub include_audio: bool,
-    pub audio_bit_rate: i64,
+// ---------------------------------------------------------------------------
+// The seam's own half of the export spec (K-485): `BridgeExportSpec` in, the
+// engine's `ExportSpec` out, and the dialogue's four questions — what can this
+// format carry, is this spec exportable, what does the crop leave, what bitrate
+// will it run at — answered by the engine rather than re-derived in Dart.
+// ---------------------------------------------------------------------------
+
+use crate::api::export::{BridgeCrop, BridgeExportPresetEntry, BridgeExportSpec, BridgeFormatCaps};
+// Only the conversion names a metadata field, and only a build with an encoder
+// converts anything.
+#[cfg(feature = "media")]
+use crate::api::export::BridgeMetadataField;
+
+/// Megabits per second as bits per second, which is what the encoder is set in.
+#[cfg(feature = "media")]
+fn bps(mbps: u32) -> i64 {
+    i64::from(mbps) * 1_000_000
 }
 
-/// Whether a codec name writes stills rather than a video container — the one
-/// question several rules below hang off (no audio, no bitrates).
-pub(crate) fn is_image_codec(codec: &str) -> bool {
-    matches!(codec, "png" | "tiff")
+/// The crop this spec applies to a `comp_w` × `comp_h` frame — the typed
+/// insets, or the Viewer's region when *use region of interest* is ticked and a
+/// region is set. One engine function decides (`crop_for`), so the reading in
+/// the dialogue and the pixels in the file cannot disagree.
+fn spec_crop(spec: &BridgeExportSpec, comp_w: u32, comp_h: u32) -> lumit_render::export::Crop {
+    let explicit = lumit_render::export::Crop {
+        top: spec.crop_top,
+        left: spec.crop_left,
+        bottom: spec.crop_bottom,
+        right: spec.crop_right,
+    };
+    let region = <[f64; 4]>::try_from(spec.region.as_slice()).ok();
+    lumit_render::export::crop_for(
+        explicit,
+        spec.use_region_of_interest,
+        region,
+        comp_w,
+        comp_h,
+    )
 }
 
-/// The dialogue-shaped inputs a `start_export` spec_json carries — the final
-/// state of the egui export dialogue's fields, so [`resolve_spec`] can reproduce
-/// `ExportDialogState::spec` exactly.
-struct SpecInputs {
-    preset: String,
-    codec: String,
-    size: Option<(u32, u32)>,
-    bitrate_mbps: String,
-    /// Output rate; zero or absent = the comp's own.
-    fps: f64,
-    /// `[start, end)` comp frames; absent/null = work area / whole comp.
-    range: Option<(u64, u64)>,
-    include_audio: bool,
-    audio_bit_rate: i64,
+/// The crop and the frame that survives it, as the dialogue's Crop row reads it.
+pub(crate) fn crop_for(spec: &BridgeExportSpec, comp_w: u32, comp_h: u32) -> BridgeCrop {
+    let crop = spec_crop(spec, comp_w, comp_h);
+    let (width, height) = crop.output_size(comp_w, comp_h);
+    BridgeCrop {
+        top: crop.top,
+        left: crop.left,
+        bottom: crop.bottom,
+        right: crop.right,
+        width,
+        height,
+    }
 }
 
-/// Parse the spec_json into [`SpecInputs`]. Every field is optional and falls to
-/// the dialogue's own defaults: no preset ("custom"), H.264, the comp's own size
-/// (`size` absent/null), the encoder's default quality (`bitrate_mbps` blank),
-/// audio on, and the delivery-preset audio rate. `bitrate_mbps` accepts a string
-/// (the raw dialogue field) or a number, so Dart can send either.
-fn parse_inputs(spec_json: &str) -> Result<SpecInputs, String> {
-    let v: Value =
-        serde_json::from_str(spec_json).map_err(|_| "spec must be a JSON object".to_string())?;
-    let Value::Object(m) = v else {
-        return Err("spec must be a JSON object".to_string());
-    };
-    let preset = m
-        .get("preset")
-        .and_then(|p| p.as_str())
-        .unwrap_or("custom")
-        .to_owned();
-    let codec = m
-        .get("codec")
-        .and_then(|c| c.as_str())
-        .unwrap_or("h264")
-        .to_owned();
-    // `size`: an explicit [w, h], or null/absent for the comp's own size.
-    let size = match m.get("size") {
-        Some(Value::Array(a)) if a.len() == 2 => match (a[0].as_u64(), a[1].as_u64()) {
-            (Some(w), Some(h)) => Some((w as u32, h as u32)),
-            _ => None,
-        },
-        _ => None,
-    };
-    let bitrate_mbps = match m.get("bitrate_mbps") {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Number(n)) => n.to_string(),
-        _ => String::new(),
-    };
-    let fps = m.get("fps").and_then(|f| f.as_f64()).unwrap_or(0.0);
-    // `range`: an explicit [start, end) in comp frames, or null/absent for the
-    // work-area default.
-    let range = match m.get("range") {
-        Some(Value::Array(a)) if a.len() == 2 => match (a[0].as_u64(), a[1].as_u64()) {
-            (Some(s), Some(e)) if e > s => Some((s, e)),
-            _ => None,
-        },
-        _ => None,
-    };
-    let include_audio = m
-        .get("include_audio")
-        .and_then(|a| a.as_bool())
-        .unwrap_or(true);
-    let audio_bit_rate = m
-        .get("audio_bit_rate")
-        .and_then(|a| a.as_i64())
-        .unwrap_or(PRESET_AUDIO_BPS);
-    Ok(SpecInputs {
-        preset,
-        codec,
-        size,
-        bitrate_mbps,
-        fps,
-        range,
-        include_audio,
-        audio_bit_rate,
+/// Whatever the engine refuses this spec for, or an empty string.
+pub(crate) fn spec_check(spec: &BridgeExportSpec) -> String {
+    // The crop plays no part in what a format can carry, so the comp's size is
+    // not needed to answer this one.
+    match to_export_spec(spec, 0, 0) {
+        Ok(resolved) => resolved.check().err().unwrap_or_default(),
+        Err(e) => e,
+    }
+}
+
+/// The video bitrate this spec runs at, or zero when there is none to choose.
+pub(crate) fn resolved_bitrate(spec: &BridgeExportSpec, width: u32, height: u32, fps: f64) -> i64 {
+    to_export_spec(spec, 0, 0)
+        .ok()
+        .and_then(|s| s.resolved_bitrate((width, height), fps))
+        .map_or(0, |(target, _)| target)
+}
+
+/// Every preset the list shows, built-ins first.
+pub(crate) fn preset_list() -> Vec<BridgeExportPresetEntry> {
+    lumit_render::export_presets::PresetLibrary::load_default()
+        .list()
+        .into_iter()
+        .map(|(name, read_only)| BridgeExportPresetEntry { name, read_only })
+        .collect()
+}
+
+/// The settings behind a preset name.
+pub(crate) fn preset_get(name: &str) -> Option<BridgeExportSpec> {
+    let spec = lumit_render::export_presets::PresetLibrary::load_default().get(name)?;
+    let mut bridged = from_export_spec(&spec)?;
+    // The row's own name comes back with it, so applying a preset also sets the
+    // dropdown that applied it.
+    bridged.preset = name.to_owned();
+    Some(bridged)
+}
+
+/// Save these settings under `name` (replacing a preset of that name in its own
+/// row). The library is read and written whole each time: it is a handful of
+/// rows in one small file, and a store held in memory would be a second copy to
+/// keep in step with the one on disk for no gain.
+pub(crate) fn preset_save(name: &str, spec: &BridgeExportSpec) -> Result<(), String> {
+    let resolved = to_export_spec(spec, 0, 0)?;
+    let mut library = lumit_render::export_presets::PresetLibrary::load_default();
+    library.put(name, resolved)?;
+    library.save_default()
+}
+
+/// Forget a preset of one's own.
+pub(crate) fn preset_delete(name: &str) -> Result<(), String> {
+    let mut library = lumit_render::export_presets::PresetLibrary::load_default();
+    library.delete(name)?;
+    library.save_default()
+}
+
+/// The format key an [`ExportFormat`](lumit_render::export::ExportFormat) is
+/// named by over the seam, and back again.
+#[cfg(feature = "media")]
+fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, String> {
+    use lumit_media::encode::{ImageFormat, VideoCodec};
+    use lumit_render::export::{AudioFormat, ExportFormat};
+    Ok(match codec {
+        "h264" => ExportFormat::Video(VideoCodec::H264),
+        "hevc" => ExportFormat::Video(VideoCodec::Hevc),
+        "png" => ExportFormat::Images(ImageFormat::Png),
+        "tiff" => ExportFormat::Images(ImageFormat::Tiff),
+        "m4a" => ExportFormat::Audio(AudioFormat::M4a),
+        "wav" => ExportFormat::Audio(AudioFormat::Wav),
+        other => return Err(format!("export: unknown format '{other}'")),
     })
 }
 
-/// Resolve the dialogue inputs into a [`ResolvedSpec`], given the comp's own
-/// size — a faithful port of `ExportDialogState::spec` (docs/06 §7.5, K-119):
-/// the target defaults to the comp size; the bitrate parses from Mbps (blank =
-/// encoder default); and the VBR peak follows the preset's peak while its numbers
-/// stand unedited (same codec and same target bitrate), else the customary 1.5×.
-fn resolve_spec(inputs: &SpecInputs, comp_w: u32, comp_h: u32) -> ResolvedSpec {
-    let stamped = preset_params(&inputs.preset);
-    let target = inputs.size.unwrap_or((comp_w, comp_h));
-    let bit_rate = inputs
-        .bitrate_mbps
-        .trim()
-        .parse::<f64>()
-        .ok()
-        .filter(|m| *m > 0.0)
-        .map(|m| (m * 1_000_000.0) as i64);
-    let max_rate = match (stamped, bit_rate) {
-        (Some(p), Some(b)) if b == p.target_bps && inputs.codec == p.codec => Some(p.peak_bps),
-        (_, Some(b)) => Some(b.saturating_mul(3) / 2),
-        (_, None) => None,
-    };
-    let images = is_image_codec(&inputs.codec);
-    ResolvedSpec {
-        codec: inputs.codec.clone(),
-        target,
-        // Stills are lossless; a bitrate against them is a field the dialogue
-        // should not have sent, dropped here so the exporter never sees one.
-        bit_rate: if images { None } else { bit_rate },
-        max_rate: if images { None } else { max_rate },
-        fps: (inputs.fps > 0.0).then_some(inputs.fps),
-        range: inputs.range.map(|(s, e)| (s as usize, e as usize)),
-        // A folder of stills has nowhere for sound to go (K-201).
-        include_audio: inputs.include_audio && !images,
-        audio_bit_rate: inputs.audio_bit_rate,
+#[cfg(feature = "media")]
+fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
+    use lumit_media::encode::{ImageFormat, VideoCodec};
+    use lumit_render::export::{AudioFormat, ExportFormat};
+    match format {
+        ExportFormat::Video(VideoCodec::H264) => "h264",
+        ExportFormat::Video(VideoCodec::Hevc) => "hevc",
+        ExportFormat::Images(ImageFormat::Png) => "png",
+        ExportFormat::Images(ImageFormat::Tiff) => "tiff",
+        ExportFormat::Audio(AudioFormat::M4a) => "m4a",
+        ExportFormat::Audio(AudioFormat::Wav) => "wav",
     }
+}
+
+/// What one format can carry, as the dialogue reads it. A build with no encoder
+/// can carry nothing, which disables every control rather than offering choices
+/// no file will honour.
+#[cfg(feature = "media")]
+pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
+    use lumit_media::encode::BitDepth;
+    let Ok(format) = export_format(codec) else {
+        return BridgeFormatCaps::default();
+    };
+    let caps = format.caps();
+    BridgeFormatCaps {
+        video: caps.video,
+        audio: caps.audio,
+        alpha: caps.alpha,
+        depths: caps
+            .depths
+            .iter()
+            .map(|d| match d {
+                BitDepth::Eight => 8,
+                BitDepth::Sixteen => 16,
+            })
+            .collect(),
+        bit_rate: caps.bit_rate,
+        // Uncompressed PCM is exactly what it is; everything else Lumit writes
+        // sound into is AAC, which has a rate to choose.
+        audio_bit_rate: caps.audio && codec != "wav",
+        metadata: caps.metadata,
+    }
+}
+
+#[cfg(not(feature = "media"))]
+pub(crate) fn format_caps(_codec: &str) -> BridgeFormatCaps {
+    BridgeFormatCaps::default()
+}
+
+/// Without a media build there is no encoder to name, so an export cannot be
+/// specified at all — a calm error rather than a spec pointing at nothing.
+#[cfg(not(feature = "media"))]
+pub(crate) fn to_export_spec(
+    _spec: &BridgeExportSpec,
+    _comp_w: u32,
+    _comp_h: u32,
+) -> Result<lumit_render::export::ExportSpec, String> {
+    Err("export: this build has no encoder (the media feature is off)".to_owned())
+}
+
+#[cfg(not(feature = "media"))]
+fn from_export_spec(_spec: &lumit_render::export::ExportSpec) -> Option<BridgeExportSpec> {
+    None
+}
+
+/// The dialogue's spec as the exporter's own, resolved against the comp's size
+/// (which only the crop needs).
+#[cfg(feature = "media")]
+pub(crate) fn to_export_spec(
+    spec: &BridgeExportSpec,
+    comp_w: u32,
+    comp_h: u32,
+) -> Result<lumit_render::export::ExportSpec, String> {
+    use lumit_media::encode::{BitDepth, Metadata};
+    use lumit_render::export::{
+        AlphaMode, Bitrate, Channels, ColourSpace, DiskCachePolicy, ExportSpec, RenderOptions,
+        WhenDone,
+    };
+    let mut metadata = Metadata::new();
+    for field in &spec.metadata {
+        metadata.set(&field.key, &field.value);
+    }
+    Ok(ExportSpec {
+        format: export_format(&spec.codec)?,
+        target: (spec.width > 0 && spec.height > 0).then_some((spec.width, spec.height)),
+        bitrate: match (spec.bitrate_auto, spec.bitrate_mbps) {
+            (true, _) => Bitrate::Auto,
+            // A blank field sets no bitrate at all and lets the encoder choose
+            // its own quality, which is a different answer from Auto (K-479).
+            (false, 0) => Bitrate::EncoderDefault,
+            (false, mbps) => Bitrate::Manual {
+                target_bps: bps(mbps),
+                peak_bps: (spec.peak_mbps > 0).then(|| bps(spec.peak_mbps)),
+            },
+        },
+        fps: (spec.fps > 0.0).then_some(spec.fps),
+        range: (spec.range_start_frame >= 0 && spec.range_end_frame > spec.range_start_frame)
+            .then_some((
+                spec.range_start_frame as usize,
+                spec.range_end_frame as usize,
+            )),
+        include_audio: spec.include_audio,
+        audio_bit_rate: if spec.audio_bit_rate > 0 {
+            spec.audio_bit_rate
+        } else {
+            PRESET_AUDIO_BPS
+        },
+        depth: if spec.depth >= 16 {
+            BitDepth::Sixteen
+        } else {
+            BitDepth::Eight
+        },
+        channels: if spec.alpha_channel {
+            Channels::RgbAlpha
+        } else {
+            Channels::Rgb
+        },
+        alpha: if spec.straight_alpha {
+            AlphaMode::Straight
+        } else {
+            AlphaMode::Premultiplied
+        },
+        colour_space: if spec.colour_space.is_empty() {
+            ColourSpace::SrgbRec709
+        } else {
+            ColourSpace::Ocio(spec.colour_space.clone())
+        },
+        crop: spec_crop(spec, comp_w, comp_h),
+        metadata,
+        render: RenderOptions {
+            quality: lumit_render::plan::Quality {
+                divisor: spec.quality_divisor.clamp(1, 4),
+                ..lumit_render::plan::Quality::default()
+            },
+            disk_cache: if spec.disk_cache_read_only {
+                DiskCachePolicy::ReadOnly
+            } else {
+                DiskCachePolicy::Off
+            },
+            effects: spec.effects,
+            honour_solo: spec.honour_solo,
+        },
+        // The two ticks are one enum in the engine, and showing the folder is
+        // the louder of the two — the queue honours both flags itself.
+        when_done: if spec.open_folder {
+            WhenDone::OpenFolder
+        } else if spec.make_a_noise {
+            WhenDone::MakeANoise
+        } else {
+            WhenDone::Nothing
+        },
+    })
+}
+
+/// A stored preset as the dialogue's own fields — the inverse of
+/// [`to_export_spec`], so a preset saved from the dialogue comes back as the
+/// settings that saved it.
+#[cfg(feature = "media")]
+fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExportSpec> {
+    use lumit_media::encode::BitDepth;
+    use lumit_render::export::{AlphaMode, Bitrate, Channels, ColourSpace, DiskCachePolicy};
+    let (bitrate_auto, bitrate_mbps, peak_mbps) = match spec.bitrate {
+        Bitrate::Auto => (true, 0, 0),
+        Bitrate::EncoderDefault => (false, 0, 0),
+        Bitrate::Manual {
+            target_bps,
+            peak_bps,
+        } => (
+            false,
+            (target_bps / 1_000_000).clamp(0, i64::from(u32::MAX)) as u32,
+            peak_bps.map_or(0, |p| (p / 1_000_000).clamp(0, i64::from(u32::MAX)) as u32),
+        ),
+    };
+    let (width, height) = spec.target.unwrap_or((0, 0));
+    let (range_start_frame, range_end_frame) =
+        spec.range.map_or((-1, -1), |(s, e)| (s as i64, e as i64));
+    Some(BridgeExportSpec {
+        preset: String::new(),
+        codec: format_key(spec.format).to_owned(),
+        width,
+        height,
+        bitrate_mbps,
+        peak_mbps,
+        bitrate_auto,
+        fps: spec.fps.unwrap_or(0.0),
+        range_start_frame,
+        range_end_frame,
+        include_audio: spec.include_audio,
+        audio_bit_rate: spec.audio_bit_rate,
+        depth: match spec.depth {
+            BitDepth::Eight => 8,
+            BitDepth::Sixteen => 16,
+        },
+        alpha_channel: spec.channels == Channels::RgbAlpha,
+        straight_alpha: spec.alpha == AlphaMode::Straight,
+        colour_space: match &spec.colour_space {
+            ColourSpace::SrgbRec709 => String::new(),
+            ColourSpace::Ocio(name) => name.clone(),
+        },
+        crop_top: spec.crop.top,
+        crop_left: spec.crop.left,
+        crop_bottom: spec.crop.bottom,
+        crop_right: spec.crop.right,
+        // A stored crop is already resolved: the region it may have come from
+        // was the Viewer's at the time, and that is not what a preset means.
+        use_region_of_interest: false,
+        region: Vec::new(),
+        metadata: spec
+            .metadata
+            .iter()
+            .map(|(key, value)| BridgeMetadataField {
+                key: key.to_owned(),
+                value: value.to_owned(),
+            })
+            .collect(),
+        quality_divisor: spec.render.quality.divisor.clamp(1, 4),
+        disk_cache_read_only: spec.render.disk_cache == DiskCachePolicy::ReadOnly,
+        effects: spec.render.effects,
+        honour_solo: spec.render.honour_solo,
+        // *When done* is what this export does, not what the preset is for.
+        make_a_noise: false,
+        open_folder: false,
+    })
 }
 
 /// The `export_preset` reply: the dialogue fields a preset stamps plus its
@@ -367,10 +573,10 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 pub(crate) fn start_export_with_document(
     doc: std::sync::Arc<lumit_core::Document>,
     comp: uuid::Uuid,
-    spec_json: &str,
+    spec: &BridgeExportSpec,
     out_path: &str,
 ) -> String {
-    driving::start_with_document(doc, comp, spec_json, out_path)
+    driving::start_with_document(doc, comp, spec, out_path)
 }
 
 /// Poll the running export, draining the exporter's event channel. Reply:
@@ -427,20 +633,11 @@ pub(crate) fn queue_add(
     doc: std::sync::Arc<lumit_core::Document>,
     comp: uuid::Uuid,
     comp_name: String,
-    spec_json: &str,
+    spec: &BridgeExportSpec,
     out_path: &str,
     start: bool,
-    open_folder: bool,
 ) -> Result<u32, String> {
-    driving::queue_add(
-        doc,
-        comp,
-        comp_name,
-        spec_json,
-        out_path,
-        start,
-        open_folder,
-    )
+    driving::queue_add(doc, comp, comp_name, spec, out_path, start)
 }
 
 /// Show a file in the desktop's own file manager — the *Open folder* tick, and
@@ -496,8 +693,8 @@ pub(crate) fn queue_remove(id: u32) {
 }
 
 mod driving {
-    use super::{err_json, parse_inputs, resolve_spec, ResolvedSpec};
-    use lumit_render::export::{ExportEvent, ExportHandle, ExportSpec};
+    use super::{err_json, to_export_spec, BridgeExportSpec};
+    use lumit_render::export::{ExportEvent, ExportHandle};
     use serde_json::json;
     use std::sync::{Mutex, OnceLock};
     use uuid::Uuid;
@@ -525,12 +722,11 @@ mod driving {
         comp_name: String,
         doc: std::sync::Arc<lumit_core::Document>,
         comp: Uuid,
-        spec_json: String,
+        /// The dialogue's fields as they stood when this was queued — the
+        /// *when done* ticks included, which is why the queue can honour them
+        /// after the dialogue that set them has closed.
+        spec: BridgeExportSpec,
         out_path: String,
-        preset: String,
-        range: Option<(u64, u64)>,
-        /// Show the file when it lands (docs/07 §11's *Reveal in folder*).
-        open_folder: bool,
         state: ItemState,
     }
 
@@ -579,54 +775,6 @@ mod driving {
         })
     }
 
-    /// Convert the resolved spec into the exporter's `ExportSpec` (codec name →
-    /// the real `VideoCodec`; an unknown name is a calm error).
-    /// Without a media build there is no encoder to name, so an export cannot
-    /// be specified at all — a calm error rather than a spec pointing at
-    /// nothing.
-    #[cfg(not(feature = "media"))]
-    fn to_export_spec(_r: &ResolvedSpec) -> Result<ExportSpec, String> {
-        Err("export: this build has no encoder (the media feature is off)".to_owned())
-    }
-
-    #[cfg(feature = "media")]
-    fn to_export_spec(r: &ResolvedSpec) -> Result<ExportSpec, String> {
-        use lumit_media::encode::{ImageFormat, VideoCodec};
-        use lumit_render::export::ExportFormat;
-        let format = match r.codec.as_str() {
-            "h264" => ExportFormat::Video(VideoCodec::H264),
-            "hevc" => ExportFormat::Video(VideoCodec::Hevc),
-            "png" => ExportFormat::Images(ImageFormat::Png),
-            "tiff" => ExportFormat::Images(ImageFormat::Tiff),
-            other => return Err(format!("export: unknown format '{other}'")),
-        };
-        // Everything the seam does not carry yet — colour depth, channels and
-        // alpha, colour space, crop, metadata, the render settings and the
-        // when-done hook — takes its own default, which is what an export has
-        // always done. The engine models all of it (`lumit_render::export`);
-        // exposing it over the seam is the interface half's own work, and this
-        // spread is what makes that one change rather than many.
-        Ok(ExportSpec {
-            format,
-            target: Some(r.target),
-            bitrate: match r.bit_rate {
-                Some(target_bps) => lumit_render::export::Bitrate::Manual {
-                    target_bps,
-                    peak_bps: r.max_rate,
-                },
-                // A blank bitrate field has always meant "encoder default
-                // quality" and still does; the drawing's Auto face is a
-                // separate answer the seam does not carry yet.
-                None => lumit_render::export::Bitrate::EncoderDefault,
-            },
-            fps: r.fps,
-            range: r.range,
-            include_audio: r.include_audio,
-            audio_bit_rate: r.audio_bit_rate,
-            ..ExportSpec::default()
-        })
-    }
-
     /// The export itself, given the document to render.
     ///
     /// Split out from [`start`] so the frb path can drive the same exporter: v0
@@ -635,7 +783,7 @@ mod driving {
     pub(super) fn start_with_document(
         doc: std::sync::Arc<lumit_core::Document>,
         comp: Uuid,
-        spec_json: &str,
+        spec: &BridgeExportSpec,
         out_path: &str,
     ) -> String {
         if out_path.trim().is_empty() {
@@ -649,7 +797,7 @@ mod driving {
             return err_json("an export is already running");
         }
 
-        match launch(&mut guard, &doc, comp, spec_json, out_path) {
+        match launch(&mut guard, &doc, comp, spec, out_path) {
             Ok(()) => {
                 guard.current = None;
                 json!({ "ok": true }).to_string()
@@ -668,17 +816,15 @@ mod driving {
         run: &mut Run,
         doc: &std::sync::Arc<lumit_core::Document>,
         comp: Uuid,
-        spec_json: &str,
+        spec: &BridgeExportSpec,
         out_path: &str,
     ) -> Result<(), String> {
-        let parsed = parse_inputs(spec_json).map_err(|e| format!("export: {e}"))?;
-        // Resolve the spec against the comp's own size.
+        // The comp's own size, which the crop is resolved against.
         let (cw, ch) = doc
             .comp(comp)
             .map(|c| (c.width, c.height))
             .ok_or("export: unknown composition")?;
-        let resolved = resolve_spec(&parsed, cw, ch);
-        let spec = to_export_spec(&resolved)?;
+        let spec = to_export_spec(spec, cw, ch)?;
 
         // Build the audio inputs through the headless seam (K-175), then hand
         // off to the exporter, which drives the same render walk the Viewer
@@ -706,18 +852,13 @@ mod driving {
         doc: std::sync::Arc<lumit_core::Document>,
         comp: Uuid,
         comp_name: String,
-        spec_json: &str,
+        spec: &BridgeExportSpec,
         out_path: &str,
         start: bool,
-        open_folder: bool,
     ) -> Result<u32, String> {
         if out_path.trim().is_empty() {
             return Err("export: no output path".to_owned());
         }
-        // Parsed here rather than at launch time so a spec the resolver cannot
-        // read is refused while the user is looking at the dialogue, instead of
-        // failing silently minutes later when its turn comes.
-        let parsed = parse_inputs(spec_json).map_err(|e| format!("export: {e}"))?;
 
         let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
         let id = guard.next_id;
@@ -727,11 +868,8 @@ mod driving {
             comp_name,
             doc,
             comp,
-            spec_json: spec_json.to_owned(),
+            spec: spec.clone(),
             out_path: out_path.to_owned(),
-            preset: parsed.preset.clone(),
-            range: parsed.range,
-            open_folder,
             state: ItemState::Waiting,
         });
         if start {
@@ -760,11 +898,14 @@ mod driving {
                 id: item.id,
                 comp_name: item.comp_name.clone(),
                 out_path: item.out_path.clone(),
-                preset: item.preset.clone(),
-                codec: parse_inputs(&item.spec_json)
-                    .map(|i| i.codec)
-                    .unwrap_or_default(),
-                range: item.range,
+                preset: item.spec.preset.clone(),
+                codec: item.spec.codec.clone(),
+                range: (item.spec.range_start_frame >= 0
+                    && item.spec.range_end_frame > item.spec.range_start_frame)
+                    .then_some((
+                        item.spec.range_start_frame as u64,
+                        item.spec.range_end_frame as u64,
+                    )),
                 state: match &item.state {
                     ItemState::Waiting => super::QueueRowState::Waiting,
                     ItemState::Running => {
@@ -831,17 +972,17 @@ mod driving {
             else {
                 return;
             };
-            let (doc, comp, spec_json, out_path, id) = {
+            let (doc, comp, spec, out_path, id) = {
                 let item = &run.queue[index];
                 (
                     item.doc.clone(),
                     item.comp,
-                    item.spec_json.clone(),
+                    item.spec.clone(),
                     item.out_path.clone(),
                     item.id,
                 )
             };
-            match launch(run, &doc, comp, &spec_json, &out_path) {
+            match launch(run, &doc, comp, &spec, &out_path) {
                 Ok(()) => {
                     run.queue[index].state = ItemState::Running;
                     run.current = Some(id);
@@ -928,11 +1069,20 @@ mod driving {
                         State::Failed { error } => ItemState::Failed(error.clone()),
                         _ => ItemState::Done,
                     };
-                    // The tick the dialogue set, honoured here rather than by
+                    // The ticks the dialogue set, honoured here rather than by
                     // whatever window happens to be watching: an export that
-                    // lands after its dialogue closed still opens its folder.
-                    if item.open_folder && matches!(item.state, ItemState::Done) {
-                        super::reveal_in_folder(&item.out_path);
+                    // lands after its dialogue closed still makes its noise and
+                    // opens its folder. Both are independent — a long export
+                    // left running wants the sound *and* the folder — and the
+                    // noise is silent, never an error, when no sound has been
+                    // supplied.
+                    if matches!(item.state, ItemState::Done) {
+                        if item.spec.make_a_noise {
+                            lumit_render::export::play_done_sound();
+                        }
+                        if item.spec.open_folder {
+                            super::reveal_in_folder(&item.out_path);
+                        }
                     }
                 }
             }
@@ -945,48 +1095,241 @@ mod driving {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{parse_inputs, resolve_spec};
+    use super::*;
 
-    /// The dialogue's new fields parse with honest defaults: no fps override,
-    /// no explicit range, and a nonsense range (end before start) is ignored
-    /// rather than clamped into something nobody asked for (K-201).
+    /// A zero size, a zero rate and a negative range all mean "the
+    /// composition's own", which is what the dialogue's untouched fields say
+    /// (K-201) — never a frame of 0×0 or a range of nothing.
     #[test]
-    fn fps_and_range_parse_with_absent_meaning_default() {
-        let inputs = parse_inputs(r#"{"codec":"h264"}"#).unwrap();
-        assert_eq!(inputs.fps, 0.0);
-        assert_eq!(inputs.range, None);
+    #[cfg(feature = "media")]
+    fn the_untouched_fields_mean_the_composition_s_own() {
+        let resolved = to_export_spec(&BridgeExportSpec::default(), 640, 360).unwrap();
+        assert_eq!(resolved.target, None, "zero size is the comp's own frame");
+        assert_eq!(resolved.fps, None, "zero rate is the comp's own");
+        assert_eq!(resolved.range, None, "a negative range is the work area");
 
-        let inputs = parse_inputs(r#"{"codec":"h264","fps":29.97,"range":[12,48]}"#).unwrap();
-        assert_eq!(inputs.fps, 29.97);
-        assert_eq!(inputs.range, Some((12, 48)));
+        let spec = BridgeExportSpec {
+            width: 1920,
+            height: 1080,
+            fps: 29.97,
+            range_start_frame: 12,
+            range_end_frame: 48,
+            ..BridgeExportSpec::default()
+        };
+        let resolved = to_export_spec(&spec, 640, 360).unwrap();
+        assert_eq!(resolved.target, Some((1920, 1080)));
+        assert_eq!(resolved.fps, Some(29.97));
+        assert_eq!(resolved.range, Some((12, 48)));
 
-        let inputs = parse_inputs(r#"{"codec":"h264","range":[48,12]}"#).unwrap();
-        assert_eq!(inputs.range, None, "a backwards range is no range");
-
-        let resolved = resolve_spec(
-            &parse_inputs(r#"{"codec":"h264","fps":0}"#).unwrap(),
-            64,
-            36,
-        );
-        assert_eq!(resolved.fps, None, "zero means the comp's own rate");
+        // A backwards range is no range rather than a clamped one: it is a slip
+        // of the fingers, not an instruction.
+        let backwards = BridgeExportSpec {
+            range_start_frame: 48,
+            range_end_frame: 12,
+            ..BridgeExportSpec::default()
+        };
+        assert_eq!(to_export_spec(&backwards, 640, 360).unwrap().range, None);
     }
 
-    /// An image sequence is stills: no audio track and no bitrates, whatever
-    /// the dialogue sent — resolution enforces it so the exporter never has to.
+    /// *Auto* and a blank field are two answers, not one (K-479): Auto works a
+    /// rate out from the frame, a blank field sets none at all, and a typed one
+    /// keeps its own peak when a preset gave it one.
     #[test]
-    fn image_codecs_shed_audio_and_bitrates_at_resolution() {
-        let inputs =
-            parse_inputs(r#"{"codec":"png","include_audio":true,"bitrate_mbps":"16"}"#).unwrap();
-        let resolved = resolve_spec(&inputs, 64, 36);
-        assert!(!resolved.include_audio, "stills carry no sound");
-        assert_eq!(resolved.bit_rate, None, "stills are lossless");
-        assert_eq!(resolved.max_rate, None);
+    #[cfg(feature = "media")]
+    fn auto_a_blank_field_and_a_typed_rate_are_three_answers() {
+        use lumit_render::export::Bitrate;
+        let auto = BridgeExportSpec::default();
+        assert_eq!(
+            to_export_spec(&auto, 64, 36).unwrap().bitrate,
+            Bitrate::Auto
+        );
 
-        // And the same dialogue state as h264 keeps all three.
-        let inputs =
-            parse_inputs(r#"{"codec":"h264","include_audio":true,"bitrate_mbps":"16"}"#).unwrap();
-        let resolved = resolve_spec(&inputs, 64, 36);
-        assert!(resolved.include_audio);
-        assert_eq!(resolved.bit_rate, Some(16_000_000));
+        let blank = BridgeExportSpec {
+            bitrate_auto: false,
+            ..BridgeExportSpec::default()
+        };
+        assert_eq!(
+            to_export_spec(&blank, 64, 36).unwrap().bitrate,
+            Bitrate::EncoderDefault,
+            "a blank field lets the encoder choose its own quality (K-119)"
+        );
+
+        let typed = BridgeExportSpec {
+            bitrate_auto: false,
+            bitrate_mbps: 25,
+            peak_mbps: 35,
+            ..BridgeExportSpec::default()
+        };
+        assert_eq!(
+            to_export_spec(&typed, 64, 36).unwrap().bitrate,
+            Bitrate::Manual {
+                target_bps: 25_000_000,
+                peak_bps: Some(35_000_000),
+            },
+            "a preset's own peak crosses rather than being re-derived at 1.5×"
+        );
+
+        // And the footer's number is the engine's, not the dialogue's: Auto
+        // works out a rate for the frame it is actually writing.
+        assert!(resolved_bitrate(&auto, 1920, 1080, 60.0) > 0);
+        assert_eq!(
+            resolved_bitrate(&blank, 1920, 1080, 60.0),
+            0,
+            "a quality nobody chose is a size nobody can estimate"
+        );
+    }
+
+    /// The capability table is the engine's, read through the seam: an mp4
+    /// carries sound and a bitrate but no alpha and only eight bits; a PNG
+    /// sequence carries alpha and either depth but no sound; a WAV carries
+    /// neither picture nor a rate to choose.
+    #[test]
+    #[cfg(feature = "media")]
+    fn every_format_answers_for_what_it_can_carry() {
+        let mp4 = format_caps("h264");
+        assert!(mp4.video && mp4.audio && mp4.bit_rate && mp4.metadata);
+        assert!(!mp4.alpha, "no v1 codec in an mp4 carries alpha (K-479)");
+        assert_eq!(mp4.depths, vec![8]);
+
+        let png = format_caps("png");
+        assert!(png.video && png.alpha);
+        assert!(!png.audio && !png.bit_rate && !png.metadata);
+        assert_eq!(png.depths, vec![8, 16]);
+
+        let wav = format_caps("wav");
+        assert!(wav.audio && !wav.video);
+        assert!(!wav.audio_bit_rate, "uncompressed PCM has no rate to pick");
+        assert!(format_caps("m4a").audio_bit_rate, "AAC does");
+
+        assert_eq!(
+            format_caps("nonsense"),
+            BridgeFormatCaps::default(),
+            "an unknown format carries nothing rather than everything"
+        );
+    }
+
+    /// A spec the format cannot honour is refused in the engine's own words,
+    /// before anything is queued — and an exportable one says nothing.
+    #[test]
+    #[cfg(feature = "media")]
+    fn a_format_refuses_what_it_cannot_carry() {
+        assert_eq!(spec_check(&BridgeExportSpec::default()), "");
+
+        let deep_mp4 = BridgeExportSpec {
+            depth: 16,
+            ..BridgeExportSpec::default()
+        };
+        assert!(
+            spec_check(&deep_mp4).contains("16-bit"),
+            "an mp4 says it cannot carry 16-bit colour rather than writing 8"
+        );
+
+        let alpha_mp4 = BridgeExportSpec {
+            alpha_channel: true,
+            ..BridgeExportSpec::default()
+        };
+        assert!(spec_check(&alpha_mp4).contains("alpha"));
+
+        // The same two settings in a PNG sequence are perfectly ordinary.
+        let stills = BridgeExportSpec {
+            codec: "png".to_owned(),
+            depth: 16,
+            alpha_channel: true,
+            ..BridgeExportSpec::default()
+        };
+        assert_eq!(spec_check(&stills), "");
+    }
+
+    /// The crop is the typed insets, or the Viewer's region when that is asked
+    /// for — and the reading is the frame that survives it (K-362, K-419).
+    #[test]
+    fn the_crop_answers_the_typed_insets_or_the_region() {
+        let typed = BridgeExportSpec {
+            crop_top: 10,
+            crop_left: 20,
+            crop_bottom: 30,
+            crop_right: 40,
+            ..BridgeExportSpec::default()
+        };
+        let crop = crop_for(&typed, 1000, 500);
+        assert_eq!(
+            (crop.top, crop.left, crop.bottom, crop.right),
+            (10, 20, 30, 40)
+        );
+        assert_eq!((crop.width, crop.height), (940, 460));
+
+        // The region wins when it is ticked and set.
+        let region = BridgeExportSpec {
+            use_region_of_interest: true,
+            region: vec![0.25, 0.0, 0.75, 1.0],
+            ..typed.clone()
+        };
+        let crop = crop_for(&region, 1000, 500);
+        assert_eq!((crop.left, crop.right), (250, 250));
+        assert_eq!((crop.width, crop.height), (500, 500));
+
+        // A degenerate region is no region, and the typed crop stands.
+        let degenerate = BridgeExportSpec {
+            region: vec![0.5, 0.5, 0.5, 0.5],
+            ..region
+        };
+        assert_eq!(crop_for(&degenerate, 1000, 500).left, 20);
+    }
+
+    /// A preset saved from the dialogue comes back as the settings that saved
+    /// it — every field, not the eight the seam used to carry. The engine's own
+    /// store is exercised by `export_presets`; this is the conversion round
+    /// trip either side of it.
+    #[test]
+    #[cfg(feature = "media")]
+    fn a_spec_survives_the_round_trip_through_the_engine_s_own() {
+        let spec = BridgeExportSpec {
+            preset: String::new(),
+            codec: "tiff".to_owned(),
+            width: 1280,
+            height: 720,
+            bitrate_mbps: 0,
+            peak_mbps: 0,
+            bitrate_auto: false,
+            fps: 24.0,
+            range_start_frame: 5,
+            range_end_frame: 25,
+            include_audio: false,
+            audio_bit_rate: 192_000,
+            depth: 16,
+            alpha_channel: true,
+            straight_alpha: true,
+            colour_space: String::new(),
+            crop_top: 1,
+            crop_left: 2,
+            crop_bottom: 3,
+            crop_right: 4,
+            use_region_of_interest: false,
+            region: Vec::new(),
+            metadata: vec![
+                BridgeMetadataField {
+                    key: "title".to_owned(),
+                    value: "Scene 1".to_owned(),
+                },
+                BridgeMetadataField {
+                    key: "artist".to_owned(),
+                    value: "Nobody".to_owned(),
+                },
+            ],
+            quality_divisor: 2,
+            disk_cache_read_only: true,
+            effects: false,
+            honour_solo: false,
+            make_a_noise: false,
+            open_folder: false,
+        };
+        let resolved = to_export_spec(&spec, 1920, 1080).unwrap();
+        let back = from_export_spec(&resolved).unwrap();
+        assert_eq!(back, spec);
+        assert_eq!(
+            resolved.metadata.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            ["title", "artist"],
+            "metadata keeps the order it was given — the order lands in the file"
+        );
     }
 }

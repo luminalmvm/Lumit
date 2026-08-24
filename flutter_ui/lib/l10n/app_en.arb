@@ -8150,5 +8150,309 @@
   "graphDriven": "driven",
   "@graphDriven": {
     "description": "Effect controls: the word on a parameter row whose value comes from a driver wired to it in the Graph panel rather than from its own keyframes. Lower case."
+  },
+  "exportGroupColour": "Colour",
+  "@exportGroupColour": {
+    "description": "Export dialog: the Colour section's name, in its tab and notched into the section's own top edge. Sentence case; shown in capitals."
+  },
+  "exportGroupMetadata": "Metadata",
+  "@exportGroupMetadata": {
+    "description": "Export dialog: the Metadata section's name, in its tab and notched into the section's own top edge. Sentence case; shown in capitals."
+  },
+  "exportTypeAudioOnly": "Audio only",
+  "@exportTypeAudioOnly": {
+    "description": "Export dialog, Type row: the output that writes the composition's sound with no picture. One of three chips beside Video and Image sequence."
+  },
+  "formatM4a": "M4A (AAC)",
+  "@formatM4a": {
+    "description": "Export dialog, Format list: compressed sound in an .m4a container. The codec name AAC stays as it is."
+  },
+  "formatWav": "WAV (uncompressed)",
+  "@formatWav": {
+    "description": "Export dialog, Format list: uncompressed sound in a .wav file. WAV stays as it is."
+  },
+  "formatM4aPicker": "M4A audio",
+  "@formatM4aPicker": {
+    "description": "Export dialog: the file type shown in the system save dialog when writing sound to an .m4a."
+  },
+  "formatWavPicker": "WAV audio",
+  "@formatWavPicker": {
+    "description": "Export dialog: the file type shown in the system save dialog when writing sound to a .wav."
+  },
+  "exportPresetEdit": "Edit",
+  "@exportPresetEdit": {
+    "description": "Export dialog, Preset row: opens the name field for the preset in force so it can be renamed or written over. Short — the button is 48 px wide."
+  },
+  "exportPresetSaveAs": "Save as…",
+  "@exportPresetSaveAs": {
+    "description": "Export dialog, Preset row: saves the settings on screen as a preset under a name of one's own."
+  },
+  "exportPresetName": "Preset name",
+  "@exportPresetName": {
+    "description": "Export dialog: the label of the row that appears under the Preset row, holding the field a preset is named in."
+  },
+  "exportPresetReadOnly": "\"{name}\" is a built-in preset and cannot be changed",
+  "@exportPresetReadOnly": {
+    "description": "Export dialog footer, in place of the summary: shown when Edit is pressed on one of the presets that ship with Lumit. They mean a fixed thing, so they are read-only.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Master"
+      }
+    }
+  },
+  "exportMakeANoise": "Make a noise",
+  "@exportMakeANoise": {
+    "description": "Export dialog, When done row: a tick that plays a short sound when the export finishes, so a long one can be left to run. Beside Open folder."
+  },
+  "exportQuality": "Quality",
+  "@exportQuality": {
+    "description": "Export dialog, Composition group: the resolution the export renders at, as opposed to the size of the file it writes."
+  },
+  "exportQualityFull": "Full",
+  "@exportQualityFull": {
+    "description": "Export dialog, Quality list: render every pixel. What an export wants and what it gets unless something else is asked for."
+  },
+  "exportQualityHalf": "Half",
+  "@exportQualityHalf": {
+    "description": "Export dialog, Quality list: render at half the composition's width and height."
+  },
+  "exportQualityThird": "Third",
+  "@exportQualityThird": {
+    "description": "Export dialog, Quality list: render at a third of the composition's width and height."
+  },
+  "exportQualityQuarter": "Quarter",
+  "@exportQualityQuarter": {
+    "description": "Export dialog, Quality list: render at a quarter of the composition's width and height."
+  },
+  "exportEffects": "Effects",
+  "@exportEffects": {
+    "description": "Export dialog, Composition group: whether each layer's effect stack runs for this export."
+  },
+  "exportCurrentSettings": "Current settings",
+  "@exportCurrentSettings": {
+    "description": "Export dialog, Composition group: the value of the Effects and Solo switches rows meaning \"whatever the composition itself says\", as opposed to overriding it for this export."
+  },
+  "exportAllOff": "All off",
+  "@exportAllOff": {
+    "description": "Export dialog, Composition group: the value of the Effects, Solo switches and Guide layers rows meaning \"ignore every one of them for this export\"."
+  },
+  "exportSoloSwitches": "Solo switches",
+  "@exportSoloSwitches": {
+    "description": "Export dialog, Composition group: whether a soloed layer hides the rest for this export, or every visible layer is written."
+  },
+  "exportProxies": "Proxies",
+  "@exportProxies": {
+    "description": "Export dialog, Composition group: which file each footage item reads from. Disabled — Lumit has no proxies yet."
+  },
+  "exportProxiesNone": "Use no proxies",
+  "@exportProxiesNone": {
+    "description": "Export dialog, Proxies row: the only value the row can have, since no footage item can carry a proxy yet."
+  },
+  "exportGuideLayers": "Guide layers",
+  "@exportGuideLayers": {
+    "description": "Export dialog, Composition group: whether layers marked for reference only are written. Disabled — Lumit has no guide layers yet."
+  },
+  "exportDiskCache": "Disk cache",
+  "@exportDiskCache": {
+    "description": "Export dialog, Composition group: whether the export reads frames already banked on disk."
+  },
+  "exportDiskCacheOff": "Off",
+  "@exportDiskCacheOff": {
+    "description": "Export dialog, Disk cache list: neither read nor written, which is what an export wants — a single pass would evict the frames you are working with."
+  },
+  "exportDiskCacheReadOnly": "Read only",
+  "@exportDiskCacheReadOnly": {
+    "description": "Export dialog, Disk cache list: read frames already banked, but bank nothing new."
+  },
+  "exportColourDepth": "Colour depth",
+  "@exportColourDepth": {
+    "description": "Export dialog, Composition group: how many bits each colour channel of the written file carries. The same setting as the Picture group's Depth row."
+  },
+  "exportDepth": "Depth",
+  "@exportDepth": {
+    "description": "Export dialog, Picture group: how many bits each colour channel of the written file carries."
+  },
+  "exportDepth8": "8 bit",
+  "@exportDepth8": {
+    "description": "Export dialog, Depth list: eight bits a channel — what every video codec Lumit writes carries."
+  },
+  "exportDepth16": "16 bit",
+  "@exportDepth16": {
+    "description": "Export dialog, Depth list: sixteen bits a channel, which only the still-image sequences can hold."
+  },
+  "exportMotionBlur": "Motion blur",
+  "@exportMotionBlur": {
+    "description": "Export dialog, Time group: whether blurred layers blur. Disabled — it is the composition's own setting, and an export renders what the composition renders."
+  },
+  "exportRetimeBlend": "Retime blend",
+  "@exportRetimeBlend": {
+    "description": "Export dialog, Time group: how retimed layers blend between frames. Disabled — it is the composition's own setting. Retime is a Lumit feature name."
+  },
+  "exportOnForCheckedLayers": "On for checked layers",
+  "@exportOnForCheckedLayers": {
+    "description": "Export dialog, Motion blur and Retime blend rows: the value both rows hold — the switch each layer carries in the Timeline decides."
+  },
+  "exportChannels": "Channels",
+  "@exportChannels": {
+    "description": "Export dialog, Picture group: whether the file carries the composite's own coverage as an alpha channel."
+  },
+  "exportChannelsRgb": "RGB",
+  "@exportChannelsRgb": {
+    "description": "Export dialog, Channels list: colour only. RGB stays as it is."
+  },
+  "exportChannelsRgbAlpha": "RGB + alpha",
+  "@exportChannelsRgbAlpha": {
+    "description": "Export dialog, Channels list: colour and coverage, for a file that will be layered over something else. RGB stays as it is."
+  },
+  "exportAlpha": "Alpha",
+  "@exportAlpha": {
+    "description": "Export dialog, Picture group: how the colour channels relate to the alpha channel in the written file."
+  },
+  "exportAlphaPremultiplied": "Premultiplied",
+  "@exportAlphaPremultiplied": {
+    "description": "Export dialog, Alpha list: colour already multiplied by coverage — the working form, and what most compositors expect back."
+  },
+  "exportAlphaStraight": "Straight",
+  "@exportAlphaStraight": {
+    "description": "Export dialog, Alpha list: colour un-multiplied, full strength wherever there is any coverage. What paint programs ask for."
+  },
+  "exportBitRateAuto": "Auto",
+  "@exportBitRateAuto": {
+    "description": "Export dialog, Bit rate row: a tick that works a delivery-quality rate out from the frame and the rate. Unticked, the number beside it is used."
+  },
+  "exportResampleHigh": "High",
+  "@exportResampleHigh": {
+    "description": "Export dialog, Resize row: the quality a resized frame is resampled at. Disabled — the export path has one resampler."
+  },
+  "exportCrop": "Crop",
+  "@exportCrop": {
+    "description": "Export dialog, Picture group: pixels taken off each edge of the frame on the way out, before any resize."
+  },
+  "exportCropTop": "T",
+  "@exportCropTop": {
+    "description": "Export dialog, Crop row: the mark before the top inset's value box. One letter — the row holds four of these."
+  },
+  "exportCropLeft": "L",
+  "@exportCropLeft": {
+    "description": "Export dialog, Crop row: the mark before the left inset's value box. One letter — the row holds four of these."
+  },
+  "exportCropBottom": "B",
+  "@exportCropBottom": {
+    "description": "Export dialog, Crop row: the mark before the bottom inset's value box. One letter — the row holds four of these."
+  },
+  "exportCropRight": "R",
+  "@exportCropRight": {
+    "description": "Export dialog, Crop row: the mark before the right inset's value box. One letter — the row holds four of these."
+  },
+  "exportUseRegionOfInterest": "Use region of interest",
+  "@exportUseRegionOfInterest": {
+    "description": "Export dialog, Crop row: a tick that takes the crop from the rectangle swept on the Viewer's picture instead of the four numbers beside it."
+  },
+  "exportCropReading": "Cropped to {width} × {height}",
+  "@exportCropReading": {
+    "description": "Export dialog, Picture group: a factual line under the rows saying what the crop leaves, in pixels at composition size.",
+    "placeholders": {
+      "width": {
+        "type": "String",
+        "example": "1600"
+      },
+      "height": {
+        "type": "String",
+        "example": "900"
+      }
+    }
+  },
+  "exportColourSpace": "Colour space",
+  "@exportColourSpace": {
+    "description": "Export dialog, Colour section: the space the file is written in — the export's final transform."
+  },
+  "exportColourSpaceSrgb": "sRGB / Rec.709",
+  "@exportColourSpaceSrgb": {
+    "description": "Export dialog, Colour space list: the built-in transform, which is the same display encode the Viewer shows. Both standard names stay as they are."
+  },
+  "exportColourManagement": "Managed by",
+  "@exportColourManagement": {
+    "description": "Export dialog, Colour section: which colour-management configuration names the output space. Disabled — Lumit has no OCIO configuration yet."
+  },
+  "exportColourOcio": "No OCIO configuration",
+  "@exportColourOcio": {
+    "description": "Export dialog, Colour section: the value of the Managed by row. OCIO is the name of the standard and stays as it is."
+  },
+  "exportColourNote": "An export asking for a space this build cannot transform to is refused rather than written wrongly.",
+  "@exportColourNote": {
+    "description": "Export dialog, Colour section: a factual line under the rows, saying what happens to a colour space Lumit has no transform for."
+  },
+  "exportAudioAuto": "Auto",
+  "@exportAudioAuto": {
+    "description": "Export dialog, Audio row: include the composition's sound when it has any. The alternative is Off."
+  },
+  "exportAudio48k": "48.000 kHz",
+  "@exportAudio48k": {
+    "description": "Export dialog, Audio row: the sample rate every export is mixed at. Disabled — there is nothing to choose."
+  },
+  "exportAudio16Bit": "16 bit",
+  "@exportAudio16Bit": {
+    "description": "Export dialog, Audio row: the bit depth every export is mixed at. Disabled — there is nothing to choose."
+  },
+  "exportAudioStereo": "Stereo",
+  "@exportAudioStereo": {
+    "description": "Export dialog, Audio row: the channel layout every export is mixed to. Disabled — there is nothing to choose."
+  },
+  "exportMetadataAdd": "Add field",
+  "@exportMetadataAdd": {
+    "description": "Export dialog, Metadata section: appends an empty row for a field of one's own, under the five classic ones."
+  },
+  "exportMetadataRemove": "Remove",
+  "@exportMetadataRemove": {
+    "description": "Export dialog, Metadata section: takes one field's row off the list. The button at the end of every row."
+  },
+  "exportMetadataUnsupported": "This format has nowhere to keep metadata.",
+  "@exportMetadataUnsupported": {
+    "description": "Export dialog, Metadata section: a factual line under the rows, shown when the chosen format's container holds no metadata — an image sequence, for instance."
+  },
+  "metadataTitle": "Title",
+  "@metadataTitle": {
+    "description": "Export dialog, Metadata section: the name of the piece, written into the file."
+  },
+  "metadataAuthor": "Author",
+  "@metadataAuthor": {
+    "description": "Export dialog, Metadata section: who made the piece, written into the file."
+  },
+  "metadataCopyright": "Copyright",
+  "@metadataCopyright": {
+    "description": "Export dialog, Metadata section: the copyright line written into the file."
+  },
+  "metadataComment": "Comment",
+  "@metadataComment": {
+    "description": "Export dialog, Metadata section: a free note written into the file."
+  },
+  "metadataCreated": "Created",
+  "@metadataCreated": {
+    "description": "Export dialog, Metadata section: the creation time written into the file."
+  },
+  "tipExportNeedsProxies": "Needs the proxy subsystem",
+  "@tipExportNeedsProxies": {
+    "description": "Export dialog: why the Proxies row is disabled. Shown on hover; a tooltip is a name, never a sentence."
+  },
+  "tipExportNeedsGuideLayers": "Needs guide layers",
+  "@tipExportNeedsGuideLayers": {
+    "description": "Export dialog: why the Guide layers row is disabled. Shown on hover; a tooltip is a name, never a sentence."
+  },
+  "tipExportCompSetting": "The composition's setting",
+  "@tipExportCompSetting": {
+    "description": "Export dialog: why the Motion blur and Retime blend rows are disabled — an export renders what the composition renders. Shown on hover."
+  },
+  "tipExportOneResampler": "One resampler",
+  "@tipExportOneResampler": {
+    "description": "Export dialog: why the resample-quality face on the Resize row is disabled. Shown on hover."
+  },
+  "tipExportOneMix": "One mix, always",
+  "@tipExportOneMix": {
+    "description": "Export dialog: why the sample rate, depth and layout faces on the Audio row are disabled. Shown on hover."
+  },
+  "tipExportAfterV1": "After version one",
+  "@tipExportAfterV1": {
+    "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
   }
 }

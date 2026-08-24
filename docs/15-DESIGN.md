@@ -1154,8 +1154,12 @@ migration path). Either way they all share one pattern:
 
 - a kicker title strip of **30**, over its hairline — the dialog's name as a kicker and,
   where the dialog is *about* something, that thing's own name beside it in `text_muted`;
-- an optional page-tab row under it, **26** over its own hairline (Export: Output /
-  Picture / Time / Audio), the page in force in `text_primary` over an accent rule;
+- an optional tab row under it, **26** over its own hairline (Export: Output / Time /
+  Picture / Colour / Audio / Metadata), the one in force in `text_primary` over an accent
+  rule. On Export the strip is a **place on one scrolling page**, not a set of pages
+  (K-485): it follows the section last touched or scrolled to, and clicking a tab scrolls
+  that section into view when it is not already fully visible and lights its box in the
+  accent for 600 ms;
 - **label-left rows, the label in a fixed column and the control at the *start* of what is
   left**. **The column and the gap are the drawing's own** (K-469): Settings computes
   190 and 12 in rows of 30 (K-465), New composition 110 and 12 in rows of 30, Export 100
@@ -1174,17 +1178,24 @@ migration path). Either way they all share one pattern:
   bullet): 12px either side of an outlined label, 16 either side of the filled one, both
   24 tall. Both approved drawings draw a pair that way.
 
-**The Export dialog's pages front what the engine backs, and the engine now backs most of
-them.** K-469 left Colour and Metadata off the tab row because an empty page is a promise the
-dialog cannot keep, and listed the rows nothing could honour. The engine half has since
-landed: audio-only output, colour depth, channels and alpha, the output colour space, crop and
-*use region of interest*, container metadata, the preset store with *Save as…*, the auto
-bitrate, and the render settings (quality, disk cache, effects, solo switches) with a
-per-format capability table saying which of them a given format can carry at all. **A control
-a format cannot honour is disabled, not drawn live** — the engine refuses such a spec outright,
-so a dialog that let it be set would only be arranging a refusal. Two of the drawing's render
-rows still have nothing beneath them and stay off the page: **guide layers** and **proxies**,
-neither of which the document model has any notion of ([TODO.md](TODO.md)).
+**The Export dialog is one page, and every row on it is backed** (K-485). K-469 left Colour
+and Metadata off the tab row because an empty page is a promise the dialog cannot keep, and
+listed the rows nothing could honour; the engine half landed with K-479 and the interface
+half with K-485. Audio-only output, colour depth, channels and alpha, the output colour
+space, crop and *use region of interest*, container metadata, the preset store with *Save
+as…* and *Edit*, the auto bitrate, and the render settings (quality, disk cache, effects,
+solo switches) are all on the page, with a per-format capability table saying which of them
+a given format can carry at all. **A control a format cannot honour is disabled, not drawn
+live and not left out** — the engine refuses such a spec outright, so a dialog that let it
+be set would only be arranging a refusal, and one that hid the row would leave the reader
+wondering where it went. The same face is used for the rows no *subsystem* backs — **guide
+layers** and **proxies** ([TODO.md](TODO.md)) — each with a short reason on hover.
+
+**The right column of a paired row extends left into its own label** (K-485). The drawing
+gives every label 100 and then asks the frame-rate row for a 150px list *and* a 56px value
+well, which is 212 of control in a 173 column: the drawing overflows itself, and the well
+was the part that lost. The value well always fits, so the right column's label is **78**
+and its control **195** — one left edge and one right edge down the whole column.
 
 **A settings row states its name and nothing else.** The sentence explaining what a setting
 does was dropped with the drawing that had no room for it (K-465) — a row may still carry a

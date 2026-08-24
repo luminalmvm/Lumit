@@ -13001,3 +13001,69 @@ noise in a column read at a glance — the same rule the flow-or-collapse cell h
 since K-168. Other kinds leave the cell **empty**, keeping its width: the group's span is
 `5 × switchCellWidth` on every row, because a column that changed width by layer kind
 would step the pickers after it left and right down the stack.
+
+## K-485 — The export dialog is one page with a table of contents, every row is backed, and *Still* is withdrawn
+
+**DECIDED 2026-08-24** (owner review of the export drawing, completing K-479's engine half).
+The whole of `lumit_render::export::ExportSpec` now crosses the seam and reaches the dialog,
+and building the interface half settled six things the drawing had left ambiguous.
+
+**One scrolling page, and the tab strip is a table of contents.** The drawing's six words —
+Output, Picture, Time, Colour, Audio, Metadata — used to switch pages, and K-469 built them
+that way. They now say *where you are*: the body scrolls as one page, the strip follows the
+section last touched or scrolled to, and clicking a word scrolls that section into view when
+it is not already fully visible and lights its box in the accent for 600 ms. An export is one
+decision, and a window that put the picture on one page and the sound on another hid half of
+what was about to be written from the person deciding it. Two consequences worth writing
+down: the strip's order follows the **page's** order (Output · Time · Picture · Colour ·
+Audio · Metadata), because a contents list that disagreed with its own document would be
+worse than a re-ordered drawing; and **Composition has no tab**, because it reads as part of
+Output, which is the group above it.
+
+**A control the format cannot honour is disabled — never hidden, never live.** K-479 built
+the capability table so the engine could refuse; the dialog reads the same table and greys
+the row instead of removing it. A row that vanishes leaves the reader hunting for a setting
+that is not in the menus either; a greyed row with a short reason on hover answers the
+question where the question is asked. The same face carries the rows no *subsystem* backs —
+**proxies** and **guide layers** (K-479), and **motion blur** and **Retime blend** at export,
+which are comp-wide settings with no override in `RenderOptions` — so "this build cannot"
+and "this file cannot" look alike on purpose: in both cases the honest answer is that this
+export will not do that. docs/TODO.md carries all four.
+
+***Still* is withdrawn, not deferred.** The drawing offers four output types; a still is an
+image sequence of one frame, which the span already says, so the fourth chip is gone rather
+than pending and the three that remain are Video, Image sequence and Audio only. What is
+genuinely missing is a *naming* rule — a one-frame sequence writes `shot.00001.png` rather
+than `shot.png` — and that belongs to the encoder's file naming, not to an output type.
+
+***When done* is two ticks, not a list.** The drawing draws a dropdown and a tick beside it;
+making a noise and opening the folder are independent answers, and a long export left running
+wants both. The engine's `WhenDone` stays one enum because it models the loudest single
+outcome, but the **queue** honours both flags itself as the item lands — which is also what
+makes them survive the dialog closing.
+
+**The right column of a paired row extends left into its own label.** The drawing gives every
+label 100 and then asks the frame-rate row for a 150px list *and* a 56px value well: 212 of
+control in a 173 column. The drawing overflows itself, and the well was the part that lost.
+The owner's ruling is that the value box always fits and the column stays aligned, so the
+paired right column's label is **78** and its control **195** — one left edge and one right
+edge down the whole column, pinned by `export_metrics_test`.
+
+**The dialog asks the engine rather than working anything out.** What a format can carry
+(`export_format_caps`), whether a spec is exportable (`export_spec_check`), what the crop
+leaves (`export_crop_for`) and what *Auto* comes to (`export_resolved_bitrate`) are four sync
+calls, answered once per **edit** and remembered — never in `build`, which crosses no bridge
+(the standing rebuild-path rule). A second opinion is a second thing to be wrong: a bitrate
+estimate the dialog worked out for itself would quietly disagree with the engine's the day
+either changed. Whatever the engine refuses stands in the footer where the summary line goes,
+and both actions are inert until it is answered — the point of asking early is that the
+refusal arrives while the fields that caused it are still on screen.
+
+**The seam carries the spec itself, and the queue stores it.** `BridgeExportSpec` is the
+whole of `ExportSpec` flattened, `to_export_spec` is the one place it becomes the engine's
+type, and the queue item holds the struct rather than a serialised copy — the JSON hop the
+egui frontend needed went with the egui frontend. The preset store crosses as four calls
+over `lumit_render::export_presets`, so a preset is the whole settings payload under a name
+rather than a stamp on three fields, and the dialog's *Edit* and *Save as…* are the same act
+(the store replaces a preset of that name in its own row). Built-ins refuse to be edited and
+say so rather than opening a field that cannot be used.
