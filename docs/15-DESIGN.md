@@ -926,8 +926,10 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   layer leaves the diamonds to the properties. The lane of a **picked** property is washed
   at foreground strength so it can be followed across the sheet.
 - **A key's shape is its interpolation** (§6.2's rule, brought out of the graph): diamond
-  linear, square hold, circle bezier. Keys draw larger here than on a Layers lane — they
-  are the subject of the view.
+  linear, square hold, **hourglass bezier** — K-457's marks, split at the vertical centre
+  so each half answers for its own side. (The Keys drawing draws the bezier key round;
+  K-459 supersedes that with the hourglass, and the same painter draws both modes.) A key
+  measures 11px point to point here and on a Layers lane alike (K-459).
 - **The mode carries its drawing's editing tools** (K-458, superseding K-455's
   restriction): the block-selection box with stretch handles and its `n keys · n f`
   badge, the Ease popover on a selection, and the bottom bar's Interpolation /
@@ -935,6 +937,22 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   snapping, the marquee and the undo step remain the lanes' own shared machinery,
   running under a different arrangement; the block tools live in the same machinery
   so Layers gains them wherever K-441 already names them as Layers behaviours.
+- **The block box.** Two or more selected keys are one block. The box stands 4px inside
+  its lanes' top and bottom — the drawing's 14 in a 22px row — in `text_primary` hairline,
+  with a 3×6 mark at each end inside an 11px hit target (K-452) and the badge on
+  `surface_4` in 8px mono beside the later one. Dragging a mark scales every key's
+  distance from the anchored end, whole-frame snapped exactly as one key's drag is, and
+  commits as **one undo step** whatever it crosses. The badge is the block's one control:
+  it opens the Ease popover, which is where the drawing anchors it.
+- **The Ease popover** is the drawing's four lines: Curve by name (the shipped easing
+  presets), Influence as the two reaches in per cent, Stagger in frames with its
+  direction, then Open graph and Apply. It shapes; it does not re-derive — Apply lands
+  through the same call the Easing panel's does (§12A.2).
+- **The bottom bar's strip is Keys mode's own.** Interpolation — Linear / Hold / Ease /
+  Bezier — then a rule, then Reverse, Copy and Paste at playhead. The zoom follows it on
+  the same bar, so the slider sits further along in Keys than on an empty Layers bar:
+  what the two modes share is the zoom itself, one control at one setting, not a fixed
+  x (§12A.1a's "nothing jumps" is about the range the views scroll).
 
 ### 12A.2 Graph mode (K-442)
 

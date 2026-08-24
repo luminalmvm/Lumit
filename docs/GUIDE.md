@@ -8346,10 +8346,12 @@ shows every property a layer has, **Animated** (the default, and the same readin
 key gives you) shows only the ones with keyframes on them; **Layers** and **Selected only**
 decide whether it covers the whole composition or just what you have picked.
 
-One small thing the dope sheet can say that the lanes cannot: a key's *shape* is its
-interpolation. A diamond eases in a straight line, a circle is a curve, a square is a
-hold — the value stays put until the next key and then jumps. Reading a sheet of them
-tells you what a composition's motion feels like before you play a frame of it.
+A key's *shape* is its interpolation, here and on a Layers lane alike. A diamond runs in a
+straight line, an hourglass is a curve, a square is a hold — the value stays put until the
+next key and then jumps. The mark is cut down the middle, and each half answers for its own
+side, so a key that eases into itself and holds out of itself is half hourglass and half
+square. Reading a sheet of them tells you what a composition's motion feels like before you
+play a frame of it.
 
 **Graph** is the curves: the same keyframes again, drawn as the value they carry rather
 than as marks on a line, which is where you shape an ease by hand.
@@ -8362,3 +8364,80 @@ differently. In the code this is one field saying which mode is up
 (`TimelineMode` in `flutter_ui/lib/panels/timeline_panel_frb.dart`) rather than a switch
 per mode, because two switches can say "graph and keys at once" and a state nobody can
 draw is a state something will eventually reach.
+
+### Selecting a run of keyframes as one thing
+
+Drag a box across some keyframes and they stop being several marks and become a **block**.
+A thin outline appears round everything you caught, with a small mark at each end and a
+label beside it reading something like `4 keys · 36 f` — how many you have hold of, and
+how many frames from the first to the last.
+
+The marks at the ends are handles. Take hold of one and drag, and the whole run stretches:
+the end you did **not** touch stays exactly where it is, the end you are dragging goes
+where you put it, and every key in between keeps its share of the distance. A key that sat
+a third of the way along still sits a third of the way along. That is how you take an
+animation that runs over one second and make it run over two without re-timing every key
+by hand. With the magnet on, every key lands on a whole frame, exactly as dragging a
+single one does.
+
+The label is also a button: press it and the **Ease popover** opens on the selection.
+
+None of this is Keys mode's own. The box is drawn by the part of the panel that draws the
+lanes, and Layers mode uses that same part, so a block selected in either view behaves the
+same way — one piece of code, not two that have to be kept in step. The arithmetic behind
+it (how far each key moves, what the label counts, what Reverse and Stagger do to a time)
+lives on its own in `flutter_ui/lib/panels/key_block.dart`, with no picture and no engine
+in it, so it can be checked directly rather than measured off a screen.
+
+### The Ease popover
+
+A small box with four lines. **Curve** picks the shape by name — Easy ease, Slow start,
+Overshoot and the rest, the same shapes the Easing panel draws. **Influence** is two
+percentages: how far the ease reaches out of the first key and back into the last one, the
+same "influence" a keyframe has always stored. **Stagger** is a number of frames and a
+direction: set it to 3 and each row in the block starts three frames after the row above,
+so a run of properties arrives one after another rather than all together — the cheapest
+way to make a stack of things feel hand-animated. **Open graph** closes the box and shows
+the same keys as curves, for when picking a shape by name is not enough; **Apply** puts it
+on.
+
+Nothing here works out a curve for itself. The shapes come from the same file the Easing
+panel uses, and Apply goes through the same call, so an ease chosen here and an ease drawn
+there land identically.
+
+### Keys mode's strip of commands
+
+Along the bottom of the dope sheet: **Interpolation** — Linear, Hold, Ease, Bezier —
+which sets both sides of every selected key at a press (Ease opens the popover above);
+then **Reverse**, **Copy** and **Paste at playhead**.
+
+Reverse turns the block back to front *where it stands*. The earliest key's time becomes
+the latest's, and each value travels with its own key, so the movement plays backwards
+without moving along the Timeline. Each key's two eases swap over as well, because the
+side that was leaving is now the side arriving — without that the times would be reversed
+while the shape of the motion still pointed the old way.
+
+Paste at playhead puts the copied keys down with the first of them under the playhead, on
+the properties they came off.
+
+### One gesture, one undo
+
+An edit in Lumit replaces a whole property's animation rather than nudging one keyframe,
+which keeps undo simple: to undo, put the old animation back. The catch is that one
+*gesture* can touch several properties on several layers — stretching a block that covers
+three rows, pasting a clipboard that came off two — and each of those is a separate edit.
+Ctrl-Z would then take three presses to put back one drag, and how many depended on what
+happened to be selected.
+
+So the engine can be told "everything between here and here is one step"
+(`begin_undo_group` / `end_undo_group` in `crates/lumit-core/src/store.rs`). The edits
+themselves still happen the moment they are made — nothing waits, so anything reading the
+document part-way through a gesture sees it as it really is — but the history collects
+them and files them as a single entry when the gesture ends. One drag, one Ctrl-Z, always.
+
+Two details that matter if you ever read the code. A group that collected only one edit is
+filed as that edit rather than as a bundle of one, because a bundle of one undoes the same
+and reads worse. And the two calls have to be paired, so the Flutter side always closes
+one in a `finally` (`asOneUndoStep` in `flutter_ui/lib/panels/layer_fold_frb.dart`): a
+group left open would quietly stop recording history at all.
+

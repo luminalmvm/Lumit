@@ -7415,7 +7415,7 @@
   "@keysPasteAtPlayhead": {
     "description": "Timeline, Keys mode bottom bar: pastes the copied keyframes so that the first of them lands on the playhead. Drawn in capitals."
   },
-  "tipReverseKeys": "Reverse the selected keyframes in time",
+  "tipReverseKeys": "Reverse the selected keyframes",
   "@tipReverseKeys": {
     "description": "Timeline, Keys mode bottom bar: hover hint on Reverse. The keys swap places within the span they already occupy; each keeps its own value."
   },
@@ -7423,7 +7423,7 @@
   "@tipCopyKeys": {
     "description": "Timeline, Keys mode bottom bar: hover hint on Copy."
   },
-  "tipPasteKeysAtPlayhead": "Paste the copied keyframes at the playhead",
+  "tipPasteKeysAtPlayhead": "Paste at the playhead",
   "@tipPasteKeysAtPlayhead": {
     "description": "Timeline, Keys mode bottom bar: hover hint on Paste at playhead."
   }

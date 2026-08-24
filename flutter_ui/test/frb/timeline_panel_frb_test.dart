@@ -29,6 +29,7 @@ import 'package:lumit_flutter/icons/icons.dart';
 import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
+import 'package:lumit_flutter/panels/ease_popover.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/panels/waveform_frb.dart';
@@ -5395,8 +5396,7 @@ void main() {
           reason: 'one zoom slider, shared, not one per mode');
       expect(
           tester
-              .widget<HouseSlider>(
-                  find.byKey(const ValueKey('tl-zoom-slider')))
+              .widget<HouseSlider>(find.byKey(const ValueKey('tl-zoom-slider')))
               .value,
           zoomBefore,
           reason: 'and it is still where it was left');
@@ -5503,6 +5503,480 @@ void main() {
           KeyShape.hourglass);
       expect(keyShapeOfSide(const BridgeSideInterp.hold()), KeyShape.square);
       expect(keyShapeOfSide(const BridgeSideInterp.linear()), KeyShape.diamond);
+    });
+    // ---------------------------------------------------------------------
+    // The block tools (K-458): the selection box with its stretch handles and
+    // badge, the Ease popover, and the Keys bottom bar's strip.
+    //
+    // All of it lives in the machinery both modes share, so the claims below
+    // are made in Keys mode — where the drawing puts them — and one of them is
+    // made again in Layers mode, which is the claim that they are *shared*
+    // rather than copied.
+    // ---------------------------------------------------------------------
+
+    /// A solid with [frames] keyed on Opacity, each key's value its own frame
+    /// number — so a test can tell whether a value travelled with its key.
+    LayerReference blockLayer(dynamic p, List<int> frames) {
+      final layer = (p.comp as CompositionReference).addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final f in frames)
+            BridgeKeyframe(
+              time: (p.comp as CompositionReference).timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      (p.uiState as LumitUiState).model.refresh();
+      return layer;
+    }
+
+    /// Box the whole of one lane row, which is how a block is made: the
+    /// marquee sits behind the keys, so a drag that starts on empty lane
+    /// gathers everything it encloses (docs/07 §4.3).
+    Future<void> boxRow(WidgetTester tester, Key laneKey) async {
+      final rect = tester.getRect(find.byKey(laneKey));
+      final gesture =
+          await tester.startGesture(Offset(rect.left + 1, rect.top + 1));
+      await tester.pump(const Duration(milliseconds: 100));
+      await gesture.moveTo(Offset(rect.left + 6, rect.top + 4));
+      await tester.pump();
+      await gesture.moveTo(Offset(rect.right - 1, rect.bottom - 1));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    /// Press one of the Keys bottom bar's words.
+    ///
+    /// Scrolled into view first: the strip scrolls sideways when the panel is
+    /// narrow — the same answer the toolbar gives, an overflow stripe being a
+    /// layout fault — so in a test-sized window its right-hand end starts off
+    /// the edge of the bar.
+    Future<void> tapStrip(WidgetTester tester, String key) async {
+      final button = find.byKey(ValueKey<String>(key));
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+    }
+
+    /// The frames a layer's Opacity keys read, in order.
+    List<int> framesOf(dynamic p, LayerReference layer) => [
+          for (final k
+              in (layer.getTransform().opacity as BridgeScalar_Keyframed)
+                  .field0)
+            (p.comp as CompositionReference).frameAtTime(time: k.time)
+        ];
+
+    List<double> valuesOf(LayerReference layer) => [
+          for (final k
+              in (layer.getTransform().opacity as BridgeScalar_Keyframed)
+                  .field0)
+            k.value
+        ];
+
+    /// Pixels per frame on the lane axis, for turning a wanted frame move into
+    /// a drag.
+    double perFrameOf(dynamic p, WidgetTester tester, Key laneKey) =>
+        (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
+        (p.comp as CompositionReference).durationFrames();
+
+    /// The box, its two handles and its badge, at the drawing's own
+    /// measurements: a 14px box inside a 22px lane, 3×6 handle marks, and the
+    /// badge counting the keys and the frames it spans.
+    testWidgets('a block of selected keys draws the drawing\'s box and badge',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      final laneKey = ValueKey<String>(
+          'tl-keys-${layer.internallayerId}/transform/opacity');
+      expect(find.byKey(const ValueKey('tl-block-box')), findsNothing,
+          reason: 'nothing selected, nothing to box');
+
+      await boxRow(tester, laneKey);
+
+      expect(find.byKey(const ValueKey('tl-block-box')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('tl-block-handle-start')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tl-block-handle-end')), findsOneWidget);
+
+      // The badge says what the block holds: two keys, and the 900 frames
+      // between 600 and 1500.
+      expect(find.text('2 keys · 900 f'), findsOneWidget,
+          reason: 'the drawing\'s `n keys · n f`');
+
+      const d = DensityTokens.regular;
+      final box = tester.getRect(find.byKey(const ValueKey('tl-block-box')));
+      expect(box.height, closeTo(d.laneRow - 8, 0.5),
+          reason: 'the drawing\'s 14 inside a 22px lane — 4 above and below');
+      final lane = tester.getRect(find.byKey(laneKey));
+      expect(box.top, closeTo(lane.top + 4, 0.5));
+
+      // The box reaches from the first key to the last.
+      final perFrame = perFrameOf(p, tester, laneKey);
+      expect(box.width, closeTo(perFrame * 900, 1.5),
+          reason: 'the box spans the block, not the row');
+
+      // The handle marks themselves are the drawing's 3 × 6, inside a hit
+      // target wide enough to aim at (K-452).
+      final mark = tester.getRect(find.descendant(
+        of: find.byKey(const ValueKey('tl-block-handle-start')),
+        matching: find.byType(ColoredBox),
+      ));
+      expect(mark.width, closeTo(3, 0.01));
+      expect(mark.height, closeTo(6, 0.01));
+      expect(
+          tester
+              .getRect(find.byKey(const ValueKey('tl-block-handle-start')))
+              .width,
+          closeTo(11, 0.01),
+          reason: 'a 3px mark is a thing to see, not a thing to aim at');
+    });
+
+    /// The block box and the Ease popover at the **manifest's** own numbers —
+    /// the computed styles taken off the approved Keys drawing, which is what
+    /// stops the two drifting apart one careless pixel at a time.
+    testWidgets(
+        'the block box and the Ease popover match the drawing\'s styles',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+      await boxRow(
+          tester,
+          ValueKey<String>(
+              'tl-keys-${layer.internallayerId}/transform/opacity'));
+      final t = LumitTheme.dark();
+
+      // The box: a hairline in text_primary, and nothing else.
+      final boxDecoration = tester
+          .widget<DecoratedBox>(find.descendant(
+            of: find.byKey(const ValueKey('tl-block-box')),
+            matching: find.byType(DecoratedBox),
+          ))
+          .decoration as BoxDecoration;
+      expect(boxDecoration.border!.top.color, t.textPrimary,
+          reason: 'the drawing\'s eef1f2 edge');
+      expect(boxDecoration.border!.top.width, 1);
+      expect(boxDecoration.color, isNull,
+          reason: 'the box is an outline, not a wash — the keys show through');
+
+      // The handle marks are the same foreground, filled.
+      expect(
+          tester
+              .widget<ColoredBox>(find.descendant(
+                of: find.byKey(const ValueKey('tl-block-handle-end')),
+                matching: find.byType(ColoredBox),
+              ))
+              .color,
+          t.textPrimary);
+
+      // The badge: 8px mono in text_primary on surface_4, 1/4 padding, 2 round.
+      final badgeText = tester.widget<Text>(find.text('2 keys · 900 f')).style!;
+      expect(badgeText.fontSize, 8, reason: 'the manifest\'s 8px');
+      expect(badgeText.color, t.textPrimary);
+      expect(badgeText.fontFamily, t.mono.fontFamily,
+          reason: 'mono — this is a count');
+      final badgeBox = tester.widget<Container>(find.descendant(
+        of: find.byKey(const ValueKey('tl-block-badge')),
+        matching: find.byType(Container),
+      ));
+      expect((badgeBox.decoration as BoxDecoration).color, t.surface4,
+          reason: 'the drawing\'s 2b3034');
+      expect(badgeBox.padding,
+          const EdgeInsets.symmetric(horizontal: 4, vertical: 1));
+
+      // The popover: the drawing's 190 face, its own hairline, and a header
+      // strip a lane row tall on surface_2.
+      await tester.tap(find.byKey(const ValueKey('tl-block-badge')));
+      await tester.pumpAndSettle();
+      expect(easePopoverWidth, 190, reason: 'the drawing\'s own width');
+      final popover = tester.getRect(find.byKey(const ValueKey('ease-apply')));
+      expect(popover.width, greaterThan(0));
+      final curve = tester.getRect(find.byKey(const ValueKey('ease-curve')));
+      final influence =
+          tester.getRect(find.byKey(const ValueKey('ease-influence-out')));
+      final stagger =
+          tester.getRect(find.byKey(const ValueKey('ease-stagger')));
+      expect(curve.left, closeTo(influence.left, 0.5),
+          reason: 'the three controls line up under one another');
+      expect(curve.top, lessThan(influence.top));
+      expect(influence.top, lessThan(stagger.top),
+          reason: 'Curve, Influence, Stagger — the drawing\'s order');
+    });
+
+    /// One key is a key, not a block: it has its own drag, and a box round it
+    /// would say "0 f".
+    testWidgets('one selected key draws no block', (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      await tester.tap(find.byKey(ValueKey<String>(
+          'tl-key-${layer.internallayerId}/transform/opacity#0')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tl-block-box')), findsNothing);
+    });
+
+    /// The gesture the whole box exists for: the anchored end stays put, the
+    /// dragged end lands where it was put, and the key between keeps its share
+    /// of the span — landed on whole frames, and undone in one step.
+    testWidgets('dragging a handle stretches the block proportionally',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 900, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      final laneKey = ValueKey<String>(
+          'tl-keys-${layer.internallayerId}/transform/opacity');
+      await boxRow(tester, laneKey);
+      expect(find.text('3 keys · 900 f'), findsOneWidget);
+
+      // Drag the later end 450 frames further out: the span goes 900 → 1350,
+      // a scale of 1.5 about the anchored first key.
+      final perFrame = perFrameOf(p, tester, laneKey);
+      await tester.drag(find.byKey(const ValueKey('tl-block-handle-end')),
+          Offset(perFrame * 450, 0));
+      await tester.pumpAndSettle();
+
+      expect(framesOf(p, layer), [600, 1050, 1950],
+          reason: '600 holds; 900 is a third along and stays a third along; '
+              '1500 lands where it was dragged');
+      expect(valuesOf(layer), [600, 900, 1500],
+          reason: 'a stretch moves keys in time and nothing else');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      expect(framesOf(p, layer), [600, 900, 1500],
+          reason: 'one gesture, one undo step — every row of it');
+    });
+
+    /// The other end, and the other direction: dragging the *earlier* handle
+    /// anchors the later one, which is the half that is easy to get backwards.
+    testWidgets('dragging the earlier handle anchors the later one',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 900, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      final laneKey = ValueKey<String>(
+          'tl-keys-${layer.internallayerId}/transform/opacity');
+      await boxRow(tester, laneKey);
+      final perFrame = perFrameOf(p, tester, laneKey);
+      // 600 → 1050: the span halves about 1500.
+      await tester.drag(find.byKey(const ValueKey('tl-block-handle-start')),
+          Offset(perFrame * 450, 0));
+      await tester.pumpAndSettle();
+
+      expect(framesOf(p, layer), [1050, 1200, 1500]);
+    });
+
+    /// The claim K-458 makes about *where* these tools live: the box is drawn
+    /// by the lane area, which is one widget serving both modes, so Layers
+    /// mode has it without a line of its own.
+    testWidgets('Layers mode has the same block box and stretch',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+      // Layers mode — no Keys tab tapped — twirled open onto Transform.
+      await openFold(tester, layer.internallayerId, group: 'Transform');
+
+      final laneKey = ValueKey<String>(
+          'tl-keys-${layer.internallayerId}/transform/opacity');
+      await boxRow(tester, laneKey);
+
+      expect(find.byKey(const ValueKey('tl-block-box')), findsOneWidget,
+          reason: 'the block tools are the lanes\', not the sheet\'s');
+      expect(find.text('2 keys · 900 f'), findsOneWidget);
+
+      final perFrame = perFrameOf(p, tester, laneKey);
+      await tester.drag(find.byKey(const ValueKey('tl-block-handle-end')),
+          Offset(perFrame * 900, 0));
+      await tester.pumpAndSettle();
+      expect(framesOf(p, layer), [600, 2400],
+          reason: 'and the stretch is the same stretch');
+    });
+
+    /// The Ease popover, opened where the drawing anchors it — on the block's
+    /// own badge — and applied to every span the selection covers, in one step.
+    testWidgets('the badge opens the Ease popover, which eases the block',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      await boxRow(
+          tester,
+          ValueKey<String>(
+              'tl-keys-${layer.internallayerId}/transform/opacity'));
+      await tester.tap(find.byKey(const ValueKey('tl-block-badge')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('ease-apply')), findsOneWidget,
+          reason: 'the popover is up');
+      expect(find.byKey(const ValueKey('ease-count')), findsOneWidget);
+      expect(find.text('2 keys'), findsWidgets,
+          reason: 'it says back what it has hold of');
+      // The drawing's four lines.
+      expect(find.byKey(const ValueKey('ease-curve')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ease-influence-out')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ease-influence-in')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ease-stagger')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ease-stagger-order')), findsOneWidget);
+      expect(find.byKey(const ValueKey('ease-open-graph')), findsOneWidget);
+
+      List<BridgeKeyframe> keys() =>
+          (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
+      expect(keys().first.interpOut, const BridgeSideInterp.linear());
+
+      await tester.tap(find.byKey(const ValueKey('ease-apply')));
+      await tester.pumpAndSettle();
+
+      expect(keys().first.interpOut, isA<BridgeSideInterp_Bezier>(),
+          reason: 'the span between the two selected keys took the shape');
+      expect(keys().last.interpIn, isA<BridgeSideInterp_Bezier>());
+      expect(framesOf(p, layer), [600, 1500],
+          reason: 'a shape is not a move: the keys stayed where they were');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      expect(keys().first.interpOut, const BridgeSideInterp.linear(),
+          reason: 'one press, one undo step');
+    });
+
+    /// The Keys drawing's bottom-bar strip, and only there: Layers mode's own
+    /// bar carries the column toggles and the comp-wide switches.
+    testWidgets('the Keys bottom bar carries the drawing\'s strip',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+
+      expect(find.byKey(const ValueKey('keys-interp-linear')), findsNothing,
+          reason: 'not on the Layers bar');
+
+      await openKeys(tester, layer);
+      for (final key in const [
+        'keys-interp-linear',
+        'keys-interp-hold',
+        'keys-interp-ease',
+        'keys-interp-bezier',
+        'keys-reverse',
+        'keys-copy',
+        'keys-paste',
+      ]) {
+        expect(find.byKey(ValueKey<String>(key)), findsOneWidget, reason: key);
+      }
+      // In the drawing's order, left to right.
+      double x(String key) =>
+          tester.getRect(find.byKey(ValueKey<String>(key))).left;
+      expect(x('keys-interp-linear'), lessThan(x('keys-interp-hold')));
+      expect(x('keys-interp-hold'), lessThan(x('keys-interp-ease')));
+      expect(x('keys-interp-ease'), lessThan(x('keys-interp-bezier')));
+      expect(x('keys-interp-bezier'), lessThan(x('keys-reverse')));
+      expect(x('keys-reverse'), lessThan(x('keys-copy')));
+      expect(x('keys-copy'), lessThan(x('keys-paste')));
+    });
+
+    /// Interpolation, from the strip: the selected keys' two sides, set at a
+    /// press, using K-457's vocabulary — and drawn with K-457's shapes.
+    testWidgets(
+        'the strip\'s Interpolation words set the selected keys\' sides',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+      await boxRow(
+          tester,
+          ValueKey<String>(
+              'tl-keys-${layer.internallayerId}/transform/opacity'));
+
+      List<BridgeKeyframe> keys() =>
+          (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
+
+      await tapStrip(tester, 'keys-interp-hold');
+      expect(keys().first.interpOut, const BridgeSideInterp.hold());
+      expect(keyShapeOf(keys().first), (KeyShape.square, KeyShape.square));
+
+      await tapStrip(tester, 'keys-interp-bezier');
+      expect(keys().first.interpOut, isA<BridgeSideInterp_Bezier>());
+      expect(
+          keyShapeOf(keys().first), (KeyShape.hourglass, KeyShape.hourglass));
+
+      await tapStrip(tester, 'keys-interp-linear');
+      expect(keys().first.interpOut, const BridgeSideInterp.linear());
+      expect(keyShapeOf(keys().first), (KeyShape.diamond, KeyShape.diamond));
+    });
+
+    /// Reverse: the block plays backwards where it stands. The times mirror
+    /// through the middle of the selection, and **each value travels with its
+    /// own key** — this re-times keys, it does not shuffle values under fixed
+    /// times.
+    testWidgets('Reverse mirrors the selected keys within their span',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 900, 1500]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+      await boxRow(
+          tester,
+          ValueKey<String>(
+              'tl-keys-${layer.internallayerId}/transform/opacity'));
+
+      await tapStrip(tester, 'keys-reverse');
+
+      expect(framesOf(p, layer), [600, 1200, 1500],
+          reason: '900 reflects through the middle of 600…1500');
+      expect(valuesOf(layer), [1500, 900, 600],
+          reason: 'the values travelled with their keys, so the run reads '
+              'back to front where it stands');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      expect(framesOf(p, layer), [600, 900, 1500]);
+      expect(valuesOf(layer), [600, 900, 1500],
+          reason: 'one press, one undo step');
+    });
+
+    /// Copy, then Paste at playhead: the block lands with its first key on the
+    /// playhead, on the same property it came off.
+    testWidgets('Copy and Paste at playhead put the block under the playhead',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 900]);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+      await boxRow(
+          tester,
+          ValueKey<String>(
+              'tl-keys-${layer.internallayerId}/transform/opacity'));
+
+      await tapStrip(tester, 'keys-copy');
+
+      p.uiState.playheadFrame.value = 1800;
+      await tapStrip(tester, 'keys-paste');
+
+      final frames = framesOf(p, layer);
+      expect(frames, contains(1800),
+          reason: 'the block\'s first key landed on the playhead');
+      expect(frames, contains(2100),
+          reason: 'and the second kept its 300-frame gap');
+      expect(frames, containsAll(<int>[600, 900]),
+          reason: 'a paste adds; it does not move what was there');
     });
   }, skip: !engineAvailable);
 }

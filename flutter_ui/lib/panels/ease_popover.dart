@@ -199,7 +199,11 @@ class _EasePopoverState extends State<_EasePopover> {
   /// is left.
   Widget _row(LumitTheme t, String label, Widget control) => Row(
         children: [
-          SizedBox(width: _labelWidth, child: Text(label, style: t.body)),
+          SizedBox(
+            width: _labelWidth,
+            child: Text(label,
+                style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
           const SizedBox(width: 8),
           Expanded(child: control),
         ],
@@ -246,25 +250,29 @@ class _EasePopoverState extends State<_EasePopover> {
   /// keyframe-eval.md §1 keeps the curve x-monotone).
   Widget _influence(LumitTheme t) => Row(
         children: [
-          SizedBox(
-            width: _wellWidth,
-            child: DragValueField(
-              key: const ValueKey('ease-influence-out'),
-              value: (_out * 100).round(),
-              min: 1,
-              max: 100,
-              onChanged: (v) => setState(() => _out = v / 100),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _wellWidth),
+              child: DragValueField(
+                key: const ValueKey('ease-influence-out'),
+                value: (_out * 100).round(),
+                min: 1,
+                max: 100,
+                onChanged: (v) => setState(() => _out = v / 100),
+              ),
             ),
           ),
           const SizedBox(width: 6),
-          SizedBox(
-            width: _wellWidth,
-            child: DragValueField(
-              key: const ValueKey('ease-influence-in'),
-              value: (_into * 100).round(),
-              min: 1,
-              max: 100,
-              onChanged: (v) => setState(() => _into = v / 100),
+          Flexible(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _wellWidth),
+              child: DragValueField(
+                key: const ValueKey('ease-influence-in'),
+                value: (_into * 100).round(),
+                min: 1,
+                max: 100,
+                onChanged: (v) => setState(() => _into = v / 100),
+              ),
             ),
           ),
           const SizedBox(width: 6),
@@ -317,14 +325,18 @@ class _EasePopoverState extends State<_EasePopover> {
   Widget _buttons(LumitTheme t) => Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          HouseButton(
-            key: const ValueKey('ease-open-graph'),
-            small: true,
-            frameless: true,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            onPressed: widget.onOpenGraph,
-            child: Text(l10n.easeOpenGraph,
-                style: t.kicker.copyWith(letterSpacing: 0.54)),
+          Flexible(
+            child: HouseButton(
+              key: const ValueKey('ease-open-graph'),
+              small: true,
+              frameless: true,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              onPressed: widget.onOpenGraph,
+              child: Text(l10n.easeOpenGraph,
+                  style: t.kicker.copyWith(letterSpacing: 0.54),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
           ),
           const SizedBox(width: 6),
           HouseButton(
