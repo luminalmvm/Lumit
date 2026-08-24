@@ -224,6 +224,9 @@ class FlowRowsFrb extends StatelessWidget {
         playheadFrame: playheadFrame,
         onSeek: onSeek,
         rowKey: 'flow-input-rate',
+        // This row only ever draws in the Effect controls panel, on its fixed
+        // columns (K-443).
+        fixedColumns: true,
       ),
       name: Text(l10n.flowInputRate,
           style: t.body, overflow: TextOverflow.ellipsis),

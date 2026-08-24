@@ -48,7 +48,8 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
 
-      expect(find.text('Source'), findsOneWidget);
+      // A kicker since K-443: capitals on the way to the screen.
+      expect(find.text('SOURCE'), findsOneWidget);
       expect(find.byKey(const ValueKey('src-text')), findsOneWidget);
 
       await tester.enterText(find.byKey(const ValueKey('src-text')), 'Hello');
@@ -139,9 +140,9 @@ void main() {
       p.uiState.selectedLayer.value = p.comp.addAdjustmentLayer();
       await mount(tester, p);
 
-      expect(find.text('Source'), findsNothing,
+      expect(find.text('SOURCE'), findsNothing,
           reason: 'an adjustment layer has no content to edit');
-      expect(find.text('Transform'), findsOneWidget,
+      expect(find.text('TRANSFORM'), findsOneWidget,
           reason: 'but it still has a transform');
     });
 
@@ -174,6 +175,5 @@ void main() {
       expect(layer.getInterpolation(), BridgeRetimeInterp.nearest,
           reason: 'any layer can be asked for a moment between two frames');
     });
-
   }, skip: !engineAvailable);
 }

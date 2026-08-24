@@ -26,7 +26,9 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../icons/icons.dart';
+import '../icons/icons.dart' show iconSize;
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
@@ -190,6 +192,9 @@ class EffectParamRowFrb extends StatelessWidget {
             playheadFrame: playheadFrame,
             onSeek: onSeek,
             rowKey: '$id-${param.id}',
+            // The panel's fixed columns (K-443); the Timeline's fold-out takes
+            // the other branch and keeps its narrow gutter.
+            fixedColumns: twoColumn && valueColumn == null,
             onWrite: (next) => _set(BridgeEffectValue.float(next.single)),
           );
 
@@ -1242,6 +1247,7 @@ class EffectPointRowFrb extends StatelessWidget {
             playheadFrame: playheadFrame,
             onSeek: onSeek,
             rowKey: '$id-${xParam.id}-pair',
+            fixedColumns: twoColumn,
             // Two parameters, so two writes: a keyframe op on the pair costs
             // two undo steps today (the staged editor commits per param).
             onWrite: (next) {
@@ -1319,6 +1325,7 @@ class EffectPointRowFrb extends StatelessWidget {
           const SizedBox(width: 4),
           _DropperButton(
             id: 'fx-$id-${xParam.id}',
+            glyph: LumitIcons.pointPicker,
             tip: l10n.tipPickOnViewer,
             arm: (ui) => ui.armDropper(DropperArm(
               id: 'fx-$id-${xParam.id}',
@@ -1652,8 +1659,16 @@ class _DropperButton extends StatelessWidget {
   final String tip;
   final void Function(LumitUiState ui) arm;
 
+  /// Which glyph it wears: the pipette for a colour or a depth, the crosshair
+  /// for a **point** picked on the Viewer (§12A.3 — a position parameter gets a
+  /// point picker exactly as a colour parameter gets an eyedropper).
+  final String glyph;
+
   const _DropperButton(
-      {required this.id, required this.tip, required this.arm});
+      {required this.id,
+      required this.tip,
+      required this.arm,
+      this.glyph = LumitIcons.eyedropper});
 
   @override
   Widget build(BuildContext context) {
@@ -1675,10 +1690,10 @@ class _DropperButton extends StatelessWidget {
                 width: 18,
                 height: 18,
                 child: Center(
-                  child: lumitIcon(
-                    LumitIcon.eyedropper,
+                  child: LumitIcon(
+                    glyph,
                     size: iconSize,
-                    color: lit ? t.accent : t.textSecondary,
+                    colour: lit ? t.accent : t.textSecondary,
                   ),
                 ),
               ),

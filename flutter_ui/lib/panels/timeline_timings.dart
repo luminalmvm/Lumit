@@ -158,7 +158,9 @@ class TimingsCell extends StatelessWidget {
             padding: const EdgeInsets.only(right: 4),
             child: Text(
               ms == null ? '—' : formatRenderMs(ms),
-              style: t.small,
+              // Mono, because it is a number, and §7.1's mono-for-numbers rule
+              // has no exceptions anywhere in the UI.
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
               maxLines: 1,
               overflow: TextOverflow.clip,
             ),

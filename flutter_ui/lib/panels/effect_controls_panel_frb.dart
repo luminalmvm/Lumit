@@ -1138,42 +1138,26 @@ class _ParamGroupSectionState extends State<_ParamGroupSection> {
   late bool _open = !widget.collapsed;
 
   @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _open = !_open),
-          child: SizedBox(
-            // A group's twirl is a row like any other, so it is the same
-            // height as one (`fxRowHeight`).
-            height: fxRowHeight,
-            child: Row(
-              children: [
-                lumitIcon(
-                  _open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                  size: iconSize,
-                  color: t.textMuted,
-                ),
-                const SizedBox(width: 4),
-                Text(widget.label, style: t.bodyPrimary),
-              ],
-            ),
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The shared header row, so a group's twirl sits in the stopwatch
+          // column and its label starts where every other label does. The
+          // members are NOT indented: K-443's straight label edge runs the
+          // whole panel, and a fold says what it is with its kicker.
+          fxGroupHeaderRow(
+            context,
+            label: widget.label,
+            open: _open,
+            onToggle: () => setState(() => _open = !_open),
           ),
-        ),
-        if (_open)
-          Padding(
-            padding: const EdgeInsets.only(left: 14),
-            child: Column(
+          if (_open)
+            Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: widget.rows,
             ),
-          ),
-      ],
-    );
-  }
+        ],
+      );
 }
 
 /// The Transform section: the layer's transform rows, in the panel's section

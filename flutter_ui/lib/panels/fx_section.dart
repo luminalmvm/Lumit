@@ -5,14 +5,15 @@
 // box, which made the stack read as a pile of unrelated cards. It is really one
 // list — the same list the Timeline twirls open under a layer — so it is drawn
 // as one now: a heading bar per section, a hairline under every row, names down
-// the left and their controls down the right. The two columns are not divided by
-// anything visible; they line up because every row reserves the same width for
-// its name (`fxNameColumnWidth`), which is what makes a stack of numbers
-// readable.
+// the left and their controls down the right. The columns are not divided by
+// anything visible; they line up because every row starts them at the same x
+// (K-443): the stopwatch, then a keyframe-navigation slot that is reserved even
+// when the property is not animated, then the label, then the control.
 //
-// **The heading row.** Left column: the twirl, the section's own enable switch
-// where it has one, the name. Right column, aligned with the values below it:
-// the section's actions — Reset for an effect. Hard against the right edge: the
+// **The heading row.** Left column: the section's own enable switch where it
+// has one, the twirl, the name as a kicker. Right column, aligned with the
+// values below it: the section's actions — Reset for an effect, and what the
+// effect cost in the last measured frame. Hard against the right edge: the
 // close mark, kept apart from the actions because removing is not an adjustment.
 //
 // **Round mode keeps its bubble** (K-092). Sharp draws the section edge to edge
@@ -26,12 +27,40 @@ import '../icons/icons.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
-/// How wide the name column is — every row in the panel reserves this much for
-/// its label so the controls stack into one column down the panel.
-const double fxNameColumnWidth = 138;
+/// **The fixed column edges** (K-443, docs/15 §12A.3). Every row in the panel
+/// lays out on the same four x positions: the stopwatch, then a keyframe-
+/// navigation slot that stays empty until the property is animated, then the
+/// label, then the control. The label therefore never moves when a stopwatch is
+/// switched on — which is exactly what it used to do, because the navigator
+/// appeared *inside* the label's own space and shoved it right.
+///
+/// The widths come from what the controls need rather than from a mockup's
+/// pixels: a glyph is 16px on its 16-unit grid (§5) and a [HouseButton] insets
+/// its child by the 1px edge it always reserves, so one icon button measures
+/// 18 — the stopwatch column, and 54 for the three the navigator holds.
+const double fxStopwatchColumn = 18;
 
-/// The width a row leaves for its stopwatch when it has none, so labels line up
-/// whether or not the property can animate.
+/// The reserved keyframe-navigation slot: previous key, add-or-remove key, next
+/// key — three 16px glyphs in their 18px buttons, drawn only while the property
+/// is animated and holding their ground when it is not.
+const double fxKeyNavColumn = 54;
+
+/// The stopwatch and navigation columns together — what every row reserves
+/// before its label, animated or not.
+const double fxKeyColumnWidth = fxStopwatchColumn + fxKeyNavColumn;
+
+/// How wide the label column is. Long parameter names ellipsise rather than
+/// pushing the control column, which is the point of it being fixed.
+const double fxLabelColumnWidth = 88;
+
+/// How wide the whole name side is — the keyframe columns, the gap, and the
+/// label — so the controls stack into one column down the panel.
+const double fxNameColumnWidth = fxKeyColumnWidth + 4 + fxLabelColumnWidth;
+
+/// The width the **Timeline's** fold-out leaves for a stopwatch on a row that
+/// has none. Its lanes are not the Effect controls panel's columns — they
+/// answer to the render-switch column group — so it keeps the single narrow
+/// gutter it always had.
 const double fxKeyframeGutter = 18;
 
 /// How tall one property row's content is — **every** row in the Effect
@@ -228,6 +257,13 @@ class FxSection extends StatelessWidget {
                 width: fxNameColumnWidth,
                 child: Row(
                   children: [
+                    // Enable switch, twirl, name — the order the redesign's
+                    // heading reads in (K-443): what the effect *is doing*
+                    // before what the heading does to the list under it.
+                    if (leading case final widget?) ...[
+                      widget,
+                      const SizedBox(width: 4),
+                    ],
                     GestureDetector(
                       key: twirlKey,
                       behavior: HitTestBehavior.opaque,
@@ -243,19 +279,19 @@ class FxSection extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 2),
-                    if (leading case final widget?) ...[
-                      widget,
-                      const SizedBox(width: 6),
-                    ],
                     Expanded(
+                      // **The section's name is a kicker** (§7.1): every
+                      // container label is, and a properties section header is
+                      // one. The capitals are the style rather than the string,
+                      // so a renamed effect keeps whatever the owner typed.
                       child: renaming && onRenamed != null
                           ? _RenameField(
                               initial: title,
                               onDone: onRenamed!,
                               onCancel: onRenameCancelled ?? () {},
                             )
-                          : Text(title,
-                              style: t.bodyPrimary,
+                          : Text(title.toUpperCase(),
+                              style: t.kickerOn,
                               overflow: TextOverflow.ellipsis),
                     ),
                   ],
@@ -312,11 +348,13 @@ class _RenameFieldState extends State<_RenameField> {
       );
 }
 
-/// One property row's two columns: [name] down the left, [control] down the
-/// right, both left-aligned within their column.
+/// One property row on the panel's fixed columns (K-443): the keyframe slot,
+/// the [name], and the [control], each starting at the same x on every row.
 ///
-/// [keyframeControls] leads the name column, and its space is reserved even when
-/// there are none so a row that cannot animate lines up with one that can.
+/// [keyframeControls] sits in a slot of [fxKeyColumnWidth] whose space is
+/// reserved even when there are none, so a row that cannot animate lines up
+/// with one that can — and a row whose stopwatch has just been switched on does
+/// not shuffle its own label sideways.
 ///
 /// [name] is a widget rather than a string because a name is not only text: it
 /// is the row's handle for the graph editor (docs/07 §4.3) — tappable, tinted to
@@ -334,15 +372,14 @@ Widget fxTwoColumnRow({
       child: Row(
         children: [
           SizedBox(
-            width: fxNameColumnWidth,
-            child: Row(
-              children: [
-                keyframeControls ?? const SizedBox(width: fxKeyframeGutter),
-                const SizedBox(width: 4),
-                Expanded(child: name),
-              ],
-            ),
+            width: fxKeyColumnWidth,
+            child: keyframeControls == null
+                ? null
+                : Align(
+                    alignment: Alignment.centerLeft, child: keyframeControls),
           ),
+          const SizedBox(width: 4),
+          SizedBox(width: fxLabelColumnWidth, child: name),
           Expanded(
             child: Align(alignment: Alignment.centerLeft, child: control),
           ),
@@ -361,9 +398,10 @@ Widget fxTwoColumnRow({
 /// nested [FxSection] would bring its own heading bar and — in round mode — its
 /// own card, which would read as an effect inside an effect.
 ///
-/// It is indented by the keyframe gutter so its twirl sits where the parameter
-/// stopwatches sit, which is what makes the fold read as belonging to the rows
-/// beneath it rather than to the effect heading above.
+/// Its twirl sits in the stopwatch column and its label starts at the label
+/// column's x, so the fold reads as belonging to the rows beneath it and the
+/// panel keeps one straight label edge from top to bottom (K-443). The label is
+/// a kicker, as every container label is (§7.1).
 Widget fxGroupHeaderRow(
   BuildContext context, {
   required String label,
@@ -381,24 +419,26 @@ Widget fxGroupHeaderRow(
       child: Row(
         children: [
           SizedBox(
-            width: fxNameColumnWidth,
-            child: Row(
-              children: [
-                const SizedBox(width: 2),
-                lumitIcon(
+            width: fxKeyColumnWidth,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 1),
+                child: lumitIcon(
                   open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
                   size: iconSize,
                   color: open ? t.textPrimary : t.textMuted,
                 ),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: t.bodyPrimary,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: fxLabelColumnWidth,
+            child: Text(
+              label.toUpperCase(),
+              style: open ? t.kickerOn : t.kicker,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const Expanded(child: SizedBox.shrink()),

@@ -315,6 +315,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       playheadFrame: widget.playheadFrame,
       onSeek: widget.onSeek,
       rowKey: '${widget.keyPrefix}-${group.axes.first.prop.name}',
+      // The Effect controls panel's fixed columns (K-443); the Timeline's
+      // fold-out draws the same rows against its own column group and keeps
+      // the loose layout.
+      fixedColumns: widget.twoColumn && widget.valueColumn == null,
       onWrite: (next) {
         widget.layer.setTransforms(
           props: [for (final axis in group.axes) axis.prop],

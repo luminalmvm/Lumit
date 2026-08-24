@@ -65,8 +65,7 @@ void main() {
       final layer = footageLayer(p);
       layer.setFlowEnabled(on_: true);
       expect(
-        p.uiState.workspace.interface
-            .transformInEffectControls,
+        p.uiState.workspace.interface.transformInEffectControls,
         isFalse,
         reason: 'the default this was hidden behind',
       );
@@ -105,12 +104,14 @@ void main() {
       final layer = footageLayer(p);
       await mount(tester, p);
 
-      expect(find.text('Flow'), findsNothing,
+      // The section heading is a kicker since K-443, so its word reaches the
+      // screen capitalised while the string itself stays sentence case.
+      expect(find.text('FLOW'), findsNothing,
           reason: 'a layer not using flow has no flow group');
 
       layer.setFlowEnabled(on_: true);
       await mount(tester, p);
-      expect(find.text('Flow'), findsOneWidget);
+      expect(find.text('FLOW'), findsOneWidget);
       expect(layer.getInterpolation(), BridgeRetimeInterp.flow);
     });
 
@@ -194,8 +195,8 @@ void main() {
       await mount(tester, p);
 
       expect(find.byKey(const ValueKey('flow-input-rate')), findsOneWidget);
-      expect(find.byKey(const ValueKey('flow-input-rate-preset')),
-          findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('flow-input-rate-preset')), findsOneWidget);
       // Auto is 0 — adjacent source frames, the clip's own rate.
       final auto = layer.getFlowInputRate();
       expect(auto, isA<BridgeScalar_Static>());
@@ -233,7 +234,8 @@ void main() {
       // the whole clip (K-160's reason for a value field over a preset list).
       expect(find.byKey(const ValueKey('kf-stopwatch-flow-input-rate')),
           findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-flow-input-rate')));
+      await tester
+          .tap(find.byKey(const ValueKey('kf-stopwatch-flow-input-rate')));
       await tester.pumpAndSettle();
       expect(layer.getFlowInputRate(), isA<BridgeScalar_Keyframed>(),
           reason: 'the stopwatch plants a key and the rate becomes a curve');

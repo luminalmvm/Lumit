@@ -13,9 +13,16 @@
 //   the playhead holding the value that is already there, so nothing moves.
 //   Turning it off keeps the value the curve reads *at the playhead* rather than
 //   snapping to the first key — which is why the sampling is done engine-side.
-// - **◄ / ►** jump to the previous and next key, moving the playhead.
-// - **◆** adds a key at the playhead, or removes the one already there. Filled
-//   when the playhead sits on a key, hollow when it does not.
+//   It is `animated` amber while the property is keyed and muted otherwise
+//   (docs/15 §3.1), and square under Sharp (§12A.3).
+// - **Previous key / next key** jump to the neighbouring keys, moving the
+//   playhead.
+// - **Add key** adds a key at the playhead, or removes the one already there.
+//   Amber when the playhead sits on a key, muted when it does not — the set has
+//   one weight and no filled variants (§5), so the state is said in colour.
+//
+// All four are drawn from Lumit's own icon set (K-440); the arrowheads used to
+// be bare Unicode characters, which §5 forbids outright.
 //
 // Every one of these is a single write of the whole animation, so each is one
 // undo step — the reason the frb API takes a whole `BridgeScalar` rather than
@@ -29,10 +36,13 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:provider/provider.dart';
 
-import '../icons/icons.dart';
+import '../icons/icons.dart' show iconSize;
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../widgets/controls.dart';
+import 'fx_section.dart';
 
 /// The scalar with `value` written at `frame`: the key already there is
 /// updated, or a new linear key is inserted in order. This is what typing or
@@ -147,6 +157,9 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
   Widget build(BuildContext context) => DragValueField(
         key: widget.fieldKey,
         value: _staged ?? widget.value,
+        // This field exists only for a keyframed scalar, so its number rests
+        // in `animated` (§3.1) — the well is where a keyed property says so.
+        keyed: true,
         min: widget.min,
         max: widget.max,
         speed: widget.speed,
@@ -192,6 +205,17 @@ class KeyframeControlsFrb extends StatelessWidget {
   /// Distinguishes this row's buttons in a panel full of them.
   final String rowKey;
 
+  /// Lay the controls out on the Effect controls panel's **fixed columns**
+  /// (K-443): the stopwatch in a column of [fxStopwatchColumn], the navigator
+  /// in a slot of [fxKeyNavColumn] that keeps its width whether or not there is
+  /// anything in it. That is what stops a label moving sideways the moment its
+  /// stopwatch is switched on.
+  ///
+  /// The Timeline's fold-out passes false, the default: its lanes answer to the
+  /// render-switch column group and have no room to reserve a navigator on
+  /// every row.
+  final bool fixedColumns;
+
   const KeyframeControlsFrb({
     super.key,
     required this.scalars,
@@ -200,6 +224,7 @@ class KeyframeControlsFrb extends StatelessWidget {
     required this.playheadFrame,
     required this.onSeek,
     required this.rowKey,
+    this.fixedColumns = false,
   });
 
   /// The row's first animation, which is what the navigator reads.
@@ -257,66 +282,80 @@ class KeyframeControlsFrb extends StatelessWidget {
   Widget _build(BuildContext context, int frame) {
     final t = ThemeScope.of(context).theme;
     final onKey = _keyAt(frame) != null;
+    final previous = _neighbour(frame, before: true);
+    final next = _neighbour(frame, before: false);
+
+    final stopwatch = LumitTooltip(
+      message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
+      child: _button(
+        keyName: 'kf-stopwatch-$rowKey',
+        // The one place the stopwatch has colour of its own: `animated` says
+        // the property is keyed (§3.1's closed job list), never the accent,
+        // which the redesign spends on the filled action and the playhead.
+        child: LumitIcon(LumitIcons.stopwatch,
+            size: iconSize, colour: _animated ? t.animated : t.textMuted),
+        onPressed: () => _toggleAnimated(frame),
+      ),
+    );
+
+    final navigator = <Widget>[
+      _button(
+        keyName: 'kf-prev-$rowKey',
+        enabled: previous != null,
+        child: LumitIcon(LumitIcons.previousKey,
+            size: iconSize,
+            colour: previous == null ? t.textDisabled : t.textMuted),
+        onPressed: () => _seekTo(previous),
+      ),
+      LumitTooltip(
+        message: onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
+        child: _button(
+          keyName: 'kf-toggle-$rowKey',
+          child: LumitIcon(LumitIcons.addKey,
+              size: iconSize, colour: onKey ? t.animated : t.textMuted),
+          onPressed: () => _toggleKeyHere(frame),
+        ),
+      ),
+      _button(
+        keyName: 'kf-next-$rowKey',
+        enabled: next != null,
+        child: LumitIcon(LumitIcons.nextKey,
+            size: iconSize,
+            colour: next == null ? t.textDisabled : t.textMuted),
+        onPressed: () => _seekTo(next),
+      ),
+    ];
+
+    if (!fixedColumns) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [stopwatch, if (_animated) ...navigator],
+      );
+    }
+
+    // The two reserved columns. The navigator's slot keeps its width while the
+    // property is static, so switching the stopwatch on adds three buttons
+    // without moving the label a pixel (K-443).
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        LumitTooltip(
-          message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
-          child: _button(
-            context,
-            keyName: 'kf-stopwatch-$rowKey',
-            child: lumitIcon(LumitIcon.stopwatch,
-                size: iconSize, color: _animated ? t.accent : t.textMuted),
-            onPressed: () => _toggleAnimated(frame),
-          ),
+        SizedBox(width: fxStopwatchColumn, child: stopwatch),
+        SizedBox(
+          width: fxKeyNavColumn,
+          child: _animated
+              ? Row(mainAxisSize: MainAxisSize.min, children: navigator)
+              : const SizedBox.shrink(),
         ),
-        if (_animated) ...[
-          _button(
-            context,
-            keyName: 'kf-prev-$rowKey',
-            enabled: _neighbour(frame, before: true) != null,
-            child: Text('◄',
-                style: t.small.copyWith(
-                    color: _neighbour(frame, before: true) == null
-                        ? t.textDisabled
-                        : t.textMuted)),
-            onPressed: () => _seekTo(_neighbour(frame, before: true)),
-          ),
-          LumitTooltip(
-            message: onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
-            child: _button(
-              context,
-              keyName: 'kf-toggle-$rowKey',
-              child: lumitIcon(
-                onKey ? LumitIcon.keyframeFilled : LumitIcon.keyframe,
-                size: iconSize,
-                color: onKey ? t.accent : t.textMuted,
-              ),
-              onPressed: () => _toggleKeyHere(frame),
-            ),
-          ),
-          _button(
-            context,
-            keyName: 'kf-next-$rowKey',
-            enabled: _neighbour(frame, before: false) != null,
-            child: Text('►',
-                style: t.small.copyWith(
-                    color: _neighbour(frame, before: false) == null
-                        ? t.textDisabled
-                        : t.textMuted)),
-            onPressed: () => _seekTo(_neighbour(frame, before: false)),
-          ),
-        ],
       ],
     );
   }
 
-  Widget _button(
-    BuildContext context, {
+  Widget _button({
     required String keyName,
     required Widget child,
     required VoidCallback onPressed,
     bool enabled = true,
+    double pad = 0,
   }) =>
       HouseButton(
         key: ValueKey<String>(keyName),
@@ -324,8 +363,10 @@ class KeyframeControlsFrb extends StatelessWidget {
         small: true,
         // No vertical padding: the icon is 16 px and an Effect controls row
         // gives its controls 18 (`fxRowHeight`), which the border then fills.
-        // Padding on top of that spilled the icon out of the row.
-        padding: const EdgeInsets.symmetric(horizontal: 3),
+        // Padding on top of that spilled the icon out of the row. Horizontally
+        // it is nothing at all: the button's own always-reserved 1px edge
+        // already brings a 16px glyph to the 18px the columns are measured in.
+        padding: EdgeInsets.symmetric(horizontal: pad),
         onPressed: enabled ? onPressed : null,
         child: child,
       );
@@ -507,6 +548,8 @@ class MaskPathKeyframesFrb extends StatelessWidget {
           child: child,
         );
 
+    final previous = _neighbour(frame, before: true);
+    final next = _neighbour(frame, before: false);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -514,43 +557,36 @@ class MaskPathKeyframesFrb extends StatelessWidget {
           message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
           child: button(
             keyName: 'kf-stopwatch-$rowKey',
-            child: lumitIcon(LumitIcon.stopwatch,
-                size: iconSize, color: _animated ? t.accent : t.textMuted),
+            child: LumitIcon(LumitIcons.stopwatch,
+                size: iconSize, colour: _animated ? t.animated : t.textMuted),
             onPressed: () => _toggleAnimated(frame),
           ),
         ),
         if (_animated) ...[
           button(
             keyName: 'kf-prev-$rowKey',
-            enabled: _neighbour(frame, before: true) != null,
-            child: Text('◄',
-                style: t.small.copyWith(
-                    color: _neighbour(frame, before: true) == null
-                        ? t.textDisabled
-                        : t.textMuted)),
-            onPressed: () => onSeek(_neighbour(frame, before: true)!),
+            enabled: previous != null,
+            child: LumitIcon(LumitIcons.previousKey,
+                size: iconSize,
+                colour: previous == null ? t.textDisabled : t.textMuted),
+            onPressed: () => onSeek(previous!),
           ),
           LumitTooltip(
             message: onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
             child: button(
               keyName: 'kf-toggle-$rowKey',
-              child: lumitIcon(
-                onKey ? LumitIcon.keyframeFilled : LumitIcon.keyframe,
-                size: iconSize,
-                color: onKey ? t.accent : t.textMuted,
-              ),
+              child: LumitIcon(LumitIcons.addKey,
+                  size: iconSize, colour: onKey ? t.animated : t.textMuted),
               onPressed: () => _toggleKeyHere(frame),
             ),
           ),
           button(
             keyName: 'kf-next-$rowKey',
-            enabled: _neighbour(frame, before: false) != null,
-            child: Text('►',
-                style: t.small.copyWith(
-                    color: _neighbour(frame, before: false) == null
-                        ? t.textDisabled
-                        : t.textMuted)),
-            onPressed: () => onSeek(_neighbour(frame, before: false)!),
+            enabled: next != null,
+            child: LumitIcon(LumitIcons.nextKey,
+                size: iconSize,
+                colour: next == null ? t.textDisabled : t.textMuted),
+            onPressed: () => onSeek(next!),
           ),
         ],
       ],

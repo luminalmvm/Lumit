@@ -19,6 +19,8 @@ import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show effectLabelOf, EffectParamRowFrb;
+import 'package:lumit_flutter/icons/lumit_icon.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:uuid/uuid.dart';
@@ -32,6 +34,14 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Effect controls (frb)', () {
+    /// A section or parameter-group heading, by the words in it.
+    ///
+    /// Since K-443 every container label in the panel is a kicker (docs/15
+    /// §7.1) and a kicker capitalises **on the way to the screen**, so the
+    /// schema label and the arb string both stay sentence case and only the
+    /// finder knows about the capitals.
+    Finder heading(String label) => find.text(label.toUpperCase());
+
     /// A project with one comp, one layer in it, and that layer selected — the
     /// state the panel needs before it draws anything at all.
     ({LumitState state, LumitUiState uiState, LayerReference layer})
@@ -117,7 +127,7 @@ void main() {
 
       expect(p.layer.getEffects(), hasLength(1),
           reason: 'the menu reached the document');
-      expect(find.text('Gaussian blur'), findsOneWidget,
+      expect(heading('Gaussian blur'), findsOneWidget,
           reason: 'the card is titled by label, not by match name');
       expect(find.text('Radius'), findsOneWidget,
           reason: 'a row per declared parameter, labelled from the schema');
@@ -157,7 +167,7 @@ void main() {
       // live and animatable is pinned engine-side, where the commit is:
       // `an_effect_on_a_null_layer_keeps_its_animated_value`.)
       expect(nul.getEffects().length, 1);
-      expect(find.text('Gaussian blur'), findsOneWidget,
+      expect(heading('Gaussian blur'), findsOneWidget,
           reason: 'the stack draws as it does on any other layer');
     });
 
@@ -178,7 +188,7 @@ void main() {
 
       final second = p.layer.getEffects()[1];
       await tester.tapAt(
-        tester.getCenter(find.text(effectLabelOf(second.name()))),
+        tester.getCenter(heading(effectLabelOf(second.name()))),
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
@@ -214,12 +224,12 @@ void main() {
       await mount(tester, p);
       final stack = p.layer.getEffects();
 
-      await tester.tap(find.text(effectLabelOf(stack.first.name())));
+      await tester.tap(heading(effectLabelOf(stack.first.name())));
       await tester.pumpAndSettle();
       expect(p.uiState.selectedEffects.value, [stack.first.id()]);
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
-      await tester.tap(find.text(effectLabelOf(stack[2].name())));
+      await tester.tap(heading(effectLabelOf(stack[2].name())));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
       await tester.pumpAndSettle();
       expect(p.uiState.selectedEffects.value, [for (final e in stack) e.id()],
@@ -245,14 +255,14 @@ void main() {
       // K-395, so the effect of that name is no longer a unique bit of text.
       other.addEffect(name: 'vignette');
       await mount(tester, p);
-      expect(find.text('Gaussian blur'), findsOneWidget);
+      expect(heading('Gaussian blur'), findsOneWidget);
 
       p.uiState.setSelection([other]);
       await tester.pump();
 
-      expect(find.text('Vignette'), findsOneWidget,
+      expect(heading('Vignette'), findsOneWidget,
           reason: "the panel shows the newly selected layer's stack");
-      expect(find.text('Gaussian blur'), findsNothing,
+      expect(heading('Gaussian blur'), findsNothing,
           reason: 'and not the one it was showing before');
     });
 
@@ -336,7 +346,7 @@ void main() {
       final before = p.layer.getEffects().map((e) => e.name()).toList();
       final second = p.layer.getEffects()[1];
       await tester.tapAt(
-        tester.getCenter(find.text(effectLabelOf(second.name()))),
+        tester.getCenter(heading(effectLabelOf(second.name()))),
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
@@ -367,8 +377,8 @@ void main() {
       expect(before, ['blur', 'sharpen']);
 
       // The second heading onto the first: sharpen takes blur's place.
-      final from = find.text(effectLabelOf('sharpen'));
-      final onto = find.text(effectLabelOf('blur'));
+      final from = heading(effectLabelOf('sharpen'));
+      final onto = heading(effectLabelOf('blur'));
       final drag = await tester.startGesture(tester.getCenter(from));
       // Past the drag threshold in steps, so the Draggable starts and the
       // target under the pointer is entered before the release.
@@ -395,7 +405,7 @@ void main() {
       // ones it cannot — a dead row tells you what you cannot do, which is not
       // what a menu is for.
       await tester.tapAt(
-        tester.getCenter(find.text(effectLabelOf(effects[0].name()))),
+        tester.getCenter(heading(effectLabelOf(effects[0].name()))),
         buttons: kSecondaryButton,
       );
       await tester.pumpAndSettle();
@@ -422,7 +432,7 @@ void main() {
       // **Only the twirl folds it** (K-300). The name picks the effect, and a
       // click that also collapsed the card took the parameters away at the
       // moment you said which effect you meant.
-      await tester.tap(find.text('Gaussian blur'));
+      await tester.tap(heading('Gaussian blur'));
       await tester.pump();
       expect(find.text('Radius'), findsOneWidget,
           reason: 'picking an effect does not shut it');
@@ -477,7 +487,7 @@ void main() {
       final p = withLayer();
       await mount(tester, p);
 
-      expect(find.text('Transform'), findsOneWidget);
+      expect(heading('Transform'), findsOneWidget);
       for (final row in [
         'Anchor point',
         'Position',
@@ -632,12 +642,12 @@ void main() {
       expect(find.text('Light y'), findsNothing);
 
       // The collapsed groups show their headers, not their members.
-      expect(find.text('Lens options'), findsOneWidget);
-      expect(find.text('Flare options'), findsOneWidget);
+      expect(heading('Lens options'), findsOneWidget);
+      expect(heading('Flare options'), findsOneWidget);
       expect(find.text('Blades'), findsNothing);
 
       // Twirling Lens options open reveals the Int-kind Blades row.
-      await tester.tap(find.text('Lens options'));
+      await tester.tap(heading('Lens options'));
       await tester.pump();
       expect(find.text('Blades'), findsOneWidget);
 
@@ -887,7 +897,7 @@ void main() {
       p.uiState.activePanel.value = Panel.effectControls;
 
       final stack = p.layer.getEffects();
-      await tester.tap(find.text(effectLabelOf(stack.single.name())));
+      await tester.tap(heading(effectLabelOf(stack.single.name())));
       await tester.pumpAndSettle();
       expect(p.uiState.selectedEffects.value, [stack.single.id()]);
 
@@ -901,7 +911,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
 
-      expect(find.text('Blur the sign'), findsOneWidget,
+      expect(heading('Blur the sign'), findsOneWidget,
           reason: 'the heading shows the given name');
       expect(p.layer.getEffects().single.getInfo().customName, 'Blur the sign',
           reason: 'the name reached the document');
@@ -913,7 +923,7 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(p.layer.getEffects().single.getInfo().customName, isNull);
-      expect(find.text(effectLabelOf('blur')), findsOneWidget,
+      expect(heading(effectLabelOf('blur')), findsOneWidget,
           reason: 'a cleared name falls back to the effect label');
 
       // Escape throws the edit away (K-323). Enter, clicking away and an
@@ -944,13 +954,13 @@ void main() {
 
       // The three twirls show their headers, not their members.
       for (final label in ['Iris', 'Highlights', 'Depth map']) {
-        expect(find.text(label), findsOneWidget);
+        expect(heading(label), findsOneWidget, reason: label);
       }
       expect(find.text('Roundness'), findsNothing,
           reason: 'the aperture arrives collapsed behind its twirl');
 
       // Twirling Iris open reveals the shape controls, the dial among them.
-      await tester.tap(find.text('Iris'));
+      await tester.tap(heading('Iris'));
       await tester.pump();
       expect(find.text('Roundness'), findsOneWidget);
       expect(find.text('Blades'), findsOneWidget);
@@ -958,7 +968,7 @@ void main() {
           reason: 'Rotation is a dial (docs/07 SS6), not a slider');
 
       // The focus point is one row over an _x/_y pair, with its own crosshair.
-      await tester.tap(find.text('Depth map'));
+      await tester.tap(heading('Depth map'));
       await tester.pump();
       expect(find.text('Focus point'), findsOneWidget);
       expect(find.text('Focus point y'), findsNothing);
@@ -988,6 +998,128 @@ void main() {
     /// rather than something else — against a real layer with real masks in a
     /// real document. Which built-ins declare the row is asserted engine-side,
     /// in `a_mask_path_row_declares_itself_and_defaults_to_the_first_mask`.
+    /// **The fixed columns** (K-443, docs/15 §12A.3). Every row lays out on the
+    /// same x positions, and the keyframe-navigation slot is reserved whether or
+    /// not the property is animated — so a stopwatch being switched on adds
+    /// three buttons without shifting the label under them.
+    ///
+    /// This is the shape the panel did NOT have: the navigator used to appear
+    /// inside the name column and shove the label sideways, so twirling a
+    /// stack open and keying one property re-ragged the whole list.
+    group('the fixed columns (K-443)', () {
+      /// The panel with Gaussian blur applied, Radius optionally keyed, and
+      /// the effect's id in hand.
+      Future<UuidValue> mountBlur(
+        WidgetTester tester,
+        ({LumitState state, LumitUiState uiState, LayerReference layer}) p, {
+        required bool animated,
+      }) async {
+        p.layer.addEffect(name: 'blur');
+        if (animated) {
+          final staged = p.layer.getEffects();
+          staged.single.setValue(
+            id: 'radius',
+            value: BridgeEffectValue.float(BridgeScalar.keyframed([
+              BridgeKeyframe(
+                time: const BridgeRational(num: 0, den: 1),
+                value: 4,
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear(),
+              ),
+              BridgeKeyframe(
+                time: const BridgeRational(num: 1, den: 1),
+                value: 40,
+                interpIn: const BridgeSideInterp.linear(),
+                interpOut: const BridgeSideInterp.linear(),
+              ),
+            ])),
+          );
+          p.layer.setEffects(effects: staged);
+        }
+        await mount(tester, p, transform: false);
+        return p.layer.getEffects().single.id();
+      }
+
+      /// The glyph inside one of the row's keyframe buttons.
+      LumitIcon glyphIn(WidgetTester tester, String keyName) =>
+          tester.widget<LumitIcon>(find.descendant(
+            of: find.byKey(ValueKey<String>(keyName)),
+            matching: find.byType(LumitIcon),
+          ));
+
+      testWidgets('the label sits at the same x animated or not',
+          (tester) async {
+        await mountBlur(tester, withLayer(), animated: false);
+        final still = tester.getTopLeft(find.text('Radius')).dx;
+
+        await mountBlur(tester, withLayer(), animated: true);
+        expect(tester.getTopLeft(find.text('Radius')).dx, still,
+            reason: 'the navigator has a slot of its own; it never borrows '
+                'the label column');
+      });
+
+      testWidgets('the control column starts at the same x too',
+          (tester) async {
+        await mountBlur(tester, withLayer(), animated: false);
+        final still = tester.getTopLeft(find.byType(DragValueField).first).dx;
+
+        await mountBlur(tester, withLayer(), animated: true);
+        expect(tester.getTopLeft(find.byType(DragValueField).first).dx, still,
+            reason: 'the wells stack into one column down the panel');
+      });
+
+      testWidgets('the navigator is there only while the property is animated',
+          (tester) async {
+        final id = await mountBlur(tester, withLayer(), animated: false);
+        for (final button in ['prev', 'toggle', 'next']) {
+          expect(find.byKey(ValueKey<String>('kf-$button-$id-radius')),
+              findsNothing,
+              reason: 'nothing to navigate on a static value');
+        }
+        expect(find.byKey(ValueKey<String>('kf-stopwatch-$id-radius')),
+            findsOneWidget,
+            reason:
+                'the stopwatch is how animation begins, so it is always there');
+
+        final keyed = await mountBlur(tester, withLayer(), animated: true);
+        for (final button in ['prev', 'toggle', 'next']) {
+          expect(find.byKey(ValueKey<String>('kf-$button-$keyed-radius')),
+              findsOneWidget,
+              reason: button);
+        }
+      });
+
+      /// The stopwatch is one of `animated`'s closed job list (§3.1) — never
+      /// the accent, which the redesign spends on the filled action and the
+      /// playhead.
+      testWidgets('the stopwatch is muted at rest and animated when keyed',
+          (tester) async {
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+
+        final id = await mountBlur(tester, withLayer(), animated: false);
+        expect(glyphIn(tester, 'kf-stopwatch-$id-radius').colour, t.textMuted);
+
+        final keyed = await mountBlur(tester, withLayer(), animated: true);
+        expect(glyphIn(tester, 'kf-stopwatch-$keyed-radius').colour, t.animated,
+            reason: 'a keyed property says so in amber, not in the accent');
+        // And so does the number in its well: the playhead sits on the first
+        // key, so the diamond is amber too.
+        expect(glyphIn(tester, 'kf-toggle-$keyed-radius').colour, t.animated,
+            reason: 'the playhead is on a key');
+      });
+
+      testWidgets('a keyed value rests animated in its well', (tester) async {
+        final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+        final id = await mountBlur(tester, withLayer(), animated: true);
+        final number = tester.widget<Text>(find.descendant(
+          of: find.byKey(ValueKey<String>('fx-float-$id-radius')),
+          matching: find.byType(Text),
+        ));
+        expect(number.style!.color, t.animated,
+            reason: 'the well is where a keyframed value says it is keyed');
+      });
+    });
+
     testWidgets('a mask-path row lists this layer’s masks, First mask first',
         (tester) async {
       final p = withLayer();
