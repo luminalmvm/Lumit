@@ -795,9 +795,9 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **Composition tabs run the full width of the panel header.** The row above the outline
   puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
   far right.
-- **The layer search stays.** A slim search row sits at the top of the outline, in the well
-  treatment, filtering the layer list as it does today; the redesign restyles it, never
-  removes it.
+- **The layer search stays.** It sits in the row above the outline as an inset well
+  stretched between the frame counter on the left and the mode tabs on the right,
+  filtering the layer list as it does today; the redesign restyles it, never removes it.
 - **The ruler is double height**: times and the playhead head in the upper half; markers and
   the work area in the lower. A marker is an upward triangle sitting on the cache bar, half
   inside its backdrop pill and half outside to its left; the pill starts at the triangle's
