@@ -71,6 +71,7 @@ import '../widgets/controls.dart';
 import '../widgets/dropper_overlay.dart';
 import '../widgets/time_readout.dart';
 import 'placeholder.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_anchor.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
@@ -138,6 +139,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   @override
   void initState() {
     super.initState();
+    _lendPicture();
     // Built here rather than lazily on first use: a `late final` field is
     // constructed the first time it is *read*, and the first read on a Viewer
     // that was never zoomed is `dispose` — which builds a ticker against a
@@ -175,6 +177,18 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   /// The boundary the camera photographs: the picture alone.
   final GlobalKey _pictureKey = GlobalKey();
 
+  /// Lend that boundary to [captureViewerPicturePng] while this Viewer is up.
+  ///
+  /// A field rather than a `GlobalKey` constant because a global key must be
+  /// unique in the tree, and nothing stops a workspace from carrying two
+  /// Viewers; the last one built is the one photographed, and a Viewer only
+  /// gives the slot up if it is still holding it.
+  void _lendPicture() => viewerPictureKey = _pictureKey;
+
+  void _returnPicture() {
+    if (identical(viewerPictureKey, _pictureKey)) viewerPictureKey = null;
+  }
+
   /// The one slot. AE's four-slot family can follow on this same mechanism if
   /// it is ever asked for (K-416); one is what a before/after actually needs.
   dartui.Image? _snapshot;
@@ -184,6 +198,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
 
   @override
   void dispose() {
+    _returnPicture();
     _unbind();
     _changes?.cancel();
     _zoomMotion.dispose();
@@ -408,6 +423,23 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     _animationLevel = scope.animationLevel;
     final round = t.shape == ThemeShape.round;
 
+    // The panel's own header strip (K-466): the Viewer's kicker, and the three
+    // pickers the drawing puts at its right — the magnification, the preview
+    // quality and the colour pipeline. The Viewer docks as a pane of its own,
+    // so the dock draws no strip above it and this is the panel's only title.
+    final header = _ViewerHeader(
+      zoom: _zoom,
+      shownScale: _shownScale,
+      look: ui.viewerLook,
+      showToneMap: ui.workspace.interface.showToneMap,
+      onToneMap: ui.toggleViewerToneMap,
+      // The magnification menu is a jump to a named place, so it flies there
+      // like every other zoom (K-218) — from whatever is on screen, which is
+      // what the measured rectangle in the layout builder knows.
+      onZoom: (z) => _goToZoom(z, Offset.zero, from: _shownScale),
+      detached: round,
+    );
+
     // Both notifiers, because the transport shows two things the engine owns:
     // where the playhead is, and whether it is running.
     final bar = ValueListenableBuilder<bool>(
@@ -416,27 +448,22 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
         valueListenable: ui.playheadFrame,
         builder: (context, frame, _) => ValueListenableBuilder<int>(
           valueListenable: ui.previewTier,
-          builder: (context, tier, _) => _Toolbar(
-            zoom: _zoom,
+          builder: (context, tier, _) => _ViewerBar(
             channel: _channel,
             // Session state rather than panel state (K-352): the engine has to
             // be told when it flips, and [LumitUiState] is what talks to it.
             grid: ui.viewerGrid,
             wireframes: _wireframes,
             look: ui.viewerLook,
-            showToneMap: ui.workspace.interface.showToneMap,
             onStops: ui.setViewerStops,
-            onToneMap: ui.toggleViewerToneMap,
             playing: playing,
             frame: frame,
             settings: settings,
             comp: comp,
+            compSize: facts.size,
             tier: tier,
+            shownScale: _shownScale,
             background: ui.model.heldBackground,
-            // The magnification menu is a jump to a named place, so it flies
-            // there like every other zoom (K-218) — from whatever is on screen,
-            // which is what the measured rectangle in the layout builder knows.
-            onZoom: (z) => _goToZoom(z, Offset.zero, from: _shownScale),
             onChannel: (c) => setState(() => _channel = c),
             onGrid: () => ui.setViewerGrid(!ui.viewerGrid),
             onWireframes: () => setState(() => _wireframes = !_wireframes),
@@ -558,7 +585,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     if (!round) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [Expanded(child: stage), bar],
+        children: [header, Expanded(child: stage), bar],
       );
     }
     return ColoredBox(
@@ -566,6 +593,8 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          header,
+          SizedBox(height: t.tokens.tileGap),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(t.tokens.cardRadius),
@@ -669,7 +698,19 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
   void _reportScale(
       LumitUiState state, Rect fitted, BridgeCompSize size, double fit) {
     if (size.width == 0) return;
-    _shownScale = fitted.width / size.width;
+    final shown = fitted.width / size.width;
+    if (shown != _shownScale) {
+      _shownScale = shown;
+      // The bar and the header are built *above* the layout builder that
+      // measures the picture, so the magnification they read is last frame's.
+      // Nothing else redraws them when only the panel's size changed, and the
+      // percentage in the readout would sit at whatever it was until a frame
+      // happened to arrive. After the frame, never during it: this runs inside
+      // a layout, where a `setState` is an assertion rather than a rebuild.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
     state.reportViewerScale(
       _shownScale > fit ? _shownScale : fit,
       // A zoom in flight lays out on every tick of it. The scale it passes
@@ -1214,6 +1255,10 @@ class _Stage extends StatelessWidget {
                   ),
                 ),
               ),
+            // The selection's name, over the stage's own corner (K-466). Last
+            // in the stack because it is chrome: it names what is selected
+            // whatever is being drawn underneath, including a held snapshot.
+            _ViewerTag(uiState: uiState),
           ],
         ),
       ),
@@ -1771,87 +1816,436 @@ class _CheckerPainter extends CustomPainter {
       old.theme != theme || old.picture != picture;
 }
 
-/// Magnification, channel, grid, transport and timecode.
-class _Toolbar extends StatelessWidget {
+/// The Viewer's two strips are the same height as every other panel header and
+/// bottom bar (§12A.6): 22, whichever density is set.
+const double viewerStripHeight = 22;
+
+/// The room either end of both strips — the drawing's `padding: 0 10px`.
+const double viewerStripPadding = 10;
+
+/// The gap between the marks on the bottom bar, and between the three pickers
+/// in the header. Two numbers because the drawing draws two.
+const double viewerBarGap = 8;
+const double viewerHeaderGap = 6;
+
+/// The gap inside the transport, which is one instrument and is spaced as one.
+const double viewerTransportGap = 10;
+
+/// **Every glyph on the Viewer's bars is 14** (K-456, K-466): the size the
+/// approved drawing computes for each of them, rather than the 16 a panel icon
+/// takes or the 20 the transport used to. A 22px strip has 14 of room in it
+/// once the mark is given air above and below.
+const double viewerBarIconSize = 14;
+
+/// The seam between the ways of looking and the snapshot beside them: a
+/// hairline 12 tall, standing in the middle of a 22px bar.
+const double viewerBarDividerHeight = 12;
+
+/// The clock on the bar, and the composition's own reading at its right-hand
+/// end: 11px mono for the time, 10 for the reading (the drawing's sizes).
+const double viewerTimecodeSize = 11;
+
+/// Where the selection's name sits over the picture — the drawing's 16 from the
+/// left edge of the stage and 8 down from its top.
+const double viewerTagLeft = 16;
+const double viewerTagTop = 8;
+
+/// The 1px transparent edge every [HouseButton] carries so that a hover cannot
+/// grow it and shuffle the row beside it. It is not drawn, but it is laid out,
+/// so a mark's box is 2 wider and 2 taller than its glyph's cell — and the gaps
+/// between marks, which the drawing measures between the *glyphs*, are stated
+/// 2 short of the drawing's number for the same reason.
+const double viewerMarkEdge = 1;
+
+/// One mark on the Viewer's bars: the glyph at its drawn size (K-456), in a
+/// cell as tall as the strip so the aim is a bar's worth of target rather than
+/// a 14px square (§7.2).
+Widget viewerBarMark({
+  required Key key,
+  required LumitIcon icon,
+  required Color colour,
+  required VoidCallback? onPressed,
+  required String tip,
+}) =>
+    LumitTooltip(
+      message: tip,
+      child: HouseButton(
+        key: key,
+        frameless: true,
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        child: SizedBox(
+          width: viewerBarIconSize,
+          height: viewerStripHeight - 2 * viewerMarkEdge,
+          child: Center(
+            child: lumitIcon(icon, size: viewerBarIconSize, color: colour),
+          ),
+        ),
+      ),
+    );
+
+/// The room between two marks' boxes that leaves [glyphGap] between the glyphs
+/// themselves — the number the drawing states.
+Widget viewerBarGapBox(double glyphGap) =>
+    SizedBox(width: glyphGap - 2 * viewerMarkEdge);
+
+/// The strip's own ground: `surface_2` welded to the panel edge under Sharp,
+/// and a tile of its own — rounded, outlined, shadowed — under Round (K-394).
+BoxDecoration _stripDecoration(LumitTheme t, bool detached) => BoxDecoration(
+      color: t.surface2,
+      borderRadius:
+          detached ? BorderRadius.circular(t.tokens.floatRadius) : null,
+      border: detached ? Border.all(color: t.hairline) : null,
+      boxShadow: detached ? t.tokens.cardShadow : null,
+    );
+
+/// The Viewer's **panel header strip** (K-466, §12A.6: 22 tall): the panel's
+/// own kicker, then the three pickers the approved drawing puts at its right —
+/// the magnification, the preview quality, and the colour pipeline.
+///
+/// **Why the Viewer draws its own strip.** It docks as a pane of its own rather
+/// than as a tab in a group, so the dock puts no header above it; without this
+/// the one panel whose drawing shows a title had none at all.
+class _ViewerHeader extends StatelessWidget {
+  /// The magnification being *headed for* — null for fit, which is a rule
+  /// rather than a number.
   final double? zoom;
+
+  /// The magnification actually on screen, which is what the face reads when a
+  /// wheel notch has left the listed steps behind.
+  final double shownScale;
+
+  final ViewerLook look;
+
+  /// Whether the tone map is offered at all (Settings → Interface). [look] is
+  /// already gated to match, so hiding it never strands an engaged one.
+  final bool showToneMap;
+  final VoidCallback onToneMap;
+  final ValueChanged<double?> onZoom;
+  final bool detached;
+
+  const _ViewerHeader({
+    required this.zoom,
+    required this.shownScale,
+    required this.look,
+    required this.showToneMap,
+    required this.onToneMap,
+    required this.onZoom,
+    required this.detached,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Container(
+      key: const ValueKey('viewer-header'),
+      height: viewerStripHeight,
+      decoration: _stripDecoration(t, detached),
+      padding: const EdgeInsets.symmetric(horizontal: viewerStripPadding),
+      child: Row(
+        children: [
+          // The panel's name, a kicker like every other container label
+          // (§7.1), and lit because this is the container rather than one of
+          // several tabs in it.
+          Text(l10n.panelViewer.toUpperCase(), style: t.kickerOn),
+          const Spacer(),
+          // The picture's scale. The face hugs its own label: "Fit" and
+          // "400%" are different widths, and a common box left a gap that
+          // read as a missing control.
+          BareDropdown<int>(
+            key: const ValueKey('viewer-zoom'),
+            dense: true,
+            // -1: a wheel zoom between the listed steps; the face then reads
+            // the true percentage and the menu still offers the steps.
+            value: _zoomSteps.indexOf(zoom),
+            options: [for (var i = 0; i < _zoomSteps.length; i++) i],
+            label: (i) => i == -1
+                ? '${(shownScale * 100).round()}%'
+                : _zoomSteps[i] == null
+                    ? l10n.menuFit
+                    : '${(_zoomSteps[i]! * 100).round()}%',
+            onChanged: (i) => onZoom(_zoomSteps[i]),
+          ),
+          const SizedBox(width: viewerHeaderGap),
+          const _QualityDropdown(key: ValueKey('viewer-resolution')),
+          const SizedBox(width: viewerHeaderGap),
+          _ColourDropdown(
+            key: const ValueKey('viewer-colour'),
+            look: look,
+            showToneMap: showToneMap,
+            onToneMap: onToneMap,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A tick in a menu row, the mark the guides menu already uses.
+///
+/// ponytail: the tick is a character, as it is in the menu bar; a drawn
+/// checkmark wants a glyph of our own.
+Widget menuTick(LumitTheme t, bool on) =>
+    SizedBox(width: 16, child: on ? Text('✓', style: t.bodyPrimary) : null);
+
+/// **How good the preview is** — the header's middle picker (K-466).
+///
+/// It carries two answers that used to sit apart: the preview resolution
+/// (docs/07 §2.2 item 2), whose name the closed face reads, and the playback
+/// behaviour, whose button the drawing takes off the bar. They belong in one
+/// menu because they are one question — how much quality this preview is
+/// allowed to spend — and asking it in two places was how a soft picture and a
+/// slow transport came to look like two unrelated faults.
+class _QualityDropdown extends StatelessWidget {
+  const _QualityDropdown({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final ui = Provider.of<LumitUiState>(context);
+    final adaptive = ui.workspace.performance.playback == PlaybackMode.adaptive;
+    return LumitTooltip(
+      // Which route frames take to get here rides in the tooltip: a build
+      // without a zero-copy path copies every pixel down and uploads it
+      // again, which is the difference between playback feeling immediate and
+      // feeling heavy, so it is worth being able to read off the screen.
+      message: adaptive
+          ? l10n.tipPlaybackAdaptive(_transportName)
+          : l10n.tipPlaybackEveryFrame(_transportName),
+      child: Builder(
+        builder: (context) => dropdownButton(
+          t: t,
+          dense: true,
+          onPressed: () => _open(context, t, ui, adaptive),
+          face: dropdownFace(t, ui.previewResolution.title),
+        ),
+      ),
+    );
+  }
+
+  void _open(
+      BuildContext context, LumitTheme t, LumitUiState ui, bool adaptive) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox) return;
+    showMenuAt<void>(
+      context: context,
+      position: box.localToGlobal(Offset(0, box.size.height + 2)),
+      rows: (close) => [
+        _menuHeading(t, l10n.viewerQualityResolution),
+        for (final resolution in PreviewResolution.values)
+          MenuRow(
+            key: ValueKey<String>('viewer-quality-${resolution.name}'),
+            onPressed: () {
+              close(null);
+              ui.setPreviewResolution(resolution);
+            },
+            child: Row(children: [
+              menuTick(t, resolution == ui.previewResolution),
+              Text(resolution.title),
+            ]),
+          ),
+        _menuHeading(t, l10n.viewerQualityPlayback),
+        for (final mode in PlaybackMode.values)
+          MenuRow(
+            key: ValueKey<String>('viewer-playback-${mode.name}'),
+            onPressed: () {
+              close(null);
+              ui.workspace.performance.playback = mode;
+              ui.workspace.touch();
+            },
+            child: Row(children: [
+              menuTick(
+                  t,
+                  mode ==
+                      (adaptive
+                          ? PlaybackMode.adaptive
+                          : PlaybackMode.everyFrame)),
+              Text(mode == PlaybackMode.adaptive
+                  ? l10n.playbackAdaptiveShort
+                  : l10n.playbackEveryFrame),
+            ]),
+          ),
+      ],
+    );
+  }
+}
+
+/// A heading over a run of menu rows — the same aside a grouped dropdown draws.
+Widget _menuHeading(LumitTheme t, String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+      child: Text(text, style: t.small.copyWith(color: t.textMuted)),
+    );
+
+/// **What am I looking at?** — the colour pipeline, the header's third picker
+/// (docs/07 §2.2 item 8, K-466).
+///
+/// It always names the display transform the picture is being shown through:
+/// working space to display, which for now is the one built-in pair,
+/// scene-linear to sRGB (docs/06 §3.3 — OCIO slots in here later and this is
+/// the picker it will fill).
+///
+/// **And while either preview-only control is engaged, it says so.** Exposure
+/// and the tone map live inside that same display transform (K-314) and change
+/// nothing the export will ever see. The statement that *the picture is not the
+/// export* belongs here, stated calmly rather than warned about (15-DESIGN) —
+/// a reading you can take without leaving the picture.
+///
+/// It was a read-only badge at the right-hand end of the bar until the drawing
+/// made it a picker; the tone map came with it, off a bar seat the drawing does
+/// not have and into the menu of the transform it lives inside.
+class _ColourDropdown extends StatelessWidget {
+  final ViewerLook look;
+  final bool showToneMap;
+  final VoidCallback onToneMap;
+
+  const _ColourDropdown({
+    super.key,
+    required this.look,
+    required this.showToneMap,
+    required this.onToneMap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final engaged = look.stops != 0 || look.toneMap;
+    return LumitTooltip(
+      message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
+      child: Builder(
+        builder: (context) => dropdownButton(
+          t: t,
+          dense: true,
+          onPressed: () => _open(context, t),
+          face: dropdownFace(
+            t,
+            '',
+            face: Flexible(
+              child: Text(
+                engaged
+                    ? l10n.viewerDisplayTransformPreview(
+                        l10n.viewerDisplayTransform)
+                    : l10n.viewerDisplayTransform,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: engaged ? t.accent : null),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _open(BuildContext context, LumitTheme t) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox) return;
+    showMenuAt<void>(
+      context: context,
+      position: box.localToGlobal(Offset(0, box.size.height + 2)),
+      rows: (close) => [
+        // The one transform there is. It is ticked because it is in force,
+        // and it is a row rather than a label because the list grows the day
+        // a second one exists.
+        MenuRow(
+          key: const ValueKey('viewer-colour-transform'),
+          onPressed: () => close(null),
+          child: Row(children: [
+            menuTick(t, true),
+            Text(l10n.viewerDisplayTransform),
+          ]),
+        ),
+        if (showToneMap)
+          MenuRow(
+            key: const ValueKey('viewer-tone-map'),
+            onPressed: () {
+              close(null);
+              onToneMap();
+            },
+            child: Row(children: [
+              menuTick(t, look.toneMap),
+              Text(l10n.viewerColourToneMap),
+            ]),
+          ),
+      ],
+    );
+  }
+}
+
+/// The Viewer's **bottom bar** (K-466, §12A.6: 22 tall).
+///
+/// Left to right, and this is the drawing's own order: the ways of *looking* —
+/// the transparency board, the view menu, the channel, the exposure — then a
+/// hairline seam and the snapshot; the transport with its clock in the middle;
+/// and at the right-hand end the composition's own reading, which says what is
+/// being shown, at what time, at how many pixels, and how big.
+class _ViewerBar extends StatelessWidget {
   final ViewerChannel channel;
   final bool grid;
   final bool wireframes;
 
   /// How the fronted comp is being looked at (K-314). Passed down rather than
   /// read here: this bar rebuilds for every frame that arrives, and a control
-  /// that asks the engine what it is set to would cross the boundary sixty
+  /// that asked the engine what it is set to would cross the boundary sixty
   /// times a second to be told what the frontend already knows.
   final ViewerLook look;
-
-  /// Whether the tone map button is on the bar at all (Settings → Interface).
-  /// Off by default; [look] is already gated to match, so a hidden button
-  /// never leaves an engaged tone map behind it.
-  final bool showToneMap;
   final bool playing;
   final int frame;
   final BridgeCompSettings settings;
   final CompositionReference comp;
-  final ValueChanged<double?> onZoom;
+
+  /// The comp's own pixel size, off the panel's held facts.
+  final BridgeCompSize compSize;
+
+  /// The preview tier the last frame was made at, off the frame itself. Given
+  /// rather than asked for, for the same reason as everything else here.
+  final int tier;
+
+  /// The magnification actually on screen, as a multiple of comp resolution.
+  final double shownScale;
+
+  /// The comp's background colour, off the held read model. Null before the
+  /// model's first read, which the swatch draws as black.
+  final F32Array4? background;
+
   final ValueChanged<ViewerChannel> onChannel;
   final VoidCallback onGrid;
   final VoidCallback onWireframes;
-
   final ValueChanged<double> onStops;
-  final VoidCallback onToneMap;
   final VoidCallback onPlayPause;
   final ValueChanged<int> onSeek;
 
-  /// Whether a snapshot has been taken — the only thing that makes Show
-  /// anything but a muted mark (K-416).
+  /// Whether a snapshot has been taken — what makes a hold do anything.
   final bool hasSnapshot;
   final VoidCallback onSnapshotTake;
-
-  /// Held down, or let go.
   final ValueChanged<bool> onSnapshotHold;
 
-  /// Drawn as a tile of its own — rounded, outlined and shadowed, sitting
-  /// below the picture with the canvas showing between (round mode) — rather
-  /// than a strip welded to the panel's bottom edge (sharp mode).
+  /// Drawn as a tile of its own under Round, rather than a strip welded to the
+  /// panel's bottom edge under Sharp.
   final bool detached;
 
-  /// The preview tier the last frame was made at, off the frame itself
-  /// ([LumitUiState.previewTier]). Given rather than asked for: this bar
-  /// rebuilds for each shown frame, and asking the engine here cost one call
-  /// across the boundary for each of them.
-  final int tier;
-
-  /// The comp's background colour, off the held read model
-  /// ([CompModel.heldBackground]) for the same reason as [tier]: given, not
-  /// asked for, because this bar rebuilds for each shown frame. Null before
-  /// the model's first read, which the swatch draws as black.
-  final F32Array4? background;
-
-  const _Toolbar({
-    required this.zoom,
+  const _ViewerBar({
     required this.channel,
     required this.grid,
     required this.wireframes,
     required this.look,
-    required this.showToneMap,
-    required this.onStops,
-    required this.onToneMap,
     required this.playing,
     required this.frame,
     required this.settings,
     required this.comp,
+    required this.compSize,
     required this.tier,
+    required this.shownScale,
     required this.background,
-    required this.onZoom,
     required this.onChannel,
     required this.onGrid,
     required this.onWireframes,
+    required this.onStops,
     required this.onPlayPause,
     required this.onSeek,
     required this.hasSnapshot,
     required this.onSnapshotTake,
     required this.onSnapshotHold,
-    this.detached = false,
+    required this.detached,
   });
 
   @override
@@ -1859,435 +2253,484 @@ class _Toolbar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return Container(
       key: const ValueKey('viewer-bar'),
-      height: 26,
-      decoration: BoxDecoration(
-        color: t.surface1,
-        borderRadius:
-            detached ? BorderRadius.circular(t.tokens.floatRadius) : null,
-        border: detached ? Border.all(color: t.hairline) : null,
-        boxShadow: detached ? t.tokens.cardShadow : null,
+      height: viewerStripHeight,
+      decoration: _stripDecoration(t, detached),
+      // The drawing's 10 either end, measured to the first *glyph* and to the
+      // last word: the left one allows for the mark's own transparent edge,
+      // the right one has nothing to allow for because a reading is text.
+      padding: const EdgeInsets.only(
+        left: viewerStripPadding - viewerMarkEdge,
+        right: viewerStripPadding,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: Row(
-        children: [
-          // The controls, and the preview progress on the right of the same bar
-          // (K-287). The controls take the space that is left over, so the
-          // progress appearing and going never moves any of them.
-          Expanded(child: _controls(context, t)),
-          ViewerProgressBar(
-            tracker: Provider.of<LumitUiState>(context, listen: false)
-                .previewProgress,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Everything on the left of the bar, in K-411's instruments: the picture's
-  /// scale, the view toggles, how the pixels read, the clock, the transport,
-  /// then the right-edge readouts. Small gaps inside a group, wide ones
-  /// between — the arrangement is the whole of what tells them apart.
-  Widget _controls(BuildContext context, LumitTheme t) {
-    // Scrolls rather than overflowing: a Viewer docked narrow has less width
-    // than this bar wants, and an overflow stripe is not a design.
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          // --- The picture's scale (K-411 item 1). Both dropdowns hug their
-          // own label: a magnification reading "Fit" and one reading "400%"
-          // are different widths, and boxing them to a common one left a
-          // gap that read as a missing control.
-          BareDropdown<int>(
-            key: const ValueKey('viewer-zoom'),
-            // -1: a wheel zoom between the listed steps; the button shows
-            // the true percentage and the menu still offers the steps.
-            value: _zoomSteps.indexOf(zoom),
-            options: [for (var i = 0; i < _zoomSteps.length; i++) i],
-            label: (i) => i == -1
-                ? '${((zoom ?? 1) * 100).round()}%'
-                : _zoomSteps[i] == null
-                    ? l10n.menuFit
-                    : '${(_zoomSteps[i]! * 100).round()}%',
-            onChanged: (i) => onZoom(_zoomSteps[i]),
-          ),
-          const SizedBox(width: _itemGap),
-          // The preview resolution (docs/07 §2.2 item 2): how many pixels the
-          // engine is asked to make, beside the magnification it is so easily
-          // mistaken for. Muted while adaptive playback is choosing the tier
-          // itself — a choice something else is making is not yours to make.
-          const _ResolutionDropdown(),
-
-          // --- The view toggles (K-411 item 2): one tight cluster of icons,
-          // each of which changes what is drawn over or behind the picture
-          // and nothing about the picture itself.
-          const SizedBox(width: _groupGap),
-          // Region of interest (K-362). Lit while a region is in force or a
-          // drag is armed for one, so working on a corner of a shot is never
-          // a state you can be in without being told; the same click clears a
-          // region that exists.
-          Builder(builder: (context) {
-            final ui = context.watch<LumitUiState>();
-            final set = ui.regionOfInterest != null;
-            final arming = ui.armingRegion;
-            return LumitTooltip(
-              message: set
-                  ? l10n.tipClearRegionOfInterest
-                  : arming
-                      ? l10n.tipDragRegionOfInterest
-                      : l10n.tipRegionOfInterest,
-              child: HouseButton(
-                key: const ValueKey('viewer-region'),
-                small: true,
-                frameless: true,
-                // A region that exists is cleared; otherwise the next drag on
-                // the picture is armed to sweep one out.
-                onPressed: () => set
-                    ? ui.setRegionOfInterest(null)
-                    : ui.armingRegion = !arming,
-                child: lumitIcon(
-                  LumitIcon.rectangle,
-                  size: iconSize,
-                  color: set || arming ? t.accent : t.textSecondary,
-                ),
+      // A Viewer docked narrow has less width than this bar wants, and an
+      // overflow stripe is not a design: below the width the drawing needs,
+      // the same row is laid out with plain gaps and scrolls sideways
+      // (§12A.6's ladder, step 5).
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final loose = constraints.maxWidth >= _barMinimum;
+          final row = Row(
+            children: [
+              ..._looking(context, t),
+              if (loose) const Spacer() else const SizedBox(width: 24),
+              ..._transport(t),
+              if (loose) const Spacer() else const SizedBox(width: 24),
+              _Readout(
+                comp: comp,
+                settings: settings,
+                compSize: compSize,
+                frame: frame,
+                tier: tier,
+                shownScale: shownScale,
+                flexible: loose,
               ),
-            );
-          }),
-          const SizedBox(width: _itemGap),
-          // The transparency grid: the checkerboard itself rather than the
-          // word "Grid" (K-411 item 2). The word was the odd one out in a row
-          // of marks, and it named the thing least well — "grid" is also the
-          // guide overlay, which this is not.
-          LumitTooltip(
-            message: l10n.tipTransparencyGrid,
-            child: HouseButton(
-              key: const ValueKey('viewer-grid'),
-              small: true,
-              frameless: true,
-              onPressed: onGrid,
-              child: lumitIcon(
-                LumitIcon.checkerboard,
-                size: iconSize,
-                color: grid ? t.accent : t.textSecondary,
+              // Nothing at all while no frame is being waited on (K-287), so
+              // at rest the reading really is the bar's right-hand end.
+              ViewerProgressBar(
+                tracker: Provider.of<LumitUiState>(context, listen: false)
+                    .previewProgress,
               ),
-            ),
-          ),
-          const SizedBox(width: _itemGap),
-          // The grid-and-guides menu (K-416, §2.2 items 5-6), beside the
-          // transparency grid because the two are the pair most easily
-          // confused: one is what shows *through* the picture, the other is
-          // what is drawn *over* it.
-          const ViewerGuidesMenu(),
-          const SizedBox(width: _itemGap),
-          // The layer controls switch (K-217): the boxes, handles and hover
-          // highlight over the picture. An icon rather than a word, because
-          // what it governs is a *mark* — and the mark is what it draws.
-          LumitTooltip(
-            message: wireframes
-                ? l10n.tipHideLayerControls
-                : l10n.tipShowLayerControls,
-            child: HouseButton(
-              key: const ValueKey('viewer-wireframes'),
-              small: true,
-              frameless: true,
-              onPressed: onWireframes,
-              child: lumitIcon(
-                LumitIcon.wireframe,
-                size: iconSize,
-                color: wireframes ? t.accent : t.textSecondary,
-              ),
-            ),
-          ),
-          const SizedBox(width: _itemGap),
-          _BackgroundSwatch(comp: comp, background: background),
-
-          // --- How the pixels read (K-411 item 3): the three controls that
-          // change what the numbers on screen mean.
-          const SizedBox(width: _groupGap),
-          // The channel picker as a mark tinted by its own answer: the face
-          // is read at a glance during a key, and "Green" spelled out is a
-          // word to read where a green mark is a thing to see. The menu still
-          // lists the names.
-          LumitTooltip(
-            message: l10n.tipViewerChannel,
-            child: BareDropdown<ViewerChannel>(
-              key: const ValueKey('viewer-channel'),
-              value: channel,
-              options: ViewerChannel.values,
-              label: _channelLabel,
-              onChanged: onChannel,
-              face: _channelFace(t, channel),
-            ),
-          ),
-          const SizedBox(width: _itemGap),
-          // Exposure and the tone map (K-314, docs/07 §2.2 items 12-13): the
-          // two preview-only controls. Each reads in the accent while it is
-          // engaged, which says "this control is on" and nothing more — that
-          // the *picture* is not the export is the colour-management badge's
-          // to say (item 8, further along this bar).
-          lumitIcon(
-            LumitIcon.aperture,
-            size: iconSize,
-            color: look.stops == 0 ? t.textSecondary : t.accent,
-          ),
-          const SizedBox(width: _itemGap),
-          LumitTooltip(
-            message: l10n.tipViewerExposure,
-            child: DragValueField(
-              key: const ValueKey('viewer-exposure'),
-              value: look.stops,
-              // Ten stops each way: past that a picture is white or black
-              // whatever is in it, so the drag has somewhere to stop.
-              min: -10,
-              max: 10,
-              speed: 0.1,
-              decimals: 1,
-              signed: true,
-              resetTo: 0,
-              // Snapped to the tenth the box actually reads, so a drag cannot
-              // leave a hair of exposure behind that shows as `+0.0` while the
-              // engine treats the view as engaged. Since K-346 that no longer
-              // costs the caches — a look names its frames rather than leaving
-              // them nameless — but a hair nobody asked for would still bank a
-              // whole second set of frames under a look that reads as neutral.
-              onChanged: (v) => onStops((v * 10).round() / 10),
-            ),
-          ),
-          // The tone map button is asked for rather than given (K-314): most
-          // work never reads a picture that way, so the bar stays shorter
-          // until somebody turns it on in Settings → Interface.
-          if (showToneMap) ...[
-            const SizedBox(width: _itemGap),
-            LumitTooltip(
-              message: l10n.tipViewerToneMap,
-              child: HouseButton(
-                key: const ValueKey('viewer-tone-map'),
-                small: true,
-                frameless: true,
-                onPressed: onToneMap,
-                child: lumitIcon(
-                  LumitIcon.toneMap,
-                  size: iconSize,
-                  color: look.toneMap ? t.accent : t.textSecondary,
-                ),
-              ),
-            ),
-          ],
-
-          // --- Snapshots (K-416, §2.2 item 14): a pair of its own, next to
-          // the exposure group because a snapshot is what the exposure is
-          // usually being judged against. Take photographs the picture; Show
-          // is held down, and puts the photograph back over it.
-          const SizedBox(width: _groupGap),
-          LumitTooltip(
-            message: l10n.tipViewerSnapshotTake,
-            child: HouseButton(
-              key: const ValueKey('viewer-snapshot-take'),
-              small: true,
-              frameless: true,
-              onPressed: onSnapshotTake,
-              child: lumitIcon(
-                LumitIcon.snapshot,
-                size: iconSize,
-                color: t.textSecondary,
-              ),
-            ),
-          ),
-          const SizedBox(width: _itemGap),
-          LumitTooltip(
-            message: hasSnapshot
-                ? l10n.tipViewerSnapshotShow
-                : l10n.tipViewerSnapshotNone,
-            // A press and hold, so the raw pointer rather than a tap: the
-            // comparison lasts exactly as long as the button is down, and a
-            // gesture recogniser only reports once it is over.
-            child: Listener(
-              onPointerDown: hasSnapshot ? (_) => onSnapshotHold(true) : null,
-              onPointerUp: hasSnapshot ? (_) => onSnapshotHold(false) : null,
-              onPointerCancel:
-                  hasSnapshot ? (_) => onSnapshotHold(false) : null,
-              child: HouseButton(
-                key: const ValueKey('viewer-snapshot-show'),
-                small: true,
-                frameless: true,
-                // The press is the Listener's; this only says whether the
-                // button is live, which is what mutes it and what stops the
-                // pointer becoming a hand over a control that does nothing.
-                onPressed: hasSnapshot ? () {} : null,
-                child: lumitIcon(
-                  LumitIcon.eye,
-                  size: iconSize,
-                  color: hasSnapshot ? t.textSecondary : t.textDisabled,
-                ),
-              ),
-            ),
-          ),
-
-          // --- The clock (K-411 item 4), a field of its own rather than
-          // something to find between the transport and a badge. In a slot
-          // wide enough for the longest time this comp can show, and
-          // clickable to type one (docs/07 §2.2 item 11). A time past either
-          // end of the composition lands on that end: the playhead cannot
-          // leave the comp, so asking for somewhere outside it means the
-          // nearest place inside.
-          const SizedBox(width: _groupGap),
-          TimeReadout(
-            key: const ValueKey('viewer-timecode'),
-            frame: frame,
-            format: (f) => timecodeOf(f, settings),
-            widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
-            style: t.mono,
-            parse: (text) =>
-                framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
-            onCommit: onSeek,
-            minFrame: 0,
-            maxFrame: _lastFrameOf(settings),
-            tooltip: l10n.tipFrameOnScreen,
-          ),
-
-          // --- The transport and the mode it runs in (K-411 item 5). A fixed
-          // gap, not a Spacer: the bar scrolls when the panel is narrow, and
-          // a flex child cannot live inside a scroll view.
-          const SizedBox(width: _groupGap),
-          // A slot rather than a button sized to its own label: the two modes
-          // are two different words, and letting them size themselves moved
-          // the whole transport across whenever the mode changed.
-          const SizedBox(
-            width: _playbackModeWidth,
-            child: _PlaybackModeButton(),
-          ),
-          const SizedBox(width: _itemGap),
-          // Round gathers the transport into one pill (K-394, §12.1): the five
-          // buttons are one instrument, and a container round them says so.
-          // Sharp is handed the very same widgets with nothing wrapped round
-          // them, so its bar is unchanged down to the widget tree.
-          if (t.shape == ThemeShape.round)
-            Container(
-              key: const ValueKey('viewer-transport-pill'),
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              decoration: BoxDecoration(
-                color: t.surface2,
-                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: _transport(t),
-              ),
-            )
-          else
-            ..._transport(t),
-
-          // --- The right edge (K-411 item 6): readouts, not controls, which
-          // is why they live apart from everything above.
-          const SizedBox(width: _groupGap),
-          _ColourManagementBadge(look: look),
-          // The degradation badge (docs/13 §B5, docs/07 §2.2): when adaptive
-          // playback has dropped below Full, say so on the bar — a softer
-          // picture must never be a mystery. The tier rides in on the frame,
-          // so the bar draws it without asking anything.
-          //
-          // Its slot is there whether or not the badge is: a box that comes
-          // and goes mid-playback would drag the bar about at the very
-          // moment the picture is being watched.
-          const SizedBox(width: _itemGap),
-          SizedBox(
-            width: _tierBadgeWidth,
-            child: playing && tier > 1
-                ? Center(
-                    child: Container(
-                      key: const ValueKey('viewer-tier-badge'),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: t.surface2,
-                        borderRadius:
-                            BorderRadius.circular(t.tokens.controlRadius),
-                      ),
-                      child: Text(
-                        _PlaybackModeButton._tierNames[tier.clamp(0, 4)],
-                        style: t.small.copyWith(color: t.warning),
-                      ),
-                    ),
-                  )
-                : null,
-          ),
-        ],
+            ],
+          );
+          return loose
+              ? row
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal, child: row);
+        },
       ),
     );
   }
 
-  /// The five transport buttons, in order. Pulled out so both shapes get the
-  /// identical set — Round inside its pill, Sharp loose on the bar.
-  List<Widget> _transport(LumitTheme t) => [
-        HouseButton(
-          key: const ValueKey('viewer-home'),
-          small: true,
-          frameless: true,
-          onPressed: () => onSeek(0),
-          child: Text('|◀', style: t.small),
+  /// The ways of looking, and the snapshot behind its seam.
+  List<Widget> _looking(BuildContext context, LumitTheme t) => [
+        // The transparency board: the checkerboard itself rather than the word
+        // "grid", which is also the overlay this is not.
+        viewerBarMark(
+          key: const ValueKey('viewer-grid'),
+          icon: LumitIcon.checkerboard,
+          colour: grid ? t.accent : t.textMuted,
+          onPressed: onGrid,
+          tip: l10n.tipTransparencyGrid,
         ),
-        HouseButton(
-          key: const ValueKey('viewer-step-back'),
-          small: true,
-          frameless: true,
-          onPressed: () => onSeek(frame - 1),
-          child: Text('◀', style: t.small),
+        viewerBarGapBox(viewerBarGap),
+        // Everything drawn *over* the picture, under one mark (docs/07 §2.2
+        // items 5–6): the grid, the safe areas, the layer controls and the
+        // region of interest — and the composition's own background, which is
+        // the same question asked from behind.
+        ViewerGuidesMenu(
+          wireframes: wireframes,
+          onWireframes: onWireframes,
+          comp: comp,
+          background: background,
         ),
-        HouseButton(
-          key: const ValueKey('viewer-play'),
-          small: true,
-          onPressed: onPlayPause,
-          // The transport is the one place the spec asks for 20 (§5): it
-          // is the control the eye goes to without looking for it.
-          child: lumitIcon(playing ? LumitIcon.pause : LumitIcon.play,
-              size: iconSizeTransport, color: t.textPrimary),
+        viewerBarGapBox(viewerBarGap),
+        // The channel as a mark tinted by its own answer: the face is read at
+        // a glance during a key, where "Green" spelled out is a word to read
+        // and a green mark is a thing to see. The menu still lists the names.
+        _ChannelPicker(channel: channel, onChannel: onChannel),
+        viewerBarGapBox(viewerBarGap),
+        // The exposure (K-314, docs/07 §2.2 item 12), bare: the drawing sets
+        // it as the number alone, with no aperture beside it and no well
+        // under it. Preview only, and the header's colour picker is what says
+        // so while it is engaged.
+        LumitTooltip(
+          message: l10n.tipViewerExposure,
+          child: DragValueField(
+            key: const ValueKey('viewer-exposure'),
+            value: look.stops,
+            bare: true,
+            // Ten stops each way: past that a picture is white or black
+            // whatever is in it, so the drag has somewhere to stop.
+            min: -10,
+            max: 10,
+            speed: 0.1,
+            decimals: 1,
+            signed: true,
+            resetTo: 0,
+            // Snapped to the tenth the box actually reads, so a drag cannot
+            // leave a hair of exposure behind that shows as `+0.0` while the
+            // engine treats the view as engaged.
+            onChanged: (v) => onStops((v * 10).round() / 10),
+          ),
         ),
-        HouseButton(
-          key: const ValueKey('viewer-step-forward'),
-          small: true,
-          frameless: true,
-          onPressed: () => onSeek(frame + 1),
-          child: Text('▶', style: t.small),
+        // One edge each side of the seam rather than two: the hairline is a
+        // plain rule and carries none of its own.
+        SizedBox(width: viewerBarGap - viewerMarkEdge),
+        Container(
+          width: 1,
+          height: viewerBarDividerHeight,
+          color: t.hairline,
         ),
-        HouseButton(
-          key: const ValueKey('viewer-end'),
-          small: true,
-          frameless: true,
-          onPressed: () => onSeek(comp.durationFrames() - 1),
-          child: Text('▶|', style: t.small),
+        SizedBox(width: viewerBarGap - viewerMarkEdge),
+        // Snapshots (K-416, §2.2 item 14), one mark for the pair the drawing
+        // draws as one: a click photographs the picture, a press and hold puts
+        // the photograph back over it for as long as the button is down. Two
+        // gestures, one control, and neither can be mistaken for the other.
+        _SnapshotButton(
+          hasSnapshot: hasSnapshot,
+          onTake: onSnapshotTake,
+          onHold: onSnapshotHold,
         ),
       ];
 
-  /// The channel picker's closed face (K-411 item 3): one mark, tinted by
-  /// whichever channel is being shown.
+  /// The five transport buttons and the clock, one instrument at one spacing.
   ///
+  /// Round gathers them into a pill (K-394, §12.1); Sharp is handed the very
+  /// same widgets with nothing wrapped round them.
+  List<Widget> _transport(LumitTheme t) {
+    final buttons = <Widget>[
+      viewerBarMark(
+        key: const ValueKey('viewer-home'),
+        icon: LumitIcon.toStart,
+        colour: t.textMuted,
+        onPressed: () => onSeek(0),
+        tip: l10n.tipTransportStart,
+      ),
+      viewerBarGapBox(viewerTransportGap),
+      viewerBarMark(
+        key: const ValueKey('viewer-step-back'),
+        icon: LumitIcon.previousFrame,
+        colour: t.textMuted,
+        onPressed: () => onSeek(frame - 1),
+        tip: l10n.tipTransportPrevious,
+      ),
+      viewerBarGapBox(viewerTransportGap),
+      // The one lit mark on the bar: the control the eye goes to without
+      // looking for it (the drawing's own `.ico.on`).
+      viewerBarMark(
+        key: const ValueKey('viewer-play'),
+        icon: playing ? LumitIcon.pause : LumitIcon.play,
+        colour: t.textPrimary,
+        onPressed: onPlayPause,
+        tip: playing ? l10n.tipTransportPause : l10n.tipTransportPlay,
+      ),
+      viewerBarGapBox(viewerTransportGap),
+      viewerBarMark(
+        key: const ValueKey('viewer-step-forward'),
+        icon: LumitIcon.nextFrame,
+        colour: t.textMuted,
+        onPressed: () => onSeek(frame + 1),
+        tip: l10n.tipTransportNext,
+      ),
+      viewerBarGapBox(viewerTransportGap),
+      viewerBarMark(
+        key: const ValueKey('viewer-end'),
+        icon: LumitIcon.toEnd,
+        colour: t.textMuted,
+        onPressed: () => onSeek(comp.durationFrames() - 1),
+        tip: l10n.tipTransportEnd,
+      ),
+    ];
+    return [
+      if (detached)
+        Container(
+          key: const ValueKey('viewer-transport-pill'),
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: t.surface3,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: buttons),
+        )
+      else
+        ...buttons,
+      // One edge to allow for rather than two: the clock is text, and text
+      // carries no button edge of its own.
+      SizedBox(width: viewerTransportGap - viewerMarkEdge),
+      // The clock, in a slot wide enough for the longest time this comp can
+      // show, and clickable to type one (docs/07 §2.2 item 11). A time past
+      // either end of the composition lands on that end.
+      TimeReadout(
+        key: const ValueKey('viewer-timecode'),
+        frame: frame,
+        format: (f) => timecodeOf(f, settings),
+        widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
+        style:
+            t.mono.copyWith(fontSize: viewerTimecodeSize, color: t.textPrimary),
+        parse: (text) =>
+            framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
+        onCommit: onSeek,
+        minFrame: 0,
+        maxFrame: _lastFrameOf(settings),
+        tooltip: l10n.tipFrameOnScreen,
+      ),
+    ];
+  }
+}
+
+/// Below this the bar stops spreading and starts scrolling: the two clusters
+/// the drawing gives fixed places, plus room for a reading between them.
+const double _barMinimum = 560;
+
+/// **What is on screen, in one line** (K-466): the composition, the time, the
+/// pixels the engine actually made, and the magnification they are drawn at.
+///
+/// It is the drawing's right-hand end, and it absorbs the degradation badge
+/// (docs/07 §2.2 item 9) that used to come and go beside the transport: a
+/// reading that always says `1920×1080 → 960×540` states the tier plainly, in
+/// the one place a person already looks to ask what they are looking at, and
+/// without a box appearing mid-playback and dragging the bar about.
+class _Readout extends StatelessWidget {
+  final CompositionReference comp;
+  final BridgeCompSettings settings;
+  final BridgeCompSize compSize;
+  final int frame;
+  final int tier;
+  final double shownScale;
+
+  /// Whether there is room for it to give way: it ellipsises where the bar is
+  /// spread, and keeps its full width where the bar scrolls.
+  final bool flexible;
+
+  const _Readout({
+    required this.comp,
+    required this.settings,
+    required this.compSize,
+    required this.frame,
+    required this.tier,
+    required this.shownScale,
+    required this.flexible,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final divisor = tier < 1 ? 1 : tier;
+    final text = Text(
+      l10n.viewerReadout(
+        settings.name,
+        timecodeOf(frame, settings),
+        '${compSize.width}×${compSize.height}',
+        '${compSize.width ~/ divisor}×${compSize.height ~/ divisor}',
+        '${(shownScale * 100).round()}%',
+      ),
+      key: const ValueKey('viewer-readout'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: t.mono.copyWith(fontSize: barValueTextSize, color: t.textMuted),
+    );
+    return flexible ? Flexible(child: text) : text;
+  }
+}
+
+/// The channel picker's mark, and the menu of names behind it (K-411, K-466).
+///
+/// A bare glyph rather than a boxed dropdown, which is what the drawing draws:
+/// the answer is a tint, and a border round a tint is a box round a colour.
+class _ChannelPicker extends StatelessWidget {
+  final ViewerChannel channel;
+  final ValueChanged<ViewerChannel> onChannel;
+
+  const _ChannelPicker({required this.channel, required this.onChannel});
+
   /// The tints are the Scopes panel's own red, green and blue
   /// ([ScopeColours.standard]) — the only place in the theme module that names
   /// the three, and the right ones by meaning: a scope's red trace and a red
-  /// channel view are the same red channel. They do not vary by theme, which
-  /// is also correct here, because what they stand for does not either.
+  /// channel view are the same red channel.
   ///
   /// Alpha is not a colour, so it gets a different mark rather than a tint: a
   /// matte, which is what an alpha view is drawn as.
-  static Widget _channelFace(LumitTheme t, ViewerChannel c) => lumitIcon(
-        c == ViewerChannel.alpha ? LumitIcon.matte : LumitIcon.channels,
-        size: iconSize,
-        color: switch (c) {
-          ViewerChannel.rgb || ViewerChannel.alpha => t.textSecondary,
-          ViewerChannel.red => ScopeColours.standard.red,
-          ViewerChannel.green => ScopeColours.standard.green,
-          ViewerChannel.blue => ScopeColours.standard.blue,
-        },
-      );
+  static Color _tint(LumitTheme t, ViewerChannel c) => switch (c) {
+        ViewerChannel.rgb || ViewerChannel.alpha => t.textMuted,
+        ViewerChannel.red => ScopeColours.standard.red,
+        ViewerChannel.green => ScopeColours.standard.green,
+        ViewerChannel.blue => ScopeColours.standard.blue,
+      };
 
-  static String _channelLabel(ViewerChannel c) => switch (c) {
+  static String _label(ViewerChannel c) => switch (c) {
         ViewerChannel.rgb => 'RGB',
         ViewerChannel.red => engineLabel('Red'),
         ViewerChannel.green => engineLabel('Green'),
         ViewerChannel.blue => engineLabel('Blue'),
         ViewerChannel.alpha => l10n.channelAlpha,
       };
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Builder(
+      builder: (context) => viewerBarMark(
+        key: const ValueKey('viewer-channel'),
+        icon: channel == ViewerChannel.alpha
+            ? LumitIcon.matte
+            : LumitIcon.channels,
+        colour: _tint(t, channel),
+        tip: l10n.tipViewerChannel,
+        onPressed: () {
+          final box = context.findRenderObject();
+          if (box is! RenderBox) return;
+          showMenuAt<void>(
+            context: context,
+            position: box.localToGlobal(Offset(0, box.size.height + 2)),
+            rows: (close) => [
+              for (final c in ViewerChannel.values)
+                MenuRow(
+                  key: ValueKey<String>('viewer-channel-${c.name}'),
+                  onPressed: () {
+                    close(null);
+                    onChannel(c);
+                  },
+                  child: Row(children: [
+                    menuTick(t, c == channel),
+                    Text(_label(c)),
+                  ]),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
+
+/// **Snapshot and compare, on one mark** (K-416, K-466).
+///
+/// The drawing gives the pair a single glyph, so the two gestures share it:
+/// a **click** photographs the picture as it stands, and a **press and hold**
+/// puts the photograph back over the live picture for as long as the button is
+/// down — the before/after read every grade leans on. Nothing crosses the
+/// bridge either way: what is stored is what the stage's own boundary
+/// rasterised, and releasing the button is the whole of a comparison's life.
+///
+/// The two are told apart by the hold itself rather than by a modifier: a press
+/// that is still down after [_holdDelay] is a comparison and never becomes a
+/// second photograph, and a press released before it is a photograph and never
+/// flashes one.
+class _SnapshotButton extends StatefulWidget {
+  final bool hasSnapshot;
+  final VoidCallback onTake;
+  final ValueChanged<bool> onHold;
+
+  const _SnapshotButton({
+    required this.hasSnapshot,
+    required this.onTake,
+    required this.onHold,
+  });
+
+  @override
+  State<_SnapshotButton> createState() => _SnapshotButtonState();
+}
+
+/// How long a press has to last to be a comparison rather than a photograph.
+const Duration _holdDelay = Duration(milliseconds: 180);
+
+class _SnapshotButtonState extends State<_SnapshotButton> {
+  Timer? _hold;
+  bool _showing = false;
+
+  @override
+  void dispose() {
+    _hold?.cancel();
+    super.dispose();
+  }
+
+  void _down() {
+    if (!widget.hasSnapshot) return;
+    _hold = Timer(_holdDelay, () {
+      _showing = true;
+      widget.onHold(true);
+    });
+  }
+
+  void _up({required bool cancelled}) {
+    _hold?.cancel();
+    _hold = null;
+    if (_showing) {
+      _showing = false;
+      widget.onHold(false);
+      return;
+    }
+    if (!cancelled) widget.onTake();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Listener(
+      onPointerDown: (_) => _down(),
+      onPointerUp: (_) => _up(cancelled: false),
+      onPointerCancel: (_) => _up(cancelled: true),
+      child: viewerBarMark(
+        key: const ValueKey('viewer-snapshot'),
+        icon: LumitIcon.snapshot,
+        colour: widget.hasSnapshot ? t.textPrimary : t.textMuted,
+        // The press is the Listener's. This only keeps the control live —
+        // what makes the pointer a hand and the button reachable from the
+        // keyboard, where a hold is not a gesture anyone can make.
+        onPressed: () {},
+        tip: widget.hasSnapshot
+            ? l10n.tipViewerSnapshotCompare
+            : l10n.tipViewerSnapshotTake,
+      ),
+    );
+  }
+}
+
+/// The selection's name over the picture's corner (K-466, the mockup's TITLE
+/// chip).
+///
+/// **Why it is worth a mark on the picture.** Selection is agreed in four
+/// places — the Timeline, the graph, the properties and the Viewer — and until
+/// now the Viewer was the one that only showed it as a box. A box says *where*;
+/// the chip says *what*, which is the question a comp with six similar layers
+/// actually raises.
+///
+/// It is `animated`, not `accent` (§3.1): the closed list gives that colour to
+/// "this is selected or in hand", which is exactly what this says, and it is
+/// the colour of the box it names.
+class _ViewerTag extends StatelessWidget {
+  final LumitUiState uiState;
+  const _ViewerTag({required this.uiState});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    // Off the read model and the selection, both of which move without this
+    // panel being rebuilt (K-230).
+    return ListenableBuilder(
+      listenable: Listenable.merge([uiState.model, uiState.selectedLayers]),
+      builder: (context, _) {
+        final picked = uiState.selectedLayerIds;
+        String? name;
+        for (final entry in uiState.model.heldLayers) {
+          if (picked.contains(entry.layer.internallayerId)) {
+            name = entry.info.name;
+            break;
+          }
+        }
+        if (name == null || name.isEmpty) return const SizedBox.shrink();
+        return Positioned(
+          left: viewerTagLeft,
+          top: viewerTagTop,
+          child: IgnorePointer(
+            child: Container(
+              key: const ValueKey('viewer-tag'),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                border: Border.all(color: t.animated),
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              ),
+              child: Text(
+                name.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.kicker.copyWith(
+                  color: t.animated,
+                  letterSpacing: viewerTagTracking,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The chip's tracking: 0.08em at 9px, the drawing's own — a shade tighter than
+/// the 0.12em a kicker carries, because it names a layer rather than a
+/// container.
+const double viewerTagTracking = 0.72;
 
 /// `HH:MM:SS:FF` for `frame` at the comp's rate — the shared clock face in
 /// state/timecode.dart, bound to this comp's settings.
@@ -2307,91 +2750,9 @@ int _lastFrameOf(BridgeCompSettings settings) {
   return frames > 0 ? frames - 1 : 0;
 }
 
-/// The two gaps the bar is built out of (K-411): controls doing one job sit at
-/// icon spacing, and the groups themselves are parted by three times as much.
-/// The bar used to be an even queue at 6, which is neither — near enough to
-/// touching that nothing grouped, far enough apart that nothing was tight.
-const double _itemGap = 4;
-const double _groupGap = 12;
-
-/// The slot the playback-mode button sits in — wide enough for either of the
-/// two labels, so changing mode does not shuffle the transport sideways.
-const double _playbackModeWidth = 92;
-
-/// The slot the degradation badge sits in, kept whether or not the badge is
-/// showing.
-const double _tierBadgeWidth = 52;
-
-/// The slot the colour-management badge sits in — wide enough for the longer of
-/// its two readings, so engaging the exposure cannot shove the transport along.
-const double _colourBadgeWidth = 148;
-
-/// **What am I looking at?** — the colour-management badge (docs/07 §2.2 item 8).
-///
-/// It is always on the bar, and it always names the display transform the
-/// picture is being shown through: working space to display, which for now is
-/// the one built-in pair, scene-linear to sRGB (docs/06 §3.3 — OCIO slots in
-/// here later and this is the readout it will feed).
-///
-/// **And while either preview-only control is engaged, it says so.** Exposure
-/// and the tone map live inside that same display transform (K-314) and change
-/// nothing the export will ever see; the two controls draw themselves in the
-/// accent while they are on, but that only says "this control is on" and only
-/// says it where you are already looking. The statement that *the picture is
-/// not the export* belongs here, stated calmly rather than warned about
-/// (15-DESIGN) — a badge you can read without leaving the picture.
-///
-/// A readout, not a control. §2.2 asks that clicking it open colour settings;
-/// there are none to open yet (docs/TODO.md), and a badge that looked pressable
-/// and did nothing would be worse than one that plainly is not.
-class _ColourManagementBadge extends StatelessWidget {
-  final ViewerLook look;
-
-  const _ColourManagementBadge({required this.look});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    final engaged = look.stops != 0 || look.toneMap;
-    return SizedBox(
-      width: _colourBadgeWidth,
-      child: LumitTooltip(
-        message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
-        child: Center(
-          child: Container(
-            key: const ValueKey('viewer-colour-badge'),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(
-              color: t.surface2,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            ),
-            child: Text(
-              engaged
-                  ? l10n.viewerDisplayTransformPreview(
-                      l10n.viewerDisplayTransform)
-                  : l10n.viewerDisplayTransform,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style:
-                  t.small.copyWith(color: engaged ? t.accent : t.textSecondary),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Which playback behaviour is in force, and a click to change it.
-///
-/// **Why this is on the bar rather than buried in Settings.** The two modes
-/// disagree about what playback *is* — one keeps time and lets the picture go
-/// soft, the other shows every frame and takes as long as it takes — so a
-/// picture that looks wrong or a transport that runs slow is explained by which
-/// one you are in. Being unable to see that from the Viewer is what makes it
-/// feel broken rather than chosen.
-///
-/// Which route frames take from the engine to the Viewer, in words.
+/// Which route frames take from the engine to the Viewer, in words — the
+/// quality picker's tooltip, where the two playback behaviours are chosen
+/// (K-466).
 ///
 /// The bridge is asked once and kept — it reports what this build compiled to,
 /// and it was asked for in a `build()` that runs for each frame of playback.
@@ -2403,164 +2764,57 @@ String get _transportName => switch (_transport) {
       BridgeViewerTransport.readBack => l10n.transportReadBack,
     };
 
-/// The composition's background colour, on the bar (docs/07 §2.2 item 10,
-/// K-357).
+/// **The composition's background colour** (docs/07 §2.2 item 10, K-357), and
+/// the picker that changes it.
 ///
-/// **A document edit, unlike everything else on this half of the bar.** The
-/// exposure, the tone map and the transparency grid are ways of *looking*;
+/// **A document edit, unlike every other way of looking the Viewer offers.**
+/// The exposure, the tone map and the transparency board are ways of *looking*;
 /// this is what the comp is actually drawn onto and what an export writes
-/// there, so it goes through an op and Ctrl+Z undoes it. It sits beside the
-/// grid button because the two answer the same question from opposite sides —
-/// what is behind the picture — and finding one without the other is what
-/// makes a black comp confusing.
-class _BackgroundSwatch extends StatelessWidget {
-  final CompositionReference comp;
-
-  /// The colour to show, off the held read model — never asked for here:
-  /// this swatch rebuilds with the bar, once per arriving frame (K-184).
-  final F32Array4? background;
-  const _BackgroundSwatch({required this.comp, required this.background});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    final state = Provider.of<LumitState>(context, listen: false);
-    // Off the read model, handed down by the bar — a document change
-    // refreshes the model and rebuilds this from the new colour.
-    final List<double> rgba = background ?? const [0.0, 0.0, 0.0, 1.0];
-    int byte(double v) => (v.clamp(0.0, 1.0) * 255).round();
-    final shown =
-        documentColour(byte(rgba[0]), byte(rgba[1]), byte(rgba[2]), 255);
-
-    return LumitTooltip(
-      message: l10n.tipCompBackground,
-      child: GestureDetector(
-        key: const ValueKey('viewer-background'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () async {
-          final box = context.findRenderObject();
-          if (box is! RenderBox) return;
-          await showColourPicker(
-            context: context,
-            position: box.localToGlobal(Offset(0, box.size.height + 6)),
-            initial: PickedColour.of(shown),
-            // Chosen as a display colour, like a solid's, so the fields read
-            // 0–255 rather than scene-linear floats.
-            scale: ColourScale.bytes,
-            presets: t.backgroundPresets,
-            onCommit: (picked) {
-              try {
-                comp.setBackground(
-                  rgba: F32Array4(Float32List.fromList([
-                    picked.r.toDouble(),
-                    picked.g.toDouble(),
-                    picked.b.toDouble(),
-                    1.0,
-                  ])),
-                );
-              } catch (_) {
-                return;
-              }
-              state.notifyDocumentChanged();
-            },
-          );
-        },
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: Container(
-            width: 22,
-            height: 14,
-            decoration: BoxDecoration(
-              color: shown,
-              border: Border.all(color: t.hairlineStrong),
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+/// there, so it goes through an op and Ctrl+Z undoes it.
+///
+/// The drawing gives it no seat on the bar, so it is a row in the view menu
+/// (K-466) — beside the transparency board, because the two answer the same
+/// question from opposite sides and finding one without the other is what makes
+/// a black comp confusing.
+///
+/// [background] is the colour to show, off the held read model and never asked
+/// for here (K-184).
+Color viewerBackgroundColour(F32Array4? background) {
+  final List<double> rgba = background ?? const [0.0, 0.0, 0.0, 1.0];
+  int byte(double v) => (v.clamp(0.0, 1.0) * 255).round();
+  return documentColour(byte(rgba[0]), byte(rgba[1]), byte(rgba[2]), 255);
 }
 
-/// The preview resolution, on the bar (docs/07 §2.2 item 2).
-///
-/// The same choice the View menu's Resolution rows make — [LumitUiState] holds
-/// it, so the menu tick and this face cannot disagree. Disabled while playback
-/// is adaptive: the engine is walking the degradation ladder itself, and a
-/// dropdown that claimed the choice while something else made it would be a
-/// control that lies.
-class _ResolutionDropdown extends StatelessWidget {
-  const _ResolutionDropdown();
-
-  @override
-  Widget build(BuildContext context) {
-    final ui = Provider.of<LumitUiState>(context);
-    final adaptive = ui.workspace.performance.playback == PlaybackMode.adaptive;
-    return LumitTooltip(
-      message: adaptive
-          ? l10n.tipPreviewResolutionAdaptive
-          : l10n.tipPreviewResolution,
-      child: BareDropdown<PreviewResolution>(
-        key: const ValueKey('viewer-resolution'),
-        value: ui.previewResolution,
-        options: PreviewResolution.values,
-        label: (resolution) => resolution.title,
-        onChanged: adaptive ? null : ui.setPreviewResolution,
-      ),
-    );
-  }
-}
-
-/// Which of the two playback behaviours is in force — the name of the mode and
-/// nothing else (K-287).
-///
-/// It used to carry the settled tier beside the name ("Adaptive · Half"), which
-/// meant the button re-lettered itself as the engine felt its way up and down
-/// the ladder — a word changing under the pointer, in the corner of the eye,
-/// through every second of playback. Which tier a frame was made at is the
-/// degradation badge's job, and the badge already says it while it matters.
-class _PlaybackModeButton extends StatelessWidget {
-  const _PlaybackModeButton();
-
-  static List<String> get _tierNames => [
-        l10n.menuFull,
-        l10n.menuFull,
-        l10n.menuHalf,
-        l10n.resolutionThird,
-        l10n.menuQuarter,
-      ];
-
-  @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    final ui = Provider.of<LumitUiState>(context);
-    final adaptive = ui.workspace.performance.playback == PlaybackMode.adaptive;
-    final label =
-        adaptive ? l10n.playbackAdaptiveShort : l10n.playbackEveryFrame;
-
-    // Which route frames take to get here. A build without a zero-copy path
-    // copies every pixel down, serialises it a byte at a time and uploads it
-    // again, which is the difference between playback feeling immediate and
-    // feeling heavy — so it is worth being able to read off the screen.
-    final transport = _transportName;
-
-    return LumitTooltip(
-      message: adaptive
-          ? l10n.tipPlaybackAdaptive(transport)
-          : l10n.tipPlaybackEveryFrame(transport),
-      child: HouseButton(
-        key: const ValueKey('viewer-playback-mode'),
-        small: true,
-        onPressed: () {
-          ui.workspace.performance.playback =
-              adaptive ? PlaybackMode.everyFrame : PlaybackMode.adaptive;
-          ui.workspace.touch();
-        },
-        child: Text(
-          label,
-          style: t.small.copyWith(color: adaptive ? null : t.accent),
-        ),
-      ),
-    );
-  }
+Future<void> showViewerBackgroundPicker({
+  required BuildContext context,
+  required CompositionReference comp,
+  required F32Array4? background,
+  required Offset position,
+}) async {
+  final t = ThemeScope.of(context).theme;
+  final state = Provider.of<LumitState>(context, listen: false);
+  await showColourPicker(
+    context: context,
+    position: position,
+    initial: PickedColour.of(viewerBackgroundColour(background)),
+    // Chosen as a display colour, like a solid's, so the fields read 0–255
+    // rather than scene-linear floats.
+    scale: ColourScale.bytes,
+    presets: t.backgroundPresets,
+    onCommit: (picked) {
+      try {
+        comp.setBackground(
+          rgba: F32Array4(Float32List.fromList([
+            picked.r.toDouble(),
+            picked.g.toDouble(),
+            picked.b.toDouble(),
+            1.0,
+          ])),
+        );
+      } catch (_) {
+        return;
+      }
+      state.notifyDocumentChanged();
+    },
+  );
 }

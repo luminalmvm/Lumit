@@ -13,24 +13,58 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
+import 'viewer_panel_frb.dart'
+    show
+        showViewerBackgroundPicker,
+        viewerBackgroundColour,
+        viewerBarIconSize,
+        viewerMarkEdge,
+        viewerStripHeight;
 
-/// The bar's grid-and-guides menu (K-416): one icon, two checkable entries.
+/// The bar's **view menu** (K-416, K-466): one mark, and everything that is
+/// drawn over the picture behind it.
 ///
-/// It is a *menu* rather than two more toggles because §2.2 item 6 has more to
-/// come — rulers, draggable guides, snapping — and they land as entries here
-/// rather than as more chrome on a bar that is already one row.
+/// It is a *menu* rather than a row of toggles because the approved drawing
+/// gives the bottom bar one overlay glyph, and because §2.2 items 5–6 have more
+/// to come — rulers, draggable guides, snapping — which land as entries here
+/// rather than as more chrome on a bar that is one row. What it governs:
+///
+/// * the **grid** and the **safe areas** (K-416), the two marks the display
+///   draws over the shot;
+/// * the **layer controls** (K-217) — the wireframe boxes, the handles and the
+///   hover highlight, which are marks over the picture like any other;
+/// * the **region of interest** (K-362), armed or cleared from the same place;
+/// * the composition's own **background** (K-357), which is the same question
+///   asked from behind the picture rather than in front of it.
 ///
 /// The face reads in the accent while anything it governs is drawn, which is
-/// the same promise every other toggle in the cluster makes: a mark over the
-/// picture is never a state you can be in without being told.
+/// the promise every toggle on this bar makes: a mark over the picture is never
+/// a state you can be in without being told.
 class ViewerGuidesMenu extends StatelessWidget {
-  const ViewerGuidesMenu({super.key});
+  /// Whether the layer controls are drawn. Panel state, so it is handed in
+  /// rather than read here.
+  final bool wireframes;
+  final VoidCallback onWireframes;
+
+  /// The fronted composition, and its background off the held read model —
+  /// what the background row shows and edits.
+  final CompositionReference comp;
+  final F32Array4? background;
+
+  const ViewerGuidesMenu({
+    super.key,
+    required this.wireframes,
+    required this.onWireframes,
+    required this.comp,
+    required this.background,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -39,17 +73,29 @@ class ViewerGuidesMenu extends StatelessWidget {
     // from the state rather than from its own rebuild.
     final ui = context.watch<LumitUiState>();
     final on = ui.viewerOverlays;
+    final lit = on.grid ||
+        on.safeAreas ||
+        ui.regionOfInterest != null ||
+        ui.armingRegion;
     return LumitTooltip(
       message: l10n.tipViewerGuides,
-      child: HouseButton(
-        key: const ValueKey('viewer-guides-menu'),
-        small: true,
-        frameless: true,
-        onPressed: () => _open(context, ui),
-        child: lumitIcon(
-          LumitIcon.grid,
-          size: iconSize,
-          color: on.grid || on.safeAreas ? t.accent : t.textSecondary,
+      child: Builder(
+        builder: (context) => HouseButton(
+          key: const ValueKey('viewer-guides-menu'),
+          frameless: true,
+          padding: EdgeInsets.zero,
+          onPressed: () => _open(context, ui),
+          child: SizedBox(
+            width: viewerBarIconSize,
+            height: viewerStripHeight - 2 * viewerMarkEdge,
+            child: Center(
+              child: lumitIcon(
+                LumitIcon.grid,
+                size: viewerBarIconSize,
+                color: lit ? t.accent : t.textMuted,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -59,34 +105,54 @@ class ViewerGuidesMenu extends StatelessWidget {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
     final t = ThemeScope.of(context).theme;
+    final region = ui.regionOfInterest != null;
     // The bar sits at the bottom of the panel, so a menu anchored under it
     // would hang off the window — showLumitPopup's layout pulls it back on
-    // screen, which is the same thing the background swatch's picker relies on.
+    // screen, which is the same thing the background picker relies on.
+    final under = box.localToGlobal(Offset(0, box.size.height + 6));
     showMenuAt<void>(
       context: context,
-      position: box.localToGlobal(Offset(0, box.size.height + 6)),
+      position: under,
       rows: (close) => [
         for (final row
-            in <({String key, String text, bool on, void Function() flip})>[
+            in <({String key, String text, bool on, void Function() pick})>[
           (
             key: 'viewer-guides-grid',
             text: l10n.viewerOverlayGrid,
             on: ui.viewerOverlays.grid,
-            flip: () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
+            pick: () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
           ),
           (
             key: 'viewer-guides-safe',
             text: l10n.viewerOverlaySafeAreas,
             on: ui.viewerOverlays.safeAreas,
-            flip: () =>
+            pick: () =>
                 ui.setViewerOverlays(safeAreas: !ui.viewerOverlays.safeAreas),
+          ),
+          (
+            key: 'viewer-wireframes',
+            text: l10n.viewerOverlayLayerControls,
+            on: wireframes,
+            pick: onWireframes,
+          ),
+          (
+            key: 'viewer-region',
+            // A region that exists is cleared; otherwise the next drag on the
+            // picture is armed to sweep one out (K-362).
+            text: region
+                ? l10n.viewerOverlayClearRegion
+                : l10n.viewerOverlayRegion,
+            on: region || ui.armingRegion,
+            pick: () => region
+                ? ui.setRegionOfInterest(null)
+                : ui.armingRegion = !ui.armingRegion,
           ),
         ])
           MenuRow(
             key: ValueKey<String>(row.key),
             onPressed: () {
               close(null);
-              row.flip();
+              row.pick();
             },
             child: Row(
               children: [
@@ -100,6 +166,40 @@ class ViewerGuidesMenu extends StatelessWidget {
               ],
             ),
           ),
+        // The one row that is a document edit rather than a way of looking, so
+        // it carries the colour it would write.
+        MenuRow(
+          key: const ValueKey('viewer-background'),
+          onPressed: () {
+            close(null);
+            showViewerBackgroundPicker(
+              context: context,
+              comp: comp,
+              background: background,
+              position: under,
+            );
+          },
+          child: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                child: Center(
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: viewerBackgroundColour(background),
+                      border: Border.all(color: t.hairlineStrong),
+                      borderRadius:
+                          BorderRadius.circular(t.tokens.controlRadius),
+                    ),
+                  ),
+                ),
+              ),
+              Text(l10n.viewerOverlayBackground),
+            ],
+          ),
+        ),
       ],
     );
   }

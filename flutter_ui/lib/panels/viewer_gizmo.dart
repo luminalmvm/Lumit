@@ -784,7 +784,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
             : const [],
         marquee: _drag == _GizmoDrag.marquee ? _marqueeRect() : null,
         moved: _drag == _GizmoDrag.move ? _delta : Offset.zero,
-        accent: t.accent,
+        // `animated`, not `accent` (§3.1, K-466): the closed list gives that
+        // colour to "this is selected or in hand", and **selected gizmo
+        // handles** are named in it. The approved drawing agrees — the box
+        // round the picture's selected layer and the mark on its anchor are
+        // both drawn in the amber, not the clay — and §3.2 bans the accent
+        // inside the Viewer's neutrality zone in the first place.
+        accent: t.animated,
         hairline: t.hairlineStrong,
         surface: t.surface0,
       ),
@@ -1449,6 +1455,9 @@ class _GizmoPainter extends CustomPainter {
   final List<Offset> anchors;
   final Rect? marquee;
   final Offset moved;
+
+  /// The colour a selected box, its handles and its anchor mark are drawn in:
+  /// `animated` (§3.1), which is the name the field keeps for its history.
   final Color accent;
   final Color hairline;
   final Color surface;

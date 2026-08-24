@@ -249,6 +249,15 @@ enum LumitIcon {
   /// A matte: a shape cut out of a square. The channel picker's alpha face —
   /// alpha is not a colour, so it gets a mark rather than a tint.
   matte,
+
+  /// The transport's four steps beside [play] and [pause] (K-466). They had
+  /// been the characters `|◀ ◀ ▶ ▶|`, drawn in the body face at whatever size
+  /// the font happened to give them; the approved drawing puts a glyph on each
+  /// one and the set has carried all four since the icon pass.
+  toStart,
+  previousFrame,
+  nextFrame,
+  toEnd,
 }
 
 /// The size an icon draws at (15-DESIGN §5: 16px for panels, 20px for the
@@ -341,6 +350,10 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       // Transport.
       LumitIcon.play => LumitIcons.play,
       LumitIcon.pause => LumitIcons.pause,
+      LumitIcon.toStart => LumitIcons.toStart,
+      LumitIcon.previousFrame => LumitIcons.previousFrame,
+      LumitIcon.nextFrame => LumitIcons.nextFrame,
+      LumitIcon.toEnd => LumitIcons.toEnd,
       // Timeline and graph.
       LumitIcon.timelineBars => LumitIcons.layers,
       LumitIcon.graphCurve => LumitIcons.scopes,

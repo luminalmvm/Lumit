@@ -324,18 +324,24 @@ double stillValue(BridgeScalar scalar) => switch (scalar) {
       _ => throw StateError('expected a still scalar, got $scalar'),
     };
 
-/// The Viewer bar's controls, left to right, by key (K-411).
+/// The Viewer bottom bar's controls, left to right, by key (K-466).
 ///
 /// The bar's arrangement is a decision rather than a look, so what asserts it
 /// is the order of the keys and not a picture. Only the keys that name a
-/// control are collected — a badge slot standing empty has nothing to name,
-/// and the wrappers between them are not the point. Element traversal is
-/// depth-first from the bar's own `ValueKey`, which for a `Row` is left to
-/// right.
-List<String> barKeys(WidgetTester tester) => [
+/// control are collected — a slot standing empty has nothing to name, and the
+/// wrappers between them are not the point. Element traversal is depth-first
+/// from the bar's own `ValueKey`, which for a `Row` is left to right.
+List<String> barKeys(WidgetTester tester) => _keysUnder(tester, 'viewer-bar');
+
+/// The same for the Viewer's **header** strip: the three pickers the drawing
+/// puts at its right-hand end.
+List<String> headerKeys(WidgetTester tester) =>
+    _keysUnder(tester, 'viewer-header');
+
+List<String> _keysUnder(WidgetTester tester, String key) => [
       for (final element in find
           .descendant(
-            of: find.byKey(const ValueKey('viewer-bar')),
+            of: find.byKey(ValueKey<String>(key)),
             matching: find.byWidgetPredicate((w) => w.key is ValueKey<String>),
           )
           .evaluate())

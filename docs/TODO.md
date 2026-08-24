@@ -102,10 +102,11 @@ hand-written `BUILTINS` literal are all deleted, and with them the migration-onl
 Flutter is the only frontend (K-174, K-182); git history is the parity reference.
 These are v1-scope surfaces it does not yet match.
 
-**Viewer bar ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
-- The wireframe/overlay *menu* (§2.2 item 5) — the layer-controls switch turns the
-    lot on and off as one; separating wireframes, motion paths, mask paths and gizmo
-    visibility, and the full wireframe display mode, is owed.
+**Viewer bars ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
+- The wireframe/overlay menu's own *separation* (§2.2 item 5) — since K-466 the view
+    menu carries the layer-controls switch, which turns wireframes, handles and hover
+    highlight on and off as one; separating those from motion paths, mask paths and
+    gizmo visibility, and the full wireframe display mode, is owed.
 - **Rulers, draggable guides and snapping-to-guides** (§2.2 item 6). K-416 built the
     menu, the grid and the title/action safe areas; these three land as further
     entries in the same menu, which is why it is a menu.
@@ -118,23 +119,21 @@ These are v1-scope surfaces it does not yet match.
     upgrade is to photograph the *visible region* instead of the whole picture,
     which keeps full detail and wants the boundary moved rather than a number
     changed.
-- **GUIDE.md owes a section on the Viewer's overlays and snapshots** (K-416) — what
-    the grid and the safe rectangles are, and why a snapshot never touches the engine.
-    Not written in the landing commit because another branch held the file.
-- **The colour-management badge is a readout and cannot yet be clicked**
-    (§2.2 item 8). It is built: always on the bar, naming the display
-    transform, and saying the picture is not the export while the exposure or
-    the tone map is engaged (K-314). §2.2 also asks that clicking it open
-    colour settings — there are none to open, so it is plainly not a control
-    rather than a button that does nothing. It names the one built-in transform
-    pair (scene-linear → sRGB) as a constant; when the transform becomes a
-    choice (docs/06 §3.3's OCIO slot) this is the readout that must follow it.
-- **Tone mapping's explanation now lives in the badge's tooltip** and nowhere
-    else on screen (owner, 2026-08-08). The toggle itself is an icon whose own
-    tooltip is its name, because §13.2 keeps tooltips to that; the badge is a
-    readout, which §13.2 does allow a sentence, so that is where "what this
-    does" went. If hints of this kind ever get a home of their own, this is
-    still a candidate to move.
+- **The colour pipeline offers one transform** (§2.2 item 8, K-466). The header's
+    third picker is built and names the display transform the picture is shown through,
+    turning accent and adding "preview" while the exposure or the tone map is engaged
+    (K-314). Its menu lists the one built-in pair (scene-linear → sRGB) as a constant;
+    when the transform becomes a real choice (docs/06 §3.3's OCIO slot) this is the
+    picker that fills with them, and no chrome has to change to let it.
+- **Degradation names a tier, not the steps it skipped** (§2.2 item 9). The bar's
+    reading says the pixel count a frame was made at, which is the tier; §2.2 also asks
+    that the indicator name what was degraded ("glow skipped"), and nothing reports that
+    across the bridge yet.
+- **Tone mapping's explanation lives in the colour picker's tooltip** and nowhere
+    else on screen (owner, 2026-08-08). The row itself is a name, because §13.2 keeps
+    a control's label to that; the picker is a readout, which §13.2 does allow a
+    sentence, so that is where "what this does" went. If hints of this kind ever get a
+    home of their own, this is still a candidate to move.
 
 **Toolbar tools ([07-UI-SPEC.md](07-UI-SPEC.md) §1.7):** what is armed is a
 *tool*; what each tool then does is the backlog.
@@ -441,17 +440,6 @@ does not gate the four. Delete each phase here when it lands, as with everything
     pop-out-panel-windows rebuild item (K-182) is folded in.
 
 ## Next - engine/bridge follow-ups
-
-**A recent project's shape, without opening it** (K-464). The welcome screen draws a
-`1920×1080 · 25` column beside every recent project and leaves it **empty**, because the
-size and rate live inside the `.lum` and the only way to learn them today is to open the
-whole document — which is precisely what a recent project has not been. The seam wanted is
-one call that reads a project file's header and answers its main composition's dimensions
-and frame rate without adopting it, registering a worker or touching any media:
-`project_summary(path) -> Option<{ width, height, fps }>`, cheap enough to run for ten
-paths while the screen is being built and forgiving of a file that has moved or gone. The
-column keeps its 120px so the row does not change shape the day it can be filled; the
-place it is drawn is `flutter_ui/lib/shell/welcome_frb.dart`.
 
 **The Lens flare's `ghost_softness` is a fraction of the frame diagonal**, which K-419
 outlawed for distances (docs/08 §2.3: every distance is px@comp). Noticed while every

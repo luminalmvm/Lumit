@@ -8506,3 +8506,59 @@ and reads worse. And the two calls have to be paired, so the Flutter side always
 one in a `finally` (`asOneUndoStep` in `flutter_ui/lib/panels/layer_fold_frb.dart`): a
 group left open would quietly stop recording history at all.
 
+
+## 18. The Viewer's two strips, in plain terms
+
+The Viewer is the picture, and two thin strips of chrome round it — one above and one
+below. Everything on either of them changes how the picture is *shown*, never what the
+picture is; the two exceptions say so in their own way, and are named below.
+
+**The strip above** answers three questions, in three small pickers at its right-hand end.
+How big is it on screen (Fit, or a percentage)? How good a preview am I being made — full
+resolution, or a half or a quarter of it to keep playback moving, with the two playback
+behaviours in the same menu because they are the same question asked a second way? And
+what am I looking at — the *colour pipeline*, which is the recipe the engine uses to turn
+the numbers it works in into something a screen can show. Today there is one recipe,
+scene-linear to sRGB, so the menu lists one thing; the day Lumit reads OCIO profiles it
+lists them here. If the exposure or the tone map is turned on, that same picker adds the
+word "preview" and turns the accent colour: it is the Viewer saying, calmly, that what you
+are seeing is not what an export would write.
+
+**The strip below** starts with the ways of looking. The chequerboard turns the
+transparency board on and off — the grey squares that show through wherever the picture is
+see-through. The next mark opens the **view menu**, which is where everything that is
+*drawn over* the picture lives: the grid, the broadcast safe rectangles, the layer controls
+(the box and handles round a selected layer) and the region of interest (sweep a rectangle
+and the engine renders only that part while you work on it). The composition's own
+background colour is the last row of that menu — it is the odd one out, because it is a
+real edit to the document that Ctrl+Z undoes, and it sits there because "what is behind the
+picture" is the same question the chequerboard asks from the other side.
+
+Then the channel mark, which shows one colour channel at a time as grey — the way to judge
+a key or a matte — and then the exposure, which is just a number reading `+0.0`. Drag it
+and the whole picture brightens or darkens by that many stops. It changes nothing an export
+will ever see; it is there so you can look into a shadow without grading one.
+
+A hairline seam, and then the **snapshot** mark. Click it and it photographs whatever the
+Viewer is showing this instant. Press and *hold* it and the photograph comes back over the
+live picture for as long as you hold — let go and you are back. That is the before/after
+every grade leans on, and it is one mark doing two things because a click and a hold are
+two gestures nobody confuses. Nothing about it goes near the engine or an export: it is a
+picture of the screen, kept in the frontend, thrown away when you take the next one.
+
+In the middle, the transport: to the start, back a frame, play, on a frame, to the end, and
+the clock. Click the clock and type a time to go there.
+
+At the far right, one line that says what is on screen: which composition, at what time, at
+how many pixels the engine actually made it, and how big it is being drawn. The second
+pixel count is the interesting one — `1920×1080 → 960×540` means you are being shown a
+half-resolution preview, which is why it may look softer than it will export. That used to
+be a badge that appeared and vanished during playback and shoved the rest of the bar about
+as it came and went; a line that is always there and always true is easier to trust and
+easier to ignore.
+
+**And one mark on the picture itself**: the name of the selected layer, in a small
+gold-outlined chip at the top-left corner. Selection is agreed in four places — the
+Timeline, the graph, the properties and the Viewer — and this is the Viewer's half of that
+agreement. The box round the layer is the same gold, which is the colour Lumit reserves for
+"this is selected, or animated, or in your hand" and for nothing else.

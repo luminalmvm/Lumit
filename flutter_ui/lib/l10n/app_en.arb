@@ -5060,10 +5060,6 @@
   "@tipCacheVram": {
     "description": "Tooltip on the VRAM cache meter."
   },
-  "tipClearRegionOfInterest": "Clear region",
-  "@tipClearRegionOfInterest": {
-    "description": "Tooltip on the Viewer bar's region button while a region is set: clicking it goes back to previewing the whole frame."
-  },
   "tipChooseCacheFolder": "Choose folder",
   "@tipChooseCacheFolder": {
     "description": "Tooltip on the button that picks where parked frames go. Under five words."
@@ -5115,10 +5111,6 @@
   "tipGraphView": "Graph view",
   "@tipGraphView": {
     "description": "Tooltip: show the selected property's curve. Under five words."
-  },
-  "tipHideLayerControls": "Hide layer controls",
-  "@tipHideLayerControls": {
-    "description": "Tooltip on the same button when the controls are already showing. Under five words."
   },
   "tipHideProperties": "Hide properties",
   "@tipHideProperties": {
@@ -5261,10 +5253,6 @@
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. Under five words."
   },
-  "tipCompBackground": "Composition background",
-  "@tipCompBackground": {
-    "description": "Tooltip on the Viewer bar's background colour swatch. Under five words."
-  },
   "tipPreviewResolution": "Preview resolution",
   "@tipPreviewResolution": {
     "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). Under five words."
@@ -5276,14 +5264,6 @@
   "tipProperties": "Properties",
   "@tipProperties": {
     "description": "Tooltip on the twirl that opens a layer's properties. Under five words."
-  },
-  "tipDragRegionOfInterest": "Drag a region",
-  "@tipDragRegionOfInterest": {
-    "description": "Tooltip on the Viewer bar's region button once armed: the next drag on the picture sweeps out the region to preview."
-  },
-  "tipRegionOfInterest": "Region of interest",
-  "@tipRegionOfInterest": {
-    "description": "Tooltip on the Viewer bar's region-of-interest button: arm a drag that limits the preview to a rectangle of the composition."
   },
   "tipRemove": "Remove",
   "@tipRemove": {
@@ -5316,10 +5296,6 @@
   "tipShowEverything": "Show everything",
   "@tipShowEverything": {
     "description": "Tooltip on the Project panel's filter when it is showing only missing footage. Under five words."
-  },
-  "tipShowLayerControls": "Show layer controls",
-  "@tipShowLayerControls": {
-    "description": "Tooltip on the button that draws handles and boxes over the picture. Under five words."
   },
   "tipShyHidden": "Shy layers hidden",
   "@tipShyHidden": {
@@ -5390,14 +5366,6 @@
   "tipViewerPreviewView": "The Viewer's exposure and tone mapping change this picture only, never the export. Tone mapping rolls bright highlights back under 1.",
   "@tipViewerPreviewView": {
     "description": "Tooltip on the Viewer bar's colour-management badge while the exposure or the tone map is engaged. Longer than a name on purpose: it is the only place either control is explained. \"Rolls back under 1\" means very bright values are folded down rather than clipping flat."
-  },
-  "tipViewerSnapshotNone": "No snapshot yet",
-  "@tipViewerSnapshotNone": {
-    "description": "Tooltip on the Viewer bar's show-snapshot button while it is muted, saying why it does nothing: nothing has been photographed to show. Under five words."
-  },
-  "tipViewerSnapshotShow": "Show snapshot — hold",
-  "@tipViewerSnapshotShow": {
-    "description": "Tooltip on the Viewer bar's show-snapshot button. The stored picture is shown for as long as the button is held down, and goes when it is let go. Under five words."
   },
   "tipViewerSnapshotTake": "Take snapshot",
   "@tipViewerSnapshotTake": {

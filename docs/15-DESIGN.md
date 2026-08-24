@@ -1065,7 +1065,7 @@ carries. The rules worth writing down:
   tree scrolls sideways under the strip that has always been drawn for it. The bottom
   bar's words are shed before its icons, per §12A.6's step 4.
 
-### 12A.3b Welcome screen (K-448, K-464)
+### 12A.3b Welcome screen (K-448, K-464, K-466)
 
 The page Lumit opens on, and the only surface that is the whole window rather than a panel
 in one. It renders **in-window** — a welcome *window* belongs to the multi-window phase
@@ -1085,11 +1085,20 @@ has said how they want to start. Somebody who double-clicked a `.lum` is never s
   and this screen spends none of the accent.
 - **The recents list is a kicker strip over a hairline well.** *Recent* is capitalised —
   it names the container under it — while *Clear* beside it is sentence case at 0.06em,
-  because it is an action rather than a label. A row is 40 with a seam under all but the
-  last: the name in body at 11 over the path in mono at 9 (`text_disabled`), then the
-  format and the date in mono at 10, muted, in fixed 120 and 70 columns.
-- **The format column is drawn and left empty** until the engine can report a project's
-  size and rate without opening it (K-464). The room stays reserved; Dart does not guess.
+  because it is an action rather than a label. A row is **52** with a seam under all but
+  the last (K-466, superseding the 40 written here before): the picture, then the name in
+  body at 11 over the path in mono at 9 (`text_disabled`), then the date in mono at 10,
+  muted, in a fixed 70 column.
+- **Every row opens with a thumbnail** (K-466): the project as it looked when it was last
+  saved, **64×36** — 16:9 exactly, sized to the row with 8 of air above and below — at the
+  radius the rest of the chrome carries, then 12 before the name. A project with no
+  picture yet shows a `surface_0` well with the composition mark muted in it and **no
+  words**: a list that explains its own blanks has stopped being a list.
+- **There is no format column** (K-466, superseding K-464's reserved 120px). It was drawn
+  to hold `1920×1080 · 25` and left empty against an engine call that could read a
+  project's size and rate without opening it — but that is per-*composition* data and a
+  project holds as many compositions as it likes, so the column asked a question a project
+  has no single answer to. Its room went to the picture and to the name.
 - **A × at the far right forgets one row**, and its room comes out of the flexible name
   column — step 1 of §12A.6's ladder. It is the composition tabs' close mark: muted, no
   box, brightening under the pointer, and the innermost hit on the row.
@@ -1131,12 +1140,30 @@ over the target; things attached to what is being dragged move with the drag. **
 changes the resting state** — a panel nobody is touching looks exactly as §2.1's three-greys
 rule says it does.
 
-### 12A.6 Viewer bar (K-448)
+### 12A.6 Viewer bars (K-448, K-466)
 
-**The transport lives in the Viewer bar.** By default the bar's items may split between a
-top and a bottom bar; a setting gathers everything into a single bar, at the top or the
-bottom. K-411's instrument grouping carries over whichever arrangement is set
+**The transport lives in the Viewer's bottom bar, and the Viewer wears two strips.** The
+split K-448 allowed is settled by the approved drawing (K-466): a **header strip** of 22
+carrying the panel's kicker and, at its right-hand end, the magnification, the preview
+quality and the colour pipeline; and a **bottom bar** of 22 carrying the ways of looking,
+the snapshot behind a hairline seam, the transport with its clock, and the composition's
+own reading at the far end. The setting that gathers everything into a single bar, at the
+top or the bottom, keeps each strip's own order within whichever arrangement is set
 ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2).
+
+**The bars' own measurements**, all the drawing's: glyphs at **14** (K-456), gaps of **8**
+between the marks and **10** inside the transport, **10** of padding either end of both
+strips, a seam of **1×12** in `hairline`, pickers of **18** with a 10px label standing
+**6** apart, the clock at **11px mono** in `text_primary`, and the exposure and the reading
+at **10px mono** — the exposure in `text_secondary` and the reading in `text_muted`. The
+exposure is **the one editable value in the application that rests bare**: the drawing sets
+it as the number alone, and a 20px well in a 22px bar reads as the bar's own edge.
+
+**The selection's name is drawn on the picture** — 16 in from the stage's left edge and 8
+down from its top, 9px mono tracked 0.08em, in `animated` inside an `animated` hairline.
+The box, the handles and the anchor mark it names are `animated` too, which is §3.1's
+closed list ("selected gizmo handles") and §3.2's ban on the accent inside the neutrality
+zone, both stated plainly by the drawing.
 
 ### 12A.6 Metrics and degradation (K-451)
 
@@ -1153,7 +1180,9 @@ a plain constant in the code rather than a token with two equal values.
 
 | Element | Regular | Compact |
 |---|---|---|
-| Panel header strip (title and tabs, composition tabs) | 22 | 22 |
+| Panel header strip (title and tabs, composition tabs, the Viewer's own) | 22 | 22 |
+| Viewer bottom bar (K-466) | 22 | 22 |
+| Viewer bar glyphs — the marks, the transport, the view menu (K-456, K-466) | 14 | 14 |
 | Secondary rows: timecode/search/mode row, column headers, filter rows, panel bottom bars | 19 | 18 |
 | Outline and lane rows | 23 | 22 |
 | Clip bars within a lane row | 16 | 16 |
@@ -1176,8 +1205,9 @@ a plain constant in the code rather than a token with two equal values.
 | Welcome: the column everything on the page sits in, and the air between its blocks | 560 wide / 28 apart | 560 wide / 28 apart |
 | Welcome: a start card (14 of padding round a 13px title, a 4px gap and the 9px note) | 63 | 63 |
 | Welcome: the kicker strip over the recents list | 18 | 18 |
-| Welcome: a recent project's row (a seam under all but the last) | 40 | 40 |
-| Welcome: the recents' fixed columns — format, date, forget | 120 / 70 / 12 | 120 / 70 / 12 |
+| Welcome: a recent project's row (a seam under all but the last, K-466) | 52 | 52 |
+| Welcome: a recent row's thumbnail — 16:9, 8 of air either side, 12 after it (K-466) | 64×36 | 64×36 |
+| Welcome: the recents' fixed columns — date, forget (no format column, K-466) | 70 / 12 | 70 / 12 |
 | Welcome: the footer strip, and the outlined links in it | 28 / 24 | 28 / 24 |
 | Dialog title strip and dialog rows | 30 | 30 |
 | Dialog page-tab row | 26 | 26 |
@@ -1202,7 +1232,8 @@ existed. Nothing about it is a second design: no colour, no size of type, no spa
 a row changes with it, and the degradation ladder below is the same under both.
 
 **The pieces inside a row are the mockups' too**, and are pinned by
-`timeline_alignment_test` and, for the Project panel, `project_panel_metrics_test`: a layer's label colour is a **6px dot**, its number stands in an
+`timeline_alignment_test`, by `project_panel_metrics_test` for the Project panel, and by
+`viewer_metrics_test` for the Viewer's two strips: a layer's label colour is a **6px dot**, its number stands in an
 **18px column** set in muted mono at 10, the keyframe mark on a shut layer's row is **8px
 point to point** (K-462 — the mockup's 4px square has a 1px border and stands on its
 corner, so it renders 8; the earlier reading of ≈5.7 measured the square's side and drew 5.

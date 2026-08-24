@@ -47,7 +47,6 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
-import 'package:lumit_flutter/widgets/controls.dart' show HouseButton;
 import 'package:lumit_flutter/widgets/dropper_overlay.dart';
 import 'package:uuid/uuid.dart';
 
@@ -98,6 +97,28 @@ void main() {
       await tester.tap(button);
       await tester.pump();
     }
+
+    /// Open one of the header's three pickers and choose the row [key].
+    Future<void> pickHeaderRow(
+        WidgetTester tester, String picker, String key) async {
+      await pressBar(tester, picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>(key)));
+      await tester.pumpAndSettle();
+    }
+
+    /// Open the bottom bar's view menu and choose the row [key].
+    Future<void> pickViewRow(WidgetTester tester, String key) async {
+      await pressBar(tester, 'viewer-guides-menu');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey<String>(key)));
+      await tester.pumpAndSettle();
+    }
+
+    /// Turn the tone map on or off, which since K-466 is a row in the
+    /// header's colour-pipeline menu rather than a button on the bar.
+    Future<void> flipToneMap(WidgetTester tester) =>
+        pickHeaderRow(tester, 'viewer-colour', 'viewer-tone-map');
 
     /// **The dropper's magnifier belongs to the pointer being over the
     /// picture.** Two things it used to get wrong: it appeared the instant the
@@ -270,12 +291,13 @@ void main() {
       expect(p.uiState.playheadFrame.value, 0,
           reason: 'stopping puts the playhead back where play started');
 
-      // The degradation badge belongs to playback alone: whatever tier the
-      // controller walked to while playing (this transportless build walks
-      // down, since nothing can present), a stopped Viewer never wears it.
-      // The while-playing half is not asserted — it races a live controller.
-      expect(find.byKey(const ValueKey('viewer-tier-badge')), findsNothing,
-          reason: 'no degradation badge once playback has stopped');
+      // Degradation is stated by the reading rather than by a badge that
+      // comes and goes (K-466): the tier a frame was made at is the pixel
+      // count in "1920×1080 → 960×540", so the bar never changes shape
+      // mid-playback. The while-playing half is not asserted — it races a
+      // live controller.
+      expect(find.byKey(const ValueKey('viewer-readout')), findsOneWidget,
+          reason: 'the reading is always there, whatever the tier');
     }, skip: zeroCopyViewerUnavailable);
 
     /// The other half of K-254: Settings ▸ Interface ▸ Editing puts the old
@@ -387,7 +409,7 @@ void main() {
       expect(find.text('100%'), findsOneWidget,
           reason: 'the picker shows what was chosen');
 
-      await tester.tap(find.byKey(const ValueKey('viewer-channel')));
+      await pressBar(tester, 'viewer-channel');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Alpha').last);
       await tester.pumpAndSettle();
@@ -400,36 +422,29 @@ void main() {
       await tester.pump();
     });
 
-    /// **The bar reads as instruments, not as a queue** (K-411, docs/07 §2.2).
-    /// The arrangement is the decision, so this is what asserts it: the order
-    /// the keys come in, left to right, and nothing about pixels. Grouping is
-    /// visible here as the runs — scale, the view toggles, how the pixels
-    /// read, the clock, the transport, then the right-edge readouts.
-    ///
-    /// The tone map is on for this one, so the whole set is named: it is the
-    /// only control that comes and goes with a setting rather than with state.
-    testWidgets('the Viewer bar is in K-411 order', (tester) async {
+    /// **The Viewer's two strips carry the drawing's own controls, in its own
+    /// order** (K-466, superseding K-411's single-bar arrangement). The
+    /// arrangement is the decision, so this is what asserts it: the keys left
+    /// to right, and nothing about pixels.
+    testWidgets("the Viewer's strips are in the drawing's order",
+        (tester) async {
       final p = withLayer();
-      p.uiState.workspace.interface.showToneMap = true;
       await mount(tester, p);
 
+      expect(headerKeys(tester), [
+        // The header: the magnification, the quality, the colour pipeline.
+        'viewer-zoom', 'viewer-resolution', 'viewer-colour',
+      ]);
+
       expect(barKeys(tester), [
-        // The picture's scale.
-        'viewer-zoom', 'viewer-resolution',
-        // The view toggles — the grid-and-guides menu among them (K-416),
-        // beside the transparency grid it is most easily confused with.
-        'viewer-region', 'viewer-grid', 'viewer-guides-menu',
-        'viewer-wireframes', 'viewer-background',
-        // How the pixels read.
-        'viewer-channel', 'viewer-exposure', 'viewer-tone-map',
-        // Snapshots, a pair of their own beside the exposure group (K-416).
-        'viewer-snapshot-take', 'viewer-snapshot-show',
-        // The clock, then the transport and its mode.
-        'viewer-timecode', 'viewer-playback-mode',
+        // The ways of looking, then the seam and the snapshot.
+        'viewer-grid', 'viewer-guides-menu', 'viewer-channel',
+        'viewer-exposure', 'viewer-snapshot',
+        // The transport and its clock.
         'viewer-home', 'viewer-step-back', 'viewer-play',
-        'viewer-step-forward', 'viewer-end',
-        // The right edge: readouts.
-        'viewer-colour-badge',
+        'viewer-step-forward', 'viewer-end', 'viewer-timecode',
+        // The right-hand end: the reading, which is not a control.
+        'viewer-readout',
       ]);
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
@@ -482,34 +497,35 @@ void main() {
     /// lifecycle** (K-416, docs/07 §2.2 item 14). Nothing here crosses the
     /// bridge: the stage photographs its own [RepaintBoundary], and Show puts
     /// the photograph back over the live picture while it is held.
-    testWidgets('taking a snapshot arms Show, and holding Show displays it',
+    /// **One mark, two gestures** (K-466): the drawing gives snapshot and
+    /// compare a single glyph, so a click photographs the picture and a press
+    /// and hold puts the photograph back over it. Neither can be mistaken for
+    /// the other — a press let go before the hold delay never flashes a
+    /// comparison, and one held past it never takes a second photograph.
+    testWidgets('a click takes a snapshot, and holding compares against it',
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
 
-      final take = find.byKey(const ValueKey('viewer-snapshot-take'));
-      final show = find.byKey(const ValueKey('viewer-snapshot-show'));
+      final mark = find.byKey(const ValueKey('viewer-snapshot'));
       final shown = find.byKey(const ValueKey('viewer-snapshot-overlay'));
 
-      // Muted until there is something to show — the button says why in its
-      // tooltip, and refuses the press rather than doing nothing quietly.
-      await tester.ensureVisible(show);
+      // Nothing photographed yet, so a hold shows nothing rather than
+      // flashing the live picture at itself.
+      await tester.ensureVisible(mark);
       await tester.pump();
-      expect(tester.widget<HouseButton>(show).onPressed, isNull);
+      final empty = await tester.startGesture(tester.getCenter(mark));
+      await tester.pump(const Duration(milliseconds: 300));
       expect(shown, findsNothing);
-
-      await tester.ensureVisible(take);
-      await tester.pump();
-      await tester.tap(take);
+      await empty.up();
       // The photograph is taken off the render tree, which is a real async
       // round trip rather than a frame.
       await tester.pumpAndSettle();
-      expect(tester.widget<HouseButton>(show).onPressed, isNotNull,
-          reason: 'a snapshot exists, so Show is live');
+
       expect(shown, findsNothing, reason: 'taking one does not display it');
 
-      final hold = await tester.startGesture(tester.getCenter(show));
-      await tester.pump();
+      final hold = await tester.startGesture(tester.getCenter(mark));
+      await tester.pump(const Duration(milliseconds: 300));
       expect(shown, findsOneWidget,
           reason: 'held down, the picture is swapped');
 
@@ -536,14 +552,14 @@ void main() {
       await tester.tap(find.text('400%').last);
       await tester.pumpAndSettle();
 
-      await pressBar(tester, 'viewer-snapshot-take');
+      await pressBar(tester, 'viewer-snapshot');
       await tester.pumpAndSettle();
 
-      final show = find.byKey(const ValueKey('viewer-snapshot-show'));
-      await tester.ensureVisible(show);
+      final mark = find.byKey(const ValueKey('viewer-snapshot'));
+      await tester.ensureVisible(mark);
       await tester.pump();
-      final hold = await tester.startGesture(tester.getCenter(show));
-      await tester.pump();
+      final hold = await tester.startGesture(tester.getCenter(mark));
+      await tester.pump(const Duration(milliseconds: 300));
 
       final image = tester
           .widget<RawImage>(
@@ -564,38 +580,33 @@ void main() {
       await tester.pump();
     });
 
-    /// **The resolution dropdown is on the bar, and adaptive playback owns it
-    /// while adaptive playback is choosing** (docs/07 §2.2 item 2). Adaptive is
-    /// the default mode, so out of the box the dropdown is a muted readout;
-    /// switching to every-frame playback hands the choice back.
-    testWidgets(
-        'the resolution dropdown chooses, and is disabled while playback'
-        ' is adaptive', (tester) async {
+    /// **How good the preview is, asked once** (K-466, docs/07 §2.2 item 2).
+    /// The header's middle picker names the preview resolution, and its menu
+    /// carries both answers: the resolutions, and the two playback behaviours
+    /// whose button the drawing takes off the bar.
+    testWidgets('the quality picker sets the resolution and the playback mode',
+        (tester) async {
       final p = withLayer();
       await mount(tester, p);
 
-      final dropdown = find.byKey(const ValueKey('viewer-resolution'));
-      expect(dropdown, findsOneWidget);
+      expect(find.byKey(const ValueKey('viewer-resolution')), findsOneWidget);
 
-      // Adaptive (the default): the engine walks the ladder itself, so the
-      // dropdown opens nothing.
-      await tester.tap(dropdown);
-      await tester.pumpAndSettle();
-      expect(find.text('Quarter'), findsNothing,
-          reason: 'disabled while adaptive playback picks the resolution');
-
-      p.uiState.workspace.performance.playback = PlaybackMode.everyFrame;
-      p.uiState.workspace.touch();
-      await tester.pump();
-
-      await tester.tap(dropdown);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Half').last);
-      await tester.pumpAndSettle();
+      await pickHeaderRow(tester, 'viewer-resolution', 'viewer-quality-half');
       expect(p.uiState.previewResolution, PreviewResolution.half,
           reason: 'the bar reaches the same state the View menu sets — the '
               'resolution→scale arithmetic itself is pinned in '
               'menu_bar_frb_test.dart');
+
+      expect(p.uiState.workspace.performance.playback, PlaybackMode.adaptive,
+          reason: 'adaptive is the mode that always plays, so it is default');
+      await pickHeaderRow(
+          tester, 'viewer-resolution', 'viewer-playback-everyFrame');
+      expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame,
+          reason: 'and the choice is remembered, not just drawn');
+
+      await pickHeaderRow(
+          tester, 'viewer-resolution', 'viewer-playback-adaptive');
+      expect(p.uiState.workspace.performance.playback, PlaybackMode.adaptive);
     });
 
     /// **Auto and Full are not the same tier** (K-357). Auto renders what the
@@ -658,7 +669,11 @@ void main() {
       final p = withLayer();
       await mount(tester, p);
 
+      await pressBar(tester, 'viewer-guides-menu');
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('viewer-background')), findsOneWidget);
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
       final before = p.comp.background();
       expect(before[3], 1.0, reason: 'a comp starts on opaque black');
 
@@ -711,34 +726,30 @@ void main() {
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
-    /// The tone map is an icon with no label and no menu (item 13): one tap on,
-    /// one tap off.
-    testWidgets('the tone-map switch is in the bar and flips', (tester) async {
+    /// The tone map is a row in the colour-pipeline menu (item 13, K-466) —
+    /// inside the display transform it is part of. One pick on, one pick off.
+    testWidgets('the tone-map row is in the colour menu and flips',
+        (tester) async {
       final p = withLayer();
       p.uiState.workspace.interface.showToneMap = true;
       await mount(tester, p);
 
-      final button = find.byKey(const ValueKey('viewer-tone-map'));
-      expect(button, findsOneWidget);
       expect(p.uiState.viewerLook.toneMap, isFalse);
 
-      await tester.tap(button);
-      await tester.pump();
+      await flipToneMap(tester);
       expect(p.uiState.viewerLook.toneMap, isTrue);
 
-      await tester.tap(button);
-      await tester.pump();
+      await flipToneMap(tester);
       expect(p.uiState.viewerLook.toneMap, isFalse);
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
-    /// **The colour-management badge** (docs/07 §2.2 item 8). Always on the
-    /// bar, naming the display transform, and while either preview-only
-    /// control is engaged it is where the Viewer says the picture on screen is
-    /// not the export — which until now was said only by the two controls
-    /// drawing themselves in the accent.
-    testWidgets('the colour-management badge says when a view is engaged',
+    /// **The colour pipeline says what you are looking at** (docs/07 §2.2
+    /// item 8, K-466). Always in the header, naming the display transform, and
+    /// while either preview-only control is engaged it is where the Viewer
+    /// says the picture on screen is not the export.
+    testWidgets('the colour picker says when a view is engaged',
         (tester) async {
       final p = withLayer();
       // The tone map is asked for (K-314); this test drives it, so it asks.
@@ -746,50 +757,58 @@ void main() {
       await mount(tester, p);
       final t = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
 
-      final badge = find.byKey(const ValueKey('viewer-colour-badge'));
-      expect(badge, findsOneWidget, reason: 'it is always on the bar');
+      final picker = find.byKey(const ValueKey('viewer-colour'));
+      expect(picker, findsOneWidget, reason: 'it is always in the header');
 
-      Text badgeText() => tester.widget<Text>(
-          find.descendant(of: badge, matching: find.byType(Text)));
+      Text faceText() => tester.widget<Text>(
+          find.descendant(of: picker, matching: find.byType(Text)).first);
 
-      expect(badgeText().data, 'Linear → sRGB');
-      expect(badgeText().style?.color, t.textSecondary);
+      expect(faceText().data, 'Linear → sRGB');
+      expect(faceText().style?.color, isNull,
+          reason: "at rest it takes the dropdown face's own colour");
 
-      // The tone map is engaged: the badge, not just the control, says so.
-      await tester.tap(find.byKey(const ValueKey('viewer-tone-map')));
-      await tester.pump();
-      expect(badgeText().data, contains('preview'));
-      expect(badgeText().data, contains('Linear → sRGB'),
+      // The tone map is engaged: the face, not just the control, says so.
+      await flipToneMap(tester);
+      expect(faceText().data, contains('preview'));
+      expect(faceText().data, contains('Linear → sRGB'),
           reason: 'it still names the transform it is showing through');
-      expect(badgeText().style?.color, t.accent);
+      expect(faceText().style?.color, t.accent);
 
       // Back to neutral, back to a plain statement of the transform.
-      await tester.tap(find.byKey(const ValueKey('viewer-tone-map')));
-      await tester.pump();
-      expect(badgeText().data, 'Linear → sRGB');
+      await flipToneMap(tester);
+      expect(faceText().data, 'Linear → sRGB');
 
       // And the exposure engages it on its own.
       await scrub(tester, find.byKey(const ValueKey('viewer-exposure')), 10);
       await tester.pump();
-      expect(badgeText().data, contains('preview'));
+      expect(faceText().data, contains('preview'));
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
-    /// The tone map is asked for, not given: the button is off the bar unless
-    /// Settings → Interface says otherwise, while the exposure stays.
-    testWidgets('the tone-map switch is absent until the setting asks for it',
+    /// The tone map is asked for, not given: its row is out of the colour
+    /// menu unless Settings → Interface says otherwise, while the exposure
+    /// stays on the bar whatever the setting says.
+    testWidgets('the tone-map row is absent until the setting asks for it',
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
 
+      await pressBar(tester, 'viewer-colour');
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('viewer-tone-map')), findsNothing);
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('viewer-exposure')), findsOneWidget,
           reason: 'only the tone map is gated, not the exposure');
 
       p.uiState.workspace.interface.showToneMap = true;
       await mount(tester, p);
+      await pressBar(tester, 'viewer-colour');
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('viewer-tone-map')), findsOneWidget);
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
 
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
@@ -803,8 +822,7 @@ void main() {
       p.uiState.workspace.interface.showToneMap = true;
       await mount(tester, p);
 
-      await tester.tap(find.byKey(const ValueKey('viewer-tone-map')));
-      await tester.pump();
+      await flipToneMap(tester);
       expect(p.uiState.viewerLook.toneMap, isTrue);
 
       p.uiState.workspace.interface.showToneMap = false;
@@ -834,8 +852,7 @@ void main() {
       await mount(tester, p);
 
       await scrub(tester, find.byKey(const ValueKey('viewer-exposure')), 20);
-      await tester.tap(find.byKey(const ValueKey('viewer-tone-map')));
-      await tester.pump();
+      await flipToneMap(tester);
       expect(p.uiState.viewerLook, (stops: 2.0, toneMap: true));
 
       p.uiState.setSelectedComp(other);
@@ -966,13 +983,13 @@ void main() {
 
       // Sweep the whole panel: everything wholly inside is taken, and the
       // adjustment layer's box is exactly the comp, so it qualifies too.
-      final stage = tester.getRect(find.byType(ViewerPanelFrb));
+      final stage = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final gesture =
           await tester.startGesture(stage.topLeft + const Offset(2, 2));
       await tester.pump();
       await gesture.moveTo(stage.center);
       await tester.pump();
-      await gesture.moveTo(stage.bottomRight - const Offset(2, 40));
+      await gesture.moveTo(stage.bottomRight - const Offset(2, 2));
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
@@ -1028,10 +1045,11 @@ void main() {
     /// fitted into it. The gizmo's handles sit on this rectangle for a
     /// comp-sized layer, which is what lets a test grab one.
     Rect fittedRect(WidgetTester tester, CompositionReference comp) {
-      const barHeight = 26.0;
-      final panel = tester.getRect(find.byType(ViewerPanelFrb));
-      final stage = Rect.fromLTWH(
-          panel.left, panel.top, panel.width, panel.height - barHeight);
+      // Measured rather than worked out from the panel less a bar height: the
+      // Viewer wears a header strip as well as a bottom bar (K-466), and a
+      // hard-coded number here silently moves every picture coordinate the
+      // moment either strip changes.
+      final stage = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final size = comp.getSize();
       final scale =
           math.min(stage.width / size.width, stage.height / size.height);
@@ -1186,9 +1204,10 @@ void main() {
       await mount(tester, p);
       expect(p.uiState.selectedLayers.value, isNotEmpty);
 
-      // The very corner of the panel is outside the fitted picture, so it is
-      // outside every layer's box.
-      final panel = tester.getRect(find.byType(ViewerPanelFrb));
+      // The very corner of the *stage* is outside the fitted picture, so it is
+      // outside every layer's box. The panel's own corner is the header strip
+      // (K-466), which is chrome and takes no click for the picture.
+      final panel = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       await tester.tapAt(panel.topLeft + const Offset(2, 2));
       await tester.pumpAndSettle();
 
@@ -1270,15 +1289,14 @@ void main() {
           reason: 'the knob wrote a rotation');
     });
 
-    testWidgets('the wireframe switch is in the bar and toggles',
+    /// The layer controls are a mark over the picture like the grid and the
+    /// safe areas, so since K-466 they are a row in the same view menu.
+    testWidgets('the layer-controls row is in the view menu and toggles',
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
 
-      final button = find.byKey(const ValueKey('viewer-wireframes'));
-      expect(button, findsOneWidget);
-      await tester.tap(button);
-      await tester.pumpAndSettle();
+      await pickViewRow(tester, 'viewer-wireframes');
       // Hiding the controls must not disturb the selection or the picture: it
       // is a drawing switch, nothing more.
       expect(p.uiState.selectedLayers.value, isNotEmpty);
@@ -1982,7 +2000,7 @@ void main() {
       // picture: a press inside a selected layer moves that layer, which is
       // what the Selection tool has always done (K-217) and what After Effects
       // does. The surround is the empty part a marquee starts from.
-      final panel = tester.getRect(find.byType(ViewerPanelFrb));
+      final panel = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final gesture =
           await tester.startGesture(panel.topLeft + const Offset(2, 2));
       await tester.pump();
@@ -2064,7 +2082,7 @@ void main() {
       // picture — exactly as the mask case does. Art coordinates are where the
       // art is drawn (K-308): this layer's box starts at the art's own corner,
       // so a point at art (400, 200) is at composition (400, 200).
-      final panel = tester.getRect(find.byType(ViewerPanelFrb));
+      final panel = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final gesture =
           await tester.startGesture(panel.topLeft + const Offset(2, 2));
       await tester.pump();
@@ -2869,33 +2887,6 @@ void main() {
       expect(p.uiState.playheadFrame.value, lessThan(100),
           reason: 'it rewound rather than sitting at the end doing nothing');
     }, skip: zeroCopyViewerUnavailable);
-
-    /// The two playback behaviours, and the fact that you can see which is on.
-    testWidgets('the playback mode is shown on the bar and toggles',
-        (tester) async {
-      final p = withLayer();
-      await mount(tester, p);
-
-      final button = find.byKey(const ValueKey('viewer-playback-mode'));
-      expect(button, findsOneWidget, reason: 'the mode is visible, not buried');
-      expect(find.text('Adaptive res'), findsOneWidget,
-          reason:
-              'adaptive is the mode that always plays, so it is the default');
-      // The mode, and only the mode (K-287): the tier it settled on used to
-      // ride in the label, which re-lettered the button through playback.
-      expect(find.textContaining('·'), findsNothing,
-          reason: 'no tier beside the mode name');
-
-      await tester.tap(button);
-      await tester.pump();
-      expect(find.text('Every frame'), findsOneWidget);
-      expect(p.uiState.workspace.performance.playback, PlaybackMode.everyFrame,
-          reason: 'and the choice is remembered, not just drawn');
-
-      await tester.tap(button);
-      await tester.pump();
-      expect(find.textContaining('Adaptive'), findsOneWidget);
-    });
 
     /// Every-frame plays WITH sound now — K-171's actual wording: audio plays
     /// while rendering holds the comp's rate, and the worker pauses it if the

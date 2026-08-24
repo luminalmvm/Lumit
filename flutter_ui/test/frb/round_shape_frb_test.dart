@@ -76,35 +76,31 @@ void main() {
       expect(play, findsOneWidget, reason: 'the same buttons, unwrapped');
     });
 
-    /// **Both shapes follow K-411's arrangement.** Round's pill is a container
-    /// around the transport, not a re-ordering of the bar: the same controls
-    /// come in the same order, with the pill's own key falling where the
-    /// transport starts. The Sharp order is asserted in full in
+    /// **Both shapes follow the drawing's arrangement** (K-466). Round's pill
+    /// is a container around the transport, not a re-ordering of the bar: the
+    /// same controls come in the same order, with the pill's own key falling
+    /// where the transport starts. The Sharp order is asserted in full in
     /// `viewer_panel_frb_test`; this is the shape half of it.
-    testWidgets('Round keeps the K-411 order, pill and all', (tester) async {
+    testWidgets("Round keeps the drawing's order, pill and all",
+        (tester) async {
       await mount(tester, const ViewerPanelFrb(), ThemeShape.round);
       expect(barKeys(tester), [
-        'viewer-zoom',
-        'viewer-resolution',
-        'viewer-region',
         'viewer-grid',
         'viewer-guides-menu',
-        'viewer-wireframes',
-        'viewer-background',
         'viewer-channel',
         'viewer-exposure',
-        'viewer-snapshot-take',
-        'viewer-snapshot-show',
-        'viewer-timecode',
-        'viewer-playback-mode',
+        'viewer-snapshot',
         'viewer-transport-pill',
         'viewer-home',
         'viewer-step-back',
         'viewer-play',
         'viewer-step-forward',
         'viewer-end',
-        'viewer-colour-badge',
+        'viewer-timecode',
+        'viewer-readout',
       ]);
+      expect(headerKeys(tester),
+          ['viewer-zoom', 'viewer-resolution', 'viewer-colour']);
     });
 
     /// The bar is *below* the picture under Round, parted from it by the tile

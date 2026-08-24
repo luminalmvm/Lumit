@@ -12478,3 +12478,65 @@ here reverses an earlier entry.
   Interface section, and is not drawn there yet because the three-way setting has nothing
   to change: the icon set is embedded but no surface reads a labels mode. It arrives with
   Phase 1's own work, in the place this entry names.
+
+## K-466 — The Viewer is rebuilt to its drawing: two strips, a reading, and a chip on the picture
+
+**DECIDED 2026-08-24.** The Viewer and its bars, rebuilt from the approved Main drawing
+under K-458's rule that a drawing is authoritative over an earlier decision. It supersedes
+**K-411** (the single bar "arranged in instruments") outright and amends K-448, K-416 and
+K-314 in the places named below; docs/07 §2.2 and 15-DESIGN §12A.6 are corrected in the
+same commit.
+
+- **The Viewer wears a header strip of its own, 22 tall.** It docks as a pane rather than
+  as a tab, so the dock drew no header above it and the one panel whose drawing shows a
+  title had none. The strip carries the panel's kicker and, at its right-hand end, the
+  three pickers the drawing puts there: the **magnification**, the **preview quality** and
+  the **colour pipeline**, each a `.dd` of 18 with a 10px label, 6 apart. This is K-448's
+  "items may split between a top and a bottom bar" settled: the split is the drawing's.
+- **The bottom bar is the drawing's, in the icon set's own order.** Left to right: the
+  transparency board, the view menu, the channel, the exposure; a hairline seam; the
+  snapshot. Then the transport's five marks and the clock, and at the right-hand end the
+  composition's reading. Every glyph is **14** (K-456's rule, the drawing's measurement),
+  the gaps are **8** in the left cluster and **10** in the transport, and the strip is
+  padded 10 either end.
+- **The transport's steps get glyphs.** They had been the characters `|◀ ◀ ▶ ▶|` in the
+  body face; the icon set has carried To start, Previous frame, Next frame and To end
+  since the icon pass, and the drawing draws them. They are 14 like every other mark on
+  the bar, which supersedes the "the transport is the one place the spec asks for 20".
+- **One reading replaces two badges.** `Opening titles · 00:00:01:23 · 1920×1080 →
+  960×540 · 47%` states the composition, the time, the pixels the engine actually made and
+  the magnification. It absorbs the degradation badge (§2.2 item 9), which used to appear
+  and disappear mid-playback and drag the bar about: the tier is the second pixel count,
+  stated always and in the place a person already looks.
+- **The colour-management badge becomes the colour-pipeline picker**, and the tone map
+  moves into its menu. The badge still says `Linear → sRGB`, and still says `· preview` in
+  the accent while the exposure or the tone map is engaged (§2.2 item 8). K-314's rule that
+  the tone map is off the bar unless Settings asks for it is kept, and now gates a menu row
+  rather than a button.
+- **The quality picker carries the playback mode.** Preview resolution and adaptive-vs-
+  every-frame are one question — how much quality this preview may spend — and the drawing
+  has one seat for it. The resolution rows are no longer disabled while playback is
+  adaptive: the two answers now sit in the same menu, where the relationship is visible
+  instead of being a control that refuses.
+- **The view menu absorbs everything the drawing gives no seat.** The drawing has one
+  overlay glyph, and §2.2 item 5 has always owed a wireframe/overlay menu; it now carries
+  the grid, the safe areas, the **layer controls** (K-217), the **region of interest**
+  (K-362) and the composition's **background** (K-357, with the colour beside its row).
+- **Snapshot and compare are one mark, two gestures** (amending K-416's pair of buttons):
+  a click photographs the picture, a press and hold puts the photograph back over it. The
+  drawing draws one glyph, and each gesture does exactly one thing — a press released
+  before the hold delay never flashes a comparison, and one held past it never takes a
+  second photograph.
+- **The exposure is bare.** The drawing sets it as the number alone, 10px mono in
+  `text_secondary`, with no aperture beside it and no well under it — the one editable
+  value in the application that does not rest in an inset, because a 20px well in a 22px
+  bar reads as the bar's own edge. `DragValueField` gains a `bare` face for it; the scrub,
+  the modifier ladder, click-to-type and the context menu are untouched.
+- **The selection's name is drawn on the picture**, 16 in from the stage's left and 8 down
+  from its top: 9px mono, tracked 0.08em, in `animated` inside an `animated` hairline. It
+  is the drawing's TITLE chip and the "viewer tag" the graph study asked for — selection is
+  agreed in four places and the Viewer was the one that only showed it as a box.
+- **The selection box, its handles and its anchor mark are `animated`, not `accent`.**
+  §3.1's closed list already names "selected gizmo handles" for that colour, §3.2 bans the
+  accent inside the Viewer's neutrality zone, and the drawing draws both in the amber. This
+  is a correction, not a new rule.

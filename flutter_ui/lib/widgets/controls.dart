@@ -638,7 +638,7 @@ class _MenuHoverScope extends InheritedWidget {
 /// bar's channel picker, whose answer is a tinted glyph rather than a word
 /// (K-411). The caret is the same one either way, so an icon dropdown still
 /// reads as a dropdown.
-Widget _dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
+Widget dropdownFace(LumitTheme t, String label, {Widget? face}) => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         face ?? Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
@@ -681,7 +681,7 @@ const double inRowDropdownTextSize = 10;
 ///
 /// **Horizontal 6, not the button's 8**: every `.dd` the mockups compute pads
 /// its label by exactly 6 either side, in both sizes.
-Widget _dropdownButton({
+Widget dropdownButton({
   required LumitTheme t,
   required bool dense,
   required VoidCallback? onPressed,
@@ -723,7 +723,7 @@ class BareDropdown<T> extends StatelessWidget {
 
   /// A mark to show instead of the value's name on the closed face. The menu
   /// still lists [label]'s words, so nothing is lost by showing a glyph — see
-  /// [_dropdownFace].
+  /// [dropdownFace].
   final Widget? face;
 
   /// The in-row face: 16 tall with a 10px label, for a picker that sits inside
@@ -744,11 +744,11 @@ class BareDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return _dropdownButton(
+    return dropdownButton(
       t: t,
       dense: dense,
       onPressed: onChanged == null ? null : () => _open(context, t),
-      face: _dropdownFace(t, label(value), face: face),
+      face: dropdownFace(t, label(value), face: face),
     );
   }
 
@@ -862,7 +862,7 @@ class BareSearchDropdown extends StatelessWidget {
         if (picked != null) onChanged(picked);
       },
       dropdown: true,
-      child: _dropdownFace(t, label),
+      child: dropdownFace(t, label),
     );
   }
 }
@@ -1030,7 +1030,7 @@ class BareLazyDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return _dropdownButton(
+    return dropdownButton(
       t: t,
       dense: dense,
       onPressed: () async {
@@ -1061,7 +1061,7 @@ class BareLazyDropdown<T> extends StatelessWidget {
         );
         if (picked != null) onChanged(picked.$1);
       },
-      face: _dropdownFace(t, label),
+      face: dropdownFace(t, label),
     );
   }
 }
@@ -2225,6 +2225,11 @@ const double wellHeight = 20;
 /// 20 from the inside.
 const double wellTextSize = 11;
 
+/// The number on a **bar**, where the drawing gives it no well: 10px mono, the
+/// Viewer bottom bar's own `+0.0` (K-466). A bar reading is an aside beside the
+/// picture, and it is set a size down from a panel's editable value.
+const double barValueTextSize = 10;
+
 /// The **value well** (docs/15-DESIGN.md §2.1/§3.1, K-439): drag horizontally
 /// to adjust, click to type, right-click for Reset / Copy / Paste.
 ///
@@ -2265,6 +2270,20 @@ class DragValueField extends StatefulWidget {
   /// the inset every well now takes by default (§2.1), so a call site has no
   /// reason to pass anything.
   final Color? fill;
+
+  /// Drawn **bare**: no inset, no hairline, the number alone at a bar's own
+  /// 10px in `text_secondary` (K-466).
+  ///
+  /// One caller, and it is a measurement rather than a taste: the approved
+  /// Viewer drawing sets the exposure as a plain `.mono` span on the bottom
+  /// bar, with no background and no border, where every other editable number
+  /// in the application rests in a well. A 20px well in a 22px bar would leave
+  /// a pixel of ground above and below it and read as the bar's own edge.
+  /// Everything else about the field is unchanged — the scrub, the modifier
+  /// ladder, click-to-type, the context menu — and the drag and focus colours
+  /// still speak, through the number rather than through an edge it has not
+  /// got.
+  final bool bare;
   final ValueChanged<num> onChanged;
 
   /// Fired once when a drag begins. Optional — a caller with nothing to do at
@@ -2300,6 +2319,7 @@ class DragValueField extends StatefulWidget {
     this.signed = false,
     this.keyed = false,
     this.fill,
+    this.bare = false,
     this.onChangeStart,
     this.onChangeLive,
     this.onChangeEnd,
@@ -2593,25 +2613,29 @@ class _DragValueFieldState extends State<DragValueField>
           widget.onDragCancel?.call();
         },
         child: Container(
-          height: wellHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          height: widget.bare ? null : wellHeight,
+          padding: widget.bare
+              ? EdgeInsets.zero
+              : const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             // The inset stays the inset in every state: a well does not lift
             // under the pointer, because then it would stop being a recess
             // (§2.1). Hover and scrub speak through the edge instead.
-            color: widget.fill ?? t.surface0,
+            color: widget.bare ? null : widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
             border: Border.all(
-                color: _dragging
-                    ? t.accent
-                    // The one focus ring that is `animated` rather than
-                    // `accent`: it means "you are about to change a value"
-                    // (§3.1, §6.5).
-                    : _focused
-                        ? t.animated
-                        : _hover
-                            ? t.hairlineStrong
-                            : t.hairline,
+                color: widget.bare
+                    ? const Color(0x00000000)
+                    : _dragging
+                        ? t.accent
+                        // The one focus ring that is `animated` rather than
+                        // `accent`: it means "you are about to change a value"
+                        // (§3.1, §6.5).
+                        : _focused
+                            ? t.animated
+                            : _hover
+                                ? t.hairlineStrong
+                                : t.hairline,
                 width: 1),
           ),
           child: Align(
@@ -2621,12 +2645,19 @@ class _DragValueFieldState extends State<DragValueField>
               _format(widget.value),
               textAlign: TextAlign.right,
               style: t.mono.copyWith(
-                fontSize: wellTextSize,
+                fontSize: widget.bare ? barValueTextSize : wellTextSize,
                 color: _dragging
                     ? t.accent
                     : widget.keyed
                         ? t.animated
-                        : t.textPrimary,
+                        // A bare number has no well to say "editable", so it
+                        // rests where the drawing puts it — a bar's own
+                        // secondary reading rather than the well's primary.
+                        : widget.bare
+                            ? (_hover || _focused
+                                ? t.textPrimary
+                                : t.textSecondary)
+                            : t.textPrimary,
               ),
             ),
           ),

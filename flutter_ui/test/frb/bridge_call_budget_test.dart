@@ -893,10 +893,9 @@ void main() {
 
       // Where the art is drawn: its own coordinates, because a shape layer's
       // box starts at the art's own corner (K-308).
-      const barHeight = 26.0;
-      final panel = tester.getRect(find.byType(ViewerPanelFrb));
-      final stage = Rect.fromLTWH(
-          panel.left, panel.top, panel.width, panel.height - barHeight);
+      // Measured rather than worked out from the panel less a bar height: the
+      // Viewer wears a header strip as well as a bottom bar (K-466).
+      final stage = tester.getRect(find.byKey(const ValueKey('viewer-stage')));
       final size = comp.getSize();
       final w = size.width.toDouble();
       final h = size.height.toDouble();

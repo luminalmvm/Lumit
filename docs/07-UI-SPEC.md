@@ -282,17 +282,24 @@ anywhere, including other monitors.
   masks on source, and (later) paint/tracking. Layer mode MUST show its own source-time strip
   for slipping a clip or layer under fixed in/out points.
 
-### 2.2 Viewer bar
+### 2.2 Viewer bars
 
-A compact bar at the bottom of the Viewer — the transport lives here, and under the
-redesign (K-448) the bar's items may split between a top and a bottom bar by default, with
-a setting for a single bar at the top or the bottom. **Arrangement is K-411's**: the bar
-reads as instruments — scale (items 1–2), the view toggles as one icon cluster (7, 4,
-6, the layer-controls switch, 10), how the pixels read (3, 12, 13), the snapshot pair
-(14), the clock (11), the transport with its playback-mode dropdown, then the
-right-edge readouts (8, 9, progress) — with small gaps inside a group and wide gaps
-between them. Each list is in the order it is built in. The items below define what
-each control does:
+**The Viewer wears two strips** (K-466, superseding K-411 and settling K-448's split):
+
+- **The header strip**, 22 tall, carrying the panel's kicker and — at its right-hand end,
+  6 apart, each an 18-tall picker with a 10px label — the **magnification** (item 1), the
+  **preview quality** (item 2, whose menu also carries the playback behaviour) and the
+  **colour pipeline** (item 8, whose menu also carries the tone map, item 13).
+- **The bottom bar**, 22 tall, padded 10 either end, glyphs at 14 and gaps of 8: the
+  **transparency board** (item 4), the **view menu** (items 5–6, which also carries the
+  layer-controls switch, the region of interest of item 7 and the composition background
+  of item 10), the **channel** (item 3) and the **exposure** (item 12); a hairline seam;
+  the **snapshot** (item 14). Then, spaced 10, the five transport marks and the **clock**
+  (item 11). At the right-hand end the **reading** — `comp · time · source → preview ·
+  zoom` — which is where degradation is stated (item 9), and the preview progress bar,
+  which is nothing at all until a frame is genuinely waited on.
+
+Every control on either strip keeps the behaviour its item below defines. The items:
 
 1. **Magnification** dropdown: Fit, Fit up to 100%, then 25 / 33.3 / 50 / 100 / 200 / 400 /
    800 %. Magnification is display scaling only; it MUST NOT change render resolution.
@@ -325,21 +332,24 @@ each control does:
    True raster downsampling — Half renders a quarter of the pixels. **Auto** renders only
    the pixels the current magnification can display. The setting is **stored per comp** in
    the project. Preview resolution MUST never affect export.
-3. **Channel view**: RGB / Red / Green / Blue / Alpha (alpha as greyscale matte). A compact
-   icon dropdown (K-411): the closed face is one mark tinted by the channel on show — alpha,
-   not being a colour, takes a matte mark instead — and the menu lists the names in full.
+3. **Channel view**: RGB / Red / Green / Blue / Alpha (alpha as greyscale matte). One
+   **bare mark** on the bar, tinted by the channel on show — alpha, not being a colour,
+   takes a matte mark instead — opening a menu that lists the names in full. It is not
+   boxed as a dropdown (K-466): a border round a tint is a box round a colour.
 4. **Transparency grid** toggle (checkerboard behind transparent pixels instead of the comp
    background colour). An icon — the checkerboard itself — rather than the word (K-411).
 5. **Wireframe/overlay menu**: layer wireframes, motion paths, mask paths, gizmo visibility,
    and a full wireframe display mode (outlines only, no raster) for heavy comps.
-   **Built so far**: nothing of the menu. The layer-controls switch beside it (K-217)
-   already turns the wireframes, handles and hover highlight on and off as one; the menu
-   that separates them — and the full wireframe display mode — is still owed
-   (docs/TODO.md).
+   **Built so far**: it is the same menu as item 6 — the bar has one overlay mark (K-466)
+   — and it carries the layer-controls switch (K-217), which turns the wireframes, handles
+   and hover highlight on and off as one. Separating them, and the full wireframe display
+   mode, is still owed (docs/TODO.md).
 6. **Guides menu**: rulers (`Ctrl+R`), guides (drag out of rulers; lock/clear), grid,
    title/action safe overlays, snapping-to-guides toggle.
-   **Built so far (K-416)**: the menu itself, on the toggle cluster beside the
-   transparency grid, with two checkable entries — Grid and Title/action safe. The grid
+   **Built so far (K-416, K-466)**: the menu itself, one mark beside the transparency
+   board, with four checkable entries — Grid, Title/action safe, Layer controls and Region
+   of interest — and a fifth row for the composition background, which opens the colour
+   picker and carries a swatch of the colour it would write. The grid
    is the frame's own **eighths**, drawn as theme hairlines; the safe areas are the
    standard **90 % action / 80 % title** rectangles, square-cornered hairlines with no
    labels. Both are worked out from the picture's rectangle, so they zoom and pan with
@@ -349,7 +359,7 @@ each control does:
    snapping, which land as further entries in this same menu rather than as new chrome.
 7. **Region of interest** (K-362, landed): drag a rectangle; the engine renders only that
    region for preview. MUST be clearable in one click and MUST never affect export. Armed
-   from the Viewer bar, swept on the picture, and outlined whenever it is in force. It is a
+   from the view menu of items 5–6 (K-466), swept on the picture, and outlined whenever it is in force. It is a
    window on the composite rather than a crop of a finished frame, so it saves the composite,
    the display encode and the publish — but not the effect stack, which runs per layer at the
    layer's own size. Frames rendered through a region take their own names, so scrubbing
@@ -357,16 +367,22 @@ each control does:
 8. **Colour management indicator**: the current display transform (e.g. working space →
    display). Read-only badge; clicking opens colour settings. Always visible so "what am I
    looking at" is never ambiguous.
-9. **Degradation indicator**: a live badge that appears **only while adaptive degradation is
-   active** (K-018), stating what is degraded (e.g. "preview at Half · glow skipped").
-   It MUST disappear the moment the full-quality frame lands. Hovering lists the degraded
-   steps. Users MUST be able to tell a degraded frame from a final one at a glance.
-10. **Background colour** swatch: per-comp background (project state), plus quick black /
-    grey / custom.
+9. **Degradation indicator**: users MUST be able to tell a degraded frame from a final one
+   at a glance (K-018). **Stated by the bar's reading rather than by a badge** (K-466): the
+   reading always says the pixel count the engine actually made beside the composition's
+   own — `1920×1080 → 960×540` — so the tier is legible at every moment without a box that
+   appears and disappears mid-playback and drags the bar about as it goes. Naming the
+   individual steps that were skipped ("glow skipped") is still owed (docs/TODO.md).
+10. **Background colour**: per-comp background (project state), plus quick black / grey /
+    custom. It is a **row in the view menu** (K-466) carrying a swatch of the colour it
+    would write — the drawing gives it no seat of its own on the bar, and it is the one
+    entry there that is a document edit rather than a way of looking, so it goes through
+    an op and Ctrl+Z undoes it.
 11. **Current time** readout in the comp's timecode; click to type a time. A time outside
     the composition lands on the nearest end rather than being refused (K-287).
-12. **Exposure** (K-314): a small box scrubbing on drag and taking a typed number, with an
-    aperture icon beside it, reading signed stops to one decimal — `+0.0`, `+1.4`, `-2.3`.
+12. **Exposure** (K-314): the number alone on the bar — 10px mono, no inset under it and
+    no aperture beside it (K-466) — scrubbing on drag and taking a typed number, reading
+    signed stops to one decimal: `+0.0`, `+1.4`, `-2.3`.
     The number means what the Exposure effect's does: the same `2^stops` gain in
     scene-linear (K-106), so the two agree. **Preview only; it MUST NOT change the
     export.**
@@ -377,14 +393,17 @@ each control does:
     not a grade. **Preview only; it MUST NOT change the export**, and it MUST NOT adapt to
     the frame's content: a picture that re-exposes itself per frame breathes across every
     cut, and a revisited frame would stop being the frame it was.
-    The button is **off the bar unless Settings → Interface asks for it**: most work never
-    reads a picture this way. While it is hidden the tone map MUST also read as **off**
+    It is a **row in the colour-pipeline menu** (K-466), inside the display transform it is
+    part of, and that row is **absent unless Settings → Interface asks for it**: most work
+    never reads a picture this way. While it is hidden the tone map MUST also read as **off**
     whatever the comp stored — hiding the control must never strand an engaged look with
     nothing left to turn it off. The exposure of item 12 is never hidden.
-14. **Snapshots** (K-416): two icons beside the exposure group — a camera that takes one,
-    and an eye that shows it. **Take** stores what the Viewer is showing this instant;
-    **Show** is a press and hold, putting the stored picture back over the live one for
-    as long as the button is down, which is the before/after read every grade leans on.
+14. **Snapshots** (K-416, K-466): **one mark, two gestures**, behind the bar's hairline
+    seam. A **click** stores what the Viewer is showing this instant; a **press and hold**
+    puts the stored picture back over the live one for as long as the button is down,
+    which is the before/after read every grade leans on. A press released before the hold
+    delay never flashes a comparison, and one held past it never takes a second
+    photograph.
     One slot in v1 (After Effects' four-slot family can follow on the same mechanism).
     It is a *display* affordance and lives entirely in the display: the stage photographs
     its own picture through a `RepaintBoundary` around the picture alone — so the layer
@@ -2131,16 +2150,18 @@ small image over each choice, remain the destination (polish tracked in TODO).
   *Import footage*, *New composition*, *Open project* — plus recent projects and a note
   that footage can be dropped anywhere in the window. Drag-and-drop import MUST work over
   every panel from first launch.
-- **The welcome screen** (K-448, K-464, superseding the card above once the redesigned
+- **The welcome screen** (K-448, K-464, K-466, superseding the card above once the redesigned
   shell lands): the launch window carries the **New**, **Blank** and **Open** project
   cards, with **Manual** and **What's new** as outlined buttons, and no "free and open
   source" line. With nothing open, the same three cards repeat in the empty Viewer until a
   composition is viewed.
   It is **the window** between the boot splash and the shell rather than a card over
   either, and it is not shown at all when a `.lum` arrived on the command line. Under the
-  cards sit the **recent projects** — name, path, format, and when each was last opened
-  here — with a **Clear** that empties the list and a **×** on each row that forgets just
-  that one. Neither asks first: nothing is deleted and File ▸ Open brings a project back.
+  cards sit the **recent projects** — a thumbnail of the project as it looked when it was
+  last saved, its name, its path, and when it was last opened here (K-466: no format
+  column; a size and a rate are per-composition, and a project has many) — with a
+  **Clear** that empties the list and a **×** on each row that forgets just that one.
+  Neither asks first: nothing is deleted and File ▸ Open brings a project back.
   A footer carries the version and the two links. The shape and every measurement are in
   [15-DESIGN.md](15-DESIGN.md) §12A.3b.
 - **Comp with no layers**: the Timeline shows one line of hint text (drag footage here, or
