@@ -496,6 +496,10 @@
   "@fxRandomness": {
     "description": "Effect controls — a control on Card wipe: how far the order of the flips is shuffled."
   },
+  "fxRec709": "Rec. 709",
+  "@fxRec709": {
+    "description": "Effect controls — an Input space option on LUT: the ITU-R BT.709 transfer function."
+  },
   "fxRectangularToPolar": "Rectangular to polar",
   "@fxRectangularToPolar": {
     "description": "Effect controls — a Conversion option on Polar coordinates."
@@ -531,6 +535,10 @@
   "fxSpherize": "Spherize",
   "@fxSpherize": {
     "description": "Effect name in the Add effect menu — a glass ball held over the picture."
+  },
+  "fxSrgb": "sRGB",
+  "@fxSrgb": {
+    "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
   },
   "fxStar": "Star",
   "@fxStar": {
@@ -2352,6 +2360,10 @@
   "fxInputBlack": "Input black",
   "@fxInputBlack": {
     "description": "Effect controls — a control on Levels."
+  },
+  "fxInputSpace": "Input space",
+  "@fxInputSpace": {
+    "description": "Effect controls — a control on LUT: the transfer function the .cube file was authored for."
   },
   "fxInputWhite": "Input white",
   "@fxInputWhite": {

@@ -18,12 +18,14 @@ LUT is a [Colour](/effects/#colour) effect.
 Applies a **look-up table**. This must be a `.cube` file, and is loaded from
 disk.
 
-:::caution[Two limits worth knowing]
-The table is applied to the scene-linear working picture as it stands, with no
-conversion into the space the LUT was authored for. A LUT built for
-display-encoded or log input will therefore not land the way its author
-intended. The tables that behave predictably are those authored against linear
-input.
+:::note[Set Input space to whatever the LUT expects]
+Lumit composites in scene-linear light, where mid-grey sits at 0.18. Most
+creative LUTs are baked in a grading application whose input is display
+encoded, where mid-grey sits near 0.5. **Input space** says which of the two the
+table was written for: the picture is converted into that space, the table
+applies, and the result comes back to linear. Leave it on Linear for a LUT
+authored against linear input; choose sRGB or Rec. 709 for one made from
+display-encoded footage. Log-encoded LUTs have no matching option yet.
 :::
 
 ## Parameters
@@ -33,6 +35,7 @@ input.
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **File** | File | `.cube` | None | - |
+| **Input space** | Dropdown | Linear · sRGB · Rec. 709 | Linear | - |
 | **Mix** | Slider | 0 to 100 | 100 | - |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Matte** | Layer | Any layer in the composition | None | - |
@@ -48,6 +51,9 @@ In the Effect Controls panel:
 ## What each control does
 
 - **File** — the .cube file to apply.
+- **Input space** — the encoding the table was authored for. Linear applies it
+  to the working picture untouched, which is what this effect always did; sRGB
+  and Rec. 709 convert into that curve first and back afterwards.
 - **Mix**: how much of the result replaces the original.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
 

@@ -3285,12 +3285,14 @@ fn build_lut_over(
 }
 
 /// The §1.6 oracle for the 3D LUT (docs/08 §3.11; docs/impl/lut.md): the
-/// WGSL manual-trilinear lookup matches `lumit_core::lut::Lut3d::sample`
+/// WGSL manual-trilinear lookup matches `lumit_core::lut::Lut3d::sample_in`
 /// wrapped as unpremultiply -> sample -> re-premultiply -> Mix, on a spread
 /// of RGBA pixels **including partial-alpha and out-of-domain HDR ones** and
 /// several cubes (identity, a per-channel gamma, an R/B swap). A cheap
 /// pointwise effect, so CPU and GPU agree to ≤ 2 fp16 ULP; the GPU is
-/// bit-stable (§2.4); Mix 0 is the bit-exact input; and the identity cube
+/// bit-stable (§2.4); Mix 0 is the bit-exact input; every **Input space**
+/// (K-443) is covered, and Linear is the case list's own default so a
+/// transfer leaking into it would fail the same comparison; and the identity cube
 /// round-trips every in-domain pixel to itself (a strong end-to-end check
 /// that the red-fastest indexing, the domain scale and the premult handling
 /// are all right — if it did not, one of those three is wrong).
@@ -3367,25 +3369,38 @@ fn wgsl_lut_matches_the_cpu_oracle() {
     // shader must do the same and not produce NaN.
     let zero_span = build_lut_over(3, [0.5; 3], [0.5; 3], |c| [c[1], c[2], c[0]]);
 
-    let cases: [(&str, &lumit_core::lut::Lut3d, f32); 8] = [
-        ("identity-full", &identity, 1.0),
-        ("identity-mix0", &identity, 0.0),
-        ("gamma-full", &gamma, 1.0),
-        ("gamma-mixed", &gamma, 0.5),
-        ("swap-rb", &swap, 1.0),
-        ("domained-full", &domained, 1.0),
-        ("domained-mixed", &domained, 0.5),
-        ("zero-span-domain", &zero_span, 1.0),
+    use lumit_core::lut::LutSpace;
+    let cases: [(&str, &lumit_core::lut::Lut3d, f32, LutSpace); 14] = [
+        ("identity-full", &identity, 1.0, LutSpace::Linear),
+        ("identity-mix0", &identity, 0.0, LutSpace::Linear),
+        ("gamma-full", &gamma, 1.0, LutSpace::Linear),
+        ("gamma-mixed", &gamma, 0.5, LutSpace::Linear),
+        ("swap-rb", &swap, 1.0, LutSpace::Linear),
+        ("domained-full", &domained, 1.0, LutSpace::Linear),
+        ("domained-mixed", &domained, 0.5, LutSpace::Linear),
+        ("zero-span-domain", &zero_span, 1.0, LutSpace::Linear),
+        // Input space (K-443): the picture converts into the space the cube was
+        // authored for, the table applies, the result converts back. Every case
+        // runs against the same pixels as its Linear sibling, so a shader that
+        // dropped or mis-ordered a transfer misses the oracle rather than
+        // producing a plausible-looking different grade.
+        ("srgb-identity", &identity, 1.0, LutSpace::Srgb),
+        ("srgb-gamma", &gamma, 1.0, LutSpace::Srgb),
+        ("srgb-mixed", &gamma, 0.5, LutSpace::Srgb),
+        ("srgb-domained", &domained, 1.0, LutSpace::Srgb),
+        ("rec709-identity", &identity, 1.0, LutSpace::Rec709),
+        ("rec709-swap", &swap, 1.0, LutSpace::Rec709),
     ];
 
-    for (name, lut, mix) in cases {
+    let mut rendered: Vec<(&str, Vec<f32>)> = Vec::new();
+    for (name, lut, mix, space) in cases {
         // CPU expected: unpremultiply -> Lut3d::sample -> re-premultiply ->
         // Mix, using the same lerp form the shader uses for the final blend.
         let mut cpu = vec![0.0f32; img.len()];
         for px in 0..(w * h) as usize {
             let i = px * 4;
             let o = [img[i], img[i + 1], img[i + 2], img[i + 3]];
-            let graded = lut.sample(unpremult(o));
+            let graded = lut.sample_in(space, unpremult(o));
             let pm = [graded[0] * o[3], graded[1] * o[3], graded[2] * o[3]];
             cpu[i] = o[0] + (pm[0] - o[0]) * mix;
             cpu[i + 1] = o[1] + (pm[1] - o[1]) * mix;
@@ -3403,6 +3418,7 @@ fn wgsl_lut_matches_the_cpu_oracle() {
             &lut_tex,
             lut.size as u32,
             mix,
+            space.code(),
             lut.domain_min,
             lut.domain_max,
         );
@@ -3426,12 +3442,41 @@ fn wgsl_lut_matches_the_cpu_oracle() {
             &lut_tex,
             lut.size as u32,
             mix,
+            space.code(),
             lut.domain_min,
             lut.domain_max,
         );
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "{name}: GPU LUT must be bit-stable");
+        rendered.push((name, gpu));
     }
+
+    // The oracle above would also be satisfied by a shader that ignored the
+    // Input space entirely, because the reference would then be wrong in the
+    // same way. So: each space must render a *different* picture from Linear
+    // through the same cube, and Linear must still be what it always was.
+    let of = |n: &str| -> &Vec<f32> {
+        &rendered
+            .iter()
+            .find(|(k, _)| *k == n)
+            .expect("case rendered")
+            .1
+    };
+    assert_ne!(
+        of("srgb-gamma"),
+        of("gamma-full"),
+        "sRGB input space must change the grade"
+    );
+    assert_ne!(
+        of("rec709-swap"),
+        of("swap-rb"),
+        "Rec. 709 input space must change the grade"
+    );
+    assert_ne!(
+        of("srgb-gamma"),
+        of("rec709-identity"),
+        "the two spaces are not the same curve"
+    );
 
     // End-to-end: the identity cube at Mix 1.0 returns every *in-domain*
     // pixel to itself (out-of-domain HDR pixels legitimately clamp, so they
@@ -3449,6 +3494,7 @@ fn wgsl_lut_matches_the_cpu_oracle() {
             &lut_tex,
             identity.size as u32,
             1.0,
+            LutSpace::Linear.code(),
             identity.domain_min,
             identity.domain_max,
         ),

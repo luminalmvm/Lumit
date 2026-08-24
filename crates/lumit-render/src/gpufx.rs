@@ -2004,7 +2004,7 @@ impl GpuEffect for Lut {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let mix = effects::lut::Lut::read(p).packed();
+        let (mix, space) = effects::lut::Lut::read(p).packed();
         // An empty slot — unset, missing, 1D or unreadable file — is the
         // labelled no-op, exactly as the old arm's `if let Some` was; the
         // texture handle is an `Arc`, so passing it back costs nothing.
@@ -2017,6 +2017,7 @@ impl GpuEffect for Lut {
                 &l.texture,
                 l.size,
                 mix,
+                space.code(),
                 l.domain_min,
                 l.domain_max,
             ),

@@ -1127,7 +1127,7 @@ Gamma is not 1.
 ### 3.11 LUT — .cube loader
 
 **Parameters:** File (file reference, `.cube` 1D and 3D, sizes to 65³), Input space
-(sRGB / Rec.709 / Linear — what the LUT expects), Interpolation (Trilinear /
+(Linear / sRGB / Rec. 709 — what the LUT expects), Interpolation (Trilinear /
 Tetrahedral, default Tetrahedral), Mix.
 
 **Algorithm sketch.** Host parses and uploads the LUT as a 3D texture at load, converts
@@ -1137,20 +1137,28 @@ render failure ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) never-crash r
 file's content hash joins the cache key; project save embeds small LUTs (K-040) so shared
 projects survive relinking.
 
-**Status (v1, shipped, K-114):** **File + Mix** only. The File parameter picks a `.cube`
+**Status (v1, shipped, K-114; Input space K-443):** **File + Input space + Mix**. The File
+parameter picks a `.cube`
 cube (animatable by stepping between paths with hold keys — two files cannot be blended,
 K-111) and Mix blends the graded result over the input. **3D trilinear** only (the manual
 eight-corner interpolation of [docs/impl/lut.md](impl/lut.md) §2–3, matching the CPU oracle
-`lut::Lut3d::sample` to ≤ 2 fp16 ULP; Tetrahedral is deferred). The LUT is applied in the
-compositor's **scene-linear working space as-is** — no Input-space transfer, so a `.cube`
-authored for a display- or log-encoded input is applied directly (flagged for the owner).
-Unpremultiplied (§2.2). An **unset, missing, 1D or unreadable** file is a labelled no-op,
+`lut::Lut3d::sample_in` to ≤ 2 fp16 ULP; Tetrahedral is deferred). **Input space** (K-443) is
+a three-option dropdown — **Linear** (default), **sRGB**, **Rec. 709** — naming the transfer
+function the cube was authored against: the straight colour converts into it, the table
+applies, and the result converts back to scene-linear, so a `.cube` baked in a
+display-referred grading application lands in the cells its author was looking at. Linear is
+the identity in both directions and is byte-for-byte the picture this effect rendered before
+the row existed (K-258). There is no Log option: the pipeline defines no log transfer
+function and §1's rules forbid inventing one (a follow-up, with OCIO).
+Unpremultiplied (§2.2), and the transfer sits **inside** the unpremultiply/re-premultiply
+pair — a transfer function is a statement about colour, not about coverage. An **unset,
+missing, 1D or unreadable** file is a labelled no-op,
 never a fault. GPU-only: the parsed cube is threaded beside the resolved op (like Echo's
 neighbour frames and Motion blur's flow field), so the CPU-degradation rung renders a LUT as
-identity — its §1.6 oracle reference is `lut::Lut3d::sample` used directly in the lumit-gpu
+identity — its §1.6 oracle reference is `lut::Lut3d::sample_in` used directly in the lumit-gpu
 test, the one effect whose reference lives outside its own `EffectDef::apply_cpu` (its parameter
-is a file, not a number). Preview and export load and apply it identically (K-031). **Follow-ups:** the
-Input-space control, Tetrahedral interpolation, the content-hash cache key (the cache is
+is a file, not a number). Preview and export load and apply it identically (K-031). **Follow-ups:**
+Tetrahedral interpolation, log input spaces, the content-hash cache key (the cache is
 path-only for now, so an edited-on-disk LUT needs the app reopened), and embedding small LUTs
 in the project (K-040).
 

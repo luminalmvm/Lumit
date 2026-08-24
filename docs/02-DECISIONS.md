@@ -12217,3 +12217,48 @@ raster assertion (lumit-gpu `fx/tests.rs`),
 end-to-end one — an 8×8 solid in a 32×32 comp covering twenty-four pixels instead of
 eight, with the original eight unmoved). `fx-reference.json` regenerated: the two changed
 defaults are the whole diff. No new user-facing strings — every label already existed.
+
+## K-443 — The LUT is told what kind of numbers it is being handed
+
+**DECIDED 2026-08-24** (allocated on safe-lane). The LUT effect (docs/08 §3.11) applied the
+cube to the scene-linear working picture as-is. §3.11 had specced an **Input space** row from
+the start and K-114 shipped without it, with `docs/impl/lut.md` §3 carrying a REVIEW note
+asking that it be raised as a decision when the effect landed. This is that decision.
+
+**Why it is not cosmetic.** Lumit composites scene-linear, where mid-grey is 0.18. Almost
+every creative `.cube` is baked in a display-referred grading application, where mid-grey is
+around 0.5. Handing such a table linear numbers does not shade the grade slightly wrong — it
+reads the wrong cells of the cube, which is why a correct LUT came out crushed. The
+conversion is the whole difference between the effect being usable with the files people
+actually have and not.
+
+**Three options, and no invented curve.** `lumit_core::lut::LutSpace` is
+**Linear** (default) / **sRGB** / **Rec. 709**. sRGB is the transfer function
+`pixels::srgb_encode` and `composite.wgsl` already carry; Rec. 709 is its ITU-R sibling
+(`4.5·L` under the knee, `1.099·L^0.45 − 0.099` over it). **There is deliberately no Log
+option.** The colour pipeline defines no log transfer function, and adding one here would put
+a curve nothing else in the engine agrees with into the render path — the wrong place to
+introduce colour management. Log arrives with OCIO (K-031's post-v1 note).
+
+**Default Linear is byte-identical to today (K-258).** `LutSpace::Linear` returns its
+argument by identity on the CPU and the shader's `to_space`/`to_linear` return `c`, so the
+default path is not "a conversion that happens to cancel" but no arithmetic at all. A project
+saved before this row reads 0 through the resolver's `unwrap_or` — no migration, no schema
+version bump.
+
+**The transfer sits inside the premultiply pair**, between the unpremultiply and the lookup
+and again between the lookup and the re-premultiply: a transfer function is a statement about
+colour, not about coverage. And **every power is guarded by `max(v, 0)` on both paths** — a
+scene-linear value may legitimately be negative, the CPU branches around it but WGSL's
+`select` evaluates both arms, so an unguarded `pow` would compute a NaN in the arm about to
+be discarded. That guard is what makes the two op-for-op (§1.6) rather than merely close.
+
+Regression tests: `input_space_linear_is_the_identity_and_the_curves_invert` (lumit-core —
+Linear adds no arithmetic, `sample_in(Linear, ·) == sample(·)` exactly, both curves invert,
+negatives stay finite, and the wire codes round-trip with an unknown one degrading to
+Linear), and six new cases in `wgsl_lut_matches_the_cpu_oracle` (lumit-gpu) covering each
+space against the same corpus — plus assertions that each space renders a *different* picture
+from Linear, since an oracle alone would be equally satisfied by a shader and a reference
+that both ignored the row. `fx-labels.txt` and `fx-reference.json` regenerated; the manual's
+`lut.mdx` caution block, which stated the missing conversion as a limitation, is rewritten as
+guidance. **New arb keys: `fxInputSpace`, `fxRec709`, `fxSrgb`** (Crowdin upload owed).

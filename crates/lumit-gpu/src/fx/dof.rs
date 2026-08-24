@@ -181,7 +181,11 @@ struct LutParams {
     size: u32,
     /// 0..1, blended against the unprocessed input.
     mix: f32,
-    _pad: [f32; 2],
+    /// The Input space the lookup happens in (K-443): 0 Linear, 1 sRGB,
+    /// 2 Rec. 709 — `lumit_core::lut::LutSpace::code`'s numbering, which the
+    /// shader's `to_space` / `to_linear` branch on. 0 is the identity both ways.
+    space: u32,
+    _pad: f32,
     /// `DOMAIN_MIN`, per channel; the fourth lane is padding (a uniform vec3
     /// is 16-byte aligned regardless, so it costs nothing).
     domain_min: [f32; 4],
@@ -346,14 +350,17 @@ impl FxEngine {
     /// Apply one 3D-LUT lookup (docs/08 §3.11; docs/impl/lut.md) to a linear
     /// working texture, returning a new texture of the same size. One pass on
     /// **unpremultiplied** colour (§2.2 — a LUT is an arbitrary colour map):
-    /// per output pixel, unpremultiply, map each channel through
+    /// per output pixel, unpremultiply, convert into the Input space `space`
+    /// names (K-443 — 0 Linear, 1 sRGB, 2 Rec. 709; Linear is the identity and
+    /// the bit-exact picture this pass rendered before), map each channel through
     /// `[domain_min, domain_max]` to a grid coordinate in `[0, size-1]`
     /// (clamped, and a zero span reading as 0), `textureLoad` the eight
     /// integer corners of `lut_tex` and trilinearly interpolate in f32 — **not**
     /// the hardware sampler, whose precision is not guaranteed bit-for-bit
-    /// across GPUs (docs/impl/lut.md §3) — re-premultiply, then blend against
+    /// across GPUs (docs/impl/lut.md §3) — convert back to scene-linear,
+    /// re-premultiply, then blend against
     /// the input by the host Mix. The cube is consumed exactly as
-    /// `lumit_core::lut::Lut3d::sample` reads its red-fastest data, so the two
+    /// `lumit_core::lut::Lut3d::sample_in` reads its red-fastest data, so the two
     /// agree (§1.6). Its own bind group (the cube is a 3D texture, the one
     /// binding no other kernel has). `mix == 0` is the bit-exact input.
     #[allow(clippy::too_many_arguments)]
@@ -366,6 +373,7 @@ impl FxEngine {
         lut_tex: &wgpu::Texture,
         size: u32,
         mix: f32,
+        space: u32,
         domain_min: [f32; 3],
         domain_max: [f32; 3],
     ) -> wgpu::Texture {
@@ -378,7 +386,8 @@ impl FxEngine {
                 contents: bytemuck::bytes_of(&LutParams {
                     size,
                     mix,
-                    _pad: [0.0; 2],
+                    space,
+                    _pad: 0.0,
                     domain_min: [domain_min[0], domain_min[1], domain_min[2], 0.0],
                     domain_max: [domain_max[0], domain_max[1], domain_max[2], 0.0],
                 }),

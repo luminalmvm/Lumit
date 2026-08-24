@@ -1,5 +1,5 @@
 // 3D-LUT lookup (docs/08-EFFECTS.md §3.11; docs/impl/lut.md). Mirrors
-// lumit_core::lut::Lut3d::sample op-for-op (§1.6: the CPU is the oracle):
+// lumit_core::lut::Lut3d::sample_in op-for-op (§1.6: the CPU is the oracle):
 // trilinear interpolation of a colour cube, in linear light on
 // **unpremultiplied** colour (§2.2 — a LUT is an arbitrary colour map, so it
 // must not see premultiplied values; unpremult -> look up -> re-premult).
@@ -19,10 +19,17 @@
 // while the CPU oracle remapped it (K-271). Out-of-domain input clamps to the
 // edge (it does not wrap). `mix == 0` reproduces the input bit-exactly.
 
+// The Input space (K-443) the cube was authored against: the picture converts
+// into it, the table applies, the result converts back. `to_space` / `to_linear`
+// below mirror `lumit_core::lut::LutSpace::from_linear` / `to_linear` operation
+// for operation, `max(v, 0.0)` included — a negative working-space value is
+// legal (out of gamut) and must take the linear segment, not `pow` a negative
+// into NaN. Space 0 (Linear) returns its argument untouched, so the default is
+// the bit-exact picture this kernel rendered before the row existed (K-258).
 struct Params {
     size: u32,     // LUT edge length N (the cube holds N³ samples)
     mix: f32,      // 0..1, blended against the unprocessed input
-    _pad0: f32,
+    space: u32,    // 0 = Linear, 1 = sRGB, 2 = Rec. 709
     _pad1: f32,
     // The cube's input domain, per channel, in .xyz (.w is padding: a uniform
     // vec3 is 16-byte aligned anyway, so the pad is free).
@@ -57,6 +64,36 @@ fn lerp3(a: vec3<f32>, b: vec3<f32>, t: f32) -> vec3<f32> {
     return a + (b - a) * t;
 }
 
+// Scene-linear -> the Input space (== LutSpace::from_linear).
+fn to_space(c: vec3<f32>) -> vec3<f32> {
+    if (p.space == 1u) {
+        let lo = 12.92 * c;
+        let hi = 1.055 * pow(max(c, vec3<f32>(0.0)), vec3<f32>(1.0 / 2.4)) - 0.055;
+        return select(hi, lo, c <= vec3<f32>(0.0031308));
+    }
+    if (p.space == 2u) {
+        let lo = 4.5 * c;
+        let hi = 1.099 * pow(max(c, vec3<f32>(0.0)), vec3<f32>(0.45)) - 0.099;
+        return select(hi, lo, c < vec3<f32>(0.018));
+    }
+    return c;
+}
+
+// The Input space -> scene-linear (== LutSpace::to_linear).
+fn to_linear(c: vec3<f32>) -> vec3<f32> {
+    if (p.space == 1u) {
+        let lo = c / 12.92;
+        let hi = pow(max(c + 0.055, vec3<f32>(0.0)) / 1.055, vec3<f32>(2.4));
+        return select(hi, lo, c <= vec3<f32>(0.04045));
+    }
+    if (p.space == 2u) {
+        let lo = c / 4.5;
+        let hi = pow(max(c + 0.099, vec3<f32>(0.0)) / 1.099, vec3<f32>(1.0 / 0.45));
+        return select(hi, lo, c < vec3<f32>(0.081));
+    }
+    return c;
+}
+
 @compute @workgroup_size(8, 8)
 fn lut_apply(@builtin(global_invocation_id) gid: vec3<u32>) {
     let dims = vec2<i32>(textureDimensions(src));
@@ -65,7 +102,8 @@ fn lut_apply(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    let u = unpremult(o);
+    // Straight colour, then into the space the cube was authored for (K-443).
+    let u = to_space(unpremult(o));
 
     // Map each channel through its domain onto the grid and clamp
     // (out-of-domain clamps to the edge) — the CPU reference's `axis()`,
@@ -105,8 +143,9 @@ fn lut_apply(@builtin(global_invocation_id) gid: vec3<u32>) {
     let c1 = lerp3(c01, c11, f.y);
     let graded = lerp3(c0, c1, f.z);
 
-    // Re-premultiply, then blend against the untouched original by Mix.
-    let pm = graded * o.a;
+    // Back to scene-linear, re-premultiply, then blend against the untouched
+    // original by Mix.
+    let pm = to_linear(graded) * o.a;
     let outv = lerp3(o.rgb, pm, p.mix);
     textureStore(dst, xy, vec4<f32>(outv, o.a));
 }

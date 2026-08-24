@@ -11,7 +11,9 @@
 //! There is no CPU reference. The parsed cube never reaches the single-buffer
 //! CPU dispatcher, so the degradation rung renders a LUT as identity, exactly as
 //! the old `Resolved::Lut` arm did; the §1.6 oracle is [`crate::lut::Lut3d::
-//! sample`], exercised directly from the lumit-gpu test.
+//! sample_in`], exercised directly from the lumit-gpu test — the transfer into
+//! and back out of the Input space (K-443) is part of that oracle, so the two
+//! paths cannot disagree about where the picture sits when the table reads it.
 
 use crate::fx::{EffectDef, EffectMetadata, EffectSchema};
 use lumit_fx_macros::Effect;
@@ -40,6 +42,19 @@ pub struct Lut {
     #[file(filter = ["cube"], filter_name = "Cube LUT")]
     pub file: Option<u32>,
 
+    /// The transfer function the cube was authored against (K-443). The picture
+    /// converts into it, the table applies, the result converts back — so a
+    /// `.cube` baked in a display-referred grading application lands in the
+    /// cells of the table its author was looking at. Linear is the default and
+    /// the identity both ways, which is exactly what this effect did before the
+    /// row existed.
+    #[choice(
+        label = "Input space",
+        options = ["Linear", "sRGB", "Rec. 709"],
+        default = 0
+    )]
+    pub input_space: u32,
+
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
@@ -52,11 +67,14 @@ pub struct Lut {
 }
 
 impl Lut {
-    /// The mix the kernel blends the graded result by, clamped exactly as the
-    /// old resolve arm clamped it — the whole of LUT's host maths, since the
-    /// grade itself is the file.
-    pub fn packed(self) -> f32 {
-        (self.mix / 100.0).clamp(0.0, 1.0)
+    /// The two numbers the kernel needs: the mix it blends the graded result by,
+    /// clamped exactly as the old resolve arm clamped it, and the space the
+    /// lookup happens in (K-443). The grade itself is still the file.
+    pub fn packed(self) -> (f32, crate::lut::LutSpace) {
+        (
+            (self.mix / 100.0).clamp(0.0, 1.0),
+            crate::lut::LutSpace::from_code(self.input_space),
+        )
     }
 }
 

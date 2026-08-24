@@ -2016,10 +2016,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   that is missing, unreadable, or the older one-dimensional kind — it never errors, just shows
   as doing nothing). Because a colour look is a whole file, you cannot smoothly *blend* from one
   LUT to another; you *step* between them with hold keyframes (the picture snaps to the new look
-  at each key). One honest limitation to know: the file is applied to the picture in Lumit's own
-  internal light space exactly as written, without first translating it into whatever space the
-  LUT was authored for — a proper "input space" control is a later job — so a LUT built for a
-  very different encoding may look off. This grade runs **only on the graphics card**: unlike
+  at each key). This grade runs **only on the graphics card**: unlike
   Contrast or Gamma there is no slow CPU stand-in, so if Lumit ever has to fall back to
   CPU-only drawing a LUT layer shows through ungraded. Under the hood the cube of sample points
   is handed to the card as a **3D texture** — an ordinary image has width and height, a 3D
@@ -2039,6 +2036,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   remembers the file's last-changed time as well, so a re-exported grade appears on the next
   frame, and it keeps only the eight most recently used cubes rather than every one the
   session ever touched.
+
+  **Input space (K-443) — telling the LUT what kind of numbers it is being handed.** This is
+  the limitation the paragraph above used to end on, and it is now a dropdown. Lumit does its
+  compositing in *scene-linear* light: numbers that behave the way light behaves, where "mid
+  grey" is 0.18. Almost every LUT a colourist hands you was baked in a grading application
+  that works in *display* numbers, where mid grey is about 0.5. Feed a display-space table
+  scene-linear numbers and every colour arrives in the wrong drawer of the filing cabinet —
+  the grade is not subtly off, it is reading the wrong entries, which is why a perfectly good
+  LUT could come out crushed and murky. **Input space** says which kind of numbers the table
+  expects: leave it on **Linear** and nothing is translated (exactly what the effect did
+  before, to the last bit); choose **sRGB** or **Rec. 709** and Lumit converts the picture
+  into that encoding, looks the colour up, and converts the answer straight back to linear
+  before the rest of the stack sees it. Those two curves are the ones Lumit already knows —
+  sRGB is the same maths that puts pictures on your screen. Log-encoded LUTs (the ones camera
+  manufacturers ship) have no option yet, because Lumit does not yet define any log curve and
+  guessing one would be worse than saying so.
 - `crates/lumit-core/src/lut.rs` — **reading a colour LUT (`.cube` file).** A LUT
   (look-up table) is a colour recipe a colourist bakes elsewhere: feed it a red/green/blue
   and it hands back a graded red/green/blue. The common `.cube` text format stores that as a

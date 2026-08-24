@@ -2568,6 +2568,19 @@
           "file_filter_name": "Cube LUT"
         },
         {
+          "id": "input_space",
+          "label": "Input space",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Linear",
+            "sRGB",
+            "Rec. 709"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",

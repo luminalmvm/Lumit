@@ -264,6 +264,7 @@ In front
 Inflate
 Inner radius
 Input black
+Input space
 Input white
 Inside colour
 Intensity
@@ -407,6 +408,7 @@ Radius
 Ramp
 Random
 Randomness
+Rec. 709
 Rectangular to polar
 Red
 Red blur
@@ -619,3 +621,4 @@ Yellows
 Z amount
 Z frequency
 Zoom
+sRGB
