@@ -36,6 +36,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/splash.dart';
 import '../state/comp_model.dart';
@@ -111,6 +113,15 @@ const double _toolbarHeight = 26;
 /// which is what keeps `maxScrollExtent` the same on both.
 const double _laneBottomBarHeight = 20;
 const double _headerHeight = 20;
+
+/// Half a keyframe diamond's width on a property's own lane.
+const double _keyHalf = 4;
+
+/// The same on a **shut layer's** row (§12A.1): half the scale, because these
+/// are a summary of everything keyed inside the layer rather than the keys you
+/// take hold of. Twirl the layer open and each property draws its own at full
+/// size, where they can be dragged.
+const double _summaryKeyHalf = _keyHalf / 2;
 
 /// The two landscapes flanking the zoom slider (K-293). Painter-drawn, so
 /// K-209's 16px floor — which is about an icon-set glyph's 1.5-unit stroke
@@ -221,11 +232,18 @@ class LayerRow {
   final bool hasAudio;
   final bool hasPicture;
 
+  /// Every keyframe anywhere on this layer, for the diamonds its **own** row
+  /// draws while it is shut (§12A.1). Empty while the layer is open: each
+  /// property then draws its own on its own lane, and saying it twice would
+  /// put a small diamond behind every large one.
+  final List<BridgeKeyframe> summaryKeys;
+
   const LayerRow({
     required this.entry,
     required this.id,
     required this.open,
     required this.foldRows,
+    this.summaryKeys = const [],
     required this.sequenceExtra,
     this.hasAudio = false,
     this.hasPicture = true,
@@ -235,6 +253,16 @@ class LayerRow {
   double get height =>
       _rowHeight * (1 + drawnRows.length) + (sequenceExtra ?? 0);
 }
+
+/// What a column group is called — in its header, and on the bottom bar's
+/// toggle for it (K-448), which must name the same thing the header does.
+String columnGroupLabel(TimelineGroup group) => switch (group) {
+      TimelineGroup.switches => l10n.columnAv,
+      TimelineGroup.identity => l10n.columnLayer,
+      TimelineGroup.render => l10n.columnSwitches,
+      TimelineGroup.compose => l10n.columnCompose,
+      TimelineGroup.timings => l10n.tipRenderTime,
+    };
 
 /// Decide every layer's row, once for the whole panel. `flowParams` and
 /// `volumeDb` are the panel's once-per-revision reads, riding down onto the
@@ -261,6 +289,14 @@ List<LayerRow> layerRows({
           hasAudio: hasAudio[id] ?? false,
           flowParams: flowParams[id],
           volumeDb: volumeDb[id]),
+      // Only for a shut layer: an open one shows the real thing.
+      summaryKeys: open.contains(id)
+          ? const []
+          : layerKeys(
+              entry: entry,
+              flowParams: flowParams[id],
+              volumeDb: volumeDb[id],
+            ),
       sequenceExtra: sequenceExtra[id],
       hasAudio: hasAudio[id] ?? false,
       // Until the probe has answered, a layer is assumed to have a picture:
@@ -828,6 +864,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Each group's width. Dragging a header seam changes one of these and
   /// leaves the rest alone, so the outline grows by what the drag moved.
   Map<TimelineGroup, double> _groupWidths = {...defaultGroupWidths};
+
+  /// The column groups the bottom bar has switched **off** (K-448, §12A.1),
+  /// so the outline pares down to names and bars when the columns are not in
+  /// use. Session-lived, like the order and the widths. The identity group is
+  /// never in here: names and bars are what "pared down" means, and a table
+  /// with no first column is a table of nothing.
+  final Set<TimelineGroup> _hiddenGroups = <TimelineGroup>{};
+
+  /// The groups a bottom-bar toggle offers, in the order the bar shows them.
+  static const List<TimelineGroup> _toggleableGroups = [
+    TimelineGroup.switches,
+    TimelineGroup.render,
+    TimelineGroup.compose,
+  ];
 
   /// Widen (or narrow) one group, never below what its cells need.
   void _resizeGroup(TimelineGroup group, double delta) => setState(() {
@@ -2181,18 +2231,19 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // works from these rather than from the stored order, so the geometry
     // follows in one place.
     final measuring = ui.renderTimings.measuring;
-    final groupOrder = measuring
-        ? _groupOrder
-        : [
-            for (final group in _groupOrder)
-              if (group != TimelineGroup.timings) group
-          ];
-    final groupWidths = measuring
-        ? _groupWidths
-        : {
-            for (final entry in _groupWidths.entries)
-              if (entry.key != TimelineGroup.timings) entry.key: entry.value
-          };
+    // A group is drawn unless it is the render-time column with nothing being
+    // measured, or its bottom-bar toggle is off (K-448). One test, one place.
+    bool drawn(TimelineGroup group) =>
+        (measuring || group != TimelineGroup.timings) &&
+        !_hiddenGroups.contains(group);
+    final groupOrder = [
+      for (final group in _groupOrder)
+        if (drawn(group)) group
+    ];
+    final groupWidths = {
+      for (final entry in _groupWidths.entries)
+        if (drawn(entry.key)) entry.key: entry.value
+    };
     final frames = ui.model.durationFrames;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
     final needle = _search.trim().toLowerCase();
@@ -2641,9 +2692,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               ),
             ],
           )),
-          Container(
-            height: _laneBottomBarHeight,
-            color: t.surface1,
+          // The outline's own end of the bottom bar: the column-group
+          // toggles, where the lane side carries the zoom and the scrollbar
+          // (K-448). The block was already reserved to keep the two halves the
+          // same height — it now has something in it.
+          _ColumnToggles(
+            groups: _toggleableGroups,
+            hidden: _hiddenGroups,
+            onToggle: (group) => setState(() {
+              if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
+            }),
           ),
         ],
       ),
@@ -3229,10 +3287,10 @@ class _FoldRow extends StatelessWidget {
                   // Wider than the glyph: the twirl is now the only way to open
                   // a heading, so it has to be worth aiming at.
                   width: iconSize + 6,
-                  child: lumitIcon(
-                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                  child: glyph.LumitIcon(
+                    open ? LumitIcons.collapse : LumitIcons.expand,
                     size: iconSize,
-                    color: open ? t.textPrimary : t.textMuted,
+                    colour: open ? t.textPrimary : t.textMuted,
                   ),
                 ),
               ),
@@ -5484,13 +5542,7 @@ class _ColumnHeader extends StatelessWidget {
     );
   }
 
-  String _labelOf(TimelineGroup group) => switch (group) {
-        TimelineGroup.switches => l10n.columnAv,
-        TimelineGroup.identity => l10n.columnLayer,
-        TimelineGroup.render => l10n.columnSwitches,
-        TimelineGroup.compose => l10n.columnCompose,
-        TimelineGroup.timings => l10n.tipRenderTime,
-      };
+  String _labelOf(TimelineGroup group) => columnGroupLabel(group);
 
   /// The header cells, in the same widths the rows use, so each icon stands
   /// over its column. Indicators only — clicking a header does nothing; the
@@ -5504,6 +5556,17 @@ class _ColumnHeader extends StatelessWidget {
         );
     Widget cell(LumitIcon i, String tip) =>
         SizedBox(width: switchCellWidth, child: icon(i, tip));
+    // The same legend drawn from Lumit's own set (K-440), for the columns the
+    // set already has a mark for.
+    Widget markCell(String mark, String tip) => SizedBox(
+          width: switchCellWidth,
+          child: LumitTooltip(
+            message: tip,
+            child: Center(
+                child:
+                    glyph.LumitIcon(mark, size: iconSize, colour: t.textMuted)),
+          ),
+        );
     // The compose titles carry the dropdown's own text inset, so each sits
     // directly over the text in the cell below it.
     Widget title(String text, String tip, double width) => SizedBox(
@@ -5523,10 +5586,10 @@ class _ColumnHeader extends StatelessWidget {
       TimelineGroup.switches => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            cell(LumitIcon.eye, l10n.switchVisible),
-            cell(LumitIcon.audio, l10n.switchAudible),
-            cell(LumitIcon.ellipse, l10n.switchSolo),
-            cell(LumitIcon.lock, l10n.switchLock),
+            markCell(LumitIcons.visible, l10n.switchVisible),
+            markCell(LumitIcons.audio, l10n.switchAudible),
+            markCell(LumitIcons.solo, l10n.switchSolo),
+            markCell(LumitIcons.lock, l10n.switchLock),
             cell(LumitIcon.shy, l10n.switchShy),
           ],
         ),
@@ -6057,27 +6120,32 @@ class _OutlineRowState extends State<_OutlineRow> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (widget.hasPicture)
-          _switch(context, id, 'visible', LumitIcon.eye, switches.visible,
+          _switch(context, id, 'visible', null, switches.visible,
               BridgeLayerSwitch.visible,
-              offIcon: LumitIcon.eyeClosed,
+              mark: LumitIcons.visible,
+              offMark: LumitIcons.hidden,
               tip: switches.visible ? l10n.switchVisible : l10n.switchHidden)
         else
           const SizedBox(width: switchCellWidth, height: _rowHeight),
         if (widget.hasAudio)
-          _switch(context, id, 'audible', LumitIcon.audio, switches.audible,
+          _switch(context, id, 'audible', null, switches.audible,
               BridgeLayerSwitch.audible,
-              offIcon: LumitIcon.mute,
+              mark: LumitIcons.audio,
+              offMark: LumitIcons.muted,
               tip: switches.audible ? l10n.switchAudible : l10n.switchMuted)
         else
           const SizedBox(width: switchCellWidth, height: _rowHeight),
-        // A circle, hollow until soloed.
-        _switch(context, id, 'solo', LumitIcon.circleFilled, switches.solo,
-            BridgeLayerSwitch.solo,
-            offIcon: LumitIcon.ellipse,
+        // A ringed dot, dimmed until soloed — the set has one solo mark, so
+        // this pair is told apart by strength rather than by shape.
+        _switch(
+            context, id, 'solo', null, switches.solo, BridgeLayerSwitch.solo,
+            mark: LumitIcons.solo,
+            offMark: LumitIcons.solo,
             tip: switches.solo ? l10n.switchSoloed : l10n.switchSolo),
-        _switch(context, id, 'locked', LumitIcon.lock, switches.locked,
+        _switch(context, id, 'locked', null, switches.locked,
             BridgeLayerSwitch.locked,
-            offIcon: LumitIcon.unlock,
+            mark: LumitIcons.lock,
+            offMark: LumitIcons.unlocked,
             tip: switches.locked ? l10n.switchLocked : l10n.switchLock),
         _switch(context, id, 'shy', LumitIcon.shyHidden, switches.shy,
             BridgeLayerSwitch.shy,
@@ -6106,10 +6174,10 @@ class _OutlineRowState extends State<_OutlineRow> {
               width: 16,
               height: _rowHeight,
               child: Center(
-                child: lumitIcon(
-                  widget.open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                child: glyph.LumitIcon(
+                  widget.open ? LumitIcons.collapse : LumitIcons.expand,
                   size: iconSize,
-                  color: widget.open ? t.textPrimary : t.textMuted,
+                  colour: widget.open ? t.textPrimary : t.textMuted,
                 ),
               ),
             ),
@@ -6393,18 +6461,28 @@ class _OutlineRowState extends State<_OutlineRow> {
     BuildContext context,
     String id,
     String name,
-    LumitIcon icon,
+    LumitIcon? icon,
     bool on,
     BridgeLayerSwitch? which, {
     LumitIcon? offIcon,
+    // Lumit's own set (K-440), where it has the mark: [mark]/[offMark] take
+    // the place of [icon]/[offIcon] and are drawn from lumit_icons.dart. The
+    // Iconoir pair stays for the switches the set has no glyph for yet, so
+    // this cell can be ported one column at a time.
+    String? mark,
+    String? offMark,
     String? tip,
     VoidCallback? onTap,
   }) {
     final t = ThemeScope.of(context).theme;
-    final glyph = on || offIcon != null
-        ? lumitIcon(on ? icon : offIcon!,
-            size: iconSize, color: on ? t.textPrimary : t.textMuted)
-        : lumitIcon(icon, size: iconSize, color: t.textDisabled);
+    final ink = on || offIcon != null || offMark != null
+        ? (on ? t.textPrimary : t.textMuted)
+        : t.textDisabled;
+    final Widget face = mark != null
+        ? glyph.LumitIcon(on || offMark == null ? mark : offMark,
+            size: iconSize, colour: ink)
+        : lumitIcon(on || offIcon == null ? icon! : offIcon,
+            size: iconSize, color: ink);
     final cell = GestureDetector(
       key: ValueKey<String>('tl-$name-$id'),
       behavior: HitTestBehavior.opaque,
@@ -6425,7 +6503,7 @@ class _OutlineRowState extends State<_OutlineRow> {
               borderRadius: BorderRadius.circular(t.tokens.controlRadius),
               border: Border.all(color: t.hairline),
             ),
-            child: Center(child: glyph),
+            child: Center(child: face),
           ),
         ),
       ),
@@ -6947,6 +7025,8 @@ class _LayerArea extends StatelessWidget {
                                               dragPreview: dragPreview,
                                               bounds: bounds[rows[i].id] ??
                                                   BarBounds.free,
+                                              summaryKeys: rows[i].summaryKeys,
+                                              fps: fps,
                                             ),
                                           // A Sequence layer's own clips and
                                           // their speed envelope, in the room
@@ -7321,8 +7401,8 @@ class _KeyLaneState extends State<_KeyLane> {
                   if (widget.selectedKeys.contains('${widget.rowId}#$i')) i,
               },
               axis: widget.axis,
-              colour: t.textPrimary,
-              chosen: t.accent,
+              colour: t.animated,
+              chosen: t.textPrimary,
             ),
           ),
         ),
@@ -7454,7 +7534,10 @@ class _RowDividerPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// A lane's keyframe diamonds: one per key, the marquee's catch in accent.
+/// A lane's keyframe diamonds: one per key, in `animated` (§3.1) — the token
+/// that means "this is animated or in hand" — and `text_primary` for the ones
+/// the marquee has hold of. Neither is `accent`: the accent's job list is the
+/// playhead, the one filled button and the active tab tick, and nothing else.
 class _LaneKeysPainter extends CustomPainter {
   /// Fractional, so a key placed between frames draws between them.
   final List<double> frames;
@@ -7463,17 +7546,22 @@ class _LaneKeysPainter extends CustomPainter {
   final Color colour;
   final Color chosen;
 
+  /// Half a diamond's width. [_keyHalf] on a property's own lane; half of
+  /// that on a shut layer's row, where the diamonds are a summary rather than
+  /// the things you drag (§12A.1).
+  final double half;
+
   const _LaneKeysPainter({
     required this.frames,
     required this.selected,
     required this.axis,
     required this.colour,
     required this.chosen,
+    this.half = _keyHalf,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    const half = 4.0;
     final mid = size.height / 2;
     for (var i = 0; i < frames.length; i++) {
       final x = axis.xOf(frames[i]);
@@ -7495,6 +7583,7 @@ class _LaneKeysPainter extends CustomPainter {
       !setEquals(old.selected, selected) ||
       old.colour != colour ||
       old.chosen != chosen ||
+      old.half != half ||
       old.axis.frames != axis.frames ||
       old.axis.width != axis.width;
 
@@ -7503,6 +7592,63 @@ class _LaneKeysPainter extends CustomPainter {
   /// up by the box, not clicked).
   @override
   bool? hitTest(Offset position) => false;
+}
+
+/// The outline's end of the bottom bar (K-448, §12A.1): one kicker per
+/// column group, lit while that group is drawn.
+///
+/// Kickers rather than buttons because these name *containers* (§7.1) — they
+/// are the same words the column headers carry, and clicking one takes its
+/// columns away so the outline pares down to names and bars. Nothing here
+/// touches the document: it is what this panel shows, and it lives as long as
+/// the session does.
+class _ColumnToggles extends StatelessWidget {
+  final List<TimelineGroup> groups;
+  final Set<TimelineGroup> hidden;
+  final ValueChanged<TimelineGroup> onToggle;
+
+  const _ColumnToggles({
+    required this.groups,
+    required this.hidden,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Container(
+      height: _laneBottomBarHeight,
+      color: t.surface1,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      // Scrolls sideways when the outline is narrow — the same answer the
+      // toolbar and the lane bar give; an overflow stripe is a layout fault.
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            for (final group in groups) ...[
+              LumitTooltip(
+                message: l10n.tipToggleColumns(columnGroupLabel(group)),
+                child: HouseButton(
+                  key: ValueKey<String>('tl-column-${group.name}'),
+                  small: true,
+                  frameless: true,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  onPressed: () => onToggle(group),
+                  child: Text(
+                    columnGroupLabel(group).toUpperCase(),
+                    style: hidden.contains(group) ? t.kicker : t.kickerOn,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The lanes' bottom bar (docs/07 §4.5-§4.6): − / + / Fit with the zoom read
@@ -7801,6 +7947,15 @@ class _Bar extends StatefulWidget {
   /// (K-217) the outline's lit rows are off the side of the panel.
   final bool selected;
 
+  /// Every key on the layer, drawn on its row at half scale while it is shut
+  /// (§12A.1) — a summary, not a target: they are not draggable here, because
+  /// several properties keyed on one frame are several keys under one diamond.
+  /// Twirl the layer open and each property's lane draws its own.
+  final List<BridgeKeyframe> summaryKeys;
+
+  /// The comp's rate, to place [summaryKeys] on the frame axis.
+  final double fps;
+
   const _Bar({
     super.key,
     required this.comp,
@@ -7816,6 +7971,8 @@ class _Bar extends StatefulWidget {
     required this.onChanged,
     required this.dragPreview,
     required this.bounds,
+    this.summaryKeys = const [],
+    required this.fps,
   });
 
   @override
@@ -7913,11 +8070,12 @@ class _BarState extends State<_Bar> {
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
-                    // The layer's own colour, faint: this is the same clip,
-                    // shown as far as it goes, not a second object.
-                    color: t.labelColour(info.label).withValues(alpha: 0.10),
+                    // A hairline and nothing inside it (§12A.1): the outline
+                    // says how far this same clip *could* still be pulled, and
+                    // a fill would read as a second, dimmer object sitting
+                    // behind the bar rather than as the bar's own reach.
                     border: Border.all(
-                      color: t.labelColour(info.label).withValues(alpha: 0.45),
+                      color: t.labelColour(info.label).withValues(alpha: 0.25),
                       width: 1,
                     ),
                     // Follows the bar's own ends: this *is* the bar, drawn as
@@ -8021,13 +8179,21 @@ class _BarState extends State<_Bar> {
                     // The layer's label colour (K-188): the same chip the
                     // outline swatch shows, so recolouring a layer recolours
                     // its bar — and each kind starts on its own colour.
-                    // Selected bars brighten that colour rather than growing
-                    // an outline: the hue still says which layer this is, and
-                    // a lighter bar reads at a glance where a 1px box did not.
+                    // **Desaturated** under the redesign (§12A.1): the fill is
+                    // that colour at [clipFillAlpha] over the lane's ground,
+                    // computed from the token rather than picked, so a lane
+                    // full of layers reads organised rather than carnival. The
+                    // solid leading edge below carries the full colour.
+                    // Selected bars brighten that fill rather than growing an
+                    // outline: the hue still says which layer this is, and a
+                    // lighter bar reads at a glance where a 1px box did not.
                     color: widget.selected
                         ? Color.lerp(
-                            t.labelColour(info.label), t.textPrimary, 0.35)!
-                        : t.labelColour(info.label),
+                                t.labelColour(info.label), t.textPrimary, 0.35)!
+                            .withValues(alpha: clipFillSelectedAlpha)
+                        : t
+                            .labelColour(info.label)
+                            .withValues(alpha: clipFillAlpha),
                     // Stadium ends under Round (K-394, §12.1) — the control
                     // radius is the sentinel that clamps to half the bar's own
                     // height. **The bar's HIT rect is unchanged and stays
@@ -8041,6 +8207,47 @@ class _BarState extends State<_Bar> {
                   ),
                   child: Stack(
                     children: [
+                      // The leading edge (§12A.1): 2px of the full colour at
+                      // the bar's start, so a desaturated fill still lands with
+                      // a snap and a row of bars reads as a row of beginnings.
+                      Positioned(
+                        key: ValueKey<String>(
+                            'tl-bar-edge-${widget.entry.layer.internallayerId}'),
+                        left: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: clipEdgeWidth,
+                        child: IgnorePointer(
+                          child: ColoredBox(color: t.labelColour(info.label)),
+                        ),
+                      ),
+                      // The layer's name, on its bar (§6.1): mono, quiet
+                      // enough to sit under the marks and the waveform, clear
+                      // of the leading edge.
+                      Positioned(
+                        left: clipEdgeWidth + 4,
+                        right: 2,
+                        top: 0,
+                        bottom: 0,
+                        child: IgnorePointer(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              info.name,
+                              key: ValueKey<String>(
+                                  'tl-bar-name-${widget.entry.layer.internallayerId}'),
+                              style: t.mono.copyWith(
+                                fontSize: 11,
+                                color: t.textPrimary
+                                    .withValues(alpha: clipNameAlpha),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
+                              softWrap: false,
+                            ),
+                          ),
+                        ),
+                      ),
                       // A Sequence layer's bar stays a plain bar: the clips and
                       // their edit points are the sequence view's to draw, and
                       // split lines up here only said the same thing twice
@@ -8091,6 +8298,30 @@ class _BarState extends State<_Bar> {
               ),
             ),
           ),
+          // What is keyed inside a shut layer, at half scale (§12A.1) — so
+          // the stack says where the animation is without every layer having
+          // to be twirled open. They travel with a move, because they belong
+          // to the layer.
+          if (widget.summaryKeys.isNotEmpty)
+            Positioned.fill(
+              key: ValueKey<String>(
+                  'tl-bar-keys-${widget.entry.layer.internallayerId}'),
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _LaneKeysPainter(
+                    frames: [
+                      for (final k in widget.summaryKeys)
+                        laneKeyFrame(k, widget.fps) + shift,
+                    ],
+                    selected: const {},
+                    axis: widget.axis,
+                    colour: t.animated,
+                    chosen: t.textPrimary,
+                    half: _summaryKeyHalf,
+                  ),
+                ),
+              ),
+            ),
           // The layer's own markers (K-254), over the bar so they take the
           // pointer ahead of it — a flag is a much smaller target than a bar,
           // and a right-click meant for one must not open the bar's menu.

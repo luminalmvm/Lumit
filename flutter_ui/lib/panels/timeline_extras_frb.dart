@@ -1821,6 +1821,28 @@ TextStyle markerLabelStyle(LumitTheme t) =>
 const double workAreaRulerFillAlpha = 0.10;
 const double workAreaLaneFillAlpha = 0.06;
 
+/// How a layer bar — and every clip inside a Sequence layer — fills, as a
+/// share of its label colour (§12A.1, K-441).
+///
+/// The bar is that colour *thinned* over the lane's ground rather than the
+/// colour itself: at full strength a stack of layers is a row of bright slabs
+/// and the eye has nothing left over for the selection or the playhead. Every
+/// value here is applied to the token, never written as a second hex, so a
+/// recoloured layer recolours its bar and its clips in any theme.
+const double clipFillAlpha = 0.38;
+
+/// The same fill on a selected bar. Brighter as well as lighter, so selection
+/// beats every label colour in the palette (§6.1).
+const double clipFillSelectedAlpha = 0.62;
+
+/// The solid mark at a bar's or a clip's start, in the label's full colour:
+/// what makes a desaturated fill still land with a snap.
+const double clipEdgeWidth = 2;
+
+/// The layer name on its own bar: `text_primary`, quieted so it sits under
+/// the bar's marks and any waveform rather than over them.
+const double clipNameAlpha = 0.8;
+
 /// A ruler label: seconds under a minute as `05s`, above as `01:00s` — the
 /// familiar editor idiom.
 String rulerLabelOf(double seconds) {

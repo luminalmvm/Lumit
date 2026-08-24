@@ -5212,6 +5212,15 @@
   "@tipTextSize": {
     "description": "Tooltip. Keep it to the control's name — under five words."
   },
+  "tipToggleColumns": "Show or hide {column}",
+  "@tipToggleColumns": {
+    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading — A/V, Switches, or Matte · Blend · Parent.",
+    "placeholders": {
+      "column": {
+        "type": "String"
+      }
+    }
+  },
   "tipTransparencyGrid": "Transparency grid",
   "@tipTransparencyGrid": {
     "description": "Tooltip on the Viewer's grid button. Under five words."

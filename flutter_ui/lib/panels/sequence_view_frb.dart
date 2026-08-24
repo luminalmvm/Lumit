@@ -412,7 +412,13 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
           onHorizontalDragCancel: () => setState(() => _drag = null),
           child: Container(
             decoration: BoxDecoration(
-              color: t.labelColour(widget.entry.info.label),
+              // Desaturated, exactly as a layer bar is (§12A.1): the label's
+              // own colour thinned over the ground, with the solid leading
+              // edge below carrying it at full strength. Computed from the
+              // token, so a recoloured layer recolours its clips too.
+              color: t
+                  .labelColour(widget.entry.info.label)
+                  .withValues(alpha: clipFillAlpha),
               border: Border.all(color: t.surface0, width: 1),
               // Stadium ends under Round (K-394, §12.1), clamped to half the
               // clip's own height by the control radius sentinel. **The hit
@@ -427,6 +433,17 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             clipBehavior: Clip.hardEdge,
             child: Stack(
               children: [
+                // The clip's leading edge: where this cut begins, at full
+                // strength, so a run of clips reads as a run of beginnings.
+                Positioned(
+                  key: ValueKey<String>('seq-clip-edge-${clip.id}'),
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: clipEdgeWidth,
+                  child:
+                      ColoredBox(color: t.labelColour(widget.entry.info.label)),
+                ),
                 // The clip's own sound, under its label and thumbnail: a cut
                 // is aimed at what you can see, and on a Sequence layer what
                 // you are cutting is the clip (docs/09 §4). Drawn behind

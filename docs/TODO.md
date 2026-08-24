@@ -439,6 +439,15 @@ storage states and nothing else. Needs a per-frame resolution tier over the
 bridge before the redesign's hues can be drawn; the painter already colours by
 a tier byte, so it is the byte's meaning that has to grow.
 
+**A Sequence clip's own source reach** (K-441, docs/15-DESIGN.md §12A.1).
+A trimmed *layer* draws the faint outline of the material trimmed away; §12A.1
+asks for the same per clip inside a Sequence layer, and `BridgeClip` cannot say:
+it carries `place_start`, `place_duration`, the comp-frame ends, the speed and
+the retime map, but nothing about how far its source runs either side of the
+trim. Needs the clip's source bounds over the bridge — the same pair
+`BarBounds` already carries for a layer — after which the lane's ghost is one
+more Positioned per clip.
+
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
 solve link and Convert to keyframes, all against an injected solve. Stage 2 landed

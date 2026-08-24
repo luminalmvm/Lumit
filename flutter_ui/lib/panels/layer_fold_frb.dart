@@ -16,6 +16,8 @@
 // only the one you want — which is what the spec asks for and what keeps a busy
 // comp from becoming a wall of numbers.
 
+import 'dart:collection';
+
 import 'package:flutter/services.dart';
 
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -260,6 +262,56 @@ BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to) =>
       expansion: value == MaskValue.expansion ? to : mask.expansion,
       pathKeys: mask.pathKeys,
     );
+
+/// A set that holds every path there is.
+///
+/// [layerFoldRows] asks `open.contains(path)` to decide which twirls are down;
+/// handed this, it answers yes to all of them and builds the layer's rows as
+/// if the whole fold-out were open. That is what [layerKeys] wants — every
+/// keyed property, whatever the user has actually twirled — and it gets it
+/// without anyone having to enumerate a layer's paths first, so there stays
+/// one description of what a layer's rows are.
+class _EveryPath extends SetBase<String> {
+  const _EveryPath();
+  @override
+  bool contains(Object? element) => true;
+  @override
+  bool add(String value) => false;
+  @override
+  String? lookup(Object? element) => element is String ? element : null;
+  @override
+  bool remove(Object? value) => false;
+  @override
+  Iterator<String> get iterator => const <String>[].iterator;
+  @override
+  int get length => 0;
+  @override
+  Set<String> toSet() => <String>{};
+}
+
+/// Every keyframe anywhere on a layer, in time order — the diamonds a layer's
+/// **own** row shows while it is shut (15-DESIGN §12A.1, K-441).
+///
+/// A twirled-open layer draws its keys per property lane; a shut one has to
+/// say the same thing on one row, so this walks the fold-out as though every
+/// twirl were down and gathers what each lane would have drawn. Duplicates
+/// stay: two properties keyed on the same frame draw one diamond on top of
+/// another, which is the truth of it.
+List<BridgeKeyframe> layerKeys({
+  required BridgeLayerEntry entry,
+  BridgeFlowParams? flowParams,
+  BridgeScalar? volumeDb,
+}) =>
+    [
+      for (final row in layerFoldRows(
+        entry: entry,
+        open: const _EveryPath(),
+        hasAudio: volumeDb != null,
+        flowParams: flowParams,
+        volumeDb: volumeDb,
+      ))
+        ...laneKeysOf(row),
+    ];
 
 /// A key's position on the comp's frame axis, computed Dart-side from its
 /// exact time and the comp's rate so a paint never crosses the bridge for it.

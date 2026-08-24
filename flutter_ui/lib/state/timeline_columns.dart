@@ -164,8 +164,16 @@ class ValueColumn {
 /// last given — see [valueColumnFor] on why that is near enough.
 double rightInsetOf(List<TimelineGroup> order,
     Map<TimelineGroup, double> widths, TimelineGroup group) {
+  final at = order.indexOf(group);
+  // A group the outline is not drawing at all (its bottom-bar toggle is off,
+  // or nothing is being measured) has nothing to its right: whatever lines up
+  // with it sits at the outline's own right edge. Without this the loop below
+  // started at zero and counted *every* group as being to the right of a
+  // column that was not there, which pushed the fold-out's value cells clean
+  // off the panel the moment the switches column was hidden.
+  if (at < 0) return 0;
   var right = 0.0;
-  for (var i = order.indexOf(group) + 1; i < order.length; i++) {
+  for (var i = at + 1; i < order.length; i++) {
     right += groupDividerWidth + (widths[order[i]] ?? 0);
   }
   return right;

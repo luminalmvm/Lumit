@@ -1058,7 +1058,17 @@ group resizes it** (K-192) — every other group keeps its width, so the outline
 shrinks by what the drag moved, and what sits inside a group grows with it: the fold-out's
 value cells span the render group, and the compose group's three pickers share theirs. The
 header icons are indicators only, and the switches live on the rows. Visibility and audio swap glyph when off (closed
-eye, muted speaker) rather than only dimming. **Shy** is a real switch on the layer: it
+eye, muted speaker) rather than only dimming. **The bottom bar carries a toggle per
+group** (K-448, 15-DESIGN §12A.1): a kicker naming each of the A/V, switches and
+matte/blend/parent groups, lit while its columns are drawn, so the outline pares down to
+names and bars when the columns are not in use. The identity group has no toggle — names
+and bars are what "pared down" means. A hidden group takes no header, no cells and no
+width, exactly as an unmeasured render-time column does, and whatever lined up with it
+(the fold-out's value cells) moves to the outline's own right edge rather than off the
+panel. The state is the session's, like the order and the widths. **The switches are drawn
+from Lumit's own icon set** (K-440) wherever the set has the mark — visible/hidden,
+audio/muted, solo, lock/unlocked, and the twirl; the rest keep their Iconoir glyph until
+the set grows one. **Shy** is a real switch on the layer: it
 hides the row from this list while the toolbar's shy filter is on, and never changes what
 renders. **Lock** holds the layer still where the gestures live — bar move/trim, razor,
 rename, reorder and delete all refuse — though property-row edits are not yet guarded
@@ -1384,10 +1394,26 @@ still instead (§4.6, K-293), so what is being worked on stays on screen. Still 
   **A trimmed layer shows its source's reach (K-212).** A source-backed layer that is not
   retimed and does not fill its source draws a faint outlined rectangle spanning the whole
   source, behind the bar and in the layer's own label colour — so what shows past each end
-  is exactly the material trimmed away. Absent when the bar already fills its source, on
+  is exactly the material trimmed away. **A hairline and nothing inside it** (K-441,
+  15-DESIGN §12A.1): a fill behind the bar read as a second, dimmer object rather than as
+  this bar's own reach. Absent when the bar already fills its source, on
   the kinds with no source, and under Retime. One vocabulary with the corner triangles: a
   triangle says *this end can go no further*, the outline says *this end could, and this
   is how far*. Both travel with a bar being moved, because the source's reach moves with it.
+
+  **The bar fills desaturated behind a solid leading edge (K-441, 15-DESIGN §12A.1).**
+  The fill is the layer's label colour thinned over the lane's ground rather than the
+  colour itself — at full strength a stack of layers is a row of bright slabs and there is
+  nothing left for the selection or the playhead — with 2px of that colour whole at the
+  bar's start, so a bar still lands with a snap. The layer's **name** rides the bar in mono,
+  quieted, clear of the edge. Selection brightens the fill rather than outlining it. The
+  clips inside a Sequence layer fill and edge the same way, per clip.
+
+  **A shut layer shows what is keyed inside it (K-441).** Its own row draws every keyframe
+  anywhere on the layer as diamonds at **half** a property lane's scale, in `animated` — a
+  summary, not a target: several properties keyed on one frame are several keys under one
+  diamond, and they are dragged on the property lanes, which is where twirling the layer
+  open puts them at full size.
 
   **Switching Retime off re-hangs the layer on its source (K-212).** A retimed layer may be
   any length; when the map goes away it plays at source rate again and needs a length. It

@@ -18,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 
 import 'package:lumit_flutter/state/comp_time.dart';
 import 'package:lumit_flutter/state/tools.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 
 import 'frb_test_support.dart';
 
@@ -228,13 +229,14 @@ void main() {
       p.comp.addCameraLayer();
       await mount(tester, p);
 
-      expect(find.text('Text'), findsOneWidget);
-      expect(find.text('Camera'), findsOneWidget);
+      // Twice each: the outline names the layer and so does its bar (§12A.1).
+      expect(find.text('Text'), findsNWidgets(2));
+      expect(find.text('Camera'), findsNWidgets(2));
 
       await tester.enterText(find.byKey(const ValueKey('tl-search')), 'cam');
       await tester.pump();
 
-      expect(find.text('Camera'), findsOneWidget);
+      expect(find.text('Camera'), findsNWidgets(2));
       expect(find.text('Text'), findsNothing,
           reason: 'search hides the rows that do not match');
     });
@@ -697,6 +699,48 @@ void main() {
       await tester.tap(name);
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey<String>('seq-clip-${clip.id}')), findsNothing);
+    });
+
+    /// A clip fills the way its layer's bar does (§12A.1): the label colour
+    /// thinned, with the solid leading edge carrying it whole, so a run of
+    /// cuts reads as a run of beginnings rather than a row of bright slabs.
+    testWidgets('a clip fills desaturated with a solid leading edge',
+        (tester) async {
+      final p = withComp();
+      final layer = await sequencedLayer(p);
+      await mount(tester, p);
+      await tester.pump();
+
+      final name =
+          find.byKey(ValueKey<String>('tl-name-${layer.internallayerId}'));
+      await tester.tap(name);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(name);
+      await tester.pumpAndSettle();
+
+      final clip = layer.getClips().single;
+      final t = LumitTheme.dark();
+      final label = t.labelColour(layer.getInfo().label);
+      final deco = tester
+          .widget<Container>(find.descendant(
+            of: find.byKey(ValueKey<String>('seq-clip-${clip.id}')),
+            matching: find.byType(Container),
+          ))
+          .decoration as BoxDecoration;
+      expect(deco.color, label.withValues(alpha: clipFillAlpha));
+
+      final edge = tester
+          .widget<ColoredBox>(find.descendant(
+            of: find.byKey(ValueKey<String>('seq-clip-edge-${clip.id}')),
+            matching: find.byType(ColoredBox),
+          ))
+          .color;
+      expect(edge, label, reason: 'the edge is the colour at full strength');
+      expect(
+          tester
+              .getSize(find.byKey(ValueKey<String>('seq-clip-edge-${clip.id}')))
+              .width,
+          clipEdgeWidth);
     });
 
     /// The two halves of the Timeline must agree about how tall every row is.

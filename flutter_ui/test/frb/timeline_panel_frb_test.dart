@@ -22,6 +22,8 @@ import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/icons/icons.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
+import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
@@ -1767,6 +1769,59 @@ void main() {
       expect(p.comp.frameAtTime(time: keys()[1].time), 30);
     });
 
+    /// A shut layer says on its own row what is keyed inside it (§12A.1):
+    /// the same diamonds, at half the scale, in `animated` rather than in
+    /// `accent` — the accent's list is the playhead, the one filled button and
+    /// the active tab tick, and nothing else (§3.1). Twirled open, the summary
+    /// stands down and each property draws its own at full size.
+    testWidgets('a shut layer shows its keys at half scale, in animated',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final f in [600, 1500])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      await mount(tester, p);
+
+      final summary =
+          find.byKey(ValueKey<String>('tl-bar-keys-${layer.internallayerId}'));
+      expect(summary, findsOneWidget,
+          reason: 'a shut layer draws what is keyed inside it');
+
+      final painter = tester
+          .widget<CustomPaint>(
+              find.descendant(of: summary, matching: find.byType(CustomPaint)))
+          .painter as dynamic;
+      expect((painter.frames as List).length, 2);
+      expect(painter.colour, LumitTheme.dark().animated,
+          reason: 'keys are animated, never accent');
+
+      await openFold(tester, layer.internallayerId, group: 'Transform');
+      expect(summary, findsNothing,
+          reason: 'an open layer draws the real thing on each lane');
+
+      final lane = tester
+          .widget<CustomPaint>(find.descendant(
+            of: find.byKey(ValueKey<String>(
+                'tl-keys-${layer.internallayerId}/transform/opacity')),
+            matching: find.byType(CustomPaint),
+          ))
+          .painter as dynamic;
+      expect(painter.half * 2, lane.half,
+          reason: 'the summary is half the scale of the lane it summarises');
+      expect(lane.colour, LumitTheme.dark().animated,
+          reason: 'and both are animated');
+    });
+
     /// Keyframes draw as diamonds on the lane (docs/07 §4.3), and a marquee
     /// dragged over empty lane space gathers them.
     testWidgets('lane diamonds appear and the marquee selects them',
@@ -2680,6 +2735,40 @@ void main() {
           reason: 'every other group kept its width');
     });
 
+    /// The bottom bar takes a column group away and gives it back (K-448,
+    /// §12A.1), so the outline pares down to names and bars. What lines up
+    /// with a hidden group has to go somewhere sensible: the fold-out's value
+    /// cells stay on the panel rather than being pushed off its right edge.
+    testWidgets('the bottom bar hides and restores a column group',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+      await openFold(tester, id, group: 'Transform');
+
+      final switches = find.byKey(ValueKey<String>('tl-visible-$id'));
+      final toggle = find.byKey(const ValueKey('tl-column-switches'));
+      expect(switches, findsOneWidget);
+      final panelRight = tester.getRect(find.byType(TimelinePanelFrb)).right;
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(switches, findsNothing, reason: 'the A/V column stood down');
+      expect(find.byKey(ValueKey<String>('tl-blend-$id')), findsOneWidget,
+          reason: 'and took none of the others with it');
+
+      await tester.tap(find.byKey(const ValueKey('tl-column-render')));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(find.byKey(const ValueKey('tl-tf-opacity'))).right,
+          lessThanOrEqualTo(panelRight),
+          reason: 'the value cells the hidden group carried stay on the panel');
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(switches, findsOneWidget, reason: 'and it comes back');
+    });
+
     /// **The bottom bar's zoom is a slider** (owner, 2026-08-06), between a
     /// small landscape glyph and a large one. Its left end is the whole
     /// composition; dragging right widens the time axis, and a slider zoom has
@@ -2780,9 +2869,10 @@ void main() {
               'rather than icon-set glyphs (K-209)');
     });
 
-    /// The bar wears the layer's label colour (K-188), so recolouring the
-    /// label recolours the bar — and a solid starts on the solid chip.
-    testWidgets('the bar wears the label colour', (tester) async {
+    /// The bar wears the layer's label colour (K-188) — **desaturated**
+    /// (§12A.1): the chip thinned over the lane's ground, with the leading
+    /// edge carrying it whole. Recolouring the label recolours both — and a solid starts on the solid chip.
+    testWidgets('the bar wears the label colour, thinned', (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       await mount(tester, p);
@@ -2794,22 +2884,37 @@ void main() {
         return deco.color!;
       }
 
+      Color edgeColour() => tester
+          .widget<ColoredBox>(find.descendant(
+            of: find.byKey(
+                ValueKey<String>('tl-bar-edge-${layer.internallayerId}')),
+            matching: find.byType(ColoredBox),
+          ))
+          .color;
+
       final t = LumitTheme.dark();
-      expect(barColour(), t.labelColour(2),
-          reason: 'a solid starts on its kind\'s chip');
+      expect(barColour(), t.labelColour(2).withValues(alpha: clipFillAlpha),
+          reason: 'a solid starts on its kind\'s chip, thinned');
+      expect(edgeColour(), t.labelColour(2),
+          reason: 'the leading edge carries the colour whole');
 
       layer.setLabel(label: 6);
       p.uiState.model.refresh();
       await tester.pump();
-      expect(barColour(), t.labelColour(6),
+      expect(barColour(), t.labelColour(6).withValues(alpha: clipFillAlpha),
           reason: 'picking a label recolours the bar');
+      expect(edgeColour(), t.labelColour(6),
+          reason: 'and its leading edge with it');
 
       // Selection brightens the bar rather than outlining it (K-317): the
       // label colour lerps toward textPrimary, so the hue still says which
       // layer this is while the lit bar says it is the one in hand.
       p.uiState.setSelection([layer]);
       await tester.pump();
-      expect(barColour(), Color.lerp(t.labelColour(6), t.textPrimary, 0.35),
+      expect(
+          barColour(),
+          Color.lerp(t.labelColour(6), t.textPrimary, 0.35)!
+              .withValues(alpha: clipFillSelectedAlpha),
           reason: 'a selected bar is its label colour, lit');
       final deco = tester
           .widget<Container>(find
@@ -2869,6 +2974,25 @@ void main() {
       };
       expect(valueColumnFor(defaultGroupOrder, wider).width,
           renderGroupWidth + 60);
+    });
+
+    /// A group the outline is not drawing (its bottom-bar toggle is off,
+    /// K-448) has nothing to its right — what lines up with it sits at the
+    /// outline's own edge. The loop used to start from index zero for a group
+    /// it could not find, counting *every* column as being to the right of one
+    /// that was not there and pushing the value cells off the panel.
+    test('a hidden group has no inset', () {
+      final withoutRender = [
+        for (final g in defaultGroupOrder)
+          if (g != TimelineGroup.render) g
+      ];
+      expect(
+          rightInsetOf(withoutRender, defaultGroupWidths, TimelineGroup.render),
+          0);
+      expect(valueColumnFor(withoutRender, defaultGroupWidths).rightInset, 0);
+      expect(valueColumnFor(withoutRender, defaultGroupWidths).width,
+          renderGroupWidth,
+          reason: 'the cells keep their width; only where they sit changes');
     });
 
     /// The render-time readout on a twirled-open effect's heading has to sit
@@ -3248,6 +3372,41 @@ void main() {
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
       expect(ghost, findsNothing);
+    });
+
+    /// The source-extent hint is a hairline and nothing else (§12A.1): a fill
+    /// behind the bar read as a second, dimmer object rather than as this
+    /// bar's own reach.
+    testWidgets('the source-extent hint is an outline, not a fill',
+        (tester) async {
+      final p = withComp();
+      final inner = p.state.project!.newComposition(name: 'Inner');
+      final layer = p.comp.addPrecompLayer(comp: inner);
+      final sourceFrames = inner.durationFrames().toInt();
+      await mount(tester, p);
+
+      layer.setSpan(
+        span: BridgeSpan(
+          inPoint: p.comp.timeOfFrame(frame: 0),
+          outPoint: p.comp.timeOfFrame(frame: sourceFrames - 300),
+          startOffset: p.comp.timeOfFrame(frame: 0),
+        ),
+      );
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      final deco = tester
+          .widget<Container>(find.descendant(
+            of: find.byKey(
+                ValueKey<String>('tl-bar-ghost-${layer.internallayerId}')),
+            matching: find.byType(Container),
+          ))
+          .decoration as BoxDecoration;
+      expect(deco.color, isNull, reason: 'nothing inside the outline');
+      final side = (deco.border as Border).top;
+      expect(side.width, 1);
+      expect(side.color.a, closeTo(0.25, 0.001),
+          reason: 'faint, and the label colour thinned rather than a new one');
     });
 
     /// A layer can start BEFORE the comp (docs/TODO: "re-introduce"): drag a
@@ -3781,19 +3940,20 @@ void main() {
       await tester.pump();
       expect(shy.getSwitches().shy, isTrue,
           reason: 'shy is a document switch, so it survives the session');
-      expect(find.text('Backplate'), findsOneWidget,
-          reason: 'marking a layer shy does not hide it yet');
+      expect(find.text('Backplate'), findsNWidgets(2),
+          reason: 'marking a layer shy does not hide it yet — the name is in '
+              'the outline and on the bar (§12A.1)');
 
       await tester.tap(find.byKey(const ValueKey('tl-hide-shy')));
       await tester.pump();
       expect(find.text('Backplate'), findsNothing);
-      expect(find.text('Hero'), findsOneWidget);
+      expect(find.text('Hero'), findsNWidgets(2));
       expect(shy.getSwitches().visible, isTrue,
           reason: 'shy hides the row, never the picture');
 
       await tester.tap(find.byKey(const ValueKey('tl-hide-shy')));
       await tester.pump();
-      expect(find.text('Backplate'), findsOneWidget);
+      expect(find.text('Backplate'), findsNWidgets(2));
     });
 
     /// Dragging a layer by its name moves it up or down the stack — layers
@@ -4420,6 +4580,41 @@ void main() {
           tester.getTopLeft(find.byKey(ValueKey<String>(key))).dx;
       expect(dx('tl-solo-$audioId'), dx('tl-solo-$solidId'));
       expect(dx('tl-shy-$audioId'), dx('tl-shy-$solidId'));
+    });
+
+    /// The outline's switches are drawn from Lumit's own icon set (K-440,
+    /// §12A.1) wherever the set has the mark, and each still flips its glyph
+    /// rather than only dimming — a closed eye, a muted speaker, an open lock.
+    /// Behaviour is untouched: the same key, the same write.
+    testWidgets('the switches wear the Lumit glyphs and still flip',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      String markOn(String key) => tester
+          .widget<glyph.LumitIcon>(find.descendant(
+            of: find.byKey(ValueKey<String>('$key-$id')),
+            matching: find.byType(glyph.LumitIcon),
+          ))
+          .glyph;
+
+      expect(markOn('tl-visible'), LumitIcons.visible);
+      expect(markOn('tl-locked'), LumitIcons.unlocked);
+      expect(markOn('tl-solo'), LumitIcons.solo);
+
+      await tester.tap(find.byKey(ValueKey<String>('tl-visible-$id')));
+      await tester.pump();
+      expect(layer.getSwitches().visible, isFalse,
+          reason: 'the write is the one it always was');
+      expect(markOn('tl-visible'), LumitIcons.hidden,
+          reason: 'and the glyph flips rather than only dimming');
+
+      await tester.tap(find.byKey(ValueKey<String>('tl-locked-$id')));
+      await tester.pump();
+      expect(layer.getSwitches().locked, isTrue);
+      expect(markOn('tl-locked'), LumitIcons.lock);
     });
 
     /// The Audio group is offered only where there is sound to set. Both halves
