@@ -3194,6 +3194,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                               t.surface1),
                                           outside: t.timelineOutOfRange,
                                           edge: workAreaEdgeColour(t),
+                                          compStartX: axis.xOf(0),
+                                          compEndX: axis.xOf(frames),
                                         ),
                                       ),
                                     ),
@@ -6090,13 +6092,38 @@ class _ColumnHeader extends StatelessWidget {
         title(l10n.columnSwitches, l10n.columnSwitches, width),
       TimelineGroup.identity => Row(
           children: [
-            // The twirl and the label dot have no heading of their own — but
-            // the `#` has to stand over the number, so the blanks either side
-            // of it are the row's own cells and gaps (K-461): the twirl's
-            // slot before it, the dot's slot after.
+            // The twirl has no heading of its own, so the blank before the `#`
+            // is the row's own twirl slot and gap (K-461).
             const SizedBox(width: 16 + identityGap),
             title(l10n.columnNumber, l10n.columnNumber, _numberCellWidth),
-            const SizedBox(width: identityGap + 16),
+            const SizedBox(width: identityGap),
+            // **The dot column is headed by the set's Label glyph** (owner,
+            // 2026-08-24). The mockup's header names the columns it can name
+            // in a word — SWITCHES, #, LAYER, MATTE, BLEND, PARENT, MS — and
+            // leaves this one blank, which left the dots looking like a strip
+            // of colour nobody had asked for. A word here would be a fourth
+            // kicker inside the identity cluster and wider than the 16 the
+            // column is; the glyph is exactly the column's width, and it is
+            // the one heading in the row that cannot be mistaken for the mark
+            // below it, because the marks below it are colours.
+            //
+            // Muted like every other kicker in this row, and centred, because
+            // the dots it stands over are centred in their own cell.
+            SizedBox(
+              key: const ValueKey<String>('tl-colhead-label'),
+              width: 16,
+              child: LumitTooltip(
+                message: l10n.tipLabelColour,
+                child: Center(
+                  child: glyph.LumitIcon(
+                    LumitIcons.label,
+                    size: 12,
+                    colour: t.textMuted,
+                    semanticLabel: l10n.tipLabelColour,
+                  ),
+                ),
+              ),
+            ),
             Expanded(
               child: Text(l10n.columnLayer.toUpperCase(),
                   style: t.kicker,
@@ -7896,6 +7923,8 @@ class _LayerArea extends StatelessWidget {
                                         t.surface1),
                                     outside: t.timelineOutOfRange,
                                     edge: workAreaEdgeColour(t),
+                                    compStartX: axis.xOf(0),
+                                    compEndX: axis.xOf(axis.frames),
                                   ),
                                 ),
                               ),
@@ -8125,6 +8154,8 @@ class _LayerArea extends StatelessWidget {
                                       inside: t.surface1.withValues(alpha: 0),
                                       outside: t.timelineOutOfRange
                                           .withValues(alpha: 0.55),
+                                      compStartX: axis.xOf(0),
+                                      compEndX: axis.xOf(axis.frames),
                                     ),
                                   ),
                                 ),

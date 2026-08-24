@@ -2984,6 +2984,9 @@ void main() {
     /// bottom bar's toggles say the same words, because a toggle that named a
     /// column differently from the column's own heading would be naming two
     /// things.
+    ///
+    /// The label-colour column is the one exception, and it is a narrow one:
+    /// see the test below it.
     testWidgets('the column headers are kicker words', (tester) async {
       final p = withComp();
       p.comp.addSolidLayer();
@@ -3007,6 +3010,56 @@ void main() {
       expect(layerHead.style!.fontFamily, LumitTheme.monoFontFamily);
       expect(layerHead.style!.color, t.textMuted);
       expect(layerHead.style!.fontSize, t.kicker.fontSize);
+    });
+
+    /// **The label-colour column is headed by the set's Label glyph** (owner,
+    /// 2026-08-24). The mockup's header row names six columns in words and
+    /// leaves the dot column bare; the owner's ruling fills it with the glyph
+    /// rather than a seventh word, because the column is 16 wide and every
+    /// word for it is wider than that.
+    ///
+    /// What this pins is that it stands **over the dots**: the heading's cell
+    /// and the row's swatch cell are the same 16, and the heading sits over
+    /// its column by exactly the shift every other heading has. The header row
+    /// is inset 10 where the layer rows are inset 8 (K-454), so *no* heading
+    /// is centred on its column to the pixel — LAYER stands two right of the
+    /// names too. Comparing the two shifts says the real thing without
+    /// re-stating that 2, and still catches a heading that has come off its
+    /// column, which is a change nobody would see in either half alone.
+    testWidgets('the label column is headed by the Label glyph',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+
+      final head = find.byKey(const ValueKey<String>('tl-colhead-label'));
+      expect(head, findsOneWidget, reason: 'the dot column has a heading');
+
+      // The set's own Label glyph, muted like every kicker beside it — not a
+      // word, and not the accent.
+      final icon = tester.widget<glyph.LumitIcon>(
+          find.descendant(of: head, matching: find.byType(glyph.LumitIcon)));
+      expect(icon.glyph, LumitIcons.label);
+      expect(icon.colour, LumitTheme.dark().textMuted);
+
+      // The heading's cell is the swatch's cell: 16 either side, so the glyph
+      // centres on the dot rather than on some slice of the column.
+      final swatch =
+          find.byKey(ValueKey<String>('tl-label-${layer.internallayerId}'));
+      expect(swatch, findsOneWidget);
+      expect(tester.getRect(head).width, 16);
+      expect(tester.getRect(swatch).width, 16);
+
+      // And it stands over its column exactly as LAYER stands over the names.
+      final shift = tester.getRect(head).left - tester.getRect(swatch).left;
+      final nameShift = tester.getRect(find.text('LAYER').first).left -
+          tester
+              .getRect(find
+                  .byKey(ValueKey<String>('tl-name-${layer.internallayerId}')))
+              .left;
+      expect(shift, closeTo(nameShift, 0.5),
+          reason: 'the heading stands over the dots it names, by the same '
+              'inset every other heading has');
     });
 
     /// **The bottom bar's zoom is a slider** (owner, 2026-08-06), between a

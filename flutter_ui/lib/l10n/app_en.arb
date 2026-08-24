@@ -5142,7 +5142,7 @@
   },
   "tipLabelColour": "Label colour",
   "@tipLabelColour": {
-    "description": "Tooltip on a layer's colour swatch. Under five words."
+    "description": "Tooltip on a layer's colour swatch in the Timeline, and on the glyph heading that column. Under five words."
   },
   "tipLaneView": "Lane view",
   "@tipLaneView": {

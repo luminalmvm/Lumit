@@ -145,6 +145,10 @@ const double _chipSize = 6;
 const double _chipGap = 3;
 const double _chipStripPad = 4;
 
+/// The search row's own gap, between the well and the chip strip — the
+/// mockup's `gap: 6` on that flex line.
+const double _searchGap = 6;
+
 /// The label chips the filter row offers, as palette indices, in the mockup's
 /// own order — azure, mint, amber, violet, coral. The sixth chip is not a
 /// colour: it is the neutral one that clears the filter, so the row can always
@@ -874,6 +878,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                     hint: l10n.searchProject,
                   ),
                 ),
+                // **The mockup's own gap between the well and the chips**
+                // (owner, 2026-08-24; measured 1:1 against ProjectPanel's
+                // manifest). The row is a flex line with `gap: 6`, and the
+                // strip beside it is 59 wide — so the well comes out at 279 in
+                // a 360 panel. The app had no gap here and a chip strip of 62,
+                // because every chip carried a leading 3; the well measured
+                // 282, three pixels over, and that is the difference the owner
+                // kept reading. The 3 has gone back to being a gap *between*
+                // chips, where the drawing puts it.
+                const SizedBox(width: _searchGap),
                 _labelChips(t),
               ],
             ),
@@ -895,9 +909,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final label in [...projectFilterLabels, null])
+            for (final (i, label) in [...projectFilterLabels, null].indexed)
               Padding(
-                padding: const EdgeInsets.only(left: _chipGap),
+                // Between the chips, not before the first one: the strip's own
+                // 4 of padding is what stands the leading dot off the well.
+                padding: EdgeInsets.only(left: i == 0 ? 0 : _chipGap),
                 child: LumitTooltip(
                   message: label == null
                       ? l10n.tipShowEverything

@@ -460,6 +460,40 @@ void main() {
       expect(tester.getRect(strip).left, greaterThanOrEqualTo(well.right));
     });
 
+    /// 8e. **The search row measured at the mockup's own width** (owner,
+    /// 2026-08-24). The owner kept reading the app's well as wider than the
+    /// drawing's, so it was probed at 1:1 — the artboard is 360 across, and
+    /// the manifest resolves the well to 279x20 with a 59-wide chip strip and
+    /// a 6 between them.
+    ///
+    /// It was 282x20 with a 62-wide strip and no gap: the strip gave every
+    /// chip a leading 3, including the first, which spent the row's gap inside
+    /// the strip and left the well three pixels over. Every other number in
+    /// the row — the 8 either side, the 20, the fill, the border — already
+    /// agreed, so this is the whole of the difference, and it is worth a test
+    /// because three pixels is exactly the size of thing that comes back.
+    testWidgets('the search row is the mockup\'s row, at the mockup\'s width',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 360);
+
+      final row = band(tester, 'project-search-row');
+      final well = band(tester, 'project-search');
+      final chips = band(tester, 'project-label-chips');
+
+      expect(row.width, 360);
+      expect(well.left - row.left, 8,
+          reason: 'the row is padded 8 at the left');
+      expect(well.size, const Size(279, 20),
+          reason: 'the manifest resolves the well to 279 by 20');
+      expect(chips.left - well.right, 6,
+          reason: 'the mockup\'s row is a flex line with gap: 6');
+      expect(chips.width, 59,
+          reason: 'six 6px dots, 3 apart, in a strip padded 4 either side');
+      expect(row.right - chips.right, 8,
+          reason: 'and padded 8 at the right, like every other row');
+    });
+
     /// 9. **A missing file wears the mockup's pill, and the pill relinks.**
     /// 14 tall, mono at 9, in `warning` — and it is the control, because the
     /// mockup gives a broken row a badge and no button.

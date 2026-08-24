@@ -480,6 +480,48 @@ void main() {
           rect.bottom, greaterThan(laneBar(tester, layers.first).bottom - 0.5));
     });
 
+    /// **And it stops where the composition does** (owner, 2026-08-24). The
+    /// wash's *widget* is the whole lane area, which is [TimelineAxis.pad]
+    /// wider than the comp at each end — that pad is grab room for a handle on
+    /// the first or last frame, not composition. What it paints has to be the
+    /// comp: the band used to run from the lane area's own left edge, six
+    /// pixels before frame zero, while the ruler's band was laid out from
+    /// `xOf(start)` and started in the right place. On a comp with no work
+    /// area set — which is most of them — that put the band's own colour in
+    /// the pad at both ends and made the strip look longer than the comp.
+    ///
+    /// Pinned at the painter, because the widget still fills the area: what
+    /// changed is the clip, and the clip is where frame zero is.
+    testWidgets('the work-area band starts at frame zero, not at the edge',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final wash = find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.painter is WorkAreaGroundPainter);
+      final paint = tester.widgetList<CustomPaint>(wash).first;
+      final painter = paint.painter! as WorkAreaGroundPainter;
+      final area = tester.getRect(wash.first);
+
+      // Frame zero's x *is* the pad, in the area's own pixels — that is what
+      // `TimelineAxis.xOf(0)` returns at any zoom, so this needs no frame
+      // count to state: the band begins one pad in, and ends one pad short.
+      expect(painter.compStartX, closeTo(TimelineAxis.pad, 0.01),
+          reason: 'the band begins at frame zero, one pad in from the edge');
+      expect(painter.compEndX, closeTo(area.width - TimelineAxis.pad, 0.01),
+          reason: 'and ends at the comp\'s end, a pad short of the far edge');
+
+      // The clip is real, not just recorded: nothing is painted in the pad.
+      expect(
+          wash.first,
+          paints
+            ..clipRect(
+                rect: Rect.fromLTRB(
+                    painter.compStartX, 0, painter.compEndX, area.height)));
+    });
+
     /// 7. **A reorder drag lands the layer where the drop said it would.** The
     /// arithmetic has its own tests (`timeline_drag_test.dart`); what is
     /// untested is that the widget honours it — and that the row lands level

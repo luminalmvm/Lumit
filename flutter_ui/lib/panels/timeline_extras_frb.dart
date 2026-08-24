@@ -2207,11 +2207,31 @@ class WorkAreaGroundPainter extends CustomPainter {
   /// beneath them has already drawn them.
   final Color? edge;
 
+  /// **The comp's own span in these pixels** — `axis.xOf(0)` and
+  /// `axis.xOf(frames)` (owner, 2026-08-24).
+  ///
+  /// Everything else in this painter works in the area's pixels, and the area
+  /// is [TimelineAxis.pad] wider than the comp at each end: six pixels of room
+  /// so a handle on the first or last frame can be grabbed. The ground used to
+  /// be painted across the whole of it, which put the wash — and, on a comp
+  /// with no work area set, the band itself — six pixels left of frame zero
+  /// and six past the end. The ruler's band has always been laid out from
+  /// `xOf(start)`, so the two disagreed by exactly that pad, and the lane
+  /// area read as a strip that began before the composition did.
+  ///
+  /// Clipping here rather than clamping each rectangle keeps the edges honest
+  /// too: a work-area edge dragged onto frame zero draws its line *on* frame
+  /// zero and not in the pad beside it.
+  final double compStartX;
+  final double compEndX;
+
   const WorkAreaGroundPainter({
     required this.startX,
     required this.endX,
     required this.inside,
     required this.outside,
+    required this.compStartX,
+    required this.compEndX,
     this.edge,
   });
 
@@ -2230,6 +2250,14 @@ class WorkAreaGroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // The comp, and nothing either side of it: the axis's pad is room to grab
+    // a handle in, not composition. Clipped once, so every rectangle below is
+    // written in the axis's own terms and cut to the comp by one rule.
+    canvas.clipRect(Rect.fromLTRB(
+        compStartX.clamp(0.0, size.width),
+        0,
+        compEndX.clamp(compStartX.clamp(0.0, size.width), size.width),
+        size.height));
     final full = Offset.zero & size;
     if (startX == null || endX == null) {
       if (inside.a > 0) canvas.drawRect(full, Paint()..color = inside);
@@ -2270,7 +2298,9 @@ class WorkAreaGroundPainter extends CustomPainter {
       old.endX != endX ||
       old.inside != inside ||
       old.outside != outside ||
-      old.edge != edge;
+      old.edge != edge ||
+      old.compStartX != compStartX ||
+      old.compEndX != compEndX;
 
   /// Never absorbs a pointer — it is the ground, not a control.
   @override
