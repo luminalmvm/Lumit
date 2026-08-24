@@ -577,22 +577,28 @@ void main() {
       expect(listAutosaves(project: path), hasLength(1));
     });
 
-    /// The footer's filled action applies whichever source is picked in the
-    /// body, and every one of the three answers still comes back — the shape
-    /// changed, what the dialogue can say did not.
+    /// The footer's filled action applies whichever source the body has
+    /// picked, and the close mark applies none of them — the shape changed,
+    /// what the dialogue can answer did not.
+    ///
+    /// The journal is the case driven here because replaying it is synchronous
+    /// engine work. Opening an autosave is not: it goes through
+    /// `state.openProject`, whose future never completes in a widget test's
+    /// fake-async zone. That the *choice* moves to the autosave is pinned in
+    /// `recovery_metrics_test` instead, on the rows themselves.
     testWidgets('the filled action recovers the picked source', (tester) async {
       Future<RecoveryChoice?> run(
-        WidgetTester tester,
         String tempPrefix,
-        Future<void> Function(WidgetTester) act,
+        Future<void> Function() act,
       ) async {
         final p = freshProject();
         p.state.project!.newComposition(name: 'Scene');
         final dir = Directory.systemTemp.createTempSync(tempPrefix);
         final path = '${dir.path}/scene.lum';
-        // A saved file to replay the journal onto, and a real autosave beside
-        // it so the dialogue has something to offer.
-        await p.state.project!.save(path: path);
+        // A saved file to replay the journal onto — written outside the fake
+        // clock, because saving is a real asynchronous call — and an autosave
+        // beside it so the dialogue has something to offer at all.
+        await tester.runAsync(() => p.state.project!.save(path: path));
         p.state.project!.autosave(projectPath: path, keep: 3);
 
         RecoveryChoice? choice;
@@ -617,32 +623,23 @@ void main() {
         await tester.pump();
         await tester.tap(find.byKey(const ValueKey('recover')));
         await tester.pumpAndSettle();
-        await act(tester);
+        await act();
         await tester.pumpAndSettle();
         return choice;
       }
 
       // Nothing picked: the journal is what the dialogue opens on.
       expect(
-        await run(tester, 'lumit-recover-journal', (t) async {
-          await t.tap(find.byKey(const ValueKey('recover-apply')));
+        await run('lumit-recover-journal', () async {
+          await tester.tap(find.byKey(const ValueKey('recover-apply')));
         }),
         RecoveryChoice.journal,
       );
 
+      // The close mark is no answer at all: the project opens as it was saved.
       expect(
-        await run(tester, 'lumit-recover-auto', (t) async {
-          await t.tap(find.byKey(const ValueKey('recover-autosave')));
-          await t.pumpAndSettle();
-          await t.tap(find.byKey(const ValueKey('recover-apply')));
-        }),
-        RecoveryChoice.autosave,
-      );
-
-      // The close mark is neither answer: the project opens as it was saved.
-      expect(
-        await run(tester, 'lumit-recover-close', (t) async {
-          await t.tap(find.byKey(const ValueKey('recover-close')));
+        await run('lumit-recover-close', () async {
+          await tester.tap(find.byKey(const ValueKey('recover-close')));
         }),
         isNull,
       );
