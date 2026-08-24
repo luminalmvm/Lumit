@@ -44,3 +44,4 @@ Rules of engagement:
 | [lens-flare.md](lens-flare.md) | The Lens flare effect: lens prescriptions, ghost ray tracing with coating interference, FRFT/FFT bakes, hardware-raster ghosts, the staged oracle | 08 |
 | [ae-import.md](ae-import.md) | The AE importer: the Bridge walker, the capture schema, ExtendScript traps, the fixture, and the mapping rules (K-410) | 11, 10, 05 |
 | [tracking.md](tracking.md) | Camera and object tracking: affine KLT tracks, global SfM solve, dynamic-track rejection, zoom-cut handling (K-415) | 08, 16, 05 |
+| [node-graph.md](node-graph.md) | The layer's driver graph (K-471): model, ops, evaluation, port types, the points stream, and phase 3's ordered work packages | 03, 05, 15 |

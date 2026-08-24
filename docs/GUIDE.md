@@ -8650,3 +8650,49 @@ two readings of the same thing, so they cannot disagree about which frame it is 
 **Open folder.** The tick in the export dialog is remembered by the item, not by the window
 that set it, so a long export whose dialog you closed an hour ago still opens the folder it
 landed in.
+
+## 20. The node graph, in plain terms
+
+A layer's effects have always been a list: the picture goes in at the top, each effect
+changes it in turn, and what comes out at the bottom is what you see. The Graph panel
+(K-471) does not replace that list — it *draws* it, as boxes joined left to right by
+wires. Same effects, same order, just laid out so you can see the picture's path. Reorder
+the boxes on the canvas and you have reordered the list; the Effect controls panel shows
+the change at once, because there is only one list and these are two windows onto it.
+
+**What the graph adds is the driver.** A driver is a box that makes no picture at all —
+it makes a *number* (or a colour). Wiggle makes a number that wobbles. Audio level
+listens to a layer's sound and makes a number that follows the loudness. Colour cycle
+makes a colour that slowly turns. Drag a wire from a driver into one of an effect's
+sockets, and that parameter now follows the driver instead of its keyframes — "the glow
+pulses with the music" becomes one visible wire instead of a line of code. The ordinary
+Effect controls row does not pretend otherwise: while a parameter is driven, its row says
+*driven* and names the driver.
+
+**Why the saved project barely changes.** The file still holds the effect list exactly as
+before, so every old project opens untouched and saves back byte for byte. A layer that
+has drivers keeps them in a small extra section beside the list — the drivers, their
+wires, and where the boxes sit on the canvas. A project that never opens the Graph panel
+never gains that section. And because the picture's path is always the list — a wire can
+drive a *value*, but the image itself always flows straight down the stack — there is no
+arrangement of boxes the plain list view would have to lie about.
+
+**The colours are the types.** Every socket and every wire is coloured by what flows
+through it: one colour for pictures and mattes, one for numbers, one for colours, one for
+shapes and points, one for sound. You can read a graph's plumbing without clicking
+anything — a wire will only plug into a socket of its own colour.
+
+**Points** are the fifth kind of thing a wire will one day carry: not a picture but a
+crowd of positions — where every particle of a particle system is this frame, how fast
+each is moving, how old each is. Particulate (K-446) will be the first thing that makes
+them. The type is defined now, with the graph, so that when Particulate and its future
+relatives (scatter, clone to points, connect points) arrive, they plug into sockets that
+already exist rather than needing the plumbing rebuilt around them.
+
+**Where you meet all this.** The Graph panel follows the selected layer, like Effect
+controls. The **Nodes workspace** makes the graph the main surface, with a small viewer
+beside it and a short timeline underneath. The **Node preview panel** is a second, locked
+viewer that shows what the picture looks like at one chosen box — halfway down the stack,
+say — without soloing or bypassing anything. None of these is the engine's internal
+"evaluation graph" (§1's compiler still builds that in private); what you are looking at
+is always your own document.
