@@ -12170,3 +12170,12 @@ ladder in §12A.6 applies in order: flexible text ellipsises, secondary control 
 wrap, optional metadata columns hide, toolbars overflow into a menu, and below a
 panel's declared minimum width the panel scrolls horizontally. Values and units never
 truncate, and the ladder never flips the user's own column toggles.
+
+## K-452 — The hit-target floor bends inside 18px secondary rows
+
+**DECIDED 2026-08-24.** KD-2/K-116's ≥32px floor cannot hold for buttons seated in the
+18px secondary rows (timecode/search/mode row, column headers, bottom bars): expanding
+their hit areas vertically would swallow the neighbouring strip's gestures (tab drag
+above, header resize and reorder below). Those buttons keep their full room along the
+axis the row is aimed on, and the floor continues to govern everything outside such
+rows. The reasoning also lives where `_toolbarHeight` is declared.
