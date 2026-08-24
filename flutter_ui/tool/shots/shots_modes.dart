@@ -102,12 +102,18 @@ Future<void> main() async {
   await sizeWindow(1720, 1000);
   await pause(5);
 
-  // Inflate for the tab strip, then clamp inside the window: a crop that
-  // pokes past the frame is an ffmpeg refusal and a silent full-window shot.
+  // Inflate for the tab strip, then clamp inside the photographed boundary
+  // itself — the client area, not the window we asked for: a crop that pokes
+  // even one pixel past the frame is an ffmpeg refusal and a silent
+  // full-window shot.
   Rect panel() {
     final b = boxOfType(TimelinePanelFrb)!.inflate(dockTabInset);
-    return Rect.fromLTRB(b.left.clamp(0, 1720), b.top.clamp(0, 1000),
-        b.right.clamp(0, 1720), b.bottom.clamp(0, 1000));
+    final frame = shotRootKey.currentContext!.size!;
+    return Rect.fromLTRB(
+        b.left.clamp(0, frame.width),
+        b.top.clamp(0, frame.height),
+        b.right.clamp(0, frame.width),
+        b.bottom.clamp(0, frame.height));
   }
 
   // 1 — Layers mode, everything shut: summary diamonds on both bars.
