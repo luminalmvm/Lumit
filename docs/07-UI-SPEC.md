@@ -813,11 +813,20 @@ The library of assets: footage items, audio items, comps, folders.
 - A folder tree with drag-to-reorganise. Sorting per column; columns: name, type,
   dimensions, frame rate, duration, colour space tag, file path. Column set is configurable
   (workspace state).
-- **Under the redesign (K-448)**: the panel gains a bottom bar with **Folder** and
-  **Composition** buttons — dropping an asset on Composition makes a comp to match it,
-  exactly as the New composition button does today; asset **colour tags** tint the item
-  icon's strokes rather than adding a dot; the **path** column sits at the right of the
-  list; and the preview card carries name, size, rate, duration and codec.
+- **Under the redesign (K-448, built to the mockup 2026-08-24)**: the panel has a bottom
+  bar with **Folder** and **Composition** buttons — dropping an asset on Composition makes
+  a comp to match it, exactly as the New composition button does today; asset **colour
+  tags** tint the item icon's strokes rather than adding a dot; the **path** column sits at
+  the right of the list; and the preview card carries name, size, rate, duration and codec.
+  **Shipped:** the bar carries Composition and **Import** — Import because it is a command
+  the panel has always had and the mockup gave it no other home. **Folder waits on the
+  engine**: there is no "make a folder" call across the bridge yet, and a button that
+  cannot do anything is worse than one that is not there. Likewise **not yet shipped for
+  want of engine data**: the item's file **path** (nothing exposes it), the `in use` badge
+  (nothing reports whether a clip is used in a comp), the asset **colour tags** and the
+  colour-tag filter chips beside the search well (items carry no label colour), and the
+  preview card's **codec and audio layout** line (the media probe reports size, rate and
+  duration only).
 - A persistent **search field** filters the tree live (name, type, extension). `Ctrl+F`
   focuses it when the panel has focus.
 - Selecting an item shows a header readout: thumbnail, dimensions, fps, duration, codec,
@@ -865,14 +874,16 @@ touching the file (K-024):
   items by filename and offer to batch-relink the matches. A *Find missing footage* search
   filter lists all missing items in one view.
   **Shipped:** `MediaStatus::Missing` is its own state, distinct from an unreadable file —
-  the project row wears a crossed-link glyph in the warning tint, the info header reads
-  "missing" with a *Relink…* button, and the layer renders **generated colour bars**
+  the project row wears a crossed-link glyph in the warning tint and a `missing` badge
+  which is itself the relink control — clicking it opens the picker, which is where the
+  separate *Relink…* button's job went when the row was rebuilt to the mockup (the mockup
+  gives a broken row a badge and no button) — and the layer renders **generated colour bars**
   (`lumit_media::slate`, drawn at comp size, never a bundled image) in preview *and* export,
   so the mistake cannot hide in a delivered file (K-031). Relinking one item batch-relinks
   every other missing item whose name is found beside the chosen file, in a single undo step,
   each rebased relative and re-fingerprinted (K-173). **Find missing footage** is a toggle
-  beside the search box — shown only while something *is* missing, with a count — and a
-  right-click entry on any footage row; it narrows *with* the search text rather than
+  on the panel's bottom bar — the `· n missing` half of its count, shown only while
+  something *is* missing — and a right-click entry on any footage row; it narrows *with* the search text rather than
   replacing it, and unlike the plain search it is never widened by a folder whose own name
   matches, so every visible row is something to fix. An empty result reads "Every file is
   where the project expects it" rather than an error (§13's no-punishment rule). Still to

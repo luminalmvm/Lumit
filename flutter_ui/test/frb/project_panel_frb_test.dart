@@ -114,8 +114,8 @@ void main() {
       expect(compRow, findsOneWidget);
       expect(
         compLeft - folderLeft,
-        closeTo(14, 0.01),
-        reason: 'one nesting level indents by 14px',
+        closeTo(projectIndentPerDepth, 0.01),
+        reason: 'one nesting level indents by the mockup\'s 16px',
       );
     });
 
@@ -181,14 +181,15 @@ void main() {
           reason: 'the anchor item is mirrored to the shell (K-327)');
       await tester.tap(rowText('Scene'));
       await tester.pump(const Duration(milliseconds: 500));
-      expect(p.uiState.selectedProjectItem.value,
-          isA<ItemReference_Composition>(),
+      expect(
+          p.uiState.selectedProjectItem.value, isA<ItemReference_Composition>(),
           reason: 'and follows the click');
     });
 
     /// Opening a folder is showing what is in it, so a second click shuts it
     /// and a third opens it again (K-243). The Compositions auto-folder is one.
-    testWidgets('a second click on a folder opens and shuts it', (tester) async {
+    testWidgets('a second click on a folder opens and shuts it',
+        (tester) async {
       final p = freshProject();
       p.state.project!.newComposition(name: 'Scene');
 
@@ -682,12 +683,14 @@ void main() {
         state: p.state,
         uiState: p.uiState,
       ));
+      final relink = find.byKey(ValueKey<String>('relink-${gone.internalid}'));
       await settleFrb(
         tester,
-        until: () => find.text('Relink…').evaluate().isNotEmpty,
+        until: () => relink.evaluate().isNotEmpty,
       );
-      expect(find.text('Relink…'), findsOneWidget,
-          reason: 'the inline Relink button is what this test clicks');
+      expect(relink, findsOneWidget,
+          reason: 'the missing badge is the inline relink control (the '
+              'mockup gives a broken row a pill and no button)');
 
       // The tap itself is ordinary fake-async work, but it does not fire on the
       // pointer-up: the *row* under the button offers `onDoubleTap`, and a
@@ -697,7 +700,7 @@ void main() {
       // never wins and `onPressed` never runs. Fake time has to be advanced past
       // it — `settleFrb` deliberately elapses none, so this pump is the one that
       // presses the button.
-      await tester.tap(find.text('Relink…'));
+      await tester.tap(relink);
       await tester.pump(kDoubleTapTimeout + const Duration(milliseconds: 50));
       // `_doRelink` then awaits the injected picker (a fake-zone future, already
       // resolved by that pump) and calls the synchronous `relink`, which clears

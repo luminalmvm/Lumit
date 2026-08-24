@@ -889,6 +889,34 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - The per-effect **Mix row** carries blend mode and matte channel; the **Matte row** carries
   an invert.
 
+### 12A.3a Project panel (K-451, K-454)
+
+The approved mockup gives the panel six bands, top to bottom — preview card, search row,
+column headers, item rows, scrollbar strip, bottom bar — at the heights §12A.6's table now
+carries. The rules worth writing down:
+
+- **The column headings are kicker words and the values sit under them.** Name (flexible),
+  then Items, Size, fps and Path, each a fixed width, right-aligned, right-anchored, with
+  8px between them and the same 8px inset at the right edge as the rows below. The header
+  and the rows are laid out from one description of the columns, because the alignment
+  came apart twice in the mockup rounds when they were not.
+- **Values are mono at 10, muted**; the Path column is quieter again (`text_disabled`),
+  because it is the one column that is context rather than fact about the item.
+- **Per-type icon tints on media rows**, drawn from the layer-label palette (K-188), not
+  from §6.1's muted layer family: azure for picture footage, indigo for sound, amber for
+  solids. Folders and compositions stay muted — a folder's mark is the twirl beside it.
+- **State reads as an outlined badge** beside the name: `in use` in `success`, `missing`
+  in `warning`, each outlined in its own colour at ~28%, mono at 9 with no tracking. A
+  badge reports a state, so it is deliberately **not** a kicker.
+- **The search well is an inset well** (§2.1), the row's full width, at the standard 20.
+- **The bottom bar carries the new-item controls at the left** — icon plus a 0.08em kicker
+  word — **and a factual count at the right** (`10 items · 1 missing`) in mono at 0.06em,
+  sentence case, never capitals: it is a statement, not a container label.
+- **Width degrades in this order**: the preview card goes first (the docked mockup has
+  none at 260), then Path, then Items, then fps, then Size; below the panel's minimum the
+  tree scrolls sideways under the strip that has always been drawn for it. The bottom
+  bar's words are shed before its icons, per §12A.6's step 4.
+
 ### 12A.4 Dialogs (K-444, K-449)
 
 Every popup is built in-window today and becomes a **real OS window** when multi-window
@@ -936,14 +964,28 @@ when a panel is too short, its content scrolls.
 | Timeline ruler (times above, markers and work area below) | 36 |
 | Cache bar (counted inside the ruler's 36, so the clock above it is 33) | 3 |
 | Value wells in panels | 20 |
+| Project panel: preview card (10 of padding round a 96×54 poster frame, plus its hairline) | 75 |
+| Project panel: search row (8 above the well, its 20, 6 below) | 34 |
+| Project panel: column-header row (a secondary row's 18 with its own hairline counted in) | 19 |
+| Project panel: state badges (`in use`, `missing`) | 14 |
+| Project panel: horizontal scrollbar strip (a 4px track inset 8 either side) | 6 |
+| Project panel: bottom bar (new-item controls and the item count) | 20 |
 | Dialog title strip and dialog rows | 30 |
 | Dialog page-tab row | 26 |
 | Dialog value wells and dropdowns | 22 |
 | Status bar | 18 |
 | Graph-side horizontal scrollbar | 7 |
 
+**The project panel's rows correct two of the table's own numbers** (K-454: a mockup's
+*rendered* height is the default density, and the roomier reading wins). Its bottom bar
+renders at **20**, not the 18 the "panel bottom bars" line gives every other one, and its
+column header at **19**, not 18, because the mockup counts the hairline under it inside the
+row. Both are the mockup's own computed values; the earlier readings are recorded here so the
+change is visible rather than silent. A slimmer variant is a future **Compact** setting's
+business, not a licence to shave these.
+
 **The pieces inside a row are the mockups' too**, and are pinned by
-`timeline_alignment_test`: a layer's label colour is a **6px dot**, its number stands in an
+`timeline_alignment_test` and, for the Project panel, `project_panel_metrics_test`: a layer's label colour is a **6px dot**, its number stands in an
 **18px column** set in muted mono at 10, the keyframe diamond on a shut layer's row is a **4px square stood
 on its corner** (≈5.7px point to point, against the 8px one a property's own lane draws), a labelled ruler tick is **7px** tall
 against a minor tick's **4**, and under Sharp a bar's ends are **square** — the stadium ends are

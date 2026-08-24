@@ -3890,6 +3890,27 @@
   "@previewShowing": {
     "description": "What the Viewer is doing: putting the finished frame on screen."
   },
+  "projectColumnItems": "Items",
+  "@projectColumnItems": {
+    "description": "Project panel column heading: how many things a folder holds. Shown in capitals by the style, so write it sentence case."
+  },
+  "projectColumnSize": "Size",
+  "@projectColumnSize": {
+    "description": "Project panel column heading: an item's pixel dimensions. Shown in capitals by the style, so write it sentence case."
+  },
+  "projectFooterComposition": "Composition",
+  "@projectFooterComposition": {
+    "description": "Label on the Project panel's bottom-bar button that makes a new composition. Shown in capitals by the style."
+  },
+  "projectFooterImport": "Import",
+  "@projectFooterImport": {
+    "description": "Label on the Project panel's bottom-bar button that brings footage into the project. Shown in capitals by the style."
+  },
+  "projectMissingCount": "{count, plural, =1{1 missing} other{{count} missing}}",
+  "@projectMissingCount": {
+    "description": "Second half of the Project panel's bottom-bar count, after the item total: how many files cannot be found. Clicking it filters the panel to just those.",
+    "placeholders": { "count": { "type": "int" } }
+  },
   "projectEmpty": "No items yet — import footage or create a composition",
   "@projectEmpty": {
     "description": "Empty-state line in the Project panel."

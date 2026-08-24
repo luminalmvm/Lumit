@@ -442,6 +442,22 @@ does not gate the four. Delete each phase here when it lands, as with everything
 
 ## Next - engine/bridge follow-ups
 
+**The Project panel's mockup owes five engine answers** (K-451, docs/07-UI-SPEC.md
+§3.1, docs/15-DESIGN.md §12A.3a). The panel is built to the approved drawing; these
+five pieces of it are drawn there and cannot be honestly filled in yet, so they are
+simply absent rather than faked. Each is a small bridge addition:
+(1) **a "make a folder" call** - the bottom bar's Folder button has no command to run,
+so it is not there; (2) **a footage item's file path**, for the Path column the
+mockup puts at the right of the list; (3) **whether a footage item is used in any
+composition**, for the `in use` badge - a Dart-side walk of every comp's layers is
+both view logic and a swarm of calls, so it must be one engine answer;
+(4) **a label colour per project item**, for the asset colour tags that tint the row
+icon and for the colour-chip filter beside the search well; (5) **codec and audio
+layout on `BridgeMediaInfo`** (it reports size, rate and duration only), for the
+preview card's second fact line - which also gives the panel a truthful still-image
+versus video distinction, today inferred only from a zero picture width meaning
+"sound".
+
 **Cache bar coloured by resolution tier** (K-441, docs/15-DESIGN.md §6.3, §12A.1).
 The bar is meant to say not just "cached" but "cached at what size", with full,
 half and quarter each their own hue. The engine cannot say: `cached_frames`

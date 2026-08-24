@@ -1,27 +1,39 @@
-// The Project panel, on the flutter_rust_bridge API — the first full panel port.
+// The Project panel, built to the approved redesign mockup (K-451, K-454).
 //
-// Top to bottom: a search field that filters the tree live, an info header
-// reading out the selected item (thumbnail, dimensions, rate, length), the
-// Import / New composition glyph buttons, then one row per document item with
-// folders nesting their children. A click selects the instant the button goes
-// down; a click on the lone selected row *opens* it immediately — which makes a
-// double-click "select, then open" in one motion, and what opening means is the
-// item's own answer (K-243): a comp fronts, footage raises New composition on
-// it, a folder shows or hides its children. Renaming is on the row menu. A
-// right-click raises that menu; footage and comp rows drag onto the Timeline (a
-// comp lands as a Precomp layer); double-clicking empty space imports. Missing footage wears a badge with an inline Relink… button, and a
-// "show only missing" toggle appears while anything is missing. Rows carry
-// their type glyph; the decoded thumbnail lives in the info header.
+// **In plain terms**: this is the shelf the project's things live on. Top to
+// bottom the mockup lays it out as a preview card for whatever is picked, a
+// search well, a row of column headings, the tree of items, a thin horizontal
+// scrollbar, and a bottom bar carrying the new-item controls at the left and a
+// factual count at the right.
 //
-// **What changed from the v0 panel, and why it is shorter.** v0 read one big
-// snapshot, mirrored it into `BridgeItem` trees, and addressed every edit by UUID
-// string through `AppStateStub`. Here the handles *are* the identity: a row holds
-// an `ItemReference` and calls `rename`/`delete`/`moveToRoot` straight on it, so
-// there is no snapshot to diff, no mirror class to keep in step, and no id
-// lookup. The thumbnail is the clearest case — v0 needed an isolate, a wire
-// protocol and a generation map to keep a cold FFmpeg decode off the UI thread;
-// `FootageReference.thumbnail` is simply async, decoded once per item into a
-// RAM cache the info header draws from.
+// Every measurement here comes from the mockups' *computed* styles — the
+// browser's own resolved numbers, not a reading of the CSS — so the comments
+// quote real pixels rather than intentions. Where a number disagreed with
+// docs/15-DESIGN.md §12A.6's table the mockup won and the table was corrected
+// in the same commit (K-450, K-454): the panel's bottom bar is 20, not the 18
+// a secondary row usually gets, and the column-header row is 19 because its
+// hairline is counted inside it.
+//
+// **Behaviour is unchanged from the panel this replaces.** A click selects the
+// instant the button goes down; a click on the lone selected row *opens* it,
+// which makes a double-click "select, then open" in one motion, and what
+// opening means is the item's own answer (K-243): a comp fronts, footage
+// raises New composition on it, a folder shows or hides its children. Renaming
+// is `Enter` or the row menu. A right-click raises that menu; footage and comp
+// rows drag onto the Timeline (a comp lands as a Precomp layer);
+// double-clicking empty space imports. Missing footage wears the mockup's
+// `missing` badge, and that badge *is* the relink control — clicking it opens
+// the file picker, which is where the old inline "Relink…" button's job went.
+// The "show only missing" filter moved onto the bottom bar's count, where the
+// mockup writes `10 items · 1 missing`.
+//
+// **What the panel reads and when.** The handles *are* the identity: a row
+// holds an `ItemReference` and calls `rename`/`delete`/`moveToRoot` straight on
+// it. Everything a row *draws* — its name, its column values, its badge — is
+// handed to it by the panel's own walk, and every engine answer that walk needs
+// (a status probe, a media probe, a comp's settings, a folder's child count) is
+// cached until the document changes. That is what keeps a hover, which rebuilds
+// one row, costing nothing at the bridge (the budget test expects zero).
 
 import 'dart:async';
 import 'dart:ui' as ui;
@@ -46,9 +58,149 @@ import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 
-/// The longer edge the info header's thumbnail is decoded at: ~64 logical px
-/// at 2× for crispness on a high-DPI display.
-const int _thumbMaxEdge = 128;
+/// The longer edge the preview card's thumbnail is decoded at: the card draws
+/// it 96 logical px wide, so ~2× for crispness on a high-DPI display.
+const int _thumbMaxEdge = 224;
+
+// ---------------------------------------------------------------------------
+// The mockups' own metrics. Every constant below is a measured value from
+// `ProjectPanel` (the panel's own artboard, 360 wide) or `Main` (the same panel
+// docked at 260), and the two agree everywhere they overlap.
+// ---------------------------------------------------------------------------
+
+/// The preview card: 10px of padding round a 96×54 poster frame, with the
+/// hairline under it counted in — 10 + 54 + 10 + 1.
+const double projectPreviewHeight = 75;
+const double _previewPad = 10;
+const double _thumbWidth = 96;
+const double _thumbHeight = 54;
+
+/// The gap between the card's three text lines.
+const double _previewLineGap = 3;
+
+/// The search row: 8 above the well, 6 under it, and the well itself the 20 a
+/// value well is everywhere (§12A.6).
+const double projectSearchRowHeight = 34;
+const double _searchPadTop = 8;
+const double _searchPadBottom = 6;
+
+/// The column-header row — a secondary row's 18, plus its own hairline.
+const double projectColumnHeaderHeight = 19;
+
+/// One item row. An outline row, and so 22 (§12A.6).
+const double projectRowHeight = 22;
+
+/// The state badge ("missing"): 14 tall, 4px of padding either side, its text
+/// mono at 9 with no tracking — a badge is not a container label, so it is not
+/// a kicker however small it is.
+const double _badgeHeight = 14;
+const double _badgePad = 4;
+const double _badgeTextSize = 9;
+
+/// The badge's outline is its own text colour, hushed: the mockup's border
+/// resolves to that colour at 28% over the panel, on both badges.
+const double _badgeBorderAlpha = 0.28;
+
+/// The horizontal scrollbar strip under the tree: a 6px strip with a 4px track
+/// inset 8px either side.
+const double projectScrollStripHeight = 6;
+const double _scrollTrackHeight = 4;
+const double _scrollTrackInset = 8;
+
+/// The bottom bar. **20, not the 18 a secondary row usually gets** — the
+/// mockup renders it at 20 and K-454 makes the mockup's own breathing room the
+/// default density, so §12A.6's table gained a project-panel line rather than
+/// this bar being shaved to fit the old one.
+const double projectFooterHeight = 20;
+const double _footerPad = 10;
+const double _footerGap = 12;
+const double _footerIconGap = 5;
+
+/// The bottom bar's two label trackings, in logical pixels at 9px type: the
+/// new-item words sit at 0.08em, the count at 0.06em — both quieter than the
+/// 0.12em a kicker carries, because neither is naming a container.
+const double _footerLabelTracking = 0.72;
+const double _footerCountTracking = 0.54;
+
+/// The metadata columns, right-anchored, in the widths the header and every
+/// row share — which is what makes a value sit under its own heading.
+const double projectItemsColumn = 36;
+const double projectSizeColumn = 64;
+const double projectFpsColumn = 22;
+
+/// The gap between every element in a row, headers included.
+const double projectRowGap = 8;
+
+/// A row's own inset. The header's left is 10 rather than 8: the heading words
+/// stand a touch in from the twirls below them, as the mockup draws it.
+const double projectRowPadding = 8;
+const double _headerPadLeft = 10;
+
+/// How far each nesting level indents a row — the mockup's 24 for a child
+/// against 8 for its parent.
+const double projectIndentPerDepth = 16;
+
+/// Below this the panel scrolls sideways rather than degrading further
+/// (§12A.6's ladder, step 5).
+const double projectMinWidth = 180;
+
+/// Where each optional piece gives way (§12A.6's ladder, step 3: metadata
+/// columns hide, least essential first). The two mockups are the two ends of
+/// this ladder — the 360-wide artboard shows everything, the 260-wide docked
+/// panel has already dropped the preview card and the Items column.
+const double _widthForPreview = 300;
+const double _widthForItems = 300;
+const double _widthForFps = 230;
+const double _widthForSize = 190;
+
+/// Which optional columns a given panel width can carry.
+class ProjectColumns {
+  final bool items;
+  final bool size;
+  final bool fps;
+
+  const ProjectColumns({
+    required this.items,
+    required this.size,
+    required this.fps,
+  });
+
+  factory ProjectColumns.forWidth(double width) => ProjectColumns(
+        items: width >= _widthForItems,
+        size: width >= _widthForSize,
+        fps: width >= _widthForFps,
+      );
+
+  /// The trailing cells of a row or of the header — the same widths, the same
+  /// gaps, the same right edge, so a value lands under its heading. The owner
+  /// corrected this alignment twice in the mockup rounds; building both sides
+  /// from one function is what stops it drifting again.
+  List<Widget> cells({
+    String? items,
+    String? size,
+    String? fps,
+    required TextStyle style,
+  }) =>
+      [
+        if (this.items) ..._cell(projectItemsColumn, items, style),
+        if (this.size) ..._cell(projectSizeColumn, size, style),
+        if (this.fps) ..._cell(projectFpsColumn, fps, style),
+      ];
+
+  static List<Widget> _cell(double width, String? text, TextStyle style) => [
+        const SizedBox(width: projectRowGap),
+        SizedBox(
+          width: width,
+          child: text == null
+              ? null
+              : Text(text,
+                  style: style,
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.clip),
+        ),
+      ];
+}
 
 /// What a click on a row does to the selection.
 enum SelectMode {
@@ -79,8 +231,34 @@ SelectMode _selectModeFromKeyboard() {
   return SelectMode.replace;
 }
 
-/// How far each nesting level indents a row.
-const double _indentPerDepth = 14;
+/// The mono face every column value and every meta line is set in: 10px, muted
+/// (§7.1's mono-for-numbers rule, at the mockup's own size).
+TextStyle _metaStyle(LumitTheme t) =>
+    t.mono.copyWith(fontSize: 10, color: t.textMuted);
+
+/// The em dash a column shows when the item cannot answer — a missing file has
+/// no size and no rate, and the mockup writes the dash rather than a blank.
+const String _noValue = '—';
+
+/// A rate as the mockup writes it: bare integers where the rate is whole, two
+/// places where it is not, and never a trailing `.00`.
+String _rateText(int num, int den) {
+  if (den == 0) return _noValue;
+  final fps = num / den;
+  final rounded = fps.roundToDouble();
+  return (fps - rounded).abs() < 0.001
+      ? rounded.toInt().toString()
+      : fps.toStringAsFixed(2);
+}
+
+/// One row's column values, worked out once by the panel's walk so the row
+/// itself never asks the engine anything.
+class _Cells {
+  final String? items;
+  final String? size;
+  final String? fps;
+  const _Cells({this.items, this.size, this.fps});
+}
 
 class ProjectPanelFrb extends StatefulWidget {
   /// The relink file picker seam (chosen path, or null when cancelled). Defaults
@@ -88,8 +266,8 @@ class ProjectPanelFrb extends StatefulWidget {
   /// opens.
   final Future<String?> Function()? relinkPicker;
 
-  /// The import picker seam, for the footer button and the double-click. Same
-  /// reason: a widget test must never open a plugin channel.
+  /// The import picker seam, for the bottom bar's button and the double-click.
+  /// Same reason: a widget test must never open a plugin channel.
   final Future<List<String>> Function()? importPicker;
 
   const ProjectPanelFrb({super.key, this.relinkPicker, this.importPicker});
@@ -108,6 +286,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// The search field's focus, owned here so `Ctrl+F` can put the cursor in it
   /// (docs/07 §15, "Panels").
   final FocusNode _searchFocus = FocusNode();
+
+  /// The sideways scroll the width ladder's last step rides on (§12A.6): below
+  /// [projectMinWidth] the tree keeps its width and slides instead of shrinking
+  /// any further.
+  final ScrollController _hScroll = ScrollController();
 
   /// The shell state this panel is listening to, so the listener can be taken
   /// off the same object it was put on.
@@ -166,6 +349,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _changes?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
+    _hScroll.dispose();
     _dropThumbs();
     super.dispose();
   }
@@ -218,16 +402,27 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// without walking the tree again. Rebuilt with the rows.
   final Map<String, FootageReference> _footageById = {};
 
-  /// Every item drawn this build, by id — what the info header looks the
+  /// Every item drawn this build, by id — what the preview card looks the
   /// anchor up in. Rebuilt with the rows.
   final Map<String, ItemReference> _itemById = {};
 
-  /// Decoded media facts per footage id, for the info header's readout.
-  /// Cached because `mediaInfo` probes the file; cleared with the epoch.
+  /// Decoded media facts per footage id, for the preview card and the Size and
+  /// fps columns. Cached because `mediaInfo` probes the file; cleared with the
+  /// epoch.
   final Map<String, BridgeMediaInfo?> _mediaInfo = {};
 
+  /// A composition's own size and rate, for the same two columns. Comp settings
+  /// are a synchronous read, so the cache is what keeps them off every rebuild
+  /// rather than off the build thread.
+  final Map<String, _Cells> _compCells = {};
+
+  /// How many things each folder holds, for the Items column — including the
+  /// folders that are shut, whose children the walk would otherwise never ask
+  /// about.
+  final Map<String, int> _childCounts = {};
+
   /// Decoded poster frames by footage id, held in RAM for the session so the
-  /// info header never re-decodes for a selection change. A null entry claims
+  /// preview card never re-decodes for a selection change. A null entry claims
   /// the slot while the decode is in flight (or records that the item has no
   /// picture to give). Cleared — and every image disposed — with the epoch.
   final Map<String, ui.Image?> _thumbs = {};
@@ -274,7 +469,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Mirror the anchor item to the shell (K-327), where the FX console reads
   /// it. The anchor, not the set: the console acts on one thing, the way the
-  /// info header describes one thing. Deselected (a toggle off) or unknown
+  /// preview card describes one thing. Deselected (a toggle off) or unknown
   /// (a stale id after a delete) publishes null rather than a dead handle.
   void _publishSelection() {
     final ui = Provider.of<LumitUiState>(context, listen: false);
@@ -306,18 +501,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   int _epoch = 0;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, box) => _build(context, box.maxWidth),
+      );
+
+  Widget _build(BuildContext context, double width) {
     final t = ThemeScope.of(context).theme;
     final state = Provider.of<LumitState>(context);
     final roots = state.project?.getItems() ?? const <ItemReference>[];
+    final cols = ProjectColumns.forWidth(width);
 
     if (roots.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _searchBar(t),
-          _infoHeader(t),
-          _toolbar(t),
+          _searchRow(t),
+          _columnHeader(t, cols),
           Expanded(
             child: _importOnDoubleTap(
               child: Center(
@@ -332,6 +531,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               ),
             ),
           ),
+          _footer(t, items: 0, missing: 0, labels: width >= _widthForItems),
         ],
       );
     }
@@ -340,11 +540,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
     // The filter only bites while something is missing, so a healthy project can
     // never trap the user behind an empty "missing only" view.
-    final anyMissing = _missing.values.any((m) => m);
-    final missingOnly = _missingOnly && anyMissing;
+    final missingCount = _missing.values.where((m) => m).length;
+    final missingOnly = _missingOnly && missingCount > 0;
 
     final rows = <Widget>[];
     _visibleIds.clear();
+    var itemCount = 0;
 
     // A row shows when its own name matches, or an ancestor folder's did —
     // searching a folder finds what it holds (docs/07 §3.1). Missing-only is
@@ -353,6 +554,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     void walk(ItemReference item, int depth, bool ancestorMatched) {
       final id = _idOf(item);
       _itemById[id] = item;
+      itemCount++;
       final name = _nameOf(item);
       final ownMatch = _search.isEmpty || name.toLowerCase().contains(_search);
       final selfMatched = ancestorMatched || ownMatch;
@@ -370,9 +572,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           name: name,
           depth: depth,
           missing: isMissingFootage,
+          audio: _mediaInfo[id]?.width == 0,
           selected: _selectedIds.contains(id),
           renaming: _renamingId == id,
           selectionCount: _selectedIds.length,
+          columns: cols,
+          cells: _cellsFor(item, id, isMissingFootage),
           selectedFootage: () => _selectedFootage,
           onSelect: (modifier) => _select(id, modifier),
           onStartRename: () => setState(() => _renamingId = id),
@@ -389,19 +594,20 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       }
       if (item case ItemReference_Footage(:final field0)) {
         _footageById[id] = field0;
-        // Decoded ahead of selection and held in RAM, so the info header
+        // Decoded ahead of selection and held in RAM, so the preview card
         // shows the picture and the facts the instant a row is clicked.
-        // Poster frames are ~48 px, so even a large project holds
-        // kilobytes, not megabytes.
         _refreshThumb(field0);
         _refreshMediaInfo(field0);
       }
       // A closed folder keeps its children to itself — unless a search is
       // running, which has to be able to find what is inside one.
-      if (item is ItemReference_Folder &&
-          (_search.isNotEmpty || !_closedFolders.contains(id))) {
-        for (final child in item.field0.getChildren()) {
-          walk(child, depth + 1, selfMatched);
+      if (item is ItemReference_Folder) {
+        final children = item.field0.getChildren();
+        _childCounts[id] = children.length;
+        if (_search.isNotEmpty || !_closedFolders.contains(id)) {
+          for (final child in children) {
+            walk(child, depth + 1, selfMatched);
+          }
         }
       }
     }
@@ -415,27 +621,30 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _searchBar(t),
-        _infoHeader(t),
-        if (anyMissing)
-          _MissingHeaderFrb(
-            count: _missing.values.where((m) => m).length,
-            active: missingOnly,
-            onToggle: () => setState(() => _missingOnly = !_missingOnly),
-          ),
-        _toolbar(t),
+        if (width >= _widthForPreview) _previewCard(t),
+        _searchRow(t),
+        _columnHeader(t, cols),
         Expanded(
           // Wrapping the list rather than sitting behind it: a sibling under a
           // ListView never sees a pointer, because the list is opaque across
           // its whole extent. As the parent it gets what the rows leave — and
           // a row's own double-tap wins the arena on the row itself.
           child: _importOnDoubleTap(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              children: rows,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              controller: _hScroll,
+              child: SizedBox(
+                width: width < projectMinWidth ? projectMinWidth : width,
+                child: ListView(children: rows),
+              ),
             ),
           ),
         ),
+        _scrollStrip(t),
+        _footer(t,
+            items: itemCount,
+            missing: missingCount,
+            labels: width >= _widthForItems),
       ],
     );
   }
@@ -451,14 +660,80 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return false;
   }
 
-  Widget _searchBar(LumitTheme t) => Padding(
-        padding: const EdgeInsets.all(6),
-        child: HouseTextField(
-          key: const ValueKey('project-search'),
-          controller: _searchController,
-          focusNode: _searchFocus,
-          width: double.infinity,
-          hint: l10n.searchProject,
+  /// The Size, fps and Items values this row can truthfully state, off the
+  /// caches the walk fills. A row never works these out itself — it is handed
+  /// finished strings, which is what keeps a hover free at the bridge.
+  _Cells _cellsFor(ItemReference item, String id, bool missing) {
+    switch (item) {
+      case ItemReference_Footage():
+        if (missing) return const _Cells(size: _noValue, fps: _noValue);
+        final info = _mediaInfo[id];
+        if (info == null || info.width == 0) return const _Cells();
+        return _Cells(
+          size: '${info.width}×${info.height}',
+          fps: _rateText(info.fpsNum, info.fpsDen),
+        );
+      case ItemReference_Composition(:final field0):
+        return _compCells[id] ??= () {
+          final s = field0.getSettings();
+          return _Cells(
+            size: '${s.width}×${s.height}',
+            fps: _rateText(s.fpsNum, s.fpsDen),
+          );
+        }();
+      case ItemReference_Folder():
+        final n = _childCounts[id];
+        return _Cells(items: n?.toString());
+      case ItemReference_Solid():
+        return const _Cells();
+    }
+  }
+
+  /// The search well. Inset on `surface_0` like every other value well (§2.1),
+  /// inside the 8/6 the mockup pads the row with.
+  Widget _searchRow(LumitTheme t) => SizedBox(
+        key: const ValueKey('project-search-row'),
+        height: projectSearchRowHeight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(projectRowPadding, _searchPadTop,
+              projectRowPadding, _searchPadBottom),
+          child: SizedBox(
+            height: wellHeight,
+            child: HouseTextField(
+              key: const ValueKey('project-search'),
+              controller: _searchController,
+              focusNode: _searchFocus,
+              width: double.infinity,
+              // The well fills its row rather than floating inside it: the
+              // mockup renders it exactly 20 tall, and the default 3px above
+              // and below would burst that.
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              hint: l10n.searchProject,
+            ),
+          ),
+        ),
+      );
+
+  /// The column headings. Kicker words, and the values below them are laid out
+  /// by the same [ProjectColumns.cells] call, so they cannot come apart.
+  Widget _columnHeader(LumitTheme t, ProjectColumns cols) => Container(
+        key: const ValueKey('project-column-header'),
+        height: projectColumnHeaderHeight,
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: t.hairline)),
+        ),
+        padding: const EdgeInsets.only(
+            left: _headerPadLeft, right: projectRowPadding),
+        child: Row(
+          children: [
+            Expanded(child: Text(l10n.name.toUpperCase(), style: t.kicker)),
+            ...cols.cells(
+              items: l10n.projectColumnItems.toUpperCase(),
+              size: l10n.projectColumnSize.toUpperCase(),
+              fps: l10n.unitFps.toUpperCase(),
+              style: t.kicker,
+            ),
+          ],
         ),
       );
 
@@ -471,83 +746,194 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         child: child,
       );
 
-  /// Import and New composition as glyph buttons above the tree, where the
-  /// egui panel kept them.
-  ///
-  /// They are on the menu bar too, and that is not duplication worth removing:
-  /// the panel is where you are looking when you want them, and a panel that
-  /// can only show what someone else put in it is a dead end.
-  Widget _toolbar(LumitTheme t) => Container(
-        height: 24,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: t.hairline)),
-        ),
-        child: Row(
-          children: [
-            LumitTooltip(
-              message: l10n.importFootage,
-              child: HouseButton(
-                key: const ValueKey('project-import'),
-                small: true,
-                frameless: true,
-                onPressed: _import,
-                child: lumitIcon(LumitIcon.folder,
-                    size: iconSize, color: t.textMuted),
+  /// The horizontal scrollbar under the tree: a 4px track inset 8 either side,
+  /// with a thumb as wide a share of it as the view is of the content. It is
+  /// full width — and so says nothing — until the width ladder's last step
+  /// actually bites.
+  Widget _scrollStrip(LumitTheme t) => SizedBox(
+        key: const ValueKey('project-scroll-strip'),
+        height: projectScrollStripHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: _scrollTrackInset),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: Container(
+              height: _scrollTrackHeight,
+              decoration: BoxDecoration(
+                color: t.surface2,
+                borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              ),
+              child: AnimatedBuilder(
+                animation: _hScroll,
+                builder: (context, _) {
+                  // `maxScrollExtent` is only an answer once the list has been
+                  // laid out — on the very first build there is nothing to
+                  // measure yet, and the thumb simply fills its track.
+                  final position =
+                      _hScroll.hasClients ? _hScroll.position : null;
+                  final p = position != null && position.hasContentDimensions
+                      ? position
+                      : null;
+                  final extent = p == null || p.maxScrollExtent <= 0
+                      ? 1.0
+                      : p.viewportDimension /
+                          (p.viewportDimension + p.maxScrollExtent);
+                  final at = p == null || p.maxScrollExtent <= 0
+                      ? 0.0
+                      : (p.pixels / p.maxScrollExtent).clamp(0.0, 1.0);
+                  return Align(
+                    // -1 is hard left, 1 is hard right: the thumb travels the
+                    // track's leftover room exactly as the view travels the
+                    // content's.
+                    alignment: Alignment(at * 2 - 1, 0),
+                    child: FractionallySizedBox(
+                      widthFactor: extent,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: t.surface4,
+                          borderRadius:
+                              BorderRadius.circular(t.tokens.controlRadius),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-            const SizedBox(width: 4),
-            // Footage dropped here makes a comp that matches it (docs/07 §3.1)
-            // — the same dialog the button opens, with the media's own size,
-            // rate and length already filled in, and every dropped item landing
-            // in the finished comp as a layer.
-            DragTarget<FootageDragData>(
-              onAcceptWithDetails: (d) => _newComposition(d.data.footage),
-              builder: (context, candidate, _) => Container(
-                foregroundDecoration: candidate.isEmpty
-                    ? null
-                    : BoxDecoration(border: Border.all(color: t.accent)),
-                child: LumitTooltip(
-                  message: l10n.newComposition,
-                  child: HouseButton(
-                    key: const ValueKey('project-new-comp'),
-                    small: true,
-                    frameless: true,
-                    onPressed: _newComposition,
-                    child: lumitIcon(LumitIcon.comp,
-                        size: iconSize, color: t.textMuted),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       );
 
-  /// The height the info header always occupies: a 36px thumbnail plus its
-  /// padding. Constant whether or not anything is selected, so the tree below
-  /// never jumps when the selection changes.
-  static const double _infoHeaderHeight = 48;
-
-  /// The selected item's readout (docs/07 §3.1): thumbnail, name, type, and
-  /// the item's own vital statistics. Always present at a fixed height; with
-  /// nothing selected it is simply quiet.
-  Widget _infoHeader(LumitTheme t) {
-    final id = _anchorId;
-    final item = id != null && _selectedIds.contains(id) ? _itemById[id] : null;
-
-    return SizedBox(
-      height: _infoHeaderHeight,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
-        child: item == null || id == null
-            ? const SizedBox.expand()
-            : _infoHeaderContent(t, item, id),
+  /// The bottom bar: the new-item controls at the left, the count at the right.
+  ///
+  /// **Import lives here** although the mockup draws only Folder and
+  /// Composition — it is a command the panel has always carried and the mockup
+  /// gave it no other home, so it takes the mockup's own icon-and-kicker shape
+  /// rather than being dropped. The count's `· n missing` half is the
+  /// "show only missing" filter, which the mockup likewise has no row for.
+  Widget _footer(LumitTheme t,
+      {required int items, required int missing, required bool labels}) {
+    final active = _missingOnly && missing > 0;
+    final count = t.kicker.copyWith(letterSpacing: _footerCountTracking);
+    return Container(
+      key: const ValueKey('project-footer'),
+      height: projectFooterHeight,
+      color: t.surface2,
+      padding: const EdgeInsets.symmetric(horizontal: _footerPad),
+      child: Row(
+        children: [
+          LumitTooltip(
+            message: l10n.importFootage,
+            child: _footerAction(
+              t,
+              key: const ValueKey('project-import'),
+              icon: LumitIcon.import,
+              label: labels ? l10n.projectFooterImport : null,
+              onPressed: _import,
+            ),
+          ),
+          const SizedBox(width: _footerGap),
+          // Footage dropped here makes a comp that matches it (docs/07 §3.1)
+          // — the same dialog the button opens, with the media's own size,
+          // rate and length already filled in, and every dropped item landing
+          // in the finished comp as a layer.
+          DragTarget<FootageDragData>(
+            onAcceptWithDetails: (d) => _newComposition(d.data.footage),
+            builder: (context, candidate, _) => Container(
+              foregroundDecoration: candidate.isEmpty
+                  ? null
+                  : BoxDecoration(border: Border.all(color: t.accent)),
+              child: LumitTooltip(
+                message: l10n.newComposition,
+                child: _footerAction(
+                  t,
+                  key: const ValueKey('project-new-comp'),
+                  icon: LumitIcon.newComposition,
+                  label: labels ? l10n.projectFooterComposition : null,
+                  onPressed: _newComposition,
+                ),
+              ),
+            ),
+          ),
+          const Spacer(),
+          // The count never pushes the bar wider than the panel: it is the
+          // flexible text the width ladder's first step truncates (§12A.6).
+          Flexible(
+            child: Text(l10n.projectItemCount(items),
+                style: count, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          if (missing > 0)
+            LumitTooltip(
+              message: active ? l10n.tipShowEverything : l10n.tipMissingOnly,
+              child: GestureDetector(
+                key: const ValueKey('missing-toggle'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _missingOnly = !_missingOnly),
+                child: Text(
+                  ' · ${l10n.projectMissingCount(missing)}',
+                  style:
+                      count.copyWith(color: active ? t.warning : t.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _infoHeaderContent(LumitTheme t, ItemReference item, String id) {
+  Widget _footerAction(
+    LumitTheme t, {
+    required Key key,
+    required LumitIcon icon,
+    // Null once the bar is too narrow to spell the word out: §12A.6's ladder
+    // step 4 says a toolbar sheds rather than shrinks, and an icon that is
+    // already the mockup's own is what a shed word leaves behind.
+    required String? label,
+    required VoidCallback onPressed,
+  }) =>
+      GestureDetector(
+        key: key,
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            lumitIcon(icon, size: iconSize, color: t.textMuted),
+            if (label != null) ...[
+              const SizedBox(width: _footerIconGap),
+              Text(
+                label.toUpperCase(),
+                style: t.kicker.copyWith(letterSpacing: _footerLabelTracking),
+              ),
+            ],
+          ],
+        ),
+      );
+
+  /// The picked item's readout (docs/07 §3.1): poster frame, name, and the
+  /// item's own vital statistics. Always present at a fixed height, so the tree
+  /// below never jumps when the selection changes; with nothing picked it is
+  /// simply quiet.
+  Widget _previewCard(LumitTheme t) {
+    final id = _anchorId;
+    final item = id != null && _selectedIds.contains(id) ? _itemById[id] : null;
+
+    return Container(
+      key: const ValueKey('project-preview-card'),
+      height: projectPreviewHeight,
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.hairline)),
+      ),
+      padding: const EdgeInsets.all(_previewPad),
+      child: item == null || id == null
+          ? const SizedBox.expand()
+          : _previewContent(t, item, id),
+    );
+  }
+
+  Widget _previewContent(LumitTheme t, ItemReference item, String id) {
     final missing = item is ItemReference_Footage && (_missing[id] ?? false);
     final type = switch (item) {
       ItemReference_Footage() => l10n.projectTypeFootage,
@@ -562,12 +948,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       // switching the selection redraws it in the same frame.
       final image = _thumbs[id];
       thumb = SizedBox(
-        width: 64,
-        height: 36,
+        width: _thumbWidth,
+        height: _thumbHeight,
         child: image == null
             ? Center(
                 child: lumitIcon(LumitIcon.footage,
-                    size: iconSize, color: t.layer.footage))
+                    size: iconSize, color: t.textMuted))
             : ClipRRect(
                 borderRadius: BorderRadius.circular(t.tokens.controlRadius),
                 child: Container(
@@ -580,24 +966,24 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
     return Row(
       key: const ValueKey('project-info-header'),
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (thumb != null) ...[thumb, const SizedBox(width: 8)],
+        if (thumb != null) ...[thumb, const SizedBox(width: _previewPad)],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(_nameOf(item),
-                        style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(type, style: t.small.copyWith(color: t.textMuted)),
-                ],
-              ),
-              _infoLine(t, item, id, missing),
+              Text(_nameOf(item),
+                  style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: _previewLineGap),
+              _previewFacts(t, item, id, missing),
+              const SizedBox(height: _previewLineGap),
+              // The card's second fact line. The mockup fills it with the
+              // container and audio layout, which the engine does not report
+              // yet; the kind of thing this is, is what the panel can say
+              // truthfully in the same breath.
+              Text(type, style: _metaStyle(t)),
             ],
           ),
         ),
@@ -605,16 +991,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     );
   }
 
-  /// The header's second line: the facts this item can truthfully state. The
+  /// The card's first fact line: what this item can truthfully state. The
   /// length reads as `HH:MM:SS:FF` timecode at the item's own rate — the same
   /// clock face the Viewer shows — never as a bare frame count.
-  Widget _infoLine(LumitTheme t, ItemReference item, String id, bool missing) {
+  Widget _previewFacts(
+      LumitTheme t, ItemReference item, String id, bool missing) {
     String? line;
     switch (item) {
       case ItemReference_Footage():
         if (missing) {
           return Text(l10n.projectItemMissing,
-              style: t.small.copyWith(color: t.warning));
+              style: _metaStyle(t).copyWith(color: t.warning));
         }
         final info = _mediaInfo[id];
         if (info != null) {
@@ -644,13 +1031,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         break;
     }
     if (line == null) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 1),
-      child: Text(line,
-          key: const ValueKey('project-info-line'),
-          style: t.small.copyWith(color: t.textMuted),
-          overflow: TextOverflow.ellipsis),
-    );
+    return Text(line,
+        key: const ValueKey('project-info-line'),
+        style: _metaStyle(t),
+        overflow: TextOverflow.ellipsis);
   }
 
   /// Fill in a footage item's media facts, off the build.
@@ -702,6 +1086,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _epoch++;
       _missing.clear();
       _mediaInfo.clear();
+      _compCells.clear();
+      _childCounts.clear();
       _dropThumbs();
     });
   }
@@ -786,42 +1172,29 @@ String _idOf(ItemReference item) => switch (item) {
       ItemReference_Folder(:final field0) => field0.internalid.toString(),
     };
 
-/// The header shown while the project has missing footage: a count and a
-/// "show only missing" toggle.
-class _MissingHeaderFrb extends StatelessWidget {
-  final int count;
-  final bool active;
-  final VoidCallback onToggle;
-  const _MissingHeaderFrb({
-    required this.count,
-    required this.active,
-    required this.onToggle,
-  });
+/// A state badge: the mockup's small outlined pill, in its own colour hushed
+/// to an outline. Not a kicker — a kicker names a container, and this reports
+/// a state — so it is plain mono with no tracking and no capitals.
+class ProjectBadge extends StatelessWidget {
+  final String label;
+  final Color colour;
+
+  const ProjectBadge({super.key, required this.label, required this.colour});
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    return LumitTooltip(
-      message: active ? l10n.tipShowEverything : l10n.tipMissingOnly,
-      child: GestureDetector(
-        key: const ValueKey('missing-toggle'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onToggle,
-        child: Container(
-          height: 24,
-          color: active ? t.accent.withValues(alpha: 0.12) : t.surface1,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Row(
-            children: [
-              lumitIcon(LumitIcon.unlink, size: iconSize, color: t.warning),
-              const SizedBox(width: 6),
-              Text(
-                l10n.missingFileCount(count),
-                style: t.small.copyWith(color: t.warning),
-              ),
-            ],
-          ),
-        ),
+    return Container(
+      height: _badgeHeight,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: _badgePad),
+      decoration: BoxDecoration(
+        border: Border.all(color: colour.withValues(alpha: _badgeBorderAlpha)),
+        borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+      ),
+      child: Text(
+        label,
+        style: t.mono.copyWith(fontSize: _badgeTextSize, color: colour),
       ),
     );
   }
@@ -837,8 +1210,17 @@ class _ProjectRowFrb extends StatefulWidget {
   final String name;
   final int depth;
   final bool missing;
+
+  /// Sound with no picture — the media probe's own answer (zero width), which
+  /// is what picks the speaker glyph over the film one.
+  final bool audio;
   final bool selected;
   final bool renaming;
+
+  /// Which optional columns this width carries, and the finished strings to put
+  /// in them — both worked out by the panel, for the same reason the name is.
+  final ProjectColumns columns;
+  final _Cells cells;
 
   /// How many rows are selected in all — a second click renames only when this
   /// row is the whole selection.
@@ -873,8 +1255,11 @@ class _ProjectRowFrb extends StatefulWidget {
     required this.name,
     required this.depth,
     required this.missing,
+    required this.audio,
     required this.selected,
     required this.renaming,
+    required this.columns,
+    required this.cells,
     required this.selectionCount,
     required this.onSelect,
     required this.selectedFootage,
@@ -1071,37 +1456,50 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
             );
           },
           child: Container(
-            constraints: const BoxConstraints(minHeight: 22),
+            height: projectRowHeight,
+            // Three greys at rest (§2.1, K-439): the row's own selected fill is
+            // the header grey, and `surface_3` appears only under the pointer.
             color: widget.selected
                 ? t.surface2
                 : _hover
-                    ? t.surface4
+                    ? t.surface3
                     : null,
             padding: EdgeInsets.only(
-              left: 6 + widget.depth * _indentPerDepth,
-              right: 6,
+              left: projectRowPadding + widget.depth * projectIndentPerDepth,
+              right: projectRowPadding,
             ),
             child: Row(
               children: [
-                _leading(t),
-                const SizedBox(width: 6),
+                _twirl(t),
+                const SizedBox(width: projectRowGap),
+                _glyph(t),
+                const SizedBox(width: projectRowGap),
                 Expanded(child: _nameOrEditor(t)),
                 if (widget.missing) ...[
-                  const SizedBox(width: 6),
-                  Text(l10n.projectItemMissing,
-                      style: t.small.copyWith(color: t.warning)),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: projectRowGap),
+                  // The badge *is* the relink control: the mockup gives a
+                  // broken row a pill and no button, and the panel would
+                  // otherwise lose the one-click relink the row has always had.
                   LumitTooltip(
-                    message: l10n.relink,
-                    child: HouseButton(
+                    message: l10n.relinkEllipsis,
+                    child: GestureDetector(
                       key: ValueKey<String>('relink-${_idOf(item)}'),
-                      small: true,
-                      onPressed: () =>
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () =>
                           _doRelink((item as ItemReference_Footage).field0),
-                      child: Text(l10n.relinkEllipsis, style: t.small),
+                      child: ProjectBadge(
+                        label: l10n.projectItemMissing,
+                        colour: t.warning,
+                      ),
                     ),
                   ),
                 ],
+                ...widget.columns.cells(
+                  items: widget.cells.items,
+                  size: widget.cells.size,
+                  fps: widget.cells.fps,
+                  style: _metaStyle(t),
+                ),
               ],
             ),
           ),
@@ -1145,43 +1543,40 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
     return row;
   }
 
-  /// The row's type glyph. Missing footage wears the warning-tinted unlink
-  /// glyph. No thumbnail here — the info header carries the picture, so the
-  /// tree stays a tight list of names.
-  Widget _leading(LumitTheme t) {
+  /// The twirl's slot. A shut folder has to say so, or it reads as an empty
+  /// one; the caret is its own target as well, the way the Hierarchy's is —
+  /// and every row keeps the slot whether or not it has one, so a child still
+  /// lines up one indent step right of the folder holding it.
+  Widget _twirl(LumitTheme t) => SizedBox(
+        width: iconSize,
+        child: item is! ItemReference_Folder
+            ? null
+            : GestureDetector(
+                key: ValueKey<String>('project-twirl-${_idOf(item)}'),
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onToggleFolder,
+                child: lumitIcon(
+                  widget.folderOpen
+                      ? LumitIcon.twirlOpen
+                      : LumitIcon.twirlClosed,
+                  size: iconSize,
+                  color: t.textMuted,
+                ),
+              ),
+      );
+
+  /// The row's type glyph, tinted by what the item *is* — the mockup's own
+  /// per-type tints, which are the label palette's own chips (K-188): azure for
+  /// picture footage, indigo for sound, amber for solids. A folder and a
+  /// composition stay muted, as the mockup draws them, and missing footage
+  /// wears the warning-tinted unlink glyph. No thumbnail here — the preview
+  /// card carries the picture, so the tree stays a tight list of names.
+  Widget _glyph(LumitTheme t) {
     final (icon, tint) = _iconFor(item, t);
-    final glyph = lumitIcon(
+    return lumitIcon(
       widget.missing ? LumitIcon.unlink : icon,
       size: iconSize,
       color: widget.missing ? t.warning : tint,
-    );
-    // A shut folder has to say so, or it reads as an empty one. The caret is
-    // its own target as well, the way the Hierarchy's is — and every row keeps
-    // the slot whether or not it has one, so a child still lines up one indent
-    // step right of the folder holding it.
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: iconSize,
-          child: item is! ItemReference_Folder
-              ? null
-              : GestureDetector(
-                  key: ValueKey<String>('project-twirl-${_idOf(item)}'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: widget.onToggleFolder,
-                  child: lumitIcon(
-                    widget.folderOpen
-                        ? LumitIcon.twirlOpen
-                        : LumitIcon.twirlClosed,
-                    size: iconSize,
-                    color: t.textMuted,
-                  ),
-                ),
-        ),
-        const SizedBox(width: 4),
-        glyph,
-      ],
     );
   }
 
@@ -1189,7 +1584,7 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
     final controller = _rename;
     if (widget.renaming && controller != null) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color: t.surface0,
           borderRadius: BorderRadius.circular(t.tokens.controlRadius),
@@ -1208,15 +1603,29 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
         ),
       );
     }
-    return Text(widget.name, style: t.body, overflow: TextOverflow.ellipsis);
+    // A folder names a group, and a picked row is the one being talked about:
+    // both read at `text_primary`. A broken one drops to muted — the badge
+    // beside it is what carries the news.
+    final colour = widget.missing
+        ? t.textMuted
+        : (widget.selected || item is ItemReference_Folder)
+            ? t.textPrimary
+            : t.textSecondary;
+    return Text(widget.name,
+        style: t.body.copyWith(color: colour), overflow: TextOverflow.ellipsis);
   }
 
   (LumitIcon, Color) _iconFor(ItemReference item, LumitTheme t) =>
       switch (item) {
-        ItemReference_Footage() => (LumitIcon.footage, t.layer.footage),
+        // Sound has no picture, so the media probe's zero width is what tells
+        // the two apart — and it is the engine's answer, not a guess at the
+        // file name.
+        ItemReference_Footage() => widget.audio
+            ? (LumitIcon.audioFile, t.labelColour(6))
+            : (LumitIcon.footage, t.labelColour(1)),
         ItemReference_Folder() => (LumitIcon.folder, t.textMuted),
-        ItemReference_Composition() => (LumitIcon.comp, t.layer.precomp),
-        ItemReference_Solid() => (LumitIcon.solid, t.layer.solid),
+        ItemReference_Composition() => (LumitIcon.comp, t.textMuted),
+        ItemReference_Solid() => (LumitIcon.solid, t.labelColour(2)),
       };
 }
 
@@ -1237,8 +1646,7 @@ class _DragFeedbackFrb extends StatelessWidget {
           children: [
             lumitIcon(icon,
                 size: iconSize,
-                color:
-                    icon == LumitIcon.comp ? t.layer.precomp : t.layer.footage),
+                color: icon == LumitIcon.comp ? t.textMuted : t.labelColour(1)),
             const SizedBox(width: 6),
             Text(name, style: t.small),
           ],

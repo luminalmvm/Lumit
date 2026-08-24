@@ -81,6 +81,15 @@ enum LumitIcon {
   footage,
   comp,
 
+  /// A sound file in the Project panel — the set's own speaker-with-waves,
+  /// which is a *file* mark, not the layer switch [audio] draws.
+  audioFile,
+
+  /// The Project panel's bottom-bar controls: bring a file in, and make a
+  /// composition. Both carry the plus the mockup gives a "new this" button.
+  import,
+  newComposition,
+
   /// A Solid (and an Adjustment layer). **No glyph in the new set yet** — its
   /// project marks are folder, composition, footage, still, sequence and audio,
   /// none of which is a solid colour.
@@ -348,6 +357,9 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       // The Project panel.
       LumitIcon.folder => LumitIcons.folder,
       LumitIcon.comp => LumitIcons.composition,
+      LumitIcon.audioFile => LumitIcons.audioFile,
+      LumitIcon.import => LumitIcons.import,
+      LumitIcon.newComposition => LumitIcons.newComposition,
       LumitIcon.footage || LumitIcon.film => LumitIcons.footage,
       LumitIcon.sequence => LumitIcons.sequence,
       _ => null,
