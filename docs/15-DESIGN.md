@@ -796,6 +796,13 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **Composition tabs run the full width of the panel header.** The row above the outline
   puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
   far right.
+- **The switches column is fixed at its minimum width** — the toggles never stretch to
+  fill a wider column, so there is nothing to gain by widening it (K-448).
+- **Comp-wide toggles live in the bottom bar**, not the timecode row: shy, motion blur
+  and the overflow menu sit beside the Parent column toggle after a divider, so the
+  comp-wide switches read apart from the column-visibility toggles.
+- **The zoom control sits at the bottom left of the lane area** (a deliberate deviation
+  from the mockup's bottom-right placement — it stays where the hand already is).
 - **The layer search stays.** It sits in the row above the outline as an inset well
   stretched between the frame counter on the left and the mode tabs on the right,
   filtering the layer list as it does today; the redesign restyles it, never removes it.
