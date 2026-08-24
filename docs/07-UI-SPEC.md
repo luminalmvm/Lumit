@@ -2208,7 +2208,7 @@ small image over each choice, remain the destination (polish tracked in TODO).
   never more** (K-440, tightening this rule's original "under five words"). *Add keyframe*,
   not *Add a keyframe here*. A
   control whose state changes says the state — *Visible* / *Hidden*, *Locked* / *Lock* —
-  rather than narrating the click. **There is no long form and no exception list** (K-476):
+  rather than narrating the click. **There is no long form and no exception list** (K-482):
   the sentence-length "rich" tooltip is gone, readouts with live figures included — a
   figure is a word, and the sentence around it was never read. Explanation belongs in the
   settings row's own line, in an empty state, or nowhere.

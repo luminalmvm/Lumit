@@ -4490,10 +4490,6 @@
   "@settingsHelpThisProcess": {
     "description": "Settings window: the sentence under the settingsThisProcess setting."
   },
-  "settingsHelpTooltips": "Show the hint that explains a control when you rest on it.",
-  "@settingsHelpTooltips": {
-    "description": "Settings window: the sentence under the settingsTooltips setting."
-  },
   "settingsHelpTransformInEffectControls": "Repeat the layer's Transform rows above its effects. The Timeline already shows them when a layer is twirled open.",
   "@settingsHelpTransformInEffectControls": {
     "description": "Settings window: the sentence under the settingsTransformInEffectControls setting."
@@ -5035,9 +5031,9 @@
   "@tipBrushSize": {
     "description": "Tooltip. Keep it to the control's name — under five words."
   },
-  "tipCacheDisk": "Parked in {path} — click to delete",
+  "tipCacheDisk": "Parked in {path}",
   "@tipCacheDisk": {
-    "description": "Tooltip on the disk cache meter. {path} is the folder frames are parked in.",
+    "description": "Tooltip on the disk cache meter. {path} is the folder frames are parked in. A tooltip is a name, never more than five words (K-482).",
     "placeholders": {
       "path": {
         "type": "String"
@@ -5048,13 +5044,13 @@
   "@tipCacheDiskNone": {
     "description": "Tooltip on the disk cache meter when the machine offers no cache folder."
   },
-  "tipCacheEmpty": "Nothing cached yet — click to clear",
+  "tipCacheEmpty": "Nothing cached yet",
   "@tipCacheEmpty": {
-    "description": "Tooltip on the memory cache meter before anything has been rendered."
+    "description": "Tooltip on the memory cache meter before anything has been rendered. A tooltip is a name, never more than five words (K-482)."
   },
-  "tipCacheRam": "{hits} served, {misses} rendered — click to clear",
+  "tipCacheRam": "{hits} hit, {misses} missed",
   "@tipCacheRam": {
-    "description": "Tooltip on the memory cache meter. {hits} and {misses} are whole numbers.",
+    "description": "Tooltip on the memory cache meter. {hits} and {misses} are whole numbers. A tooltip is a name, never more than five words (K-482).",
     "placeholders": {
       "hits": {
         "type": "String"
@@ -5064,9 +5060,9 @@
       }
     }
   },
-  "tipCacheVram": "Graphics-card cache — click to clear",
+  "tipCacheVram": "Graphics-card cache",
   "@tipCacheVram": {
-    "description": "Tooltip on the VRAM cache meter."
+    "description": "Tooltip on the VRAM cache meter. A tooltip is a name, never more than five words (K-482)."
   },
   "tipChooseCacheFolder": "Choose folder",
   "@tipChooseCacheFolder": {
@@ -5100,13 +5096,13 @@
   "@tipEnable": {
     "description": "Tooltip on the checkbox that switches an effect on. Under five words."
   },
-  "tipFlowOff": "Flow — synthesise in-between frames with optical flow",
+  "tipFlowOff": "Flow off",
   "@tipFlowOff": {
-    "description": "Tooltip on a footage layer's Flow switch while it is off: what turning it on does."
+    "description": "Tooltip on a footage layer's Flow switch while it is off. Flow is the feature name and is not translated."
   },
-  "tipFlowOn": "Flow — in-between frames are synthesised; click to turn off",
+  "tipFlowOn": "Flow on",
   "@tipFlowOn": {
-    "description": "Tooltip on a footage layer's Flow switch while it is on."
+    "description": "Tooltip on a footage layer's Flow switch while it is on. Flow is the feature name and is not translated."
   },
   "tipFrameNumber": "Frame number",
   "@tipFrameNumber": {
@@ -5239,18 +5235,18 @@
   "@tipPickOnViewer": {
     "description": "Tooltip on the eyedropper that reads a position off the picture. Under five words."
   },
-  "tipPlaybackAdaptive": "Keeps time, lowers resolution. Frames arrive by {transport}.",
+  "tipPlaybackAdaptive": "Adaptive · {transport}",
   "@tipPlaybackAdaptive": {
-    "description": "Tooltip on the playback-mode button. {transport} is a technical route name such as 'shared texture' and is not translated.",
+    "description": "Tooltip on the playback-mode button, naming the mode. {transport} is a technical route name such as 'shared texture' and is not translated.",
     "placeholders": {
       "transport": {
         "type": "String"
       }
     }
   },
-  "tipPlaybackEveryFrame": "Every frame at full resolution, sound silenced. Frames arrive by {transport}.",
+  "tipPlaybackEveryFrame": "Every frame · {transport}",
   "@tipPlaybackEveryFrame": {
-    "description": "Tooltip on the playback-mode button. {transport} is a technical route name and is not translated.",
+    "description": "Tooltip on the playback-mode button, naming the mode. {transport} is a technical route name and is not translated.",
     "placeholders": {
       "transport": {
         "type": "String"
@@ -5367,23 +5363,23 @@
   "@tipViewerExposure": {
     "description": "Tooltip on the Viewer's exposure box. It brightens or darkens the picture on screen and never the export. \"Stop\" is the photographic unit — one stop is a doubling of light."
   },
+  "tipViewerExposureReset": "Reset exposure",
+  "@tipViewerExposureReset": {
+    "description": "Tooltip on the small mark to the left of the Viewer bar's exposure number. It appears only while the exposure is not zero, and clicking it puts the exposure back to zero."
+  },
   "tipViewerGuides": "Grid and guides",
   "@tipViewerGuides": {
     "description": "Tooltip on the Viewer bar's grid-and-guides menu button, which shows an icon and no words. The menu turns on marks drawn over the picture: a grid, and the title/action safe rectangles."
   },
-  "tipViewerPreviewView": "The Viewer's exposure and tone mapping change this picture only, never the export. Tone mapping rolls bright highlights back under 1.",
+  "tipViewerPreviewView": "Preview only",
   "@tipViewerPreviewView": {
-    "description": "Tooltip on the Viewer bar's colour-management badge while the exposure or the tone map is engaged. Longer than a name on purpose: it is the only place either control is explained. \"Rolls back under 1\" means very bright values are folded down rather than clipping flat."
+    "description": "Tooltip on the Viewer bar's colour-management badge while the exposure or the tone map is engaged: what is on screen is not what will be exported."
   },
   "tipViewerSnapshotTake": "Take snapshot",
   "@tipViewerSnapshotTake": {
     "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. Under five words."
   },
   "tipViewerToneMap": "Tone mapping — preview only",
-  "tipViewerExposureReset": "Reset exposure",
-  "@tipViewerExposureReset": {
-    "description": "Tooltip on the small mark to the left of the Viewer bar's exposure number. It appears only while the exposure is not zero, and clicking it puts the exposure back to zero."
-  },
   "@tipViewerToneMap": {
     "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this sentence is the only description of it. \"The knee\" is where the rolloff starts; \"what is up there\" means detail brighter than the display can show. Preview only."
   },
@@ -7685,10 +7681,6 @@
   "tipViewerSnapshotCompare": "Snapshot — hold to compare",
   "@tipViewerSnapshotCompare": {
     "description": "Tooltip on the Viewer bar's snapshot mark once a snapshot exists. One mark, two gestures: a click photographs the picture again, and holding the button puts the stored photograph back over the live picture for as long as it is held."
-  },
-  "tooltipsShort": "Short",
-  "@tooltipsShort": {
-    "description": "One choice for tooltips: on, and a word or two long. The other choice is Off."
   },
   "viewerColourToneMap": "Tone mapping",
   "@viewerColourToneMap": {

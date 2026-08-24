@@ -1000,10 +1000,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         const SizedBox(width: 8),
         // The one thing in the row that may be shortened: the window is
         // resizable, and at the drawing's own width this row fills the column
-        // to the pixel.
+        // to the pixel — the note gets the 107-odd the drawing leaves it, and
+        // **wraps onto the two lines the drawing draws**.
+        //
+        // It used to carry `overflow: TextOverflow.ellipsis`, which is not the
+        // "shorten it" this needed: an ellipsis with no line limit puts the
+        // whole phrase on one line and cuts it off, so the note read "applies
+        // on rele…" instead of wrapping. Wrapping is the shortening.
         Flexible(
-          child: Text(l10n.settingsAppliesOnRelease,
-              style: unit, overflow: TextOverflow.ellipsis),
+          child: Text(l10n.settingsAppliesOnRelease, style: unit),
         ),
       ],
     );

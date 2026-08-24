@@ -15,6 +15,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/shell/settings_rows.dart';
+import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -239,6 +240,70 @@ void main() {
       expect(band(tester, 'settings-reset-page').height, settingsFooterButton);
       expect(
           band(tester, 'settings-close-button').height, settingsFooterButton);
+    });
+
+    /// 8. **Appearance reads in the order the work happens in**: pick a
+    /// scheme, make it your own, then tune whichever one is in force. Accent
+    /// and shape sat above the rows that create the thing they tune.
+    testWidgets('the Appearance rows are in the owner\'s order',
+        (tester) async {
+      await open(tester);
+      await showAppearance(tester);
+
+      double topOf(String label) => boxRound(tester, label, ConstrainedBox).top;
+      final order = [
+        'Colour scheme',
+        'Custom colours',
+        'Your themes',
+        'Accent',
+        'Shape',
+      ];
+      final tops = [for (final row in order) topOf(row)];
+      for (var i = 1; i < order.length; i++) {
+        expect(tops[i], greaterThan(tops[i - 1]),
+            reason: '${order[i]} must read after ${order[i - 1]}');
+      }
+    });
+
+    /// 9. **Tooltips are a switch, not a picker** (K-476), and the switch
+    /// survives the trip out to the settings file and back.
+    testWidgets('the tooltip setting is a switch that round-trips',
+        (tester) async {
+      final p = await open(tester);
+      await showAppearance(tester);
+
+      expect(find.byKey(const ValueKey('settings-tooltips')), findsOneWidget);
+      expect(find.text('Short'), findsNothing,
+          reason: 'there is no longer form to choose, so no picker');
+      final pill = band(tester, 'settings-tooltips');
+      expect(pill.width, 26, reason: 'the drawing\'s pill, as every flag row');
+      expect(pill.height, 16);
+
+      expect(p.uiState.workspace.interface.showTooltips, isTrue);
+      await tester.tap(find.byKey(const ValueKey('settings-tooltips')));
+      await tester.pumpAndSettle();
+      expect(p.uiState.workspace.interface.showTooltips, isFalse);
+
+      // Out to the settings file and back: off has to still be off next time.
+      final settings = p.uiState.workspace.interface;
+      expect(
+          InterfaceSettings.fromJson(settings.toJson()).showTooltips, isFalse);
+    });
+
+    /// 10. **The scale row's note wraps.** The drawing measures it at 107 wide
+    /// and 26 tall — two lines of it — rather than one line clipped short.
+    testWidgets('the scale note reads on two lines', (tester) async {
+      await open(tester);
+      await showAppearance(tester);
+
+      final note = find.text('applies on release');
+      // The `%` rider beside it is one line of the same style, so twice its
+      // height is what "wrapped onto two lines" means without hard-coding a
+      // font's metrics.
+      final oneLine = tester.getRect(find.text('%')).height;
+      expect(tester.getRect(note).height, closeTo(oneLine * 2, 1),
+          reason: 'the drawing draws the note on two lines, not one clipped '
+              'to fit');
     });
   }, skip: !engineAvailable);
 }

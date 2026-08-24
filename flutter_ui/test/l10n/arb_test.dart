@@ -10,28 +10,16 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// Tooltips that are allowed to run long, and why.
+/// The longest a tooltip may be, in words.
 ///
-/// docs/07-UI-SPEC.md §13.2 reserves the sentence-length "rich" tooltip for
-/// concepts with Lumit-specific behaviour, and for the readouts that carry
-/// live figures. These nine are the whole list: the cache meters, whose
-/// tooltips carry live numbers and warn that clicking throws work away, the two
-/// playback modes, which are the adaptive degradation the spec names outright,
-/// the Flow switch, which says what frame synthesis will do before it is turned
-/// on (K-088), and the colour-management badge while a preview-only view is
-/// engaged — a readout, and the one place that says the picture on screen is
-/// not the export (K-314, §2.2 item 8). Anything else must fit in five words.
-const _richTooltips = {
-  'tipCacheEmpty',
-  'tipCacheRam',
-  'tipCacheVram',
-  'tipCacheDisk',
-  'tipPlaybackAdaptive',
-  'tipPlaybackEveryFrame',
-  'tipFlowOn',
-  'tipFlowOff',
-  'tipViewerPreviewView',
-};
+/// **There is no exception list, and one may not be added** (K-482). This file
+/// used to keep nine names that were allowed a sentence each — the cache
+/// meters, the playback modes, the Flow switches, the preview-view badge —
+/// under docs/07-UI-SPEC.md §13.2's reserved "rich" tooltip. The reservation is
+/// withdrawn: a tooltip is a name, so the same limit holds for every one of
+/// them. A string that will not fit belongs in a settings row's own line, in an
+/// empty state, or nowhere.
+const _tooltipWordLimit = 5;
 
 /// docs/01-GLOSSARY.md §9, as it applies to what the user reads. `render` is
 /// missing on purpose: it is banned only for writing a file, and the Timeline's
@@ -61,11 +49,11 @@ const _bannedWordIsAnotherSense = {
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.
 List<File> _arbFiles() => (Directory('lib/l10n')
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.arb'))
-        .toList())
-    ..sort((a, b) => a.path.compareTo(b.path));
+    .listSync()
+    .whereType<File>()
+    .where((f) => f.path.endsWith('.arb'))
+    .toList())
+  ..sort((a, b) => a.path.compareTo(b.path));
 
 Map<String, dynamic> _arb() =>
     json.decode(File('lib/l10n/app_en.arb').readAsStringSync())
@@ -83,19 +71,24 @@ void main() {
 
   test('a tooltip is the control name, not a sentence about it', () {
     final long = <String>[];
+    var checked = 0;
     for (final m in _messages(_arb())) {
-      if (!m.key.startsWith('tip') || _richTooltips.contains(m.key)) continue;
+      if (!m.key.startsWith('tip')) continue;
+      checked++;
       // A placeholder stands for one word whatever it expands to.
       final words = m.value.replaceAll(RegExp(r'\{\w+\}'), 'x').split(' ');
-      if (words.length > 5) long.add('${m.key}: "${m.value}"');
+      if (words.length > _tooltipWordLimit) long.add('${m.key}: "${m.value}"');
     }
+    // The walk itself is asserted: a renamed prefix would otherwise turn this
+    // into a test that checks nothing and passes for ever.
+    expect(checked, greaterThan(50), reason: 'the tip* keys were not found');
     expect(
       long,
       isEmpty,
       reason: 'tooltips are the control\'s name and its shortcut '
-          '(docs/07-UI-SPEC.md §13.2) — under five words, two where two will '
-          'do. Shorten these, or add the key to _richTooltips above with a '
-          'reason it has to be long.',
+          '(docs/07-UI-SPEC.md §13.2, K-482) — one or two words where two will '
+          'do, and never more than $_tooltipWordLimit. Shorten these; there is '
+          'no exception list to add them to.',
     );
   });
 
@@ -173,7 +166,8 @@ void main() {
     final wrong = <String>[];
     for (final file in _arbFiles()) {
       final name = file.uri.pathSegments.last;
-      final fromName = name.substring('app_'.length, name.length - '.arb'.length);
+      final fromName =
+          name.substring('app_'.length, name.length - '.arb'.length);
       final declared = (json.decode(file.readAsStringSync())
           as Map<String, dynamic>)['@@locale'] as String?;
       if (declared != fromName) {

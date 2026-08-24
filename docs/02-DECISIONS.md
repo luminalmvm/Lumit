@@ -12776,23 +12776,6 @@ effect's degradation rung draws the newest half of its particles (halving as pre
 demands) — deterministic, interaction-only, in the status readout, never on export; the
 CPU fallback renders the same particles at the same cap, slower but not different.
 
-## K-476 — Tooltips have one length and one switch: the rich tooltip is withdrawn
-
-**DECIDED 2026-08-24.** Owner ruling, completing K-440. A tooltip is **one or two words,
-never more**, everywhere and always — [07-UI-SPEC.md](07-UI-SPEC.md) §13.2's reserved
-"rich" tooltip (a sentence, sometimes with a *Learn more* link) is withdrawn, and so is
-the named exception list `arb_test.dart` kept for it. The nine exempt strings — the four
-cache meters, the two playback modes, the two Flow switches and the Viewer's
-preview-view badge — are shortened to names; the live figures they carried stay in the
-readouts themselves, where they are read. `arb_test.dart` now walks every `tip*` key with
-nothing allowed past the limit, and adding an allowance is not a fix.
-
-**The setting is a switch, not a choice.** Settings ▸ Interface ▸ Tooltips is on or off,
-in the drawing's pill (K-465), replacing the Short/Off picker: with one length there is
-nothing to pick. Off means no tooltip anywhere, and it always did — `LumitTooltip` reads
-the flag from the theme scope and hands back the bare control, so the rule holds at the
-one place every tooltip in the application passes through rather than at any call site.
-
 ## K-478 — The dock's corner grip goes, and four owner corrections to the Viewer's bars
 
 **DECIDED 2026-08-24.** An owner review of the Viewer and the dock chrome. Five rulings,
@@ -12942,3 +12925,20 @@ it always did.
 The setting is a `Workspace` field (`show_welcome_on_launch`), not an interface setting: it
 is a launch behaviour, sibling to the automatic update check, and it is read once by the
 boot gate. A settings file written before it existed loads as on.
+
+## K-482 — Tooltips have one length and one switch: the rich tooltip is withdrawn
+
+**DECIDED 2026-08-24.** Owner ruling, completing K-440. A tooltip is **one or two words,
+never more**, everywhere and always — [07-UI-SPEC.md](07-UI-SPEC.md) §13.2's reserved
+"rich" tooltip (a sentence, sometimes with a *Learn more* link) is withdrawn, and so is
+the named exception list `arb_test.dart` kept for it. The nine exempt strings — the four
+cache meters, the two playback modes, the two Flow switches and the Viewer's
+preview-view badge — are shortened to names; the live figures they carried stay in the
+readouts themselves, where they are read. `arb_test.dart` now walks every `tip*` key with
+nothing allowed past the limit, and adding an allowance is not a fix.
+
+**The setting is a switch, not a choice.** Settings ▸ Interface ▸ Tooltips is on or off,
+in the drawing's pill (K-465), replacing the Short/Off picker: with one length there is
+nothing to pick. Off means no tooltip anywhere, and it always did — `LumitTooltip` reads
+the flag from the theme scope and hands back the bare control, so the rule holds at the
+one place every tooltip in the application passes through rather than at any call site.
