@@ -54,6 +54,19 @@ pub fn user_facing_labels() -> BTreeSet<String> {
     for category in FxCategory::ALL {
         out.insert(category.label().to_owned());
     }
+    // The graph canvas's own words (K-471): the two derived nodes, the ports
+    // no schema declares, and every driver's declared output. The bridge draws
+    // a socket from each, so each is a word the engine can send.
+    out.insert(crate::graph::SOURCE_LABEL.to_owned());
+    out.insert(crate::graph::OUT_LABEL.to_owned());
+    for port in crate::graph::DERIVED_PORTS {
+        out.insert(port.label.to_owned());
+    }
+    for def in super::BUILTIN_DEFS.iter() {
+        for port in def.signature().outputs() {
+            out.insert(port.label.to_owned());
+        }
+    }
     // The blend modes cross the same seam: `list_blend_modes` sends each
     // mode's display name for the Timeline's dropdown, and a name with no
     // table entry ships in English inside a translated application.

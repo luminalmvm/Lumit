@@ -267,11 +267,13 @@ How to treat
 Hue
 Hue and saturation
 Hue shift
+Image
 In front
 In high
 In low
 Inflate
 Inner radius
+Input
 Input black
 Input white
 Inside colour
@@ -290,6 +292,7 @@ Jagged
 Key out safe
 Key out unsafe
 LUT
+Layer out
 Left and right
 Left bottom tangent x
 Left bottom tangent y
@@ -382,6 +385,7 @@ Origin y
 Out high
 Out low
 Outer radius
+Output
 Output black
 Output height
 Output white

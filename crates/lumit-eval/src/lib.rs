@@ -1551,6 +1551,7 @@ mod tests {
                 },
             }],
             layout: Vec::new(),
+            exposed: Vec::new(),
         };
 
         let layer_with = |graph: LayerGraph| {
@@ -1660,6 +1661,7 @@ mod tests {
                     },
                 }],
                 layout: Vec::new(),
+                exposed: Vec::new(),
             }
         };
         let comp_at = |time: f64| {

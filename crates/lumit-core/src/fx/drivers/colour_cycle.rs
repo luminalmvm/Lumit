@@ -9,7 +9,7 @@
 //! which is what you want when Phase is itself being driven by something else.
 
 use crate::fx::{
-    cpu, DriverCx, EffectDef, EffectMetadata, EffectSchema, PortType, Signature, Value,
+    cpu, DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -69,7 +69,11 @@ impl EffectDef for ColourCycleDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
-            outputs: &[(COLOUR_PORT, PortType::Colour)],
+            outputs: &[Port {
+                id: COLOUR_PORT,
+                label: "Colour",
+                ty: PortType::Colour,
+            }],
         }
     }
 

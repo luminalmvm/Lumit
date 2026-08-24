@@ -13,7 +13,7 @@
 //! identically in the preview and in the export, which is K-031's promise.
 
 use crate::fx::{
-    noise, DriverCx, EffectDef, EffectMetadata, EffectSchema, PortType, Signature, Value,
+    noise, DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -59,7 +59,11 @@ impl EffectDef for WiggleDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
-            outputs: &[(VALUE_PORT, PortType::Number)],
+            outputs: &[Port {
+                id: VALUE_PORT,
+                label: "Value",
+                ty: PortType::Number,
+            }],
         }
     }
 

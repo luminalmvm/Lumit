@@ -29,8 +29,37 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::fx::PortType;
+use crate::fx::{Port, PortType};
 use crate::model::EffectInstance;
+
+/// The picture leaving a Source node, entering the Layer out node, or the
+/// image a node hands on.
+pub const IMAGE_PORT: Port = Port::new("image", "Image", PortType::Image);
+/// Coverage: the layer's own masked source alpha, and the socket on an effect
+/// that reads one.
+pub const MATTE_PORT: Port = Port::new("matte", "Matte", PortType::Matte);
+/// An effect node's one picture in — by construction the previous stack
+/// entry's output (§1.1), which is why no gesture can branch the chain.
+pub const INPUT_PORT: Port = Port::new("input", "Input", PortType::Image);
+/// An effect node's one picture out.
+pub const OUTPUT_PORT: Port = Port::new("output", "Output", PortType::Image);
+/// The Layer out node's sound. Drawn and unfilled: audio comes only from a
+/// footage layer's own stream (K-435), so this accepts no wire in this phase
+/// (§7) — listed rather than faked.
+pub const AUDIO_PORT: Port = Port::new("audio", "Audio", PortType::Audio);
+
+/// Every port the *derived* nodes draw — the ones no schema declares, because
+/// the Source node, an effect's picture in and out and the Layer out node are
+/// all worked out from the effect stack rather than stored.
+///
+/// Gathered in one list so the K-303 label walk ([`crate::fx::labels`]) can
+/// find their words the same way it finds an effect's.
+pub const DERIVED_PORTS: [Port; 5] = [IMAGE_PORT, MATTE_PORT, INPUT_PORT, OUTPUT_PORT, AUDIO_PORT];
+
+/// What the canvas calls [`NodeRef::Source`] — display text (K-303).
+pub const SOURCE_LABEL: &str = "Source";
+/// What the canvas calls [`NodeRef::Out`] — display text (K-303).
+pub const OUT_LABEL: &str = "Layer out";
 
 /// Names anything the graph canvas draws (K-471 §1.2).
 ///
@@ -107,6 +136,13 @@ pub struct LayerGraph {
     /// with no entry is auto-placed by the panel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layout: Vec<(NodeRef, [f64; 2])>,
+    /// The nodes whose `E` badge is on — grown to show one socket per
+    /// parameter (§1.4). Presentation state, beside [`Self::layout`] rather
+    /// than on the instance, so a *derived* effect node can carry it without
+    /// the whole effect stack gaining a field; it changes no pixel and so
+    /// reaches no frame key. A wired socket draws regardless of it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exposed: Vec<NodeRef>,
 }
 
 /// Why a graph was refused (§1.5).
@@ -136,7 +172,10 @@ impl LayerGraph {
     /// what keeps the field out of the saved file.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.nodes.is_empty() && self.edges.is_empty() && self.layout.is_empty()
+        self.nodes.is_empty()
+            && self.edges.is_empty()
+            && self.layout.is_empty()
+            && self.exposed.is_empty()
     }
 
     /// The driver instance named by `id`, if this graph carries one.
@@ -325,6 +364,7 @@ mod tests {
                 nodes: vec![wiggle],
                 edges: vec![edge],
                 layout: vec![(NodeRef::Source, [0.0, 0.0])],
+                exposed: Vec::new(),
             },
             vec![blur],
         )

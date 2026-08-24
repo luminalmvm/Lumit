@@ -2006,6 +2006,7 @@ mod tests {
                 },
             }],
             layout: vec![(NodeRef::Driver(wiggle_id), [40.0, 12.0])],
+            exposed: vec![NodeRef::Effect(blur_id)],
         };
         store
             .commit(Op::SetLayerGraph {

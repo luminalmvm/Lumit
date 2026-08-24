@@ -9,7 +9,9 @@
 //! An input range of zero width has no line through it, so it answers the
 //! output's low end rather than dividing by nought.
 
-use crate::fx::{DriverCx, EffectDef, EffectMetadata, EffectSchema, PortType, Signature, Value};
+use crate::fx::{
+    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+};
 use lumit_fx_macros::Effect;
 
 /// Remap's controls.
@@ -68,7 +70,11 @@ impl EffectDef for RemapDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
-            outputs: &[(VALUE_PORT, PortType::Number)],
+            outputs: &[Port {
+                id: VALUE_PORT,
+                label: "Value",
+                ty: PortType::Number,
+            }],
         }
     }
 

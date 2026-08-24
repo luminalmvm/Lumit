@@ -4354,6 +4354,7 @@ surfaces:
                         },
                     }],
                     layout: Vec::new(),
+                    exposed: Vec::new(),
                 };
                 // A frame partway in, so the wobble is somewhere other than its
                 // starting value.
@@ -4469,6 +4470,7 @@ surfaces:
                         },
                     }],
                     layout: Vec::new(),
+                    exposed: Vec::new(),
                 };
             }
             (doc, comp_id)

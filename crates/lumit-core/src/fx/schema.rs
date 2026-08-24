@@ -134,6 +134,35 @@ pub enum PortType {
     Audio,
 }
 
+/// One socket on the graph canvas: its stable id, the English word beside it,
+/// and what it carries.
+///
+/// # In plain terms
+///
+/// A port is a plug on the side of a box. The **id** is what the document
+/// writes down when a wire is joined to it — never seen, never translated. The
+/// **label** is what the canvas draws beside the plug, and like every other word
+/// the engine sends it crosses the bridge in English and is looked up in the
+/// frontend's table (K-303) — which is why it is declared here, beside the port,
+/// rather than worked out from the id at the seam.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Port {
+    /// Stable, snake_case, and the only half the document stores.
+    pub id: &'static str,
+    /// The word drawn beside the socket, in British English (K-303).
+    pub label: &'static str,
+    /// What travels through it, which is also what colours it.
+    pub ty: PortType,
+}
+
+impl Port {
+    /// Declare a port. `const` so a signature's output list is a static.
+    #[must_use]
+    pub const fn new(id: &'static str, label: &'static str, ty: PortType) -> Port {
+        Port { id, label, ty }
+    }
+}
+
 /// Parameter type + defaults/ranges (docs/08 §1.2: sliders may be exceeded
 /// by typing; hard ranges may not).
 #[derive(Debug, Clone, Copy, PartialEq)]

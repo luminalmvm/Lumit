@@ -72,7 +72,7 @@ pub enum Signature {
     /// A driver: no image kernel, and these named output ports.
     Data {
         /// The output ports, in the order the node draws them.
-        outputs: &'static [(&'static str, super::schema::PortType)],
+        outputs: &'static [super::schema::Port],
     },
 }
 
@@ -81,18 +81,12 @@ impl Signature {
     /// does not declare.
     #[must_use]
     pub fn output(self, port: &str) -> Option<super::schema::PortType> {
-        match self {
-            Signature::Image => None,
-            Signature::Data { outputs } => outputs
-                .iter()
-                .find(|(id, _)| *id == port)
-                .map(|(_, ty)| *ty),
-        }
+        self.outputs().iter().find(|p| p.id == port).map(|p| p.ty)
     }
 
     /// This signature's output ports, empty for an image operation.
     #[must_use]
-    pub fn outputs(self) -> &'static [(&'static str, super::schema::PortType)] {
+    pub fn outputs(self) -> &'static [super::schema::Port] {
         match self {
             Signature::Image => &[],
             Signature::Data { outputs } => outputs,

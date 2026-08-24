@@ -16,7 +16,9 @@
 //! than as the ramp running late, which is what makes Smooth safe to drop into
 //! a chain that was already timed.
 
-use crate::fx::{DriverCx, EffectDef, EffectMetadata, EffectSchema, PortType, Signature, Value};
+use crate::fx::{
+    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+};
 use lumit_fx_macros::Effect;
 
 /// Smooth's controls.
@@ -74,7 +76,11 @@ impl EffectDef for SmoothDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
-            outputs: &[(VALUE_PORT, PortType::Number)],
+            outputs: &[Port {
+                id: VALUE_PORT,
+                label: "Value",
+                ty: PortType::Number,
+            }],
         }
     }
 

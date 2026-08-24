@@ -11,7 +11,8 @@
 //! (14-ENGINEERING-RULES §4).
 
 use crate::fx::{
-    DriverCx, EffectDef, EffectMetadata, EffectSchema, PortType, Signature, Value, CHOICE_UNGROUPED,
+    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+    CHOICE_UNGROUPED,
 };
 use lumit_fx_macros::Effect;
 
@@ -69,7 +70,11 @@ impl EffectDef for MathDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
-            outputs: &[(VALUE_PORT, PortType::Number)],
+            outputs: &[Port {
+                id: VALUE_PORT,
+                label: "Value",
+                ty: PortType::Number,
+            }],
         }
     }
 

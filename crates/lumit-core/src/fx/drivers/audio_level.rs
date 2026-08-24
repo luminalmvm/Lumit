@@ -17,7 +17,9 @@
 //! names a layer somebody deleted: the level reads nought, which is the same
 //! labelled no-op a dangling matte gives, never a fault.
 
-use crate::fx::{DriverCx, EffectDef, EffectMetadata, EffectSchema, PortType, Signature, Value};
+use crate::fx::{
+    DriverCx, EffectDef, EffectMetadata, EffectSchema, Port, PortType, Signature, Value,
+};
 use lumit_fx_macros::Effect;
 
 /// Audio level's controls.
@@ -78,8 +80,16 @@ impl EffectDef for AudioLevelDef {
     fn signature(&self) -> Signature {
         Signature::Data {
             outputs: &[
-                (AMPLITUDE_PORT, PortType::Number),
-                (LOW_PORT, PortType::Number),
+                Port {
+                    id: AMPLITUDE_PORT,
+                    label: "Amplitude",
+                    ty: PortType::Number,
+                },
+                Port {
+                    id: LOW_PORT,
+                    label: "Low",
+                    ty: PortType::Number,
+                },
             ],
         }
     }
