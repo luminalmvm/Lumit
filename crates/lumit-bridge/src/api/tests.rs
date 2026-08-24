@@ -438,7 +438,10 @@ fn composition_settings_carry_the_background_and_the_shutter_as_one_step() {
     let comp = add_comp(&project, "Scene");
 
     let before = comp.get_settings().expect("settings");
-    assert_eq!(before.shutter_angle, 180.0, "the model's own default shutter");
+    assert_eq!(
+        before.shutter_angle, 180.0,
+        "the model's own default shutter"
+    );
 
     comp.set_settings(BridgeCompSettings {
         name: "Scene".into(),
