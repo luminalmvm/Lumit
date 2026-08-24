@@ -45,10 +45,9 @@ const double lumitWordmarkAspect = 253.82 / 71.55;
 /// letters. A null ground is a surface nobody can judge — an unfinished custom
 /// theme, a caller with nothing to say — and takes the light letters, because
 /// Lumit is dark-first and light lettering is the mark as it is usually seen.
-Color wordmarkLetters(Color? ground) =>
-    (ground?.computeLuminance() ?? 0) > 0.5
-        ? brandWordmarkInk
-        : brandWordmarkPaper;
+Color wordmarkLetters(Color? ground) => (ground?.computeLuminance() ?? 0) > 0.5
+    ? brandWordmarkInk
+    : brandWordmarkPaper;
 
 /// The wordmark, [height] logical pixels from its cap line to the `u`'s
 /// overshoot; the width follows from the lockup.

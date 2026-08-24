@@ -169,7 +169,8 @@ void main() {
     /// mark is legible under every scheme and under a custom theme nobody has
     /// seen yet. The keys are never chosen: they are the brand.
     test('the wordmark\'s lettering follows the ground', () {
-      final dark = LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
+      final dark =
+          LumitTheme.forScheme(LumitColorScheme.dark, ThemeShape.sharp);
       final light =
           LumitTheme.forScheme(LumitColorScheme.light, ThemeShape.sharp);
 
