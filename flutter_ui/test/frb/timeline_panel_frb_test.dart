@@ -269,6 +269,26 @@ void main() {
                 'type is — 11 for the clock, 10 for the frame count');
       }
 
+      // And the open editor speaks through the **edge**, never by lifting the
+      // fill: a well that rose under the pointer would stop being a recess
+      // (§2.1). `animated`, not `accent` — the ring that means "you are about
+      // to change a value" (§6.5).
+      for (final key in ['tl-timecode', 'tl-frame']) {
+        await tester.tap(find.byKey(ValueKey<String>(key)));
+        await tester.pump();
+        final open = tester.widget<Container>(find
+            .descendant(
+                of: find.byKey(ValueKey<String>(key)),
+                matching: find.byType(Container))
+            .first);
+        final face = open.decoration as BoxDecoration;
+        expect(face.color, t.surface0, reason: '$key stays inset while typing');
+        expect((face.border as Border).top.color, t.animated,
+            reason: 'and says so on its edge');
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+      }
+
       // The total is not editable, so it wears no well: a recess round it
       // would be an invitation the readout cannot accept.
       expect(
