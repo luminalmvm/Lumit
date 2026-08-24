@@ -12267,3 +12267,17 @@ compose column defaults that shipped with it.
   every name, 9 for the kickers over the columns and in the bottom bar. Two numbers had
   drifted and are corrected — the Retime clock, at `mono`'s bare 12 rather than the value
   well's 11, and the render-time readout at a kicker's 9 rather than a value's 10.
+
+## K-458 — The drawing is authoritative; Keys mode carries everything its drawing shows
+
+**DECIDED 2026-08-24.** Two rulings from the owner. First, the general one, sharpening
+K-450: **an approved mockup is authoritative over every earlier decision and every
+scope argument — unless the owner personally says otherwise.** "Adds no new behaviour"
+is never a reason to leave out something a drawing shows; the drawings are the plan.
+Second, the application: K-455's restriction ("Keys adds no editing behaviour Layers
+lacks") is superseded. Keys mode carries the whole of its drawing: the block-selection
+box with stretch handles and its `n keys · n f` badge, the Ease popover, and the bottom
+bar's Interpolation / Reverse / Copy / Paste-at-playhead strip. Where those tools also
+belong in Layers per K-441's own bullet, the shared machinery serves both; where the
+engine lacks an op (reverse, paste at playhead), the op is built with it, per the
+standing build-the-bridge-parts rule.
