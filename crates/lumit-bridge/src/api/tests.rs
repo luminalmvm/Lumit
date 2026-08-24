@@ -293,6 +293,110 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
     );
 }
 
+/// **Picking any frame of a moved run relinks the run** (K-439), and takes the
+/// ordinary clips beside it along in the same sweep.
+///
+/// The failure this pins is quiet: the item points at frame 1, the user picks
+/// frame 42, and the path rewrite compares `frame0001.png` with `frame0042.png`
+/// — all they share at the end is `.png`, so "the folder moved" comes out as
+/// "everything up to half a frame number moved", and the sibling is swept to a
+/// path that does not exist.
+#[test]
+fn relinking_a_sequence_by_any_of_its_frames_finds_the_run_and_its_neighbours() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let new_root = dir.path().join("moved");
+    std::fs::create_dir_all(new_root.join("frames")).expect("tree");
+    for n in 1..=50u32 {
+        std::fs::write(
+            new_root.join("frames").join(format!("frame{n:04}.png")),
+            b"f",
+        )
+        .expect("frame");
+    }
+    std::fs::write(new_root.join("music.wav"), b"w").expect("sound");
+
+    let old_root = std::path::Path::new("/nowhere/edit");
+    let run = FootageItem {
+        sequence: Some(lumit_core::model::SequenceRef::default()),
+        id: Uuid::now_v7(),
+        name: "frame[0001-0050].png".into(),
+        media: MediaRef {
+            relative_path: "frame0001.png".into(),
+            absolute_path: old_root
+                .join("frames")
+                .join("frame0001.png")
+                .to_string_lossy()
+                .into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+    };
+    let sibling = FootageItem {
+        sequence: None,
+        id: Uuid::now_v7(),
+        name: "music.wav".into(),
+        media: MediaRef {
+            relative_path: "music.wav".into(),
+            absolute_path: old_root.join("music.wav").to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+    };
+    let (run_id, sibling_id) = (run.id, sibling.id);
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        for (index, item) in [ProjectItem::Footage(run), ProjectItem::Footage(sibling)]
+            .into_iter()
+            .enumerate()
+        {
+            state
+                .store
+                .commit(Op::AddItem {
+                    index,
+                    item: Box::new(item),
+                })
+                .expect("seeded");
+        }
+    }
+
+    // The middle of the run, which is what a picker started at the folder gives.
+    FootageReference::new(project.id, run_id)
+        .relink(
+            new_root
+                .join("frames")
+                .join("frame0042.png")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("relinked");
+
+    let state = project.state().expect("state");
+    let state = state.read().expect("read");
+    let doc = state.store.snapshot();
+    let media_of = |id: Uuid| match doc.item(id) {
+        Some(ProjectItem::Footage(f)) => f.media.absolute_path.clone(),
+        _ => panic!("the footage is still there"),
+    };
+    assert_eq!(
+        media_of(run_id),
+        new_root
+            .join("frames")
+            .join("frame0001.png")
+            .to_string_lossy(),
+        "the run is pointed at its first frame, not at the one that was picked"
+    );
+    assert_eq!(
+        media_of(sibling_id),
+        new_root.join("music.wav").to_string_lossy(),
+        "the sound file beside it moved the same way and came back too"
+    );
+}
+
 /// A placed clip must land in the composition; the span/size fallbacks are what
 /// let a *missing* file still place, so the user can relink rather than being
 /// unable to add it at all.

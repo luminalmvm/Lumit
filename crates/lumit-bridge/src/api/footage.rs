@@ -137,14 +137,14 @@ impl FootageReference {
         if path.trim().is_empty() {
             return Err(BridgeError::MediaPathUnresolved);
         }
-        let picked = PathBuf::from(&path);
+        let mut picked = PathBuf::from(&path);
         let proj = self.project()?;
 
-        // The files this relink points at, so the probe worker can be reading
-        // them while the user is still looking at the picker's afterglow: the
+        // The media this relink points at, so the probe worker can be reading
+        // it while the user is still looking at the picker's afterglow: the
         // panel asks every repointed item for its status the moment the change
         // lands.
-        let mut repointed: Vec<PathBuf> = Vec::new();
+        let mut repointed: Vec<lumit_media::MediaSource> = Vec::new();
 
         let ops = {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -154,6 +154,23 @@ impl FootageReference {
             match doc.item(self.id).ok_or(BridgeError::InvalidItem)? {
                 lumit_core::model::ProjectItem::Footage(_) => {}
                 _ => return Err(BridgeError::InvalidItem),
+            }
+
+            // **Relinking an image sequence by any of its files relinks the
+            // run** (K-439). A sequence item points at the run's *first* file,
+            // so a user who picks frame 42 out of the picker is answered with
+            // frame 1 of the run that frame 42 is in — before anything else
+            // reads `picked`. Without this the path rewrite below would compare
+            // `frame0001.png` against `frame0042.png`, find `.png` as all they
+            // share, and sweep every sibling to a prefix built out of half a
+            // frame number.
+            if matches!(
+                doc.item(self.id),
+                Some(lumit_core::model::ProjectItem::Footage(f)) if f.sequence.is_some()
+            ) {
+                if let Some(run) = lumit_media::sequence::detect(&picked) {
+                    picked = run.first;
+                }
             }
 
             let folder = picked.parent().map(std::path::Path::to_path_buf);
@@ -221,7 +238,10 @@ impl FootageReference {
                     }
                 }
                 media.fingerprint = lumit_project::fingerprint_path(&candidate).ok();
-                repointed.push(candidate);
+                repointed.push(lumit_media::MediaSource {
+                    path: candidate,
+                    sequence_fps: other.sequence_fps(),
+                });
                 ops.push(lumit_core::Op::SetMediaRef {
                     id: other.id,
                     media: Box::new(media),
@@ -245,8 +265,8 @@ impl FootageReference {
 
         // After the commit and outside the lock: queueing is a channel send,
         // but the rule is the rule (docs/14 §3).
-        for path in &repointed {
-            crate::probe::request(path);
+        for src in &repointed {
+            crate::probe::request(src);
         }
         Ok(())
     }
