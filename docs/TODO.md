@@ -479,30 +479,55 @@ export rework did **not** bring with it (K-469): the queue's engine half remembe
 between sessions, so a defaults store is still the first thing that page needs. Each is
 engine-first work; the rows are drawn and waiting.
 
-**The Export drawing's rows the engine cannot back** (K-469, docs/15-DESIGN.md §12A.4).
-The drawing draws a fuller export than the engine can honour, and the rows nothing backs
-are left out rather than drawn dead — each is engine-first work, and the drawing is the
-specification for it:
+**The Export drawing's rows: the engine half has landed, the seam has not** (K-469,
+docs/06 §7.4–§7.5, docs/15-DESIGN.md §12A.4). The engine now models and tests every one of
+these — audio-only output (`.m4a`/`.wav`), colour depth, channels and alpha, the output
+colour space, crop and *use region of interest*, container metadata, the named preset store,
+the auto bitrate, the render settings (quality, disk cache, effects, solo switches) and the
+*when done* hook — all on `lumit_render::export::ExportSpec`, with a per-format capability
+table refusing what a format cannot carry. What is left:
 
-- **The render settings**: quality, effects, solo switches, proxies, guide layers, disk
-  cache and colour depth. None of these concepts exists in the document model at all —
-  there is no guide layer, no proxy and no solo switch to honour — so each is a document
-  feature first and an export override second.
-- **The picture's colour management**: channels (RGB / RGB + alpha), alpha
-  (premultiplied / straight), bit depth, and the output colour space. The exporter writes
-  what the render walk gives it; a colour transform on the way out is the same work the
-  Viewer's colour pipeline is waiting for.
-- **Crop and the region of interest** on the way out, with the drawing's `T · L · B · R`
-  reading.
-- **Two output types**: *Still* (one frame, written under its own name rather than as a
-  numbered sequence) and *Audio only* (needs a video-less mux path in lumit-media, which
-  `Encoder::open` cannot express today).
-- **Presets of one's own** — the drawing's *Save as…* beside the preset list. Needs a user
-  preset store (docs/07 §11: "presets are user-editable and shareable files").
-- **The *When done* action list** beside the Open folder tick: the tick is built
-  (`reveal_in_folder`), the list of machine actions after it is not.
+- **Expose it over the seam.** `BridgeExportSpec` carries eight fields of the twenty-odd
+  the engine now has; `to_export_spec` fills the rest with `..ExportSpec::default()`, which
+  is where the one change goes. The preset store (`lumit_render::export_presets`) needs
+  list/get/save/delete endpoints, and the *when done* hook needs the queue runner to call
+  `play_done_sound` / `reveal_in_folder` at completion.
+- **Wider than eight bits, honestly.** The pack stage writes 16-bit stills, but its input is
+  the 8-bit display read-back, so today's 16-bit file carries an exactly-widened 8-bit
+  signal. Making the extra bits mean something wants a 16-bit display target in lumit-gpu
+  and a `readback16` beside `readback8`; nothing in the export path changes when it lands.
+  Marked `ponytail:` at `pack_frame`.
+- **The *Still* output type** — one frame written under its own name rather than as a
+  numbered sequence. The frame walk and the encoders already do everything but the naming.
 - **Reordering the queue** (docs/07 §11: "items are reorderable"). The engine holds the
   list in the order things were added; nothing moves a row up it.
+- **A disk-cache policy with something to govern.** The setting exists and defaults to Off,
+  which is what happens: the export renderer is a fresh `HeadlessRenderer` with no disk
+  tier at all. *Read-only* becomes a real choice the day the export path gains one.
+
+**Guide layers and proxies — needs a subsystem, not an export setting** (K-469). The Export
+drawing puts both among the render settings, and both are left out because neither concept
+exists anywhere in Lumit. They are document features first and export overrides second, and
+faking either at export would be worse than the empty row:
+
+- **Guide layers.** A guide layer is a layer marked *for reference only*: it draws in the
+  Viewer like any other layer, and it is skipped by every render that produces a file. The
+  subsystem is a per-layer switch in the document model (beside `visible`, `solo` and `fx`
+  in `Switches`), honoured by the draw-list builder under a "this walk is for delivery"
+  flag rather than by the export path alone — a precomp rendered into a parent must skip
+  its own guide layers too. It needs its own Timeline switch column and glyph, its own AE
+  import mapping (AE has the same flag), and a rule for what a *soloed* guide layer means.
+  Only then is "render guide layers" an export override worth drawing.
+- **Proxies.** A proxy is a low-resolution stand-in for a footage item — the file the
+  Viewer decodes while you work, with the full-resolution original swapped back in for
+  delivery. The subsystem is a second media reference on the footage item (path,
+  fingerprint, its own probe and frame index), a per-item and per-project *use proxies*
+  state, and a resolution point in the decode planner that picks which file a source
+  reads from, with the plan's cache key folding the choice in so a proxy frame and a
+  full-resolution frame are never confused for one another. It also wants a way to *make*
+  proxies (a background transcode queue reusing the exporter) and an honest answer for a
+  proxy whose dimensions or duration disagree with the original. Only then is "use
+  proxies / use full resolution" an export override worth drawing.
 
 **Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
 drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it

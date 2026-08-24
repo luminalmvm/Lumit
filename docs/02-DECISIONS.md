@@ -12839,3 +12839,51 @@ refines K-451 for one compound reading; it reverses nothing.
 computed-style manifests measure `border-radius: 2px` on the mockups' controls almost
 without exception — wells, dropdown faces, buttons, badges — so the token follows the
 drawings (K-458). Round's stadium is untouched.
+
+## K-479 — The export drawing's rows are the engine's now, and a format's capability table refuses what it cannot carry
+
+**DECIDED 2026-08-24.** K-469 left most of the Export drawing's rows out because the engine
+could not back them, and listed each as engine-first work. The engine half has landed, and
+building it settled four things K-469 had left as a list.
+
+**A capability table decides, and it refuses rather than coerces.** Each output format carries
+one row — picture, sound, alpha, the colour depths, whether a bitrate applies, whether the
+container holds metadata — and both the dialog and the exporter read that one row. A spec
+asking for something its format cannot carry (16-bit in an mp4, alpha in an mp4, a colour
+space this build has no transform for) is **refused before a frame is rendered**, never
+quietly dropped. The alternative was tempting and wrong: an export that silently delivered
+something other than what was asked for is a mistake the user finds out about from somebody
+else, and by then the file has been sent.
+
+**RGB + alpha is a still-sequence answer in v1.** The drawing offers channels and alpha on the
+picture, and the formats that carry video alpha — ProRes 4444, DNxHR — are explicitly not in
+v1 (docs/06 §7.4). Rather than add a codec the spec excludes, the capability table says mp4
+cannot carry alpha and the still sequences can. The pack stage's straight/premultiplied choice
+is real and tested regardless, because it is pure arithmetic on the finished frame.
+
+**A crop decides the delivered frame's size.** The crop is `T · L · B · R` in pixels at
+composition size (K-419), applied to the composited frame *before* any resize. When no other
+frame was named — every Custom export — the cropped size becomes the file's size, which is
+what cropping is for; a preset that named its own frame letterboxes the cropped picture into
+it, exactly as an uncropped one does. *Use region of interest* takes the same insets from the
+Viewer's region, which crosses as fractions (K-362) and converts here; a degenerate region is
+no region and falls back to whatever was typed.
+
+**A blank bitrate is not the same answer as Auto.** *Auto* works a delivery-quality rate out
+from the frame and the rate; a blank field sets no bitrate at all and lets the encoder choose
+its own quality, which is what it has always meant (K-119). Folding the two together would
+have changed what every existing blank-field export writes, so they are separate answers and a
+preset saved under one never becomes the other.
+
+**Two rows stay out, and they stay out for the same reason K-469 gave.** **Guide layers** and
+**proxies** are the only render settings still unbacked, because neither concept exists
+anywhere in the document model. Each is a document feature first and an export override
+second — a guide layer needs a switch in `Switches` honoured by the draw-list builder under a
+"this walk is for delivery" flag, a Timeline column, and an AE import mapping; a proxy needs a
+second media reference on the footage item, a per-project *use proxies* state, a resolution
+point in the decode planner, and the plan's cache key folding the choice in. docs/TODO.md
+carries both in full. Faking either at export would be worse than the empty row.
+
+The **seam is unchanged by this entry**: `BridgeExportSpec` still carries the eight fields it
+carried, and `to_export_spec` fills the rest from `ExportSpec::default()`, so exposing the
+whole set later is one change in one place rather than many.

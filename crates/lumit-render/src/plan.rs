@@ -36,7 +36,8 @@ pub const DRAFT_MAX_WIDTH: u32 = 640;
 /// plan and the frame-cache key. Keeping the two in one type is deliberate: if
 /// they could disagree, a frame decoded at one width could be served from a
 /// cache entry filed under another.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Quality {
     /// Scrub/drag draft: cap the decode width hard for instant feedback. Never
     /// raises the width the settings below ask for, only lowers it.

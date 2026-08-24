@@ -8651,6 +8651,89 @@ two readings of the same thing, so they cannot disagree about which frame it is 
 that set it, so a long export whose dialog you closed an hour ago still opens the folder it
 landed in.
 
+### 19.1 What an export actually carries
+
+The queue is *when* an export happens. This is *what* it writes.
+
+**Every setting travels together.** There is one settings record per export — the format,
+the frame, the bitrate, the colour depth, the crop, the metadata, everything — and it is
+copied into the queued item alongside the photograph of the project. That is why an export
+started an hour ago still writes what you asked for then, even if you have changed every
+field in the dialog since.
+
+**A format is a set of promises, and not all formats make the same ones.** An `.mp4` cannot
+hold transparency; a folder of PNGs cannot hold sound; a `.wav` has no picture to set a
+depth on; nothing lossless has a bitrate, because a bitrate is a budget for throwing detail
+away. Rather than each part of the program remembering this, there is one **capability
+table**: one row per format saying what it can carry. The dialog reads it to decide which
+controls mean anything, and the exporter reads it to refuse a setting the format cannot
+honour. Refusing matters more than it sounds — a file that quietly came out without the
+transparency you asked for is a file you find out about from somebody else.
+
+**Sound with no picture.** An export can be nothing but the composition's mix: an `.m4a`,
+which is compressed like the sound in a video file, or a `.wav`, which is not compressed at
+all. That path needs no compositor and no graphics card, because there is nothing to draw —
+the mix is already made, and it goes straight into the file.
+
+**The pack stage.** The compositor's answer to every frame is four numbers per pixel — red,
+green, blue and *coverage* (how much of the pixel the picture actually fills), each one byte.
+Files want other shapes, and the small piece of code that converts is the **pack stage**:
+
+- **RGB** writes the coverage as "completely covered" everywhere, so the file is the picture
+  over its own background — what you want when the file is the finished thing.
+- **RGB + alpha** keeps the coverage, so the file can be laid over something else later.
+- **Premultiplied** and **straight** are two ways of storing a half-covered pixel. Lumit
+  works premultiplied — a half-covered red pixel is stored as half-strength red — because
+  that is the form in which blending and blurring are simply correct. Straight stores the
+  red at full strength and the coverage beside it, which is what paint programs and some
+  delivery specifications ask for, so the pack stage divides the colour back up on the way
+  out.
+- **8-bit or 16-bit** is how finely each of those numbers is written. Only the still formats
+  can carry sixteen; every video codec Lumit writes today is eight.
+
+**Crop, and the region of interest.** A crop takes pixels off each edge — top, left, bottom,
+right — counted in the composition's own pixels, and it decides the size of the file unless
+you named a different frame. The **region of interest** is the rectangle you can sweep on the
+Viewer to make previews faster; ticking *use region of interest* at export means "crop to
+that instead". It has to be converted, because a region is stored as fractions of the frame
+rather than as pixels — a preview at half resolution has half as many pixels, and the same
+region has to mean the same part of the picture at every one of them.
+
+**Metadata** is the handful of facts written *about* the file rather than in it: title,
+author, copyright, comment, when it was made. They are kept in a fixed order rather than a
+lookup table, for a reason worth knowing: an export must be **deterministic** — the same
+project must produce the same bytes twice — and the order these are written in lands in the
+file's bytes. A lookup table gives them back in whatever order it feels like.
+
+**Render settings** say how the composition is rendered on the way through: the quality tier
+(the same Full/Half/Quarter machinery the Viewer uses — an export takes Full), whether the
+disk cache is touched (it is not: an export is one pass through the timeline, and filling the
+cache with frames nobody will ask for again would push out the ones you are actually working
+with), whether effects run, and whether solo switches are obeyed. The last two work by making
+a throwaway copy of the project photograph with those switches flipped — the export renders
+the copy, and nothing about your actual project changes. Two things the export drawing shows
+here do not exist yet and are not faked: **guide layers** (a "reference only" mark on a layer)
+and **proxies** (a small stand-in file used while you work). Both are features of the project
+itself before they can be export settings, and TODO.md says what each would take.
+
+**Auto bitrate.** A bitrate is how many bits a second of video is allowed. Bigger pictures and
+more frames need more, roughly in proportion, so *Auto* multiplies the pixels-per-second by a
+constant per codec — the constant chosen so that 1920×1080 at 60 comes out at exactly the
+16 Mbps the delivery preset table already specifies. Typing a number overrides it; leaving the
+field blank is a third answer meaning "let the encoder decide", which is what it has always
+meant.
+
+**Presets** are a name over that whole settings record. The built-in ones — *Master* and the
+delivery presets — cannot be edited or deleted, because a preset name has to mean the same
+thing on everybody's machine. Your own are saved into one small file in Lumit's data folder,
+so they follow you between projects. If that file goes missing or gets damaged, Lumit reads it
+as "no saved presets" and carries on: losing your presets should cost you a re-save, never an
+export.
+
+**When done** is what happens at the end: nothing, a short sound, or opening the folder the
+file landed in. The sound is a file that ships with Lumit — and when it is not there, the hook
+simply does nothing, because a missing ding must never make a finished export look failed.
+
 ## 20. The node graph, in plain terms
 
 A layer's effects have always been a list: the picture goes in at the top, each effect

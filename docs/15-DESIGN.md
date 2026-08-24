@@ -1139,6 +1139,18 @@ migration path). Either way they all share one pattern:
   bullet): 12px either side of an outlined label, 16 either side of the filled one, both
   24 tall. Both approved drawings draw a pair that way.
 
+**The Export dialog's pages front what the engine backs, and the engine now backs most of
+them.** K-469 left Colour and Metadata off the tab row because an empty page is a promise the
+dialog cannot keep, and listed the rows nothing could honour. The engine half has since
+landed: audio-only output, colour depth, channels and alpha, the output colour space, crop and
+*use region of interest*, container metadata, the preset store with *Save as…*, the auto
+bitrate, and the render settings (quality, disk cache, effects, solo switches) with a
+per-format capability table saying which of them a given format can carry at all. **A control
+a format cannot honour is disabled, not drawn live** — the engine refuses such a spec outright,
+so a dialog that let it be set would only be arranging a refusal. Two of the drawing's render
+rows still have nothing beneath them and stay off the page: **guide layers** and **proxies**,
+neither of which the document model has any notion of ([TODO.md](TODO.md)).
+
 **A settings row states its name and nothing else.** The sentence explaining what a setting
 does was dropped with the drawing that had no room for it (K-465) — a row may still carry a
 line *under* it, at the full width of the page, but only for something live it has to

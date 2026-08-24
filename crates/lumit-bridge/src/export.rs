@@ -600,15 +600,30 @@ mod driving {
             "tiff" => ExportFormat::Images(ImageFormat::Tiff),
             other => return Err(format!("export: unknown format '{other}'")),
         };
+        // Everything the seam does not carry yet — colour depth, channels and
+        // alpha, colour space, crop, metadata, the render settings and the
+        // when-done hook — takes its own default, which is what an export has
+        // always done. The engine models all of it (`lumit_render::export`);
+        // exposing it over the seam is the interface half's own work, and this
+        // spread is what makes that one change rather than many.
         Ok(ExportSpec {
             format,
-            target: r.target,
-            bit_rate: r.bit_rate,
-            max_rate: r.max_rate,
+            target: Some(r.target),
+            bitrate: match r.bit_rate {
+                Some(target_bps) => lumit_render::export::Bitrate::Manual {
+                    target_bps,
+                    peak_bps: r.max_rate,
+                },
+                // A blank bitrate field has always meant "encoder default
+                // quality" and still does; the drawing's Auto face is a
+                // separate answer the seam does not carry yet.
+                None => lumit_render::export::Bitrate::EncoderDefault,
+            },
             fps: r.fps,
             range: r.range,
             include_audio: r.include_audio,
             audio_bit_rate: r.audio_bit_rate,
+            ..ExportSpec::default()
         })
     }
 

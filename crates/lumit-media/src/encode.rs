@@ -21,7 +21,7 @@ use std::ffi::CString;
 use std::path::Path;
 
 /// Delivery codec choice (docs/06-RENDER-PIPELINE.md §7.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VideoCodec {
     H264,
     Hevc,
@@ -249,7 +249,7 @@ pub fn encoder_label(encoder: &str) -> &'static str {
 /// A still-image sequence format the exporter can write (K-201). PNG and TIFF
 /// both carry the full RGBA frame losslessly, which is what a compositor's
 /// image export is for — a lossy sequence would be an mp4 with extra steps.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ImageFormat {
     Png,
     Tiff,

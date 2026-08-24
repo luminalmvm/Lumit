@@ -212,26 +212,580 @@ impl ExportPreset {
     }
 }
 
-/// What the export writes: a video file, or one still image per frame (K-201).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// The sound-only containers an export can write (docs/06 §7.4).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum AudioFormat {
+    /// AAC in an `.m4a` — the delivery form, same codec a video export uses.
+    #[default]
+    M4a,
+    /// Uncompressed 16-bit PCM in a `.wav` — the master form.
+    Wav,
+}
+
+impl AudioFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            AudioFormat::M4a => "M4A (AAC)",
+            AudioFormat::Wav => "WAV (uncompressed)",
+        }
+    }
+
+    pub fn extension(self) -> &'static str {
+        match self {
+            AudioFormat::M4a => "m4a",
+            AudioFormat::Wav => "wav",
+        }
+    }
+
+    pub fn codec(self) -> lumit_media::encode::AudioCodec {
+        match self {
+            AudioFormat::M4a => lumit_media::encode::AudioCodec::Aac,
+            AudioFormat::Wav => lumit_media::encode::AudioCodec::PcmS16,
+        }
+    }
+}
+
+/// What the export writes: a video file, one still image per frame (K-201), or
+/// sound with no picture at all.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum ExportFormat {
     /// An `.mp4`, in the given codec.
     Video(lumit_media::encode::VideoCodec),
     /// A numbered image per frame — `shot.00001.png` beside the chosen path.
     Images(lumit_media::encode::ImageFormat),
+    /// An `.m4a` or `.wav` of the comp's mix, with no video stream.
+    Audio(AudioFormat),
+}
+
+/// What one output format can and cannot carry (docs/06 §7.4).
+///
+/// In plain terms: the export dialog draws every option, but not every option
+/// means anything in every file. A `.png` has no bitrate; an `.mp4` cannot hold
+/// an alpha channel; a `.wav` has no picture to set a depth on. This table says
+/// which is which, in one place, so the dialog and the exporter cannot disagree
+/// — and so a setting that a format cannot honour is refused rather than
+/// quietly ignored.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FormatCaps {
+    /// Carries a picture at all.
+    pub video: bool,
+    /// Can carry the comp's sound.
+    pub audio: bool,
+    /// Can carry an alpha channel (so the Channels choice means something).
+    pub alpha: bool,
+    /// The colour depths this format can write, best last.
+    pub depths: &'static [lumit_media::encode::BitDepth],
+    /// A video bitrate applies (lossless formats have none to choose).
+    pub bit_rate: bool,
+    /// The container holds metadata.
+    pub metadata: bool,
+}
+
+use lumit_media::encode::BitDepth;
+
+/// Eight bits only — every video codec Lumit writes in v1 (docs/06 §7.4:
+/// ProRes and DNxHR, which is where 4444 and deeper live, are not in v1).
+const EIGHT_ONLY: &[BitDepth] = &[BitDepth::Eight];
+/// The still formats carry either width.
+const EIGHT_OR_SIXTEEN: &[BitDepth] = &[BitDepth::Eight, BitDepth::Sixteen];
+
+impl ExportFormat {
+    /// This format's capability row.
+    pub fn caps(self) -> FormatCaps {
+        match self {
+            // H.264/HEVC in mp4: 4:2:0, eight bits, no alpha, a bitrate to
+            // choose, and a container that holds metadata.
+            ExportFormat::Video(_) => FormatCaps {
+                video: true,
+                audio: true,
+                alpha: false,
+                depths: EIGHT_ONLY,
+                bit_rate: true,
+                metadata: true,
+            },
+            // Stills: lossless RGBA, either depth, no sound and no bitrate.
+            // The image2 muxer writes one file per frame and has nowhere to
+            // put container metadata.
+            ExportFormat::Images(_) => FormatCaps {
+                video: true,
+                audio: false,
+                alpha: true,
+                depths: EIGHT_OR_SIXTEEN,
+                bit_rate: false,
+                metadata: false,
+            },
+            ExportFormat::Audio(f) => FormatCaps {
+                video: false,
+                audio: true,
+                alpha: false,
+                depths: &[],
+                // AAC has a bitrate; PCM is exactly what it is.
+                bit_rate: f == AudioFormat::M4a,
+                metadata: true,
+            },
+        }
+    }
+
+    /// The file extension this format writes.
+    pub fn extension(self) -> &'static str {
+        match self {
+            ExportFormat::Video(_) => "mp4",
+            ExportFormat::Images(f) => f.extension(),
+            ExportFormat::Audio(f) => f.extension(),
+        }
+    }
+}
+
+/// Which channels the written file carries.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum Channels {
+    /// Colour only — the alpha channel is written opaque, so what a viewer
+    /// sees is the comp over its own background.
+    #[default]
+    Rgb,
+    /// Colour and the composite's own coverage, for a file that will be
+    /// layered over something else.
+    RgbAlpha,
+}
+
+/// How the colour channels relate to the alpha channel in the written file
+/// (docs/06 §3.4). The compositor works premultiplied throughout, so
+/// premultiplied is a pass-through and straight is a division.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum AlphaMode {
+    /// Colour already multiplied by coverage — the working form, and what
+    /// most compositors expect back.
+    #[default]
+    Premultiplied,
+    /// Colour un-multiplied, full-strength wherever there is any coverage at
+    /// all. What paint programs and some delivery specs ask for.
+    Straight,
+}
+
+/// The colour space the file is written in — the export's final transform
+/// (docs/06 §7.4).
+///
+/// In plain terms: the compositor works in scene-linear light, which is not
+/// what a file should contain. Something has to convert on the way out, and
+/// this says what to convert *to*. One transform exists today; the named
+/// variant is the shape an OCIO config's output spaces will arrive in, so the
+/// setting does not have to change when they do.
+#[derive(Clone, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum ColourSpace {
+    /// The built-in transform: working space → sRGB / Rec.709, which is the
+    /// same display encode the Viewer shows (K-031).
+    #[default]
+    SrgbRec709,
+    /// A named output space from an OCIO config (docs/06 §2, post-v1). Kept in
+    /// the model so a project written today names its space the same way it
+    /// will then; an export that asks for one before OCIO exists is refused,
+    /// because a wrong colour space in a delivered file is worse than an
+    /// export that did not run.
+    Ocio(String),
+}
+
+impl ColourSpace {
+    /// Whether this build can actually perform the transform.
+    pub fn is_available(&self) -> bool {
+        matches!(self, ColourSpace::SrgbRec709)
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            ColourSpace::SrgbRec709 => "sRGB / Rec.709".to_owned(),
+            ColourSpace::Ocio(name) => name.clone(),
+        }
+    }
+}
+
+/// A crop applied on the way out, as pixel insets from each edge of the
+/// composition (K-419: distances are pixels at composition size, never a
+/// percentage). `Crop::NONE` is no crop.
+///
+/// In plain terms: the four numbers are how much to take off the top, the
+/// left, the bottom and the right — the reading the export drawing shows as
+/// `T · L · B · R`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct Crop {
+    pub top: u32,
+    pub left: u32,
+    pub bottom: u32,
+    pub right: u32,
+}
+
+impl Crop {
+    pub const NONE: Crop = Crop {
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: 0,
+    };
+
+    pub fn is_none(self) -> bool {
+        self == Crop::NONE
+    }
+
+    /// The size a `w`×`h` frame becomes. Insets that meet or cross are
+    /// clamped so at least one pixel survives — a crop that asked for nothing
+    /// is a slip of the fingers, not a reason to fail an export.
+    pub fn output_size(self, w: u32, h: u32) -> (u32, u32) {
+        let out_w = w
+            .saturating_sub(self.left.saturating_add(self.right))
+            .max(1);
+        let out_h = h
+            .saturating_sub(self.top.saturating_add(self.bottom))
+            .max(1);
+        (out_w.min(w.max(1)), out_h.min(h.max(1)))
+    }
+
+    /// The window this crop keeps, as `(x, y, width, height)` in source
+    /// pixels — clamped to the frame the same way [`Self::output_size`] is, so
+    /// the two can never disagree about which pixels are copied.
+    pub fn window(self, w: u32, h: u32) -> (u32, u32, u32, u32) {
+        let (out_w, out_h) = self.output_size(w, h);
+        let x = self.left.min(w.saturating_sub(out_w));
+        let y = self.top.min(h.saturating_sub(out_h));
+        (x, y, out_w, out_h)
+    }
+
+    /// Copy the kept window out of a tightly-packed frame of `bytes_per_px`.
+    /// A buffer too small for the frame it claims to be comes back unchanged,
+    /// which is the calm answer: no panic, and a caller bug shows as a
+    /// full-size frame rather than a crash mid-export.
+    pub fn apply(self, frame: &[u8], w: u32, h: u32, bytes_per_px: usize) -> Vec<u8> {
+        let (x, y, out_w, out_h) = self.window(w, h);
+        let src_row = (w as usize).saturating_mul(bytes_per_px);
+        if self.is_none() || frame.len() < src_row.saturating_mul(h as usize) {
+            return frame.to_vec();
+        }
+        let dst_row = (out_w as usize) * bytes_per_px;
+        let skip = (x as usize) * bytes_per_px;
+        let mut out = Vec::with_capacity(dst_row * out_h as usize);
+        for row in 0..out_h as usize {
+            let start = (y as usize + row) * src_row + skip;
+            out.extend_from_slice(&frame[start..start + dst_row]);
+        }
+        out
+    }
+
+    /// The crop equivalent to the Viewer's region of interest — the rectangle
+    /// the user swept on the picture, which crosses every boundary as
+    /// fractions `[x0, y0, x1, y1]` rather than pixels (K-362: which pixel a
+    /// point is depends on the raster, and the raster changes with the preview
+    /// resolution).
+    ///
+    /// Degenerate input answers no crop, exactly as a degenerate region clears
+    /// the region: a drag that ended where it began is a gesture, not an
+    /// error.
+    pub fn from_region(region: [f64; 4], w: u32, h: u32) -> Crop {
+        let [x0, y0, x1, y1] = region;
+        if !region.iter().all(|v| v.is_finite()) || x1 <= x0 || y1 <= y0 {
+            return Crop::NONE;
+        }
+        let px = |v: f64, size: u32| (v.clamp(0.0, 1.0) * f64::from(size)).round() as u32;
+        let (l, t, r, b) = (px(x0, w), px(y0, h), px(x1, w), px(y1, h));
+        Crop {
+            top: t,
+            left: l,
+            bottom: h.saturating_sub(b),
+            right: w.saturating_sub(r),
+        }
+    }
+}
+
+/// The video bitrate, chosen or worked out (docs/06 §7.5).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum Bitrate {
+    /// Work a high default out from the resolution and the rate — what the
+    /// dialog's *Auto* face means.
+    #[default]
+    Auto,
+    /// Set no bitrate at all and let the encoder pick its own quality. What a
+    /// blank bitrate field has always meant (K-119), kept as its own answer
+    /// rather than folded into `Auto`, because the two produce different
+    /// files and a preset saved under one must not silently become the other.
+    EncoderDefault,
+    /// The number the user typed, in bits per second, with an optional VBR
+    /// peak (None takes the 1.5× fallback the resolver has always used).
+    Manual {
+        target_bps: i64,
+        peak_bps: Option<i64>,
+    },
+}
+
+/// Bits per pixel per second a codec needs for a delivery-quality picture —
+/// the constants behind [`Bitrate::Auto`]. Taken from the preset table
+/// (docs/06 §7.5): 1920×1080 at 60 wants 16 Mbps of H.264, which is 0.13 bits
+/// per pixel, and HEVC buys roughly a quarter off that.
+const H264_BITS_PER_PIXEL: f64 = 0.13;
+const HEVC_BITS_PER_PIXEL: f64 = 0.10;
+
+/// The VBR peak as a multiple of the target, when no peak was given — the
+/// same 1.5× the spec resolver has always fallen back to.
+pub const PEAK_MULTIPLE: f64 = 1.5;
+
+/// A high-quality bitrate for `w`×`h` at `fps`, as `(target, peak)` in bits
+/// per second, rounded to a whole megabit and clamped to something a file can
+/// actually hold.
+///
+/// In plain terms: more pixels and more frames need more bits, in proportion.
+/// This is deliberately a straight line rather than a curve fitted to the
+/// preset table — a preset stamps its own exact numbers, and *Auto* only has
+/// to be a good default for a size no preset covers.
+pub fn auto_bitrate(
+    w: u32,
+    h: u32,
+    fps: f64,
+    codec: lumit_media::encode::VideoCodec,
+) -> (i64, i64) {
+    let bits_per_px = match codec {
+        lumit_media::encode::VideoCodec::H264 => H264_BITS_PER_PIXEL,
+        lumit_media::encode::VideoCodec::Hevc => HEVC_BITS_PER_PIXEL,
+    };
+    let pixels_per_second = f64::from(w) * f64::from(h) * fps.clamp(1.0, 1000.0);
+    let mbps = (pixels_per_second * bits_per_px / 1e6)
+        .round()
+        .clamp(1.0, 400.0);
+    let target = (mbps as i64) * 1_000_000;
+    let peak = ((target as f64) * PEAK_MULTIPLE).round() as i64;
+    (target, peak)
+}
+
+/// Whether the export reads and writes the disk frame cache while it runs.
+///
+/// In plain terms: the cache of already-rendered frames on disk speeds up
+/// scrubbing, but an export is a single pass through the timeline — it would
+/// fill the cache with frames nobody is going to ask for again, evicting the
+/// ones the user *is* working with. Off is the honest default.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum DiskCachePolicy {
+    /// Neither read nor written — the export renderer's own state today.
+    #[default]
+    Off,
+    /// Read frames already banked, but bank nothing new.
+    ReadOnly,
+}
+
+/// What the export does to the composition on the way through — the render
+/// settings the export drawing puts beside the output format.
+#[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct RenderOptions {
+    /// The resolution/quality tier, the same one the preview uses
+    /// (docs/01-GLOSSARY.md §5: Full, Half, Third, Quarter). Full is what an
+    /// export wants and what it gets unless something else is asked for.
+    pub quality: crate::plan::Quality,
+    pub disk_cache: DiskCachePolicy,
+    /// Run each layer's effect stack. Off exports the layers unaffected —
+    /// the export-time twin of the per-layer fx switch (docs/08 §1.5).
+    pub effects: bool,
+    /// Honour solo switches (K-105). Off exports every visible layer even
+    /// when one is soloed for working on — an export of a soloed comp is
+    /// almost never what was wanted, but it must be *askable*, not assumed.
+    pub honour_solo: bool,
+}
+
+impl Default for RenderOptions {
+    fn default() -> Self {
+        Self {
+            quality: crate::plan::Quality::default(),
+            disk_cache: DiskCachePolicy::default(),
+            effects: true,
+            honour_solo: true,
+        }
+    }
+}
+
+impl RenderOptions {
+    /// Whether these options change anything about the document at all.
+    pub fn changes_document(&self) -> bool {
+        !self.effects || !self.honour_solo
+    }
+}
+
+/// Apply the document-shaped render options to the export's own snapshot —
+/// effects off clears every layer's fx switch, solo ignored clears every solo
+/// switch, and both apply through nested comps, because "no effects" means no
+/// effects anywhere in this export.
+///
+/// Returns `None` when nothing would change, so the common export keeps the
+/// snapshot it was given rather than cloning a whole document to alter
+/// nothing. The copy is thrown away when the export finishes and never
+/// reaches the project (docs/06 §7.2: baking is invisible).
+pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Document>> {
+    if !opts.changes_document() {
+        return None;
+    }
+    let mut copy = Document::clone(doc);
+    for item in &mut copy.items {
+        let ProjectItem::Composition(comp) = item else {
+            continue;
+        };
+        for layer in &mut comp.layers {
+            if !opts.effects {
+                layer.switches.fx = false;
+            }
+            if !opts.honour_solo {
+                layer.switches.solo = false;
+            }
+        }
+    }
+    Some(Arc::new(copy))
+}
+
+/// What happens the moment an export finishes (docs/07 §11's *When done*).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum WhenDone {
+    #[default]
+    Nothing,
+    /// Play a short sound, so a long export can be left to run.
+    MakeANoise,
+    /// Show the finished file in the file browser.
+    OpenFolder,
+}
+
+/// Where the completion sound lives, if it is there at all: beside the
+/// executable first (a shipped build's own copy), then the application's data
+/// directory (a user's own). `None` when neither exists — the hook is silent
+/// rather than faulty when no sound has been supplied.
+pub fn done_sound_path() -> Option<PathBuf> {
+    const NAME: &str = "export-done.wav";
+    let beside_exe = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("sounds").join(NAME)));
+    let in_data = lumit_project::presets_dir()
+        .and_then(|dir| dir.parent().map(|d| d.join("sounds").join(NAME)));
+    [beside_exe, in_data]
+        .into_iter()
+        .flatten()
+        .find(|p| p.is_file())
+}
+
+/// Play the completion sound, if there is one. Answers whether there was a
+/// sound to play, and is silent — never an error — when the file is absent,
+/// cannot be decoded, or there is no audio device to play it on: a missing
+/// ding must never make a finished export look failed.
+///
+/// Returns at once. Everything happens on a thread of its own, engine
+/// included: the audio device's stream handle cannot cross threads, so it is
+/// born and dies on the one that keeps it alive for the sound's length.
+pub fn play_done_sound() -> bool {
+    let Some(path) = done_sound_path() else {
+        return false;
+    };
+    std::thread::spawn(move || {
+        let Ok(engine) = lumit_audio::AudioEngine::new() else {
+            return;
+        };
+        let Ok(buffer) = lumit_media::audio::decode_all(&path, engine.device_rate()) else {
+            return;
+        };
+        // A ding, not a track: ten seconds is generous and stops a wrongly
+        // supplied file from holding a thread open all afternoon.
+        let seconds = buffer.duration_seconds().clamp(0.0, 10.0);
+        engine.load(Arc::new(buffer));
+        engine.play();
+        std::thread::sleep(std::time::Duration::from_secs_f64(seconds + 0.25));
+    });
+    true
+}
+
+/// The pack stage: the finished display frame turned into the exact bytes the
+/// encoder is fed (docs/06 §7.4).
+///
+/// In plain terms: the compositor's answer is one 8-bit RGBA pixel per pixel,
+/// premultiplied and already display-encoded. What a file wants may be
+/// narrower (no alpha), differently related (straight alpha) or wider (16 bits
+/// a channel). This is where that conversion happens, on the CPU, once per
+/// frame, and it is pure — which is why it is the one part of colour handling
+/// that can be tested without a graphics card.
+///
+// ponytail: the input is the 8-bit display read-back, so a 16-bit file today
+// carries an exactly-widened 8-bit signal (v × 257 — every 8-bit value maps to
+// its own 16-bit one and back without loss, so nothing is invented). The extra
+// bits start meaning something the moment the display read-back widens; the
+// upgrade path is a 16-bit display target in lumit-gpu and a `readback16`
+// beside `readback8`, and nothing else here changes. docs/TODO.md carries it.
+pub fn pack_frame(rgba8: &[u8], channels: Channels, alpha: AlphaMode, depth: BitDepth) -> Vec<u8> {
+    let straight = channels == Channels::RgbAlpha && alpha == AlphaMode::Straight;
+    let opaque = channels == Channels::Rgb;
+    let mut out = Vec::with_capacity(rgba8.len() * depth.bytes_per_channel());
+    for px in rgba8.chunks_exact(4) {
+        let a = px[3];
+        let mut rgba = [px[0], px[1], px[2], a];
+        if opaque {
+            rgba[3] = 255;
+        } else if straight && a > 0 && a < 255 {
+            // Un-multiply: colour back to full strength wherever there is any
+            // coverage. Rounded, and clamped because a premultiplied pixel
+            // whose colour exceeds its own coverage (an additive blend can
+            // make one) would divide past full scale.
+            for c in &mut rgba[..3] {
+                *c = ((f32::from(*c) * 255.0 / f32::from(a)).round()).clamp(0.0, 255.0) as u8;
+            }
+        } else if straight && a == 0 {
+            // No coverage: no colour to recover. Zero rather than a division
+            // that has no answer.
+            rgba[..3].fill(0);
+        }
+        match depth {
+            BitDepth::Eight => out.extend_from_slice(&rgba),
+            // × 257 maps 0→0 and 255→65535 exactly, so the widening is
+            // reversible and adds nothing that was not there.
+            BitDepth::Sixteen => {
+                for c in rgba {
+                    out.extend_from_slice(&(u16::from(c) * 257).to_le_bytes());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The crop an export actually applies, from the dialog's two faces: the
+/// explicit `T · L · B · R`, or the Viewer's region of interest when *use
+/// region of interest* is ticked and a region is set.
+///
+/// The region wins when it is asked for and exists; otherwise the typed crop
+/// stands. A region that is not four finite, increasing fractions is no region
+/// (K-362), and answers the typed crop rather than nothing.
+pub fn crop_for(
+    explicit: Crop,
+    use_region: bool,
+    region: Option<[f64; 4]>,
+    w: u32,
+    h: u32,
+) -> Crop {
+    match (use_region, region) {
+        (true, Some(r)) => {
+            let from_region = Crop::from_region(r, w, h);
+            if from_region.is_none() {
+                explicit
+            } else {
+                from_region
+            }
+        }
+        _ => explicit,
+    }
 }
 
 /// Everything one queued export needs beyond the document snapshot: the
-/// format, resolved output size, rates, range and whether audio joins.
-#[derive(Clone)]
+/// format, resolved output size, rates, range, what the picture carries and
+/// what happens when it finishes.
+///
+/// Every field carries `serde`'s default when a stored preset does not name it
+/// (`#[serde(default)]`), so a preset saved by an older Lumit still loads and
+/// simply takes today's default for whatever it had never heard of.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct ExportSpec {
     pub format: ExportFormat,
-    pub target: (u32, u32),
-    /// Average video bitrate in bits/second; None = encoder default quality.
-    /// Ignored by image sequences, which are lossless.
-    pub bit_rate: Option<i64>,
-    /// VBR peak in bits/second.
-    pub max_rate: Option<i64>,
+    /// The delivery frame; None = the composition's own size, exactly as
+    /// `fps: None` means the composition's own rate.
+    pub target: Option<(u32, u32)>,
+    /// The video bitrate: worked out from the size and rate, or the number
+    /// that was typed. Meaningless — and unread — for the lossless formats.
+    pub bitrate: Bitrate,
     /// Output frame rate; None = the composition's own (K-201). A different
     /// rate resamples by nearest comp frame — the honest thing without optical
     /// flow in the export path — and the file is stamped with the chosen rate.
@@ -241,6 +795,108 @@ pub struct ExportSpec {
     pub range: Option<(usize, usize)>,
     pub include_audio: bool,
     pub audio_bit_rate: i64,
+    /// Bits per channel in the written file.
+    pub depth: BitDepth,
+    pub channels: Channels,
+    pub alpha: AlphaMode,
+    pub colour_space: ColourSpace,
+    /// Pixels taken off each edge on the way out, already resolved from the
+    /// region of interest where that was asked for ([`crop_for`]).
+    pub crop: Crop,
+    /// What is written into the container about the file.
+    pub metadata: lumit_media::encode::Metadata,
+    /// How the composition is rendered for this export.
+    pub render: RenderOptions,
+    pub when_done: WhenDone,
+}
+
+impl Default for ExportSpec {
+    /// A comp-sized H.264 mp4 with sound — what a plain "Export…" has always
+    /// meant (K-119) — at every setting's own default.
+    fn default() -> Self {
+        Self {
+            format: ExportFormat::Video(lumit_media::encode::VideoCodec::H264),
+            target: None,
+            bitrate: Bitrate::default(),
+            fps: None,
+            range: None,
+            include_audio: true,
+            audio_bit_rate: PRESET_AUDIO_BPS,
+            depth: BitDepth::default(),
+            channels: Channels::default(),
+            alpha: AlphaMode::default(),
+            colour_space: ColourSpace::default(),
+            crop: Crop::NONE,
+            metadata: lumit_media::encode::Metadata::new(),
+            render: RenderOptions::default(),
+            when_done: WhenDone::default(),
+        }
+    }
+}
+
+impl ExportSpec {
+    /// Refuse a spec the chosen format cannot honour, before a single frame is
+    /// rendered. A setting a format cannot carry is a mistake worth naming —
+    /// silently ignoring it would deliver a file that is not what was asked
+    /// for, and the user would find out from someone else.
+    pub fn check(&self) -> Result<(), String> {
+        let caps = self.format.caps();
+        if caps.video && !caps.depths.contains(&self.depth) {
+            return Err(format!(
+                "{} cannot carry {} colour",
+                self.format.extension(),
+                self.depth.label()
+            ));
+        }
+        if self.channels == Channels::RgbAlpha && caps.video && !caps.alpha {
+            return Err(format!(
+                "{} cannot carry an alpha channel",
+                self.format.extension()
+            ));
+        }
+        if !self.colour_space.is_available() {
+            return Err(format!(
+                "the colour space \"{}\" is not available in this build",
+                self.colour_space.label()
+            ));
+        }
+        if !caps.video && !caps.audio {
+            return Err("this format can carry neither picture nor sound".to_owned());
+        }
+        Ok(())
+    }
+
+    /// The video bitrate this spec runs with, as `(target, peak)` — the typed
+    /// numbers, or the worked-out ones for `size` — and `None` for a format
+    /// with no bitrate to choose. `size` is the frame actually being written,
+    /// which is the composition's own whenever no target was named.
+    pub fn resolved_bitrate(&self, size: (u32, u32), fps: f64) -> Option<(i64, Option<i64>)> {
+        if !self.format.caps().bit_rate {
+            return None;
+        }
+        let codec = match self.format {
+            ExportFormat::Video(c) => c,
+            // Audio-only: the AAC bitrate is its own field; there is no video
+            // rate to work out.
+            _ => return None,
+        };
+        Some(match self.bitrate {
+            // No bitrate at all: the encoder chooses its own quality.
+            Bitrate::EncoderDefault => return None,
+            Bitrate::Auto => {
+                let (w, h) = self.target.unwrap_or(size);
+                let (t, p) = auto_bitrate(w, h, fps, codec);
+                (t, Some(p))
+            }
+            Bitrate::Manual {
+                target_bps,
+                peak_bps,
+            } => (
+                target_bps,
+                peak_bps.or_else(|| Some((target_bps as f64 * PEAK_MULTIPLE).round() as i64)),
+            ),
+        })
+    }
 }
 
 /// A chosen output rate as the exact rational the encoder is stamped with:
@@ -379,6 +1035,11 @@ fn run(
     tx: &Sender<ExportEvent>,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
+    spec.check()?;
+    // The render settings that change the document do it on this export's own
+    // throwaway snapshot, never on the project (docs/06 §7.2).
+    let overridden = apply_render_overrides(doc, &spec.render);
+    let doc = overridden.as_ref().unwrap_or(doc);
     let comp = doc.comp(comp_id).ok_or("composition missing")?;
     let fps = comp.frame_rate.fps().max(1.0);
     let comp_frames = (comp.duration.0.to_f64() * fps).round().max(1.0) as usize;
@@ -410,10 +1071,17 @@ fn run(
     // The comp's audio, mixed exactly as playback mixes it, then cut to the
     // export range and padded so sound and picture end together.
     let rate = EXPORT_AUDIO_RATE;
-    // Sound only joins a video container; a folder of stills has nowhere to
-    // put it, and the dialogue says so rather than silently dropping it.
-    let wants_audio = spec.include_audio && matches!(spec.format, ExportFormat::Video(_));
-    let audio_mix: Option<Vec<f32>> = if wants_audio && !audio_jobs.is_empty() {
+    // Sound only joins a container that can hold it: a folder of stills has
+    // nowhere to put it, and the dialogue says so rather than silently
+    // dropping it. An audio-only export is nothing *but* sound, so the
+    // include-audio tick has no say there.
+    let caps = spec.format.caps();
+    let wants_audio = caps.audio && (spec.include_audio || !caps.video);
+    // A silent comp exported as sound still writes silence of the right
+    // length — an empty .wav would look like a failure that wasn't one — but
+    // a video export of a silent comp carries no audio stream at all rather
+    // than a mute one.
+    let audio_mix: Option<Vec<f32>> = if wants_audio && (!audio_jobs.is_empty() || !caps.video) {
         let full = mixdown(audio_jobs, rate, comp.duration.0.to_f64());
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
@@ -430,6 +1098,20 @@ fn run(
         None
     };
 
+    // Sound with no picture needs no compositor and no graphics card at all:
+    // the mix is already made, and there is nothing to render.
+    if let ExportFormat::Audio(format) = spec.format {
+        return run_audio_only(
+            out_path,
+            format,
+            spec,
+            audio_mix.as_deref(),
+            total,
+            tx,
+            cancel,
+        );
+    }
+
     // The export renders through the SAME walk the Viewer does — the headless
     // preview at full decode quality (K-031: preview == export by
     // construction, gated by the bit-identity matrix in `headless::tests`).
@@ -441,29 +1123,46 @@ fn run(
     // One sink, two shapes: the mp4 muxer, or one image file per frame. The
     // loop below is shared — a second frame loop would be a second chance to
     // disagree about sampling, cancellation or progress.
+    // The crop happens in composition pixels (K-419), so the picture that
+    // leaves the compositor is cropped first and sized afterwards. When the
+    // delivery size *is* the comp's own — every Custom export — the cropped
+    // size becomes the file's size, which is what cropping is for; a preset
+    // that asked for a different frame letterboxes the cropped picture into
+    // it, exactly as an uncropped one does.
+    let (crop_w, crop_h) = spec.crop.output_size(comp.width, comp.height);
+    let delivered = match spec.target {
+        Some(t) if t != (comp.width, comp.height) => t,
+        _ => (crop_w, crop_h),
+    };
     let mut sink = match spec.format {
         ExportFormat::Video(codec) => {
             // Encoded frame dimensions must be even for 4:2:0 H.264/HEVC.
-            let (tw, th) = (spec.target.0 & !1, spec.target.1 & !1);
+            let (tw, th) = (delivered.0 & !1, delivered.1 & !1);
             let (tw, th) = (tw.max(2), th.max(2));
             let audio_settings = audio_mix
                 .as_ref()
                 .map(|_| lumit_media::encode::AudioSettings {
                     rate,
                     bit_rate: spec.audio_bit_rate,
+                    codec: lumit_media::encode::AudioCodec::Aac,
                 });
+            let (bit_rate, max_rate) = match spec.resolved_bitrate((tw, th), out_fps) {
+                Some((target, peak)) => (Some(target), peak),
+                None => (None, None),
+            };
             let encoder = lumit_media::Encoder::open(
                 out_path,
-                &lumit_media::encode::VideoSettings {
+                Some(&lumit_media::encode::VideoSettings {
                     codec,
                     width: tw,
                     height: th,
                     fps_num: out_num,
                     fps_den: out_den,
-                    bit_rate: spec.bit_rate,
-                    max_rate: spec.max_rate,
-                },
+                    bit_rate,
+                    max_rate,
+                }),
                 audio_settings.as_ref(),
+                &spec.metadata,
             )
             .map_err(|e| e.to_string())?;
             let _ = tx.send(ExportEvent::Encoder(encoder.encoder_label()));
@@ -474,9 +1173,9 @@ fn run(
         }
         ExportFormat::Images(format) => {
             // Stills have no chroma subsampling, so no evenness rule.
-            let (tw, th) = (spec.target.0.max(1), spec.target.1.max(1));
+            let (tw, th) = (delivered.0.max(1), delivered.1.max(1));
             let encoder = lumit_media::encode::ImageSequenceEncoder::open(
-                out_path, format, tw, th, out_num, out_den,
+                out_path, format, tw, th, out_num, out_den, spec.depth,
             )
             .map_err(|e| e.to_string())?;
             let _ = tx.send(ExportEvent::Encoder(format.label()));
@@ -486,8 +1185,10 @@ fn run(
                 written: 0,
             }
         }
+        // Handled above: sound with no picture never reaches the frame loop.
+        ExportFormat::Audio(_) => return Err("audio-only export took the picture path".into()),
     };
-    let resize = sink.size() != (comp.width, comp.height);
+    let resize = sink.size() != (crop_w, crop_h);
 
     let mut audio_fed = 0usize;
     for frame_n in 0..total {
@@ -499,20 +1200,18 @@ fn run(
         // (the rounding is then of an integer), nearest otherwise.
         let src = first + ((frame_n as f64) * fps / out_fps).round() as usize;
         let src = src.min(end.saturating_sub(1));
-        let (rgba, _, _) = renderer.render_preview(
-            doc,
-            comp_id,
-            src as u64,
-            crate::plan::Quality::default(),
-            1.0,
-        )?;
-        // Letterbox into the delivery frame when the size was changed.
+        let (rgba, _, _) =
+            renderer.render_preview(doc, comp_id, src as u64, spec.render.quality, 1.0)?;
+        // Crop in composition pixels first, then letterbox into the delivery
+        // frame when the size was changed, then pack to what the file carries.
+        let rgba = spec.crop.apply(&rgba, comp.width, comp.height, 4);
         let (tw, th) = sink.size();
         let rgba = if resize {
-            lumit_core::pixels::letterbox_resize(&rgba, comp.width, comp.height, tw, th)
+            lumit_core::pixels::letterbox_resize(&rgba, crop_w, crop_h, tw, th)
         } else {
             rgba
         };
+        let rgba = pack_frame(&rgba, spec.channels, spec.alpha, spec.depth);
         if let Err(e) = sink.write_rgba(&rgba) {
             // A folder of stills that failed half-way is tidied rather than
             // left as a trap that looks like a finished export.
@@ -544,6 +1243,67 @@ fn run(
         }
     }
     sink.finish()
+}
+
+/// Write the comp's mix with no picture at all (docs/06 §7.4). No compositor,
+/// no graphics card: the mixdown above is the whole export, so this feeds it
+/// to the muxer in one-second helpings and reports progress against the same
+/// frame count a video export would have written.
+fn run_audio_only(
+    out_path: &std::path::Path,
+    format: AudioFormat,
+    spec: &ExportSpec,
+    mix: Option<&[f32]>,
+    total: usize,
+    tx: &Sender<ExportEvent>,
+    cancel: &AtomicBool,
+) -> Result<(), String> {
+    let rate = EXPORT_AUDIO_RATE;
+    let mut encoder = lumit_media::Encoder::open(
+        out_path,
+        None,
+        Some(&lumit_media::encode::AudioSettings {
+            rate,
+            bit_rate: spec.audio_bit_rate,
+            codec: format.codec(),
+        }),
+        &spec.metadata,
+    )
+    .map_err(|e| e.to_string())?;
+    let _ = tx.send(ExportEvent::Encoder(encoder.encoder_label()));
+
+    // A comp with no audible layer still exports a file — of silence, of the
+    // right length. An empty .wav would look like a failure that wasn't one.
+    let silence;
+    let mix = match mix {
+        Some(m) => m,
+        None => {
+            silence = Vec::new();
+            &silence
+        }
+    };
+    let chunk = rate as usize * 2;
+    for (n, block) in mix.chunks(chunk).enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        encoder.write_audio(block).map_err(|e| e.to_string())?;
+        // Progress against the picture's own clock, so the queue row reads
+        // the same way whatever an item writes.
+        let done = ((n + 1) * chunk / 2).min(mix.len() / 2);
+        let frame = if mix.is_empty() {
+            total
+        } else {
+            (done * total / (mix.len() / 2).max(1)).min(total)
+        };
+        let _ = tx.send(ExportEvent::Progress { frame, total });
+    }
+    encoder.finish().map_err(|e| e.to_string())?;
+    let _ = tx.send(ExportEvent::Progress {
+        frame: total,
+        total,
+    });
+    Ok(())
 }
 
 /// Where the rendered frames go: the mp4 muxer, or the numbered stills. One
@@ -744,13 +1504,9 @@ mod tests {
     fn spec(format: ExportFormat, w: u32, h: u32) -> ExportSpec {
         ExportSpec {
             format,
-            target: (w, h),
-            bit_rate: None,
-            max_rate: None,
-            fps: None,
-            range: None,
+            target: Some((w, h)),
             include_audio: false,
-            audio_bit_rate: 320_000,
+            ..ExportSpec::default()
         }
     }
 
@@ -997,5 +1753,519 @@ mod tests {
         let mix = mixdown(&[], 48_000, 2.0);
         assert_eq!(mix.len(), 96_000 * 2);
         assert!(mix.iter().all(|s| *s == 0.0));
+    }
+
+    /// The capability table is the one place a format's limits are written
+    /// down. It is spec (docs/06 §7.4), so it is pinned here rather than
+    /// discovered by an export that fails halfway.
+    #[test]
+    fn the_capability_table_says_what_each_format_can_carry() {
+        use lumit_media::encode::ImageFormat;
+
+        let mp4 = ExportFormat::Video(VideoCodec::H264).caps();
+        assert!(mp4.video && mp4.audio && mp4.metadata);
+        assert!(!mp4.alpha, "4:2:0 H.264 has no alpha channel");
+        assert_eq!(mp4.depths, [BitDepth::Eight]);
+        assert!(mp4.bit_rate);
+
+        let png = ExportFormat::Images(ImageFormat::Png).caps();
+        assert!(png.video && png.alpha);
+        assert!(!png.audio, "a folder of stills has nowhere to put sound");
+        assert!(!png.bit_rate, "lossless has no bitrate to choose");
+        assert!(!png.metadata, "the image2 muxer has no container to tag");
+        assert_eq!(png.depths, [BitDepth::Eight, BitDepth::Sixteen]);
+        assert_eq!(ExportFormat::Images(ImageFormat::Tiff).caps(), png);
+
+        let m4a = ExportFormat::Audio(AudioFormat::M4a).caps();
+        assert!(!m4a.video && m4a.audio && m4a.metadata);
+        assert!(m4a.bit_rate, "AAC has a bitrate");
+        let wav = ExportFormat::Audio(AudioFormat::Wav).caps();
+        assert!(!wav.bit_rate, "PCM is exactly what it is");
+
+        // Extensions match the formats, so a filename and its contents agree.
+        assert_eq!(ExportFormat::Video(VideoCodec::Hevc).extension(), "mp4");
+        assert_eq!(ExportFormat::Images(ImageFormat::Tiff).extension(), "tiff");
+        assert_eq!(ExportFormat::Audio(AudioFormat::Wav).extension(), "wav");
+    }
+
+    /// A setting the chosen format cannot honour is refused before a frame is
+    /// rendered — never silently dropped, which would deliver a file that is
+    /// not what was asked for.
+    #[test]
+    fn a_spec_the_format_cannot_honour_is_refused() {
+        use lumit_media::encode::ImageFormat;
+        let base = spec(ExportFormat::Video(VideoCodec::H264), 320, 240);
+        base.check().expect("the plain case runs");
+
+        let deep = ExportSpec {
+            depth: BitDepth::Sixteen,
+            ..base.clone()
+        };
+        assert!(deep.check().is_err(), "mp4 cannot carry 16-bit");
+
+        let transparent = ExportSpec {
+            channels: Channels::RgbAlpha,
+            ..base.clone()
+        };
+        assert!(transparent.check().is_err(), "mp4 cannot carry alpha");
+
+        // The same two settings are fine on a PNG sequence.
+        let stills = ExportSpec {
+            format: ExportFormat::Images(ImageFormat::Png),
+            depth: BitDepth::Sixteen,
+            channels: Channels::RgbAlpha,
+            ..base.clone()
+        };
+        stills.check().expect("a PNG carries both");
+
+        // An OCIO space is refused until OCIO exists: a wrong colour space in
+        // a delivered file is worse than an export that did not run.
+        let ocio = ExportSpec {
+            colour_space: ColourSpace::Ocio("ACES - ACEScg".into()),
+            ..base
+        };
+        assert!(ocio.check().is_err());
+        assert!(ColourSpace::SrgbRec709.is_available());
+        assert!(!ColourSpace::Ocio("anything".into()).is_available());
+    }
+
+    /// Crop arithmetic, in pixels at composition size (K-419): the size it
+    /// leaves, the window it keeps, and the pixels it actually copies.
+    #[test]
+    fn crop_maths_keeps_the_window_it_says_it_keeps() {
+        let crop = Crop {
+            top: 1,
+            left: 2,
+            bottom: 3,
+            right: 4,
+        };
+        assert_eq!(crop.output_size(10, 10), (4, 6));
+        assert_eq!(crop.window(10, 10), (2, 1, 4, 6));
+        assert!(Crop::NONE.is_none());
+        assert_eq!(Crop::NONE.output_size(10, 10), (10, 10));
+
+        // Insets that meet leave one pixel rather than none — a slip of the
+        // fingers is not a reason to fail an export.
+        let silly = Crop {
+            top: 99,
+            left: 99,
+            bottom: 99,
+            right: 99,
+        };
+        assert_eq!(silly.output_size(10, 10), (1, 1));
+        let (x, y, w, h) = silly.window(10, 10);
+        assert_eq!((w, h), (1, 1));
+        assert!(x < 10 && y < 10, "the window stays inside the frame");
+
+        // The pixels: a 4×3 frame of one byte per pixel, numbered by position.
+        let frame: Vec<u8> = (0..12).collect();
+        let one_off_each_side = Crop {
+            top: 1,
+            left: 1,
+            bottom: 1,
+            right: 1,
+        };
+        assert_eq!(one_off_each_side.apply(&frame, 4, 3, 1), vec![5, 6]);
+        // Four bytes a pixel, the real shape.
+        let rgba: Vec<u8> = (0..(4 * 2 * 2)).collect();
+        let right_half = Crop {
+            top: 0,
+            left: 1,
+            bottom: 0,
+            right: 0,
+        };
+        assert_eq!(
+            right_half.apply(&rgba, 2, 2, 4),
+            vec![4, 5, 6, 7, 12, 13, 14, 15]
+        );
+        // No crop is the frame itself, and a buffer too small comes back
+        // whole rather than panicking mid-export.
+        assert_eq!(Crop::NONE.apply(&frame, 4, 3, 1), frame);
+        assert_eq!(one_off_each_side.apply(&[1, 2, 3], 4, 3, 1), vec![1, 2, 3]);
+    }
+
+    /// The region of interest crosses as fractions (K-362) and becomes pixel
+    /// insets here; degenerate input is a gesture, not an error.
+    #[test]
+    fn a_region_of_interest_becomes_pixel_insets() {
+        // The middle half of a 100×100 comp.
+        assert_eq!(
+            Crop::from_region([0.25, 0.25, 0.75, 0.75], 100, 100),
+            Crop {
+                top: 25,
+                left: 25,
+                bottom: 25,
+                right: 25
+            }
+        );
+        // The whole frame is no crop at all.
+        assert!(Crop::from_region([0.0, 0.0, 1.0, 1.0], 100, 100).is_none());
+        // Inside-out, empty and non-finite all answer no crop.
+        assert!(Crop::from_region([0.8, 0.1, 0.2, 0.9], 100, 100).is_none());
+        assert!(Crop::from_region([0.5, 0.5, 0.5, 0.5], 100, 100).is_none());
+        assert!(Crop::from_region([f64::NAN, 0.0, 1.0, 1.0], 100, 100).is_none());
+
+        // The two faces of the dialog: the region wins when asked for, the
+        // typed crop stands otherwise — and when the region is no region.
+        let typed = Crop {
+            top: 5,
+            left: 5,
+            bottom: 5,
+            right: 5,
+        };
+        let region = Some([0.25, 0.25, 0.75, 0.75]);
+        assert_eq!(crop_for(typed, false, region, 100, 100), typed);
+        assert_eq!(crop_for(typed, true, None, 100, 100), typed);
+        assert_eq!(crop_for(typed, true, Some([0.0; 4]), 100, 100), typed);
+        assert_eq!(
+            crop_for(typed, true, region, 100, 100).left,
+            25,
+            "the region wins when it is asked for and real"
+        );
+    }
+
+    /// The pack stage: what each channel/alpha/depth choice does to the
+    /// finished pixels, on the CPU, without a graphics card in sight.
+    #[test]
+    fn the_pack_stage_writes_what_each_choice_asks_for() {
+        // One half-covered premultiplied pixel and one opaque one.
+        let src = [100u8, 50, 0, 128, 10, 20, 30, 255];
+
+        // RGB: alpha forced opaque, colour untouched.
+        let rgb = pack_frame(
+            &src,
+            Channels::Rgb,
+            AlphaMode::Premultiplied,
+            BitDepth::Eight,
+        );
+        assert_eq!(rgb, [100, 50, 0, 255, 10, 20, 30, 255]);
+
+        // Premultiplied RGBA: exactly what the compositor produced.
+        let pre = pack_frame(
+            &src,
+            Channels::RgbAlpha,
+            AlphaMode::Premultiplied,
+            BitDepth::Eight,
+        );
+        assert_eq!(pre, src);
+
+        // Straight RGBA: colour divided back up by its coverage.
+        let straight = pack_frame(
+            &src,
+            Channels::RgbAlpha,
+            AlphaMode::Straight,
+            BitDepth::Eight,
+        );
+        assert_eq!(straight[3], 128, "coverage itself is unchanged");
+        assert_eq!(straight[0], 199, "100 / (128/255) rounds to 199");
+        assert_eq!(straight[1], 100);
+        assert_eq!(&straight[4..], &src[4..], "an opaque pixel is untouched");
+
+        // A colour beyond its own coverage clamps rather than overflowing,
+        // and zero coverage has no colour to recover.
+        let odd = [200u8, 0, 0, 100, 9, 9, 9, 0];
+        let straight = pack_frame(
+            &odd,
+            Channels::RgbAlpha,
+            AlphaMode::Straight,
+            BitDepth::Eight,
+        );
+        assert_eq!(straight[0], 255);
+        assert_eq!(&straight[4..], &[0, 0, 0, 0]);
+
+        // Sixteen bits: × 257, little-endian, exactly reversible.
+        let wide = pack_frame(
+            &src,
+            Channels::RgbAlpha,
+            AlphaMode::Premultiplied,
+            BitDepth::Sixteen,
+        );
+        assert_eq!(wide.len(), src.len() * 2);
+        let samples: Vec<u16> = wide
+            .chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect();
+        assert_eq!(samples[0], 100 * 257);
+        assert_eq!(samples[7], 65_535, "255 widens to full scale");
+        assert!(
+            samples.iter().zip(src).all(|(w, n)| (w / 257) as u8 == n),
+            "the widening is reversible: nothing is invented"
+        );
+    }
+
+    /// The auto bitrate is a straight line through the preset table's own
+    /// 1080p60 point, and it moves the way more pixels and more frames should.
+    #[test]
+    fn the_auto_bitrate_lands_on_the_preset_tables_own_numbers() {
+        let (target, peak) = auto_bitrate(1920, 1080, 60.0, VideoCodec::H264);
+        assert_eq!(target, 16_000_000, "docs/06 §7.5's 1080p60 target");
+        assert_eq!(peak, 24_000_000, "and its peak, at the 1.5× rule");
+
+        // Half the frames, half the bits.
+        let (half, _) = auto_bitrate(1920, 1080, 30.0, VideoCodec::H264);
+        assert_eq!(half, 8_000_000);
+        // HEVC buys a quarter off.
+        let (hevc, _) = auto_bitrate(1920, 1080, 60.0, VideoCodec::Hevc);
+        assert!(hevc < target, "hevc {hevc} < h264 {target}");
+        // More pixels, more bits — monotonic in every direction.
+        let (uhd, _) = auto_bitrate(3840, 2160, 60.0, VideoCodec::Hevc);
+        assert!(uhd > hevc);
+        // Absurd input clamps rather than overflowing or answering zero.
+        let (tiny, _) = auto_bitrate(1, 1, 1.0, VideoCodec::H264);
+        assert_eq!(tiny, 1_000_000);
+        let (huge, huge_peak) = auto_bitrate(60_000, 40_000, 1000.0, VideoCodec::H264);
+        assert_eq!(huge, 400_000_000);
+        assert!(huge_peak > huge);
+    }
+
+    /// Auto versus manual is stored in the settings and resolved at the last
+    /// moment, against the frame actually being written.
+    #[test]
+    fn the_bitrate_choice_resolves_auto_manual_and_neither() {
+        use lumit_media::encode::ImageFormat;
+        let auto = spec(ExportFormat::Video(VideoCodec::H264), 1920, 1080);
+        assert_eq!(auto.bitrate, Bitrate::Auto, "auto is the default");
+        assert_eq!(
+            auto.resolved_bitrate((1920, 1080), 60.0),
+            Some((16_000_000, Some(24_000_000)))
+        );
+
+        // A typed number with no peak takes the 1.5× fallback.
+        let manual = ExportSpec {
+            bitrate: Bitrate::Manual {
+                target_bps: 10_000_000,
+                peak_bps: None,
+            },
+            ..auto.clone()
+        };
+        assert_eq!(
+            manual.resolved_bitrate((1920, 1080), 60.0),
+            Some((10_000_000, Some(15_000_000)))
+        );
+
+        // No target named: the composition's own size decides the auto rate.
+        let comp_sized = ExportSpec {
+            target: None,
+            ..auto.clone()
+        };
+        assert_eq!(
+            comp_sized.resolved_bitrate((1280, 720), 30.0),
+            Some((4_000_000, Some(6_000_000)))
+        );
+
+        // Lossless and audio-only formats have no video bitrate at all.
+        let stills = ExportSpec {
+            format: ExportFormat::Images(ImageFormat::Png),
+            ..auto.clone()
+        };
+        assert_eq!(stills.resolved_bitrate((1920, 1080), 60.0), None);
+        let sound = ExportSpec {
+            format: ExportFormat::Audio(AudioFormat::M4a),
+            ..auto
+        };
+        assert_eq!(sound.resolved_bitrate((1920, 1080), 60.0), None);
+    }
+
+    /// The document-shaped render options act on the export's own snapshot,
+    /// through nested comps, and leave the original untouched.
+    #[test]
+    fn render_overrides_clear_fx_and_solo_everywhere_or_nothing_at_all() {
+        let (doc, comp_id) = solid_doc(32, 16);
+        // Give the one layer both switches something to clear.
+        let mut seeded = Document::clone(&doc);
+        for item in &mut seeded.items {
+            if let ProjectItem::Composition(c) = item {
+                for l in &mut c.layers {
+                    l.switches.fx = true;
+                    l.switches.solo = true;
+                }
+            }
+        }
+        let seeded = Arc::new(seeded);
+
+        // Defaults change nothing, and say so by answering None rather than
+        // cloning a whole document to alter nothing.
+        assert!(apply_render_overrides(&seeded, &RenderOptions::default()).is_none());
+
+        let off = RenderOptions {
+            effects: false,
+            honour_solo: false,
+            ..RenderOptions::default()
+        };
+        let patched = apply_render_overrides(&seeded, &off).expect("something changed");
+        let layer = &patched.comp(comp_id).unwrap().layers[0];
+        assert!(!layer.switches.fx, "effects off clears the fx switch");
+        assert!(!layer.switches.solo, "solo ignored clears the solo switch");
+        // The snapshot the export was handed is untouched.
+        let original = &seeded.comp(comp_id).unwrap().layers[0];
+        assert!(original.switches.fx && original.switches.solo);
+
+        // Each half acts on its own.
+        let fx_only = RenderOptions {
+            effects: false,
+            ..RenderOptions::default()
+        };
+        let patched = apply_render_overrides(&seeded, &fx_only).unwrap();
+        let layer = &patched.comp(comp_id).unwrap().layers[0];
+        assert!(!layer.switches.fx && layer.switches.solo);
+    }
+
+    /// The render settings' own defaults: an export renders at full quality
+    /// with everything on and no disk cache (docs/06 §7.3 — export never
+    /// degrades), and the export tier is the preview's own machinery.
+    #[test]
+    fn export_renders_at_full_quality_with_everything_on() {
+        let opts = RenderOptions::default();
+        assert_eq!(opts.quality, crate::plan::Quality::default());
+        assert_eq!(opts.quality.divisor, 1);
+        assert!(!opts.quality.draft, "an export never drafts");
+        assert_eq!(opts.disk_cache, DiskCachePolicy::Off);
+        assert!(opts.effects && opts.honour_solo);
+        assert!(!opts.changes_document());
+
+        // A half-resolution export is the preview's own tier, not a new one.
+        let half = RenderOptions {
+            quality: crate::plan::Quality {
+                divisor: 2,
+                ..crate::plan::Quality::default()
+            },
+            ..RenderOptions::default()
+        };
+        assert!(!half.changes_document(), "a tier is not a document change");
+    }
+
+    /// The when-done hook tolerates a missing sound file in silence — the
+    /// owner supplies one later, and until then a finished export must not
+    /// look failed.
+    #[test]
+    fn the_when_done_hook_tolerates_a_missing_sound() {
+        assert_eq!(WhenDone::default(), WhenDone::Nothing);
+        // Whatever this machine has (probably nothing), it answers rather
+        // than panicking, and the answer agrees with the path it resolved.
+        assert_eq!(play_done_sound(), done_sound_path().is_some());
+        // The whole settings payload round-trips, hook included.
+        let spec = ExportSpec {
+            when_done: WhenDone::MakeANoise,
+            ..ExportSpec::default()
+        };
+        let json = serde_json::to_string(&spec).unwrap();
+        let back: ExportSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, spec);
+        // A payload missing every field is today's defaults, so an older
+        // preset still loads.
+        let bare: ExportSpec = serde_json::from_str("{}").unwrap();
+        assert_eq!(bare, ExportSpec::default());
+    }
+
+    /// Audio-only export, end to end through `run`: no compositor, no
+    /// graphics card, a real `.wav` of the range's own length.
+    #[test]
+    fn an_audio_only_export_writes_the_range_as_a_wav() {
+        let (doc, comp) = solid_doc(32, 16);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mix.wav");
+        let mut sp = spec(ExportFormat::Audio(AudioFormat::Wav), 32, 16);
+        sp.include_audio = true;
+        // Comp frames 0..60 of a 30 fps comp — two seconds.
+        sp.range = Some((0, 60));
+
+        let (tx, _rx) = channel();
+        let cancel = AtomicBool::new(false);
+        run(&doc, comp, &[], &path, &sp, &tx, &cancel).expect("audio-only export runs");
+
+        let probe = lumit_media::probe::probe(&path).unwrap();
+        assert!(probe.video.is_none(), "no picture in an audio-only export");
+        let audio = probe.audio.expect("it is all sound");
+        assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
+        assert!(
+            (probe.duration_seconds - 2.0).abs() < 0.05,
+            "two seconds of silence, not {}",
+            probe.duration_seconds
+        );
+    }
+
+    /// A crop really crops: the same comp exported with and without one
+    /// differs by exactly the pixels the crop took off, and the still's own
+    /// size is the assertion.
+    #[test]
+    fn a_crop_decides_the_exported_frame_size() {
+        let (doc, comp) = solid_doc(64, 32);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cropped.png");
+        let mut sp = spec(
+            ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
+            64,
+            32,
+        );
+        sp.range = Some((0, 1));
+        sp.crop = Crop {
+            top: 4,
+            left: 8,
+            bottom: 4,
+            right: 8,
+        };
+        let Some(result) = run_now(&doc, comp, &path, &sp) else {
+            return;
+        };
+        result.expect("export runs");
+        let frame = lumit_media::encode::sequence_frame_path(&path, 1);
+        let probe = lumit_media::probe::probe(&frame).unwrap();
+        let video = probe.video.expect("a still is a one-frame video");
+        assert_eq!(
+            (video.width, video.height),
+            (48, 24),
+            "64−8−8 by 32−4−4, in composition pixels"
+        );
+    }
+
+    /// A sixteen-bit, alpha-carrying still export runs the whole way through
+    /// — the pack stage, the wide encoder, and a file our own probe reads.
+    #[test]
+    fn a_sixteen_bit_still_export_runs_end_to_end() {
+        let (doc, comp) = solid_doc(32, 16);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("wide.png");
+        let mut sp = spec(
+            ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
+            32,
+            16,
+        );
+        sp.range = Some((0, 2));
+        sp.depth = BitDepth::Sixteen;
+        sp.channels = Channels::RgbAlpha;
+        sp.alpha = AlphaMode::Straight;
+        let Some(result) = run_now(&doc, comp, &path, &sp) else {
+            return;
+        };
+        result.expect("export runs");
+        for n in 1..=2 {
+            let frame = lumit_media::encode::sequence_frame_path(&path, n);
+            let probe = lumit_media::probe::probe(&frame).unwrap();
+            let video = probe.video.expect("frame {n} reads back");
+            assert_eq!((video.width, video.height), (32, 16));
+        }
+    }
+
+    /// Metadata reaches the file an export writes, not just the encoder that
+    /// was handed it.
+    #[test]
+    fn export_metadata_reaches_the_written_file() {
+        let (doc, comp) = solid_doc(32, 16);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tagged.mp4");
+        let mut sp = spec(ExportFormat::Video(VideoCodec::H264), 32, 16);
+        sp.range = Some((0, 5));
+        sp.metadata
+            .set(lumit_media::encode::Metadata::TITLE, "Scene 1");
+        sp.metadata
+            .set(lumit_media::encode::Metadata::AUTHOR, "A Person");
+        let Some(result) = run_now(&doc, comp, &path, &sp) else {
+            return;
+        };
+        result.expect("export runs");
+        // Read it back the way any player would.
+        let text = String::from_utf8_lossy(&std::fs::read(&path).unwrap()).into_owned();
+        assert!(text.contains("Scene 1"), "the title is in the container");
+        assert!(text.contains("A Person"), "and so is the author");
     }
 }

@@ -426,6 +426,20 @@ pub fn presets_dir() -> Option<PathBuf> {
     Some(dirs.data_dir().join("presets"))
 }
 
+/// Where the user's own **export** presets live (docs/07 §11) — one small
+/// JSON file beside the effect-preset library, in the same roaming app-data
+/// area, because a saved export setting should follow the user between
+/// projects and between machines that share a profile.
+///
+/// A file rather than a folder: an export preset is a few dozen fields, the
+/// list is short, and one file is one thing to back up. `None` only when the
+/// platform has no home directory; the library then lives for the session and
+/// says so rather than failing.
+pub fn export_presets_path() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.data_dir().join("export-presets.json"))
+}
+
 /// Bytes hashed from each of the head and tail of a file for its fingerprint.
 /// 64 KiB catches format headers, codec tables and trailing indexes cheaply;
 /// files smaller than two samples are hashed whole (the windows would overlap).

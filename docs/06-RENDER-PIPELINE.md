@@ -938,6 +938,46 @@ than leaving a folder that looks like a finished export. Both still formats can 
 encoder little-endian samples either way and each format's own byte order is the encoder's
 business, not the caller's.
 
+**What each format can carry is a table, not folklore.** One capability row per format —
+picture, sound, alpha, the colour depths, whether a bitrate applies, whether the container
+holds metadata — read by the dialog and by the exporter, so the two cannot disagree. A
+setting the chosen format cannot honour is **refused before a frame is rendered** rather than
+silently dropped: a delivered file that is not what was asked for is worse than an export that
+did not run. ProRes 4444 and DNxHR, which is where deeper video and video alpha live, remain
+out of v1 (above), so RGB + alpha is a still-sequence answer today.
+
+**The pack stage.** The compositor's answer is one display-encoded, premultiplied RGBA8 pixel
+per pixel. What the file carries may be narrower (**RGB**, the alpha written opaque),
+differently related (**straight alpha**, the colour divided back up by its coverage — §3.4),
+or wider (**16 bits**, each sample widened ×257, which maps 0→0 and 255→65535 exactly and so
+invents nothing). This conversion is a pure CPU pass and is where the channels, alpha and
+depth settings act.
+
+**Colour space.** The export's final transform is a setting, not an assumption: the built-in
+working-space → sRGB/Rec.709 encode today, and a **named** output space when OCIO lands (§2).
+The named form exists in the model now so a preset saved today names its space the way it will
+then; asking for one before OCIO exists is refused rather than approximated.
+
+**Crop and the region of interest.** An export can take pixels off each edge — `T · L · B · R`
+in **pixels at composition size** (K-419) — applied to the composited frame before any resize,
+so the crop decides the delivered frame's size whenever no other frame was named. *Use region
+of interest* takes those insets from the Viewer's own region instead, which crosses as
+fractions rather than pixels (K-362) and converts here. A degenerate region is no region, and
+falls back to whatever was typed.
+
+**Render settings.** An export names how the composition is rendered on the way through: the
+**quality tier** (the preview's own Full/Half/Third/Quarter machinery — export takes Full and
+never drafts, §7.3), the **disk-cache policy** (off during export by default: a single pass
+through the timeline would evict the frames the user is actually working with), whether
+**effects** run, and whether **solo switches** are honoured (K-105). The last two act on the
+export's own document snapshot and never reach the project (§7.2). **Guide layers and proxies
+are not among them**: neither concept exists in the document model, so neither can be
+overridden at export — see [TODO.md](TODO.md).
+
+**When done.** An export finishing can do nothing, play a short sound, or show the file in the
+file browser. The sound is a bundled file; when there is none, the hook is silent rather than
+faulty — a missing ding must never make a finished export look failed.
+
 **The export dialogue's own fields (K-201).** Beyond the preset stamp, the dialogue carries a
 **frame rate** (defaulting to the comp's own; a different rate resamples by nearest comp frame
 over the same wall-clock span, and the file is stamped with the chosen rate as an exact
@@ -959,6 +999,23 @@ Every landscape preset offers a **one-click vertical variant** (1080×1920): cen
 draggable reframe, or pillar-fit. Audio on all delivery presets: AAC 320 kbps, 48 kHz. Presets
 are data, not code; user presets serialise next to built-ins
 ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)).
+
+**Named presets, built-in and one's own.** A preset is a **name over the whole settings
+payload** — format, frame, bitrate, depth, channels, alpha, colour space, crop, metadata,
+render settings and the when-done hook — so picking one fills every field at once. The
+built-ins are **"Master"** (the composition's own frame and rate, HEVC at a worked-out
+bitrate) and the delivery presets of the table above; all are **read-only**, because
+"YouTube 1080p60" must mean the same thing on someone else's machine. A user's own presets
+are saved from the dialog into one small JSON file in the application's data directory, so
+they follow the user between projects. A missing or damaged file reads as an empty library
+rather than an error.
+
+**The bitrate is auto or typed, and the choice is stored.** *Auto* works a delivery-quality
+rate out from the frame and the rate — a straight line through the table's own 1080p60 point
+(0.13 bits per pixel for H.264, 0.10 for HEVC), with the VBR peak at 1.5× the target. A typed
+number stands as typed. A blank field is a third answer and keeps its old meaning: no bitrate
+set at all, the encoder's own quality (K-119). Formats with nothing to choose — the lossless
+sequences, PCM audio — have no bitrate at all.
 
 ## 8. Scopes
 

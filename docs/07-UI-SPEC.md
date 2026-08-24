@@ -2028,6 +2028,14 @@ Export window. Export never blocks editing; the queue runs in the background.
   (H.264; the scene's quality trick), *Vertical 1080×1920 60* (Shorts/TikTok/Reels), plus
   *PNG sequence + alpha* and a mezzanine intermediate. Preset details and encoder matrix
   live in the export spec; presets are user-editable and shareable files.
+- **The preset store** (engine-backed): the built-ins — *Master* plus the delivery presets —
+  are **read-only**, and a preset of one's own is saved from the dialog under a name that is
+  not a built-in's. Saving over an existing name replaces it in its own row rather than
+  making a second row of the same name; the library is one small JSON file in the
+  application's data directory, so it follows the user between projects, and a missing or
+  damaged one reads as an empty library rather than an error.
+- **When done**: nothing, make a noise, or open the containing folder. The noise plays a
+  bundled sound file when there is one and is silent when there is not.
 - **Progress**: overall queue progress in the window and on the OS taskbar icon; per-item
   progress bars; completion raises a non-blocking notification with *Reveal in folder*.
 - Export uses full quality always — adaptive degradation and preview resolution MUST NOT
