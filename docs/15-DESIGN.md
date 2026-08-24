@@ -838,6 +838,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   animated** (so the label never moves when animation begins); then the label; then the
   control column at a fixed x. Rows that cannot be keyed simply omit the stopwatch — a
   ragged stopwatch column, a dead-straight label edge.
+- **Tab hops values, pre-selected.** Tab and Shift+Tab move focus between value fields in
+  visual order, skipping dropdowns and toggles (those stay reachable by ordinary focus
+  traversal), and the field's content arrives selected so typing replaces it outright.
+  The hop cycles within the panel. This is a binding behaviour of every value field, not
+  a styling note.
 - The stopwatch is **square under Sharp**.
 - **Vector pairs are two equal wells with a link glyph between them**; unlinking splits them
   into two rows.
