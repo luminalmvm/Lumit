@@ -296,6 +296,49 @@ impl Realiser<'_> {
         made
     }
 
+    /// Stamp a Precomp layer's paint strokes into its realised picture
+    /// (K-447).
+    ///
+    /// Every other kind of layer is painted on the CPU, in the layer's own
+    /// 8-bit sRGB raster, before it is uploaded — a Precomp has no such
+    /// raster, because its picture is made on the graphics card. So the
+    /// picture comes back the way an export reads it (the neutral display
+    /// encode, never the Viewer's exposure), goes through the *same*
+    /// `apply_strokes` every other layer uses, and is uploaded again. One
+    /// rasteriser, one set of rules, and a stroke that lands identically
+    /// wherever it is painted.
+    ///
+    /// ponytail: an 8-bit round trip per painted Precomp per frame — the
+    /// nested picture is quantised to the depth every footage layer is
+    /// painted at anyway, and read back synchronously. A GPU stamping pass
+    /// (docs/impl/paint.md, "Not built") is the upgrade if a painted
+    /// Precomp ever shows in a profile; nothing stored changes when it
+    /// arrives. Costs exactly nothing on the Precomp layers — almost all of
+    /// them — that carry no paint.
+    fn paint_over(
+        &self,
+        tex: wgpu::Texture,
+        natural_w: f64,
+        natural_h: f64,
+        strokes: &[lumit_core::paint::PaintStroke],
+    ) -> wgpu::Texture {
+        if strokes.is_empty() {
+            return tex;
+        }
+        let (w, h) = (tex.width(), tex.height());
+        let display = self
+            .engine
+            .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL);
+        let Ok(mut rgba) = self.engine.readback8(&self.ctx, &display) else {
+            // The read failed (a lost device, a surface gone). The unpainted
+            // picture is the calm answer; engine crates do not panic.
+            return tex;
+        };
+        lumit_core::paint::apply_strokes(&mut rgba, w, h, natural_w, natural_h, strokes);
+        let src = self.engine.upload_srgb8(&self.ctx, &rgba, w, h);
+        self.engine.linearise(&self.ctx, &src)
+    }
+
     /// As [`Self::realise`], but compositing only `region` of the composition
     /// — the Viewer's region of interest (K-362). The returned texture is the
     /// region's size, not the comp's, and every layer lands where it would
@@ -640,7 +683,12 @@ impl Realiser<'_> {
                     draws,
                     camera,
                     key,
-                } => self.realise_nested(*key, *camera, *width, *height, *background, draws),
+                    paint,
+                } => {
+                    let nested =
+                        self.realise_nested(*key, *camera, *width, *height, *background, draws);
+                    self.paint_over(nested, f64::from(*width), f64::from(*height), paint)
+                }
                 DrawSource::Adjust => {
                     // realise splits segments at every Adjust draw, so none
                     // reaches here; a transparent texel keeps the no-panic

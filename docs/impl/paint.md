@@ -73,6 +73,37 @@ see it. Two knock-on effects worth knowing:
   splicing a collapsed precomp never produces the layer's own raster, and there would be nothing
   to stamp into.
 
+## Every kind of layer, and the one that needed help (K-447)
+
+`pixels_for` builds a layer's raster and then stamps into it, whatever made it: a decoded
+footage frame, a Sequence clip, a solid at its true size, a rasterised line of type, a shape
+layer's art. One shared tail, so a stroke behaves the same on all of them. Two consequences
+worth knowing: a shape layer's raster **is** its art's bounding box, so the layer's pixel
+(0, 0) is that box's corner (K-308) and re-drawing the art far enough to move the box moves
+the paint with it; and a text layer's raster is the line as typed, so an expression-driven
+caption that grows re-lays its strokes against the new width.
+
+A **Precomp** had no raster at all — a composition has no pixels until it is rendered, and it
+is rendered on the graphics card — so `pixels_for` answers `None` for one and the strokes were
+dropped. `DrawSource::Nested` now carries the layer's `paint`, and `Realiser::paint_over`
+stamps it once the nested comp has been realised:
+
+1. `ColourEngine::display` with `DisplayParams::NEUTRAL` — never the Viewer's exposure or tone
+   map, so the picture a preview paints on is the picture an export paints on (K-031);
+2. `readback8`, giving the same 8-bit sRGB bytes every other layer is painted in;
+3. the **same** `apply_strokes`, with the nested comp's own width and height as the natural
+   size, so a reduced-resolution preview scales the brush exactly as it does everywhere else;
+4. `upload_srgb8` + `linearise` back into the working texture.
+
+A read that fails returns the unpainted picture rather than panicking, and an empty stroke list
+returns the texture untouched — a Precomp nobody has painted on pays nothing. The cost when
+somebody has: one synchronous read-back per frame, and the nested picture quantised to eight
+bits. Both are named in "Not built" below as the GPU stamping pass's job.
+
+A Precomp used as a **track matte** or as an effect's layer input renders unpainted: those
+build a `NestedInputDraw`, not a layer draw, and take the same v1 boundary the source's own
+effects take (K-266).
+
 ## The seam
 
 `SetLayerPaint` replaces the whole list and is exactly invertible — the same shape as
@@ -114,9 +145,9 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
 
 ## Not built
 
-Pressure and tilt; brush shapes other than round; spacing and scatter; write-on (a stroke's own
-start and end times, which is what makes paint animate in After Effects); per-stroke blending
-modes; painting in Layer view rather than on the composite; painting on a Precomp's nested
-pixels; and a GPU stamping path. The last one is the only one that would change any code here
-rather than adding to it — and it changes the *rasteriser*, not the stored stroke, which is why
-the storage was decided first.
+Pressure and tilt; brush shapes other than round; spacing and scatter; write-on (a stroke's
+own start and end times, which is what makes paint animate in After Effects); per-stroke
+blending modes; painting in Layer view rather than on the composite; and a GPU stamping path. The last one is the only one that would change any code here rather
+than adding to it — and it changes the *rasteriser*, not the stored stroke, which is why the
+storage was decided first. It is also what would retire the 8-bit read-back a painted Precomp
+pays (K-447).

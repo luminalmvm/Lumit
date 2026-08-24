@@ -8306,6 +8306,29 @@ with neutral settings", the *old path*, so an existing project keys the identica
 keyed before. That is checked by a test rather than promised: the two paths are run side by
 side at the defaults and compared for exact equality.
 
+### Painting on a precomp (K-447)
+
+Paint works by keeping the *gesture* rather than the pixels: the path your pointer took, in the
+layer's own coordinates, stamped afresh into the layer's picture every time the frame is drawn.
+That works because every kind of layer has a picture waiting on the processor before it goes to
+the graphics card — a decoded video frame, a flat solid, a line of type, a drawn shape. The
+brush stamps into those bytes and they are handed over painted.
+
+A **precomp** layer is the exception, and the reason is worth a sentence: a composition has no
+picture until it is rendered, and it is rendered on the graphics card. There were never any
+bytes for the brush to mark, so a stroke painted on a precomp made a Timeline row and no
+pixels at all.
+
+The fix is deliberately the boring one. Once the nested composition has been rendered, its
+picture is brought back from the graphics card, run through the **same** stamping code every
+other layer uses, and sent back. Not a second rasteriser written in the graphics card's own
+language — one rasteriser, one set of rules, and a stroke that lands identically wherever it is
+painted. The price is that the nested picture makes a round trip through the eight-bit form
+every video frame is painted in anyway, and only for a precomp somebody has actually painted
+on; an unpainted precomp does not pay a thing. Doing the stamping on the card is the upgrade
+if it ever shows up in a measurement, and nothing about what is *stored* would change when it
+arrives.
+
 ## 13. The two public web sites
 
 `web/` and `web-docs/` are the public face of the project: **lumitlab.com**,

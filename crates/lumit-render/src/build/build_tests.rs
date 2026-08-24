@@ -241,6 +241,31 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     );
     assert_eq!(draws.len(), 1);
     assert!(matches!(draws[0].source, DrawSource::Nested { .. }));
+
+    // Paint does the same, and the strokes ride the Nested draw so the
+    // realiser can stamp them into the picture it makes (K-447). Before
+    // this they were built, carried nowhere, and dropped: the brush left a
+    // Timeline row and no pixels.
+    let mut painted = parent.clone();
+    painted.layers[0]
+        .paint
+        .push(lumit_core::paint::PaintStroke::new(
+            "Brush 1",
+            vec![(5.0, 5.0)],
+        ));
+    let mut visited = vec![painted.id];
+    let draws = build_comp_draws(
+        &std::sync::Arc::new(doc.clone()),
+        &painted,
+        0.0,
+        &map,
+        &mut visited,
+    );
+    assert_eq!(draws.len(), 1);
+    let DrawSource::Nested { paint, .. } = &draws[0].source else {
+        panic!("paint forces the intermediate a stroke needs to land in");
+    };
+    assert_eq!(paint.len(), 1, "the stroke travels with the draw");
 }
 
 // The live value-drag preview renders a comp patched with the provisional

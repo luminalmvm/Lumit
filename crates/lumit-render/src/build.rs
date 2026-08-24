@@ -972,6 +972,12 @@ pub fn build_comp_draws_at(
                         // flick grid already (`layer_time`), so a Precomp
                         // layer moved by whole frames keeps its names.
                         key: keys.and_then(|k| k.nested_key(nested, lt)),
+                        // Paint on a Precomp (K-447): stamped into the nested
+                        // picture by the realiser, because a comp has no
+                        // pixels until it is rendered. Collapse is already
+                        // forced off by any paint (`collapse_state`), so the
+                        // strokes always have an intermediate to land in.
+                        paint: layer.paint.clone(),
                     },
                     (nested.width as f32, nested.height as f32),
                 )

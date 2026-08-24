@@ -147,6 +147,14 @@ pub enum DrawSource {
         /// keyer — realises it every time. A collapsed Precomp never reaches
         /// here: its inner draws are spliced into the parent's list.
         key: Option<u128>,
+        /// The Precomp layer's own paint strokes (K-447), stamped into the
+        /// nested picture once it has been realised. Every other kind of
+        /// layer has its strokes baked into `Pixels` by `build`'s
+        /// `pixels_for`; a Precomp has no pixels until it is rendered, so
+        /// they travel with the draw and are applied on the other side.
+        /// Empty on the overwhelming majority of Precomp layers, which is
+        /// the case that costs nothing.
+        paint: Vec<lumit_core::paint::PaintStroke>,
     },
     /// An adjustment layer's staging point (docs/06 §1.5): no pixels of its
     /// own — the draw's `fx` runs on the composite of every draw before it,

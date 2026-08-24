@@ -12482,3 +12482,40 @@ them at once, Mix 0, and the default pinned against the pointwise kernel); in `l
 the extended `the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path`. New strings:
 `fxScreenPreBlur`, `fxScreenShrinkGrow`, `fxScreenSoftness`, `fxDespotBlack`, `fxDespotWhite`,
 `fxInsideMask`, `fxOutsideMask`.
+
+## K-447 — Paint lands on a Precomp too, through the one rasteriser
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. A paint stroke on a Precomp layer now
+reaches the picture. It never did: `build`'s `pixels_for` answers `None` for a Precomp
+because a composition has no pixels until it is rendered, so the strokes were stored, listed
+in the Timeline, and dropped on the floor. Every other kind of layer — footage, a Sequence
+clip, a solid, text, a shape — was already painted by the shared tail of `pixels_for`, which
+is why the manual's note named only Precomps.
+
+**One rasteriser, not two.** `DrawSource::Nested` carries the Precomp layer's `paint`, and
+`Realiser::paint_over` stamps it after the nested comp has been realised: the picture comes
+back through the neutral display encode (`ColourEngine::display` with `DisplayParams::NEUTRAL`
+— never the Viewer's own exposure, so preview equals export, K-031), through the **same**
+`lumit_core::paint::apply_strokes` every other layer goes through, and up again via
+`upload_srgb8` + `linearise`. Writing a second stamping kernel in WGSL would have meant two
+descriptions of one behaviour and a parity suite to keep them honest, for a feature nobody
+paints on hot paths.
+
+**What that costs, said plainly.** One synchronous read-back per *painted* Precomp per frame,
+and the nested picture quantised to the eight-bit sRGB depth every footage layer is painted at
+anyway. A Precomp with no strokes — nearly all of them — takes the early return and is byte
+for byte what it was. A GPU stamping pass is the named upgrade (docs/impl/paint.md, "Not
+built"); it changes the rasteriser and nothing that is stored, which is why the storage was
+settled first.
+
+**Collapse already knew.** `collapse_state` has forced the nested intermediate for any painted
+Precomp since K-227, so the strokes always have a raster to land in; that rule is now load
+bearing rather than defensive. A Precomp used as a **matte** or as a layer input still renders
+unpainted — the same v1 boundary its own effects take (K-266) — because those paths build a
+`NestedInputDraw`, not a layer draw.
+
+Regression tests: in `lumit-render`,
+`headless::tests::a_paint_stroke_on_a_precomp_layer_reaches_the_picture` (a red dab on a white
+precomp, end to end on a real device) and the extended
+`collapsed_precomp_splices_inner_draws_with_parent_placement`, which holds the draw-side half
+on a machine with no adapter. No new strings.
