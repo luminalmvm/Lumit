@@ -2772,14 +2772,18 @@ what the effect is.
 
 ### 3.39 Tile — the frame repeated across itself
 
-**Parameters:** Tile centre x and Tile centre y (px@comp, default 960, 540), Tile width and
-Tile height (per cent of the frame, 1..500, default 50), Output width and Output height
-(per cent of the frame, 1..500, default 100), Mirror edges (default off), Phase (dial,
-degrees, default 0), Horizontal phase shift (default off), Mix.
+**Parameters:** Tile centre x and Tile centre y (px@comp, default the frame's own centre),
+Tile width and Tile height (per cent of the frame, 1..500, default 100), Output width and
+Output height (per cent of the frame, 1..500, default 100), Mirror edges (default off),
+Phase (dial, degrees, default 0), Horizontal phase shift (default off), Mix.
 
-**Algorithm sketch.** One rectangle of the picture is copied across the frame:
+**Algorithm sketch.** One rectangle of the picture is copied across the frame, into a
+raster that may be **larger** than the one it read:
 
 ```
+raster = (W, H) · max(output_width ÷ 100, 1), capped at 8 192 a side   # K-442
+origin = (raster − (W, H)) ÷ 2, whole pixels                 # where the frame sits in it
+p      = the output pixel's position in the INCOMING frame's coordinates
 tile   = (tile_width ÷ 100 · W,  tile_height ÷ 100 · H)      # raster pixels
 window = (output_width ÷ 100 · W, output_height ÷ 100 · H)
 outside the window, centred on the frame → transparent
@@ -2789,23 +2793,47 @@ u  = (p − tile centre) ÷ tile + ½                            # position in t
 f  = u − floor(u)                                            # position within this tile
     Mirror edges: f.axis = 1 − f.axis on every odd tile index
 out = bilinear(src, tile centre + (f − ½)·tile, Repeat edges)
+out = orig·(1 − mix) + out·mix      # orig is transparent outside the incoming frame
 ```
 
-Three notes:
+Four notes:
 
-- **The default tiles.** AE's Motion Tile is the identity until it is set up (100 % tiles
-  in a 100 % output); §1.2's "drop it on and it already looks right" says otherwise, so
-  Lumit's Tile width and height default to 50 and a fresh Tile is a 2×2 repeat. Nothing
-  else about the effect diverges. The Transform effect's identity default (§3.5) is not a
-  precedent here: that one inherits the layer's own neutral transform, and "no tiling" is
-  not a tiling.
+- **The default is the identity, and it is AE's** (K-442, which reverses this section's
+  earlier 2×2 default). One whole-frame tile, cut from the middle of the frame, stamped
+  over exactly the frame it came from: dropping Tile on a layer changes not one bit.
+  §1.2's "drop it on and it already looks right" is met by *looking unchanged* here, for
+  the reason §3.5's Transform meets it the same way — Tile is the effect whose controls
+  have no meaning until the user has said where the picture is being repeated **to**, and a
+  2×2 grid nobody asked for is a picture nobody can undo by eye. The exactness matters as
+  much as the value: the mapping is a divide followed by the multiply that undoes it, which
+  fp32 does not always answer exactly, so both kernels short-circuit the identity rather
+  than resampling through it. The centre default is the raster's own, filled by
+  `instantiate_for_raster` — a fixed 960, 540 would shift the picture on any comp that is
+  not 1080p, which is precisely what the identity forbids.
+- **Output width and height above 100 % grow the working raster** (K-442). This is the
+  point of the control, and AE's: the copies land *past* the frame's edges, the working
+  picture grows evenly on all four sides to hold them, and every effect after Tile in the
+  stack runs on that wider picture — so a warp or a directional blur below it finds tiled
+  material where a layer's edge used to be transparency. The composite then places the
+  wider picture by the layer's own transform (the quad grows, the anchor slides with it),
+  so not one of the original pixels moves. Below 100 % nothing grows: the window only
+  clips, which needs no more room than the frame already has. The growth stops at 8 192
+  pixels a side, so a slider dragged to 500 % on a 4K comp cannot ask for a third of a
+  gigabyte of working texture.
+  **Three places cannot grow, and crop back instead**: an adjustment layer's stack (what
+  follows blends it against the composite beneath, which is comp-sized by definition), a
+  matte source's own stack, and a referenced layer's own stack. On those a Tile above
+  100 % reads as the plain clipped tiling. A layer mask is grown into the same margin with
+  nothing in it, so the copies Tile puts outside the layer are outside the mask.
 - **Mirror edges flips alternate tiles** rather than butting copies together, which is what
-  makes a tiled texture seamless without a seamless source.
+  makes a tiled texture seamless without a seamless source. With Output width and height a
+  little over 100 % this is the standard way to give a stabiliser or a warp material to eat
+  into: mirrored edges, a wider raster, nothing moved.
 - **Phase shifts every other row** (or column, with the switch) along by a fraction of a
   tile, which is how a tiled pattern stops reading as a grid. The rows shift by whole
   multiples of `phase ÷ 360` tiles, so 180° is the brickwork offset.
 
-`cheap` cost, `FullFrame` ROI. Mix 0 is the bit-exact identity.
+`cheap` cost, `FullFrame` ROI. Mix 0 is the bit-exact identity, and so is a fresh instance.
 
 ### 3.40 Offset — the frame slid, wrapping round
 
@@ -2823,10 +2851,10 @@ revealed and no edge policy is needed or offered. That is the whole effect, and 
 having for one reason — it is how a seamless texture is repositioned without a seam, and
 how a scrolling background is made out of one still.
 
-**Its default is the identity, and that is right here** (unlike §3.39): a shift is a
-displacement of the picture, exactly as the Transform effect's (§3.5) is, and a
-displacement's neutral is zero. There is no "already looks right" default for "how far",
-because how far depends on the picture.
+**Its default is the identity**, as §3.39's now is: a shift is a displacement of the
+picture, exactly as the Transform effect's (§3.5) is, and a displacement's neutral is zero.
+There is no "already looks right" default for "how far", because how far depends on the
+picture.
 
 **AE names the same control differently.** Its "Shift Center To" is a destination point:
 the pixel that ends up in the middle. Lumit stores a shift, which is that point minus the
@@ -3096,8 +3124,11 @@ out     = orig·(1 − mix) + out·mix
 
 Three notes:
 
-- **Completion defaults to 50, where AE's is 0**, for §3.39's reason: an effect whose
-  default state has removed nothing is an effect that has not been applied (§1.2). Feather
+- **Completion defaults to 50, where AE's is 0**, for §1.2's reason: an effect whose
+  default state has removed nothing is an effect that has not been applied. (§3.39 used to
+  be cited here as the precedent; K-442 turned that one back to the identity, for a reason
+  that does not reach a wipe — a wipe's control means something the moment it is dragged,
+  a tiling's does not until there is somewhere to tile to.) Feather
   keeps AE's 0, because one divergence is enough to make the effect visible and a second
   would be taste imposed on a control that has a right answer of its own.
 - **The edge travels half a feather past each end**, which is what the `± band÷2` in the

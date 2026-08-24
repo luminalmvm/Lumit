@@ -12491,3 +12491,125 @@ fn the_two_keyers_still_load_a_save_that_holds_their_old_matte_rows() {
         assert_eq!(ops.len(), 1, "{name}: the effect resolved to no op");
     }
 }
+
+/// **A fresh Tile changes nothing** (docs/08 §3.39, §1.2, K-442 — which reverses
+/// the earlier 2×2 default).
+///
+/// AE's Motion Tile is the identity until it is set up, and so is Lumit's: one
+/// whole-frame tile, cut from the middle of the frame, stamped over exactly the
+/// frame it came from. "Nothing" here means to the bit, not to the eye — the
+/// mapping is a divide followed by the multiply that undoes it, which fp32 does
+/// not always answer exactly, so both kernels short-circuit it. This test fails
+/// against a Tile width of 50, and against a centre that has not been moved onto
+/// the raster.
+#[test]
+fn a_fresh_tile_changes_not_one_bit() {
+    let (w, h) = (37u32, 21u32);
+    let source: Vec<f32> = (0..(w * h * 4))
+        .map(|i| ((i * 7 % 251) as f32) / 251.0)
+        .collect();
+
+    for (rw, rh) in [(w, h), (1920, 1080), (3840, 2160)] {
+        let inst = builtins::instantiate_for_raster("tile", f64::from(rw), f64::from(rh))
+            .expect("tile is a builtin");
+        let list = vec![inst];
+        let ops = super::resolve_stack_temporal_named(
+            &list,
+            0.0,
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        )
+        .1;
+        // The raster the fresh instance was centred on is the one it must be the
+        // identity on; the corpus is small, so the two other cases prove only
+        // that the centring happened, which the next assertion covers.
+        if (rw, rh) != (w, h) {
+            let t = effects::tile::Tile::read(ops.iter().next().expect("one op").params);
+            assert_eq!(
+                (t.tile_centre_x, t.tile_centre_y),
+                (rw as f32 * 0.5, rh as f32 * 0.5),
+                "a fresh Tile must be cut from the middle of the comp it was dropped on"
+            );
+            continue;
+        }
+        let mut out = source.clone();
+        cpu::apply_stack(&mut out, w, h, &ops);
+        assert_eq!(out, source, "dropping Tile on a layer changed the picture");
+    }
+}
+
+/// **Output width and height above 100 % grow the working raster** (docs/08
+/// §3.39, K-442): the copies land past the frame's edges, and the effects after
+/// Tile in the stack run on the wider picture so those copies are picture to
+/// them rather than transparency.
+///
+/// At or below 100 % nothing grows — the window only clips, which needs no more
+/// room than the frame already has — and Mix 0 grows nothing either, because an
+/// identity that reallocated the raster would not be one.
+#[test]
+fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
+    let (w, h) = (32u32, 24u32);
+    let of = |ow: f32, oh: f32, mix: f32| {
+        let mut t = effects::tile::Tile::read(crate::fx::Params::EMPTY);
+        t.tile_centre_x = 16.0;
+        t.tile_centre_y = 12.0;
+        t.tile_width = 50.0;
+        t.tile_height = 50.0;
+        t.output_width = ow;
+        t.output_height = oh;
+        t.mix = mix;
+        t.packed()
+    };
+    assert_eq!(cpu::tile_raster(w, h, &of(100.0, 100.0, 100.0)), (w, h));
+    assert_eq!(cpu::tile_raster(w, h, &of(60.0, 60.0, 100.0)), (w, h));
+    assert_eq!(cpu::tile_raster(w, h, &of(200.0, 150.0, 100.0)), (64, 36));
+    assert_eq!(
+        cpu::tile_raster(w, h, &of(200.0, 150.0, 0.0)),
+        (w, h),
+        "Mix 0 is the identity, and an identity does not reallocate"
+    );
+    // The ceiling holds a slider drag to a raster every backend can allocate.
+    assert_eq!(
+        cpu::tile_raster(3840, 2160, &of(500.0, 500.0, 100.0)),
+        (cpu::TILE_MAX_RASTER, cpu::TILE_MAX_RASTER),
+        "the growth stops at the guaranteed maximum texture side"
+    );
+
+    // The margin holds picture, and the frame's own window is untouched: the
+    // growth adds, it never moves what was already there.
+    let img: Vec<f32> = (0..(w * h * 4))
+        .map(|i| {
+            if i % 4 == 3 {
+                1.0
+            } else {
+                (i % 17) as f32 / 17.0
+            }
+        })
+        .collect();
+    let p = of(200.0, 150.0, 100.0);
+    let (ow, oh) = cpu::tile_raster(w, h, &p);
+    let mut grown = vec![0.0f32; (ow * oh * 4) as usize];
+    cpu::tile_into(&img, w, h, &mut grown, ow, oh, &p);
+    let mut flat = img.clone();
+    cpu::tile(&mut flat, w, h, &of(100.0, 100.0, 100.0));
+    let (ox, oy) = ((ow - w) / 2, (oh - h) / 2);
+    for y in 0..h {
+        for x in 0..w {
+            let a = (((y + oy) * ow + x + ox) * 4) as usize;
+            let b = ((y * w + x) * 4) as usize;
+            assert_eq!(
+                grown[a..a + 4],
+                flat[b..b + 4],
+                "the window moved at ({x}, {y})"
+            );
+        }
+    }
+    let top_row_alpha: f32 = (0..ow).map(|x| grown[(x * 4 + 3) as usize]).sum();
+    assert!(
+        top_row_alpha > 0.5 * ow as f32,
+        "the margin an effect after Tile sees must be picture, not transparency"
+    );
+}

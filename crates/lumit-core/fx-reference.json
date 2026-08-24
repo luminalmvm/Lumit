@@ -4384,7 +4384,7 @@
           "label": "Tile width",
           "kind": "float",
           "unit": "raw",
-          "default": 50.0,
+          "default": 100.0,
           "slider_min": 1.0,
           "slider_max": 500.0,
           "hard_min": 1.0
@@ -4394,7 +4394,7 @@
           "label": "Tile height",
           "kind": "float",
           "unit": "raw",
-          "default": 50.0,
+          "default": 100.0,
           "slider_min": 1.0,
           "slider_max": 500.0,
           "hard_min": 1.0

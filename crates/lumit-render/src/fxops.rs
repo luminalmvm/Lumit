@@ -437,6 +437,14 @@ pub fn run_ops(
     cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
 ) -> Tex {
     let mut tex = tex;
+    // The working raster, which **one** effect can grow mid-stack (K-442): Tile
+    // with Output width or height above 100 % stamps copies past the frame's
+    // edges, and the ops after it run on the wider picture so those copies are
+    // real picture to them rather than transparency. Every other op returns the
+    // size it was given, so this pair never moves and the walk is what it was.
+    // The caller reads the finished size off the texture; a caller that cannot
+    // take a wider one crops it back through `lumit_gpu::fx::fit_centred`.
+    let (mut w, mut h) = (w, h);
     // The name of each op's output (K-421), before anything runs: the input's
     // name, the raster, the flare substitution count, then op after op — so
     // the k-th name covers ops 0..=k. `None` from the first op that binds
@@ -473,6 +481,11 @@ pub fn run_ops(
             };
             if let Some(held) = store.lru.get(&key) {
                 tex = held.0.clone();
+                // The held picture may have been made by a growing op (K-442),
+                // in which case the ops that follow it run at *its* raster and
+                // not the layer's.
+                w = tex.width();
+                h = tex.height();
                 start = i + 1;
                 store.hits += start as u64;
                 break;
@@ -561,6 +574,12 @@ pub fn run_ops(
         // cheap handle clone) so the dissolve below has something to lerp
         // back towards, and nothing at all happens when the row is unset.
         let matte = matte.and_then(|m| m.texture(&tex)).cloned();
+        // The mattes and layer inputs were all rendered at the layer's own
+        // raster, before the walk started. Once an op has grown it (K-442) they
+        // no longer line up with the picture, so they are grown into the same
+        // margin — a no-op, and not even a copy, on every stack that has no
+        // growing op in it.
+        let matte = matte.map(|m| lumit_gpu::fx::fit_centred(ctx, m, w, h));
         // The Channel pick and Invert, once, before anyone reads the matte
         // (K-425): a bound matte on an effect that carries the injected
         // Channel row is rewritten to a grey of the chosen channel, inverted
@@ -589,7 +608,10 @@ pub fn run_ops(
         } else {
             (matte.as_ref(), None)
         };
-        let unmatted_input = generic_matte.map(|_| tex.clone());
+        let mut unmatted_input = generic_matte.map(|_| tex.clone());
+        // Rebound only when an op grows the raster (K-442), so that the dissolve
+        // below reads a matte the same size as the picture it is dissolving.
+        let mut grown_matte: Option<Tex> = None;
         // Only a *profiled* render reads a clock here, and it reads it either
         // side of a fence — see crate::profile on why an unfenced span would
         // time the paperwork rather than the work. One reading per op, whether
@@ -612,7 +634,13 @@ pub fn run_ops(
                 Some((_, _, entries)) => lumit_core::fx::Params::new(entries),
                 None => resolved.params,
             };
-            let blend_input = blend.as_ref().map(|_| tex.clone());
+            let mut blend_input = blend.as_ref().map(|_| tex.clone());
+            // As above (K-442): a Light wrap's background plate, sized to the
+            // layer, grown into the margin an earlier op added.
+            let fitted_layer_input = layer_input
+                .and_then(|l| l.texture(&tex))
+                .cloned()
+                .map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
             let data = match gpu.aux() {
                 AuxKind::None => AuxData::None,
                 AuxKind::Lut => {
@@ -638,13 +666,24 @@ pub fn run_ops(
                 w,
                 h,
                 params,
-                AuxSlot::new(
-                    data,
-                    own_matte,
-                    layer_input.and_then(|l| l.texture(&tex)),
-                    mask_path,
-                ),
+                AuxSlot::new(data, own_matte, fitted_layer_input.as_ref(), mask_path),
             );
+            // A grown raster (K-442). The two passes below and every op after
+            // this one read texel by texel, so the pictures they compare against
+            // — the input the Blend row lerps from, the input the generic matte
+            // dissolves back to, the matte itself — are grown into the same
+            // margin, transparently. `fit_centred` returns its argument when the
+            // size already matches, so nothing at all happens on the ordinary
+            // path and the picture stays byte for byte what it was.
+            if tex.width() != w || tex.height() != h {
+                w = tex.width();
+                h = tex.height();
+                blend_input = blend_input.map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
+                unmatted_input = unmatted_input.map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
+                grown_matte = matte
+                    .clone()
+                    .map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
+            }
             if let (Some((mode, mix, _)), Some(input)) = (blend, blend_input) {
                 tex = fx.blend_mix(ctx, &input, &tex, w, h, mode, mix);
             }
@@ -656,7 +695,7 @@ pub fn run_ops(
         // to the picture it was handed, by the matte's luma. Invert is passed
         // only when the prepare pass above did not already apply it — an
         // effect with no Channel row — so it is applied exactly once.
-        if let (Some(m), Some(input)) = (generic_matte, unmatted_input) {
+        if let (Some(m), Some(input)) = (grown_matte.as_ref().or(generic_matte), unmatted_input) {
             let invert = !schema.matte_channel()
                 && resolved.params.bool(lumit_core::fx::MATTE_INVERT_ID, false);
             tex = fx.matte_mix(ctx, &input, &tex, m, w, h, invert);
@@ -1090,6 +1129,75 @@ mod tests {
             8,
         );
         assert_eq!(cache.borrow().counts(), (6, 0));
+    }
+
+    /// **The ops after a growing one run on the wider raster** (K-442, docs/08
+    /// §3.39). Tile above 100 % output is the only effect that can grow the
+    /// working picture; what makes that worth having is that the effects below
+    /// it in the stack then see the copies as picture rather than as
+    /// transparency. Here an Exposure after the Tile brightens the margin as
+    /// well as the frame, which it could only do if it was dispatched at the
+    /// grown size.
+    #[test]
+    fn the_ops_after_a_growing_one_run_on_the_wider_raster() {
+        use lumit_core::fx::{effects, Value};
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+
+        let mut ops = lumit_core::fx::ResolvedStack::new();
+        ops.begin(&effects::tile::TileDef, uuid::Uuid::now_v7());
+        ops.push(effects::tile::Tile::TILE_CENTRE_X, Value::Float(4.0));
+        ops.push(effects::tile::Tile::TILE_CENTRE_Y, Value::Float(4.0));
+        ops.push(effects::tile::Tile::OUTPUT_WIDTH, Value::Float(200.0));
+        ops.push(effects::tile::Tile::OUTPUT_HEIGHT, Value::Float(200.0));
+        ops.push(effects::tile::Tile::MIX, Value::Float(100.0));
+        ops.begin(&effects::exposure::ExposureDef, uuid::Uuid::now_v7());
+        ops.push(effects::exposure::Exposure::STOPS, Value::Float(1.0));
+        ops.push(effects::exposure::Exposure::MIX, Value::Float(100.0));
+
+        let out = run_ops(
+            &fx,
+            &ctx,
+            source(&ctx),
+            W,
+            H,
+            &ops,
+            &[],
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+        );
+        assert_eq!(
+            (out.width(), out.height()),
+            (W * 2, H * 2),
+            "the stack must hand back the raster Tile grew"
+        );
+        let grown = lumit_gpu::fx::readback_linear_f32(&ctx, &out, W * 2, H * 2).expect("readback");
+        let flat = lumit_gpu::fx::readback_linear_f32(&ctx, &source(&ctx), W, H).expect("readback");
+        // The margin: brightened copies, not the transparency a layer's edge
+        // used to be past its own raster.
+        let corner = 0usize;
+        assert!(
+            grown[corner + 3] > 0.5,
+            "the margin must hold picture, alpha {}",
+            grown[corner + 3]
+        );
+        // And the second op really ran there: +1 stop is a factor of two on the
+        // colour channels, which the source's own texel says.
+        let mid = (((H) * W * 2 + W) * 4) as usize;
+        let src = 0usize;
+        assert!(
+            grown[mid] > flat[src] || grown[mid + 1] > flat[src + 1],
+            "the Exposure after the Tile must have run on the grown raster"
+        );
     }
 
     /// An op that binds a picture nobody named — another layer's texture as a

@@ -17,6 +17,10 @@ Tile is a **Distortion** effect.
 
 Tile cuts a rectangle out of the layer and repeatedly stamps it side by side until the frame is filled.
 
+A fresh Tile changes nothing: one tile the size of the whole frame, cut from the middle of it, stamped over exactly the frame it came from. Shrink **Tile width** and **Tile height** and the picture starts repeating — 50 % of each gives a 2×2 grid.
+
+Push **Output width** or **Output height** past 100 % and the stamping carries on past the layer's own edges, and the layer grows to hold it. That material is real: an effect further down the stack — a warp, a directional blur, a stabilising Transform — finds picture there instead of nothing. With **Mirror edges** on, a modest 110 % is the usual way to give a shot a seamless border to push into. Nothing you already had moves; only the margin is new.
+
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
@@ -25,8 +29,8 @@ Tile cuts a rectangle out of the layer and repeatedly stamps it side by side unt
 | --- | --- | --- | --- | --- |
 | **Tile centre x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
 | **Tile centre y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
-| **Tile width** | Slider | 1 to 500; higher | 50 | - |
-| **Tile height** | Slider | 1 to 500; higher | 50 | - |
+| **Tile width** | Slider | 1 to 500; higher | 100 | - |
+| **Tile height** | Slider | 1 to 500; higher | 100 | - |
 | **Output width** | Slider | 1 to 500; higher | 100 | - |
 | **Output height** | Slider | 1 to 500; higher | 100 | - |
 | **Mirror edges** | Checkbox | On or off | Off | - |
@@ -48,8 +52,8 @@ In the Effect Controls panel:
 
 - **Tile centre x** and **Tile centre y**: the centre point to begin repeating from.
 - **Tile width** and **Tile height**: how large the tile rectangle is.
-- **Output width** and **Output height**: how much of the frame gets stamped.
-- **Mirror edges**: flips alternate stamps.
+- **Output width** and **Output height**: how much gets stamped. Below 100 % the rest of the frame is cleared; above it the stamps carry on past the layer's edges and the layer grows to hold them.
+- **Mirror edges**: flips alternate stamps, so copies meet without a seam.
 - **Phase**: slides every row of tiles sideways by a fraction of a tile.
 - **Horizontal phase shift**: decides if Phase slides vertically or horizontally.
 - **Mix**: how much of the result replaces the original.

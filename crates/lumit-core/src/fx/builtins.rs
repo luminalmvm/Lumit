@@ -127,6 +127,13 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // raster.
             ("point_control", "point_x") => w * 0.5,
             ("point_control", "point_y") => h * 0.5,
+            // Tile's centre is the same default for a stronger reason (K-442):
+            // its whole-frame default tile is only the *identity* if it is cut
+            // from the middle of the frame, so a schema constant of 960, 540 on
+            // a 4K comp would make a fresh Tile shift the picture — the one
+            // thing §1.2 says dropping an effect on must never do.
+            ("tile", "tile_centre_x") => w * 0.5,
+            ("tile", "tile_centre_y") => h * 0.5,
             // Wave 2's Distort II batch (docs/08 §3.55): a Bezier warp's twelve
             // points are the frame's own corners with the handles at the
             // thirds — the patch that is exactly the identity — and every one

@@ -6473,6 +6473,60 @@ half the radius at Half resolution wants half the margin — and it never falls 
 one pixel, so even a kernel that reads only its immediate neighbours still gets them
 at Quarter.
 
+### The one effect that makes the picture bigger (K-442)
+
+Every effect in Lumit has, until now, been handed a picture and asked for a
+picture the same size back. That is what makes a stack of them cheap to reason
+about: the layer's own rectangle goes in at the top, comes out at the bottom, and
+the compositor puts it where the layer's position and scale say it goes.
+
+Tile breaks that, on purpose, because the After Effects effect it matches does.
+Tile stamps a rectangle of the picture side by side across the frame, and it has a
+control called **Output width and height** that says how much area gets stamped.
+Set to 110 %, it means "keep going a little past the edges". That is not a
+decoration; it is the standard way to give a shot some spare material. If you are
+about to stabilise a shaky clip, the stabiliser has to push the picture around and
+will run off the edge of it — so you first tile the frame outwards by ten per cent
+with **Mirror edges** on, which folds the outer band back on itself and produces a
+seamless border that did not exist in the footage. The stabiliser now has
+something to eat into.
+
+That only works if the extra material is *really there* for whatever comes next.
+So when Output width or height goes above 100 %, Tile now hands back a **bigger
+picture than it was given** — the original frame sitting in the middle of a wider
+one, with the copies filling the margin. The effects below Tile in the stack run
+on that wider picture, so a warp or a directional blur finds tiled material where
+the layer's edge used to be nothing at all.
+
+Three small things had to follow from that, and they are worth knowing because
+they are where the surprises would be:
+
+- **Nothing moves.** The compositor places a layer by a rectangle with a pin in it
+  (the anchor point). When the picture grows, the rectangle grows by the same
+  amount and the pin slides to stay over the same pixel, so every pixel of the
+  original ends up exactly where it was before. Only the margin is new.
+- **A few places cannot grow, and crop instead.** An adjustment layer's effects
+  run against the composite underneath it, which is the size of the composition by
+  definition — there is no "underneath" outside the frame to grow into. The same
+  goes for a layer being used as a matte, or a layer another effect is reading as
+  a second input. On those, a Tile above 100 % behaves the way it always did.
+- **There is a ceiling.** The slider reaches 500 %, and five times a 4K frame in
+  each direction would be a third of a gigabyte of working texture asked for by a
+  drag of the mouse. The growth stops at 8 192 pixels a side, which is the largest
+  texture every graphics card is guaranteed to allow.
+
+While Tile was being fixed, its starting values changed too. A fresh Tile used to
+arrive as a 2×2 grid, on the principle that an effect should look like something
+the moment you drop it on. That principle is right for a blur, whose control means
+something on its own, and wrong for Tile, whose controls mean nothing until you
+have said where the picture is being repeated *to* — and a grid nobody asked for
+is a change nobody can undo by eye. A fresh Tile now changes nothing at all, which
+is also what After Effects does. "Nothing at all" is meant exactly: the code that
+would resample the picture one-for-one is skipped entirely, because a divide
+followed by the multiply that undoes it does not always come back to the same
+number in a computer, and "not quite the same picture" would be worse than either
+answer.
+
 ### Telling how long a frame is taking, and where the time went (K-276)
 
 Two readouts, one mechanism. Both come from a small recorder the engine builds

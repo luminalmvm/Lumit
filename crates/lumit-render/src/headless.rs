@@ -2635,6 +2635,131 @@ mod tests {
         id
     }
 
+    /// **Tile above 100 % output reaches past the layer's own edges** (docs/08
+    /// §3.39, K-442), and the composite puts the wider picture in the same place.
+    ///
+    /// An 8×8 solid in a 32×32 comp covers the middle eight pixels and nothing
+    /// else. Give it a Tile at 300 % output and it covers twenty-four: the
+    /// effect stack grew its working raster, the copies landed in the margin,
+    /// and the layer transform placed the result so that not one of the original
+    /// pixels moved. Without the growth the margin is still the comp background,
+    /// which is what this test fails on.
+    #[test]
+    fn a_tile_past_full_output_extends_the_layer_past_its_edges() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let comp_with_tile = |output_pct: f64| {
+            let mut doc = Document::new();
+            let solid_id = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid_id,
+                name: "Solid".into(),
+                colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+                width: 8,
+                height: 8,
+                extra: serde_json::Map::new(),
+            }));
+            let mut tile = lumit_core::fx::instantiate_for_raster("tile", 8.0, 8.0)
+                .expect("tile is a builtin");
+            for p in &mut tile.params {
+                if p.id == "output_width" || p.id == "output_height" {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(output_pct));
+                }
+            }
+            let comp_id = Uuid::now_v7();
+            let layer = lumit_core::model::Layer {
+                markers: Vec::new(),
+                id: Uuid::now_v7(),
+                name: "Solid".into(),
+                kind: LayerKind::Solid { def: solid_id },
+                in_point: CompTime(Rational::new(0, 1).unwrap()),
+                out_point: CompTime(Rational::new(5, 1).unwrap()),
+                start_offset: CompTime(Rational::new(0, 1).unwrap()),
+                // The 8×8 layer pinned at its own middle, in the middle of a
+                // 32×32 comp: the original picture is the pixels 12..20.
+                transform: TransformGroup {
+                    anchor_x: Property::fixed(4.0),
+                    anchor_y: Property::fixed(4.0),
+                    position_x: Property::fixed(16.0),
+                    position_y: Property::fixed(16.0),
+                    ..Default::default()
+                },
+                matte: None,
+                parent: None,
+                label: 0,
+                volume_db: Property::zero(),
+                audio_only: false,
+                retime: None,
+                interpolation: Default::default(),
+                parked_flow: None,
+                blend: Default::default(),
+                masks: Vec::new(),
+                paint: Vec::new(),
+                effects: vec![tile],
+                switches: Switches::default(),
+                extra: serde_json::Map::new(),
+            };
+            doc.items.push(ProjectItem::Composition(Composition {
+                id: comp_id,
+                name: "Scene".into(),
+                width: 32,
+                height: 32,
+                frame_rate: FrameRate::new(30, 1).unwrap(),
+                duration: Duration(Rational::new(5, 1).unwrap()),
+                background: LinearColour::BLACK,
+                work_area: None,
+                layers: vec![layer],
+                markers: Vec::new(),
+                motion_blur: lumit_core::model::MotionBlur::default(),
+                extra: serde_json::Map::new(),
+            }));
+            (DocumentStore::new(doc), comp_id)
+        };
+
+        let red_at = |rgba: &[u8], x: u32, y: u32| rgba[((y * 32 + x) * 4) as usize];
+
+        // 100 %: the identity. The layer is its own eight pixels and no more.
+        let (store, comp_id) = comp_with_tile(100.0);
+        let (flat, w, h) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert_eq!((w, h), (32, 32));
+        assert!(red_at(&flat, 16, 16) > 200, "the solid itself is red");
+        assert!(
+            red_at(&flat, 6, 16) < 40,
+            "at 100 % output nothing reaches outside the layer"
+        );
+
+        // 300 %: the copies land in the margin and the margin is inside the comp.
+        let (store, comp_id) = comp_with_tile(300.0);
+        let (grown, _, _) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert!(
+            red_at(&grown, 6, 16) > 200,
+            "a later pass must find picture past the layer's edge, not background"
+        );
+        assert!(
+            red_at(&grown, 1, 16) < 40,
+            "and it must stop at 300 %, not fill the comp"
+        );
+        // Nothing the layer already covered moved.
+        for y in 12..20 {
+            for x in 12..20 {
+                assert_eq!(
+                    red_at(&grown, x, y),
+                    red_at(&flat, x, y),
+                    "the original picture moved at ({x}, {y})"
+                );
+            }
+        }
+    }
+
     /// A full-frame red solid composites to red in the centre pixel — the GPU
     /// oracle that proves the headless seam drives the real compositor. Skips
     /// when the machine has no adapter (the lavapipe/hardware convention the

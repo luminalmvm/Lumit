@@ -7237,44 +7237,48 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
+    // The shipped defaults, centred on this raster the way
+    // `instantiate_for_raster` centres them on a real comp (K-442). This is the
+    // identity, and the cases below build on it.
     let base = {
         let mut t = Tile::read(Params::EMPTY);
         t.tile_centre_x = 16.0;
         t.tile_centre_y = 12.0;
         t
     };
-    let mut mirrored = base;
+    let tiled = {
+        let mut t = base;
+        t.tile_width = 50.0;
+        t.tile_height = 50.0;
+        t
+    };
+    let mut mirrored = tiled;
     mirrored.mirror_edges = true;
-    let mut phased = base;
+    let mut phased = tiled;
     phased.phase = 180.0;
-    let mut phased_h = base;
+    let mut phased_h = tiled;
     phased_h.phase = 180.0;
     phased_h.horizontal_phase_shift = true;
-    let mut windowed = base;
+    let mut windowed = tiled;
     windowed.output_width = 60.0;
     windowed.output_height = 60.0;
-    let mut wide = base;
+    let mut wide = tiled;
     wide.tile_width = 25.0;
     wide.tile_height = 200.0;
-    let mut whole = base;
-    whole.tile_width = 100.0;
-    whole.tile_height = 100.0;
-    let mut off = base;
+    // The growing case (K-442): output past 100 % writes a wider raster.
+    let mut grown = tiled;
+    grown.output_width = 200.0;
+    grown.output_height = 150.0;
+    let mut off = tiled;
     off.mix = 0.0;
 
-    for (name, t) in [
-        ("default", base),
-        ("mirrored", mirrored),
-        ("phased", phased),
-        ("phased-columns", phased_h),
-        ("windowed", windowed),
-        ("stretched", wide),
-        ("whole-frame", whole),
-        ("mix-zero", off),
-    ] {
+    // `cpu::tile_into` at the raster `cpu::tile_raster` sizes, against
+    // `FxEngine::tile` at the raster it sizes for itself from the same rule.
+    let run = |t: Tile| {
         let p = t.packed();
-        let mut cpu = img.clone();
-        lumit_core::fx::cpu::tile(&mut cpu, w, h, &p);
+        let (ow, oh) = lumit_core::fx::cpu::tile_raster(w, h, &p);
+        let mut cpu = vec![0.0f32; (ow * oh * 4) as usize];
+        lumit_core::fx::cpu::tile_into(&img, w, h, &mut cpu, ow, oh, &p);
         let out = fx.tile(
             &ctx,
             &tex,
@@ -7288,45 +7292,90 @@ fn wgsl_tile_matches_the_cpu_oracle() {
                 mirror_edges: p.mirror_edges,
                 horizontal_phase_shift: p.horizontal_phase_shift,
                 mix: p.mix,
+                out_raster: (ow, oh),
             },
         );
-        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        assert_eq!(
+            (out.width(), out.height()),
+            (ow, oh),
+            "the kernel must write the raster the oracle sized"
+        );
+        let gpu = readback_linear_f32(&ctx, &out, ow, oh).unwrap();
+        (ow, oh, cpu, gpu)
+    };
+
+    for (name, t) in [
+        ("identity", base),
+        ("tiled", tiled),
+        ("mirrored", mirrored),
+        ("phased", phased),
+        ("phased-columns", phased_h),
+        ("windowed", windowed),
+        ("stretched", wide),
+        ("grown", grown),
+        ("mix-zero", off),
+    ] {
+        let (ow, oh, cpu, gpu) = run(t);
         let worst = worst_diff(&cpu, &gpu);
-        eprintln!("tile {name}: worst {worst}");
+        eprintln!("tile {name}: {ow}x{oh}, worst {worst}");
         assert!(worst < 2e-3, "{name}: worst diff {worst}");
         match name {
-            "mix-zero" => assert_eq!(gpu, img, "{name}: must be the bit-exact identity"),
-            // A 100 % tile centred on the frame is the picture itself — to
-            // resampling, not to the bit: the sample lands on the pixel's own
-            // centre only if the two paths contract the same multiply-add.
-            "whole-frame" => assert!(
-                worst_diff(&gpu, &img) < 2e-3,
-                "{name}: a whole-frame tile is the picture"
-            ),
-            _ => assert!(gpu != img, "{name}: the tiling must actually do something"),
+            // **The default is the identity, to the bit** (§1.2, K-442): a fresh
+            // Tile dropped on a layer must change nothing, and "nothing" here is
+            // not "nothing you can see" — the short-circuit both kernels take
+            // means the pixels are the same pixels.
+            "identity" | "mix-zero" => {
+                assert_eq!((ow, oh), (w, h), "{name}: the raster must not grow");
+                assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+            }
+            _ => assert!(gpu != cpu[..] || gpu != img, "{name}: must do something"),
         }
     }
 
-    // **It repeats.** At the default 2×2 the pixel at (4, 3) and the one a tile
+    // **It repeats.** At a 2×2 tiling the pixel at (4, 3) and the one a tile
     // away at (20, 15) come from the same place, so they must match.
-    let p = base.packed();
-    let mut tiled = img.clone();
-    lumit_core::fx::cpu::tile(&mut tiled, w, h, &p);
+    let (_, _, cpu_tiled, _) = run(tiled);
     let a = ((3 * w + 4) * 4) as usize;
     let b = ((15 * w + 20) * 4) as usize;
     assert_eq!(
-        tiled[a..a + 4],
-        tiled[b..b + 4],
+        cpu_tiled[a..a + 4],
+        cpu_tiled[b..b + 4],
         "tiles one period apart must be the same picture"
     );
 
     // **The window clips.** At 60 % output the frame's corner is outside it.
-    let mut clipped = img.clone();
-    lumit_core::fx::cpu::tile(&mut clipped, w, h, &windowed.packed());
+    let (_, _, cpu_windowed, _) = run(windowed);
     assert_eq!(
-        clipped[0..4],
+        cpu_windowed[0..4],
         [0.0; 4],
         "outside the output window must be transparent"
+    );
+
+    // **Above 100 % the picture grows, and the margin is picture** (K-442).
+    // The raster is Output width and height of the frame, the frame's own
+    // window inside it is what the ungrown tiling produced — the growth adds,
+    // it does not move anything — and the margin holds copies rather than the
+    // transparency a layer's edge used to be.
+    let (ow, oh, cpu_grown, gpu_grown) = run(grown);
+    assert_eq!((ow, oh), (64, 36), "output 200/150 % of 32×24");
+    let (ox, oy) = ((ow - w) / 2, (oh - h) / 2);
+    for y in 0..h {
+        for x in 0..w {
+            let inner = (((y + oy) * ow + x + ox) * 4) as usize;
+            let flat = ((y * w + x) * 4) as usize;
+            assert_eq!(
+                cpu_grown[inner..inner + 4],
+                cpu_tiled[flat..flat + 4],
+                "the frame's own window must be unmoved at ({x}, {y})"
+            );
+        }
+    }
+    let margin: f32 = (0..ow)
+        .map(|x| gpu_grown[((2 * ow + x) * 4 + 3) as usize])
+        .sum();
+    assert!(
+        margin > 0.5 * ow as f32,
+        "the grown margin must hold picture, not transparency (alpha sum {margin})"
     );
 }
 

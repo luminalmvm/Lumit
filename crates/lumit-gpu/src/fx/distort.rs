@@ -79,6 +79,13 @@ pub struct TileOp {
     pub horizontal_phase_shift: bool,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// The raster to write, which may be larger than the one handed in (K-442):
+    /// Output width and height above 100 % stamp copies past the frame's edges.
+    ///
+    /// **The host fills this from `lumit_core::fx::cpu::tile_raster`**, which is
+    /// the oracle's own sizing — this crate does not depend on lumit-core
+    /// outside its tests, and a second copy of the rule is a rule that drifts.
+    pub out_raster: (u32, u32),
 }
 
 #[repr(C)]
@@ -90,8 +97,10 @@ struct TileParams {
     mix_amt: f32,
     mirror_edges: u32,
     horizontal_phase_shift: u32,
-    _pad0: u32,
-    _pad1: u32,
+    /// The destination raster (K-442), which may be larger than the source —
+    /// the two former padding words, put to work. The kernel cannot read it off
+    /// the storage texture on every backend, so it is told.
+    out_size: [u32; 2],
 }
 
 #[repr(C)]
@@ -798,9 +807,14 @@ impl FxEngine {
         out
     }
 
-    /// Apply one Tile (docs/08 §3.39) to a linear working texture, returning a
-    /// new texture of the same size. One bilinear tap a pixel, or transparent
-    /// outside the output window.
+    /// Apply one Tile (docs/08 §3.39) to a linear working texture. One bilinear
+    /// tap a pixel, or transparent outside the output window.
+    ///
+    /// **The returned texture may be larger than the one handed in** (K-442):
+    /// Output width and height above 100 % stamp copies past the frame's edges,
+    /// and `cpu::tile_raster` — the oracle's own sizing, so the two paths make
+    /// the same raster — says how much larger. The frame sits in the middle of
+    /// it; the caller reads the new size off the texture.
     pub fn tile(
         &self,
         ctx: &GpuContext,
@@ -809,15 +823,16 @@ impl FxEngine {
         h: u32,
         op: &TileOp,
     ) -> wgpu::Texture {
-        let out = work_texture(ctx, w, h, "fx-tile-out");
+        let (ow, oh) = (op.out_raster.0.max(w), op.out_raster.1.max(h));
+        let out = work_texture(ctx, ow, oh, "fx-tile-out");
         self.dispatch(
             ctx,
             &self.tile,
             src,
             src,
             &out,
-            w,
-            h,
+            ow,
+            oh,
             bytemuck::bytes_of(&TileParams {
                 centre_tile: [op.centre[0], op.centre[1], op.tile_frac[0], op.tile_frac[1]],
                 output_frac: op.output_frac,
@@ -825,8 +840,7 @@ impl FxEngine {
                 mix_amt: op.mix,
                 mirror_edges: u32::from(op.mirror_edges),
                 horizontal_phase_shift: u32::from(op.horizontal_phase_shift),
-                _pad0: 0,
-                _pad1: 0,
+                out_size: [ow, oh],
             }),
         );
         out

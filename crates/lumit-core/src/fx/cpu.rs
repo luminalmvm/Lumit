@@ -1611,23 +1611,88 @@ pub struct TileParams {
     pub mix: f32,
 }
 
-/// Tile (docs/08 §3.39): one rectangle of the picture stamped across the frame.
-/// Outside the output window the result is transparent; inside, the pixel's
-/// position within its tile picks the sample, mirrored on odd tiles when Mirror
-/// edges is on. Mix 0 is the bit-exact identity, and so is a 100 % tile at the
-/// frame centre with no phase.
-pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
-    let original = rgba.to_vec();
+/// The biggest raster Tile will grow to, per side (K-442). Output width and
+/// height reach 500 %, which on a 4K comp would be a 19 200 × 10 800 working
+/// texture — a third of a gigabyte in fp16, allocated because a slider was
+/// dragged. The growth stops here instead, and the placement follows the raster
+/// that was actually made, so the picture stays put and only the extra copies
+/// are missing.
+///
+/// 8 192 is `wgpu`'s guaranteed `max_texture_dimension_2d`, so a raster this
+/// function allows is one every backend can allocate.
+pub const TILE_MAX_RASTER: u32 = 8192;
+
+/// The raster [`tile_into`] writes for an incoming `w × h` frame (K-442, docs/08
+/// §3.39).
+///
+/// Output width and height above 100 % put copies *outside* the frame, so the
+/// working picture grows to hold them and every effect after Tile in the stack
+/// sees those copies instead of transparency. At or below 100 % nothing grows:
+/// the window only clips, which needs no more room than the frame already has.
+#[must_use]
+pub fn tile_raster(w: u32, h: u32, p: &TileParams) -> (u32, u32) {
+    // Mix 0 is the identity, and an identity that reallocated the raster would
+    // not be one.
+    if p.mix <= 0.0 {
+        return (w, h);
+    }
+    let grow = |n: u32, frac: f32| {
+        if frac <= 1.0 {
+            n
+        } else {
+            ((n as f32 * frac).round() as u32).clamp(n, TILE_MAX_RASTER.max(n))
+        }
+    };
+    (grow(w, p.output_frac[0]), grow(h, p.output_frac[1]))
+}
+
+/// Tile (docs/08 §3.39): one rectangle of the picture stamped across the frame,
+/// into a raster that may be larger than the one it read.
+///
+/// `src` is the incoming `w × h` frame; `out` is the `ow × oh` raster
+/// [`tile_raster`] sized, with the frame sitting in the middle of it. Outside
+/// the output window the result is transparent; inside, the pixel's position
+/// within its tile picks the sample, mirrored on odd tiles when Mirror edges is
+/// on.
+///
+/// **The default is the identity** (§1.2, K-442): a whole-frame tile centred on
+/// the frame with no phase samples every pixel at its own centre — but the
+/// arithmetic that says so is a divide followed by the multiply that undoes it,
+/// and fp32 does not always answer that exactly. The identity is therefore
+/// stated once, here, and the WGSL twin states it with the same comparisons, so
+/// dropping Tile on a layer changes not one bit.
+pub fn tile_into(src: &[f32], w: u32, h: u32, out: &mut [f32], ow: u32, oh: u32, p: &TileParams) {
     let (fw, fh) = (w as f32, h as f32);
+    let (cx, cy) = (fw * 0.5, fh * 0.5);
+    if p.tile_frac == [1.0, 1.0]
+        && p.output_frac == [1.0, 1.0]
+        && p.phase == 0.0
+        && p.centre == [cx, cy]
+    {
+        out.copy_from_slice(src);
+        return;
+    }
     let tw = (fw * p.tile_frac[0]).max(1e-3);
     let th = (fh * p.tile_frac[1]).max(1e-3);
     let (half_w, half_h) = (fw * p.output_frac[0] * 0.5, fh * p.output_frac[1] * 0.5);
-    let (cx, cy) = (fw * 0.5, fh * 0.5);
-    for y in 0..h {
-        for x in 0..w {
-            let i = ((y * w + x) * 4) as usize;
-            let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
+    // Where the incoming frame's top-left sits in the output raster. Whole
+    // pixels deliberately: a pixel that passes through must be the same pixel
+    // and not a resample of it.
+    let (ox, oy) = ((ow as i64 - w as i64) / 2, (oh as i64 - h as i64) / 2);
+    for y in 0..oh {
+        for x in 0..ow {
+            let i = ((y * ow + x) * 4) as usize;
+            let (sx, sy) = (x as i64 - ox, y as i64 - oy);
+            let px = sx as f32 + 0.5;
+            let py = sy as f32 + 0.5;
+            // What was here before the effect: the frame's own pixel inside it,
+            // and nothing at all in the margin the growth added.
+            let o = if sx >= 0 && sy >= 0 && sx < w as i64 && sy < h as i64 {
+                let s = ((sy * w as i64 + sx) * 4) as usize;
+                [src[s], src[s + 1], src[s + 2], src[s + 3]]
+            } else {
+                [0.0f32; 4]
+            };
             let v = if (px - cx).abs() > half_w || (py - cy).abs() > half_h {
                 [0.0f32; 4]
             } else {
@@ -1658,7 +1723,7 @@ pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
                     }
                 }
                 bilinear_edge(
-                    &original,
+                    src,
                     w,
                     h,
                     p.centre[0] + (fu - 0.5) * tw,
@@ -1667,10 +1732,20 @@ pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
                 )
             };
             for c in 0..4 {
-                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+                out[i + c] = o[c] * (1.0 - p.mix) + v[c] * p.mix;
             }
         }
     }
+}
+
+/// [`tile_into`] into the raster it was handed — the frame-sized middle of the
+/// grown picture, which is all a single in-place buffer can hold. This is what
+/// [`apply_stack`] runs, and it is the whole answer whenever Output width and
+/// height stay at or below 100 %; the growing entry point above is the one the
+/// renderer calls.
+pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
+    let src = rgba.to_vec();
+    tile_into(&src, w, h, rgba, w, h, p);
 }
 
 /// Wrap-addressed bilinear sample: the frame is a torus, so a tap that leaves

@@ -12128,3 +12128,92 @@ of work rather than a dial.
 Regression tests: the default resolving bit-for-bit to the old wobble, doubling the rate
 reading the twist at twice the time, and x, y and z staying untouched while it moves
 (`lumit-core`).
+
+## K-442 — Tile is the identity when it lands, and grows the raster when it is asked to
+
+**DECIDED 2026-08-24** (allocated on safe-lane). Two changes to Tile (docs/08 §3.39), which
+together make it AE's Motion Tile rather than a lookalike.
+
+**1. A fresh Tile changes nothing.** Tile width and height default to **100**, not 50, and
+Tile centre is filled by `instantiate_for_raster` with the comp's own middle rather than
+the schema's nominal 960, 540. This **supersedes §3.39's "the default tiles" note**, which
+had cited §1.2 ("drop it on and it already looks right") for a 2×2 repeat.
+
+*Why that reading of §1.2 was wrong here.* §1.2 asks that an effect look right when it
+lands, and for a blur or a glow "right" is a visible amount, because the control means
+something on its own. Tile's controls do not: a tiling is a statement about where the
+picture is being repeated *to*, and until the user has made it, any grid the effect chooses
+is a guess. A 2×2 repeat nobody asked for is also a picture nobody can undo by eye — the
+way back is to know that 100 is the neutral, which is exactly the knowledge the default was
+meant to save. §3.5's Transform is the precedent after all: an effect whose whole subject
+is a placement starts at the placement that changes nothing.
+
+The identity is exact, not approximate. The mapping at a whole-frame tile is
+`px ÷ W · W`, a divide followed by the multiply that undoes it, which fp32 does not always
+answer to the bit — so `cpu::tile_into` and `fx_tile.wgsl` both test for the identity
+(tile 100 %, output 100 %, phase 0, centre at the frame's middle) with the same four
+comparisons and copy instead of resampling. §3.42's short-circuit is the precedent.
+
+Two consequential edits elsewhere in docs/08: §3.40's "unlike §3.39" aside, and §3.71's
+Completion default, which cited §3.39 as its precedent and now cites §1.2 directly. The
+Completion divergence itself stands — a wipe's control does mean something the moment it is
+dragged.
+
+**2. Output width and height above 100 % grow the working raster.** This is the half of the
+effect that was missing. AE's Motion Tile at 110 % output with Mirror edges is how a shot
+is given material for a stabiliser or a warp to eat into; that only works if the copies
+land *outside* the layer's own rectangle and the effects after it can see them. Until now
+Output above 100 % did nothing at all: the window was already covering the frame, and the
+frame was all there was.
+
+**The shape (the honest minimal version).** No tiling scheduler and no ROI negotiation:
+
+- `cpu::tile_raster(w, h, params)` is the single sizing rule — the frame grown by Output
+  width and height where those exceed 100 %, rounded, capped at `TILE_MAX_RASTER` (8 192,
+  `wgpu`'s guaranteed `max_texture_dimension_2d`), and never grown at Mix 0. lumit-gpu does
+  not depend on lumit-core outside its tests, so the host fills `TileOp::out_raster` from
+  it and the kernel is told; one rule in one place rather than two copies that drift.
+- The kernel reads a `w × h` source and writes the grown raster with the frame in the
+  middle of it, at a whole-pixel origin. Every coordinate inside is still in the incoming
+  frame's own pixels, so the tiling arithmetic is unchanged and the pixels inside the frame
+  are the pixels the ungrown kernel produced.
+- `fxops::run_ops` carries `(w, h)` as a *running* pair instead of a fixed one. Every effect
+  but this one returns the raster it was handed, so the pair never moves and the walk is
+  what it was. When it does move, the companions that are compared texel by texel — the
+  Blend row's input, the generic matte's input, the matte texture itself, a Light wrap's
+  background plate — are grown into the same margin by `lumit_gpu::fx::fit_centred`, which
+  returns its argument untouched when the size already matches. A cache hit restores the
+  raster the held picture was made at, since it may be a grown one.
+- The composite places the wider picture by the layer's own transform: the quad is
+  `natural_size · grow` and the anchor slides by half the width the growth added, which
+  leaves `(q − anchor)·scale + position` unchanged for every original pixel. Per-layer
+  motion blur offsets each sub-frame's anchor the same way. A layer mask is grown into the
+  margin with nothing in it — a mask clips, and the copies are outside it.
+- **Three places crop back instead of growing**, through the same `fit_centred`: an
+  adjustment layer's stack (`adjust_blend` reads it against the composite beneath, which is
+  comp-sized by definition), a matte source's own stack, and a referenced layer's own stack.
+  All three are placed at a size the builder decided before the stack ran. A Tile above
+  100 % output on one of them reads as the plain clipped tiling.
+
+**What this is not.** It is not a general growing-raster contract. One effect grows, the
+seam follows it, and the ROI paddings of K-433 are untouched — nothing consumes those yet
+and this does not start. If a second effect ever wants to grow (a drop shadow that keeps
+its own offset, a glow that keeps its halo), the honest next step is a declared output
+rectangle on the schema rather than a second special case; `fit_centred` and the running
+`(w, h)` are the half of that which already exists.
+
+**AE parity.** `docs/impl/ae-effect-parity.md` recorded "Tile's default tiles" as one of the
+distort batch's two deliberate divergences; that divergence is withdrawn. Turbulent
+displace's Amount in px@comp stands. `docs/11-AE-IMPORT.md` §5's Motion Tile row is direct
+either way — the import writes the values — but its aside about the differing defaults is
+no longer true and is corrected.
+
+Regression tests: `a_fresh_tile_changes_not_one_bit` and
+`tile_grows_the_raster_only_above_a_hundred_per_cent` (lumit-core `fx/tests.rs`),
+`wgsl_tile_matches_the_cpu_oracle` extended with an identity case, a grown case and the
+raster assertion (lumit-gpu `fx/tests.rs`),
+`the_ops_after_a_growing_one_run_on_the_wider_raster` (lumit-render `fxops.rs`) and
+`a_tile_past_full_output_extends_the_layer_past_its_edges` (lumit-render `headless.rs`, the
+end-to-end one — an 8×8 solid in a 32×32 comp covering twenty-four pixels instead of
+eight, with the original eight unmoved). `fx-reference.json` regenerated: the two changed
+defaults are the whole diff. No new user-facing strings — every label already existed.

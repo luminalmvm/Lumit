@@ -1228,6 +1228,10 @@ impl GpuEffect for Tile {
                 mirror_edges: t.mirror_edges,
                 horizontal_phase_shift: t.horizontal_phase_shift,
                 mix: t.mix,
+                // The oracle sizes the raster (K-442): lumit-gpu has no
+                // lumit-core to ask, and one rule in one place is what keeps the
+                // two paths making the same picture.
+                out_raster: lumit_core::fx::cpu::tile_raster(w, h, &t),
             },
         )
     }
