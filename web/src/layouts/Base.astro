@@ -1,6 +1,8 @@
 ---
-import "@fontsource-variable/schibsted-grotesk";
-import "@fontsource-variable/jetbrains-mono";
+// The application's two faces, both SIL OFL, both self-hosted (K-438).
+import "@fontsource-variable/hanken-grotesk";
+import "@fontsource/geist-mono/400.css";
+import "@fontsource/geist-mono/500.css";
 import "../styles/global.css";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
@@ -22,7 +24,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     <link rel="icon" href="/lumit-mark.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#0a0b0d" />
+    <meta name="theme-color" content="#0b0c0e" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />

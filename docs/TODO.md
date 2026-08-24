@@ -459,10 +459,36 @@ does not gate the four. Delete each phase here when it lands, as with everything
     the `AudioTap` is wired (`lumit_render::audio_tap`), so Audio level reads
     the referenced layer's own footage at a fixed rate, identically in the
     preview and the export — the K-031 matrix carries an audio-driven row.
-- **Phase 4 - the website**: lumitlab.com ported into the new styling - current
-    content kept, wordmark top-left, the animation in a half-height hero, platform's
-    own download button, screenshot sections and hover-play feature videos; type set
-    in Geist, unless a near-neighbour wins the side-by-side comparison.
+- ~~**Phase 4 - the website**~~ - **landed 2026-08-24** (K-438, K-439, K-476, the
+    `WebHero` drawing under K-458): lumitlab.com carries the application's own tokens -
+    the three greys, the four text tiers, the two hairlines, clay as the only accent -
+    and its two faces, **Hanken Grotesk and Geist Mono**, which won the side-by-side
+    against Geist on the two things that decided it: the site and the application then
+    read as one product, and it ships as one variable latin+ext file where Geist ships
+    static latin-only weights. The wordmark is top-left in the bar and its animation is
+    the hero, a band of half the window (never more than the drawing's 520px) on the
+    drawing's own three washes and grain. The download button names the visitor's
+    platform and links straight at that platform's asset; **no platform is greyed**,
+    because `release.yml` builds the Windows `.exe`, the macOS `.dmg` and the Linux
+    `.flatpak` on every tag and every job gates the release (K-304), so all three exist
+    whenever any of them does. Below the hero: the wide screenshot, the two captioned
+    screenshots, and the three hover-play slots, every picture a real capture from the
+    application (`web/public/shots/`, 124 KB the lot).
+    Two things the drawing shows are deliberately **not** built. Its closing tab strip
+    (Animate / Composite / Retime / Export) is a control with nothing behind it, so it
+    is omitted rather than shipped dead. And the three clips are **content debt**:
+    - **Record `retime.webm`, `flare.webm` and `camera.webm`** into `web/public/clips/`
+      (see `web/README.md`). The slots are built and working - a real `<video>` that
+      plays on hover - and until the files exist each shows its poster, a crop of a
+      real screenshot, and drops its "plays on hover" label. Nothing fakes motion. The
+      posters for the flare and the camera slot are stand-ins from the Viewer; a
+      capture of each feature would be better and can replace them in place.
+    - **`web-docs/` still carries the old ramp.** `web-docs/src/styles/theme.css` says
+      in its own first line that it mirrors `web/src/styles/global.css`, and it no
+      longer does: Schibsted Grotesk and JetBrains Mono, `#0a0b0d`/`#f4f6f8`, and a
+      violet/cyan Starlight accent. Porting it is a small follow-up and out of phase
+      4's scope - `--sl-font`, `--sl-font-mono`, the dark ramp and the three
+      `--sl-color-accent*` values are the whole of it.
 - **Later, gated - the Flutter multi-window upgrade** (K-449, K-444, K-182). Blocked
     upstream: windowing is main-channel-only, flagged, and its API promises breaking
     changes, so Lumit takes no production dependency on it until it reaches the

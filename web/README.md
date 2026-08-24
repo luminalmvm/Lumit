@@ -88,17 +88,44 @@ so notes can be written before or after the release goes out.
 
 ## Brand
 
-`web/src/components/Wordmark.astro` builds the wordmark out of the app icon on load.
-Its "umi" is outlined from the same Schibsted Grotesk the site ships, so the logotype
-cannot drift from the body text. `web/public/lumit-wordmark.svg` is the static lockup.
+`web/src/components/Wordmark.astro` builds the wordmark out of the app icon on load,
+and it is the hero: the animation runs once, and without script (or under reduced
+motion) the markup is the finished lockup standing still. `web/public/lumit-wordmark.svg`
+is the same lockup as a static file, and that is what the header shows.
+
+Its "umi" is outlined letterforms, not live text - they were traced from Schibsted
+Grotesk, which the site no longer sets its copy in (K-438: Hanken Grotesk for text,
+Geist Mono for numbers and container labels). The logotype is fixed artwork now and
+does not follow the body face.
 
 The regeneration script is not checked in; the component is the source of truth. To
 change the geometry, edit the keyframes and the `viewBox` anchors directly.
 
+## Screenshots
+
+`public/shots/` holds the pictures the front page shows. Every one is a real
+capture of the application, cropped and re-encoded as WebP - nothing is a
+mockup and nothing has a fake window frame around it:
+
+| File | Size | Where it appears |
+| --- | --- | --- |
+| `workspace.webp` | 1704x961, 60 KB | the wide picture under "Everything you know" |
+| `timeline.webp` | 1160x520, 29 KB | "Familiar by design." |
+| `welcome.webp` | 1160x520, 12 KB | "Yours to keep." |
+| `poster-retime.webp` | 768x364, 8 KB | poster for the Retime slot |
+| `poster-flare.webp` | 768x364, 3 KB | poster for the lens-flare slot |
+| `poster-camera.webp` | 768x364, 12 KB | poster for the camera-solve slot |
+
+About 124 KB in total, all of it lazily loaded except the wide one. To replace
+a picture, capture the application, crop to the aspect in the table and save as
+WebP at quality 80 - there is no build-time image pipeline here on purpose.
+
 ## Feature clips
 
-The front page's feature cards each look for a short clip under
-`public/clips/` (`playback.webm`, `retime.webm`, `sequence.webm`,
-`graph.webm`). The clips are not recorded yet, and a missing file is fine —
-the card simply renders without one. Record them at some point; the plumbing
-is already there.
+The three slots under the screenshots play a short clip on hover. Each is a real
+`<video>` pointing at `public/clips/` (`retime.webm`, `flare.webm`, `camera.webm`)
+with a screenshot crop as its poster. **None of the three clips has been recorded
+yet**, so what a visitor sees today is the poster: hovering removes the "plays on
+hover" label and leaves the picture, which is a real screenshot and worth showing
+on its own. Drop the files in and the slots start moving with no code change. The
+three are listed as content debt in `docs/TODO.md`.
