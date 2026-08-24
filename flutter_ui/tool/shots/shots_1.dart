@@ -19,34 +19,61 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 
 import 'shots_common.dart';
+
+/// One family of comps: 1920×1080 at 25 fps, differing only in how long they
+/// run. The panel's Size and fps columns then read the same down the folder,
+/// which is what the drawing shows.
+BridgeCompSettings _settings(String name, int seconds) => BridgeCompSettings(
+      name: name,
+      width: 1920,
+      height: 1080,
+      fpsNum: 25,
+      fpsDen: 1,
+      duration: BridgeRational(num: seconds, den: 1),
+    );
 
 Future<void> main() async {
   final (state, ui) = await bootLumit();
   final project = state.project!;
 
-  // A comp that looks like somebody's evening: 1920×1080, 25 fps, ten seconds.
+  // A comp that looks like somebody's evening: ten seconds of it.
   final comp = project.newComposition(
     name: 'Opening titles',
-    settings: const BridgeCompSettings(
-      name: 'Opening titles',
-      width: 1920,
-      height: 1080,
-      fpsNum: 25,
-      fpsDen: 1,
-      duration: BridgeRational(num: 10, den: 1),
-    ),
+    settings: _settings('Opening titles', 10),
   );
+  // Two more, empty: they are here so the Compositions folder and the comp
+  // tabs read like a project somebody has been working in rather than one
+  // comp on its own. Nothing is photographed inside them.
+  final titleCard = project.newComposition(
+      name: 'Title card', settings: _settings('Title card', 3));
+  final lowerThird = project.newComposition(
+      name: 'Lower third', settings: _settings('Lower third', 5));
+
+  // The folders a project of this shape would have. Only Compositions holds
+  // anything: it is the engine's own auto-folder, filled by `newComposition`
+  // above, and the bridge has no call that moves an existing item into a
+  // folder — the Project panel cannot do it either, its only filing action is
+  // Move to root — so the footage stays where an import leaves it, at the
+  // root. Their labels are what tints the folder icons (§12A.3a).
+  for (final (name, label) in [('Footage', 1), ('Audio', 6)]) {
+    ItemReference.folder(project.newFolder(name: name)).setLabel(label: label);
+  }
 
   // Bottom of the stack upwards: each call puts its layer on top of the last.
   // The fixture files are named the way the layers should read, so nothing
-  // needs renaming afterwards.
-  for (final file in ['Music.wav', 'Gameplay.mp4', 'Title card.mp4']) {
-    comp.addFootageLayer(
-      footage: project.importFootage(path: '$fixtures/$file'),
-      asSequence: false,
-    );
+  // needs renaming afterwards. The label is the item's colour tag — azure for
+  // the video, indigo for the music.
+  for (final (file, label) in [
+    ('Music.wav', 6),
+    ('Gameplay.mp4', 1),
+    ('Title card.mp4', 1),
+  ]) {
+    final footage = project.importFootage(path: '$fixtures/$file');
+    comp.addFootageLayer(footage: footage, asSequence: false);
+    ItemReference.footage(footage).setLabel(label: label);
   }
   // Imported but not placed — a project usually has one of those, and the
   // later sweeps need a still in the Project panel.
@@ -103,9 +130,18 @@ Future<void> main() async {
   final layers = comp.getLayers();
   // The panels show a layer's own name, which starts as the file's. Names
   // without extensions are what somebody an hour into the job would have.
-  for (final (index, name)
-      in ['Title', 'Title card', 'Gameplay', 'Music'].indexed) {
+  // The label is set beside the name rather than left to the layer kind's
+  // default, so the outline chips and the lane bars are the same colours in
+  // every run: mint for the words, azure for the picture, indigo for the
+  // sound.
+  for (final (index, (name, label)) in [
+    ('Title', 4),
+    ('Title card', 1),
+    ('Gameplay', 1),
+    ('Music', 6),
+  ].indexed) {
     layers[index].rename(name: name);
+    layers[index].setLabel(label: label);
   }
   // The title card half-dissolved over the footage, which is what the picture
   // would actually look like at this point in a cut.
@@ -114,7 +150,12 @@ Future<void> main() async {
     value: const BridgeScalar.static_(55),
   );
 
-  ui.setSelectedComp(comp);
+  // Fronting a comp is what opens its tab, so three fronts leave three tabs in
+  // that order — and the last one decides which comp is on screen, which is
+  // still the one every shot in this sweep is of.
+  for (final open in [comp, titleCard, lowerThird, comp]) {
+    ui.setSelectedComp(open);
+  }
   ui.playheadFrame.value = 48;
 
   runApp(shotRoot(LumitAppNew(state, ui)));
