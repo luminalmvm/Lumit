@@ -2078,6 +2078,14 @@ pub struct RenderCompRequestWithPreview {
     pub scale: f32,
     pub layer: LayerReference,
     pub effects: Option<Vec<EffectInstance>>,
+    /// The layer's driver graph **nodes**, while one of their numbers is being
+    /// dragged (K-471 §5). Exactly `effects`' reason, for the other half of the
+    /// layer's parameters: a driver's value is one op per drag, not one per
+    /// tick, and a driven parameter is the thing the picture is following — so
+    /// without this the picture does not move until the pointer is let go. The
+    /// wires, the layout and the badges are not staged: a drag on a number
+    /// changes none of them.
+    pub drivers: Option<Vec<EffectInstance>>,
     pub transform: Option<crate::api::layer::BridgeTransform>,
     /// A text layer's document, while it is being typed (K-225). The Type tool
     /// writes the layer once, when the edit ends; this is what keeps the
@@ -3179,6 +3187,11 @@ fn render_comp_with_preview(
 
     if let Some(effects) = req.effects {
         comp.layers[index].effects = effects;
+    }
+    if let Some(drivers) = req.drivers {
+        // The nodes only: the wires are the document's, and a driver whose
+        // number is being dragged is still wired exactly where it was.
+        comp.layers[index].graph.nodes = drivers;
     }
     if let Some(document) = req.text {
         apply_text_preview(&mut comp.layers[index].kind, document);

@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'graph.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core`, `core`, `of`, `of`, `of`, `of`, `of`, `param_ports`, `read_layer_graph`, `wiring_into`
+// These functions are ignored because they are not marked as `pub`: `catalogue_ports`, `core`, `core`, `of`, `of`, `of`, `of`, `of`, `param_ports`, `read_layer_graph`, `wiring_into`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One wire.

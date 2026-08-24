@@ -32,6 +32,7 @@ import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_panel.dart' show graphNodeKey, graphToolbarHeight;
@@ -75,14 +76,16 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   final EffectStackEditor _stack = EffectStackEditor();
 
   /// The same for a driver box, which cannot ride [EffectStackEditor] because
-  /// its commit is `setGraph` rather than `setEffects`.
-  ///
-  /// ponytail: no live preview while a driver's number is dragged — the
-  /// preview call takes a staged *stack*, and there is no staged-graph render
-  /// yet. The field under the pointer shows the staged value and the release
-  /// commits; add the preview when `renderFrameWithPreview` learns to carry a
-  /// staged graph.
+  /// its commit is `setGraph` rather than `setEffects` — and its preview is
+  /// `renderFrameWithDriverPreview`, which stages the graph's nodes exactly as
+  /// the stack preview stages the effect list.
   ({String param, BridgeEffectValue value})? _stagedDriver;
+
+  /// The driver drag's own rate limit, the twin of the one inside
+  /// [EffectStackEditor]: the first tick goes at once and the newest of those
+  /// that follow goes when the interval is up, so a fast drag cannot queue up
+  /// renders the pointer has already outrun.
+  final PreviewThrottle _driverPreview = PreviewThrottle();
 
   @override
   void didChangeDependencies() {
@@ -106,6 +109,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   @override
   void dispose() {
     _unbind();
+    // A held tick would fire into a panel that is gone.
+    _driverPreview.cancel();
+    _stack.clear();
     super.dispose();
   }
 
@@ -187,15 +193,15 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     final layer = _layer;
     if (layer == null) return;
     if (_picked?.driver ?? false) {
+      // A release ends the drag: a held preview tick would render provisional
+      // values *after* the commit, putting the pre-commit picture back up.
+      _driverPreview.cancel();
       _stagedDriver = (param: param, value: value);
       try {
-        final drivers = layer.getGraphDrivers();
-        for (final instance in drivers) {
-          if (instance.id() == effect) {
-            instance.setValue(id: param, value: value);
-          }
-        }
-        layer.setGraph(drivers: drivers, wiring: layer.getGraph().wiring);
+        layer.setGraph(
+          drivers: _driversWith(layer, effect),
+          wiring: layer.getGraph().wiring,
+        );
       } catch (_) {
         // The graph changed under us, or the edit was refused (§1.5);
         // re-reading is the recovery.
@@ -212,14 +218,39 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     final layer = _layer;
     final ui = _ui;
     if (layer == null || ui == null) return;
+    final comp = ui.selectedComp;
     if (_picked?.driver ?? false) {
       setState(() => _stagedDriver = (param: param, value: value));
+      if (comp == null) return;
+      // The drivers are read *inside* the closure: a held tick must send the
+      // newest staged value, not the one that was current when it was held.
+      _driverPreview.request(() => comp.renderFrameWithDriverPreview(
+            frame: BigInt.from(ui.playheadFrame.value),
+            scale: ui.viewerScale,
+            layer: layer,
+            drivers: _driversWith(layer, effect),
+          ));
       return;
     }
-    final comp = ui.selectedComp;
     if (comp == null) return;
     setState(() => _stack.live(comp, layer, effect, param, value,
         frame: ui.playheadFrame.value, scale: ui.viewerScale));
+  }
+
+  /// The layer's driver nodes, freshly read, with the drag in progress written
+  /// into the one being dragged — what both the preview and the commit send.
+  List<BridgeEffectInstance> _driversWith(
+      LayerReference layer, UuidValue node) {
+    final drivers = layer.getGraphDrivers();
+    final staged = _stagedDriver;
+    if (staged != null) {
+      for (final instance in drivers) {
+        if (instance.id() == node) {
+          instance.setValue(id: staged.param, value: staged.value);
+        }
+      }
+    }
+    return drivers;
   }
 
   /// What a row should *show*, which during a drag is the staged value.

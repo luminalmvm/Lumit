@@ -274,6 +274,128 @@ void main() {
           BridgeOutputRef.driver(node: wiggle, port: 'value'));
     });
 
+    /// **The box and its wire arrive in one commit** (docs/impl/node-graph.md
+    /// §3), which is what makes the whole gesture one undo step. The ports come
+    /// off the catalogue entry, so the socket is known before the node is in
+    /// the document and there is nothing left to do in a second op.
+    testWidgets('the added driver and its auto-wire are one undo step',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      await mount(tester, p);
+
+      await tester.dragFrom(tester.getCenter(socket('driver:$wiggle', 'value')),
+          const Offset(220, 60));
+      await tester.pump();
+      await tester
+          .tap(find.byKey(const ValueKey<String>('graph-search-smooth')));
+      await tester.pump();
+      expect(p.layer.getGraphDrivers(), hasLength(2));
+      expect(p.layer.getGraph().wiring.edges, hasLength(1));
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getGraphDrivers(), hasLength(1),
+          reason: 'one undo takes the new box away');
+      expect(p.layer.getGraph().wiring.edges, isEmpty,
+          reason: 'and the wire with it — the two were one commit');
+    });
+
+    /// **The search shows what the wire in hand could land on** (WP3), so the
+    /// footer's promise — "connects the dragged wire where it fits" — is true
+    /// of every row it offers.
+    testWidgets('the Tab search filters by the dragged wire\'s type',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      final cycle = seedDriver(p.layer, 'colour_cycle', const Offset(30, 440));
+      await mount(tester, p);
+
+      // A number in hand: the drivers that take a number are offered.
+      await tester.dragFrom(tester.getCenter(socket('driver:$wiggle', 'value')),
+          const Offset(240, 60));
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('graph-search-smooth')),
+          findsOneWidget);
+      // A press anywhere puts the popover away.
+      await tester.tapAt(const Offset(860, 560));
+      await tester.pump();
+
+      // A colour in hand: nothing in the v1 set takes one, and the list says so
+      // rather than offering a row that could not connect.
+      await tester.dragFrom(tester.getCenter(socket('driver:$cycle', 'colour')),
+          const Offset(240, 60));
+      await tester.pump();
+      expect(
+          find.byKey(const ValueKey<String>('graph-search')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('graph-search-smooth')),
+          findsNothing);
+      expect(find.byKey(const ValueKey<String>('graph-search-wiggle')),
+          findsNothing);
+
+      // Without a wire the whole family is back.
+      await tester.tapAt(const Offset(860, 560));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(find.byKey(const ValueKey<String>('graph-search-smooth')),
+          findsOneWidget);
+    });
+
+    /// **Removing a wired effect is one op** (K-471 §1.5). The stack's own
+    /// removal prunes the graph inside the same commit, so the panel neither
+    /// unplugs first nor leaves a dangling edge behind — and one undo brings
+    /// the effect and its wiring back together.
+    testWidgets('deleting a wired effect takes its wires with it, in one step',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+      final from = tester.getCenter(socket('driver:$wiggle', 'value'));
+      await tester.dragFrom(
+          from, tester.getCenter(socket(key, 'radius')) - from);
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(1));
+
+      // Pick the *effect* box and delete it.
+      await tester.tapAt(
+          tester.getCenter(find.byKey(ValueKey<String>('graph-node-$key'))));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pump();
+
+      expect(p.layer.getEffects(), isEmpty);
+      expect(p.layer.getGraph().wiring.edges, isEmpty,
+          reason: 'the wire went with the box it named');
+      expect(p.layer.getGraphDrivers(), hasLength(1),
+          reason: 'the driver itself is not the stack\'s to remove');
+
+      // The proof the prune is for: the next graph write is accepted.
+      final moved = p.layer.getGraph();
+      p.layer.setGraph(
+        drivers: p.layer.getGraphDrivers(),
+        wiring: BridgeGraphWiring(
+          edges: moved.wiring.edges,
+          layout: [
+            BridgeNodePosition(node: BridgeNodeRef.driver(wiggle), x: 4, y: 4),
+          ],
+          exposed: moved.wiring.exposed,
+        ),
+      );
+
+      p.state.project!.undo();
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getEffects(), hasLength(1));
+      expect(p.layer.getGraph().wiring.edges, hasLength(1),
+          reason: 'one undo restores the effect and its wire together');
+    });
+
     testWidgets('with Auto-wire off the node lands unwired', (tester) async {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));

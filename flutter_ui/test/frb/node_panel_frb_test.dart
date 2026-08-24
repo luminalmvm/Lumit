@@ -15,6 +15,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/node_panel.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
@@ -150,6 +151,58 @@ void main() {
           find.byKey(ValueKey<String>(
               'node-row-$wiggle-${cachedListParameters('wiggle').first.id}')),
           findsOneWidget);
+    });
+
+    /// **A driver's number is dragged live** (WP4). The drag stages the value
+    /// and asks for a preview frame through `renderFrameWithDriverPreview`,
+    /// which substitutes the graph's nodes on a throwaway copy exactly as the
+    /// stack preview substitutes the effect list; the document is written once,
+    /// on release.
+    ///
+    /// The second tick is the load-bearing part. A `BridgeEffectInstance`
+    /// handed to a preview call is *moved* — frb disposes the Dart side of it —
+    /// so a panel that read the driver handles once and reused them would throw
+    /// `DroppableDisposedException` on the tick after the first. Two moves with
+    /// the throttle's interval between them is what forces a second real call.
+    testWidgets('dragging a driver value previews live and commits once',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedWiredDriver(p.layer, 'wiggle');
+      p.uiState.graphNode.value = BridgeNodeRef.driver(wiggle);
+      await mount(tester, p, const NodePanelFrb());
+
+      double amount() =>
+          ((p.layer.getGraphDrivers().single.getValue(id: 'amount')
+                      as BridgeEffectValue_Float)
+                  .field0 as BridgeScalar_Static)
+              .field0;
+      final before = amount();
+
+      final gesture = await tester
+          .startGesture(tester.getCenter(find.byKey(ValueKey<String>(
+        'fx-float-$wiggle-amount',
+      ))));
+      await gesture.moveBy(const Offset(30, 0));
+      await tester.pump();
+      expect(amount(), before, reason: 'a drag tick previews; it never writes');
+
+      await tester.pump(const Duration(milliseconds: 40));
+      await gesture.moveBy(const Offset(30, 0));
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(tester.takeException(), isNull,
+          reason: 'each preview tick reads its own handles');
+      expect(amount(), before, reason: 'still nothing written');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(amount(), greaterThan(before),
+          reason: 'the release reached the document');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(amount(), before,
+          reason: 'the whole drag was one op, so one undo puts it back');
     });
 
     /// The coupling. Clicking a box on the canvas is what fills this panel,

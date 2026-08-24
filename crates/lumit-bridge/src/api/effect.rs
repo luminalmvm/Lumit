@@ -43,6 +43,18 @@ pub struct BridgeEffectInfo {
     pub label: String,
     pub category: String,
     pub category_label: String,
+    /// The sockets an instance of this entry would draw, from its declaration
+    /// alone (K-471 §1.3) — the parameters that can take a wire.
+    ///
+    /// Here because the Graph panel has to know an entry's ports *before* it is
+    /// in the document: it is what lets adding a driver and joining it to the
+    /// wire in hand be one commit and so one undo step, and what lets the Tab
+    /// search show only the entries a dragged wire could land on. `wired` is
+    /// always false — nothing is wired on a catalogue entry.
+    pub inputs: Vec<crate::api::graph::BridgePort>,
+    /// The output sockets — empty for every image effect, and the declared
+    /// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
+    pub outputs: Vec<crate::api::graph::BridgePort>,
 }
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -80,13 +92,18 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
     lumit_core::fx::BUILTINS
         .iter()
         .filter(|schema| keep(schema.category))
-        .map(|schema| BridgeEffectInfo {
-            name: schema.match_name.to_owned(),
-            label: schema.label.to_owned(),
-            // Shared with v0 rather than restated, so the two frontends cannot
-            // disagree about which key a category has.
-            category: crate::edits::fx_category_key(schema.category).to_owned(),
-            category_label: schema.category.label().to_owned(),
+        .map(|schema| {
+            let (inputs, outputs) = crate::api::graph::catalogue_ports(schema.match_name);
+            BridgeEffectInfo {
+                name: schema.match_name.to_owned(),
+                label: schema.label.to_owned(),
+                // Shared with v0 rather than restated, so the two frontends cannot
+                // disagree about which key a category has.
+                category: crate::edits::fx_category_key(schema.category).to_owned(),
+                category_label: schema.category.label().to_owned(),
+                inputs,
+                outputs,
+            }
         })
         .collect()
 }

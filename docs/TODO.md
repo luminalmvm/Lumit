@@ -441,12 +441,21 @@ does not gate the four. Delete each phase here when it lands, as with everything
     path spelled `<layer>/graph/<node>/<param>` (docs/17).
     ~~WP3, the Graph panel~~ — **landed 2026-08-24**: the panel to its drawing,
     the wire colours as the theme's `PortColours`, and the *driven* state on an
-    Effect-controls row.
+    Effect-controls row. Its three gaps closed 2026-08-24:
+    `Op::SetLayerEffects` prunes the edges, positions and badges naming a
+    removed effect (so deleting a wired box is one op), and
+    `BridgeEffectInfo` carries an entry's declared ports — which folds the
+    auto-wire into the add's own commit and lets the Tab search offer only the
+    entries a dragged wire could land on.
     ~~WP4, the Nodes workspace~~ — **landed 2026-08-24**: the preset (the Graph
     panel large with the ordinary Timeline short beneath it, the small Viewer
     and the new **Node panel** down the right), its tab on the workspace strip,
     and the graph's pick carried through the shell so the Node panel follows
-    it. **WP5 is pending**: the Node preview panel. WP1's named gap is closed:
+    it. Its gap closed 2026-08-24:
+    `render_frame_with_driver_preview` stages the graph's nodes as the stack
+    preview stages the effect list, so a driver's number moves the picture
+    while it is dragged rather than only on release.
+    **WP5 is pending**: the Node preview panel. WP1's named gap is closed:
     the `AudioTap` is wired (`lumit_render::audio_tap`), so Audio level reads
     the referenced layer's own footage at a fixed rate, identically in the
     preview and the export — the K-031 matrix carries an audio-driven row.

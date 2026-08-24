@@ -1755,6 +1755,41 @@ impl CompositionReference {
             scale,
             layer,
             effects: Some(effects.iter().map(|i| i.get_effects()).collect()),
+            drivers: None,
+            transform: None,
+            text: None,
+            paint: None,
+            contents: None,
+            masks: None,
+            clip_retime: None,
+            retime: None,
+        }))
+    }
+
+    /// Ask for `frame` with `layer`'s **driver graph nodes** replaced by
+    /// `drivers` — the live drag on a driver's number, which never touches the
+    /// document (K-471 §5).
+    ///
+    /// The stack's twin, one function up, and for the same reason: a driver's
+    /// value is one op per drag and not one per tick, so the picture is kept in
+    /// step by previewing rather than by writing. Only the graph's *nodes* are
+    /// substituted — its wires, layout and badges are the document's, and a
+    /// drag on a number changes none of them.
+    #[frb(sync)]
+    pub fn render_frame_with_driver_preview(
+        &self,
+        frame: u64,
+        scale: f32,
+        layer: LayerReference,
+        drivers: Vec<BridgeEffectInstance>,
+    ) -> Result<(), BridgeError> {
+        self.dispatch(RenderCompWithPreview(RenderCompRequestWithPreview {
+            comp: self.clone(),
+            frame,
+            scale,
+            layer,
+            effects: None,
+            drivers: Some(drivers.iter().map(|i| i.get_effects()).collect()),
             transform: None,
             text: None,
             paint: None,
@@ -1788,6 +1823,7 @@ impl CompositionReference {
             scale,
             layer,
             effects: None,
+            drivers: None,
             transform: None,
             text: None,
             paint: None,
@@ -1824,6 +1860,7 @@ impl CompositionReference {
             scale,
             layer,
             effects: None,
+            drivers: None,
             transform: None,
             text: None,
             paint: None,
@@ -2006,6 +2043,7 @@ impl CompositionReference {
             scale,
             layer,
             effects: None,
+            drivers: None,
             transform: Some(transform),
             text: None,
             paint: None,
@@ -2037,6 +2075,7 @@ impl CompositionReference {
             scale,
             layer,
             effects: None,
+            drivers: None,
             transform: None,
             text: Some(document),
             paint: None,
@@ -2072,6 +2111,7 @@ impl CompositionReference {
             scale,
             layer,
             effects: None,
+            drivers: None,
             transform: None,
             text: None,
             paint: Some(strokes),
@@ -2104,6 +2144,7 @@ impl CompositionReference {
             scale,
             layer,
             effects: None,
+            drivers: None,
             transform,
             text: None,
             paint: None,
@@ -2130,6 +2171,7 @@ impl CompositionReference {
             scale,
             layer,
             effects: None,
+            drivers: None,
             transform: None,
             text: None,
             paint: None,

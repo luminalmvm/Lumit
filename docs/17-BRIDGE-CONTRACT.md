@@ -85,10 +85,13 @@ undo step:
     copy and `LayerReference::set_effects` is the commit, so a rename is one op
     and one undo step like any other stack edit. `render_frame_with_preview`'s
     siblings patch the other things a drag can be holding — a transform, a text
-    document, a paint or shape or mask list, a clip's retime envelope, and a
-    layer's own Retime map (`render_frame_with_retime`, K-329) — one layer's one
+    document, a paint or shape or mask list, a clip's retime envelope, a layer's
+    own Retime map (`render_frame_with_retime`, K-329), and its **driver graph
+    nodes** (`render_frame_with_driver_preview`, K-471) — one layer's one
     state per request, so a gesture spanning more than that previews the part it
-    grabbed.
+    grabbed. The driver call stages the graph's *nodes* only: a drag on a
+    number changes no wire, no position and no badge, and staging them would be
+    inventing a state the document cannot be in.
 
 ### The four binding rules
 
@@ -401,6 +404,17 @@ without its entry.
 filtered by the frontend, because the distinction is the engine's: a driver makes a value,
 not a picture, so it belongs in the graph canvas's search and never in the Add-effect menu,
 where it would add a node that changes no pixel.
+
+**A catalogue entry carries the ports it declares.** `BridgeEffectInfo` answers `inputs`
+and `outputs` beside the name and the label — the same `BridgePort` the read model uses,
+with `wired` always false, because nothing is wired on an entry that has no instance yet.
+Two things depend on knowing an entry's sockets *before* the node is in the document, and
+both were impossible without it: **auto-wire folds into the add's own commit**, so "drag a
+wire out, pick a driver" is one `set_graph` and one undo step rather than an add followed
+by a connect; and the **Tab search filters by the wire in hand**, so every row it offers is
+one that would actually connect. Derived from `Signature::Data` and the schema's own
+`ParamKind::port_type`, so the entry's sockets and the wires `LayerGraph::validate`
+accepts cannot disagree.
 
 ### The camera track: an event down, readings up (K-417)
 

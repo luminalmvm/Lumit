@@ -284,7 +284,19 @@ docs/05 §3 already names structural sharing as the upgrade if cloning ever bite
 - **Write**: `LayerReference::set_graph(drivers, wiring)`; stack gestures reuse
   `set_effects`; driver params reuse the property calls, from the staged instances
   `get_graph_drivers()` hands out.
-- **Catalogue**: the Drivers category rides the existing effect-catalogue listing.
+- **Catalogue**: the Drivers category rides the existing effect-catalogue listing,
+  through `list_drivers()` of its own. **Built 2026-08-24**: an entry carries the ports it
+  declares (`BridgeEffectInfo::inputs` / `outputs`, `wired` always false), which is what
+  lets the panel fold the auto-wire into the add's own commit and filter the Tab search to
+  the entries a dragged wire could land on. Without it the auto-wire had to be a second op,
+  because a driver's outputs only existed once `get_graph` could derive them.
+- **Live drag on a driver**: `CompositionReference::render_frame_with_driver_preview(
+  frame, scale, layer, drivers)` — **built 2026-08-24**, the twin of
+  `render_frame_with_preview`. It substitutes `Layer::graph.nodes` on the worker's
+  throwaway clone exactly as the stack call substitutes `Layer::effects`, so a driven
+  parameter moves under the pointer instead of only on release. The nodes only: a drag on
+  a number changes no wire, position or badge, and staging them would invent a state the
+  document cannot be in.
 - **Port types cross as an enum**; Dart maps type → theme token. No colour crosses the
   bridge.
 - **K-005 gate**: every label the engine can send gets its `engine_labels.dart` entry and

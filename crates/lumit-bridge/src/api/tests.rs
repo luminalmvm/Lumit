@@ -7159,6 +7159,72 @@ fn the_drivers_listing_is_the_family_with_its_category() {
     );
 }
 
+/// **A catalogue entry carries its declared ports** (K-471 §1.3), which is what
+/// lets the Graph panel wire a driver into the *same* commit that adds it, and
+/// filter the Tab search to the entries a dragged wire could land on. Before
+/// this, a driver's outputs only existed once `get_graph` could derive them from
+/// a node already in the document, so the auto-wire had to be a second op.
+#[test]
+fn a_catalogue_entry_declares_its_ports_before_any_instance_exists() {
+    use crate::api::effect::list_drivers;
+    use crate::api::graph::BridgePortType;
+
+    let drivers = list_drivers();
+    let level = drivers
+        .iter()
+        .find(|d| d.name == "audio_level")
+        .expect("Audio level is a v1 driver");
+    assert_eq!(
+        level
+            .outputs
+            .iter()
+            .map(|p| (p.id.as_str(), p.port_type, p.wired))
+            .collect::<Vec<_>>(),
+        vec![
+            ("amplitude", BridgePortType::Number, false),
+            ("low", BridgePortType::Number, false),
+        ],
+        "the signature's own ports, in the order the node draws them"
+    );
+    assert!(
+        level
+            .inputs
+            .iter()
+            .any(|p| p.id == "window" && p.port_type == BridgePortType::Number),
+        "and the parameters a wire can land on"
+    );
+    assert!(
+        !level.inputs.iter().any(|p| p.id == "audio"),
+        "a layer reference is not a socket — it is answered by the derived source node"
+    );
+
+    let smooth = drivers
+        .iter()
+        .find(|d| d.name == "smooth")
+        .expect("Smooth is a v1 driver");
+    assert!(
+        smooth
+            .inputs
+            .iter()
+            .any(|p| p.id == "value" && p.port_type == BridgePortType::Number),
+        "a driver that takes a number declares the socket for it"
+    );
+
+    let effects = list_effects();
+    let blur = effects
+        .iter()
+        .find(|e| e.name == "blur")
+        .expect("the catalogue knows Blur");
+    assert!(
+        blur.outputs.is_empty(),
+        "an image effect declares no data outputs"
+    );
+    assert!(
+        blur.inputs.iter().any(|p| p.id == "radius"),
+        "but its parameters are still sockets a driver can feed"
+    );
+}
+
 /// An unknown name is refused and nothing is written — the same answer
 /// `add_effect` gives.
 #[test]

@@ -5,6 +5,7 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
+import 'graph.dart';
 import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
@@ -239,11 +240,27 @@ class BridgeEffectInfo {
   final String category;
   final String categoryLabel;
 
+  /// The sockets an instance of this entry would draw, from its declaration
+  /// alone (K-471 §1.3) — the parameters that can take a wire.
+  ///
+  /// Here because the Graph panel has to know an entry's ports *before* it is
+  /// in the document: it is what lets adding a driver and joining it to the
+  /// wire in hand be one commit and so one undo step, and what lets the Tab
+  /// search show only the entries a dragged wire could land on. `wired` is
+  /// always false — nothing is wired on a catalogue entry.
+  final List<BridgePort> inputs;
+
+  /// The output sockets — empty for every image effect, and the declared
+  /// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
+  final List<BridgePort> outputs;
+
   const BridgeEffectInfo({
     required this.name,
     required this.label,
     required this.category,
     required this.categoryLabel,
+    required this.inputs,
+    required this.outputs,
   });
 
   @override
@@ -251,7 +268,9 @@ class BridgeEffectInfo {
       name.hashCode ^
       label.hashCode ^
       category.hashCode ^
-      categoryLabel.hashCode;
+      categoryLabel.hashCode ^
+      inputs.hashCode ^
+      outputs.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -261,7 +280,9 @@ class BridgeEffectInfo {
           name == other.name &&
           label == other.label &&
           category == other.category &&
-          categoryLabel == other.categoryLabel;
+          categoryLabel == other.categoryLabel &&
+          inputs == other.inputs &&
+          outputs == other.outputs;
 }
 
 /// Everything a panel draws for one effect instance, in one crossing (K-183):

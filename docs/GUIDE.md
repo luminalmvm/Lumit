@@ -8848,6 +8848,16 @@ badges that named it, in the same single step, so one undo brings the effect *an
 wiring back together. This is the same rule as **Heal** above, applied where the deletion
 comes from somewhere else entirely — the Effect controls panel, or the Timeline.
 
+**Dragging a driver's number moves the picture.** The same trick as dragging any other
+value: the engine takes a throwaway copy of the project with your half-finished number in
+it, renders that, and throws it away — nothing is written down until you let go, so a
+drag is one entry in the undo history rather than a hundred. And when you let go of a
+wire over empty canvas and pick a driver from the list that appears, two things are worth
+knowing. The list only offers boxes the wire could actually plug into, so picking one
+always connects. And the box and its wire arrive together as one change, so one undo
+takes both away — which is only possible because the engine can say what sockets a driver
+has before that driver exists.
+
 **Points** are the fifth kind of thing a wire will one day carry: not a picture but a
 crowd of positions — where every particle of a particle system is this frame, how fast
 each is moving, how old each is. Particulate (K-446) will be the first thing that makes

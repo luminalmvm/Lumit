@@ -837,6 +837,28 @@ class CompositionReference {
               clip: clip,
               retime: retime);
 
+  /// Ask for `frame` with `layer`'s **driver graph nodes** replaced by
+  /// `drivers` — the live drag on a driver's number, which never touches the
+  /// document (K-471 §5).
+  ///
+  /// The stack's twin, one function up, and for the same reason: a driver's
+  /// value is one op per drag and not one per tick, so the picture is kept in
+  /// step by previewing rather than by writing. Only the graph's *nodes* are
+  /// substituted — its wires, layout and badges are the document's, and a
+  /// drag on a number changes none of them.
+  void renderFrameWithDriverPreview(
+          {required BigInt frame,
+          required double scale,
+          required LayerReference layer,
+          required List<BridgeEffectInstance> drivers}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceRenderFrameWithDriverPreview(
+              that: this,
+              frame: frame,
+              scale: scale,
+              layer: layer,
+              drivers: drivers);
+
   /// Ask for `frame` with `layer`'s masks replaced by `masks` — the mask's
   /// half of the two calls above (K-240).
   void renderFrameWithMaskPreview(

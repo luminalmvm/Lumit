@@ -388,6 +388,29 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
     }
 }
 
+/// The sockets an entry of the catalogue *declares*, before any instance of it
+/// exists: `(inputs, outputs)`.
+///
+/// The Graph panel needs these before the node is in the document — to fold an
+/// auto-wire into the same commit as the add, and to filter the Tab search to
+/// the entries a dragged wire could actually land on. Nothing is ever wired on
+/// a catalogue entry, so the `wired` flag is `false` throughout and the node
+/// reference `param_ports` needs is never consulted.
+#[frb(ignore)]
+pub(crate) fn catalogue_ports(match_name: &str) -> (Vec<BridgePort>, Vec<BridgePort>) {
+    let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(match_name) else {
+        return (Vec::new(), Vec::new());
+    };
+    let inputs = param_ports(Some(def.schema()), NodeRef::Source, &|_| false).collect();
+    let outputs = def
+        .signature()
+        .outputs()
+        .iter()
+        .map(|port| BridgePort::of(*port, false))
+        .collect();
+    (inputs, outputs)
+}
+
 /// One socket per parameter that can take a wire.
 ///
 /// `ParamKind::port_type` is the authority (a switch, a dropdown or a file

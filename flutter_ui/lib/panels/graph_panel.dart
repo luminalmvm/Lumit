@@ -609,21 +609,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       return;
     }
 
-    // ponytail: an effect's removal is the stack's own op, and
-    // `Op::SetLayerEffects` does not prune the graph's edges — so a driven
-    // effect needs its wires dropped first or the next graph write is refused.
-    // That is two ops when (and only when) the box carried wires; one when it
-    // did not, which is the ordinary case. Upgrade path: have
-    // `SetLayerEffects` prune edges naming a removed effect, or batch the two.
+    // An effect's removal is the stack's own op, and one op is all it takes:
+    // `Op::SetLayerEffects` prunes the edges, positions and badges naming the
+    // box that went, inside the same commit, so this is one write and one undo
+    // step exactly as a driver's removal is.
     final effect = _effectIdOf(node);
     if (effect == null) return;
     try {
-      if (kept.length != _graph!.wiring.edges.length) {
-        layer.setGraph(
-          drivers: layer.getGraphDrivers(),
-          wiring: _wiringNow(edges: kept),
-        );
-      }
       for (final instance in layer.getEffects()) {
         if (instance.id() == effect) {
           layer.removeEffect(effect: instance);
@@ -676,14 +668,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// `newDriver` deliberately does not commit, because dropping a node is
   /// rarely the whole gesture (docs/17, "The layer graph").
   ///
-  /// ponytail: the auto-wire is a **second** op rather than folded into the
-  /// add's own commit as docs/impl/node-graph.md §3 asks, because nothing on
-  /// the seam names a driver's ports before the node is in the document —
-  /// `list_drivers` answers with name/label/category and `new_driver` hands
-  /// back a staged instance whose *outputs* only appear once `get_graph` can
-  /// derive them. Upgrade path: carry the declared ports on `BridgeEffectInfo`
-  /// (the engine already has them in `Signature::Data`), and the wire folds
-  /// back into the add.
+  /// **The wire rides in the same commit as the box** (docs/impl/node-graph.md
+  /// §3), which is what makes "drag a wire out, pick a driver" one undo step
+  /// rather than two. It can, because a catalogue entry carries the ports it
+  /// declares — the socket is known before the node is in the document.
   void _addDriver(BridgeEffectInfo info) {
     final layer = _layer;
     final at = _searchAt;
@@ -700,11 +688,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final ref = BridgeNodeRef.driver(made.id());
     _positions[graphNodeKey(ref)] = at;
 
+    final edges = [..._graph!.wiring.edges];
+    final joined =
+        _autoWire && wire != null ? _autoWireEdge(ref, info, wire) : null;
+    if (joined != null) {
+      // An occupied input is re-routed rather than doubled (§1.1), the same
+      // rule `_connect` applies to a wire drawn by hand.
+      edges.removeWhere((e) => e.to == joined.to);
+      edges.add(joined);
+    }
     try {
       layer.setGraph(
         drivers: [...layer.getGraphDrivers(), made],
         wiring: BridgeGraphWiring(
-          edges: _graph!.wiring.edges,
+          edges: edges,
           layout: [
             ..._wiringNow().layout,
             BridgeNodePosition(node: ref, x: at.dx, y: at.dy),
@@ -718,30 +715,41 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _ui?.model.refresh();
     _reload();
     setState(() => _selected = ref);
-    if (_autoWire && wire != null) _autoWireTo(ref, wire);
   }
 
-  /// Join the wire that was in hand to the first socket of the freshly added
-  /// box whose type matches it.
+  /// The wire joining the box about to be added to the wire in hand, or null
+  /// when none of the sockets it declares fits.
   ///
-  /// Every socket the box *declares* is considered, not only the ones drawn:
-  /// an unexposed box shows nothing but the picture's own path, and auto-wire
-  /// is about what the node can take, not about what is on screen.
-  void _autoWireTo(BridgeNodeRef added, _Socket wire) {
-    final key = graphNodeKey(added);
-    final node =
-        _graph!.nodes.where((n) => graphNodeKey(n.node) == key).firstOrNull;
-    if (node == null) return;
+  /// Every socket the entry *declares* is considered, not only the ones the box
+  /// would draw: an unexposed box shows nothing but the picture's own path, and
+  /// auto-wire is about what the node can take, not about what is on screen.
+  /// The ports come from the catalogue entry rather than from the read model,
+  /// which is what lets this be worked out before the node is committed.
+  BridgeGraphEdge? _autoWireEdge(
+    BridgeNodeRef added,
+    BridgeEffectInfo info,
+    _Socket wire,
+  ) {
     // A wire let go of an output looks for an input on the new box, and the
     // other way about.
-    for (final port in wire.isInput ? node.outputs : node.inputs) {
+    for (final port in wire.isInput ? info.outputs : info.inputs) {
       final socket = _Socket(added, port, !wire.isInput, Offset.zero);
-      if (_accepts(wire, socket)) {
-        _connect(wire, socket);
-        return;
-      }
+      if (!_accepts(wire, socket)) continue;
+      final source = _outputRef(wire.isInput ? socket : wire);
+      final dest = _inputRef(wire.isInput ? wire : socket);
+      if (source == null || dest == null) continue;
+      return BridgeGraphEdge(from: source, to: dest);
     }
+    return null;
   }
+
+  /// Whether any socket this catalogue entry declares could take the wire in
+  /// hand — the same type rule [_accepts] applies on the canvas, asked of a box
+  /// that does not exist yet. It is what the Tab search filters by, so picking
+  /// an entry from the list can never fail to connect.
+  bool _fitsWire(BridgeEffectInfo info, _Socket wire) =>
+      (wire.isInput ? info.outputs : info.inputs).any((port) =>
+          !_isChainType(port.portType) && port.portType == wire.port.portType);
 
   // --- Pointer work -------------------------------------------------------
 
@@ -1084,10 +1092,15 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final at = _searchAt!;
     final needle = _search.text.trim().toLowerCase();
     final all = (widget.driversLister ?? listDrivers)();
+    // With a wire in hand the list is the entries that wire could actually land
+    // on, which is what makes the footer's sentence true: pick one and it is
+    // connected. Without one, everything.
+    final wire = _searchWire;
     final shown = [
       for (final d in all)
-        if (needle.isEmpty ||
-            engineLabel(d.label).toLowerCase().contains(needle))
+        if ((needle.isEmpty ||
+                engineLabel(d.label).toLowerCase().contains(needle)) &&
+            (wire == null || _fitsWire(d, wire)))
           d,
     ];
     final screen = at * _zoom + _pan;
@@ -1179,9 +1192,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                 border: Border(top: BorderSide(color: t.hairline)),
               ),
               child: Text(
-                _searchWire == null
-                    ? l10n.graphSearchAdds
-                    : l10n.graphSearchWires,
+                wire == null ? l10n.graphSearchAdds : l10n.graphSearchWires,
                 style: t.kicker.copyWith(letterSpacing: 0.54),
               ),
             ),
