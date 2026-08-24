@@ -280,6 +280,7 @@ mod tests {
         let item = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: item,
                 name: "clip.mp4".into(),
                 media: MediaRef {

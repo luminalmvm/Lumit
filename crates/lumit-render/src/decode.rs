@@ -2,7 +2,6 @@
 //! verbatim from app_state.rs.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
 use std::sync::Arc;
@@ -19,7 +18,7 @@ pub struct FramePixels {
 pub struct Request {
     pub generation: u64,
     pub item: Uuid,
-    pub path: PathBuf,
+    pub source: lumit_media::MediaSource,
     pub frame: usize,
     pub target_width: Option<u32>,
     /// The file is missing (docs/07 §3.3): answer with the test-bar slate at
@@ -33,7 +32,9 @@ pub struct Request {
 pub struct CompJob {
     pub layer: Uuid,
     pub item: Uuid,
-    pub path: PathBuf,
+    /// One media file, or the numbered run of stills this item is (K-439) —
+    /// whichever it is, the decode worker opens it the same way.
+    pub source: lumit_media::MediaSource,
     pub source_frame: usize,
     pub target_width: Option<u32>,
     /// The source's native pixel size, independent of the decode width.
@@ -467,9 +468,9 @@ fn decode(
             // decoder opens with, so the first preview frame of a session
             // costs a read rather than a fresh packet scan of the file.
             let index =
-                crate::media_index::load_or_build_index(&req.path).map_err(|e| e.to_string())?;
+                crate::media_index::load_or_build_index(&req.source).map_err(|e| e.to_string())?;
             let dec =
-                lumit_media::VideoDecoder::open(&req.path, index).map_err(|e| e.to_string())?;
+                lumit_media::VideoDecoder::open(&req.source, index).map_err(|e| e.to_string())?;
             e.insert(dec)
         }
     };
@@ -496,20 +497,32 @@ fn decode(
 
 impl PreviewEngine {
     /// Ask for a frame; any not-yet-decoded older request is abandoned.
-    pub fn request(&self, item: Uuid, path: PathBuf, frame: usize, target_width: Option<u32>) {
-        self.request_inner(item, path, frame, target_width, None);
+    pub fn request(
+        &self,
+        item: Uuid,
+        source: lumit_media::MediaSource,
+        frame: usize,
+        target_width: Option<u32>,
+    ) {
+        self.request_inner(item, source, frame, target_width, None);
     }
 
     /// As [`Self::request`], but answers with the missing-footage slate at
     /// `size` rather than decoding (docs/07 §3.3).
     pub fn request_slate(&self, item: Uuid, size: (u32, u32)) {
-        self.request_inner(item, PathBuf::new(), 0, None, Some(size));
+        self.request_inner(
+            item,
+            lumit_media::MediaSource::default(),
+            0,
+            None,
+            Some(size),
+        );
     }
 
     fn request_inner(
         &self,
         item: Uuid,
-        path: PathBuf,
+        source: lumit_media::MediaSource,
         frame: usize,
         target_width: Option<u32>,
         slate: Option<(u32, u32)>,
@@ -518,7 +531,7 @@ impl PreviewEngine {
         let _ = self.tx.send(Message::Footage(Request {
             generation,
             item,
-            path,
+            source,
             frame,
             target_width,
             slate,
@@ -639,7 +652,7 @@ fn decode_comp(
         let req = Request {
             generation: 0,
             item: job.item,
-            path: job.path.clone(),
+            source: job.source.clone(),
             frame: job.source_frame,
             target_width: job.target_width,
             slate: None, // the comp path builds its slate below, from natural size
@@ -669,7 +682,7 @@ fn decode_comp(
                 let nreq = Request {
                     generation: 0,
                     item: job.item,
-                    path: job.path.clone(),
+                    source: job.source.clone(),
                     frame,
                     target_width: job.target_width,
                     slate: None,
@@ -749,7 +762,7 @@ fn decode_comp(
             let req2 = Request {
                 generation: req.generation,
                 item: req.item,
-                path: job.path.clone(),
+                source: job.source.clone(),
                 frame: ceil,
                 target_width: req.target_width,
                 slate: None,
@@ -828,7 +841,7 @@ mod tests {
         let hit = pool.decode_footage(&Request {
             generation: 0,
             item,
-            path: PathBuf::from("Z:/definitely/not/here/gone.mp4"),
+            source: lumit_media::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
             frame: 3,
             target_width: Some(64),
             slate: None,
@@ -841,7 +854,7 @@ mod tests {
             .decode_footage(&Request {
                 generation: 0,
                 item,
-                path: PathBuf::from("Z:/definitely/not/here/gone.mp4"),
+                source: lumit_media::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
                 frame: 3,
                 target_width: None,
                 slate: None,
@@ -876,7 +889,7 @@ mod tests {
             pool.decode_footage(&Request {
                 generation: 0,
                 item: Uuid::now_v7(),
-                path: file.clone(),
+                source: lumit_media::MediaSource::file(file.clone()),
                 frame: 40,
                 target_width: None,
                 slate: None,
@@ -926,7 +939,7 @@ mod tests {
             pool.decode_footage(&Request {
                 generation: 0,
                 item: Uuid::now_v7(),
-                path: file.clone(),
+                source: lumit_media::MediaSource::file(file.clone()),
                 frame: 40,
                 target_width: None,
                 slate: None,

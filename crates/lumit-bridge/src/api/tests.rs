@@ -42,6 +42,7 @@ fn project_with_folder() -> (
     let project = LumitBridgeState::new_project(None).expect("a new project");
 
     let filed = FootageItem {
+        sequence: None,
         id: Uuid::now_v7(),
         name: "filed.mp4".into(),
         media: MediaRef {
@@ -53,6 +54,7 @@ fn project_with_folder() -> (
         extra: serde_json::Map::new(),
     };
     let loose = FootageItem {
+        sequence: None,
         id: Uuid::now_v7(),
         name: "loose.mp4".into(),
         media: MediaRef {
@@ -227,6 +229,7 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
     // from another machine leaves them.
     let old_root = std::path::Path::new("/nowhere/Set Me Free Edit");
     let footage = |name: &str, folder: &str| FootageItem {
+        sequence: None,
         id: Uuid::now_v7(),
         name: name.into(),
         media: MediaRef {
@@ -436,6 +439,99 @@ fn a_work_area_is_clamped_to_the_composition() {
     assert!(comp.set_work_area(Some(span(-80, -40))).is_err());
     let still = comp.get_work_area().expect("read").expect("a span");
     assert_eq!(comp.frame_at_time(still.in_point).expect("frame"), 0);
+}
+
+/// **A folder of numbered stills is one item, not two thousand** (K-439).
+///
+/// The front door's whole promise: pick any file of a run and the run comes in,
+/// named for its span, pointed at its first frame — and picking the rest of the
+/// files afterwards (which is what selecting the whole folder does) hands back
+/// the item that is already there rather than filing it again.
+#[test]
+fn a_run_of_numbered_stills_imports_once_whichever_file_is_picked() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    for n in 1..=5u32 {
+        std::fs::write(
+            dir.path().join(format!("frame{n:04}.png")),
+            b"not really a png",
+        )
+        .expect("write");
+    }
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let first = project
+        .import_footage(
+            dir.path()
+                .join("frame0003.png")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("imported");
+    let roots = project.get_items().expect("roots");
+    assert_eq!(
+        roots.first().map(|i| i.name().expect("name")),
+        Some("frame[0001-0005].png".to_owned()),
+        "the panel says what the run is and where it stops"
+    );
+
+    for n in 1..=5u32 {
+        let again = project
+            .import_footage(
+                dir.path()
+                    .join(format!("frame{n:04}.png"))
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+            .expect("imported");
+        assert_eq!(again.id(), first.id(), "file {n} is the same item");
+    }
+    assert_eq!(project.get_items().expect("roots").len(), 1);
+}
+
+/// A numbered file with no numbered neighbours is a still, and a folder of
+/// numbered *clips* is a folder of clips — neither becomes a sequence (K-439).
+#[test]
+fn a_lone_still_and_a_run_of_clips_import_as_they_always_did() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join("poster0001.png"), b"x").expect("write");
+    for n in 1..=3u32 {
+        std::fs::write(dir.path().join(format!("take{n:04}.mp4")), b"x").expect("write");
+    }
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    project
+        .import_footage(
+            dir.path()
+                .join("poster0001.png")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("imported");
+    assert_eq!(
+        project
+            .get_items()
+            .expect("roots")
+            .first()
+            .map(|i| i.name().expect("name")),
+        Some("poster0001.png".to_owned()),
+        "a still with no neighbours keeps its own file name"
+    );
+
+    for n in 1..=3u32 {
+        project
+            .import_footage(
+                dir.path()
+                    .join(format!("take{n:04}.mp4"))
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+            .expect("imported");
+    }
+    assert_eq!(
+        project.get_items().expect("roots").len(),
+        4,
+        "three clips and the still, each its own item"
+    );
 }
 
 #[test]

@@ -1372,10 +1372,10 @@ impl CompositionReference {
     fn has_picture(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
         #[cfg(feature = "media")]
         {
-            let Some(path) = FootageReference::resolve_path(state, footage) else {
+            let Some(src) = FootageReference::resolve_source(state, footage) else {
                 return true;
             };
-            let Some(info) = crate::probe::ensure_probed(&path) else {
+            let Some(info) = crate::probe::ensure_probed(&src) else {
                 return true;
             };
             info.video.is_some()
@@ -1392,7 +1392,7 @@ impl CompositionReference {
     fn runs_as_video(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
         #[cfg(feature = "media")]
         {
-            let Some(path) = FootageReference::resolve_path(state, footage) else {
+            let Some(src) = FootageReference::resolve_source(state, footage) else {
                 return false;
             };
             // `ensure_probed`, not the prober: the file was queued for the
@@ -1400,7 +1400,7 @@ impl CompositionReference {
             // probes here and now when it is not, because `add_footage_layer`
             // is synchronous and must answer with what the file actually is
             // rather than with a guess it would have to revise.
-            let Some(info) = crate::probe::ensure_probed(&path) else {
+            let Some(info) = crate::probe::ensure_probed(&src) else {
                 return false;
             };
             let Some(video) = info.video.as_ref() else {
@@ -1436,10 +1436,10 @@ impl CompositionReference {
 
         #[cfg(feature = "media")]
         {
-            let Some(path) = FootageReference::resolve_path(state, footage) else {
+            let Some(src) = FootageReference::resolve_source(state, footage) else {
                 return fallback;
             };
-            let Some(info) = crate::probe::ensure_probed(&path) else {
+            let Some(info) = crate::probe::ensure_probed(&src) else {
                 return fallback;
             };
             let frames = (info.duration_seconds * comp.frame_rate.fps()).round() as i64;

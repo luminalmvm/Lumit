@@ -1314,6 +1314,7 @@ mod tests {
         let mut doc = Document::new();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: media,
                 name: "shot.mov".into(),
                 media: lumit_core::model::MediaRef {

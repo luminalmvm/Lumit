@@ -223,6 +223,7 @@ fn add_footage(doc: &mut Document, name: &str, path: &Path) -> Uuid {
             fingerprint: None,
             extra: serde_json::Map::new(),
         },
+        sequence: None,
         extra: serde_json::Map::new(),
     }));
     item

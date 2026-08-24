@@ -941,6 +941,7 @@ mod tests {
 
     fn footage(name: &str) -> FootageItem {
         FootageItem {
+            sequence: None,
             id: Uuid::now_v7(),
             name: name.into(),
             extra: serde_json::Map::new(),
@@ -1426,6 +1427,7 @@ mod tests {
 
     fn footage_item(name: &str, rel: &str, abs: &str) -> lumit_core::model::ProjectItem {
         lumit_core::model::ProjectItem::Footage(lumit_core::model::FootageItem {
+            sequence: None,
             id: Uuid::now_v7(),
             name: name.into(),
             media: media_ref(rel, abs, None),
@@ -1792,6 +1794,30 @@ mod tests {
         assert_eq!(back.absolute_path, "");
         assert_eq!(back.relative_path, m.relative_path);
         assert_eq!(back.fingerprint, m.fingerprint);
+    }
+
+    /// **A sequence costs a project that has none nothing at all** (K-439). The
+    /// field is skipped when unset, so every project saved before image
+    /// sequences existed round-trips byte-for-byte — and a project that *does*
+    /// have one carries its rate back exactly, because a rate that went through
+    /// a float would not (docs/14 §2).
+    #[test]
+    fn a_sequence_saves_only_when_there_is_one_and_keeps_its_exact_rate() {
+        let plain = footage("clip.mp4");
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("sequence"),
+            "an ordinary file must not grow a sequence field: {json}"
+        );
+
+        let mut run = footage("shot[0001-0100].exr");
+        run.sequence = Some(lumit_core::model::SequenceRef {
+            frame_rate: lumit_core::time::FrameRate::new(24000, 1001).unwrap(),
+            extra: serde_json::Map::new(),
+        });
+        let back: lumit_core::model::FootageItem =
+            serde_json::from_str(&serde_json::to_string(&run).unwrap()).unwrap();
+        assert_eq!(back.sequence_fps(), Some((24000, 1001)));
     }
 
     /// **A project's own cache location travels with it.** The whole reason it

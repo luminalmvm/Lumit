@@ -78,15 +78,67 @@ pub struct MediaRef {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+/// A footage item that is a folder of numbered stills rather than one file
+/// (docs/03-DATA-MODEL.md §3, K-439).
+///
+/// Deliberately just the rate. Which files are in the run, where it starts and
+/// how long it is are re-read from the folder every time it is opened, because
+/// the files on disk are the truth about a sequence and a saved copy of them
+/// would only ever be a stale one. The rate is the exception: stills carry no
+/// frame rate of their own, so it is the one thing about a sequence nobody but
+/// the project can say.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SequenceRef {
+    /// The rate the run plays at. Defaults to 25 on import (K-439).
+    pub frame_rate: FrameRate,
+    /// Unknown fields from newer Lumit versions, preserved on load/save
+    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl Default for SequenceRef {
+    fn default() -> Self {
+        Self {
+            frame_rate: FrameRate::FPS_25,
+            extra: serde_json::Map::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FootageItem {
     pub id: Uuid,
     pub name: String,
     pub media: MediaRef,
+    /// Set when this item is an image sequence: `media` then names *a* file of
+    /// the numbered run — usually the first — and the item's frames are the
+    /// run's files in numeric order (K-439).
+    ///
+    /// Absent, and skipped on save, for the ordinary one-file case, so every
+    /// project written before sequences existed round-trips byte for byte.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<SequenceRef>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl FootageItem {
+    /// The rate to read a numbered run of stills at, or `None` when this item
+    /// is one ordinary file (K-439).
+    ///
+    /// The exact pair, never `fps()`: a rate that goes through a float does not
+    /// come back (docs/14 §2). This is what everything that opens media builds
+    /// its `lumit_media::MediaSource` from — the engine crates cannot see
+    /// `lumit-media`, so the pair is what crosses.
+    #[must_use]
+    pub fn sequence_fps(&self) -> Option<(u32, u32)> {
+        self.sequence
+            .as_ref()
+            .map(|s| (s.frame_rate.num(), s.frame_rate.den()))
+    }
 }
 
 /// A shared solid definition (docs/03-DATA-MODEL.md §2): solids are assets,

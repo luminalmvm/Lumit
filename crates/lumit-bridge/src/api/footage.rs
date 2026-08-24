@@ -91,6 +91,26 @@ impl FootageReference {
         }
     }
 
+    /// [`Self::resolve_path`] together with what kind of media the item says it
+    /// is: one file, or the numbered run that file belongs to (K-439).
+    ///
+    /// Everything that probes, indexes or decodes footage asks for this rather
+    /// than the bare path, because for an image sequence the two are different
+    /// questions — the path is the file that gets stat-ed and relinked, the run
+    /// is what actually plays.
+    pub(crate) fn resolve_source(
+        p: &LumitBridgeState,
+        f: &FootageItem,
+    ) -> Option<lumit_media::MediaSource> {
+        Some(lumit_media::MediaSource {
+            path: Self::resolve_path(p, f)?,
+            sequence_fps: f
+                .sequence
+                .as_ref()
+                .map(|s| (s.frame_rate.num(), s.frame_rate.den())),
+        })
+    }
+
     /// Point this footage item at `path`, and fix every *other* missing item
     /// that moved the same way — one undo step for the lot.
     ///
@@ -261,11 +281,11 @@ impl FootageReference {
         let proj = self.project()?;
         let mut proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
 
-        let Some(path) = ({
+        let Some(src) = ({
             let snapshot = proj.store.snapshot();
             match snapshot.item(self.id) {
                 Some(lumit_core::model::ProjectItem::Footage(footage)) => {
-                    Self::resolve_path(&proj, footage)
+                    Self::resolve_source(&proj, footage)
                 }
                 _ => None,
             }
@@ -275,7 +295,7 @@ impl FootageReference {
 
         let id = self.id;
         Ok(
-            crate::media::thumbnail_from_path(&mut proj.media, id, max_edge, &path, 0).map(
+            crate::media::thumbnail_from_path(&mut proj.media, id, max_edge, &src, 0).map(
                 |(width, height, rgba)| BridgeRenderedFrame {
                     // A thumbnail is of the media's own first frame, not of a
                     // composition — there is no playhead behind it to report.
@@ -309,10 +329,10 @@ impl FootageReference {
         let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(self.id) else {
             return Err(BridgeError::InvalidItem);
         };
-        let Some(path) = Self::resolve_path(&proj, footage) else {
+        let Some(src) = Self::resolve_source(&proj, footage) else {
             return Ok(None);
         };
-        let Some(info) = crate::probe::ensure_probed(&path) else {
+        let Some(info) = crate::probe::ensure_probed(&src) else {
             return Ok(None);
         };
 
@@ -349,9 +369,10 @@ impl FootageReference {
             lumit_core::model::ProjectItem::Footage(footage_item) => {
                 // An unresolvable path is missing media, same as one that
                 // resolves but no longer decodes.
-                let Some(path) = Self::resolve_path(&proj, footage_item) else {
+                let Some(src) = Self::resolve_source(&proj, footage_item) else {
                     return Ok(LumitMediaStatus::Missing);
                 };
+                let path = src.path.clone();
                 // Whether a file is *there* is not a question for the decoder,
                 // and a media-less build used to answer "ready" for a path that
                 // plainly was not on disk (K-273). Asking the filesystem costs
@@ -373,7 +394,7 @@ impl FootageReference {
                 #[cfg(not(feature = "media"))]
                 let probed = true;
                 #[cfg(feature = "media")]
-                let probed = crate::probe::ensure_probed(&path).is_some();
+                let probed = crate::probe::ensure_probed(&src).is_some();
 
                 if probed {
                     Ok(LumitMediaStatus::Ready)

@@ -535,6 +535,7 @@ fn example_doc(
     let mut footage = |name: &str, path: &std::path::Path| {
         let item = id(name);
         doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
             id: item,
             name: name.into(),
             media: MediaRef {

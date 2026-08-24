@@ -2025,30 +2025,30 @@ impl LayerReference {
             // video frame is slow enough that holding the project across it
             // stalls every other reader, and the render worker is one of them
             // (docs/14 §3). The lock comes back only to store the result.
-            let (path, at, cached) = {
+            let (src, at, cached) = {
                 let proj = project.read().map_err(|_| BridgeError::ReadFailed)?;
                 let doc = proj.store.snapshot();
                 let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
                     return Ok(None);
                 };
-                let Some(path) = crate::api::footage::FootageReference::resolve_path(&proj, f)
+                let Some(src) = crate::api::footage::FootageReference::resolve_source(&proj, f)
                 else {
                     return Ok(None);
                 };
                 // The media's own rate turns its seconds into its frames.
-                let fps = crate::probe::ensure_probed(&path)
+                let fps = crate::probe::ensure_probed(&src)
                     .and_then(|i| i.video.as_ref().map(|v| v.fps()))
                     .filter(|fps| *fps > 0.0)
                     .unwrap_or(1.0);
                 let at = (opens_at * fps).round() as i64;
                 let cached = crate::media::thumb_cached(&proj.media, item, max_edge, at);
-                (path, at, cached)
+                (src, at, cached)
             };
 
             let thumb = match cached {
                 Some(hit) => hit,
                 None => {
-                    let Some(decoded) = crate::media::thumb_decode(&path, max_edge, at) else {
+                    let Some(decoded) = crate::media::thumb_decode(&src, max_edge, at) else {
                         return Ok(None);
                     };
                     if let Ok(mut proj) = project.write() {
@@ -3066,11 +3066,11 @@ impl LayerReference {
 
         #[cfg(feature = "media")]
         {
-            let Some(path) = crate::api::footage::FootageReference::resolve_path(&proj, footage)
+            let Some(src) = crate::api::footage::FootageReference::resolve_source(&proj, footage)
             else {
                 return Ok(false);
             };
-            Ok(crate::probe::ensure_probed(&path)
+            Ok(crate::probe::ensure_probed(&src)
                 .map(|p| p.video.is_some())
                 .unwrap_or(false))
         }
@@ -3111,11 +3111,11 @@ impl LayerReference {
 
         #[cfg(feature = "media")]
         {
-            let Some(path) = crate::api::footage::FootageReference::resolve_path(&proj, footage)
+            let Some(src) = crate::api::footage::FootageReference::resolve_source(&proj, footage)
             else {
                 return Ok(false);
             };
-            Ok(crate::probe::ensure_probed(&path)
+            Ok(crate::probe::ensure_probed(&src)
                 .map(|p| p.audio.is_some())
                 .unwrap_or(false))
         }
@@ -3263,8 +3263,8 @@ impl LayerReference {
                 let Some(lumit_core::model::ProjectItem::Footage(footage)) = doc.item(item) else {
                     return None;
                 };
-                let path = crate::api::footage::FootageReference::resolve_path(&proj, footage)?;
-                let info = crate::probe::ensure_probed(&path)?;
+                let src = crate::api::footage::FootageReference::resolve_source(&proj, footage)?;
+                let info = crate::probe::ensure_probed(&src)?;
                 // The one sanctioned route back from the container's floating
                 // point duration is an explicit grid (docs/impl/rational-time.md
                 // §4) — the same millisecond grid `media_info` reports on.

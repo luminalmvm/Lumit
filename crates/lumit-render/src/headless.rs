@@ -462,7 +462,7 @@ impl lumit_cache::ByteSized for FrameTexture {
 /// under [`HeadlessRenderer::preload_decoded`] makes that render a cache hit.
 pub struct PrefetchWant {
     pub item: Uuid,
-    pub path: PathBuf,
+    pub source: lumit_media::MediaSource,
     pub frame: usize,
     pub target_width: Option<u32>,
 }
@@ -1222,7 +1222,7 @@ impl HeadlessRenderer {
             let mut want = |frame: usize| {
                 wants.push(PrefetchWant {
                     item: job.item,
-                    path: job.path.clone(),
+                    source: job.source.clone(),
                     frame,
                     target_width: job.target_width,
                 });
@@ -2099,13 +2099,13 @@ impl HeadlessRenderer {
             let probe = self
                 .probe_cache
                 .entry(f.id)
-                .or_insert_with(|| probe_item(&footage_path(f)));
+                .or_insert_with(|| probe_item(&footage_source(f)));
             match probe {
                 Probe::Ok { fps, frames, .. } => {
                     self.items.insert(
                         f.id,
                         ItemInfo {
-                            path: footage_path(f),
+                            source: footage_source(f),
                             fps: *fps,
                             frames: *frames,
                             missing: None,
@@ -2121,7 +2121,7 @@ impl HeadlessRenderer {
                     self.items.insert(
                         f.id,
                         ItemInfo {
-                            path: footage_path(f),
+                            source: footage_source(f),
                             fps: 1.0,
                             frames: 1,
                             missing: Some(slate),
@@ -2283,6 +2283,15 @@ fn footage_path(f: &FootageItem) -> PathBuf {
     }
 }
 
+/// [`footage_path`] together with what the item says it is: one file, or the
+/// numbered run of stills that file belongs to (K-439).
+fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
+    lumit_media::MediaSource {
+        path: footage_path(f),
+        sequence_fps: f.sequence_fps(),
+    }
+}
+
 /// Probe one footage path into a [`Probe`]. A path that is not a file, an
 /// unreadable file, or one whose frame index will not build falls to
 /// [`Probe::Slate`] — none of them is an error, they are the states the slate
@@ -2291,17 +2300,17 @@ fn footage_path(f: &FootageItem) -> PathBuf {
 /// no slate, no picture at all, since flagging a valid audio-only source as
 /// "missing" would be actively wrong. A clean video caches its exact rate and
 /// frame count, warming the on-disk frame index so the decoder open reuses it.
-fn probe_item(path: &Path) -> Probe {
-    if !path.is_file() {
+fn probe_item(src: &lumit_media::MediaSource) -> Probe {
+    if !src.on_disk().is_file() {
         return Probe::Slate;
     }
-    let Ok(probe) = lumit_media::probe::probe(path) else {
+    let Ok(probe) = lumit_media::probe::probe(src) else {
         return Probe::Slate;
     };
     let Some(video) = probe.video.as_ref() else {
         return Probe::NoVideo;
     };
-    let Ok(index) = crate::media_index::load_or_build_index(path) else {
+    let Ok(index) = crate::media_index::load_or_build_index(src) else {
         return Probe::Slate;
     };
     Probe::Ok {
@@ -2561,6 +2570,7 @@ mod tests {
         let id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id,
                 name: name.into(),
                 media: lumit_core::model::MediaRef {
@@ -3136,6 +3146,7 @@ mod tests {
         let item_id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: item_id,
                 name: "gone.mp4".into(),
                 media: lumit_core::model::MediaRef {
@@ -4071,6 +4082,7 @@ surfaces:
                 let mut doc = Document::new();
                 let item = Uuid::now_v7();
                 doc.items.push(ProjectItem::Footage(FootageItem {
+                    sequence: None,
                     id: item,
                     name: "fixture.mp4".into(),
                     media: lumit_core::model::MediaRef {
@@ -4400,6 +4412,7 @@ surfaces:
             let item = Uuid::now_v7();
             doc.items
                 .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                    sequence: None,
                     id: item,
                     name: "fixture.mp4".into(),
                     media: lumit_core::model::MediaRef {
@@ -4496,6 +4509,7 @@ surfaces:
             let item = Uuid::now_v7();
             doc.items
                 .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                    sequence: None,
                     id: item,
                     name: "fixture.mp4".into(),
                     media: lumit_core::model::MediaRef {
@@ -5159,6 +5173,7 @@ surfaces:
         let item = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: item,
                 name: "fixture.mp4".into(),
                 media: lumit_core::model::MediaRef {

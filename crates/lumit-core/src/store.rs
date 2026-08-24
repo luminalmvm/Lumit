@@ -389,6 +389,7 @@ mod tests {
         let comp = test_comp();
         let comp_id = comp.id;
         let footage = FootageItem {
+            sequence: None,
             id: Uuid::now_v7(),
             name: "capture.mp4".into(),
             extra: serde_json::Map::new(),

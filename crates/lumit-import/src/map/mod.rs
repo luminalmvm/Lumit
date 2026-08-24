@@ -315,6 +315,7 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             fingerprint: None,
             extra: serde_json::Map::new(),
         },
+        sequence: None,
         // Everything AE knew about how to read the file. Lumit has no field
         // for most of it yet; the `ae` namespace keeps it until it does.
         extra: ae_map(vec![

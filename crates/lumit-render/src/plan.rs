@@ -280,7 +280,10 @@ pub fn collect_comp_jobs(
                     jobs.push(CompJob {
                         layer: layer.id,
                         item,
-                        path: PathBuf::from(&f.media.absolute_path),
+                        source: lumit_media::MediaSource {
+                            path: PathBuf::from(&f.media.absolute_path),
+                            sequence_fps: f.sequence_fps(),
+                        },
                         source_frame,
                         target_width,
                         natural_w: nat_w,
@@ -332,7 +335,10 @@ pub fn collect_comp_jobs(
                     jobs.push(CompJob {
                         layer: layer.id,
                         item: *item,
-                        path: PathBuf::from(&f.media.absolute_path),
+                        source: lumit_media::MediaSource {
+                            path: PathBuf::from(&f.media.absolute_path),
+                            sequence_fps: f.sequence_fps(),
+                        },
                         source_frame: 0,
                         target_width: None,
                         natural_w: comp.width,
@@ -419,7 +425,10 @@ pub fn collect_comp_jobs(
                 jobs.push(CompJob {
                     layer: layer.id,
                     item: *item,
-                    path: PathBuf::from(&f.media.absolute_path),
+                    source: lumit_media::MediaSource {
+                        path: PathBuf::from(&f.media.absolute_path),
+                        sequence_fps: f.sequence_fps(),
+                    },
                     source_frame,
                     target_width,
                     natural_w: nat_w,
@@ -510,7 +519,12 @@ impl CompJob {
         let mut h = blake3::Hasher::new();
         h.update(b"decode/1/");
         h.update(self.item.as_bytes());
-        h.update(self.path.to_string_lossy().as_bytes());
+        h.update(self.source.path.to_string_lossy().as_bytes());
+        // A run of stills read at a different rate is a different picture at
+        // the same frame number, so the rate is part of the name (K-439).
+        let (num, den) = self.source.sequence_fps.unwrap_or((0, 0));
+        h.update(&num.to_le_bytes());
+        h.update(&den.to_le_bytes());
         h.update(&self.source_frame.to_le_bytes());
         h.update(&self.target_width.unwrap_or(u32::MAX).to_le_bytes());
         h.update(&[u8::from(self.slate)]);
@@ -698,7 +712,7 @@ mod tests {
         CompJob {
             layer,
             item,
-            path: PathBuf::from("a.mp4"),
+            source: lumit_media::MediaSource::file("a.mp4"),
             source_frame,
             target_width: None,
             natural_w: 8,
@@ -800,6 +814,7 @@ mod tests {
             let mut doc = Document::new();
             let item = Uuid::now_v7();
             doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
                 id: item,
                 name: "f".into(),
                 media: MediaRef {
@@ -928,6 +943,7 @@ mod tests {
             let mut doc = Document::new();
             let item = Uuid::now_v7();
             doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
                 id: item,
                 name: "f".into(),
                 media: MediaRef {
@@ -1052,6 +1068,7 @@ mod tests {
         let mut doc = Document::new();
         let item = Uuid::now_v7();
         doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
             id: item,
             name: "f".into(),
             media: MediaRef {

@@ -43,7 +43,9 @@ impl ExportHandle {
 /// Everything the export thread needs about one footage item.
 #[derive(Clone)]
 pub struct ItemInfo {
-    pub path: PathBuf,
+    /// Where the pixels come from: one file, or the numbered run of stills the
+    /// item names one file of (K-439).
+    pub source: lumit_media::MediaSource,
     pub fps: f64,
     pub frames: usize,
     /// The file could not be found (docs/07 §3.3): render the test-bar slate
@@ -650,7 +652,10 @@ pub fn item_infos(
             map.insert(
                 f.id,
                 ItemInfo {
-                    path: PathBuf::from(&f.media.absolute_path),
+                    source: lumit_media::MediaSource {
+                        path: PathBuf::from(&f.media.absolute_path),
+                        sequence_fps: f.sequence_fps(),
+                    },
                     fps,
                     frames,
                     missing: None,
@@ -664,7 +669,10 @@ pub fn item_infos(
             map.insert(
                 f.id,
                 ItemInfo {
-                    path: PathBuf::from(&f.media.absolute_path),
+                    source: lumit_media::MediaSource {
+                        path: PathBuf::from(&f.media.absolute_path),
+                        sequence_fps: f.sequence_fps(),
+                    },
                     fps: 1.0,
                     frames: 1,
                     missing: Some(slate_size),
