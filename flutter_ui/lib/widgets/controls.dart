@@ -1985,21 +1985,35 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => widget.onChanged(!widget.value),
-        child: Container(
+        // The mockups' checkbox (K-450): a 9px outlined box whose checked
+        // state is a 5px block of the primary text colour — no accent, which
+        // also puts the control inside §3.1's accent discipline. The 14px
+        // container stays as the hit target around the smaller mark; the
+        // focus ring reads in the animated token, like a focused value well.
+        child: SizedBox(
           width: 14,
           height: 14,
-          decoration: BoxDecoration(
-            color: widget.value ? t.accent : t.surface3,
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(
-                color: _focused
-                    ? t.accent
-                    : (widget.value ? t.accent : t.hairlineStrong),
-                width: _focused ? 1.5 : 1),
+          child: Center(
+            child: Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(1),
+                border: Border.all(
+                    color: _focused ? t.animated : t.textMuted,
+                    width: _focused ? 1.5 : 1),
+              ),
+              child: widget.value
+                  ? Center(
+                      child: Container(
+                        width: 5,
+                        height: 5,
+                        color: t.textPrimary,
+                      ),
+                    )
+                  : null,
+            ),
           ),
-          child: widget.value
-              ? CustomPaint(painter: _TickPainter(t.surface0))
-              : null,
         ),
       ),
     );
@@ -2080,27 +2094,6 @@ class _HouseRadioState extends State<HouseRadio> {
       ),
     );
   }
-}
-
-class _TickPainter extends CustomPainter {
-  final Color color;
-  const _TickPainter(this.color);
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6
-      ..strokeCap = StrokeCap.round;
-    final path = Path()
-      ..moveTo(size.width * 0.22, size.height * 0.52)
-      ..lineTo(size.width * 0.44, size.height * 0.74)
-      ..lineTo(size.width * 0.8, size.height * 0.28);
-    canvas.drawPath(path, p);
-  }
-
-  @override
-  bool shouldRepaint(_TickPainter old) => old.color != color;
 }
 
 /// How much a scrub tick is worth right now, from the modifier keys — the
@@ -2414,8 +2407,8 @@ class _DragValueFieldState extends State<DragValueField>
                 // Mono while focused too — the number must not change width
                 // between reading it and typing over it (§7.1) — the same
                 // size as the resting number, so nothing reflows on the click.
-                style:
-                    t.mono.copyWith(fontSize: wellTextSize, color: t.textPrimary),
+                style: t.mono
+                    .copyWith(fontSize: wellTextSize, color: t.textPrimary),
                 cursorColor: t.accent,
                 backgroundCursorColor: t.surface2,
                 selectionColor: t.accent.withValues(alpha: 0.5),
