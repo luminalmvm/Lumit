@@ -948,6 +948,22 @@ class LumitTheme {
   /// rather than a trip round the wheel.
   List<Color> get backgroundPresets =>
       const [Color(0xFF000000), Color(0xFFFFFFFF)];
+
+  /// The five accents the Settings drawing offers as one click each: Lumit's
+  /// own, then a blue, a green, an amber and a violet.
+  ///
+  /// The same five in every scheme, and deliberately: an accent is the one
+  /// colour the user is choosing *for* the chrome rather than out of it, so it
+  /// cannot be mirrored per mode without the swatch under the pointer changing
+  /// meaning as the theme does. The full wheel is still a click away in the
+  /// theme editor — these are the quick answers, not the whole answer.
+  static const List<Color> accentPresets = [
+    Color(0xFFE05A72),
+    Color(0xFF4AA3E0),
+    Color(0xFF46C98E),
+    Color(0xFFE0A33C),
+    Color(0xFFA06CE0),
+  ];
 }
 
 /// A colour that comes from the *document* (a solid's swatch, a comp

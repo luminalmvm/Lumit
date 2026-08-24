@@ -2025,6 +2025,107 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
   }
 }
 
+/// The pill switch the approved **dialog** drawings put on a plain on/off
+/// setting: a 22×12 track with an 8px knob that slides from one end to the
+/// other.
+///
+/// In plain terms, this is the switch you flick — the thing a phone's settings
+/// screen uses — as opposed to [HouseCheckbox], the little box you tick. Both
+/// say the same thing; which one a surface draws is the drawing's business,
+/// and the Settings window's drawing asks for this.
+///
+/// On is `animated`, the amber the drawing computes, **not** the accent:
+/// §3.1's accent discipline gives the accent to the single filled action and
+/// to focus, and a page of switches would spend it a dozen times over. Off is
+/// the same `hairline_strong` rule every inert edge takes.
+class HouseToggle extends StatefulWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const HouseToggle({super.key, required this.value, required this.onChanged});
+
+  @override
+  State<HouseToggle> createState() => _HouseToggleState();
+}
+
+class _HouseToggleState extends State<HouseToggle> {
+  bool _focused = false;
+  final ControlFocusNode _focusNode = ControlFocusNode(debugLabel: 'toggle');
+
+  /// The track, and the knob that runs inside it. The drawing's own numbers.
+  static const double _width = 22;
+  static const double _height = 12;
+  static const double _knob = 8;
+  static const double _inset = 2;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    return FocusableActionDetector(
+      focusNode: _focusNode,
+      shortcuts: _activateShortcuts,
+      actions: <Type, Action<Intent>>{
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) {
+          widget.onChanged(!widget.value);
+          return null;
+        }),
+      },
+      onFocusChange: (has) => setState(() => _focused = has),
+      mouseCursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => widget.onChanged(!widget.value),
+        // The focus ring is drawn on a box *around* the pill rather than on
+        // the pill itself, so taking focus never moves the switch by a pixel —
+        // and the 26×16 box is a kinder hit target than a 22×12 one.
+        child: Container(
+          width: _width + 4,
+          height: _height + 4,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(_height / 2 + 2),
+            border: Border.all(
+              color: _focused ? t.accent : const Color(0x00000000),
+            ),
+          ),
+          child: AnimatedContainer(
+            duration: animationDuration(scope.animationLevel),
+            width: _width,
+            height: _height,
+            decoration: BoxDecoration(
+              color: widget.value ? t.animated : t.hairlineStrong,
+              borderRadius: BorderRadius.circular(_height / 2),
+            ),
+            child: Stack(
+              children: [
+                AnimatedPositioned(
+                  duration: animationDuration(scope.animationLevel),
+                  left: widget.value ? _width - _knob - _inset : _inset,
+                  top: _inset,
+                  child: Container(
+                    width: _knob,
+                    height: _knob,
+                    decoration: BoxDecoration(
+                      color: t.surface0,
+                      borderRadius: BorderRadius.circular(_knob / 2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One of a set of choices, where the set is exclusive — the dot beside a
 /// sentence. [HouseCheckbox] is the independent one; this is the one that says
 /// "this, and therefore not that". Disabled it still shows which way the
