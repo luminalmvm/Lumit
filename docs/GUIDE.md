@@ -8861,7 +8861,7 @@ has before that driver exists.
 **Points** are the fifth kind of thing a wire carries: not a picture but a crowd of
 positions — where every particle of a particle system is this frame, how fast each is
 moving, how old each is. Particulate (K-446) is the first thing that makes them, and
-§22 explains the whole idea in plain terms. The type was defined with the graph, before
+§23 explains the whole idea in plain terms. The type was defined with the graph, before
 anything emitted one, so that Particulate and its future relatives (scatter, clone to
 points, connect points) plug into sockets that already exist rather than needing the
 plumbing rebuilt around them.
@@ -8981,7 +8981,7 @@ writing a delivery file in a colour space Lumit cannot currently compute would p
 wrong file, and a wrong file that looks finished is worse than an export that asks you to
 relink the config first.
 
-## 22. Particulate and the points stream, in plain terms
+## 23. Particulate and the points stream, in plain terms
 
 A particle system makes many small things — sparks, dust, snow — that are born, drift
 about, and fade away. The usual way to build one is a **simulation**: every frame takes
