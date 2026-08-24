@@ -12,6 +12,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/keyframe_controls_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -306,6 +307,48 @@ void main() {
       tf = p.layer.getTransform();
       expect((tf.positionX as BridgeScalar_Keyframed).field0, hasLength(1));
       expect((tf.positionY as BridgeScalar_Keyframed).field0, hasLength(1));
+    });
+
+    /// **The fold-out's hit target** (docs/15 §5). The two layouts share one
+    /// button builder, and when the Effect controls panel's fixed columns
+    /// arrived (K-443) the horizontal padding was dropped to nothing for
+    /// *both* — which is right for the columns, whose 18px the button's own
+    /// reserved edge already fills, and wrong for the Timeline's fold-out,
+    /// whose buttons quietly shrank by 6px and became harder to hit.
+    testWidgets('the Timeline fold-out keeps its padded buttons',
+        (tester) async {
+      final p = withLayer();
+      Widget controls({required bool fixedColumns}) => KeyframeControlsFrb(
+            scalars: [opacityOf(p.layer)],
+            comp: p.comp,
+            playheadFrame: 0,
+            onSeek: (_) {},
+            onWrite: (_) {},
+            rowKey: fixedColumns ? 'fixed' : 'loose',
+            fixedColumns: fixedColumns,
+          );
+
+      await tester.pumpWidget(hostPanel(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            controls(fixedColumns: false),
+            controls(fixedColumns: true),
+          ],
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      final loose =
+          tester.getSize(find.byKey(const ValueKey('kf-stopwatch-loose')));
+      final fixed =
+          tester.getSize(find.byKey(const ValueKey('kf-stopwatch-fixed')));
+      expect(loose.width, fixed.width + 6,
+          reason: '3px either side, as the fold-out always had');
+      expect(fixed.width, 18,
+          reason: 'the fixed columns are measured in unpadded buttons (K-443)');
     });
 
     // Without the built library there is nothing to test against; the harness

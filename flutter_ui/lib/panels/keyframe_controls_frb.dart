@@ -355,7 +355,6 @@ class KeyframeControlsFrb extends StatelessWidget {
     required Widget child,
     required VoidCallback onPressed,
     bool enabled = true,
-    double pad = 0,
   }) =>
       HouseButton(
         key: ValueKey<String>(keyName),
@@ -363,10 +362,15 @@ class KeyframeControlsFrb extends StatelessWidget {
         small: true,
         // No vertical padding: the icon is 16 px and an Effect controls row
         // gives its controls 18 (`fxRowHeight`), which the border then fills.
-        // Padding on top of that spilled the icon out of the row. Horizontally
-        // it is nothing at all: the button's own always-reserved 1px edge
-        // already brings a 16px glyph to the 18px the columns are measured in.
-        padding: EdgeInsets.symmetric(horizontal: pad),
+        // Padding on top of that spilled the icon out of the row.
+        //
+        // Horizontally the two layouts differ. On the fixed columns it is
+        // nothing at all: the button's own always-reserved 1px edge already
+        // brings a 16px glyph to the 18px those columns are measured in, and
+        // any more would burst them. The Timeline's fold-out is not measured in
+        // those columns, so it keeps the 3px it always had — losing it shrank
+        // its buttons and made them harder to hit.
+        padding: EdgeInsets.symmetric(horizontal: fixedColumns ? 0 : 3),
         onPressed: enabled ? onPressed : null,
         child: child,
       );

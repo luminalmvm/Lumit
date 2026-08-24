@@ -26,6 +26,7 @@ import 'package:flutter/widgets.dart';
 import '../icons/icons.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/dashed_outline.dart';
 
 /// **The fixed column edges** (K-443, docs/15 §12A.3). Every row in the panel
 /// lays out on the same four x positions: the stopwatch, then a keyframe-
@@ -146,6 +147,12 @@ class FxSection extends StatelessWidget {
   /// `Escape` while renaming: close the editor and keep the old name (K-323).
   final VoidCallback? onRenameCancelled;
 
+  /// False while the effect is **bypassed**. The heading takes a dashed outline
+  /// (docs/15 §5) and the rows below stop answering the pointer — but nothing
+  /// fades, because the reason to look at a bypassed effect is to read what it
+  /// was set to. Sections that cannot be switched off leave it true.
+  final bool enabled;
+
   const FxSection({
     super.key,
     required this.title,
@@ -164,6 +171,7 @@ class FxSection extends StatelessWidget {
     this.renaming = false,
     this.onRenamed,
     this.onRenameCancelled,
+    this.enabled = true,
   });
 
   @override
@@ -172,7 +180,11 @@ class FxSection extends StatelessWidget {
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _draggableHeading(t),
+        // Bypassed: the heading wears a dashed outline instead of the stack
+        // being dimmed (docs/15 §5).
+        enabled
+            ? _draggableHeading(t)
+            : DashedOutline(child: _draggableHeading(t)),
         if (open)
           for (final row in rows)
             Container(

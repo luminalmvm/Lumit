@@ -22,6 +22,7 @@ import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
 import 'package:lumit_flutter/icons/lumit_icon.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
+import 'package:lumit_flutter/widgets/dashed_outline.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -339,6 +340,22 @@ void main() {
       await tester.pump();
       expect(p.layer.getEffects().first.enabled(), isFalse,
           reason: 'bypassing an effect is a document edit, not a view state');
+
+      // **Bypassed draws as a dashed outline, not a dimmed row** (docs/15 §5).
+      // The rows stop answering the pointer, but nothing fades: the reason to
+      // look at a bypassed effect is to read what it is set to.
+      expect(find.byType(DashedOutline), findsOneWidget,
+          reason: 'the bypassed heading wears the outline; the live one does '
+              'not');
+      expect(
+        find.descendant(
+          of: find.byType(EffectParamRowFrb),
+          matching: find.byWidgetPredicate((w) => w is Opacity && w.opacity < 1,
+              description: 'a dimmed row'),
+        ),
+        findsNothing,
+        reason: 'the 40% dim is gone — the outline carries the state',
+      );
 
       // Reorder: right-click the second card's heading and move it up (K-276
       // put the two arrows' rare job in a menu and gave their space to the

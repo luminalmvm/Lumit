@@ -273,16 +273,14 @@ class EffectParamRowFrb extends StatelessWidget {
   /// schema declares — all three store a float, differing only in the control
   /// drawn over it; a colour animates per channel, which the swatch has no
   /// room to key.
-  /// Draw `child` as a greyed row when another parameter has taken it over.
+  /// Draw `child` as a quiet row when another parameter has taken it over.
   ///
-  /// Faded **and** deaf: [IgnorePointer] is what makes the greying honest, since
-  /// a control that still answers a drag while looking disabled is worse than
-  /// one that never dimmed. The value stays legible — you can read what Focus
-  /// distance *would* be — because greying says "this is not the one in charge",
-  /// not "this is gone".
-  Widget _greyed(Widget child) => enabled
-      ? child
-      : IgnorePointer(child: Opacity(opacity: 0.4, child: child));
+  /// Deaf but **not** faded (docs/15 §5): [IgnorePointer] is what makes it
+  /// honest, since a control that still answers a drag while looking disabled
+  /// is worse than one that never changed. The dimming is gone — the label
+  /// already carries `text_disabled`, and the value stays fully legible, so you
+  /// can read what Focus distance *would* be. Being off is not being gone.
+  Widget _greyed(Widget child) => enabled ? child : IgnorePointer(child: child);
 
   BridgeScalar? _animatableScalarOf(BridgeEffectValue? value) {
     // Int is a Float value with integer display (docs/08 §1.2), and a Slider is
@@ -1264,11 +1262,11 @@ class EffectPointRowFrb extends StatelessWidget {
       overflow: TextOverflow.ellipsis,
     );
 
-    // Faded and deaf together: a control that still answers a drag while
-    // looking disabled is worse than one that never dimmed.
-    Widget greyed(Widget child) => enabled
-        ? child
-        : IgnorePointer(child: Opacity(opacity: 0.4, child: child));
+    // Deaf, not faded (docs/15 §5): a control that still answers a drag while
+    // looking disabled is worse than one that never changed, and the label's
+    // `text_disabled` says which it is without hiding the number.
+    Widget greyed(Widget child) =>
+        enabled ? child : IgnorePointer(child: child);
 
     Widget field(BridgeParamInfo param, BridgeScalar? scalar) {
       if (scalar == null) return Text('—', style: t.small);

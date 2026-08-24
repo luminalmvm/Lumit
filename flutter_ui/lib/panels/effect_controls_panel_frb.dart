@@ -662,6 +662,9 @@ class _EffectSection extends StatelessWidget {
       onRenamed: onRenamed,
       onRenameCancelled: onRenameCancelled,
       twirlKey: ValueKey<String>('fx-twirl-$id'),
+      // Bypassed draws as a dashed outline round the heading (docs/15 §5), not
+      // as a faded stack: the values stay readable while the effect is off.
+      enabled: info.enabled,
       leading: LumitTooltip(
         message: info.enabled ? l10n.tipDisable : l10n.tipEnable,
         child: HouseCheckbox(
