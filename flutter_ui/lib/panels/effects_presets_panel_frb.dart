@@ -8,6 +8,15 @@
 // The list comes from `listEffects`, which is the engine's own schema order, so
 // the panel never holds a copy of what effects exist. Adding a built-in to the
 // engine puts it here with no Dart change at all.
+//
+// **Every heading twirls.** A category — and the saved-preset group above them
+// — folds its rows away behind the set's triangle, the same one the Timeline
+// and the Project panel fold with: right is shut, down is open. Which headings
+// are shut is *view* state, so it lives in this widget and dies with the
+// session rather than crossing the bridge. A search overrides it: while the
+// field has something in it every match shows, whatever was folded, because a
+// search that hides what it found is a trap. Clearing the field puts the folds
+// back exactly as they were.
 
 import 'dart:io';
 
@@ -55,6 +64,25 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// The saved-preset library, read once and after each save — not per
   /// rebuild, which would scan a folder on every search keystroke.
   List<BridgePresetInfo> _presets = const [];
+
+  /// The headings the user has folded shut, by engine category name. Nothing
+  /// here goes to the engine: which groups are open is how this panel is being
+  /// looked at, not part of the document (the Project panel's `_closedFolders`
+  /// keeps its folders the same way).
+  final Set<String> _shut = <String>{};
+
+  /// The saved-preset group's name in [_shut]. No engine category is called
+  /// this, so one set holds the presets and the categories without collision.
+  static const String _presetsKey = '*saved-presets';
+
+  /// Whether a heading's rows are showing. A live search opens every group
+  /// that still has a match in it, without disturbing what was folded — so
+  /// clearing the field puts the folds back as they were.
+  bool _isOpen(String key, String needle) =>
+      needle.isNotEmpty || !_shut.contains(key);
+
+  void _toggle(String key) =>
+      setState(() => _shut.contains(key) ? _shut.remove(key) : _shut.add(key));
 
   @override
   void initState() {
@@ -144,17 +172,19 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
               children: [
                 ...presetRows,
                 for (final entry in grouped.entries) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
-                    child: Text(headings[entry.key] ?? entry.key,
-                        style: t.small.copyWith(color: t.textMuted)),
+                  _heading(
+                    t,
+                    group: entry.key,
+                    label: headings[entry.key] ?? entry.key,
+                    open: _isOpen(entry.key, needle),
                   ),
-                  for (final effect in entry.value)
-                    _EffectRow(
-                      key: ValueKey<String>('fx-item-${effect.name}'),
-                      effect: effect,
-                      onApply: () => _apply(ui, effect.name),
-                    ),
+                  if (_isOpen(entry.key, needle))
+                    for (final effect in entry.value)
+                      _EffectRow(
+                        key: ValueKey<String>('fx-item-${effect.name}'),
+                        effect: effect,
+                        onApply: () => _apply(ui, effect.name),
+                      ),
                 ],
               ],
             );
@@ -179,29 +209,60 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     setState(() {});
   }
 
+  /// A heading and its twirl: the whole strip is the target, the way the
+  /// Timeline's section headers are, and the triangle points right while the
+  /// rows under it are away.
+  Widget _heading(
+    LumitTheme t, {
+    required String group,
+    required String label,
+    required bool open,
+  }) =>
+      GestureDetector(
+        key: ValueKey<String>('fx-group-$group'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _toggle(group),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 6, 10, 2),
+          child: Row(
+            children: [
+              lumitIcon(
+                open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                size: iconSize,
+                color: t.textMuted,
+              ),
+              const SizedBox(width: 2),
+              Expanded(
+                child: Text(label,
+                    style: t.small.copyWith(color: t.textMuted),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+        ),
+      );
+
   List<Widget> _presetRows(LumitTheme t, LumitUiState ui, String needle) {
     final shown = _presets
         .where((p) => needle.isEmpty || p.name.toLowerCase().contains(needle))
         .toList();
     if (shown.isEmpty) return const [];
+    final open = _isOpen(_presetsKey, needle);
     return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
-        child: Text(l10n.savedPresets,
-            style: t.small.copyWith(color: t.textMuted)),
-      ),
-      for (final preset in shown)
-        GestureDetector(
-          key: ValueKey<String>('preset-item-${preset.name}'),
-          behavior: HitTestBehavior.opaque,
-          onDoubleTap: () => _applyPreset(ui, preset),
-          child: Container(
-            height: 20,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            alignment: Alignment.centerLeft,
-            child: Text(preset.name, style: t.body),
+      _heading(t, group: _presetsKey, label: l10n.savedPresets, open: open),
+      if (open)
+        for (final preset in shown)
+          GestureDetector(
+            key: ValueKey<String>('preset-item-${preset.name}'),
+            behavior: HitTestBehavior.opaque,
+            onDoubleTap: () => _applyPreset(ui, preset),
+            child: Container(
+              height: 20,
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              alignment: Alignment.centerLeft,
+              child: Text(preset.name, style: t.body),
+            ),
           ),
-        ),
     ];
   }
 
@@ -238,7 +299,8 @@ class _EffectRow extends StatelessWidget {
       onDoubleTap: onApply,
       child: Container(
         height: 20,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        // Indented under the heading's own label, past the twirl's column.
+        padding: const EdgeInsets.symmetric(horizontal: 22),
         alignment: Alignment.centerLeft,
         child: Text(effect.label, style: t.body),
       ),

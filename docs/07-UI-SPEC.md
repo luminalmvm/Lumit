@@ -1878,8 +1878,14 @@ them, and apply to the plain text fields too.
 - A searchable tree: **built-in effects** by category ([08-EFFECTS.md](08-EFFECTS.md)),
   **OFX** and **LFX** plugins (labelled with their origin), **user presets**, and imported
   preset packs.
+- **Every heading twirls.** Each category — and the Presets group above them — carries the
+  set's triangle (right shut, down open) and folds its entries away; the whole heading strip
+  is the target, as the Timeline's section headers are. Groups arrive open, and which are
+  shut is *view* state: remembered for the session, never written to the document.
 - Search is fuzzy, matches names and categories, and filters the tree live. `Ctrl+F`
-  focuses search when the panel has focus.
+  focuses search when the panel has focus. **A live search overrides every fold** — matches
+  show wherever they sit, because a search that hides what it found is a trap — and clearing
+  the field puts the folds back as they were.
 - Apply by: double-click (applies to selected layers), drag onto a layer row in the
   Timeline, or drag onto the Viewer (applies to the topmost hit layer, which highlights
   before release).

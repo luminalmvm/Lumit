@@ -9,6 +9,8 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
+import 'package:lumit_flutter/icons/lumit_icons.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effects_presets_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -158,6 +160,107 @@ void main() {
           find.byKey(const ValueKey('fx-search')), 'zzz-nothing');
       await tester.pump();
       expect(find.byKey(const ValueKey('preset-item-Soft glow')), findsNothing);
+    });
+
+    /// **Every heading twirls.** The category folds its effects away and lets
+    /// them back, and the saved-preset group does the same.
+    testWidgets('a category twirls its effects away and back', (tester) async {
+      final p = withLayer();
+      final dir = Directory.systemTemp.createTempSync('lumit-preset-fold');
+      final path = '${dir.path}/glow.lumfx';
+      final donor = withLayer();
+      donor.layer.addEffect(name: 'blur');
+      File(path).writeAsStringSync(donor.layer.savePreset(name: 'Soft glow'));
+      await mount(tester, p,
+          presetsLister: () =>
+              [BridgePresetInfo(name: 'Soft glow', path: path)]);
+
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsOneWidget,
+          reason: 'every category arrives open');
+
+      await tester.tap(find.byKey(const ValueKey('fx-group-blur_sharpen')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsNothing,
+          reason: 'a shut category shows its heading and nothing else');
+      expect(
+          find.byKey(const ValueKey('fx-group-blur_sharpen')), findsOneWidget,
+          reason: 'the heading stays — it is the way back');
+
+      await tester.tap(find.byKey(const ValueKey('fx-group-blur_sharpen')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsOneWidget);
+
+      // The saved-preset group folds by the same gesture.
+      await tester.tap(find.byKey(const ValueKey('fx-group-*saved-presets')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('preset-item-Soft glow')), findsNothing);
+      expect(find.text('Saved presets'), findsOneWidget);
+    });
+
+    /// Each heading remembers its own state: folding one leaves the rest as
+    /// they were.
+    testWidgets('a fold is one category\'s, not the panel\'s', (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      // Whatever the engine's first non-blur effect is, so the test does not
+      // hold a second copy of the schema.
+      final other = listEffects()
+          .firstWhere((effect) => effect.category != 'blur_sharpen');
+
+      await tester.tap(find.byKey(const ValueKey('fx-group-blur_sharpen')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsNothing);
+      expect(
+          find.byKey(ValueKey<String>('fx-item-${other.name}')), findsOneWidget,
+          reason: 'the other categories were not touched');
+    });
+
+    /// **A search overrides the folds** — a search that hides what it found is
+    /// a trap — and clearing it puts them back exactly as they were.
+    testWidgets('a live search shows matches inside shut categories',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      await tester.tap(find.byKey(const ValueKey('fx-group-blur_sharpen')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsNothing);
+
+      await tester.enterText(find.byKey(const ValueKey('fx-search')), 'blur');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsOneWidget,
+          reason: 'a match shows whatever the heading over it was doing');
+
+      await tester.enterText(find.byKey(const ValueKey('fx-search')), '');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsNothing,
+          reason: 'the fold was remembered through the search, not discarded');
+    });
+
+    /// The glyph is the set's twirl: right while the category is shut, down
+    /// while it is open — the same pair the Timeline folds with.
+    testWidgets('the heading wears the set\'s twirl', (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      String twirl() => tester
+          .widget<glyph.LumitIcon>(find
+              .descendant(
+                of: find.byKey(const ValueKey('fx-group-blur_sharpen')),
+                matching: find.byType(glyph.LumitIcon),
+              )
+              .first)
+          .glyph;
+
+      expect(twirl(), LumitIcons.collapse,
+          reason: 'open is the triangle pointing down');
+
+      await tester.tap(find.byKey(const ValueKey('fx-group-blur_sharpen')));
+      await tester.pumpAndSettle();
+      expect(twirl(), LumitIcons.expand,
+          reason: 'shut is the triangle pointing right');
     });
 
     testWidgets('a file that is not a preset changes nothing', (tester) async {
