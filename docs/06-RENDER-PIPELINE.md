@@ -316,7 +316,9 @@ Every footage item carries a **colour-space tag** in its interpretation settings
 video streams are assumed Rec.709 (BT.1886 transfer), stills and screen/game captures sRGB,
 unless container metadata says otherwise; the user can override per item. Game captures — the
 primary v1 audience's material — therefore linearise through the sRGB/Rec.709 assumptions
-without configuration.
+without configuration. When the project names an OCIO config (K-490, §3.3), the tag's list of
+choices becomes the config's colour spaces beside the built-ins, and the item's baked input
+artefact replaces the fixed curves in the same decode pass.
 
 Decode path: hardware decode lands NV12/P010 in GPU memory ([05-ARCHITECTURE.md](05-ARCHITECTURE.md));
 one compute pass performs colour-matrix conversion, chroma upsampling, transfer-function
@@ -332,9 +334,19 @@ inside this stage). Nothing upstream of this blit is display-referred.
 
 Both the per-footage input transform and the display transform are implementations of one
 internal `ColourTransform` interface (shader source + optional LUT textures). v1 ships built-in
-transforms (sRGB, Rec.709/BT.1886, linear). **OCIO v2 integration is post-v1 but slots here**:
-an OCIO-backed `ColourTransform` generated from a config via OCIO's GPU shader API, transpiled
-to WGSL. Nothing else in the pipeline may assume the transform set is fixed.
+transforms (sRGB, Rec.709/BT.1886, linear). **OCIO fills the same slot** (K-489, K-490,
+[docs/impl/ocio.md](impl/ocio.md)): a project can name an OCIO config, whose colour spaces
+become the per-footage input choices, whose displays and views fill the Viewer's picker, and
+whose names the export can be written in. The config format is hosted **natively in Rust**
+(`lumit-colour`), never via the C++ library: every resolved transform is baked once, on the
+CPU, to a small deterministic artefact (factorised curves + matrix, or a shaper + 65³ cube
+sampled tetrahedrally), and that one artefact is what the decode pass, the display pass and
+the export's identical blit all sample — one implementation, so K-031 holds by construction.
+The working space stays fixed with OCIO at the edges (K-490). A missing or refused config
+degrades calmly to the built-ins for preview and refuses for export; fidelity against the
+reference library is gated by vendored golden fixtures, and a config using an unimplemented
+transform is refused by name, never approximated. Nothing else in the pipeline may assume
+the transform set is fixed.
 
 **Perceptual operations (K-034).** Linear RGB is correct for combining *light*; it is the
 wrong space for combining *colours as perceived*: a linear (or worse, gamma-space) lerp
@@ -954,9 +966,11 @@ invents nothing). This conversion is a pure CPU pass and is where the channels, 
 depth settings act.
 
 **Colour space.** The export's final transform is a setting, not an assumption: the built-in
-working-space → sRGB/Rec.709 encode today, and a **named** output space when OCIO lands (§2).
-The named form exists in the model now so a preset saved today names its space the way it will
-then; asking for one before OCIO exists is refused rather than approximated.
+working-space → sRGB/Rec.709 encode, and a **named** output space from the project's OCIO
+config (§3.3, K-489/K-490) — the export binds the named transform's baked artefact into the
+same display blit the Viewer runs, so preview equals export because they are the same
+dispatch. A name no loaded config answers is refused rather than approximated (K-479), and a
+file written through an OCIO name carries no container colour tag rather than a wrong one.
 
 **Crop and the region of interest.** An export can take pixels off each edge — `T · L · B · R`
 in **pixels at composition size** (K-419) — applied to the composited frame before any resize,
@@ -1042,6 +1056,3 @@ as the Viewer blit; budget < 0.5 ms at 4K. Never computed on the CPU.
   the cost threshold for persisting an intermediate needs tuning against real montage projects.
 - **Vertical reframe keyframing** — is the one-click vertical variant's reframe animatable in
   v1, or a static offset?
-- **OCIO config surface** — when OCIO lands, whether the working space becomes configurable
-  (ACEScg) or stays linear-Rec.709 with OCIO only at the ends. Nothing in this document may
-  assume either answer.
