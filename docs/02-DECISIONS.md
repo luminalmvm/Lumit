@@ -12735,3 +12735,66 @@ Regression tests: in `lumit-core`, `a_dashed_outline_leaves_gaps_in_itself`,
 `a_keyed_dash_is_read_on_the_layers_clock`, `an_undashed_item_is_absent_from_the_file`; in the
 bridge, `a_shapes_dashes_round_trip_and_are_clamped`; in Flutter, `a stroked shape item carries
 the dash rows`. New strings: `shapeDash`, `shapeGap`, `shapeDashOffset`.
+
+## K-453 — A shape item repeats itself, and the layer's box learns a clock to hold the copies
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-451 and K-452, whose
+shape it takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md)
+§7.2 and §7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and
+[impl/shape-layers.md](impl/shape-layers.md).
+
+Ten `Property` fields: `repeat_copies`, `repeat_offset`, `repeat_anchor_x/y`,
+`repeat_position_x/y`, `repeat_rotation`, `repeat_scale`, `repeat_start_opacity` and
+`repeat_end_opacity`. Copy *j* is drawn with the step transform raised to the power *j + offset* —
+move, turn and scale about the anchor — so the offset decides which copy the original geometry is
+and a negative one puts copies **behind** it. A still count of one is no repeater at all, is
+absent from the file, and draws byte-for-byte the pixels a shape drew before there was a repeater.
+
+**The layer's box now takes a time.** This is the change worth arguing about. K-451 kept the box
+the *untrimmed* one, because a trim only ever takes art away and a box that breathed as a write-on
+played would churn every cache keyed on it. A repeater is the opposite: it puts art **outside** the
+path, so a box that ignored it would draw the copies off the edge of the layer's own picture.
+`ShapeItem::bounds` and `contents_bounds` therefore take `t`, and the frontend measures a shape
+layer fresh rather than out of its revision-keyed cache.
+
+**The price is named rather than hidden.** A shape layer's position is pinned to its art box's
+corner (K-308), so a repeater *keyed* to grow up or left moves the box's corner and the art
+appears to slide. Stepping down and to the right — which is what a row of things or a clock face
+does — never moves the corner, and the alternative was a static box computed from the extremes of
+every keyed channel, which is not a bound under bezier overshoot and would clip at the very moment
+the animation is most visible. A wrong answer you can see and correct beat a wrong answer that
+looks like a rendering bug. The manual and GUIDE.md both say so.
+
+**A copy is a scaled drawing, not a scaled path.** The outline width and the dash lengths are
+multiplied by the copy's scale, or a copy at half size would carry an outline twice as heavy for
+its art and read as a different shape.
+
+**The copies are drawn last first**, so the original sits on top of everything made from it —
+After Effects' default composite, and the only order in which turning the count up does not hide
+the shape you already had. A Composite choice of its own is not built; nothing here stands in the
+way of one.
+
+**The ceiling is 100 copies**, and it is the rasteriser's, not the format's: every copy is a
+scanline pass over the whole layer, so an unbounded count is an unbounded frame. A count past it is
+**held** rather than refused, because the number is a slider and a slider that stops is kinder than
+a frame that does not arrive. Lifting it means teaching the mask rasteriser to work inside one
+copy's own box.
+
+**The order is trim, then dash, then repeat** (§7.2.1): the repeater copies whatever the other two
+drew.
+
+**Copies is the row that opens the rest.** The other nine appear only once there is more than one
+copy to step between — ten rows describing a step that does not exist would be ten promises the
+item cannot keep, which is K-452's rule for the dash rows applied again.
+
+Regression tests: in `lumit-core`, `a_repeater_draws_a_copy_at_every_step`,
+`the_box_grows_to_hold_the_copies`, `one_copy_is_no_repeater_at_all`,
+`the_copies_fade_from_the_first_to_the_last`, `a_scaled_copy_carries_a_scaled_outline`,
+`a_rotated_copy_turns_about_the_anchor`,
+`the_copy_count_is_held_at_the_ceiling_and_never_fractional`,
+`a_keyed_repeater_is_read_on_the_layers_clock`, `an_unrepeated_item_is_absent_from_the_file`; in
+the bridge, `a_shapes_repeater_round_trips_and_is_clamped`; in Flutter, `a repeated shape's box
+holds every copy` and `a repeated shape item carries the repeater rows`. New strings:
+`shapeRepeatCopies`, `shapeRepeatOffset`, `shapeRepeatAnchorX`, `shapeRepeatAnchorY`,
+`shapeRepeatPositionX`, `shapeRepeatPositionY`, `shapeRepeatRotation`, `shapeRepeatScale`,
+`shapeRepeatStartOpacity`, `shapeRepeatEndOpacity`.

@@ -499,7 +499,7 @@ pub fn build_comp_draws_at(
             // (K-237). Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
-                .then(|| lumit_core::shape::contents_bounds(contents))
+                .then(|| lumit_core::shape::contents_bounds(contents, lt))
                 .flatten()
                 .map(|(x0, y0, x1, y1)| {
                     let natural_w = (x1 - x0).max(1.0);

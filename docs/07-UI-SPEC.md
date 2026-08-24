@@ -514,6 +514,11 @@ there is something to say.
   (K-452): three dead rows on a fill-only shape would be three promises the item cannot keep.
   Writing either Dash or Gap on an item with no dash list makes the pair, so there is no separate
   "add dashes" gesture to find.
+- **Copies** appears under every item, and the repeater's other nine rows — Copy offset,
+  Repeater anchor x and y, Repeater position x and y, Repeater rotation, Repeater scale, Start
+  opacity and End opacity — appear only once there is more than one copy to step between
+  (K-453). Copies is the row that opens them, so there is no separate "add a repeater" gesture,
+  and an item drawn once carries one row rather than ten that describe nothing.
 - **All five shape tools drag out** between two opposite corners of the shape's box —
   whichever way round the drag went — with `Shift` keeping the box square. Rectangle and
   rounded rectangle fill the box; ellipse is inscribed in it; polygon and star are the regular

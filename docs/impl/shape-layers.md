@@ -127,6 +127,28 @@ and handing over several runs instead of one. Two things worth knowing:
   put two zeros in a list, and a row that reads zero until you type in it says
   the same thing with nothing to find.
 
+**The repeater.** The third modifier is the first that puts art where the path
+is not, and that is the whole of its difficulty. Three things fell out of it:
+
+* **The layer's box had to learn a clock.** A trim only ever takes art away, so
+  the box could stay the untrimmed one; a repeater *adds* art outside the path,
+  so the box has to hold the copies, and a keyed repeater moves them every
+  frame. `bounds` and `contents_bounds` take a time now, and the frontend
+  measures a shape layer fresh rather than from the revision-keyed cache. The
+  price is named in [../02-DECISIONS.md](../02-DECISIONS.md) K-453 and is real:
+  a repeater keyed to grow up or left slides the art, because a shape layer's
+  position is pinned to the box's corner.
+* **The transform is six numbers here, not a matrix type.** This is the only
+  place in `lumit-core` that composes transforms in the art's own space; a
+  dependency for six multiplications would be a dependency for six
+  multiplications. The frontend carries the same six for the wireframe, and the
+  two are tested to agree.
+* **The ceiling is the rasteriser, not the format.** Every copy is a scanline
+  pass over the whole layer, so a hundred copies is a hundred passes. A count
+  past `MAX_COPIES` is *held* rather than refused — the number is a slider —
+  and lifting the ceiling means teaching the mask rasteriser to work in one
+  copy's own box, which is a change over there rather than here.
+
 ## The trap to expect
 
 The wireframe and hit-testing (K-217) read a layer's *content size* to draw its

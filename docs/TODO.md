@@ -139,10 +139,10 @@ These are v1-scope surfaces it does not yet match.
 **Toolbar tools ([07-UI-SPEC.md](07-UI-SPEC.md) §1.7):** what is armed is a
 *tool*; what each tool then does is the backlog.
 - **Razor** - a Sequence layer's eased ramps refuse a cut (`UncuttableClip`).
-- **Shape layers** ([impl/shape-layers.md](impl/shape-layers.md)) - owed: nested
-    groups and the shape **modifiers** (repeater, trim paths, wiggle, offset
-    paths), gradient fills, dashed strokes, joins and caps other than round, and
-    animated paths.
+- **Shape layers** ([impl/shape-layers.md](impl/shape-layers.md)) - trim paths
+    (K-451), dashed strokes (K-452) and the repeater (K-453) have landed. Owed:
+    nested groups, the **wiggle** and **offset paths** modifiers, gradient
+    fills, joins and caps other than round, and animated paths.
 - **Path editing on the picture** - mask and shape-layer points drag (K-224,
     K-307). Still owed: a **paint stroke's** points, which are a stored gesture
     rather than a path and so are their own piece of work; no path's bezier

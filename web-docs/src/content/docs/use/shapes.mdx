@@ -46,8 +46,27 @@ the path. Both start at zero — a solid outline — so typing a Dash is what tu
 dashes on. Key the offset and the dashes march along the path.
 
 :::note[Not built yet]
-The repeater, offset paths, and gradient fills are planned but not.
+Offset paths and gradient fills are planned but not built yet.
 :::
+
+## The repeater
+
+Every shape group carries a **Copies** row. Turn it above one and the group is drawn
+that many times, each copy one more step along than the last, and nine more rows
+appear to describe the step: **Repeater position x** and **y**, **Repeater rotation**,
+**Repeater scale**, the **Repeater anchor** the turn and the scale happen about, and
+**Start opacity** and **End opacity**, which the copies fade evenly between.
+
+A position step gives a row of ticks; a rotation step about an anchor gives a clock
+face; both together with a scale under 100% gives a spiral. **Copy offset** says which
+copy the original art is, so a negative number puts copies behind it. A copy is a
+scaled drawing, not a scaled path — halve the scale and the outline and the dashes
+halve with it.
+
+The layer's box grows to hold the copies, and the layer's position stays pinned to
+that box's corner, so a repeater keyed to grow upwards or leftwards moves the art as
+it plays. Step down and to the right, or key the layer's position to match. The count
+stops at 100 copies.
 
 ## Related
 

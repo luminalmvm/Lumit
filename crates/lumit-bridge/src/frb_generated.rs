@@ -10015,6 +10015,17 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_dashes = <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         let mut var_dashOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatCopies = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatAnchorX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatAnchorY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatPositionX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatPositionY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatRotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatScale = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatStartOpacity =
+            <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatEndOpacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeShapeItem {
             id: var_id,
             name: var_name,
@@ -10029,6 +10040,16 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             trim_offset: var_trimOffset,
             dashes: var_dashes,
             dash_offset: var_dashOffset,
+            repeat_copies: var_repeatCopies,
+            repeat_offset: var_repeatOffset,
+            repeat_anchor_x: var_repeatAnchorX,
+            repeat_anchor_y: var_repeatAnchorY,
+            repeat_position_x: var_repeatPositionX,
+            repeat_position_y: var_repeatPositionY,
+            repeat_rotation: var_repeatRotation,
+            repeat_scale: var_repeatScale,
+            repeat_start_opacity: var_repeatStartOpacity,
+            repeat_end_opacity: var_repeatEndOpacity,
         };
     }
 }
@@ -13757,6 +13778,16 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.trim_offset.into_into_dart().into_dart(),
             self.dashes.into_into_dart().into_dart(),
             self.dash_offset.into_into_dart().into_dart(),
+            self.repeat_copies.into_into_dart().into_dart(),
+            self.repeat_offset.into_into_dart().into_dart(),
+            self.repeat_anchor_x.into_into_dart().into_dart(),
+            self.repeat_anchor_y.into_into_dart().into_dart(),
+            self.repeat_position_x.into_into_dart().into_dart(),
+            self.repeat_position_y.into_into_dart().into_dart(),
+            self.repeat_rotation.into_into_dart().into_dart(),
+            self.repeat_scale.into_into_dart().into_dart(),
+            self.repeat_start_opacity.into_into_dart().into_dart(),
+            self.repeat_end_opacity.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -15641,6 +15672,16 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
         <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.dashes, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.dash_offset, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_copies, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_offset, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_anchor_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_anchor_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_position_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_position_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_rotation, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_scale, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_start_opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_end_opacity, serializer);
     }
 }
 

@@ -137,14 +137,62 @@ final class FoldShapeRow extends LayerFoldRow {
 /// (K-451). The trim's three are the first of them.
 /// [dash] and [gap] are the first pair of the item's dash list (K-452), which
 /// is where a dashed outline is set from: writing either into an item that has
-/// no list makes one.
-enum ShapeValue { trimStart, trimEnd, trimOffset, dash, gap, dashOffset }
+/// no list makes one. The repeater's ten (K-453) are the count, which copy the
+/// original is, and the step every copy is one more of.
+enum ShapeValue {
+  trimStart,
+  trimEnd,
+  trimOffset,
+  dash,
+  gap,
+  dashOffset,
+  repeatCopies,
+  repeatOffset,
+  repeatAnchorX,
+  repeatAnchorY,
+  repeatPositionX,
+  repeatPositionY,
+  repeatRotation,
+  repeatScale,
+  repeatStartOpacity,
+  repeatEndOpacity,
+}
 
 /// Which of a shape item's numbers are the dashes' — shown only under an item
 /// that actually has an outline to dash.
 bool isDashValue(ShapeValue value) => switch (value) {
       ShapeValue.dash || ShapeValue.gap || ShapeValue.dashOffset => true,
       _ => false,
+    };
+
+/// The most copies the engine draws of one repeated item — `MAX_COPIES` in
+/// `lumit-core`'s `shape.rs` (K-453). The row stops where the engine does, so
+/// a slider dragged to its end asks for a frame that arrives.
+const double maxShapeCopies = 100;
+
+/// Which of a shape item's numbers describe the **step** the repeater takes
+/// (K-453) — everything but the count itself, which is the row that turns the
+/// repeater on and so is always there to find.
+bool isRepeatStepValue(ShapeValue value) => switch (value) {
+      ShapeValue.trimStart ||
+      ShapeValue.trimEnd ||
+      ShapeValue.trimOffset ||
+      ShapeValue.dash ||
+      ShapeValue.gap ||
+      ShapeValue.dashOffset ||
+      ShapeValue.repeatCopies =>
+        false,
+      _ => true,
+    };
+
+/// True once the item is drawn more than once — a still count of one is no
+/// repeater at all, which is what every shape is until somebody asks for more.
+bool isRepeated(BridgeShapeItem item) => switch (item.repeatCopies) {
+      BridgeScalar_Static(:final field0) => field0 > 1,
+      // Keyed, or driven by an expression: the count is more than one
+      // somewhere in the animation, so the rows that shape it belong on
+      // screen.
+      _ => true,
     };
 
 /// One of a shape item's numbers on a row of its own under it (K-451). A row
@@ -372,6 +420,16 @@ String shapeValueLabel(ShapeValue value) => switch (value) {
       ShapeValue.dash => l10n.shapeDash,
       ShapeValue.gap => l10n.shapeGap,
       ShapeValue.dashOffset => l10n.shapeDashOffset,
+      ShapeValue.repeatCopies => l10n.shapeRepeatCopies,
+      ShapeValue.repeatOffset => l10n.shapeRepeatOffset,
+      ShapeValue.repeatAnchorX => l10n.shapeRepeatAnchorX,
+      ShapeValue.repeatAnchorY => l10n.shapeRepeatAnchorY,
+      ShapeValue.repeatPositionX => l10n.shapeRepeatPositionX,
+      ShapeValue.repeatPositionY => l10n.shapeRepeatPositionY,
+      ShapeValue.repeatRotation => l10n.shapeRepeatRotation,
+      ShapeValue.repeatScale => l10n.shapeRepeatScale,
+      ShapeValue.repeatStartOpacity => l10n.shapeRepeatStartOpacity,
+      ShapeValue.repeatEndOpacity => l10n.shapeRepeatEndOpacity,
     };
 
 /// The first pair of an item's dash list, or a still zero where it has none —
@@ -390,33 +448,73 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
       ShapeValue.dash => _dashAt(item, 0),
       ShapeValue.gap => _dashAt(item, 1),
       ShapeValue.dashOffset => item.dashOffset,
+      ShapeValue.repeatCopies => item.repeatCopies,
+      ShapeValue.repeatOffset => item.repeatOffset,
+      ShapeValue.repeatAnchorX => item.repeatAnchorX,
+      ShapeValue.repeatAnchorY => item.repeatAnchorY,
+      ShapeValue.repeatPositionX => item.repeatPositionX,
+      ShapeValue.repeatPositionY => item.repeatPositionY,
+      ShapeValue.repeatRotation => item.repeatRotation,
+      ShapeValue.repeatScale => item.repeatScale,
+      ShapeValue.repeatStartOpacity => item.repeatStartOpacity,
+      ShapeValue.repeatEndOpacity => item.repeatEndOpacity,
     };
+
+/// [item] with whatever is named replaced and everything else carried over.
+///
+/// The **one** place that lists a shape item's fields. Four gestures copy an
+/// item — a value row, a rename, an opacity drag and a point drag — and a
+/// modifier added to three of them and forgotten in the fourth would be a
+/// setting that quietly reset itself when you dragged something else.
+BridgeShapeItem shapeItemWith(
+  BridgeShapeItem item, {
+  String? name,
+  List<BridgeVertex>? vertices,
+  double? opacity,
+  ShapeValue? value,
+  BridgeScalar? to,
+}) {
+  BridgeScalar at(ShapeValue which, BridgeScalar was) =>
+      value == which ? to! : was;
+  return BridgeShapeItem(
+    id: item.id,
+    name: name ?? item.name,
+    vertices: vertices ?? item.vertices,
+    closed: item.closed,
+    fill: item.fill,
+    stroke: item.stroke,
+    strokeWidth: item.strokeWidth,
+    opacity: opacity ?? item.opacity,
+    trimStart: at(ShapeValue.trimStart, item.trimStart),
+    trimEnd: at(ShapeValue.trimEnd, item.trimEnd),
+    trimOffset: at(ShapeValue.trimOffset, item.trimOffset),
+    // Writing a dash or a gap into an item that has neither makes the pair:
+    // there is no separate "add dashes" gesture, and a list of one would only
+    // be read as a pair anyway.
+    dashes: switch (value) {
+      ShapeValue.dash => [to!, _dashAt(item, 1)],
+      ShapeValue.gap => [_dashAt(item, 0), to!],
+      _ => item.dashes,
+    },
+    dashOffset: at(ShapeValue.dashOffset, item.dashOffset),
+    repeatCopies: at(ShapeValue.repeatCopies, item.repeatCopies),
+    repeatOffset: at(ShapeValue.repeatOffset, item.repeatOffset),
+    repeatAnchorX: at(ShapeValue.repeatAnchorX, item.repeatAnchorX),
+    repeatAnchorY: at(ShapeValue.repeatAnchorY, item.repeatAnchorY),
+    repeatPositionX: at(ShapeValue.repeatPositionX, item.repeatPositionX),
+    repeatPositionY: at(ShapeValue.repeatPositionY, item.repeatPositionY),
+    repeatRotation: at(ShapeValue.repeatRotation, item.repeatRotation),
+    repeatScale: at(ShapeValue.repeatScale, item.repeatScale),
+    repeatStartOpacity:
+        at(ShapeValue.repeatStartOpacity, item.repeatStartOpacity),
+    repeatEndOpacity: at(ShapeValue.repeatEndOpacity, item.repeatEndOpacity),
+  );
+}
 
 /// [item] with the one number [value] names replaced.
 BridgeShapeItem shapeWithScalar(
         BridgeShapeItem item, ShapeValue value, BridgeScalar to) =>
-    BridgeShapeItem(
-      id: item.id,
-      name: item.name,
-      vertices: item.vertices,
-      closed: item.closed,
-      fill: item.fill,
-      stroke: item.stroke,
-      strokeWidth: item.strokeWidth,
-      opacity: item.opacity,
-      trimStart: value == ShapeValue.trimStart ? to : item.trimStart,
-      trimEnd: value == ShapeValue.trimEnd ? to : item.trimEnd,
-      trimOffset: value == ShapeValue.trimOffset ? to : item.trimOffset,
-      // Writing a dash or a gap into an item that has neither makes the pair:
-      // there is no separate "add dashes" gesture, and a list of one would
-      // only be read as a pair anyway.
-      dashes: switch (value) {
-        ShapeValue.dash => [to, _dashAt(item, 1)],
-        ShapeValue.gap => [_dashAt(item, 0), to],
-        _ => item.dashes,
-      },
-      dashOffset: value == ShapeValue.dashOffset ? to : item.dashOffset,
-    );
+    shapeItemWith(item, value: value, to: to);
 
 /// A key's position on the comp's frame axis, computed Dart-side from its
 /// exact time and the comp's rate so a paint never crosses the bridge for it.
@@ -752,6 +850,10 @@ List<LayerFoldRow> layerFoldRows({
           // there is one to dash — three dead rows on a fill-only shape would
           // be three promises the item cannot keep.
           if (isDashValue(value) && item.stroke == null) continue;
+          // The repeater's step is nine rows of nothing until there is more
+          // than one copy to step between, so Copies is the row that opens
+          // them (K-453).
+          if (isRepeatStepValue(value) && !isRepeated(item)) continue;
           rows.add(FoldShapeValueRow(item, value, depth: 3));
         }
       }

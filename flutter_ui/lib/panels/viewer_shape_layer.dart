@@ -430,6 +430,17 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             // Solid, until somebody dashes it (K-452).
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            // Drawn once, until somebody repeats it (K-453).
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );

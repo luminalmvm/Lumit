@@ -874,7 +874,7 @@ impl CompositionReference {
             .collect::<Result<_, _>>()?;
         // The art's own box: the layer's natural size, and where it sits.
         let (x0, y0, _x1, _y1) =
-            lumit_core::shape::contents_bounds(&items).ok_or(BridgeError::EmptyPath)?;
+            lumit_core::shape::contents_bounds(&items, 0.0).ok_or(BridgeError::EmptyPath)?;
 
         let layer = crate::edits::base_layer(
             name,

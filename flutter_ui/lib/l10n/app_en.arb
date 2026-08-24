@@ -5667,6 +5667,46 @@
   "@shapeGap": {
     "description": "Timeline row under a shape layer's art: how long the space between two dashes of its outline is, in pixels."
   },
+  "shapeRepeatAnchorX": "Repeater anchor x",
+  "@shapeRepeatAnchorX": {
+    "description": "Timeline row under a shape layer's art: the x of the point each repeated copy is turned and scaled about, in pixels."
+  },
+  "shapeRepeatAnchorY": "Repeater anchor y",
+  "@shapeRepeatAnchorY": {
+    "description": "Timeline row under a shape layer's art: the y of the point each repeated copy is turned and scaled about, in pixels."
+  },
+  "shapeRepeatCopies": "Copies",
+  "@shapeRepeatCopies": {
+    "description": "Timeline row under a shape layer's art: how many copies of it are drawn. One is no repeater at all."
+  },
+  "shapeRepeatEndOpacity": "End opacity",
+  "@shapeRepeatEndOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the last repeated copy is, as a percentage."
+  },
+  "shapeRepeatOffset": "Copy offset",
+  "@shapeRepeatOffset": {
+    "description": "Timeline row under a shape layer's art: which copy the original art is, so a negative number puts copies behind it."
+  },
+  "shapeRepeatPositionX": "Repeater position x",
+  "@shapeRepeatPositionX": {
+    "description": "Timeline row under a shape layer's art: how far along x one repeated copy is moved from the one before it, in pixels."
+  },
+  "shapeRepeatPositionY": "Repeater position y",
+  "@shapeRepeatPositionY": {
+    "description": "Timeline row under a shape layer's art: how far along y one repeated copy is moved from the one before it, in pixels."
+  },
+  "shapeRepeatRotation": "Repeater rotation",
+  "@shapeRepeatRotation": {
+    "description": "Timeline row under a shape layer's art: how far one repeated copy is turned from the one before it, in degrees."
+  },
+  "shapeRepeatScale": "Repeater scale",
+  "@shapeRepeatScale": {
+    "description": "Timeline row under a shape layer's art: how much one repeated copy is scaled from the one before it, as a percentage."
+  },
+  "shapeRepeatStartOpacity": "Start opacity",
+  "@shapeRepeatStartOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the first repeated copy is, as a percentage."
+  },
   "shapeTrimStart": "Trim start",
   "@shapeTrimStart": {
     "description": "Timeline row under a shape layer's art: how far along the path's own length the art begins, as a percentage."

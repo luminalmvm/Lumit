@@ -559,6 +559,16 @@ mod tests {
             trim_offset: lumit_core::anim::Property::zero(),
             dashes: Vec::new(),
             dash_offset: lumit_core::anim::Property::zero(),
+            repeat_copies: lumit_core::anim::Property::fixed(1.0),
+            repeat_offset: lumit_core::anim::Property::zero(),
+            repeat_anchor_x: lumit_core::anim::Property::zero(),
+            repeat_anchor_y: lumit_core::anim::Property::zero(),
+            repeat_position_x: lumit_core::anim::Property::zero(),
+            repeat_position_y: lumit_core::anim::Property::zero(),
+            repeat_rotation: lumit_core::anim::Property::zero(),
+            repeat_scale: lumit_core::anim::Property::fixed(100.0),
+            repeat_start_opacity: lumit_core::anim::Property::fixed(100.0),
+            repeat_end_opacity: lumit_core::anim::Property::fixed(100.0),
             extra: serde_json::Map::new(),
         };
 

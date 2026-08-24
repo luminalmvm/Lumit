@@ -4470,21 +4470,7 @@ class _ShapeItemRow extends StatelessWidget {
 
   static BridgeShapeItem _with(BridgeShapeItem i,
           {String? name, double? opacity}) =>
-      BridgeShapeItem(
-        id: i.id,
-        name: name ?? i.name,
-        vertices: i.vertices,
-        closed: i.closed,
-        fill: i.fill,
-        stroke: i.stroke,
-        strokeWidth: i.strokeWidth,
-        opacity: opacity ?? i.opacity,
-        trimStart: i.trimStart,
-        trimEnd: i.trimEnd,
-        trimOffset: i.trimOffset,
-        dashes: i.dashes,
-        dashOffset: i.dashOffset,
-      );
+      shapeItemWith(i, name: name, opacity: opacity);
 
   /// Write the contents back with this item changed, or dropped.
   void _write({String? name, double? opacity, bool delete = false}) {
@@ -4884,6 +4870,21 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
         ShapeValue.dashOffset => (-1000, 1000, ' px'),
+        // The repeater: the count and which copy the original is are whole
+        // things, and the step is read in the units the layer's own transform
+        // is — pixels, degrees, per cent.
+        ShapeValue.repeatCopies => (1, maxShapeCopies, ''),
+        ShapeValue.repeatOffset => (-maxShapeCopies, maxShapeCopies, ''),
+        ShapeValue.repeatAnchorX ||
+        ShapeValue.repeatAnchorY ||
+        ShapeValue.repeatPositionX ||
+        ShapeValue.repeatPositionY =>
+          (-10000, 10000, ' px'),
+        ShapeValue.repeatRotation => (-3600, 3600, '°'),
+        ShapeValue.repeatScale => (-1000, 1000, '%'),
+        ShapeValue.repeatStartOpacity ||
+        ShapeValue.repeatEndOpacity =>
+          (0, 100, '%'),
       };
   double get _min => _units.$1;
   double get _max => _units.$2;

@@ -745,6 +745,26 @@ class BridgeShapeItem {
   final List<BridgeScalar> dashes;
   final BridgeScalar dashOffset;
 
+  /// **The repeater** (K-453): how many copies of the item are drawn, which
+  /// copy the original is (`repeat_offset`), and the transform each copy is
+  /// one more step of — moved by `repeat_position_*` layer pixels, turned by
+  /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
+  /// about `repeat_anchor_*`. The copies fade evenly from
+  /// `repeat_start_opacity` to `repeat_end_opacity`.
+  ///
+  /// A still count of one is no repeater at all, which is what every shape is
+  /// until somebody asks for more.
+  final BridgeScalar repeatCopies;
+  final BridgeScalar repeatOffset;
+  final BridgeScalar repeatAnchorX;
+  final BridgeScalar repeatAnchorY;
+  final BridgeScalar repeatPositionX;
+  final BridgeScalar repeatPositionY;
+  final BridgeScalar repeatRotation;
+  final BridgeScalar repeatScale;
+  final BridgeScalar repeatStartOpacity;
+  final BridgeScalar repeatEndOpacity;
+
   const BridgeShapeItem({
     required this.id,
     required this.name,
@@ -759,6 +779,16 @@ class BridgeShapeItem {
     required this.trimOffset,
     required this.dashes,
     required this.dashOffset,
+    required this.repeatCopies,
+    required this.repeatOffset,
+    required this.repeatAnchorX,
+    required this.repeatAnchorY,
+    required this.repeatPositionX,
+    required this.repeatPositionY,
+    required this.repeatRotation,
+    required this.repeatScale,
+    required this.repeatStartOpacity,
+    required this.repeatEndOpacity,
   });
 
   @override
@@ -775,7 +805,17 @@ class BridgeShapeItem {
       trimEnd.hashCode ^
       trimOffset.hashCode ^
       dashes.hashCode ^
-      dashOffset.hashCode;
+      dashOffset.hashCode ^
+      repeatCopies.hashCode ^
+      repeatOffset.hashCode ^
+      repeatAnchorX.hashCode ^
+      repeatAnchorY.hashCode ^
+      repeatPositionX.hashCode ^
+      repeatPositionY.hashCode ^
+      repeatRotation.hashCode ^
+      repeatScale.hashCode ^
+      repeatStartOpacity.hashCode ^
+      repeatEndOpacity.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -794,7 +834,17 @@ class BridgeShapeItem {
           trimEnd == other.trimEnd &&
           trimOffset == other.trimOffset &&
           dashes == other.dashes &&
-          dashOffset == other.dashOffset;
+          dashOffset == other.dashOffset &&
+          repeatCopies == other.repeatCopies &&
+          repeatOffset == other.repeatOffset &&
+          repeatAnchorX == other.repeatAnchorX &&
+          repeatAnchorY == other.repeatAnchorY &&
+          repeatPositionX == other.repeatPositionX &&
+          repeatPositionY == other.repeatPositionY &&
+          repeatRotation == other.repeatRotation &&
+          repeatScale == other.repeatScale &&
+          repeatStartOpacity == other.repeatStartOpacity &&
+          repeatEndOpacity == other.repeatEndOpacity;
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.

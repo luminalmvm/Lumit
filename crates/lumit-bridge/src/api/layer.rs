@@ -121,6 +121,25 @@ pub struct BridgeShapeItem {
     /// pixels.
     pub dashes: Vec<BridgeScalar>,
     pub dash_offset: BridgeScalar,
+    /// **The repeater** (K-453): how many copies of the item are drawn, which
+    /// copy the original is (`repeat_offset`), and the transform each copy is
+    /// one more step of — moved by `repeat_position_*` layer pixels, turned by
+    /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
+    /// about `repeat_anchor_*`. The copies fade evenly from
+    /// `repeat_start_opacity` to `repeat_end_opacity`.
+    ///
+    /// A still count of one is no repeater at all, which is what every shape is
+    /// until somebody asks for more.
+    pub repeat_copies: BridgeScalar,
+    pub repeat_offset: BridgeScalar,
+    pub repeat_anchor_x: BridgeScalar,
+    pub repeat_anchor_y: BridgeScalar,
+    pub repeat_position_x: BridgeScalar,
+    pub repeat_position_y: BridgeScalar,
+    pub repeat_rotation: BridgeScalar,
+    pub repeat_scale: BridgeScalar,
+    pub repeat_start_opacity: BridgeScalar,
+    pub repeat_end_opacity: BridgeScalar,
 }
 
 impl BridgeShapeItem {
@@ -144,6 +163,16 @@ impl BridgeShapeItem {
                 .map(|d| BridgeScalar::read_at(d, offset))
                 .collect(),
             dash_offset: BridgeScalar::read_at(&item.dash_offset, offset),
+            repeat_copies: BridgeScalar::read_at(&item.repeat_copies, offset),
+            repeat_offset: BridgeScalar::read_at(&item.repeat_offset, offset),
+            repeat_anchor_x: BridgeScalar::read_at(&item.repeat_anchor_x, offset),
+            repeat_anchor_y: BridgeScalar::read_at(&item.repeat_anchor_y, offset),
+            repeat_position_x: BridgeScalar::read_at(&item.repeat_position_x, offset),
+            repeat_position_y: BridgeScalar::read_at(&item.repeat_position_y, offset),
+            repeat_rotation: BridgeScalar::read_at(&item.repeat_rotation, offset),
+            repeat_scale: BridgeScalar::read_at(&item.repeat_scale, offset),
+            repeat_start_opacity: BridgeScalar::read_at(&item.repeat_start_opacity, offset),
+            repeat_end_opacity: BridgeScalar::read_at(&item.repeat_end_opacity, offset),
         }
     }
 
@@ -181,6 +210,57 @@ impl BridgeShapeItem {
                 .map(|d| clamped_property(d, offset, 0.0, 100_000.0))
                 .collect::<Result<_, _>>()?,
             dash_offset: clamped_property(&self.dash_offset, offset, -100_000.0, 100_000.0)?,
+            // The count is what the engine holds to 1..MAX_COPIES as it draws,
+            // so the clamp here only keeps a wild number out of the document;
+            // the offset is a copy index and may be negative, which is what
+            // puts copies behind the original.
+            repeat_copies: clamped_property(
+                &self.repeat_copies,
+                offset,
+                1.0,
+                lumit_core::shape::MAX_COPIES as f64,
+            )?,
+            repeat_offset: clamped_property(
+                &self.repeat_offset,
+                offset,
+                -(lumit_core::shape::MAX_COPIES as f64),
+                lumit_core::shape::MAX_COPIES as f64,
+            )?,
+            repeat_anchor_x: clamped_property(
+                &self.repeat_anchor_x,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            repeat_anchor_y: clamped_property(
+                &self.repeat_anchor_y,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            repeat_position_x: clamped_property(
+                &self.repeat_position_x,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            repeat_position_y: clamped_property(
+                &self.repeat_position_y,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            // Degrees, which wrap; a scale of zero collapses a copy to nothing
+            // and a negative one mirrors it, both of which are drawings.
+            repeat_rotation: clamped_property(
+                &self.repeat_rotation,
+                offset,
+                -360_000.0,
+                360_000.0,
+            )?,
+            repeat_scale: clamped_property(&self.repeat_scale, offset, -10_000.0, 10_000.0)?,
+            repeat_start_opacity: clamped_property(&self.repeat_start_opacity, offset, 0.0, 100.0)?,
+            repeat_end_opacity: clamped_property(&self.repeat_end_opacity, offset, 0.0, 100.0)?,
             extra: serde_json::Map::new(),
         })
     }
@@ -1845,9 +1925,11 @@ impl LayerReference {
             .iter()
             .map(|i| i.write_item(offset))
             .collect::<Result<_, _>>()?;
+        // Both boxes on the same clock — the head of the layer — so the delta
+        // is the edit's own, not the repeater's animation moving underneath it.
         let shift = match (
-            lumit_core::shape::contents_bounds(before),
-            lumit_core::shape::contents_bounds(&items),
+            lumit_core::shape::contents_bounds(before, 0.0),
+            lumit_core::shape::contents_bounds(&items, 0.0),
         ) {
             (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
             // Art appearing or going away entirely leaves the layer where it

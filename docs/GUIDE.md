@@ -6887,6 +6887,37 @@ into thousands of pieces, the outline is simply drawn solid. At that size the
 dashes would be invisible anyway, and cutting them would cost a frame's worth of
 work to draw something you could not tell from a line.
 
+### Repeating a shape
+
+A shape item has a **Copies** row. Leave it at one and nothing changes; turn it
+up and the item is drawn that many times, each copy one more step along than the
+last. Nine more rows appear once there is a step to describe: how far a copy is
+moved (Repeater position x and y), turned (Repeater rotation) and scaled
+(Repeater scale) from the one before it, the point it turns and scales about
+(Repeater anchor x and y), and how opaque the first and the last copy are
+(Start opacity and End opacity) — the ones between fade evenly from one to the
+other.
+
+That is a whole family of motion-graphics staples from one row: a row of ticks
+is a position step, a clock face is a rotation step about an anchor, and a
+spiral is both at once with a scale under a hundred. **Copy offset** says which
+copy the original art is, so a negative one puts copies *behind* it — handy when
+you want the drawing to stay where you left it and the copies to grow the other
+way.
+
+A copy is a scaled *drawing*, not a scaled path: halve the scale and the
+outline halves with it, and so do the dashes, or a small copy would look like a
+different shape with a heavy border. The copies are drawn back to front, so the
+original stays on top of everything made from it.
+
+Two things worth knowing. The layer's box **grows to hold the copies** — it has
+to, or they would be drawn off the edge of the layer's own picture — and since
+the layer's position is pinned to that box's corner, a repeater animated to grow
+upwards or leftwards moves the art as it plays. Step down and to the right, or
+key the layer's position to compensate. And the count stops at a hundred: every
+copy is a full pass of the rasteriser, so an unbounded count would be an
+unbounded frame.
+
 ### What the lock switch does
 
 Locking a layer means **no edits until unlocked** — not just the obvious ones

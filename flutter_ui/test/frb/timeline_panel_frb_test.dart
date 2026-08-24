@@ -1353,6 +1353,16 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -1423,6 +1433,16 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -1446,6 +1466,74 @@ void main() {
       expect(layer.getShapeContents().single.dashes,
           const [BridgeScalar.static_(8), BridgeScalar.static_(0)],
           reason: 'writing one half makes the pair');
+    });
+
+    /// The repeater's step is nine rows of nothing until there is more than
+    /// one copy to step between, so Copies is the row that opens them (K-453).
+    testWidgets('a repeated shape item carries the repeater rows',
+        (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      final layer = p.comp.addShapeLayer(
+        name: 'Tick',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Tick',
+            vertices: [
+              corner(0, 0),
+              corner(10, 0),
+              corner(10, 40),
+              corner(0, 40),
+            ],
+            closed: true,
+            fill: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+            stroke: null,
+            strokeWidth: 0,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      // Drawn once: the count is there to find, and nothing else is.
+      expect(find.text('Copies'), findsOneWidget);
+      expect(find.text('Repeater rotation'), findsNothing);
+
+      final item = layer.getShapeContents().single;
+      final field =
+          find.byKey(ValueKey<String>('tl-shape-repeatCopies-${item.id}'));
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '5');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.repeatCopies,
+          const BridgeScalar.static_(5));
+
+      // And now there is a step to describe.
+      expect(find.text('Repeater rotation'), findsOneWidget);
+      expect(find.text('Repeater position x'), findsOneWidget);
+      expect(find.text('Start opacity'), findsOneWidget);
     });
 
     /// A shape layer's art gets the same rename as a mask: it too arrives named
@@ -1473,6 +1561,16 @@ void main() {
             trimOffset: const BridgeScalar.static_(0),
             dashes: const [],
             dashOffset: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );

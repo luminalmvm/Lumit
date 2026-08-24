@@ -107,6 +107,14 @@ class CompModel extends ChangeNotifier {
   List<BridgeLayerEntry> get heldLayers => _model?.layers ?? const [];
   BigInt? get heldRevision => _revision;
 
+  /// The comp's rate from the copy in hand, on the same terms — what turns a
+  /// playhead frame into seconds while a paint is running, which is where a
+  /// keyed shape modifier has to be read (K-453).
+  double get heldFps {
+    final fps = _model?.fps ?? 60.0;
+    return fps > 0 ? fps : 60.0;
+  }
+
   /// The comp this model is bound to has gone — deleted, or undone out of
   /// existence — rather than merely being empty. A comp that is *there* always
   /// reads as a model, even with no layers in it, so the pair below says

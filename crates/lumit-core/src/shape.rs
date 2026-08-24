@@ -114,6 +114,80 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub dash_offset: Property,
+    /// **The repeater** (K-453): how many copies of the item are drawn, and the
+    /// transform each copy is one more step of.
+    ///
+    /// `repeat_copies` is a count, rounded and held to 1..[`MAX_COPIES`]; a
+    /// still 1 is "no repeater" and is what every shape is until somebody asks
+    /// for more. `repeat_offset` says which copy the original is: copy *k* runs
+    /// from the offset, so a negative offset puts copies *behind* the original.
+    #[serde(
+        default = "one",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_one"
+    )]
+    pub repeat_copies: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub repeat_offset: Property,
+    /// The point the copy transform turns and scales about, in layer pixels.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub repeat_anchor_x: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub repeat_anchor_y: Property,
+    /// How far one copy is moved from the one before it, in layer pixels.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub repeat_position_x: Property,
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub repeat_position_y: Property,
+    /// How far one copy is turned from the one before it, in degrees.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub repeat_rotation: Property,
+    /// How much one copy is scaled from the one before it, per cent — 100 being
+    /// the same size.
+    #[serde(
+        default = "crate::paint::full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub repeat_scale: Property,
+    /// The opacity of the first and last copy, per cent; the ones between ramp
+    /// evenly from one to the other.
+    #[serde(
+        default = "crate::paint::full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub repeat_start_opacity: Property,
+    #[serde(
+        default = "crate::paint::full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub repeat_end_opacity: Property,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -123,6 +197,29 @@ pub struct ShapeItem {
 fn full_opacity() -> f64 {
     100.0
 }
+
+/// serde default for [`ShapeItem::repeat_copies`]: one copy, which is no
+/// repeater at all.
+fn one() -> Property {
+    Property::fixed(1.0)
+}
+
+/// True for a still 1 — the repeater switched off, and so the thing left out of
+/// the file entirely.
+fn is_static_one(p: &Property) -> bool {
+    matches!(p.animation, crate::anim::Animation::Static(v) if v == 1.0) && p.extra.is_empty()
+}
+
+/// The most copies one repeated item is drawn as.
+///
+/// Every copy is a rasteriser pass of its own over the whole layer, so the
+/// count is the frame's cost written as a number. A hundred is past what a row
+/// of things or a ring of ticks asks for and still inside a frame; a count past
+/// it is **held** here rather than refused, because the number is a slider and a
+/// slider that stops is kinder than a frame that does not arrive. Lifting the
+/// ceiling means a rasteriser that can be pointed at one copy's own box rather
+/// than the whole layer, which is a change to the mask rasteriser, not here.
+pub const MAX_COPIES: i64 = 100;
 
 impl ShapeItem {
     /// A filled item with no outline — what a shape tool makes.
@@ -140,6 +237,16 @@ impl ShapeItem {
             trim_offset: Property::zero(),
             dashes: Vec::new(),
             dash_offset: Property::zero(),
+            repeat_copies: one(),
+            repeat_offset: Property::zero(),
+            repeat_anchor_x: Property::zero(),
+            repeat_anchor_y: Property::zero(),
+            repeat_position_x: Property::zero(),
+            repeat_position_y: Property::zero(),
+            repeat_rotation: Property::zero(),
+            repeat_scale: crate::paint::full(),
+            repeat_start_opacity: crate::paint::full(),
+            repeat_end_opacity: crate::paint::full(),
             extra: serde_json::Map::new(),
         }
     }
@@ -204,18 +311,81 @@ impl ShapeItem {
         pattern
     }
 
-    /// The item's bounding box in layer coordinates, its outline included, or
-    /// `None` when its path has no vertices.
+    /// The copies this item is drawn as at `t`, each with the transform to
+    /// apply to its geometry and the share of its opacity to draw it at (0..1,
+    /// the item's *own* opacity not in it — the fill and the outline apply that
+    /// where they always did).
+    ///
+    /// One copy, identity, full opacity, for an item nobody has repeated —
+    /// which is the same single draw a shape has always been.
+    fn copies_at(&self, t: f64) -> Vec<(Affine, f64)> {
+        let copies = self
+            .repeat_copies
+            .value_at(t)
+            .round()
+            .clamp(1.0, MAX_COPIES as f64) as i64;
+        if copies <= 1 {
+            return vec![(Affine::IDENTITY, 1.0)];
+        }
+        let offset = self
+            .repeat_offset
+            .value_at(t)
+            .round()
+            .clamp(-(MAX_COPIES as f64), MAX_COPIES as f64) as i64;
+        let step = repeat_step(
+            (
+                self.repeat_position_x.value_at(t),
+                self.repeat_position_y.value_at(t),
+            ),
+            self.repeat_rotation.value_at(t),
+            self.repeat_scale.value_at(t) / 100.0,
+            (
+                self.repeat_anchor_x.value_at(t),
+                self.repeat_anchor_y.value_at(t),
+            ),
+        );
+        let (from, to) = (
+            self.repeat_start_opacity.value_at(t).clamp(0.0, 100.0) / 100.0,
+            self.repeat_end_opacity.value_at(t).clamp(0.0, 100.0) / 100.0,
+        );
+
+        // The first copy is step^offset, and every one after it is one more
+        // step — so the offset decides which copy the original geometry is, and
+        // a negative one puts copies *behind* it. Stepping the accumulator
+        // rather than raising the transform to a power each time keeps the work
+        // one multiplication per copy.
+        let (walk, back) = (step, step.inverse());
+        let mut m = Affine::IDENTITY;
+        for _ in 0..offset.abs() {
+            m = m.then(if offset >= 0 { &walk } else { &back });
+        }
+
+        (0..copies)
+            .map(|j| {
+                let here = m;
+                m = m.then(&walk);
+                // The ramp runs across the copies drawn, not across the offset:
+                // it is "the first one is this bright, the last one is that",
+                // which is what the two numbers say.
+                let ramp = from + (to - from) * (j as f64 / (copies - 1) as f64);
+                (here, ramp)
+            })
+            .collect()
+    }
+
+    /// The item's bounding box in layer coordinates at `t`, its outline and its
+    /// repeated copies included, or `None` when its path has no vertices.
     ///
     /// The **control points** bound the curve rather than the curve itself: a
     /// cubic never leaves its own control hull, so this is correct and never
     /// too small. It can be a little generous on a strongly curved path, which
     /// costs a few transparent pixels and no correctness.
-    pub fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
-        // The **whole** path, untrimmed, and for the reason a paint stroke's
-        // bounds give (K-449): this answers "where could this art ever be",
-        // which is what a layer's natural size has to be if it is not to
-        // breathe as a write-on plays.
+    ///
+    /// `t` is here because the **repeater** puts art where the path is not
+    /// (K-453), and where it puts it can be keyed. A trim needs no clock — it
+    /// only ever takes art away, and the box stays the untrimmed one for the
+    /// reason a paint stroke's bounds give (K-449).
+    pub fn bounds(&self, t: f64) -> Option<(f64, f64, f64, f64)> {
         let mut out: Option<(f64, f64, f64, f64)> = None;
         for v in &self.path.vertices {
             for (x, y) in [
@@ -231,25 +401,43 @@ impl ShapeItem {
         }
         let (x0, y0, x1, y1) = out?;
         // Half the stroke sits outside the path, so the box has to hold it.
+        // Inflating **before** the copies are placed is what makes a scaled
+        // copy's outline fit too: the copy's transform grows the margin with
+        // the art.
         let half = if self.stroke.is_some() {
             self.stroke_width.max(0.0) / 2.0
         } else {
             0.0
         };
-        Some((x0 - half, y0 - half, x1 + half, y1 + half))
+        let (x0, y0, x1, y1) = (x0 - half, y0 - half, x1 + half, y1 + half);
+
+        // Every copy's box, unioned. One copy and the identity — every shape
+        // nobody has repeated — hands back exactly the box above.
+        let mut whole: Option<(f64, f64, f64, f64)> = None;
+        for (m, _) in self.copies_at(t) {
+            for corner in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] {
+                let (x, y) = m.apply(corner);
+                whole = Some(match whole {
+                    None => (x, y, x, y),
+                    Some(b) => (b.0.min(x), b.1.min(y), b.2.max(x), b.3.max(y)),
+                });
+            }
+        }
+        whole
     }
 }
 
-/// The bounding box of a whole layer's worth of art, or `None` when there is no
-/// art in it — the layer's **natural size** (docs/06 §1.2 step 1).
+/// The bounding box of a whole layer's worth of art at `t`, or `None` when
+/// there is no art in it — the layer's **natural size** (docs/06 §1.2 step 1).
 ///
 /// This is the number the wireframe, hit-testing and the transform all read, and
 /// it moves when the art is edited: a shape layer is the first kind whose size
-/// is not fixed by its source.
-pub fn contents_bounds(contents: &[ShapeItem]) -> Option<(f64, f64, f64, f64)> {
+/// is not fixed by its source. Since K-453 it can also move as the art is
+/// *played*, because a keyed repeater puts copies somewhere new each frame.
+pub fn contents_bounds(contents: &[ShapeItem], t: f64) -> Option<(f64, f64, f64, f64)> {
     let mut out: Option<(f64, f64, f64, f64)> = None;
     for item in contents {
-        let Some(b) = item.bounds() else { continue };
+        let Some(b) = item.bounds(t) else { continue };
         out = Some(match out {
             None => b,
             Some(a) => (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)),
@@ -302,93 +490,115 @@ pub fn rasterise_contents(
         if trimmed.as_ref().is_some_and(|p| p.len() < 2) {
             continue; // trimmed away to nothing: the first frame of a write-on
         }
-        // The path in the buffer's own coordinates: the rasteriser works from
-        // the origin, so the art is shifted to the box's top-left first.
-        let shifted = match &trimmed {
-            // A trimmed piece is a polyline, and a polyline is a bezier whose
-            // handles are all zero — one path type, still (K-237). Closed so
-            // the fill has something to fill: a half-trimmed circle fills as a
-            // half circle, exactly as After Effects draws it.
-            Some(points) => polyline_path(points, item.path.closed),
-            None => item.path.clone(),
-        };
-        let shifted = shift_path(&shifted, -min_x, -min_y);
 
-        if let Some(fill) = item.fill {
-            let coverage = crate::mask::rasterise(&shifted, w, h, sx, sy);
-            let colour = crate::pixels::solid_rgba(fill);
-            let alpha = f32::from(colour[3]) / 255.0;
-            for (px, c) in rgba.chunks_exact_mut(4).zip(coverage) {
-                over(
-                    px,
-                    [colour[0], colour[1], colour[2]],
-                    (f32::from(c) / 255.0) * opacity * alpha,
+        // The copies the repeater asks for (K-453), drawn **last first** so the
+        // original ends up on top of the copies made from it — which is what
+        // After Effects draws, and the only order in which turning the count up
+        // does not hide the shape you already had.
+        for (copy, ramp) in item.copies_at(t).into_iter().rev() {
+            let opacity = opacity * ramp as f32;
+            if opacity <= 0.0 {
+                continue;
+            }
+            // The copy's own transform and the shift into the buffer's
+            // coordinates, composed into one: the rasteriser works from the
+            // origin, so the art is moved to the box's top-left as it is
+            // placed. An item nobody has repeated is placed by the identity, so
+            // this is exactly the subtraction it has always been.
+            let to_box = copy.then(&Affine::translation(-min_x, -min_y));
+            let placed = match &trimmed {
+                // A trimmed piece is a polyline, and a polyline is a bezier
+                // whose handles are all zero — one path type, still (K-237).
+                // Closed so the fill has something to fill: a half-trimmed
+                // circle fills as a half circle, exactly as AE draws it.
+                Some(points) => polyline_path(
+                    &points.iter().map(|&p| to_box.apply(p)).collect::<Vec<_>>(),
+                    item.path.closed,
+                ),
+                None => transform_path(&item.path, &to_box),
+            };
+
+            if let Some(fill) = item.fill {
+                let coverage = crate::mask::rasterise(&placed, w, h, sx, sy);
+                let colour = crate::pixels::solid_rgba(fill);
+                let alpha = f32::from(colour[3]) / 255.0;
+                for (px, c) in rgba.chunks_exact_mut(4).zip(coverage) {
+                    over(
+                        px,
+                        [colour[0], colour[1], colour[2]],
+                        (f32::from(c) / 255.0) * opacity * alpha,
+                    );
+                }
+            }
+
+            if let (Some(stroke), true) = (item.stroke, item.stroke_width > 0.0) {
+                // A stroke is a brush run along the path, which is exactly what the
+                // paint rasteriser already does — one widened-path implementation
+                // for both, rather than two that can disagree (K-237).
+                // The outline follows the trimmed piece, and it is drawn **open**
+                // whatever the path was: a trim is what turns a closed ring into a
+                // stroke with two ends.
+                let points: Vec<(f64, f64)> = match &trimmed {
+                    Some(_) => placed.vertices.iter().map(|v| v.pos).collect(),
+                    None => flatten_path(&placed),
+                };
+                // A copy is a scaled **drawing**, not a scaled path: its outline
+                // and its dashes grow with it, or a copy at half size would be a
+                // shape with an outline twice as heavy.
+                let scale = copy.scale();
+                // Dashes cut the outline into pieces, each of which is a brush run
+                // of its own (K-452). A solid outline is one piece, which is the
+                // same single run it always was.
+                let pattern: Vec<f64> = item.dash_pattern_at(t).iter().map(|d| d * scale).collect();
+                let pieces = if pattern.is_empty() {
+                    vec![points]
+                } else {
+                    dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
+                };
+                let brushes: Vec<crate::paint::PaintStroke> = pieces
+                    .into_iter()
+                    .filter(|p| p.len() >= 2)
+                    .map(|points| crate::paint::PaintStroke {
+                        id: item.id,
+                        name: item.name.clone(),
+                        points,
+                        colour: stroke,
+                        width: item.stroke_width * scale,
+                        // A vector outline has a hard edge; the rasteriser keeps
+                        // half a pixel of falloff whatever this says, which is the
+                        // anti-aliasing rather than a soft brush.
+                        hardness: 1.0,
+                        // A vector outline is round-capped and round-joined, which
+                        // is what the round brush already draws.
+                        shape: crate::paint::BrushShape::Round,
+                        // The item's own opacity, faded by this copy's share of the
+                        // repeater's ramp (K-453) — the same number the fill above
+                        // multiplied its coverage by, in the per cent the brush
+                        // reads it in.
+                        opacity: item.opacity * ramp,
+                        // A vector outline is drawn whole; a shape item's own trim
+                        // paths are a shape-layer feature, not the brush's (K-449),
+                        // so the whole path every time and no clock to read.
+                        start: crate::anim::Property::zero(),
+                        end: crate::anim::Property::fixed(100.0),
+                        mode: crate::paint::PaintMode::Paint,
+                        // A shape item's outline lays its colour down; a blend of
+                        // its own would be a shape-layer feature (K-450).
+                        blend: crate::model::BlendMode::Normal,
+                        clone_offset: (0.0, 0.0),
+                        extra: serde_json::Map::new(),
+                    })
+                    .collect();
+                crate::paint::apply_strokes(
+                    &mut rgba,
+                    w,
+                    h,
+                    max_x - min_x,
+                    max_y - min_y,
+                    &brushes,
+                    0.0,
                 );
             }
-        }
-
-        if let (Some(stroke), true) = (item.stroke, item.stroke_width > 0.0) {
-            // A stroke is a brush run along the path, which is exactly what the
-            // paint rasteriser already does — one widened-path implementation
-            // for both, rather than two that can disagree (K-237).
-            // The outline follows the trimmed piece, and it is drawn **open**
-            // whatever the path was: a trim is what turns a closed ring into a
-            // stroke with two ends.
-            let points = match &trimmed {
-                Some(points) => points
-                    .iter()
-                    .map(|&(x, y)| (x - min_x, y - min_y))
-                    .collect(),
-                None => flatten_path(&shifted),
-            };
-            // Dashes cut the outline into pieces, each of which is a brush run
-            // of its own (K-452). A solid outline is one piece, which is the
-            // same single run it always was.
-            let pattern = item.dash_pattern_at(t);
-            let pieces = if pattern.is_empty() {
-                vec![points]
-            } else {
-                dashed(&points, &pattern, item.dash_offset.value_at(t))
-            };
-            let brushes: Vec<crate::paint::PaintStroke> = pieces
-                .into_iter()
-                .filter(|p| p.len() >= 2)
-                .map(|points| crate::paint::PaintStroke {
-                    id: item.id,
-                    name: item.name.clone(),
-                    points,
-                    colour: stroke,
-                    width: item.stroke_width,
-                    // A vector outline has a hard edge; the rasteriser keeps
-                    // half a pixel of falloff whatever this says, which is the
-                    // anti-aliasing rather than a soft brush.
-                    hardness: 1.0,
-                    // A vector outline is round-capped and round-joined, which
-                    // is what the round brush already draws.
-                    shape: crate::paint::BrushShape::Round,
-                    opacity: item.opacity,
-                    // A vector outline is drawn whole; a shape item's own trim
-                    // paths are a shape-layer feature, not the brush's (K-449),
-                    // so the whole path every time and no clock to read.
-                    start: crate::anim::Property::zero(),
-                    end: crate::anim::Property::fixed(100.0),
-                    mode: crate::paint::PaintMode::Paint,
-                    // A shape item's outline lays its colour down; a blend of
-                    // its own would be a shape-layer feature (K-450).
-                    blend: crate::model::BlendMode::Normal,
-                    clone_offset: (0.0, 0.0),
-                    extra: serde_json::Map::new(),
-                })
-                .collect();
-            crate::paint::apply_strokes(
-                &mut rgba,
-                w,
-                h,
-                max_x - min_x,
-                max_y - min_y,
-                &brushes,
-                0.0,
-            );
         }
     }
     rgba
@@ -479,6 +689,89 @@ fn rotated(points: &[(f64, f64)], shift: f64) -> Vec<(f64, f64)> {
     out
 }
 
+/// A 2-D affine transform, `[a, b, c, d, e, f]`, mapping
+/// `(x, y)` to `(a x + c y + e, b x + d y + f)` — the order every 2-D graphics
+/// library writes it in.
+///
+/// Six numbers rather than a matrix type from somewhere: this is the only place
+/// in the crate that composes transforms in the *art's* own space, and a
+/// dependency for six multiplications would be a dependency for six
+/// multiplications.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Affine(pub [f64; 6]);
+
+impl Affine {
+    pub const IDENTITY: Affine = Affine([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+
+    /// A move and nothing else.
+    #[must_use]
+    pub fn translation(dx: f64, dy: f64) -> Affine {
+        Affine([1.0, 0.0, 0.0, 1.0, dx, dy])
+    }
+
+    /// How much bigger this transform draws things: the square root of the area
+    /// it multiplies by, which is the one number a *width* can be scaled by
+    /// whatever the rotation. A mirrored transform has a negative determinant
+    /// and still draws at a size, hence the absolute value.
+    #[must_use]
+    pub fn scale(&self) -> f64 {
+        let m = self.0;
+        (m[0] * m[3] - m[1] * m[2]).abs().sqrt()
+    }
+
+    /// This transform followed by `next` — read left to right, which is how the
+    /// repeater stacks its steps.
+    #[must_use]
+    pub fn then(self, next: &Affine) -> Affine {
+        let (m, n) = (self.0, next.0);
+        Affine([
+            m[0] * n[0] + m[1] * n[2],
+            m[0] * n[1] + m[1] * n[3],
+            m[2] * n[0] + m[3] * n[2],
+            m[2] * n[1] + m[3] * n[3],
+            m[4] * n[0] + m[5] * n[2] + n[4],
+            m[4] * n[1] + m[5] * n[3] + n[5],
+        ])
+    }
+
+    #[must_use]
+    pub fn apply(&self, (x, y): (f64, f64)) -> (f64, f64) {
+        let m = self.0;
+        (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
+    }
+
+    /// The transform that undoes this one, or the identity where it cannot be
+    /// undone — a copy scaled to nothing has no way back, and an identity is
+    /// the answer that draws something rather than dividing by zero (docs/14).
+    #[must_use]
+    pub fn inverse(&self) -> Affine {
+        let m = self.0;
+        let det = m[0] * m[3] - m[1] * m[2];
+        if det.abs() < 1e-12 {
+            return Affine::IDENTITY;
+        }
+        let inv = 1.0 / det;
+        let (a, b, c, d) = (m[3] * inv, -m[1] * inv, -m[2] * inv, m[0] * inv);
+        Affine([a, b, c, d, -(m[4] * a + m[5] * c), -(m[4] * b + m[5] * d)])
+    }
+}
+
+/// One step of the repeater: move by `position`, turn by `rotation` degrees and
+/// scale by `scale`, all about `anchor`.
+fn repeat_step(position: (f64, f64), rotation: f64, scale: f64, anchor: (f64, f64)) -> Affine {
+    let (sin, cos) = rotation.to_radians().sin_cos();
+    let (a, b, c, d) = (cos * scale, sin * scale, -sin * scale, cos * scale);
+    // Move to the anchor, turn and scale there, move back, then translate.
+    Affine([
+        a,
+        b,
+        c,
+        d,
+        anchor.0 - (a * anchor.0 + c * anchor.1) + position.0,
+        anchor.1 - (b * anchor.0 + d * anchor.1) + position.1,
+    ])
+}
+
 /// The most pieces one dashed outline is cut into.
 ///
 /// A pattern fine enough to need more than this is, at any size a stroke is
@@ -533,15 +826,24 @@ fn dashed(points: &[(f64, f64)], pattern: &[f64], offset: f64) -> Vec<Vec<(f64, 
     out
 }
 
-fn shift_path(path: &BezierPath, dx: f64, dy: f64) -> BezierPath {
+/// `path` with `m` applied to it.
+///
+/// A vertex's **position** is moved; its **handles** are turned and scaled but
+/// not moved, because a handle is a direction from its vertex rather than a
+/// place — moving it as well would translate the curve twice.
+fn transform_path(path: &BezierPath, m: &Affine) -> BezierPath {
+    let vector = |(x, y): (f64, f64)| {
+        let a = m.0;
+        (a[0] * x + a[2] * y, a[1] * x + a[3] * y)
+    };
     BezierPath {
         vertices: path
             .vertices
             .iter()
             .map(|v| crate::mask::Vertex {
-                pos: (v.pos.0 + dx, v.pos.1 + dy),
-                tan_in: v.tan_in,
-                tan_out: v.tan_out,
+                pos: m.apply(v.pos),
+                tan_in: vector(v.tan_in),
+                tan_out: vector(v.tan_out),
             })
             .collect(),
         closed: path.closed,
@@ -574,13 +876,19 @@ mod tests {
     #[test]
     fn a_layers_size_is_the_box_its_art_fills() {
         let contents = vec![item(square(10.0, 20.0, 30.0))];
-        assert_eq!(contents_bounds(&contents), Some((10.0, 20.0, 40.0, 50.0)));
+        assert_eq!(
+            contents_bounds(&contents, 0.0),
+            Some((10.0, 20.0, 40.0, 50.0))
+        );
 
         // Two items: the box holds both.
         let contents = vec![item(square(10.0, 20.0, 30.0)), item(square(-5.0, 0.0, 8.0))];
-        assert_eq!(contents_bounds(&contents), Some((-5.0, 0.0, 40.0, 50.0)));
+        assert_eq!(
+            contents_bounds(&contents, 0.0),
+            Some((-5.0, 0.0, 40.0, 50.0))
+        );
 
-        assert!(contents_bounds(&[]).is_none());
+        assert!(contents_bounds(&[], 0.0).is_none());
     }
 
     #[test]
@@ -588,7 +896,7 @@ mod tests {
         let mut it = item(square(0.0, 0.0, 10.0));
         it.stroke = Some(LinearColour::BLACK);
         it.stroke_width = 4.0;
-        assert_eq!(it.bounds(), Some((-2.0, -2.0, 12.0, 12.0)));
+        assert_eq!(it.bounds(0.0), Some((-2.0, -2.0, 12.0, 12.0)));
     }
 
     #[test]
@@ -597,7 +905,7 @@ mod tests {
         // straight line between the vertices, and the box has to hold it.
         let mut path = square(0.0, 0.0, 10.0);
         path.vertices[0].tan_out = (0.0, -20.0);
-        let bounds = item(path).bounds().expect("bounds");
+        let bounds = item(path).bounds(0.0).expect("bounds");
         assert!(
             bounds.1 <= -20.0,
             "the handle reaches above the box: {bounds:?}"
@@ -696,7 +1004,7 @@ mod tests {
             vertices: Vec::new(),
             closed: true,
         });
-        assert!(empty.bounds().is_none());
+        assert!(empty.bounds(0.0).is_none());
         assert!(rasterise_contents(&[empty], 4, 4, 0.0, 0.0, 4.0, 4.0, 0.0)
             .iter()
             .all(|&b| b == 0));
@@ -727,6 +1035,16 @@ mod tests {
 
     fn ink(rgba: &[u8]) -> u32 {
         rgba.chunks_exact(4).map(|p| u32::from(p[3])).sum()
+    }
+
+    /// The ink in one vertical band of the picture, for telling two copies of
+    /// the same art apart by how much of it there is.
+    fn ink_in(rgba: &[u8], w: u32, xs: std::ops::Range<u32>) -> u32 {
+        rgba.chunks_exact(4)
+            .enumerate()
+            .filter(|(i, _)| xs.contains(&(*i as u32 % w)))
+            .map(|(_, p)| u32::from(p[3]))
+            .sum()
     }
 
     #[test]
@@ -968,6 +1286,169 @@ mod tests {
         let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
         assert_eq!(back.dashes.len(), 2);
         assert_eq!(back.dashes[1].value_at(0.0), 3.0);
+    }
+
+    /// A repeated square is drawn where the step puts it, and nowhere else.
+    #[test]
+    fn a_repeater_draws_a_copy_at_every_step() {
+        let mut it = item(square(0.0, 0.0, 6.0));
+        it.repeat_copies = Property::fixed(3.0);
+        it.repeat_position_x = Property::fixed(10.0);
+        let contents = vec![it];
+        // The box has grown to hold all three, so it is asked for explicitly.
+        let rgba = rasterise_contents(&contents, 40, 10, 0.0, 0.0, 40.0, 10.0, 0.0);
+        for x in [3, 13, 23] {
+            assert_eq!(alpha_at(&rgba, 40, x, 3), 255, "a copy at {x}");
+        }
+        for x in [8, 18, 33] {
+            assert_eq!(alpha_at(&rgba, 40, x, 3), 0, "the gap at {x}");
+        }
+    }
+
+    /// The layer has to be big enough to hold what the repeater made, or the
+    /// copies would be drawn off the edge of their own raster.
+    #[test]
+    fn the_box_grows_to_hold_the_copies() {
+        let mut it = item(square(0.0, 0.0, 6.0));
+        assert_eq!(it.bounds(0.0), Some((0.0, 0.0, 6.0, 6.0)));
+        it.repeat_copies = Property::fixed(3.0);
+        it.repeat_position_x = Property::fixed(10.0);
+        assert_eq!(it.bounds(0.0), Some((0.0, 0.0, 26.0, 6.0)));
+
+        // Behind the original as well, when the offset says so.
+        it.repeat_offset = Property::fixed(-1.0);
+        assert_eq!(it.bounds(0.0), Some((-10.0, 0.0, 16.0, 6.0)));
+    }
+
+    /// The identity case, which is every shape until somebody repeats one: the
+    /// pixels are the ones drawn before there was a repeater at all.
+    #[test]
+    fn one_copy_is_no_repeater_at_all() {
+        let plain = item(square(2.0, 3.0, 9.0));
+        let mut one_copy = item(square(2.0, 3.0, 9.0));
+        one_copy.repeat_copies = Property::fixed(1.0);
+        one_copy.repeat_position_x = Property::fixed(40.0);
+        one_copy.repeat_rotation = Property::fixed(30.0);
+        assert_eq!(plain.bounds(0.0), one_copy.bounds(0.0));
+        assert_eq!(
+            rasterise_contents(&[plain], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
+            rasterise_contents(&[one_copy], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
+            "one copy draws the very same bytes"
+        );
+    }
+
+    /// Start and end opacity ramp across the copies drawn — the first at one
+    /// end of the ramp, the last at the other.
+    #[test]
+    fn the_copies_fade_from_the_first_to_the_last() {
+        let mut it = item(square(0.0, 0.0, 6.0));
+        it.repeat_copies = Property::fixed(3.0);
+        it.repeat_position_x = Property::fixed(10.0);
+        it.repeat_end_opacity = Property::fixed(0.0);
+        let rgba = rasterise_contents(&[it], 40, 10, 0.0, 0.0, 40.0, 10.0, 0.0);
+        let (first, middle, last) = (
+            alpha_at(&rgba, 40, 3, 3),
+            alpha_at(&rgba, 40, 13, 3),
+            alpha_at(&rgba, 40, 23, 3),
+        );
+        assert_eq!(first, 255, "the first copy is the item's own opacity");
+        assert!(
+            middle > 100 && middle < 200,
+            "the middle is half way down the ramp: {middle}"
+        );
+        assert_eq!(last, 0, "and the last has faded out");
+    }
+
+    /// A copy at half size is a *drawing* at half size: its outline thins with
+    /// it, or the copy would look like a different shape.
+    #[test]
+    fn a_scaled_copy_carries_a_scaled_outline() {
+        let mut it = item(square(2.0, 2.0, 8.0));
+        it.fill = None;
+        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+        it.stroke_width = 4.0;
+        it.repeat_copies = Property::fixed(2.0);
+        it.repeat_position_x = Property::fixed(20.0);
+        it.repeat_scale = Property::fixed(50.0);
+        // The second copy is half the size *and* half the outline, so it puts
+        // down less than half the first one's ink.
+        let rgba = rasterise_contents(&[it], 40, 20, 0.0, 0.0, 40.0, 20.0, 0.0);
+        let left: u32 = ink_in(&rgba, 40, 0..20);
+        let right: u32 = ink_in(&rgba, 40, 20..40);
+        assert!(right > 0, "the copy is drawn");
+        assert!(
+            right * 2 < left,
+            "and it is drawn smaller in both ways: {left} against {right}"
+        );
+    }
+
+    /// Rotation turns each copy about the anchor, so a step of 90° puts the
+    /// fourth copy back where the first one started.
+    #[test]
+    fn a_rotated_copy_turns_about_the_anchor() {
+        let mut it = item(square(8.0, 2.0, 4.0));
+        it.repeat_copies = Property::fixed(4.0);
+        it.repeat_rotation = Property::fixed(90.0);
+        it.repeat_anchor_x = Property::fixed(10.0);
+        it.repeat_anchor_y = Property::fixed(10.0);
+        let (x0, y0, x1, y1) = it.bounds(0.0).expect("a box");
+        // Four quarter turns about (10, 10) put the copies on all four sides of
+        // it, so the box is square and centred on the anchor.
+        assert!((x1 - x0 - (y1 - y0)).abs() < 1e-9, "a square box");
+        assert!(
+            ((x0 + x1) / 2.0 - 10.0).abs() < 1e-9 && ((y0 + y1) / 2.0 - 10.0).abs() < 1e-9,
+            "centred on the anchor: {x0},{y0} to {x1},{y1}"
+        );
+    }
+
+    /// A count nobody could draw is held at the ceiling rather than refused —
+    /// and a fractional one is a count of things, so it rounds.
+    #[test]
+    fn the_copy_count_is_held_at_the_ceiling_and_never_fractional() {
+        let mut it = item(square(0.0, 0.0, 2.0));
+        it.repeat_position_x = Property::fixed(1.0);
+        it.repeat_copies = Property::fixed(1e9);
+        assert_eq!(it.copies_at(0.0).len(), MAX_COPIES as usize);
+        it.repeat_copies = Property::fixed(-4.0);
+        assert_eq!(it.copies_at(0.0).len(), 1, "never fewer than the original");
+        it.repeat_copies = Property::fixed(2.6);
+        assert_eq!(it.copies_at(0.0).len(), 3);
+    }
+
+    #[test]
+    fn a_keyed_repeater_is_read_on_the_layers_clock() {
+        let mut it = item(square(0.0, 0.0, 6.0));
+        it.repeat_copies = Property::fixed(3.0);
+        let key = |secs: i64, value: f64| crate::anim::Keyframe {
+            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
+            value,
+            interp_in: crate::anim::SideInterp::Linear,
+            interp_out: crate::anim::SideInterp::Linear,
+        };
+        let mut step = Property::fixed(0.0);
+        step.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 10.0)]);
+        it.repeat_position_x = step;
+        // Stacked at the head, spread out a second later — and the box knows.
+        assert_eq!(it.bounds(0.0), Some((0.0, 0.0, 6.0, 6.0)));
+        assert_eq!(it.bounds(1.0), Some((0.0, 0.0, 26.0, 6.0)));
+    }
+
+    #[test]
+    fn an_unrepeated_item_is_absent_from_the_file() {
+        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
+        assert!(!json.contains("repeat"), "nothing about copies: {json}");
+        let mut it = item(square(0.0, 0.0, 4.0));
+        it.repeat_copies = Property::fixed(5.0);
+        it.repeat_position_x = Property::fixed(12.0);
+        let json = serde_json::to_string(&it).expect("json");
+        let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
+        assert_eq!(back.repeat_copies.value_at(0.0), 5.0);
+        assert_eq!(back.repeat_position_x.value_at(0.0), 12.0);
+        assert_eq!(
+            back.repeat_scale.value_at(0.0),
+            100.0,
+            "the default is kept"
+        );
     }
 
     #[test]

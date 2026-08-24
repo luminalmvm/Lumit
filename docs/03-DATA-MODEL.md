@@ -275,7 +275,7 @@ Invariants:
 | `Camera { zoom: Property, solve_link: Option<Uuid> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link (K-417); `None` — the usual case — is a camera the user drives by hand. |
 | `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. (There is no `adjustment` switch — it is this kind.) |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only (K-206). |
-| `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art | §7.2 (K-237). Flat list, modifiers as fields (§7.2.1); nested groups are future (§9.2). |
+| `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art, its repeated copies included | §7.2 (K-237). Flat list, modifiers as fields (§7.2.1); nested groups are future (§9.2). |
 | `Light { light: Box<LightDef> }` | yes | §5.5 | A source of light other layers see (K-360). Draws no pixels of its own, like a Camera; its placement is the ordinary layer transform. |
 
 **There is no `Audio` kind (K-435).** An Audio layer — a layer whose source is an audio item,
@@ -725,6 +725,16 @@ struct ShapeItem {
     trim_offset: Property,            // degrees; 360 is once round a closed path
     dashes: Vec<Property>,            // dash, gap, dash, gap … in layer pixels
     dash_offset: Property,            // layer pixels
+    repeat_copies: Property,          // 1..MAX_COPIES; a still 1 is no repeater
+    repeat_offset: Property,          // which copy the original is; may be negative
+    repeat_anchor_x: Property,        // layer pixels; what a copy turns and scales about
+    repeat_anchor_y: Property,
+    repeat_position_x: Property,      // layer pixels, per copy
+    repeat_position_y: Property,
+    repeat_rotation: Property,        // degrees, per copy
+    repeat_scale: Property,           // per cent, per copy; 100 is the same size
+    repeat_start_opacity: Property,   // per cent, the first copy
+    repeat_end_opacity: Property,     // per cent, the last copy
 }
 ```
 
@@ -741,7 +751,10 @@ is absent from the file until it is used, so nothing here stands in the way of t
 
 **The layer's natural size is the box its art fills**, bounding the curves by their control
 points, and it *changes as the art is edited* — the only layer kind whose size is not fixed by
-its source. Anything caching a layer's size must key on the document revision.
+its source. Anything caching a layer's size must key on the document revision. Since the
+repeater (K-453) the box holds the **copies** too, so it is measured at a time: a keyed repeater
+moves its copies as it plays, and a cache keyed on the revision alone would hand back a box the
+picture has left behind. The frontend measures a shape layer fresh for that reason.
 
 The op is `SetShapeContents` — the whole list, exactly invertible, like `SetLayerMasks` and
 `SetLayerPaint`.
@@ -769,7 +782,20 @@ along" is, and each piece is drawn by the same brush run the whole outline is. A
 that the path would need more than 4096 pieces is drawn **solid**: at that density it is a solid
 line to the eye, and cutting it would cost a frame to draw something indistinguishable.
 
-The order is **trim, then dash**: the dashes run along whatever the trim left.
+**The repeater** (K-453) draws the item **more than once**: `repeat_copies` copies, each one more
+step of a transform than the last. The step moves by `repeat_position_*` layer pixels, turns by
+`repeat_rotation` degrees and scales by `repeat_scale` per cent, all about `repeat_anchor_*`;
+`repeat_offset` says which copy the original geometry is, so a negative offset puts copies
+*behind* it. The copies fade evenly from `repeat_start_opacity` to `repeat_end_opacity`.
+
+A copy is a scaled **drawing**, not a scaled path: its outline and its dashes grow with it. The
+copies are drawn last first, so the original sits on top of the copies made from it — After
+Effects' own default. A still count of one is no repeater at all and is absent from the file, and
+the count is held to `MAX_COPIES` (100) because every copy is a rasteriser pass over the whole
+layer.
+
+The order is **trim, then dash, then repeat**: the dashes run along whatever the trim left, and
+the repeater copies whatever the two of them drew.
 
 **Future:** nested groups, wiggle paths, joins and caps other than round, and animated paths.
 

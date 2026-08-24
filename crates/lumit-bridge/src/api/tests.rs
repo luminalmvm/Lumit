@@ -3420,6 +3420,16 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         trim_offset: BridgeScalar::Static(0.0),
         dashes: Vec::new(),
         dash_offset: BridgeScalar::Static(0.0),
+        repeat_copies: BridgeScalar::Static(1.0),
+        repeat_offset: BridgeScalar::Static(0.0),
+        repeat_anchor_x: BridgeScalar::Static(0.0),
+        repeat_anchor_y: BridgeScalar::Static(0.0),
+        repeat_position_x: BridgeScalar::Static(0.0),
+        repeat_position_y: BridgeScalar::Static(0.0),
+        repeat_rotation: BridgeScalar::Static(0.0),
+        repeat_scale: BridgeScalar::Static(100.0),
+        repeat_start_opacity: BridgeScalar::Static(100.0),
+        repeat_end_opacity: BridgeScalar::Static(100.0),
     }
 }
 
@@ -3561,6 +3571,42 @@ fn a_shapes_dashes_round_trip_and_are_clamped() {
     );
 }
 
+/// The repeater crosses as its count and the one step every copy is another of
+/// (K-453). A count below one is not a shape drawn fewer times, it is a number
+/// with no meaning; the copy offset may be negative, which is what puts copies
+/// behind the original.
+#[test]
+fn a_shapes_repeater_round_trips_and_is_clamped() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].repeat_copies = BridgeScalar::Static(-2.0);
+    contents[0].repeat_offset = BridgeScalar::Static(-1.0);
+    contents[0].repeat_position_x = BridgeScalar::Static(24.0);
+    contents[0].repeat_rotation = BridgeScalar::Static(15.0);
+    contents[0].repeat_end_opacity = BridgeScalar::Static(140.0);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        got.repeat_copies,
+        BridgeScalar::Static(1.0),
+        "fewer than one copy is no drawing at all, so one is where it lands"
+    );
+    assert_eq!(got.repeat_offset, BridgeScalar::Static(-1.0));
+    assert_eq!(got.repeat_position_x, BridgeScalar::Static(24.0));
+    assert_eq!(got.repeat_rotation, BridgeScalar::Static(15.0));
+    assert_eq!(
+        got.repeat_end_opacity,
+        BridgeScalar::Static(100.0),
+        "and an opacity is a per cent"
+    );
+}
+
 /// Dragging the left-most point left grows the art's box leftwards, and the
 /// layer's origin **is** that box's corner — so without the position following
 /// it, every point nobody touched would slide the other way (K-308).
@@ -3590,7 +3636,7 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
                     .expect("an item")
             })
             .collect();
-        let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&items).expect("a box");
+        let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&items, 0.0).expect("a box");
         let tf = shape.get_transform().expect("transform");
         let v = &contents[0].vertices[index];
         (

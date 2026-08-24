@@ -480,22 +480,10 @@ List<BridgeShapeItem>? shapeContentsWithPointsMoved(
       continue;
     }
     touched = true;
-    contents.add(BridgeShapeItem(
-      id: item.id,
-      name: item.name,
-      vertices: _verticesMoved(item.vertices, moved, d),
-      closed: item.closed,
-      fill: item.fill,
-      stroke: item.stroke,
-      strokeWidth: item.strokeWidth,
-      opacity: item.opacity,
-      // A point drag moves geometry; the modifiers on it are untouched.
-      trimStart: item.trimStart,
-      trimEnd: item.trimEnd,
-      trimOffset: item.trimOffset,
-      dashes: item.dashes,
-      dashOffset: item.dashOffset,
-    ));
+    // A point drag moves geometry; every modifier on the item is carried
+    // over untouched.
+    contents.add(shapeItemWith(item,
+        vertices: _verticesMoved(item.vertices, moved, d)));
   }
   return touched ? contents : null;
 }
