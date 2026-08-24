@@ -3450,7 +3450,13 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   it sits, and a comp is renamed from its right-click menu or its settings dialogue instead.
   Drag footage onto the Timeline or Viewer to make a layer; with no comp open yet, dropping
   it on the empty Timeline raises the composition dialogue already filled in from that
-  footage, and the clips land in the comp it makes. Solids are proper assets now — one "White solid"
+  footage, and the clips land in the comp it makes. **Filing is a drag too**: drop rows onto
+  a folder row and they move inside it, or use **Move to folder** on the right-click menu,
+  which lists the project's folders — either way the whole selection goes together as one
+  undo step, and **Move to root** brings things back out. An item lives in one folder at a
+  time, so filing it somewhere takes it out of wherever it was in the same step; a folder
+  cannot be filed inside itself or inside anything it holds, which would take that whole
+  branch off the panel with no way back to it, so Lumit simply declines those. Solids are proper assets now — one "White solid"
   in the project can back fifty layers, and the first one you make creates a Solids
   folder that future solids follow even if you rename it or tuck it inside another
   folder (Lumit remembers the folder itself, not its name). Compositions do the same

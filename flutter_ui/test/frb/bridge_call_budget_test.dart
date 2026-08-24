@@ -358,6 +358,10 @@ void main() {
       await settleFrb(tester, minRounds: 8);
 
       final rows = [
+        // The folder row is in here because it is the panel's drop target
+        // (K-451): a drop target that asked the engine what it could offer
+        // per rebuild would put the chatter back exactly where it was.
+        find.text('Compositions'),
         find.text('Scene'),
         find.text('shot.mov'),
         find.text('other.avi'),

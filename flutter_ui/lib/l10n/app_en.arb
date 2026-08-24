@@ -3712,6 +3712,10 @@
   "@moveToBottom": {
     "description": "Context-menu item: move an effect to the bottom of the stack."
   },
+  "moveToFolder": "Move to folder",
+  "@moveToFolder": {
+    "description": "Context-menu item in the Project panel: opens a submenu of the project's folders to file the picked items into."
+  },
   "moveToRoot": "Move to root",
   "@moveToRoot": {
     "description": "Context-menu item: take an item out of its folder in the Project panel."

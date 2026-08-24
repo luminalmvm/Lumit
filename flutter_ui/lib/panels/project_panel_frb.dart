@@ -682,6 +682,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final chipHit = _labelFilter == null || label == _labelFilter;
       final show =
           chipHit && (missingOnly ? isMissingFootage && ownMatch : searchHit);
+      // Counted before the row is built rather than after it: the Items cell
+      // reads this cache, so counting afterwards left the column one build
+      // behind — a folder just filed into still said what it held before.
+      final children = item is ItemReference_Folder
+          ? item.field0.getChildren()
+          : const <ItemReference>[];
+      if (item is ItemReference_Folder) _childCounts[id] = children.length;
       if (show) {
         _visibleIds.add(id);
         rows.add(_ProjectRowFrb(
@@ -714,6 +721,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           }),
           onLocalEdit: _documentChanged,
           onSetLabel: (picked) => _setLabel(item, picked),
+          onMoveToFolder: (folder) => _fileInto(folder, _targets(item)),
+          folderChoices: () => _folderChoices(item),
+          onDropItems: item is ItemReference_Folder
+              ? (dropped) => _fileInto(item, dropped)
+              : null,
           relinkPicker: widget.relinkPicker,
         ));
       }
@@ -726,13 +738,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       }
       // A closed folder keeps its children to itself — unless a search is
       // running, which has to be able to find what is inside one.
-      if (item is ItemReference_Folder) {
-        final children = item.field0.getChildren();
-        _childCounts[id] = children.length;
-        if (_search.isNotEmpty || !_closedFolders.contains(id)) {
-          for (final child in children) {
-            walk(child, depth + 1, selfMatched);
-          }
+      if (_search.isNotEmpty || !_closedFolders.contains(id)) {
+        for (final child in children) {
+          walk(child, depth + 1, selfMatched);
         }
       }
     }
@@ -1356,17 +1364,76 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     }
   }
 
+  /// What a row menu's command acts on: the whole selection when the row is
+  /// part of it, and that row alone when it is not. The menu is about what is
+  /// picked, and a right-click on an unpicked row is about that row.
+  List<ItemReference> _targets(ItemReference item) =>
+      _selectedIds.contains(_idOf(item))
+          ? [
+              for (final id in _visibleIds)
+                if (_selectedIds.contains(id)) _itemById[id],
+            ].whereType<ItemReference>().toList()
+          : [item];
+
   /// Tag every selected item, or untag them with 0 — one call each, so one
   /// undo step each, which is what the engine's op is.
   void _setLabel(ItemReference item, int label) {
-    final targets = _selectedIds.contains(_idOf(item))
-        ? [for (final id in _selectedIds) _itemById[id]]
-            .whereType<ItemReference>()
-        : [item];
-    for (final target in targets) {
+    for (final target in _targets(item)) {
       target.setLabel(label: label);
     }
     _documentChanged();
+  }
+
+  /// File `items` into `folder` — the drag onto a folder row, and the row
+  /// menu's **Move to folder**.
+  ///
+  /// One undo step for the whole gesture: the seam files one item per call, so
+  /// several are wrapped in an undo group and undo takes the drop back whole
+  /// rather than one item at a time.
+  ///
+  /// A refusal is calm and silent: the engine turns down a folder dropped into
+  /// its own descendant (and anything whose item has since been deleted), and
+  /// the rest of the drop still lands.
+  void _fileInto(ItemReference folder, List<ItemReference> items) {
+    if (items.isEmpty) return;
+    final id = folder is ItemReference_Folder ? folder.field0.internalid : null;
+    if (id == null) return;
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final group = items.length > 1 && project != null;
+    if (group) project.beginUndoGroup();
+    for (final item in items) {
+      try {
+        item.moveToFolder(folder: id);
+      } catch (_) {
+        // Refused — a cycle, or an item that is no longer there.
+      }
+    }
+    if (group) project.endUndoGroup();
+    _documentChanged();
+  }
+
+  /// The folders a **Move to folder** menu may offer, in the order the panel
+  /// lists them, walked at gesture time rather than held: a menu is not a
+  /// rebuild path, and the tree it must offer includes folders inside shut
+  /// ones, which the panel's own walk never reaches.
+  ///
+  /// `excluding` drops an item's own subtree — a folder cannot be filed into
+  /// itself or into anything it holds, and offering the move only to have the
+  /// engine refuse it is a dead entry.
+  List<(String, ItemReference)> _folderChoices(ItemReference excluding) {
+    final out = <(String, ItemReference)>[];
+    final skip = _idOf(excluding);
+    void walk(ItemReference item) {
+      if (item is! ItemReference_Folder) return;
+      if (_idOf(item) == skip) return;
+      out.add((_nameOf(item), item));
+      item.field0.getChildren().forEach(walk);
+    }
+
+    (Provider.of<LumitState>(context, listen: false).project?.getItems() ??
+            const <ItemReference>[])
+        .forEach(walk);
+    return out;
   }
 
   Future<void> _newFolder() async {
@@ -1587,6 +1654,19 @@ class _ProjectRowFrb extends StatefulWidget {
   /// Tag this row — and the rest of the selection, when this row is part of
   /// one — from the context menu's chip strip.
   final ValueChanged<int> onSetLabel;
+
+  /// File these items into this row's folder — the drop gesture. Null on every
+  /// kind but a folder, which is what makes a folder row the only drop target.
+  final void Function(List<ItemReference> items)? onDropItems;
+
+  /// File this row (and the rest of the selection, when it is part of one) into
+  /// the folder picked from **Move to folder**.
+  final void Function(ItemReference folder) onMoveToFolder;
+
+  /// The folders **Move to folder** may offer, read when the menu is raised.
+  /// A function rather than a list because a menu is a gesture: reading the
+  /// tree per rebuild is exactly the chatter the budget test guards against.
+  final List<(String, ItemReference)> Function() folderChoices;
   final Future<String?> Function()? relinkPicker;
 
   const _ProjectRowFrb({
@@ -1613,6 +1693,9 @@ class _ProjectRowFrb extends StatefulWidget {
     required this.onToggleFolder,
     required this.onLocalEdit,
     required this.onSetLabel,
+    required this.onMoveToFolder,
+    required this.folderChoices,
+    this.onDropItems,
     this.relinkPicker,
   });
 
@@ -1798,6 +1881,9 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
               onRelink: item is ItemReference_Footage
                   ? () => _doRelink((item as ItemReference_Footage).field0)
                   : null,
+              // Read here, not in build: raising the menu is a gesture.
+              folders: widget.folderChoices(),
+              onMoveToFolder: widget.onMoveToFolder,
             );
           },
           child: Container(
@@ -1897,6 +1983,33 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
         dragAnchorStrategy: pointerDragAnchorStrategy,
         feedback: _DragFeedbackFrb(name: widget.name, icon: LumitIcon.comp),
         child: row,
+      );
+    }
+    // A folder row takes what the other rows drag: dropping on it files the
+    // items there (K-451). Two nested targets rather than one, because a
+    // `DragTarget` is typed and the panel's rows carry two payload types — the
+    // same two the Timeline consumes.
+    final drop = widget.onDropItems;
+    if (drop != null) {
+      return DragTarget<FootageDragData>(
+        onAcceptWithDetails: (d) =>
+            drop([for (final f in d.data.footage) ItemReference.footage(f)]),
+        builder: (context, footageOver, _) => DragTarget<CompDragData>(
+          onAcceptWithDetails: (d) =>
+              drop([ItemReference.composition(d.data.comp)]),
+          builder: (context, compOver, _) => Container(
+            // The drop-target treatment (§6.5), painted over the row rather
+            // than behind it: the row draws its own fill, and a drop with no
+            // feedback is indistinguishable from one that did nothing.
+            foregroundDecoration: footageOver.isEmpty && compOver.isEmpty
+                ? null
+                : BoxDecoration(
+                    border: Border.all(color: t.accent, width: 1.5),
+                    color: t.accent.withValues(alpha: 0.1),
+                  ),
+            child: row,
+          ),
+        ),
       );
     }
     return row;
@@ -2056,6 +2169,15 @@ Future<void> showProjectMenuFrb({
 
   /// The tag the item wears now, so the strip can mark it.
   int label = 0,
+
+  /// The folders **Move to folder** offers, name and handle, in the order the
+  /// panel lists them. Empty — a project with no folders in it — leaves the
+  /// entry off the menu rather than opening onto nothing.
+  List<(String, ItemReference)> folders = const [],
+
+  /// File the picked row, and the rest of the selection with it, into that
+  /// folder.
+  void Function(ItemReference folder)? onMoveToFolder,
 }) async {
   final isFootage = item is ItemReference_Footage;
   final isComp = item is ItemReference_Composition;
@@ -2140,6 +2262,35 @@ Future<void> showProjectMenuFrb({
                     ),
                 ],
               ),
+            ),
+          // Filing, the mouse way — the drag onto a folder row is the other
+          // one. A submenu rather than a dialogue: the folders are a short
+          // list the panel already knows, so picking one is one hover and one
+          // click, the same shape Effects & presets offers its categories in.
+          if (onMoveToFolder != null && folders.isNotEmpty)
+            SubmenuRow(
+              key: const ValueKey('project-menu-move-to-folder'),
+              closeParent: () => close(null),
+              submenu: (dismiss) => FloatSurface(
+                width: 210,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final (name, folder) in folders)
+                      MenuRow(
+                        key: ValueKey<String>(
+                            'project-menu-folder-${_idOf(folder)}'),
+                        onPressed: () {
+                          dismiss();
+                          onMoveToFolder(folder);
+                        },
+                        child: Text(name),
+                      ),
+                  ],
+                ),
+              ),
+              child: Text(l10n.moveToFolder),
             ),
           MenuRow(
             onPressed: () => close(_ProjectMenuAction.moveToRoot),

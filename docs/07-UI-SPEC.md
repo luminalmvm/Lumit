@@ -810,7 +810,12 @@ The library of assets: footage items, audio items, comps, folders.
 
 ### 3.1 Structure
 
-- A folder tree with drag-to-reorganise. Sorting per column; columns: name, type,
+- A folder tree with drag-to-reorganise: dropping rows on a folder row files them there,
+  and the row menu's **Move to folder** lists the project's folders for the rows that do not
+  drag. Either way the whole selection moves together as one undo step, an item leaves its
+  old folder in the same step it joins the new one, and **Move to root** unfiles. A folder
+  is never offered — or allowed — inside itself or inside its own descendant. Sorting per
+  column; columns: name, type,
   dimensions, frame rate, duration, colour space tag, file path. Column set is configurable
   (workspace state).
 - **Under the redesign (K-448, built to the mockup 2026-08-24)**: the panel has a bottom

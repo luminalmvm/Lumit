@@ -629,6 +629,123 @@ void main() {
       expect(rowText('Scene'), findsOneWidget, reason: 'moved, not deleted');
     });
 
+    /// The other direction, and the panel's own filing gesture (K-451): a row
+    /// dropped on a folder row lands in that folder, and the folder's Items
+    /// count says so at once.
+    testWidgets('a folder row takes a dropped item and files it',
+        (tester) async {
+      final p = freshProject();
+      final folder = p.state.project!.newFolder(name: 'Footage');
+      final shot = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      Finder countCell(String text) => find.descendant(
+            of: find
+                .byKey(ValueKey<String>('project-row-${folder.internalid}')),
+            matching: find.text(text),
+          );
+      expect(countCell('0'), findsOneWidget, reason: 'an empty folder');
+
+      // Delivered straight to the target's callback, as the New composition
+      // drop test does: the row and the folder are both on screen, but a real
+      // pointer drag would race the double-tap recogniser the rows also use.
+      final target = find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(DragTarget<FootageDragData>),
+      );
+      tester
+          .widget<DragTarget<FootageDragData>>(target)
+          .onAcceptWithDetails!(DragTargetDetails<FootageDragData>(
+        data: FootageDragData([shot], 'shot.mov'),
+        offset: tester.getCenter(target),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(folder.getChildren(), hasLength(1),
+          reason: 'the drop reached the document');
+      expect(countCell('1'), findsOneWidget,
+          reason: 'the Items count is re-read after the edit');
+      expect(
+        tester.getTopLeft(rowText('shot.mov')).dx,
+        greaterThan(tester.getTopLeft(rowText('Footage')).dx),
+        reason: 'filed, so it draws indented under the folder',
+      );
+    });
+
+    /// **Move to folder** files everything picked, in one undo step — the
+    /// gesture for the rows that do not drag, and for a selection spanning
+    /// kinds.
+    testWidgets('the context menu files the whole selection into a folder',
+        (tester) async {
+      final p = freshProject();
+      final folder = p.state.project!.newFolder(name: 'Footage');
+      p.state.project!.importFootage(path: 'C:/clips/a.mov');
+      p.state.project!.importFootage(path: 'C:/clips/b.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await _clickRow(tester, 'a.mov');
+      await _clickRow(tester, 'b.mov', held: LogicalKeyboardKey.controlLeft);
+
+      await tester.tapAt(
+        tester.getCenter(rowText('b.mov')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      // The folders wait behind the entry, exactly as the effect categories do.
+      await tester.tap(find.text('Move to folder'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+            ValueKey<String>('project-menu-folder-${folder.internalid}')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(folder.getChildren(), hasLength(2),
+          reason: 'both picked rows were filed, not just the one clicked');
+
+      // One undo step for the pair: the group is what makes the gesture whole.
+      p.state.project!.undo();
+      expect(folder.getChildren(), isEmpty);
+      expect(p.state.project!.getItems(), hasLength(3),
+          reason: 'the folder and both clips, back at the root');
+    });
+
+    /// A folder cannot be filed inside itself: the engine refuses it, so the
+    /// menu never offers it — a dead entry is worse than a missing one.
+    testWidgets('Move to folder never offers a folder its own subtree',
+        (tester) async {
+      final p = freshProject();
+      final outer = p.state.project!.newFolder(name: 'Shoots');
+      p.state.project!.newFolder(name: 'Day one', parent: outer.internalid);
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await tester.tapAt(
+        tester.getCenter(rowText('Shoots')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Move to folder'), findsNothing,
+          reason: 'itself and its own child are all there is to offer');
+    });
+
     /// Missing-media rows and the filter. The imported path does not exist, so the
     /// engine's probe genuinely fails — no fake status is injected anywhere.
     ///
