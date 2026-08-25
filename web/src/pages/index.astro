@@ -134,65 +134,69 @@ const roadmap = [
   {/* ---------- hero: half height, the wordmark animation, one download ---------- */}
   {/* Half the window, and never more than the drawing's 520 however tall the
       screen is - the hero is a band, not a page. */}
-  <section class="hero relative isolate -mt-16 flex min-h-[clamp(420px,54vh,560px)] flex-col items-center justify-center overflow-hidden px-5 pt-24 pb-16 text-center">
+  {/* The field is a sibling of the band's content, not a child of it, because it
+      is taller than the band: it runs on past the hero's bottom edge and fades
+      out behind the section below, so the hero has no edge of its own. */}
+  <div class="relative -mt-16">
     <HeroField />
-    <div class="grain pointer-events-none absolute inset-0 opacity-90 mix-blend-overlay" aria-hidden="true"></div>
+    <section class="relative flex min-h-[clamp(420px,54vh,560px)] flex-col items-center justify-center px-5 pt-24 pb-16 text-center">
 
-    <h1 class="relative mb-0 w-[min(440px,78vw)]">
-      <Wordmark />
-      <span class="sr-only">Lumit - compositing, your way.</span>
-    </h1>
+      <h1 class="relative mb-0 w-[min(440px,78vw)]">
+        <Wordmark />
+        <span class="sr-only">Lumit - compositing, your way.</span>
+      </h1>
 
-    <p class="relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80">
-      Compositing, your way. A native motion-graphics editor built for editors:
-      GPU-first, open source, and responsive in projects with thousands of layers.
-    </p>
+      <p class="relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80">
+        Compositing, your way. A native motion-graphics editor built for editors:
+        GPU-first, open source, and responsive in projects with thousands of layers.
+      </p>
 
-    <div class="relative mt-7 flex flex-wrap items-center justify-center gap-3">
-      <a class="btn" href="/download" data-dl>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-          <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
-        </svg>
-        <span data-dl-label>Download</span>
-      </a>
-      <a class="text-[13px] text-fg-2 no-underline hover:text-accent-2" href="/download" data-alt>
-        All download options
-      </a>
-    </div>
+      <div class="relative mt-7 flex flex-wrap items-center justify-center gap-3">
+        <a class="btn" href="/download" data-dl>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
+          </svg>
+          <span data-dl-label>Download</span>
+        </a>
+        <a class="text-[13px] text-fg-2 no-underline hover:text-accent-2" href="/download" data-alt>
+          All download options
+        </a>
+      </div>
 
-    {/* Naming the visitor's OS changes the width of both lines above, so it has
-        to happen before the browser paints them - a deferred module runs after
-        the first paint and the labels visibly jump. This is the whole reason
-        the two lines are written here, inline and in place, rather than in the
-        module at the foot of the page. */}
-    <script is:inline>
-      (function () {
-        var ua = navigator.userAgent;
-        var os = /Win/.test(ua)
-          ? "Windows"
-          : /Mac/.test(ua)
-            ? "macOS"
-            : /Linux|X11/.test(ua)
-              ? "Linux"
-              : null;
-        document.documentElement.dataset.os = os || "";
-        if (!os) return;
-        var others = {
-          Windows: "Also for macOS and Linux",
-          macOS: "Also for Windows and Linux",
-          Linux: "Also for Windows and macOS",
-        };
-        var label = document.querySelector("[data-dl-label]");
-        var alt = document.querySelector("[data-alt]");
-        if (label) label.textContent = "Download for " + os;
-        if (alt) alt.textContent = others[os];
-      })();
-    </script>
+      {/* Naming the visitor's OS changes the width of both lines above, so it has
+          to happen before the browser paints them - a deferred module runs after
+          the first paint and the labels visibly jump. This is the whole reason
+          the two lines are written here, inline and in place, rather than in the
+          module at the foot of the page. */}
+      <script is:inline>
+        (function () {
+          var ua = navigator.userAgent;
+          var os = /Win/.test(ua)
+            ? "Windows"
+            : /Mac/.test(ua)
+              ? "macOS"
+              : /Linux|X11/.test(ua)
+                ? "Linux"
+                : null;
+          document.documentElement.dataset.os = os || "";
+          if (!os) return;
+          var others = {
+            Windows: "Also for macOS and Linux",
+            macOS: "Also for Windows and Linux",
+            Linux: "Also for Windows and macOS",
+          };
+          var label = document.querySelector("[data-dl-label]");
+          var alt = document.querySelector("[data-alt]");
+          if (label) label.textContent = "Download for " + os;
+          if (alt) alt.textContent = others[os];
+        })();
+      </script>
 
-    <p class="relative mt-6 text-[14px] text-fg-2">
-      Free and open source, GPLv3. No account, no trial, no card.
-    </p>
-  </section>
+      <p class="relative mt-6 text-[14px] text-fg-2">
+        Free and open source, GPLv3. No account, no trial, no card.
+      </p>
+    </section>
+  </div>
 
   {/* ---------- the product, in pictures ---------- */}
   <section id="features" class="wrap flex flex-col gap-10 pt-24 pb-20 sm:pt-[120px]">
@@ -338,19 +342,6 @@ const roadmap = [
 </Base>
 
 <style>
-  /* The hero's ground: three washes over surface_0's near-black, and a fine grain
-     over the lot so the gradient never bands on a wide screen. Both are the
-     drawing's own values. */
-  .hero {
-    background:
-      radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
-      radial-gradient(90% 80% at 85% 30%, #3a2a6b 0%, rgba(58, 42, 107, 0) 55%),
-      radial-gradient(100% 90% at 60% 95%, #6a2f3f 0%, rgba(106, 47, 63, 0) 60%),
-      #0f1422;
-  }
-  .grain {
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.10 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
-  }
 
   /* Numbered stages against a rail. Each stage carries its own rail segment so
      the last one can go dashed: past 1.0 the order is a guess, and the line

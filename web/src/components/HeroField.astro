@@ -13,23 +13,54 @@
 // it is flowing rather than fizzing.
 //
 // The same three hues as the static wash it replaces, so the page's colour does
-// not change - only its stillness. The CSS gradient stays underneath as the
-// ground for anyone whose browser gives us no WebGL, and the grain layer over
-// the top is unchanged.
+// not change - only its stillness. The wash itself is still here, under the
+// canvas, as the whole of the fallback for a browser with no WebGL; the grain
+// rides on top, inside the same faded box, so grain and colour end together.
 ---
 
-<canvas class="field" data-field aria-hidden="true"></canvas>
+<div class="field" aria-hidden="true">
+  <div class="ground"></div>
+  <canvas data-field></canvas>
+  <div class="grain"></div>
+</div>
 
 <style>
+  /* The field is taller than the band it sits in - it runs 280 px past the
+     bottom and fades out over the last third, so the colour dies away behind
+     the section below instead of stopping at an edge. The overhang is why it
+     sits on a negative z-index. The grain rides inside
+     the same box and fades with it, so grain and colour end together. */
   .field {
+    position: absolute;
+    inset: 0 0 -280px 0;
+    pointer-events: none;
+    /* Behind everything the page draws, but still above the body's own colour:
+       the field overhangs the section below, and must pass under its words
+       rather than over them. */
+    z-index: -1;
+    -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+  }
+  .field > * {
     position: absolute;
     inset: 0;
     display: block;
     width: 100%;
     height: 100%;
-    /* The field is a soft wash; drawing it at half size and letting the browser
-       scale it up costs a quarter of the pixels and looks identical. */
-    image-rendering: auto;
+  }
+  /* The ground the canvas is drawn over, and the whole of the fallback for a
+     browser that gives us no WebGL: the wash this field replaced. */
+  .ground {
+    background:
+      radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
+      radial-gradient(90% 80% at 85% 30%, #3a2a6b 0%, rgba(58, 42, 107, 0) 55%),
+      radial-gradient(100% 90% at 60% 95%, #6a2f3f 0%, rgba(106, 47, 63, 0) 60%),
+      #0f1422;
+  }
+  .grain {
+    opacity: 0.9;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.10 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
   }
 </style>
 
@@ -60,7 +91,10 @@
       );
     }
 
-    // Four octaves, each half the size and half the strength of the last.
+    // Four octaves, each half the size and half the strength of the last. The
+    // even halving is what keeps the field wispy: the big shapes carry it and
+    // the fine detail only softens their edges. Giving the small octaves more
+    // say makes it turbulent instead, which is not what this hero wants.
     float fbm(vec2 p) {
       float v = 0.0;
       float a = 0.5;
@@ -75,7 +109,7 @@
     void main() {
       vec2 uv = gl_FragCoord.xy / u_res;
       vec2 p = vec2(uv.x * (u_res.x / u_res.y), uv.y) * 1.7;
-      float t = u_t * 0.035;
+      float t = u_t * 0.055;
 
       // Bend the coordinates by the noise twice over before the final lookup.
       vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t));
@@ -93,12 +127,16 @@
       vec3 col = ink;
       col = mix(col, indigo, smoothstep(0.15, 0.85, f) * 0.95);
       col = mix(col, violet, clamp(length(q) - 0.35, 0.0, 1.0) * 1.1);
-      // The wine only ever appears low, as it does in the wash it replaces.
-      col = mix(col, wine, clamp(r.x - 0.4, 0.0, 1.0) * 1.4 * (1.0 - uv.y));
+      // The wine is weighted low, as it is in the wash this replaces, but it is
+      // no longer confined there: a third of its strength reaches the top.
+      col = mix(col, wine, clamp(r.x - 0.26, 0.0, 1.0) * 2.1 * (0.35 + 0.65 * (1.0 - uv.y)));
+      // A second, looser pass of the same red, so it reads as a tint through
+      // the whole field rather than a single band of it.
+      col = mix(col, wine, smoothstep(0.45, 0.95, q.y + r.y) * 0.35);
 
-      // Ease off at the very edges so the band has no seam of its own.
-      float edge = smoothstep(0.0, 0.18, uv.y) * smoothstep(0.0, 0.10, 1.0 - uv.y);
-      col = mix(ink, col, 0.35 + 0.65 * edge);
+      // Only the top eases off, under the header. The bottom has no edge to
+      // hide: the whole field is faded out there by its mask.
+      col = mix(ink, col, 0.35 + 0.65 * smoothstep(0.0, 0.14, uv.y));
 
       gl_FragColor = vec4(col, 1.0);
     }
