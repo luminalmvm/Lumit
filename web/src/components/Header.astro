@@ -14,14 +14,14 @@ const links = [
 ];
 ---
 
-<header class="sticky top-0 z-20 transition-colors" data-header>
+<header class="sticky top-0 z-20">
   <div class="blur-stack" aria-hidden="true">
     <div></div>
     <div></div>
     <div></div>
     <div></div>
   </div>
-  <div class="wrap relative flex h-32 items-center">
+  <div class="wrap relative flex h-16 items-center">
     <a href="/" class="mr-auto flex items-center no-underline">
       <img src="/lumit-wordmark.svg" alt="Lumit" height="18" class="block h-[18px] w-auto" />
     </a>
@@ -50,10 +50,10 @@ const links = [
 </header>
 
 <style>
-  /* The bar rides on the hero's own wash, as the drawing draws it, and only
-     grows a ground once the page has scrolled far enough for content to pass
-     underneath it. Without script it simply stays clear, which is what it looks
-     like at the top of every page anyway.
+  /* The bar always carries its own ground, on every page and at every scroll
+     position. It used to grow one only once the page had scrolled, which meant
+     a visible darkening the moment you began to move - the ground arriving is
+     more distracting than the ground simply being there.
 
      The ground is not flat. It is four blurred bands, each one starting lower
      than the last, so blur and ink both deepen towards the top edge and reach
@@ -64,11 +64,6 @@ const links = [
     position: absolute;
     inset: 0;
     pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-  [data-header].scrolled .blur-stack {
-    opacity: 1;
   }
   .blur-stack > div {
     position: absolute;
@@ -96,15 +91,3 @@ const links = [
     mask-image: linear-gradient(to top, transparent 72%, #000 100%);
   }
 </style>
-
-<script is:inline>
-  (function () {
-    var h = document.querySelector("[data-header]");
-    if (!h) return;
-    var upd = function () {
-      h.classList.toggle("scrolled", window.scrollY > 8);
-    };
-    addEventListener("scroll", upd, { passive: true });
-    upd();
-  })();
-</script>

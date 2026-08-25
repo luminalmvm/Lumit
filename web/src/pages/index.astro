@@ -136,11 +136,7 @@ const roadmap = [
   <section class="hero relative isolate -mt-16 flex min-h-[clamp(420px,54vh,560px)] flex-col items-center justify-center overflow-hidden px-5 pt-24 pb-16 text-center">
     <div class="grain pointer-events-none absolute inset-0 opacity-90 mix-blend-overlay" aria-hidden="true"></div>
 
-    <a class="pill relative" href="/releases">
-      <b class="font-mono font-normal text-fg" data-ver>v0.2.0</b> · public beta
-    </a>
-
-    <h1 class="relative mt-7 mb-0 w-[min(440px,78vw)]">
+    <h1 class="relative mb-0 w-[min(440px,78vw)]">
       <Wordmark />
       <span class="sr-only">Lumit - compositing, your way.</span>
     </h1>
@@ -161,6 +157,35 @@ const roadmap = [
         All download options
       </a>
     </div>
+
+    {/* Naming the visitor's OS changes the width of both lines above, so it has
+        to happen before the browser paints them - a deferred module runs after
+        the first paint and the labels visibly jump. This is the whole reason
+        the two lines are written here, inline and in place, rather than in the
+        module at the foot of the page. */}
+    <script is:inline>
+      (function () {
+        var ua = navigator.userAgent;
+        var os = /Win/.test(ua)
+          ? "Windows"
+          : /Mac/.test(ua)
+            ? "macOS"
+            : /Linux|X11/.test(ua)
+              ? "Linux"
+              : null;
+        document.documentElement.dataset.os = os || "";
+        if (!os) return;
+        var others = {
+          Windows: "Also for macOS and Linux",
+          macOS: "Also for Windows and Linux",
+          Linux: "Also for Windows and macOS",
+        };
+        var label = document.querySelector("[data-dl-label]");
+        var alt = document.querySelector("[data-alt]");
+        if (label) label.textContent = "Download for " + os;
+        if (alt) alt.textContent = others[os];
+      })();
+    </script>
 
     <p class="relative mt-6 text-[14px] text-fg-2">
       Free and open source, GPLv3. No account, no trial, no card.
@@ -395,11 +420,10 @@ const roadmap = [
 </style>
 
 <script>
-  // Name the visitor's OS on the hero button and point it straight at that
-  // platform's installer, and let the version pill say whatever the latest
-  // GitHub release says. Pure enhancement: the button ships pointing at
-  // /download and the pill ships with the version current at deploy time,
-  // and every failure here leaves them be.
+  // Point the hero button straight at the installer for the visitor's platform.
+  // Pure enhancement: the button ships pointing at /download, and every failure
+  // here leaves it be. The button's *words* are set inline in the hero instead,
+  // because changing them after this module loads would move the layout.
   //
   // No platform is "coming": release.yml builds a Windows .exe, a macOS .dmg
   // and a Linux .flatpak on every tag and every job gates the release (K-304),
@@ -409,45 +433,27 @@ const roadmap = [
     Linux: /linux.*\.flatpak$/i,
     macOS: /\.dmg$/i,
   };
-  const OTHERS: Record<string, string> = {
-    Windows: "Also for macOS and Linux",
-    macOS: "Also for Windows and Linux",
-    Linux: "Also for Windows and macOS",
-  };
-
-  const ua = navigator.userAgent;
-  const os = /Win/.test(ua)
-    ? "Windows"
-    : /Mac/.test(ua)
-      ? "macOS"
-      : /Linux|X11/.test(ua)
-        ? "Linux"
-        : null;
+  // The inline script in the hero has already worked the platform out.
+  const os = document.documentElement.dataset.os;
 
   const btn = document.querySelector<HTMLAnchorElement>("[data-dl]");
-  const label = document.querySelector("[data-dl-label]");
-  const ver = document.querySelector("[data-ver]");
-  const alt = document.querySelector("[data-alt]");
-
-  if (os && label) label.textContent = `Download for ${os}`;
-  if (os && alt) alt.textContent = OTHERS[os];
 
   type Asset = { name: string; browser_download_url: string };
-  fetch("https://api.github.com/repos/luminalmvm/Lumit/releases/latest")
-    .then((r) => {
-      if (!r.ok) throw new Error(String(r.status));
-      return r.json() as Promise<{ tag_name: string; assets: Asset[] }>;
-    })
-    .then((rel) => {
-      if (ver && rel.tag_name) ver.textContent = rel.tag_name;
-      if (os && btn) {
-        const asset = rel.assets.find((a) => ASSET[os].test(a.name));
+  if (os && btn && ASSET[os]) {
+    const want = ASSET[os];
+    fetch("https://api.github.com/repos/luminalmvm/Lumit/releases/latest")
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json() as Promise<{ assets: Asset[] }>;
+      })
+      .then((rel) => {
+        const asset = rel.assets.find((a) => want.test(a.name));
         if (asset) btn.href = asset.browser_download_url;
-      }
-    })
-    .catch(() => {
-      /* the shipped pill and /download link stand */
-    });
+      })
+      .catch(() => {
+        /* the shipped /download link stands */
+      });
+  }
 
   // The three slots play on hover. A slot whose clip does not exist yet keeps
   // its poster and drops the "plays on hover" label rather than removing
