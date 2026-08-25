@@ -468,6 +468,24 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     );
   }
 
+  /// Every layer an add from this panel should land on (K-523): the whole
+  /// selection when the layer these rows are for is part of it, and that layer
+  /// alone when it is not.
+  ///
+  /// The second case is the one worth naming. This panel deliberately keeps the
+  /// last stack up after a deselect, so the rows on screen are not always the
+  /// rows of a *selected* layer — and an add made against a stack nobody has
+  /// selected means the stack that is being looked at, not nothing.
+  ///
+  /// Read from the shell in the handler rather than in the build, the way the
+  /// Timeline's row menu reads its own targets (K-184).
+  List<LayerReference> _addTargets(LumitUiState ui, LayerReference shown) {
+    final picked = ui.selectedLayers.value;
+    return picked.any((l) => l.internallayerId == shown.internallayerId)
+        ? picked
+        : [shown];
+  }
+
   Widget _rows(
     BuildContext context,
     CompositionReference comp,
@@ -506,7 +524,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         _Header(
           layerName: info.name,
           onAdd: (name) {
-            layer.addEffect(name: name);
+            for (final target in _addTargets(ui, layer)) {
+              try {
+                target.addEffect(name: name);
+              } catch (_) {}
+            }
             ui.model.refresh();
           },
         ),
@@ -517,7 +539,11 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           // with the Timeline.
           child: DragTarget<EffectDragData>(
             onAcceptWithDetails: (details) {
-              layer.addEffect(name: details.data.name);
+              for (final target in _addTargets(ui, layer)) {
+                try {
+                  target.addEffect(name: details.data.name);
+                } catch (_) {}
+              }
               ui.model.refresh();
             },
             builder: (context, candidate, _) => Container(

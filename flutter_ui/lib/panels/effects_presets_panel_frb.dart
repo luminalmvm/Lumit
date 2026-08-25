@@ -212,7 +212,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           }),
         ),
         _PresetBar(
-          layer: ui.selectedLayer.value,
+          layers: ui.selectedLayers.value,
           savePicker: widget.savePicker,
           loadPicker: widget.loadPicker,
           onChanged: _refreshPresets,
@@ -350,21 +350,36 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     ];
   }
 
-  /// Apply a library preset's whole stack to the selected layer. A file that
-  /// has gone away since the listing just refreshes the listing — the library
-  /// is a folder, and folders change behind running programs.
+  /// Apply a library preset's whole stack to **every** selected layer, exactly
+  /// as [_apply] does with a single effect (K-523): the two rows sit in the
+  /// same list and are double-clicked with the same gesture, so one of them
+  /// quietly meaning "the first layer only" would read as the selection having
+  /// been lost.
+  ///
+  /// A file that has gone away since the listing just refreshes the listing —
+  /// the library is a folder, and folders change behind running programs. Read
+  /// once and applied many times: the text is the same for every layer, and
+  /// re-reading it per layer would let a file change halfway through a batch.
   void _applyPreset(LumitUiState ui, BridgePresetInfo preset) {
-    final layer = ui.selectedLayer.value;
-    if (layer == null) return;
+    final layers = ui.selectedLayers.value;
+    if (layers.isEmpty) return;
     final file = File(preset.path);
     if (!file.existsSync()) {
       _refreshPresets();
       return;
     }
+    final String text;
     try {
-      layer.loadPreset(text: file.readAsStringSync());
+      text = file.readAsStringSync();
     } catch (_) {
       return;
+    }
+    for (final layer in layers) {
+      // Each layer keeps its own `try`: a stack one layer will not take
+      // leaves the rest of the batch standing.
+      try {
+        layer.loadPreset(text: text);
+      } catch (_) {}
     }
     setState(() {});
   }
@@ -507,13 +522,16 @@ class _EffectRow extends StatelessWidget {
 
 /// Save the selected layer's stack as a `.lumfx`, or load one onto it.
 class _PresetBar extends StatelessWidget {
-  final LayerReference? layer;
+  /// Every picked layer. **Save** takes the first — a preset file is one
+  /// stack, and saving four would mean choosing which one survives — while
+  /// **Load** lands on all of them, the way every other add here does (K-523).
+  final List<LayerReference> layers;
   final Future<String?> Function()? savePicker;
   final Future<String?> Function()? loadPicker;
   final VoidCallback onChanged;
 
   const _PresetBar({
-    required this.layer,
+    required this.layers,
     required this.savePicker,
     required this.loadPicker,
     required this.onChanged,
@@ -522,7 +540,7 @@ class _PresetBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final target = layer;
+    final target = layers.isEmpty ? null : layers.first;
 
     return Container(
       height: 26,
@@ -546,7 +564,7 @@ class _PresetBar extends StatelessWidget {
               key: const ValueKey('preset-load'),
               small: true,
               frameless: true,
-              onPressed: target == null ? null : () => _load(target),
+              onPressed: target == null ? null : _load,
               child: Text(l10n.loadPresetEllipsis, style: t.small),
             ),
             if (target == null) ...[
@@ -577,17 +595,24 @@ class _PresetBar extends StatelessWidget {
     onChanged();
   }
 
-  Future<void> _load(LayerReference target) async {
+  Future<void> _load() async {
     final path = await (loadPicker ?? pickPresetToOpen)();
     if (path == null) return;
     final file = File(path);
     if (!file.existsSync()) return;
+    final String text;
     try {
-      target.loadPreset(text: file.readAsStringSync());
+      text = file.readAsStringSync();
     } catch (_) {
-      // Not a preset: the picker will take any file, so this is a normal thing
-      // for a user to do and not something to shout about.
       return;
+    }
+    for (final layer in layers) {
+      try {
+        layer.loadPreset(text: text);
+      } catch (_) {
+        // Not a preset: the picker will take any file, so this is a normal
+        // thing for a user to do and not something to shout about.
+      }
     }
     onChanged();
   }

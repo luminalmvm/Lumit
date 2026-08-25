@@ -152,6 +152,57 @@ void main() {
           reason: 'a row per declared parameter, labelled from the schema');
     });
 
+    /// **Add lands on every selected layer** (K-523), the way the Effect menu
+    /// and the effects console already do. This button reached for the layer
+    /// the panel was showing alone, so the same effect on the same selection
+    /// landed on three layers from the menu and on one from here.
+    testWidgets('Add effect commits to every selected layer', (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final first = comp.addAdjustmentLayer();
+      final second = comp.addAdjustmentLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([first, second]);
+      await tester.pumpWidget(hostPanel(
+        child: const EffectControlsPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('fx-add')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fx-category-blur_sharpen')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Gaussian blur'));
+      await tester.pumpAndSettle();
+
+      expect(first.getEffects(), hasLength(1));
+      expect(second.getEffects(), hasLength(1),
+          reason: 'the second selected layer must get the effect too');
+    });
+
+    /// **And a stack nobody has selected still takes one.** The panel keeps the
+    /// last layer up after a deselect on purpose, so an add made against those
+    /// rows means those rows rather than nothing at all.
+    testWidgets('Add effect still reaches a deselected panel layer',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+      p.uiState.selectedLayer.value = null;
+      p.uiState.setSelection(const []);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('fx-add')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('fx-category-blur_sharpen')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Gaussian blur'));
+      await tester.pumpAndSettle();
+
+      expect(p.layer.getEffects(), hasLength(1));
+    });
+
     testWidgets(
         'a null layer says its effects change no picture, and keeps their values',
         (tester) async {

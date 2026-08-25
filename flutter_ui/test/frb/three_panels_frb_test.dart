@@ -188,6 +188,65 @@ void main() {
       expect(find.byKey(const ValueKey('preset-item-Soft glow')), findsNothing);
     });
 
+    /// A **preset** row is added to the same list by the same gesture as an
+    /// effect row, so it lands on the same layers (K-523). It reached for the
+    /// primary layer alone while the effect row beside it took the whole
+    /// selection.
+    testWidgets('a library preset applies to every selected layer',
+        (tester) async {
+      final dir = Directory.systemTemp.createTempSync('lumit-preset-many');
+      final path = '${dir.path}/glow.lumfx';
+      final donor = withLayer();
+      donor.layer.addEffect(name: 'blur');
+      File(path).writeAsStringSync(donor.layer.savePreset(name: 'Soft glow'));
+
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final first = comp.addAdjustmentLayer();
+      final second = comp.addAdjustmentLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([first, second]);
+      await mount(tester, p,
+          presetsLister: () =>
+              [BridgePresetInfo(name: 'Soft glow', path: path)]);
+
+      final row = find.byKey(const ValueKey('preset-item-Soft glow'));
+      await tester.tap(row);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(first.getEffects(), hasLength(1));
+      expect(second.getEffects(), hasLength(1),
+          reason: 'the second selected layer must get the preset too');
+    });
+
+    /// **Load preset** is the same act reached from the bar rather than the
+    /// list, so it lands on the same layers. Save stays singular: a preset file
+    /// is one stack.
+    testWidgets('loading a preset applies to every selected layer',
+        (tester) async {
+      final dir = Directory.systemTemp.createTempSync('lumit-preset-load');
+      final path = '${dir.path}/look.lumfx';
+      final donor = withLayer();
+      donor.layer.addEffect(name: 'blur');
+      File(path).writeAsStringSync(donor.layer.savePreset(name: 'Look'));
+
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final first = comp.addAdjustmentLayer();
+      final second = comp.addAdjustmentLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([first, second]);
+      await mount(tester, p, loadPicker: () async => path);
+
+      await tester.tap(find.byKey(const ValueKey('preset-load')));
+      await tester.pumpAndSettle();
+
+      expect(first.getEffects(), hasLength(1));
+      expect(second.getEffects(), hasLength(1));
+    });
+
     /// **Every heading twirls.** The category folds its effects away and lets
     /// them back, and the saved-preset group does the same.
     testWidgets('a category twirls its effects away and back', (tester) async {
