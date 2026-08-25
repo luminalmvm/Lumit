@@ -1202,7 +1202,13 @@ class EffectParamRowFrb extends StatelessWidget {
                 l10n.missingLayer),
         options: () => [
           (null, l10n.none),
-          for (final entry in ownerLayers)
+          // **Numbered as the composition numbers them** (item 6.13): the
+          // entry reads "3. Sky", the layer's own place in the stack, so a
+          // list of layers that share a name is still a list of different
+          // layers. The number is the position, not part of the name — so it
+          // counts every layer, including the ones this picker does not
+          // offer, and it is data rather than a phrase (no arb entry).
+          for (var i = 0; i < ownerLayers.length; i++)
             // A layer-valued parameter samples a *picture*, so a layer with
             // none (a camera, an audio-only clip) is not offered.
             //
@@ -1212,11 +1218,12 @@ class EffectParamRowFrb extends StatelessWidget {
             // whole point on an **adjustment layer** — which has no picture
             // of its own, and whose input is the composite of everything
             // below it. A Lens flare added to one starts here.
-            if (entry.layer.internallayerId == ownerLayerId ||
-                entry.layer.hasPicture())
+            if (ownerLayers[i].layer.internallayerId == ownerLayerId ||
+                ownerLayers[i].layer.hasPicture())
               (
-                entry.layer.internallayerId,
-                named(entry.info.name, entry.layer.internallayerId)
+                ownerLayers[i].layer.internallayerId,
+                '${i + 1}. '
+                    '${named(ownerLayers[i].info.name, ownerLayers[i].layer.internallayerId)}'
               ),
         ],
         onChanged: (picked) => _set(BridgeEffectValue.layer(picked)),

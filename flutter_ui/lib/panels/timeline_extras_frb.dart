@@ -518,9 +518,14 @@ class ParentPickerFrb extends StatelessWidget {
         label: info.parent == null ? l10n.none : (info.parentName ?? l10n.none),
         options: () => [
           (null, l10n.none),
-          for (final e in all)
-            if (e.layer.internallayerId != layer.internallayerId)
-              (e.layer.internallayerId, e.info.name),
+          // Numbered by the layer's place in the composition (item 6.13) —
+          // "3. Sky" — so two layers with the same name are still two
+          // entries you can tell apart. Position, not name: it counts from
+          // the whole stack, this layer included, whether or not the entry
+          // is offered.
+          for (var i = 0; i < all.length; i++)
+            if (all[i].layer.internallayerId != layer.internallayerId)
+              (all[i].layer.internallayerId, '${i + 1}. ${all[i].info.name}'),
         ],
         onChanged: (id) {
           // A cycle is refused engine-side; the picker reports nothing and the
@@ -617,10 +622,15 @@ class MattePickerFrb extends StatelessWidget {
               // matting a layer with itself has no meaning.
               options: () => [
                 (null, l10n.noMatte),
-                for (final e in all)
-                  if (e.layer.internallayerId != layer.internallayerId &&
-                      e.layer.hasPicture())
-                    (e.layer.internallayerId, e.info.name),
+                // Numbered by place in the composition, as every layer
+                // picker is (item 6.13).
+                for (var i = 0; i < all.length; i++)
+                  if (all[i].layer.internallayerId != layer.internallayerId &&
+                      all[i].layer.hasPicture())
+                    (
+                      all[i].layer.internallayerId,
+                      '${i + 1}. ${all[i].info.name}'
+                    ),
               ],
               onChanged: (id) => _set(id == null
                   ? null

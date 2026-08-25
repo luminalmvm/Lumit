@@ -320,7 +320,9 @@ void main() {
       await tester.tap(
           find.byKey(ValueKey<String>('tl-parent-${child.internallayerId}')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text(parent.getName()).last);
+      // Numbered by place in the composition since item 6.13, so the entry
+      // reads "1. Adjustment" rather than the bare name.
+      await tester.tap(find.textContaining(parent.getName()).last);
       await tester.pumpAndSettle();
 
       expect(child.getParent(), parent.internallayerId);
