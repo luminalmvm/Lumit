@@ -8448,6 +8448,29 @@ header strip, a clip bar and a value box measure the same either way, so they st
 fixed numbers where they are written. A dial with two identical settings is a dial that
 does nothing.
 
+One row of the Timeline broke out of that scheme after the editor was used on a real
+desktop for a day: the strip carrying the clock, the layer search and the Layers / Keys /
+Graph tabs is aimed at constantly, and at the mockup's height it was genuinely hard to hit
+— a target a few pixels tall, clicked hundreds of times an hour. So the roomy setting now
+gives that row **24** pixels and the column-header row under it **23**, where every other
+thin row in the application still gets 19. The controls standing in those rows are told to
+stand 20 tall rather than each measuring itself to its own word, so the tabs, the search
+box and the two clocks all fill the row instead of floating in a band of empty ground.
+Compact was left at exactly the numbers it had: it is the setting for someone who has
+already said they want less air, and a ruling about the roomy default that quietly moved
+the tight one would be a ruling about both.
+
+That change has a knock-on the Timeline could not avoid, and it is the good kind. The
+time ruler on the right-hand side of the panel is not given a height of its own — it is
+told to be exactly as tall as the two rows facing it on the left, which is the whole
+reason the panel's two halves line up row for row. Growing those two rows therefore grew
+the ruler with them, from 38 to 47, and the extra nine pixels went to the clock. In the
+same pass the line that used to be drawn across the ruler's middle came out: the ruler is
+one band now, the labelled ticks reach down through where that line was, and the
+work-area highlight and the two handles that drag its ends run the ruler's full height
+instead of the bottom half. An edge you can see for the whole of the ruler and can only
+take hold of for half of it is a handle that is half a lie.
+
 **The mockups are the reference.** Each panel was designed as a full-size picture first
 and approved by the owner before any code moves. When a question comes up about where
 something sits or how big it is, the answer is read off the approved mockup, not
@@ -8572,8 +8595,15 @@ it holds at the playhead beside it. Nothing about it is a new way of editing: th
 its lanes are the same keyframes, at the same places, dragged with the same hand — this is
 a way of *looking*. Two words in the row under the tabs decide how much it lists: **All**
 shows every property a layer has, **Animated** (the default, and the same reading the `U`
-key gives you) shows only the ones with keyframes on them; **Layers** and **Selected only**
-decide whether it covers the whole composition or just what you have picked.
+key gives you) shows only the ones with keyframes on them. It always covers the whole
+composition — there is nothing to narrow it to a selection, because the outline beside it
+and the wash on a picked lane already say what you have in hand.
+
+Behind each layer's own band the sheet draws that layer's **bar**, greyed right down. It
+is the bar from Layers mode, in the same place and at the same height, with everything
+that made it a handle taken away — no name on it, no ends to trim, nothing that answers a
+drag. It is there for one reason: keys tell you *when*, and without the bar behind them
+there was no way to see that a key sat past the end of the layer it belonged to.
 
 A key's *shape* is its interpolation, here and on a Layers lane alike. A diamond runs in a
 straight line, an hourglass is a curve, a square is a hold — the value stays put until the

@@ -77,6 +77,21 @@ void main() {
     expect(InterfaceSettings.fromJson(tight.toJson()).compact, isTrue);
   });
 
+  /// K-514, the owner's explicit default: the mockups draw a layer's name on
+  /// every bar in the lane area, and the ruling from desktop testing is that
+  /// the editor should not — the outline is already a column of exactly those
+  /// names. Off unless a settings file asks, including for every file written
+  /// by a build that always drew them.
+  test('bars carry no layer name unless a settings file asks for one', () {
+    expect(InterfaceSettings().layerNamesOnBars, isFalse);
+    expect(
+        InterfaceSettings.fromJson(const {'ui_scale': 1.25}).layerNamesOnBars,
+        isFalse,
+        reason: 'a file written before the field existed loses the labels');
+    final named = InterfaceSettings()..layerNamesOnBars = true;
+    expect(InterfaceSettings.fromJson(named.toJson()).layerNamesOnBars, isTrue);
+  });
+
   /// K-448's arrangement choice, settled by K-466's drawing. Split is the
   /// default because it is what the drawing draws; the other two gather the
   /// chrome into one strip. Stored by name, so a reordered enum cannot
@@ -110,16 +125,40 @@ void main() {
     expect(DensityTokens.regular.inRowPicker, 18);
     expect(DensityTokens.regular.dropdownFace, 20);
     expect(DensityTokens.regular.propertyRow, 27);
-    // Derived, never declared: the ruler is what the outline's two secondary
-    // rows cost, which is what makes the Timeline's halves meet.
-    expect(DensityTokens.regular.ruler, 38);
 
     expect(DensityTokens.compact.laneRow, 22);
     expect(DensityTokens.compact.secondaryRow, 18);
     expect(DensityTokens.compact.inRowPicker, 16);
     expect(DensityTokens.compact.dropdownFace, 18);
     expect(DensityTokens.compact.propertyRow, 26);
+  });
+
+  /// K-512, the owner's ruling from desktop testing: the Timeline's own two
+  /// chrome rows are no longer plain secondary rows. Regular grew them — the
+  /// row that is aimed at all day most — and states a height for the controls
+  /// standing in them, so the hit targets grew with the row. **Compact keeps
+  /// exactly what it drew**, which is the half of this that a test has to
+  /// hold: a ruling about Regular that quietly moved Compact would be a
+  /// ruling about both.
+  test('the Timeline chrome grew under Regular and stood still under Compact',
+      () {
+    expect(DensityTokens.regular.timelineChromeRow, 24);
+    expect(DensityTokens.regular.timelineHeaderRow, 23);
+    expect(DensityTokens.regular.timelineChromeControl, 20);
+
+    expect(DensityTokens.compact.timelineChromeRow, 18);
+    expect(DensityTokens.compact.timelineHeaderRow, 18);
+    expect(DensityTokens.compact.timelineChromeControl, isNull,
+        reason: 'Compact states nothing, so every control measures itself');
+
+    // Derived, never declared: the ruler is what the outline's two chrome
+    // rows cost, which is what makes the Timeline's halves meet. Grow either
+    // row and the ruler grows with it.
+    expect(DensityTokens.regular.ruler, 47);
     expect(DensityTokens.compact.ruler, 36);
+    for (final d in [DensityTokens.regular, DensityTokens.compact]) {
+      expect(d.ruler, d.timelineChromeRow + d.timelineHeaderRow);
+    }
   });
 
   /// The rebuild's own guard (K-465): the Settings window was taken apart and
@@ -143,6 +182,7 @@ void main() {
       waveformsFromBottom: true,
       showToneMap: true,
       easingInPopup: true,
+      layerNamesOnBars: true,
       compact: true,
       viewerBars: ViewerBars.bottom,
     );
@@ -160,11 +200,12 @@ void main() {
     expect(back.waveformsFromBottom, isTrue);
     expect(back.showToneMap, isTrue);
     expect(back.easingInPopup, isTrue);
+    expect(back.layerNamesOnBars, isTrue);
     expect(back.compact, isTrue);
     expect(back.viewerBars, ViewerBars.bottom);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 16);
+    expect(all.toJson().keys.length, 17);
   });
 
   test('the Retime seconds preference round-trips', () {

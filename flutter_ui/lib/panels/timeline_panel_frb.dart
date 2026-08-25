@@ -837,6 +837,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// is what keeps a rebuild free of bridge calls (K-184).
   BigInt? _boundsRevision;
 
+  /// Whether a layer's name is written along its bar — Settings ▸ Interface ▸
+  /// Panels, off by default (K-514). Read here, once per build of the panel,
+  /// and handed down to the bars.
+  bool get _barNames => Provider.of<LumitUiState>(context, listen: false)
+      .workspace
+      .interface
+      .layerNamesOnBars;
+
   /// How waveforms draw — Settings ▸ Interface ▸ Editing (K-280, K-285).
   WaveformStyle get _waveformStyle {
     final interface =
@@ -1537,13 +1545,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Keys mode — the dope sheet (K-455).
   bool get _keys => _mode == TimelineMode.keys;
 
-  /// The dope sheet's own two filters (§12A.1, the Keys drawing): **Animated**
-  /// by default — which is what makes it a dope sheet — with **All** to see
-  /// every property a layer has, and a scope of every layer or only the ones
-  /// in hand. Session state, like every other thing about what this panel
-  /// *shows*; nothing here touches the document.
+  /// The dope sheet's one filter (§12A.1, the Keys drawing): **Animated** by
+  /// default — which is what makes it a dope sheet — with **All** to see every
+  /// property a layer has. Session state, like every other thing about what
+  /// this panel *shows*; nothing here touches the document.
+  ///
+  /// There is no scope beside it any more (K-515): the sheet is always every
+  /// layer in the comp.
   bool _keysShowAll = false;
-  bool _keysSelectedOnly = false;
 
   /// Graph mode's own **Show** filter (§3.3, §12A.2): **Animated** by default,
   /// **All** to list every property a layer has. There is deliberately no
@@ -2873,10 +2882,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       List<double> heights, Offset global, DensityTokens density) {
     final box = _dropArea.currentContext?.findRenderObject();
     if (box is! RenderBox) return 0;
-    // The two secondary rows above the stack — the same pair the lane side
-    // spends on its ruler.
+    // The two chrome rows above the stack — the same pair the lane side
+    // spends on its ruler, which is exactly what `density.ruler` is.
     final y = box.globalToLocal(global).dy -
-        density.secondaryRow * 2 +
+        density.ruler +
         (_vLane.hasClients ? _vLane.offset : 0);
     final slot = layerDropSlot(heights, y);
     if (slot >= layers.length) return ui.model.layers.length;
@@ -3006,13 +3015,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // instead, which is the whole point of the setting.
     final rows = _flatSheet
         ? keysLayerRows(
-            layers: _keys && _keysSelectedOnly
-                ? [
-                    for (final e in layers)
-                      if (ui.selectedLayerIds.contains(e.layer.internallayerId))
-                        e,
-                  ]
-                : layers,
+            // Every layer, always (K-515): the dope sheet's scope pair is
+            // gone, and it never had a second answer worth keeping.
+            layers: layers,
             // **All open unless shut** (K-500 §2.3): the dope sheet's point is
             // the flattened property rows, and a sheet of shut bands shows
             // nothing and takes no marquee.
@@ -3385,22 +3390,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             if (_keys)
                               _KeysFilterRow(
                                 showAll: _keysShowAll,
-                                selectedOnly: _keysSelectedOnly,
                                 onShowAll: (v) =>
                                     setState(() => _keysShowAll = v),
-                                onSelectedOnly: (v) =>
-                                    setState(() => _keysSelectedOnly = v),
                               )
                             // Graph mode takes the same row under its own
-                            // filter, with Normalise where the sheet's scope
-                            // words are (§3.3).
+                            // filter, with Normalise hard right (§3.3).
                             else if (_graph && !_layersOutlineInGraph)
                               _KeysFilterRow(
                                 showAll: _graphShowAll,
-                                selectedOnly: false,
                                 onShowAll: (v) =>
                                     setState(() => _graphShowAll = v),
-                                onSelectedOnly: (_) {},
                                 normalise: _normalise,
                                 onNormalise: (v) =>
                                     setState(() => _normalise = v),
@@ -3515,9 +3514,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     showThumb: _graph,
                     header: [
                       Container(
-                          height: t.density.secondaryRow, color: t.surface1),
+                          height: t.density.timelineChromeRow,
+                          color: t.surface1),
                       Container(
-                          height: t.density.secondaryRow, color: t.surface1),
+                          height: t.density.timelineHeaderRow,
+                          color: t.surface1),
                     ],
                   ),
                 ],
@@ -3527,9 +3528,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               // phased by the scroll so they travel with the
               // rows they separate.
               Positioned(
-                // Below the outline's own two secondary rows —
+                // Below the outline's own two chrome rows —
                 // level with the foot of the lane side's ruler.
-                top: t.density.secondaryRow * 2,
+                top: t.density.ruler,
                 left: 0,
                 right: 0,
                 bottom: 0,
@@ -3824,6 +3825,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       // Keys mode swaps the body under the shared ruler and
                       // leaves everything else alone (K-455).
                       keys: _keys,
+                      barNames: _barNames,
                       selectedProperties: _selectedProperties,
                       selectedIds: ui.selectedLayerIds,
                       layerDrag: _layerDrag,
@@ -5798,6 +5800,14 @@ class _RetimeRowState extends State<_RetimeRow> {
                       // mockup draws anywhere and the one number in the
                       // Timeline that still read a step larger than the rest.
                       style: t.mono.copyWith(fontSize: wellTextSize),
+                      // **In a well, like every other property row's value**
+                      // (K-460's rule, applied here at last): the clock face
+                      // is dragged and typed into exactly as the seconds face
+                      // beside it is, and that face has always been a
+                      // `DragValueField` with a recess round it. This one was
+                      // bare text that happened to answer a drag, which is
+                      // the one thing K-460 says a value must never be.
+                      well: true,
                       minFrame: -100000,
                       maxFrame: 100000,
                       draggable: true,
@@ -6020,6 +6030,24 @@ class BarEndMarksPainter extends CustomPainter {
       old.atIn != atIn || old.atOut != atOut || old.colour != colour;
 }
 
+/// **A control standing in one of the Timeline's two chrome rows**, grown to
+/// the height the density states for them (K-512).
+///
+/// In plain terms: Regular's chrome rows are taller than they used to be, so
+/// the tabs, the search well and the two readouts in them are told to stand
+/// 20 tall instead of each measuring itself to something between 13 and 16 and
+/// floating in a band of ground. Compact states no height at all — its rows
+/// are the rows these controls were built for — and this hands the control
+/// straight back, so nothing about Compact changed by a pixel.
+///
+/// A `HouseButton` handed a height centres its label in it; a well handed one
+/// takes it in place of its own, because a tight constraint from above wins
+/// over a box's own preferred size.
+Widget timelineChromeControl(LumitTheme t, Widget child) {
+  final height = t.density.timelineChromeControl;
+  return height == null ? child : SizedBox(height: height, child: child);
+}
+
 /// The outline's toolbar (docs/07 §4.1, §12A.1): the timecode and frame
 /// readouts at the far left, the layer search stretched across the middle as
 /// an inset well, and the Layers / Graph mode segments at the far right — with
@@ -6027,11 +6055,12 @@ class BarEndMarksPainter extends CustomPainter {
 /// layer/work-area/marker commands the old full-width toolbar carried) between
 /// the well and the segments.
 ///
-/// **A secondary row**, and so `t.density.secondaryRow` — 19 under Regular, 18
-/// under Compact (K-451, K-454, docs/15 §12A.6). Twice that is exactly what
-/// the same table gives the ruler across the panel, and that is what makes the
-/// two halves meet: this row and the column header under it are what the
-/// outline spends where the lane side spends a ruler.
+/// **The Timeline's first chrome row**, and so `t.density.timelineChromeRow` —
+/// **24** under Regular, 18 under Compact (K-512, docs/15 §12A.6). It used to
+/// be a plain secondary row at 19 either way; the owner's ruling after desktop
+/// testing is that this row is aimed at all day and 19 was too small to hit
+/// comfortably. It plus the header row under it are still exactly what the
+/// lane side spends on its ruler, which is what makes the two halves meet.
 ///
 /// **This is where the hit floor gives way** (§7.2, K-452): the buttons in
 /// this row are the row's own height, well under the 32 nothing interactive is
@@ -6040,7 +6069,9 @@ class BarEndMarksPainter extends CustomPainter {
 /// tab strip and a few below is the column header's own drag-to-reorder and
 /// resize seams, so an expanded target here would swallow a neighbour's
 /// gesture rather than add one. Across, where a row like this is actually
-/// aimed, they keep their room.
+/// aimed, they keep their room. What K-512 could do — and did — is give the
+/// row itself more height and grow every control in it to match, which is
+/// what [timelineChromeControl] is.
 class _Toolbar extends StatelessWidget {
   /// The read model, for the exact rate — no bridge calls in a build (K-184).
   final CompModel model;
@@ -6072,9 +6103,9 @@ class _Toolbar extends StatelessWidget {
     final (fpsNum, fpsDen) = model.fpsExact;
     final lastFrame = model.durationFrames - 1;
     return Container(
-      height: t.density.secondaryRow,
+      height: t.density.timelineChromeRow,
       // The panel's own surface, ruled off from the column header below it —
-      // the mockup draws both secondary rows on the panel ground with a
+      // the mockup draws both chrome rows on the panel ground with a
       // hairline under each, not as a raised strip.
       decoration: BoxDecoration(
         color: t.surface1,
@@ -6096,48 +6127,53 @@ class _Toolbar extends StatelessWidget {
             valueListenable: playhead,
             builder: (context, frame, _) => Row(
               children: [
-                TimeReadout(
-                  key: const ValueKey('tl-timecode'),
-                  frame: frame,
-                  format: (f) => timecodeOfRate(f, fpsNum, fpsDen),
-                  widthChars: timecodeChars(fpsNum, fpsDen),
-                  // The clock is the row's first fact and reads at full
-                  // strength; the frame count beside it is the same moment
-                  // said again, so it stays muted (§12A.1).
-                  style: t.mono.copyWith(fontSize: 11, color: t.textPrimary),
-                  parse: (text) => framesOfTimecode(text, fpsNum, fpsDen),
-                  onCommit: onSeek,
-                  minFrame: 0,
-                  maxFrame: lastFrame,
-                  tooltip: l10n.tipPlayheadTime,
-                  // A **well**, because the clock can be typed into (K-460):
-                  // the recess is what says so, and a time you can read is a
-                  // time you should be able to state. It was bare text that
-                  // happened to answer a click.
-                  well: true,
-                ),
+                timelineChromeControl(
+                    t,
+                    TimeReadout(
+                      key: const ValueKey('tl-timecode'),
+                      frame: frame,
+                      format: (f) => timecodeOfRate(f, fpsNum, fpsDen),
+                      widthChars: timecodeChars(fpsNum, fpsDen),
+                      // The clock is the row's first fact and reads at full
+                      // strength; the frame count beside it is the same moment
+                      // said again, so it stays muted (§12A.1).
+                      style:
+                          t.mono.copyWith(fontSize: 11, color: t.textPrimary),
+                      parse: (text) => framesOfTimecode(text, fpsNum, fpsDen),
+                      onCommit: onSeek,
+                      minFrame: 0,
+                      maxFrame: lastFrame,
+                      tooltip: l10n.tipPlayheadTime,
+                      // A **well**, because the clock can be typed into (K-460):
+                      // the recess is what says so, and a time you can read is a
+                      // time you should be able to state. It was bare text that
+                      // happened to answer a click.
+                      well: true,
+                    )),
                 const SizedBox(width: 4),
-                TimeReadout(
-                  key: const ValueKey('tl-frame'),
-                  frame: frame,
-                  format: (f) => 'F$f',
-                  // The `f`, the digits of the last frame, and one spare so a
-                  // comp that grows past a power of ten does not start to
-                  // twitch before the next rebuild.
-                  widthChars: 2 + '${lastFrame < 0 ? 0 : lastFrame}'.length,
-                  style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
-                  parse: _frameOfTyped,
-                  onCommit: onSeek,
-                  minFrame: 0,
-                  maxFrame: lastFrame,
-                  tooltip: l10n.tipFrameNumber,
-                  well: true,
-                  // Rests as `F48`, edits as `48` (K-460, capital by owner ruling). The `f` names the
-                  // clock rather than counting in it, so the field holds the
-                  // bare number and wears the letter again on commit — an
-                  // edit that began by stepping over a letter began wrong.
-                  editFormat: (f) => '$f',
-                ),
+                timelineChromeControl(
+                    t,
+                    TimeReadout(
+                      key: const ValueKey('tl-frame'),
+                      frame: frame,
+                      format: (f) => 'F$f',
+                      // The `f`, the digits of the last frame, and one spare so a
+                      // comp that grows past a power of ten does not start to
+                      // twitch before the next rebuild.
+                      widthChars: 2 + '${lastFrame < 0 ? 0 : lastFrame}'.length,
+                      style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
+                      parse: _frameOfTyped,
+                      onCommit: onSeek,
+                      minFrame: 0,
+                      maxFrame: lastFrame,
+                      tooltip: l10n.tipFrameNumber,
+                      well: true,
+                      // Rests as `F48`, edits as `48` (K-460, capital by owner ruling). The `f` names the
+                      // clock rather than counting in it, so the field holds the
+                      // bare number and wears the letter again on commit — an
+                      // edit that began by stepping over a letter began wrong.
+                      editFormat: (f) => '$f',
+                    )),
               ],
             ),
           ),
@@ -6158,7 +6194,9 @@ class _Toolbar extends StatelessWidget {
           // tabs (§12A.1) — at the row's own 2px gap, like everything else in
           // it; the well's own inset is what keeps the text off its edge.
           const SizedBox(width: 2),
-          Expanded(child: LayerSearchFrb(onChanged: onSearch, width: 1e9)),
+          Expanded(
+              child: timelineChromeControl(
+                  t, LayerSearchFrb(onChanged: onSearch, width: 1e9))),
           const SizedBox(width: 2),
           // The three modes, at the far right of the row (§12A.1, K-455).
           // Kicker segments rather than icons: "Layers", "Keys" and "Graph"
@@ -6215,13 +6253,19 @@ class _Toolbar extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return LumitTooltip(
       message: tip,
-      child: HouseButton(
-        key: ValueKey<String>(keyName),
-        small: true,
-        frameless: !active,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        onPressed: onPressed,
-        child: Text(label.toUpperCase(), style: active ? t.kickerOn : t.kicker),
+      // Grown to the chrome row's stated control height under Regular
+      // (K-512): these three are the buttons the owner named as hard to hit.
+      child: timelineChromeControl(
+        t,
+        HouseButton(
+          key: ValueKey<String>(keyName),
+          small: true,
+          frameless: !active,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          onPressed: onPressed,
+          child:
+              Text(label.toUpperCase(), style: active ? t.kickerOn : t.kicker),
+        ),
       ),
     );
   }
@@ -6520,8 +6564,10 @@ class _GroupSeam extends StatelessWidget {
 /// already carry. The switch cells still wear their icons — those are the
 /// controls; this is the legend.
 ///
-/// The second of the outline's two **secondary rows**, and so the same
-/// `t.density.secondaryRow` the toolbar above it stands at (K-454).
+/// The second of the outline's two chrome rows, and so
+/// `t.density.timelineHeaderRow` — **23** under Regular, 18 under Compact
+/// (K-512). A shade shorter than the row above it, because that row is aimed
+/// at and this one is mostly read.
 class _ColumnHeader extends StatelessWidget {
   final List<TimelineGroup> order;
   final Map<TimelineGroup, double> widths;
@@ -6547,7 +6593,7 @@ class _ColumnHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
-      height: t.density.secondaryRow,
+      height: t.density.timelineHeaderRow,
       // The panel's own ground with a rule under it, like the timecode row
       // above — the mockup draws no raised strip here.
       decoration: BoxDecoration(
@@ -6588,7 +6634,7 @@ class _ColumnHeader extends StatelessWidget {
         key: ValueKey<String>('tl-colgroup-${group.name}'),
         data: group,
         feedback: Container(
-          height: t.density.secondaryRow,
+          height: t.density.timelineHeaderRow,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           color: t.surface2,
           child: Center(
@@ -6776,34 +6822,33 @@ String? keysRowValue(LayerFoldRow row, BridgeRational time) {
 }
 
 /// The dope sheet's second outline row: what the sheet is showing (K-441's
-/// Animated filter, K-455) and which layers it is showing it for.
+/// Animated filter, K-455).
 ///
 /// Kickers rather than buttons, because these name what is on screen rather
 /// than doing anything to the document — the same grammar the bottom bar's
 /// column toggles use. The `U` beside them is the key that opens a layer onto
 /// what is animated, which is the same reveal it has always been in Layers
 /// mode: the filter and the key are two doors into one reading.
+///
+/// **There is no scope pair here** (K-515). Keys mode listed *Layers* and
+/// *Selected only* beside the filter until the owner ruled the pair out after
+/// desktop testing: the sheet is always every layer, and the selection is
+/// already said by the outline and by the wash on a picked property's lane.
 class _KeysFilterRow extends StatelessWidget {
   final bool showAll;
-  final bool selectedOnly;
   final ValueChanged<bool> onShowAll;
-  final ValueChanged<bool> onSelectedOnly;
 
   /// **Graph mode's** reading of the same row (§3.3): the same Show pair, and
-  /// **Normalise** hard right where the dope sheet puts its scope words.
+  /// **Normalise** hard right.
   ///
   /// One widget rather than two, because it is one row: the same words in the
-  /// same places, saying what is on screen. Non-null switches it to the
-  /// graph's shape — there is no *Selected* scope there, since the outline is
-  /// itself how curves are chosen.
+  /// same places, saying what is on screen.
   final ValueChanged<bool>? onNormalise;
   final bool normalise;
 
   const _KeysFilterRow({
     required this.showAll,
-    required this.selectedOnly,
     required this.onShowAll,
-    required this.onSelectedOnly,
     this.onNormalise,
     this.normalise = false,
   });
@@ -6819,13 +6864,16 @@ class _KeysFilterRow extends StatelessWidget {
     required VoidCallback onPressed,
   }) {
     final t = ThemeScope.of(context).theme;
-    return HouseButton(
-      key: ValueKey<String>(keyName),
-      small: true,
-      frameless: !on,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      onPressed: onPressed,
-      child: Text(label.toUpperCase(), style: on ? t.kickerOn : t.kicker),
+    return timelineChromeControl(
+      t,
+      HouseButton(
+        key: ValueKey<String>(keyName),
+        small: true,
+        frameless: !on,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        onPressed: onPressed,
+        child: Text(label.toUpperCase(), style: on ? t.kickerOn : t.kicker),
+      ),
     );
   }
 
@@ -6834,7 +6882,7 @@ class _KeysFilterRow extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return Container(
       key: const ValueKey('tl-keys-filters'),
-      height: t.density.secondaryRow,
+      height: t.density.timelineHeaderRow,
       decoration: BoxDecoration(
         color: t.surface1,
         border: Border(bottom: BorderSide(color: t.hairline)),
@@ -6866,24 +6914,12 @@ class _KeysFilterRow extends StatelessWidget {
               height: 9,
               child: HouseCheckbox(value: normalise, onChanged: set),
             ),
-          ] else ...[
+          ] else
             // The key that does the same thing from the keyboard, said quietly
-            // beside the words it belongs to.
+            // beside the words it belongs to. Nothing follows it: the scope
+            // pair that used to sit hard right is gone (K-515).
             Text('U',
                 style: t.mono.copyWith(fontSize: 9, color: t.textDisabled)),
-            const Spacer(),
-            _word(context,
-                keyName: 'tl-keys-scope-layers',
-                label: l10n.keysScopeLayers,
-                on: !selectedOnly,
-                onPressed: () => onSelectedOnly(false)),
-            const SizedBox(width: 2),
-            _word(context,
-                keyName: 'tl-keys-scope-selected',
-                label: l10n.keysScopeSelected,
-                on: selectedOnly,
-                onPressed: () => onSelectedOnly(true)),
-          ],
         ],
       ),
     );
@@ -8718,10 +8754,16 @@ class _LayerArea extends StatelessWidget {
   /// only, where a lane is washed to show which property is in hand.
   final List<String> selectedProperties;
 
+  /// Settings ▸ Interface ▸ Panels ▸ *Layer names on lane bars* (K-514), off
+  /// by default. Read once by the panel and handed down, never looked up in a
+  /// bar's own build.
+  final bool barNames;
+
   const _LayerArea({
     required this.comp,
     required this.rows,
     this.keys = false,
+    this.barNames = false,
     this.selectedProperties = const [],
     required this.selectedIds,
     this.onOpenSequence,
@@ -9183,6 +9225,7 @@ class _LayerArea extends StatelessWidget {
                                               fps: fps,
                                               snapTargets: snap,
                                               magnet: magnet,
+                                              showName: barNames,
                                             ),
                                           // A Sequence layer's own clips and
                                           // their speed envelope, in the room
@@ -9487,19 +9530,51 @@ class _KeysLayerLane extends StatelessWidget {
           height: row.rowHeight,
           color: tint.withValues(
               alpha: selected ? _keysLayerTint * 2 : _keysLayerTint),
-          child: CustomPaint(
-            painter: _LaneKeysPainter(
-              frames: [
-                for (final k in row.summaryKeys) laneKeyFrame(k, fps),
-              ],
-              selected: const {},
-              axis: axis,
-              colour: t.animated,
-              chosen: t.textPrimary,
-              // A summary, not the keys you take hold of — the same half-scale
-              // rule a shut layer's bar follows in Layers mode (§12A.1).
-              half: _summaryKeyHalf,
-            ),
+          child: Stack(
+            children: [
+              // The layer's own bar, drawn back in behind its keys (K-515) —
+              // the Layers-mode rectangle, in the same place and at the same
+              // 16 inside the row, at [keysGhostBarAlpha] and stripped of
+              // everything that made it a handle. It says how long the layer
+              // is, which the sheet could not say at all before.
+              Positioned(
+                key: ValueKey<String>('tl-keys-ghost-${row.id}'),
+                left: axis.xOf(row.entry.info.inFrame),
+                width: (axis.xOf(row.entry.info.outFrame) -
+                        axis.xOf(row.entry.info.inFrame))
+                    .clamp(1.0, 1e6),
+                top: clipBarInsetFor(t.density),
+                height: clipBarHeight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: tint.withValues(alpha: keysGhostBarAlpha),
+                    // The bar's own ends under either shape, so the ghost is
+                    // recognisably the same object as the bar in Layers mode.
+                    borderRadius: BorderRadius.circular(
+                        t.shape == ThemeShape.round
+                            ? t.tokens.controlRadius
+                            : sharpClipRadius),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _LaneKeysPainter(
+                    frames: [
+                      for (final k in row.summaryKeys) laneKeyFrame(k, fps),
+                    ],
+                    selected: const {},
+                    axis: axis,
+                    colour: t.animated,
+                    chosen: t.textPrimary,
+                    // A summary, not the keys you take hold of — the same
+                    // half-scale rule a shut layer's bar follows in Layers
+                    // mode (§12A.1).
+                    half: _summaryKeyHalf,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -9841,6 +9916,45 @@ class _KeyLaneState extends State<_KeyLane> {
   }
 }
 
+/// Where the row seams fall, in the painter's own coordinates — one entry per
+/// hairline, each already **snapped to a whole pixel**.
+///
+/// **Why the snapping is the whole point.** Both halves of the Timeline draw
+/// their seams with the same painter, but the lane side draws inside the
+/// scrolled content (so its seams land on multiples of the row height, whole
+/// numbers) while the outline side draws on an overlay pinned to the panel and
+/// carries the scroll in [phase] instead. A scroll offset is very rarely a
+/// whole number — a wheel flings through physics that lands wherever it lands
+/// — so the outline's seams were coming out at fractions of a pixel, and a
+/// 1px line drawn at, say, y = 21.8 is painted as two neighbouring rows of
+/// grey rather than one row of hairline. That is what "the outline's dividers
+/// look 2px and faint where the lanes' look crisp" was, reported from desktop.
+///
+/// Rounding each seam to the nearest whole pixel first, and *then* offsetting
+/// by the half-pixel a 1px stroke needs to sit inside one row of pixels rather
+/// than straddle two, gives both halves the identical crisp line.
+///
+/// [blanks] are stretches to leave unruled, as (top, bottom) pairs: an open
+/// sequence view is one table cell, not six rows of one (K-248).
+List<double> rowSeamOffsets({
+  required double step,
+  required double height,
+  double phase = 0,
+  List<(double, double)> blanks = const [],
+}) {
+  if (step <= 0) return const [];
+  final ys = <double>[];
+  for (var y = phase + step; y <= height; y += step) {
+    if (y < 0) continue;
+    // Strictly inside a blank, so the seams that *bound* an open view stay:
+    // the row still has a top and a bottom, it simply has no rules through
+    // its middle.
+    if (blanks.any((b) => y > b.$1 + 0.5 && y < b.$2 - 0.5)) continue;
+    ys.add(y.roundToDouble() - 0.5);
+  }
+  return ys;
+}
+
 /// The lane area's row seams: one hairline per row, the full width of the
 /// area (K-190).
 ///
@@ -9878,13 +9992,9 @@ class _RowDividerPainter extends CustomPainter {
     final paint = Paint()
       ..color = colour
       ..strokeWidth = 1;
-    for (var y = phase + step; y <= size.height; y += step) {
-      if (y < 0) continue;
-      // Strictly inside a blank, so the seams that *bound* an open view stay:
-      // the row still has a top and a bottom, it simply has no rules through
-      // its middle.
-      if (blanks.any((b) => y > b.$1 + 0.5 && y < b.$2 - 0.5)) continue;
-      canvas.drawLine(Offset(0, y - 0.5), Offset(size.width, y - 0.5), paint);
+    for (final y in rowSeamOffsets(
+        step: step, height: size.height, phase: phase, blanks: blanks)) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
 
@@ -11013,6 +11123,12 @@ class _Bar extends StatefulWidget {
   /// Whether the magnet is on; `Ctrl` held suspends it for the moment.
   final bool magnet;
 
+  /// Whether the layer's name is written along the bar — Settings ▸ Interface
+  /// ▸ Panels, **off by default** (K-514). Handed down rather than read here,
+  /// because a bar rebuilds on every hover and a build has no business
+  /// reaching for a settings object (K-184's spirit).
+  final bool showName;
+
   const _Bar({
     super.key,
     required this.comp,
@@ -11032,6 +11148,7 @@ class _Bar extends StatefulWidget {
     required this.fps,
     this.snapTargets = const [],
     this.magnet = true,
+    this.showName = false,
   });
 
   @override
@@ -11428,26 +11545,33 @@ class _BarState extends State<_Bar> {
                         // Full `text_primary`, no alpha: the mockup draws the
                         // name opaque. Quieting it only made a name over a pale
                         // label colour harder to read than the bar it sits on.
-                        Positioned(
-                          left: clipEdgeWidth + 4,
-                          right: 2,
-                          top: 0,
-                          bottom: 0,
-                          child: IgnorePointer(
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                info.name,
-                                key: ValueKey<String>(
-                                    'tl-bar-name-${widget.entry.layer.internallayerId}'),
-                                style: t.small.copyWith(color: t.textPrimary),
-                                maxLines: 1,
-                                overflow: TextOverflow.clip,
-                                softWrap: false,
+                        //
+                        // **Only when asked for** (K-514): the mockups draw
+                        // the name on every bar and so did the editor, and the
+                        // owner's ruling from desktop testing is that it reads
+                        // as the outline's own column of names said twice.
+                        // Off by default, unchanged when on.
+                        if (widget.showName)
+                          Positioned(
+                            left: clipEdgeWidth + 4,
+                            right: 2,
+                            top: 0,
+                            bottom: 0,
+                            child: IgnorePointer(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  info.name,
+                                  key: ValueKey<String>(
+                                      'tl-bar-name-${widget.entry.layer.internallayerId}'),
+                                  style: t.small.copyWith(color: t.textPrimary),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.clip,
+                                  softWrap: false,
+                                ),
                               ),
                             ),
                           ),
-                        ),
                         // A Sequence layer's bar stays a plain bar: the clips and
                         // their edit points are the sequence view's to draw, and
                         // split lines up here only said the same thing twice

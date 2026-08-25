@@ -296,14 +296,15 @@ void main() {
       p.comp.addCameraLayer();
       await mount(tester, p);
 
-      // Twice each: the outline names the layer and so does its bar (§12A.1).
-      expect(find.text('Text'), findsNWidgets(2));
-      expect(find.text('Camera'), findsNWidgets(2));
+      // Once each: the outline names the layer, and its bar carries no label
+      // unless the setting asks for one (K-514).
+      expect(find.text('Text'), findsOneWidget);
+      expect(find.text('Camera'), findsOneWidget);
 
       await tester.enterText(find.byKey(const ValueKey('tl-search')), 'cam');
       await tester.pump();
 
-      expect(find.text('Camera'), findsNWidgets(2));
+      expect(find.text('Camera'), findsOneWidget);
       expect(find.text('Text'), findsNothing,
           reason: 'search hides the rows that do not match');
     });

@@ -14081,3 +14081,96 @@ as a quarter of the accent over `surface_0` and was recomputed on that rule to `
 **The mockups are not edited.** They are dated artefacts of the design programme and record
 what was drawn at the time, clay included; this entry, the roles table and the theme are
 where the current answer lives.
+
+## K-512 — The Timeline's chrome grows under Regular; Compact stands still
+
+**DECIDED 2026-08-25.** The owner's ruling from a day of desktop testing: the Timeline's
+two chrome rows are too small to hit. The row carrying the timecode, the layer search and
+the **Layers / Keys / Graph** tabs goes to **24** ("almost double... if it's like 14 I want
+20 at least" — it was the manifest-derived 19), the column-header row under it to **23**,
+and **every control standing in either row is told to stand 20** rather than each
+measuring itself to its own word: the tabs, the search well and the two readouts now fill
+their row instead of floating in a band of ground. That is what "grow the hit targets to
+match" means, and it is the only way to grow a target in this row — §7.2's hit floor
+already gives way here (K-452), because a few pixels above is the comp tab strip and a few
+below is the header's own drag-and-resize seams, so slop would swallow a neighbour's
+gesture rather than add one.
+
+**Compact keeps 18, 18 and no stated control height**, which is exactly what it drew
+before. That is the whole mechanism K-454 built the second column for: Compact is the
+setting for someone who has already said they want less air, and a ruling about Regular
+that quietly moved Compact would be a ruling about both.
+
+**The ruler follows, because the ruler is derived** (§12A.6): the lane side spends on its
+ruler exactly what the outline spends on its two chrome rows, which is what makes the
+panel's halves meet. 24 + 23 = **47** under Regular, unchanged at 36 under Compact. The
+nine extra pixels go to the clock.
+
+**These three numbers are the owner's, not the manifests'.** Every other height in
+§12A.6's table is measured off the approved artboards; the artboards say 19 here and are
+**overruled** (K-458 — the owner's word governs). The table's Regular column carries the
+new values with this entry named beside them, and its authority over everything else
+stands. Supersedes K-451 and K-454 for these rows only.
+
+## K-513 — The Timeline ruler reads as one band
+
+**DECIDED 2026-08-25.** The owner's ruling: the ruler was drawn as two stacked readings —
+a clock above a line, markers and the work area below it — and should read as one ruler.
+
+- **The seam across the waist goes.** Nothing is drawn along it.
+- **A labelled tick crosses the waist**: 7px above it and 7 below, where it used to stop at
+  the line. That is what ties the two readings together now that the line is not there to
+  hold them apart. Minor ticks are unchanged — 4px, above the waist only — so a subdivided
+  ruler still reads as a row of labels rather than as a comb.
+- **The work-area highlight and its two drag handles run the ruler's whole height**, not
+  its lower half. An edge you can see for the whole of the ruler and can take hold of for
+  half of it is a handle that is half a lie. This gives back the trade the handles were
+  written to make: a scrub started within ten pixels of a work-area edge now belongs to the
+  edge. The owner's ruling takes that trade the other way round.
+
+**One gesture keeps the waist**: the double-click that gives the whole comp back. Below the
+waist it clears the work area, above it makes a marker — because a comp nobody has narrowed
+already has a work area of the whole comp, so a band-wide double-click would leave nowhere
+on the ruler to make a marker at all. That is a mechanical necessity, not a second reading.
+
+Supersedes the "clock above, band below" halves of K-441 and §12A.1.
+
+## K-514 — Layer names on lane bars are a setting, and it is off
+
+**DECIDED 2026-08-25.** The approved mockups write a layer's name along its bar in the lane
+area, and the editor did the same. The owner's ruling after desktop testing: **off by
+default**. On a real composition the row of names turns the lane area into a second copy of
+the outline, which is already spelling out exactly those names a few pixels to the left.
+
+`Settings ▸ Interface ▸ Panels ▸ Layer names on lane bars` gives them back, unchanged —
+same size, same face, same colour, same place on the bar. Off is the default in a fresh
+settings file **and** in every settings file written before the field existed, deliberately:
+the ruling is about what the editor should look like, not about who asked first, and the
+labels are one click away for anyone who wants them.
+
+**This supersedes the mockups' always-on labels** (§12A.1, K-451). The mockups are not
+edited — they are dated artefacts of the design programme — and the owner's word governs
+(K-458).
+
+## K-515 — Keys mode: no scope pair, and the layer's own bar shows through
+
+**DECIDED 2026-08-25.** Two rulings on the dope sheet, from the same session.
+
+**The scope pair goes, entirely.** Keys mode listed *Layers* and *Selected only* hard right
+of its filter row (K-455, §12A.1). The sheet is now always every layer in the composition:
+the buttons, their state, their strings and their keys are deleted rather than defaulted,
+because a control with one answer is a control that only has to be read. Which properties
+are in hand is already said twice over — by the outline beside the sheet, and by the wash on
+a picked property's own lane (K-459). The filter row keeps **Show — All / Animated** and the
+quiet `U` beside them, and nothing follows them.
+
+**Each layer band draws that layer's bar behind its keys**, as a ghost. Keys mode could say
+*when* a layer's keys were and never *how long the layer was*, so a key sitting past the end
+of its own layer looked no different from one inside it. The ghost is the Layers-mode bar in
+the same place, at the same 16 inside the row, at **0.15 of the label colour** — and with
+everything that made it a handle taken off: no leading edge, no name, no end marks, no
+gestures of any kind. That is the disabled treatment, and the missing affordances are the
+point: a bar you could take hold of here would promise an edit the dope sheet does not have.
+
+The alpha is metrics-pinned in `timeline_alignment_test` with §12A.6's other in-row
+numbers. Brighter and it competes with the keys in front of it; fainter and it is not there.

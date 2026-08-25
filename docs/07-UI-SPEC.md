@@ -989,9 +989,9 @@ for. This has a regression test.
 
 ### 4.1 Time ruler region
 
-Top to bottom: the **time ruler**'s clock in its upper half; its lower half carrying the
-**markers ribbon**, the **work area bar** and — on the band's own row at the ruler's floor
-— the **cache bar**; then layer lanes.
+Top to bottom: the **time ruler** - one band, with its clock near the top, the
+**markers ribbon** and the **work area bar** covering the whole of it (K-513), and — on
+the band's own row at the ruler's floor — the **cache bar**; then layer lanes.
 
 - **Markers ribbon**: comp markers (point or span) with labels; double-click the ruler's own
   ground creates one and opens its label editor (built, TI-9);
@@ -1003,9 +1003,15 @@ Top to bottom: the **time ruler**'s clock in its upper half; its lower half carr
   narrowed", which is what the whole comp *is*). Work area is the preview range and default export range,
   and playback **loops** it (§10's default loop mode): reaching its end resumes from its
   start. It draws as **one band in `animated`** (K-441,
-  [15-DESIGN.md](15-DESIGN.md) §12A.1): the ruler's **lower half** only, so the ticks and
-  their labels keep the upper half, then on behind the cache bar and down through the lanes,
-  behind the bars and the keys. Its two edges, at half strength, *are* the two drag handles.
+  [15-DESIGN.md](15-DESIGN.md) §12A.1): the **whole height of the ruler**
+  (K-513 - it was the lower half only, back when a seam was drawn across the ruler's
+  waist), then on behind the cache bar and down through the lanes, behind the bars and the
+  keys. Its two edges, at half strength, *are* the two drag handles, and they are
+  grabbable for the ruler's whole height too. The **double-click that clears it** is the
+  one gesture the ruler's waist still divides: below the waist clears the work area, above
+  it makes a marker. It has to stay divided — a comp nobody has narrowed has a work area
+  of the whole comp, so a band-wide double-click would leave nowhere on the ruler to make
+  a marker at all.
   Outside it the lane ground stays a step darker, drawn both under the rows
   and again, lightly, over the layer bars — under them alone it was invisible along every
   row that had a layer in it (K-207).
@@ -1029,10 +1035,14 @@ nearest end — the layer search, the master motion-blur button, the shy filter,
 Lane and Graph view buttons, and a ⋯ menu with the layer / razor / work-area / marker /
 beat commands) and the **column-group header** (§4.2). The lane side gives those two
 rows' height to a taller, labelled time ruler — a bigger playhead grab — with the cache
-bar tucked under it. The ruler is **double height** (K-441): the time labels, the
-ticks and the playhead's head in the upper half, the markers and the work-area band in the
-lower. Minor ticks subdivide between the labelled ones as the zoom grows, and stop at one
-tick per frame. A few pixels of padding sit either side of the axis, so a handle on the
+bar tucked under it. The ruler is **double height and reads as one band** (K-441, K-513):
+the time labels, the ticks and the playhead's head near the top, the markers on the floor,
+and nothing ruled across the middle. A labelled tick crosses the waist and reaches the
+same distance below it; minor ticks subdivide above the waist as the zoom grows, and stop
+at one tick per frame. **Both of the outline's chrome rows grew under Regular** (K-512) -
+24 for the toolbar, 23 for the column-group header, with every control standing in them
+told to be 20 - and the ruler, derived from their sum, grew with them to 47. Compact keeps
+18, 18 and 36. A few pixels of padding sit either side of the axis, so a handle on the
 first or last frame stays visible and grabbable; the lanes carry the same padding, so both
 halves stay lined up. Markers draw on the ruler itself rather than in a ribbon of their
 own (K-254): an **upward triangle** standing on the cache bar at the floor of the ruler,

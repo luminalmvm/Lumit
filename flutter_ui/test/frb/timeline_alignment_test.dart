@@ -366,11 +366,14 @@ void main() {
           reason: 'and carries on past the last row');
     });
 
-    /// 6b. **The ruler is two rows, not one** (docs/15 §12A.1). The clock owns
-    /// the upper half — the labels, the ticks and the playhead's head — and the
-    /// lower half carries the markers and the work-area band, so a flag never
-    /// sits on a tick and the band never tints the time.
-    testWidgets('the ruler is double height, clock above, band below',
+    /// 6b. **The ruler is one band, the height of the outline's two chrome
+    /// rows** (docs/15 §12A.1, K-513). The clock's labels sit near its top and
+    /// the markers stand on its floor, but nothing is ruled off any more: the
+    /// work-area highlight and its two drag handles run the ruler's **whole
+    /// height**, which is the owner's ruling from desktop testing. Until then
+    /// the band and the handles lived in the lower half alone, under a drawn
+    /// seam across the waist.
+    testWidgets('the ruler is one band, highlight and handles full height',
         (tester) async {
       final p = withComp();
       p.comp.addAdjustmentLayer();
@@ -390,10 +393,20 @@ void main() {
       final waist = ruler.top + ruler.height / 2;
 
       final band = tester.getRect(find.byKey(const ValueKey('tl-work-area')));
-      expect(band.top, closeTo(waist, 0.5),
-          reason: 'the band hangs from the waist of the ruler');
+      expect(band.top, closeTo(ruler.top, 0.5),
+          reason: 'the highlight starts at the top of the ruler (K-513)');
       expect(band.bottom, closeTo(ruler.bottom, 0.5),
           reason: 'and reaches its floor, which the cache bar is drawn on');
+
+      // Both handles are grabbable for the whole of the band they belong to.
+      for (final end in const ['start', 'end']) {
+        final handle =
+            tester.getRect(find.byKey(ValueKey<String>('tl-work-$end')));
+        expect(handle.top, closeTo(ruler.top, 0.5),
+            reason: 'the $end handle can be taken hold of from the top');
+        expect(handle.bottom, closeTo(ruler.bottom, 0.5),
+            reason: 'and all the way to the floor');
+      }
 
       // The cache bar is *on* the band's row, at the ruler's floor — not a
       // strip of its own beneath it (§12A.1).
@@ -597,15 +610,27 @@ void main() {
       expect(cache.bottom, closeTo(ruler.bottom, 0.5),
           reason: 'the cache bar sits on the ruler floor, inside it');
 
-      // The outline's two secondary rows — timecode/search/mode, then the
+      // The outline's two chrome rows — timecode/search/mode, then the
       // column header — stand between the top of the panel's table and its
       // first row, and the ruler starts at that same top on the lane side.
       // **That equality is the ruler's whole derivation** (§12A.6): the lane
       // side spends on its ruler exactly what the outline spends on its two
       // rows, so the two halves meet.
-      expect(outlineRow(tester, layer).top - ruler.top,
-          closeTo(d.secondaryRow * 2, 0.5),
-          reason: 'two secondary rows sit above the first layer row');
+      expect(outlineRow(tester, layer).top - ruler.top, closeTo(d.ruler, 0.5),
+          reason: 'two chrome rows sit above the first layer row');
+      // And they are the two the density states, at K-512's own numbers: the
+      // row that is aimed at all day is the taller of the pair.
+      expect(
+          tester
+                  .getRect(find.byKey(const ValueKey('tl-view-lanes')))
+                  .center
+                  .dy -
+              ruler.top,
+          lessThan(d.timelineChromeRow),
+          reason: 'the mode tabs ride in the first of the two rows');
+      expect(d.timelineChromeRow, 24);
+      expect(d.timelineHeaderRow, 23);
+      expect(d.ruler, 47, reason: 'so the ruler facing them is 47');
       expect(outlineRow(tester, layer).height, closeTo(d.laneRow, 0.5),
           reason: 'an outline row is the density\'s lane row');
       expect(laneBar(tester, layer).height, closeTo(d.laneRow, 0.5),
@@ -653,23 +678,78 @@ void main() {
       expect(dot.height, closeTo(6, 0.5));
     });
 
-    /// 10b. **The bar's label is Hanken at 10** (§7.1, K-451) — the mockup's
-    /// own size, and the face §7.1 gives everything the *user* named. It was
-    /// mono at 11, which is the row the axis numbers keep.
-    testWidgets('a bar\'s label is set in Hanken at 10', (tester) async {
+    /// 10b. **A bar carries no name unless the setting asks for one** (K-514,
+    /// the owner's ruling), and when it does the label is **Hanken at 10**
+    /// (§7.1, K-451) — the mockup's own size, and the face §7.1 gives
+    /// everything the *user* named. It was mono at 11, which is the row the
+    /// axis numbers keep.
+    ///
+    /// The default is the half of this that matters: the mockups draw the
+    /// name on every bar, and the ruling from desktop testing is that it says
+    /// the outline's own column of names a second time.
+    testWidgets('a bar is unlabelled by default and Hanken at 10 when asked',
+        (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
       p.uiState.model.refresh();
       await mount(tester, p);
 
-      final label = tester
-          .renderObject<RenderParagraph>(
-              find.byKey(ValueKey<String>('tl-bar-name-${idOf(layer)}')))
-          .text
-          .style!;
+      final name = find.byKey(ValueKey<String>('tl-bar-name-${idOf(layer)}'));
+      expect(name, findsNothing,
+          reason: 'names on bars are off until they are asked for');
+
+      p.uiState.workspace.interface.layerNamesOnBars = true;
+      await mount(tester, p);
+
+      final label = tester.renderObject<RenderParagraph>(name).text.style!;
       expect(label.fontSize, 10);
       expect(label.fontFamily, LumitTheme.fontFamily,
           reason: 'a layer\'s own name is sentence-case Hanken, not mono');
+    });
+
+    /// 10b-bis. **Both halves rule their rows on the same pixel** (K-513's
+    /// sibling fix, reported from desktop as "the outline's dividers look 2px
+    /// and faint where the lanes' look crisp").
+    ///
+    /// The lane side draws its seams inside the scrolled content, so they fall
+    /// on whole multiples of the row height. The outline side draws on an
+    /// overlay pinned to the panel and carries the scroll in a phase instead —
+    /// and a scroll offset is almost never a whole number, so its seams were
+    /// landing on fractions of a pixel and a 1px line drawn at y = 21.8 paints
+    /// as two rows of grey rather than one row of hairline.
+    ///
+    /// The claim is parity: the same rows, ruled at the same offsets, whatever
+    /// the phase.
+    test('the outline and the lanes rule their rows on the same pixel', () {
+      const step = 23.0;
+      // The lane side: no phase, because it draws inside the scrolled
+      // content. Every seam is a whole pixel plus the half a 1px stroke needs
+      // to fill one row of pixels rather than straddle two.
+      final lanes = rowSeamOffsets(step: step, height: 200);
+      expect(lanes, isNotEmpty);
+      for (final y in lanes) {
+        expect(y + 0.5, closeTo((y + 0.5).roundToDouble(), 1e-9),
+            reason: 'the lane seams are crisp, and always were');
+      }
+      // The outline side, at fractions a wheel fling really stops on. Its
+      // seams travel with the rows — that is what the phase is for — but they
+      // land on the pixel grid exactly as the lanes' do, which is the parity
+      // the report was about.
+      for (final scroll in [0.0, 0.3, 7.5, 11.9, 22.4]) {
+        final outline =
+            rowSeamOffsets(step: step, height: 200, phase: -(scroll % step));
+        expect(outline, isNotEmpty);
+        for (final y in outline) {
+          expect(y + 0.5, closeTo((y + 0.5).roundToDouble(), 1e-9),
+              reason: 'a seam at scroll $scroll must not land on a fraction');
+        }
+      }
+      // And a blank leaves its middle unruled while keeping the seams that
+      // bound it (K-248).
+      final blanked =
+          rowSeamOffsets(step: step, height: 200, blanks: [(23, 92)]);
+      expect(blanked.where((y) => (y - 45.5).abs() < 0.01), isEmpty);
+      expect(blanked.where((y) => (y - 22.5).abs() < 0.01), isNotEmpty);
     });
 
     /// 10c. **The pickers inside a row wear the in-row face** (§12A.6's table,
@@ -706,26 +786,45 @@ void main() {
       }
     });
 
-    /// 10c-bis. **The layer-search well is the drawing's 16**, in a secondary
-    /// row of 19 — ground above and below it, rather than a field filling its
-    /// row edge to edge. Measured against the artboard, 2026-08-24: the well
-    /// had sized itself to its own 16px glyph plus its hairline and come out
-    /// at 18. (The in-row pickers were measured in the same pass and already
-    /// matched the drawing's 18, so only this one moved.)
-    testWidgets('the layer search sits in the drawing\'s 16px well',
+    /// 10c-bis. **The layer search stands at whatever its row states** (K-511).
+    ///
+    /// Under **Compact** that is nothing at all, and the well keeps the
+    /// drawing's own 16 in an 18 row — ground above and below it, rather than
+    /// a field filling its row edge to edge. Measured against the artboard,
+    /// 2026-08-24: the well had sized itself to its own 16px glyph plus its
+    /// hairline and come out at 18.
+    ///
+    /// Under **Regular** the row is 24 and states 20, and every control in it
+    /// — this well, the two readouts, the three mode tabs — takes that number,
+    /// which is what the owner's "grow the hit targets to match" means.
+    testWidgets('the layer search stands at the height its row states',
         (tester) async {
       final p = withComp();
       p.comp.addSolidLayer();
       p.uiState.model.refresh();
-      await mount(tester, p);
 
+      await mount(tester, p, density: DensityTokens.compact);
       expect(tester.getRect(find.byKey(const ValueKey('tl-search'))).height,
           closeTo(layerSearchWellHeight, 0.5));
       expect(layerSearchWellHeight, 16,
           reason: 'which is the drawing\'s own value');
       expect(layerSearchWellHeight,
-          lessThan(DensityTokens.compact.secondaryRow.toDouble()),
-          reason: 'and leaves ground in the row at either density');
+          lessThan(DensityTokens.compact.timelineChromeRow.toDouble()),
+          reason: 'and leaves ground in Compact\'s row');
+      expect(DensityTokens.compact.timelineChromeControl, isNull,
+          reason: 'Compact states no height: every control measures itself');
+
+      await mount(tester, p);
+      final grown = DensityTokens.regular.timelineChromeControl!;
+      expect(tester.getRect(find.byKey(const ValueKey('tl-search'))).height,
+          closeTo(grown, 0.5),
+          reason: 'Regular\'s taller row grows the well with it');
+      expect(tester.getRect(find.byKey(const ValueKey('tl-view-keys'))).height,
+          closeTo(grown, 0.5),
+          reason: 'and the mode tabs the owner named, to the same number');
+      expect(tester.getRect(find.byKey(const ValueKey('tl-timecode'))).height,
+          closeTo(grown, 0.5),
+          reason: 'and the clock, so the whole row stands level');
     });
 
     /// 10d. **Compact is the same panel, a pixel tighter** (K-454, §12A.6's
@@ -745,10 +844,14 @@ void main() {
       final row = outlineRow(tester, layer);
       expect(row.height, closeTo(22, 0.5), reason: 'a lane row is 22');
       expect(ruler.height, closeTo(36, 0.5), reason: 'the ruler is 36');
-      // The ruler is still exactly the two secondary rows the outline spends
-      // opposite it, which is what holds the halves level at either density.
+      // The ruler is still exactly the two chrome rows the outline spends
+      // opposite it, which is what holds the halves level at either density —
+      // and under Compact those two rows are 18 apiece, exactly as they were
+      // before K-512 grew Regular's.
       expect(row.top - ruler.top, closeTo(36, 0.5),
-          reason: 'two 18px secondary rows stand above the first layer row');
+          reason: 'two 18px chrome rows stand above the first layer row');
+      expect(d.timelineChromeRow, 18);
+      expect(d.timelineHeaderRow, 18);
       expect(
           tester
               .getRect(find.byKey(const ValueKey('tl-lane-bottom-bar')))
@@ -1172,12 +1275,60 @@ void main() {
 
       expect(row.height, closeTo(d.laneRow, 0.5));
       expect(prop.height, closeTo(d.laneRow, 0.5));
-      expect(row.top - ruler.top, closeTo(d.secondaryRow * 2, 0.5),
+      expect(row.top - ruler.top, closeTo(d.ruler, 0.5),
           reason: 'the timecode row and the filter row stand above the first '
               'layer, exactly the ruler opposite them');
       expect(lane.top, closeTo(row.top, 0.5),
           reason: 'the dope sheet\'s halves are level too');
       expect(lane.height, closeTo(row.height, 0.5));
+    });
+
+    /// 10e. **Keys mode shows each layer's bar through its keys** (K-515, the
+    /// owner's ruling): the dope sheet could say when a layer's keys were and
+    /// never how long the layer itself was, so a key past the end of its own
+    /// layer looked no different from one inside it.
+    ///
+    /// The ghost is the Layers-mode bar with everything that made it a handle
+    /// taken off — same place, same 16 inside the row, no leading edge, no
+    /// name, no end marks and no gestures — drawn at [keysGhostBarAlpha] of
+    /// the layer's label colour. The alpha is pinned here because it is the
+    /// whole of the disabled treatment: brighter and it competes with the
+    /// keys in front of it, fainter and it is not there.
+    testWidgets('a Keys layer band draws its bar as a disabled ghost',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
+      await tester.pumpAndSettle();
+
+      final ghost =
+          find.byKey(ValueKey<String>('tl-keys-ghost-${idOf(layer)}'));
+      expect(ghost, findsOneWidget);
+      final box = tester.getRect(ghost);
+      final band = tester.getRect(
+          find.byKey(ValueKey<String>('tl-keys-layer-${idOf(layer)}')));
+      expect(box.height, closeTo(clipBarHeight, 0.5),
+          reason: 'a bar\'s own 16, the same as in Layers mode');
+      expect(box.center.dy, closeTo(band.center.dy, 0.5),
+          reason: 'centred in the band, ground above and below');
+
+      final decoration = tester
+          .widget<DecoratedBox>(
+              find.descendant(of: ghost, matching: find.byType(DecoratedBox)))
+          .decoration as BoxDecoration;
+      expect(decoration.color!.a, closeTo(keysGhostBarAlpha, 0.001),
+          reason: 'the disabled treatment, and the number is the treatment');
+      expect(keysGhostBarAlpha, lessThan(clipFillAlpha),
+          reason: 'quieter than the bar it is a ghost of');
+
+      // Nothing about it is a handle: the whole band ignores the pointer, so
+      // a drag started on the ghost is the marquee's, not a trim's.
+      expect(find.byKey(ValueKey<String>('tl-bar-name-${idOf(layer)}')),
+          findsNothing);
+      expect(find.byKey(ValueKey<String>('tl-bar-ends-${idOf(layer)}')),
+          findsNothing);
     });
 
     /// 11. **Neither column of switches ever stretches** (§12A.1, K-448; Modes

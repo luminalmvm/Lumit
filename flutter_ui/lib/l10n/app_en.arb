@@ -3334,14 +3334,6 @@
       }
     }
   },
-  "keysScopeLayers": "Layers",
-  "@keysScopeLayers": {
-    "description": "Timeline, Keys mode: the filter word for showing every layer in the composition, beside 'Selected only'. Drawn in capitals; one word."
-  },
-  "keysScopeSelected": "Selected only",
-  "@keysScopeSelected": {
-    "description": "Timeline, Keys mode: the filter word for showing only the layers currently picked, beside 'Layers'. Drawn in capitals; two words."
-  },
   "keysShow": "Show",
   "@keysShow": {
     "description": "Timeline, Keys mode: the label at the left of the filter row, naming the two words that follow it. Drawn in capitals; one word."
@@ -9068,5 +9060,9 @@
   "exportColourConfigUntagged": "A file written through the colour configuration is left untagged rather than mis-tagged.",
   "@exportColourConfigUntagged": {
     "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
+  },
+  "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
+  "@settingsLayerNamesOnLaneBars": {
+    "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
   }
 }

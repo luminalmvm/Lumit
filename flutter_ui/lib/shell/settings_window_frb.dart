@@ -563,6 +563,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
         settings.graphOutlineLikeLayers = shipped.graphOutlineLikeLayers;
+        settings.layerNamesOnBars = shipped.layerNamesOnBars;
         workspace.settingsChanged();
       case SettingsPage.viewer:
         workspace.setSmoothZoomedViewer(false);
@@ -1206,6 +1207,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               l10n.settingsGraphKeepsTheLayersOutline,
               value: settings.graphOutlineLikeLayers, set: (on) {
             settings.graphOutlineLikeLayers = on;
+            changed();
+          }),
+          // Off by default (K-514): the lane area draws bars, and the names
+          // are already a column away in the outline.
+          _flag(t, 'settings-layer-names-on-bars',
+              l10n.settingsLayerNamesOnLaneBars,
+              value: settings.layerNamesOnBars, set: (on) {
+            settings.layerNamesOnBars = on;
             changed();
           }),
         ],

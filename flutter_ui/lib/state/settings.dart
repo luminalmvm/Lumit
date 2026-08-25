@@ -241,6 +241,16 @@ class InterfaceSettings {
   /// rows.
   bool graphOutlineLikeLayers;
 
+  /// Whether a layer's name is written along its bar in the Timeline's lane
+  /// area (K-514).
+  ///
+  /// **Off by default**, by the owner's explicit ruling after desktop testing.
+  /// The approved mockups draw the name on every bar and the editor did the
+  /// same; on a real comp the row of names turned the lane area into a second
+  /// copy of the outline, which is already spelling out exactly those names a
+  /// few pixels to the left. Turning it on gives the labels back, unchanged.
+  bool layerNamesOnBars;
+
   /// Whether rows are drawn a pixel or two tighter than the approved mockups
   /// render them (K-454, `DensityTokens` in `theme/theme.dart`).
   ///
@@ -286,6 +296,7 @@ class InterfaceSettings {
     this.showToneMap = false,
     this.easingInPopup = false,
     this.graphOutlineLikeLayers = false,
+    this.layerNamesOnBars = false,
     this.compact = false,
     this.viewerBars = ViewerBars.split,
   });
@@ -305,6 +316,7 @@ class InterfaceSettings {
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
         'graph_outline_like_layers': graphOutlineLikeLayers,
+        'layer_names_on_bars': layerNamesOnBars,
         'compact': compact,
         'viewer_bars': viewerBars.name,
       };
@@ -355,6 +367,12 @@ class InterfaceSettings {
         // outline it happened to have.
         graphOutlineLikeLayers:
             j['graph_outline_like_layers'] as bool? ?? false,
+        // Absent means off (K-514). Every settings file written before this
+        // field existed was written by a build that always drew the names, so
+        // those users lose them — deliberately, because off is the owner's
+        // ruling on what the editor should look like, and the labels are one
+        // click away for anyone who wants them back.
+        layerNamesOnBars: j['layer_names_on_bars'] as bool? ?? false,
         // Absent means off, which is the roomy default — and every settings
         // file written before this field existed was written by a build that
         // drew the tight rows. Those users get the extra pixel or two back,

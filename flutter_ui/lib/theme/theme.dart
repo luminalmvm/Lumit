@@ -164,11 +164,41 @@ class DensityTokens {
   /// setting fits the seam inside the 22.
   final double laneRow;
 
-  /// The thin rows that frame a panel — the Timeline's timecode/search/mode
-  /// row, column-group headers, filter rows, panel bottom bars. 18 of content;
-  /// Regular counts the hairline beneath it in, as §12A.6 already does for the
+  /// The thin rows that frame a panel — the Project panel's column header, a
+  /// panel's bottom bar, the graph's key readout. 18 of content; Regular
+  /// counts the hairline beneath it in, as §12A.6 already does for the
   /// Project panel's column header.
+  ///
+  /// **The Timeline's own chrome is no longer one of these** (K-512): its two
+  /// rows are [timelineChromeRow] and [timelineHeaderRow], which under Regular
+  /// stand taller than a secondary row anywhere else.
   final double secondaryRow;
+
+  /// The Timeline's first chrome row — the timecode and frame readouts, the
+  /// layer search, and the Layers / Keys / Graph tabs (K-512).
+  ///
+  /// **24 under Regular**, where every other secondary row is 19: the owner's
+  /// ruling from desktop testing is that this row is aimed at constantly and
+  /// was too small to hit comfortably. Compact keeps the 18 it always drew.
+  final double timelineChromeRow;
+
+  /// The Timeline's second chrome row — the column-group headers in Layers
+  /// mode, the dope sheet's filters in Keys mode, the graph's in Graph mode
+  /// (K-512). **23 under Regular**, 18 under Compact.
+  ///
+  /// It is a separate number from [timelineChromeRow] because the two rows do
+  /// different work: the row above is aimed at, this one is mostly read.
+  final double timelineHeaderRow;
+
+  /// How tall a control standing in either Timeline chrome row is *told* to
+  /// be, or **null for "measure yourself"** (K-512).
+  ///
+  /// In plain terms: Regular's rows grew, so the buttons and wells in them
+  /// grow too rather than floating in a band of empty ground — one number, so
+  /// the tabs, the search well and the two readouts all stand level. Compact's
+  /// rows are exactly the rows these controls were built for, so it states
+  /// nothing and each control keeps the size it has always measured itself to.
+  final double? timelineChromeControl;
 
   /// The pickers that sit *inside* a layer's row: matte, blend and parent.
   final double inRowPicker;
@@ -182,6 +212,9 @@ class DensityTokens {
   const DensityTokens({
     required this.laneRow,
     required this.secondaryRow,
+    required this.timelineChromeRow,
+    required this.timelineHeaderRow,
+    required this.timelineChromeControl,
     required this.inRowPicker,
     required this.dropdownFace,
     required this.propertyRow,
@@ -189,27 +222,38 @@ class DensityTokens {
 
   /// The Timeline ruler, which is **derived and not declared**: the lane side
   /// gives the ruler exactly the height the outline side spends on its two
-  /// secondary rows, and that is the whole reason the two halves of the panel
-  /// line up row for row. The mockup's own ruler measures a pixel under the
-  /// sum of the two rows it faces — the artboard is inconsistent with itself
-  /// there — and of the two readings only this one can be true of a panel
-  /// whose halves have to meet.
-  double get ruler => secondaryRow * 2;
+  /// chrome rows, and that is the whole reason the two halves of the panel
+  /// line up row for row. Grow either row and the ruler grows with it — which
+  /// is what K-512 did, taking Regular's ruler from 38 to **47** while Compact
+  /// keeps its 36.
+  ///
+  /// The extra room goes to the clock: the ruler's two halves are no longer
+  /// ruled apart (K-512 again), so what the reader sees is one taller band
+  /// with the labels near its top and the markers and work area on its floor.
+  double get ruler => timelineChromeRow + timelineHeaderRow;
 
-  /// What the mockups render. The default (K-454).
+  /// What the mockups render, with the Timeline's chrome at the height the
+  /// owner asked for after desktop testing. The default (K-454, K-512).
   static const regular = DensityTokens(
     laneRow: 23,
     secondaryRow: 19,
+    timelineChromeRow: 24,
+    timelineHeaderRow: 23,
+    timelineChromeControl: 20,
     inRowPicker: 18,
     dropdownFace: 20,
     propertyRow: 27,
   );
 
   /// A pixel or two off each row, for more visible at once. What the app drew
-  /// before the setting existed.
+  /// before the setting existed — **including the Timeline's chrome**, which
+  /// K-512 grew under Regular alone.
   static const compact = DensityTokens(
     laneRow: 22,
     secondaryRow: 18,
+    timelineChromeRow: 18,
+    timelineHeaderRow: 18,
+    timelineChromeControl: null,
     inRowPicker: 16,
     dropdownFace: 18,
     propertyRow: 26,

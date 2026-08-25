@@ -1370,6 +1370,14 @@ class _TimelineRulerState extends State<TimelineRuler> {
         // and a work-area handle are opaque, so neither reaches here.
         // **On the band**: the work area goes back to the whole comp
         // (docs/07 §4.1). Anywhere else: a marker is made at that frame.
+        //
+        // **The waist still divides this one gesture**, though nothing is
+        // drawn along it any more and the highlight now covers the whole
+        // ruler (K-513). It has to: a comp nobody has narrowed has a work
+        // area of the whole comp, so a band-wide double-click would clear a
+        // work area that is already whole and there would be nowhere left on
+        // the ruler to make a marker. Clock above, band below — for the
+        // double-click, and for nothing else.
         final x = d.localPosition.dx;
         final onBand = d.localPosition.dy >= widget.height / 2 &&
             x >= axis.xOf(work.start) &&
@@ -1408,16 +1416,17 @@ class _TimelineRulerState extends State<TimelineRuler> {
               ),
             ),
             // The work area: the span the Viewer previews and the export
-            // writes. The ruler's lower half only, so the ticks and labels
-            // above it stay legible and the band reads as a bar hung under the
-            // clock rather than a tint over it — and this is the top of *one*
-            // band that carries on behind the cache bar and down through the
-            // lanes (docs/15 §12A.1).
+            // writes. **The whole ruler**, not its lower half (K-513): the
+            // ruler is one band now, so the span that band describes covers
+            // all of it — and this is the top of *one* highlight that carries
+            // on behind the cache bar and down through the lanes (docs/15
+            // §12A.1). It was the lower half alone, back when a drawn seam
+            // said the clock above was a separate reading.
             Positioned(
               left: axis.xOf(work.start),
               width:
                   (axis.xOf(work.end) - axis.xOf(work.start)).clamp(1.0, 1e6),
-              top: widget.height / 2,
+              top: 0,
               bottom: 0,
               child: IgnorePointer(
                 child: Container(
@@ -1433,18 +1442,20 @@ class _TimelineRulerState extends State<TimelineRuler> {
             // to take hold of. Each edge stops one frame short of the other,
             // so a drag can never invert the span.
             //
-            // Only in the lower half, where the band is drawn. A handle over
-            // the full height sat on top of the ticks and stole the drag from
-            // the playhead whenever the two were near each other, which made
-            // the playhead unscrubbable next to a work-area edge. The rule is
-            // the one the band already reads as: clock above, bar below.
+            // **The full height of the ruler** (K-513), because the band they
+            // belong to is now the full height too: an edge you can see for
+            // the whole of the ruler and can only grab for the bottom half of
+            // it is a handle that is half a lie. They were the lower half
+            // alone, which kept the scrub free right next to an edge; the
+            // owner's ruling takes that trade the other way, and the ten
+            // pixels either side of an edge are the edge's.
             if (widget.onWorkArea != null)
               for (final isStart in const [true, false])
                 Positioned(
                   left: axis.xOf(isStart ? work.start : work.end) -
                       _workHandleWidth / 2,
                   width: _workHandleWidth,
-                  top: widget.height / 2,
+                  top: 0,
                   bottom: 0,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.resizeLeftRight,
@@ -2172,6 +2183,23 @@ double clipBarInsetFor(DensityTokens d) => (d.laneRow - clipBarHeight) / 2;
 /// beats every label colour in the palette (§6.1).
 const double clipFillSelectedAlpha = 0.62;
 
+/// **The Layers bar, shown through Keys mode** (K-515): each layer band in the
+/// dope sheet draws that layer's bar behind its keys, at this share of the
+/// label colour.
+///
+/// In plain terms: in Keys mode you see when a layer's keys are but not how
+/// long the layer *is*, so a key sitting past the end of its own layer looked
+/// no different from one inside it. The bar is drawn back in as a ghost — the
+/// same rectangle, in the same place, at the same 16 inside the row — so the
+/// length reads at a glance.
+///
+/// **The disabled treatment**, and deliberately so: it is [clipFillAlpha]'s
+/// fill taken most of the way down, it carries no leading edge, no name, no
+/// end marks and no gestures of any kind. Everything that made the Layers bar
+/// a handle is exactly what has to be missing here, or a reader would try to
+/// drag it. Pinned by `timeline_alignment_test`.
+const double keysGhostBarAlpha = 0.15;
+
 /// The solid mark at a bar's or a clip's start, in the label's full colour:
 /// what makes a desaturated fill still land with a snap.
 const double clipEdgeWidth = 2;
@@ -2217,18 +2245,29 @@ String rulerLabelOf(double seconds) {
   return h > 0 ? '$h:$mm:${ss}s' : '$mm:${ss}s';
 }
 
-/// The ruler's ticks and time labels — the **upper half** of the double-height
-/// ruler (docs/15 §12A.1). Labelled ticks at a nice step, minor ticks
-/// subdividing between them as the zoom allows, and the seam the markers and
-/// the work area hang below.
+/// The ruler's ticks and time labels (docs/15 §12A.1).
+///
+/// **One band, not two** (K-513). The ruler used to be ruled across its waist,
+/// with the clock above the line and the markers and work area below it; the
+/// owner's ruling after desktop testing is that it should read as a single
+/// ruler. So the seam is gone, and a **labelled** tick now crosses the waist
+/// and carries on into the lower half — [labelledTick] above it and the same
+/// again below — which is what ties the two readings together where the line
+/// used to hold them apart. Minor ticks are unchanged: they hang from the
+/// waist upward only, so a subdivided ruler still reads as a row of labels
+/// rather than as a comb.
 class _RulerTicksPainter extends CustomPainter {
+  /// How far a labelled tick reaches either side of the ruler's waist, and how
+  /// far a minor tick reaches above it — the mockup's own pair (K-451), with
+  /// the labelled one now drawn twice, once up and once down (K-513).
+  static const double labelledTick = 7;
+  static const double minorTickLength = 4;
+
   final TimelineAxis axis;
   final double fps;
   final Color tick;
 
-  /// The minor ticks, and the seam across the ruler's waist: quieter than the
-  /// labelled ticks, so a subdivided ruler still reads as a row of labels
-  /// rather than as a comb.
+  /// The minor ticks: quieter than the labelled ones.
   final Color minorTick;
   final TextStyle label;
 
@@ -2242,13 +2281,12 @@ class _RulerTicksPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // The waist: everything the clock owns sits above it, the markers and the
-    // work-area band below.
+    // The waist is still where the ticks are hung from and where the labels
+    // stop — it is simply no longer *drawn* (K-513).
     final mid = size.height / 2;
     final quiet = Paint()
       ..color = minorTick
       ..strokeWidth = 1;
-    canvas.drawLine(Offset(0, mid), Offset(size.width, mid), quiet);
 
     if (axis.frames <= 0 || fps <= 0 || size.width <= 0) return;
     final seconds = axis.frames / fps;
@@ -2266,15 +2304,18 @@ class _RulerTicksPainter extends CustomPainter {
     if (minor < step) {
       for (var s = 0.0; s <= seconds; s += minor) {
         final x = axis.xOf(s * fps);
-        canvas.drawLine(Offset(x, mid - 4), Offset(x, mid), quiet);
+        canvas.drawLine(
+            Offset(x, mid - minorTickLength), Offset(x, mid), quiet);
       }
     }
 
     for (var s = 0.0; s <= seconds; s += step) {
       final x = axis.xOf(s * fps);
       // Seven pixels of labelled tick against the minor ticks' four — the
-      // mockup's own pair (K-451).
-      canvas.drawLine(Offset(x, mid - 7), Offset(x, mid), paint);
+      // mockup's own pair (K-451) — drawn **through** the waist and the same
+      // distance again below it, so the ruler reads as one band (K-513).
+      canvas.drawLine(
+          Offset(x, mid - labelledTick), Offset(x, mid + labelledTick), paint);
       final text = TextPainter(
         text: TextSpan(text: rulerLabelOf(s), style: label),
         textDirection: TextDirection.ltr,

@@ -264,10 +264,17 @@ void main() {
             reason: '$key rests in the well\'s own recess');
         expect((face.border as Border).top.color, t.hairline,
             reason: 'inside a hairline, like every other value well');
+        // One height, whatever size their own type is — 11 for the clock, 10
+        // for the frame count — and under Regular that height is the one the
+        // Timeline's chrome row states for everything standing in it (K-512),
+        // not the readout's own [readoutWellHeight]. Compact states none and
+        // the well measures itself.
         expect(tester.getRect(find.byKey(ValueKey<String>(key))).height,
-            closeTo(readoutWellHeight, 0.5),
-            reason: 'and both wells are one height, whatever size their own '
-                'type is — 11 for the clock, 10 for the frame count');
+            closeTo(DensityTokens.regular.timelineChromeControl!, 0.5),
+            reason: 'a well in the chrome row grows with the row');
+        expect(readoutWellHeight,
+            lessThan(DensityTokens.regular.timelineChromeControl!),
+            reason: 'which is taller than the well would size itself to');
       }
 
       // And the open editor speaks through the **edge**, never by lifting the
@@ -4473,20 +4480,20 @@ void main() {
       await tester.pump();
       expect(shy.getSwitches().shy, isTrue,
           reason: 'shy is a document switch, so it survives the session');
-      expect(find.text('Backplate'), findsNWidgets(2),
+      expect(find.text('Backplate'), findsOneWidget,
           reason: 'marking a layer shy does not hide it yet — the name is in '
-              'the outline and on the bar (§12A.1)');
+              'the outline, and on the bar only if the setting asks (K-514)');
 
       await tester.tap(find.byKey(const ValueKey('tl-hide-shy')));
       await tester.pump();
       expect(find.text('Backplate'), findsNothing);
-      expect(find.text('Hero'), findsNWidgets(2));
+      expect(find.text('Hero'), findsOneWidget);
       expect(shy.getSwitches().visible, isTrue,
           reason: 'shy hides the row, never the picture');
 
       await tester.tap(find.byKey(const ValueKey('tl-hide-shy')));
       await tester.pump();
-      expect(find.text('Backplate'), findsNWidgets(2));
+      expect(find.text('Backplate'), findsOneWidget);
     });
 
     /// Dragging a layer by its name moves it up or down the stack — layers
@@ -5617,6 +5624,36 @@ void main() {
       expect(find.text('Position'), findsNothing);
     });
 
+    /// **Keys mode has no scope pair** (K-515, the owner's ruling from desktop
+    /// testing). It listed *Layers* and *Selected only* hard right of the
+    /// filter until the ruling took them out: the sheet is always every layer
+    /// in the composition, and which properties are in hand is already said by
+    /// the outline and by the wash on a picked lane. The filter row keeps
+    /// Show All / Animated and the `U` beside them.
+    testWidgets('the dope sheet is every layer, with no scope to choose',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      final other = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      expect(find.byKey(const ValueKey('tl-keys-scope-layers')), findsNothing);
+      expect(
+          find.byKey(const ValueKey('tl-keys-scope-selected')), findsNothing);
+      // The two words that stayed.
+      expect(find.byKey(const ValueKey('tl-keys-all')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tl-keys-animated')), findsOneWidget);
+
+      // Selecting one layer does not narrow the sheet to it: both are still
+      // listed, which is what "always the layers scope" means.
+      for (final l in [layer, other]) {
+        expect(find.byKey(ValueKey<String>('tl-keys-row-${l.internallayerId}')),
+            findsOneWidget);
+      }
+    });
+
     /// `U` is the same reveal it has always been: it opens a layer onto what
     /// is animated, and the dope sheet's rows are what it opens onto.
     testWidgets('U opens a layer in Keys mode as it does in Layers',
@@ -5748,11 +5785,12 @@ void main() {
           reason: 'the two halves are one table here as well');
       expect(lane.height, closeTo(row.height, 0.5));
 
-      // The filter row is a secondary row, level with the column header it
-      // replaces — which is what keeps the ruler opposite it.
+      // The filter row is the Timeline's second chrome row, level with the
+      // column header it replaces — which is what keeps the ruler opposite it
+      // (K-511).
       expect(
           tester.getRect(find.byKey(const ValueKey('tl-keys-filters'))).height,
-          closeTo(d.secondaryRow, 0.5));
+          closeTo(d.timelineHeaderRow, 0.5));
 
       // The property's value is the fold row's **well** (K-499), so its
       // metrics are the well's: mono at [wellTextSize], and `animated`

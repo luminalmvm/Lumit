@@ -610,8 +610,9 @@ mono while focused.
   nearest-wins disambiguation; adjacent slop regions split at their midpoint.
 - Row and chrome heights are **§12A.6's table** (K-451), which supersedes the 28px/24px rows
   written here before the redesign: an outline or lane row is 23 and a secondary row 19
-  under Regular, 22 and 18 under Compact (K-454 — read the height off the table's two
-  columns, never off this sentence). The
+  under Regular, 22 and 18 under Compact (K-454; the Timeline's own two chrome rows are
+  24 and 23 under Regular, K-512 — read the height off the table's two columns, never off
+  this sentence). The
   floors above still govern what sits *inside* those rows — bars, keyframes, curve handles
   and the cache bar keep their ≥24px visual and ≥32px hit extent along the axis they are
   aimed at. A chrome row shorter than the floor is the mockup's height, not a licence to
@@ -931,8 +932,17 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **The layer search stays.** It sits in the row above the outline as an inset well
   stretched between the frame counter on the left and the mode tabs on the right,
   filtering the layer list as it does today; the redesign restyles it, never removes it.
-- **The ruler is double height**: times and the playhead head in the upper half; markers and
-  the work area in the lower. A marker is an upward triangle sitting on the cache bar, half
+- **The ruler is double height and reads as one band** (K-513): the times and the
+  playhead head sit near its top and the markers stand on its floor, but nothing is ruled
+  across its waist. A **labelled** tick crosses that waist and carries on the same
+  distance below it — 7px each way — which is what ties the clock to the markers where the
+  seam used to hold them apart; minor ticks still hang above the waist only. The
+  **work-area highlight and its two drag handles run the ruler's whole height**, not its
+  lower half: an edge you can see for the whole ruler and grab for half of it is a handle
+  that is half a lie. The **double-click that gives the whole comp back** is the one
+  gesture the waist still divides — below it clears the work area, above it makes a
+  marker — because a comp nobody has narrowed has a work area of the whole comp, and a
+  band-wide double-click would leave nowhere on the ruler to make a marker. A marker is an upward triangle sitting on the cache bar, half
   inside its backdrop pill and half outside to its left; the pill starts at the triangle's
   point. **A marker that carries a duration draws a bar** running from its own frame for
   that long, on the same floor the flag stands on and hushed under it: the flag is what is
@@ -942,8 +952,8 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   frame, and no tick is drawn closer than **30px** to its neighbour — which is the mockup's own density at the
   resting zoom, three half-second ticks between labels two seconds apart (K-451).
 - **The cache bar is drawn on the ruler's floor, coloured by resolution tier** (§6.3) —
-  on the work-area band's own row, inside the ruler's 36, not as a strip of its own
-  beneath it. The band paints behind it; the marker flags stand on it.
+  on the work-area band's own row, inside the ruler's height (§12A.6's table), not as a
+  strip of its own beneath it. The band paints behind it; the marker flags stand on it.
 - **A few pixels of padding sit either side of the ruler** in every timeline mode, so a
   keyframe or work-area handle on the first or last frame stays visible and grabbable.
 - **The work area is one band** in `animated`, from the ruler's handles down through the
@@ -953,6 +963,10 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **Layer bars (and the clips inside a Sequence layer) fill desaturated with a solid
   leading edge**, so a lane full of layers reads organised rather than carnival, and each
   bar's start still lands with a snap.
+- **A bar carries no layer name unless the user asks for one** (K-514). The mockups write
+  the name along every bar; on a real comp that is the outline's own column of names said
+  a second time a few pixels to the right. `Settings ▸ Interface ▸ Panels ▸ Layer names on
+  lane bars` gives them back, unchanged — **off by default**.
 - **Keyframe diamonds on layer rows draw at half the row scale.**
 - **The panel's bottom bar carries a toggle for the switches / modes / parent columns**
   (K-448), so the outline pares down to names and bars when the columns are not in use.
@@ -966,8 +980,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   columns, which in Keys mode would hide nothing; the drawing gives that end of the bar to
   the sheet's own strip. The comp-wide cluster to the right of the bar's rule stays, being
   the document's rather than the outline's. In the columns' place the second row carries
-  the sheet's filters: **Show — All / Animated** (Animated is the default; it is K-441's filter, and
-  `U` is the same reveal from the keyboard) and a scope of **Layers / Selected only**.
+  the sheet's filters: **Show — All / Animated** (Animated is the default; it is K-441's
+  filter, and `U` is the same reveal from the keyboard). **There is no scope pair**
+  (K-515): the sheet is always every layer in the composition. It carried
+  *Layers / Selected only* until the owner ruled the pair out — which properties are in
+  hand is already said by the outline and by the wash on a picked lane.
 - **A layer's row, then its properties flat.** The layer's own row carries its twirl, its
   **layer number** (K-461's muted mono, K-499), its label-colour bullet, its name and —
   quietly, at the right — how many properties are listed under it. Each property is one
@@ -1352,14 +1369,17 @@ a plain constant in the code rather than a token with two equal values.
 | Panel header strip (title and tabs, composition tabs, the Viewer's own) | 22 | 22 |
 | Viewer bottom bar (K-466) | 22 | 22 |
 | Viewer bar glyphs — the marks, the transport, the view menu (K-456, K-466) | 14 | 14 |
-| Secondary rows: timecode/search/mode row, column headers, filter rows, panel bottom bars | 19 | 18 |
+| Secondary rows elsewhere: filter rows, panel bottom bars, the graph's key readout | 19 | 18 |
+| Timeline chrome row 1 — timecode, search, the Layers/Keys/Graph tabs (K-512) | 24 | 18 |
+| Timeline chrome row 2 — column headers, and the Keys and Graph filter rows (K-512) | 23 | 18 |
+| A control standing in either Timeline chrome row — tab, search well, readout (K-512) | 20 | (sizes itself) |
 | Outline and lane rows | 23 | 22 |
 | Clip bars within a lane row | 16 | 16 |
 | In-row pickers (the Timeline's matte, blend and parent cells), label at 10px | 18 | 16 |
 | Dropdown closed face elsewhere in a panel or a bar | 20 | 18 |
 | Property and effect-parameter rows | 27 | 26 |
 | Effect section headings | 24 | 24 |
-| Timeline ruler (times above, markers and work area below) | 38 | 36 |
+| Timeline ruler — derived: chrome row 1 + chrome row 2 (K-512) | 47 | 36 |
 | Cache bar (counted inside the ruler, so the clock above it is the rest) | 3 | 3 |
 | Value wells in panels, the number inside them 11px mono | 20 | 20 |
 | Project panel: preview card (10 of padding round a 96×54 poster frame, plus its hairline) | 75 | 75 |
@@ -1393,10 +1413,21 @@ a plain constant in the code rather than a token with two equal values.
 | Graph-side horizontal scrollbar | 7 | 7 |
 
 **The ruler is derived, not declared.** The lane side gives the ruler exactly what the
-outline side spends on its two secondary rows, which is the whole reason the two halves of
+outline side spends on its two chrome rows, which is the whole reason the two halves of
 the Timeline line up row for row. The mockup's own ruler measures a pixel under the sum of
 the two rows it faces — the artboard disagrees with itself there — and of the two readings
-only this one can be true of a panel whose halves have to meet.
+only this one can be true of a panel whose halves have to meet. Grow either row and the
+ruler grows with it, which is exactly what K-512 did.
+
+**The Timeline's chrome rows are the owner's, not the manifests'** (K-512). Every other
+number in this table is measured off the approved artboards; these three are not. The
+editor was used on a desktop for a day and the ruling came back that the timecode/tabs row
+was too small to click comfortably at the manifest-derived 19 — "almost double... if it's
+like 14 I want 20 at least". Regular therefore states **24** for that row, **23** for the
+header row under it, and **20** for every control standing in either, which is what "grow
+the hit targets to match" means. **Compact is untouched**, at exactly the 18 it drew
+before: it is the setting for someone who has already asked for less air, and a ruling
+about Regular that silently moved Compact would be a ruling about both.
 
 **The Compact column is the set of values the editor shipped with** before the toggle
 existed. Nothing about it is a second design: no colour, no size of type, no spacing across
@@ -1408,9 +1439,12 @@ a row changes with it, and the degradation ladder below is the same under both.
 **18px column** set in muted mono at 10, the keyframe mark on a shut layer's row is **8px
 point to point** (K-462 — the mockup's 4px square has a 1px border and stands on its
 corner, so it renders 8; the earlier reading of ≈5.7 measured the square's side and drew 5.
-Against the **11px** mark a property's own lane draws in both Layers and Keys — K-459), a labelled ruler tick is **7px** tall
-against a minor tick's **4**, and under Sharp a bar's ends are **square** — the stadium ends are
-Round's, and are the whole of that shape's difference here.
+Against the **11px** mark a property's own lane draws in both Layers and Keys — K-459), a labelled ruler tick is **7px**
+above the ruler's waist **and 7 below it** (K-513 — the tick crosses the waist now that
+nothing is drawn along it) against a minor tick's **4** above only, a Keys layer band
+draws its layer's bar behind the keys at **0.15** of the label colour (K-515), and under
+Sharp a bar's ends are **square** — the stadium ends are Round's, and are the whole of
+that shape's difference here.
 
 **When width runs out, things give way in this order** — earlier steps must be exhausted
 before later ones, and nothing ever paints outside its box:
