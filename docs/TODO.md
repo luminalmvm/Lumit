@@ -331,8 +331,7 @@ imported theme travels with the user rather than the machine's settings.
     read that, so they can differ in what they draw but no longer in what a layer
     is. The scroll mirror and its guard flag stay.
 - **The lane keyframe selection selects and eases, nothing more** - moving or
-    deleting a *whole lane selection* is not built (the graph view has both), nor
-    are `=`/`-`/`\` or edge-follow during playback.
+    deleting a *whole lane selection* is not built (the graph view has both).
 - **Column widths and the property selection are session-lived** - fold into the
     workspace when per-workspace column layouts land ([07-UI-SPEC.md](07-UI-SPEC.md)
     §4.2).
@@ -359,10 +358,11 @@ imported theme travels with the user rather than the machine's settings.
 - **Beat tap has no key left** - [07-UI-SPEC.md](07-UI-SPEC.md) §10 wants `8`
     during playback to tap a beat, and K-254 gave the bare digits to the numbered
     markers. Needs its own chord or a modal reading.
-- **Snapping covers the lane key drag and the razor only** (K-292). Still landing
-    where the pointer puts them: the layer **bar** drag, the work-area handles
-    and marker drags. The arithmetic is shared and pure
-    (`panels/timeline_snap.dart`), so each is wiring rather than design.
+- **Edge-follow has one manner, not two** - the lanes flip a page when the
+    playhead leaves the viewport (TI-9); [07-UI-SPEC.md](07-UI-SPEC.md) §4.6 also
+    wants a *smooth* follow and a setting to choose between them. `Shift+=` (zoom
+    to the work area) is unbound for the same reason: neither was in TI-9's own
+    sentence list.
 - **Volume keyframes draw no lane diamonds and no graph curve** - volume is not
     in the comp read model; fold it into `BridgeLayerInfo` if either matters.
 
@@ -436,8 +436,7 @@ does not gate the four. Delete each phase here when it lands, as with everything
     rows to K-499 (layer number, stopwatch, navigator, value wells); TI-5 graph handles
     (dashed lines, hollow rings, handles travel with a dragged key, value hint pill);
     TI-6 Graph mode's drawn surface (colour-ticked outline, Normalise, Key readout row,
-    right-hand value gutter); TI-9 snapping + ruler completion (bar/work-area/
-    marker snap, double-click reset/create, B/N actions, edge-follow, `=`/`-`/`\`);
+    right-hand value gutter);
     TI-10 the hover, cursor and modifier-ladder-hint pass. Delete each TI line from here
     as it lands.
 - **Phase 3 - the node graph and the Nodes workspace** (K-445): the Graph panel as a

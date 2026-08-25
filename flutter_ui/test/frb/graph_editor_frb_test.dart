@@ -12,7 +12,10 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:uuid/uuid.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
+import 'package:lumit_flutter/panels/timeline_extras_frb.dart'
+    show TimelineAxis;
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
+import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -368,6 +371,48 @@ void main() {
 
     /// One gesture, one op: the key moves in time AND value, and one undo
     /// puts both back.
+    /// §4.5 — the graph's key drags reach for the timeline's own landmarks in
+    /// the time axis, not only for whole frames, and say what caught them.
+    testWidgets('a dragged key lands on the marker it is pulled near',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      writeMarkers(p.comp, [
+        BridgeMarker(
+          id: UuidValue.fromString(const Uuid().v4()),
+          time: p.comp.timeOfFrame(frame: 140),
+          label: 'Beat',
+        ),
+      ]);
+      await mountGraph(tester, p);
+
+      // What one frame is worth, measured off the shared ruler.
+      final perFrame =
+          (tester.getRect(find.byKey(const ValueKey('tl-ruler'))).width -
+                  TimelineAxis.pad * 2) /
+              p.comp.durationFrames();
+      final key = find.byKey(ValueKey<String>(opacityKey(p.layer, 1)));
+      // A mouse, whose slop is a pixel: a touch pan would not begin at all
+      // inside the few pixels this drag is made of.
+      final gesture = await tester.startGesture(tester.getCenter(key),
+          kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      // Short of the marker, so only a reach for it can explain the landing.
+      for (var i = 0; i < 8; i++) {
+        await gesture.moveBy(Offset(perFrame * 39 / 8, 0));
+        await tester.pump();
+      }
+      expect(find.byKey(const ValueKey('graph-snap-caught')), findsOneWidget,
+          reason: 'the capture line marks the marker that caught the key');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(p.comp.frameAtTime(time: opacityKeys(p.layer)[1].time), 140,
+          reason: 'the key took the marker rather than the pointer');
+      expect(find.byKey(const ValueKey('graph-snap-caught')), findsNothing,
+          reason: 'and the capture leaves no trace after (P1)');
+    });
+
     testWidgets('dragging a key moves it in time and value as one undo step',
         (tester) async {
       final p = withLayer();

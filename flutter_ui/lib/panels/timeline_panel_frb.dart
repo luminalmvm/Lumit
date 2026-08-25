@@ -1865,6 +1865,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   bool _syncingScroll = false;
 
+  /// How much one press of the zoom keys is worth. A doubling, which is what
+  /// After Effects' `=`/`-` do: the wheel's gentler notch is for a hand that
+  /// can keep rolling, and a key press is one discrete jump.
+  static const double _zoomKeyStep = 2;
+
+  /// The zoom `\` came away from, so pressing it again goes back there. Null
+  /// until it has been used, and dropped by any other zoom — going back to a
+  /// magnification the user has since left is not what "the previous zoom"
+  /// means.
+  double? _zoomBeforeFit;
+
   @override
   void initState() {
     super.initState();
@@ -1912,6 +1923,36 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // every cache bar under it unsubscribe and resubscribe, which during a zoom
     // flight is sixty times a second for nothing (K-293).
     _cacheRevision = Listenable.merge([_ui!.frameArrived, _ui!.cacheChanged]);
+    // Edge-follow: the playhead stays on screen while the transport runs
+    // (docs/07 §4.6).
+    _ui!.playheadFrame.addListener(_edgeFollow);
+  }
+
+  /// Keep the playhead in view during playback (docs/07 §4.6).
+  ///
+  /// **Page-flip**: when the playhead leaves the viewport the lanes jump so it
+  /// lands back at the left edge, and the next page plays out under a still
+  /// picture. A view that scrolled a pixel per frame instead would put the
+  /// whole timeline in motion for the whole of playback, which is the harder
+  /// thing to read — and it is the flip that After Effects' own default does.
+  ///
+  /// **Only while playing.** Scrubbing stops the transport (K-254), so this
+  /// never fights a hand: the spec's "MUST NOT recentre while the user is
+  /// dragging anything" is kept by the transport being off whenever anything
+  /// is being dragged.
+  void _edgeFollow() {
+    final ui = _ui;
+    if (ui == null || !ui.playing.value || !mounted) return;
+    final position = _positionOf(_hLane);
+    if (position == null || position.maxScrollExtent <= 0) return;
+    final viewport = position.viewportDimension;
+    final span = viewport + position.maxScrollExtent - TimelineAxis.pad * 2;
+    if (_laneFrames <= 0 || span <= 0) return;
+    final x = TimelineAxis.pad + ui.playheadFrame.value * span / _laneFrames;
+    final at = x - position.pixels;
+    if (at >= 0 && at <= viewport) return;
+    // The playhead to the left edge, one padding in so its head is whole.
+    _hLane.jumpTo((x - TimelineAxis.pad).clamp(0.0, position.maxScrollExtent));
   }
 
   /// When the render cache may have changed — a frame arrived, or the cache
@@ -2373,6 +2414,30 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         (action.startsWith('reveal.') || action == 'layer.retime.enable')) {
       return _reveal(ui, action);
     }
+    // The zoom keys (docs/07 §4.6): `=` in, `-` out, `\` between the whole
+    // composition and wherever the zoom was before. They hold the **playhead**
+    // still, because a key press has no pointer to zoom about — the same
+    // answer the bottom bar's slider gives (K-293).
+    if (action == 'timeline.zoom.in' || action == 'timeline.zoom.out') {
+      final step =
+          action == 'timeline.zoom.in' ? _zoomKeyStep : 1 / _zoomKeyStep;
+      _zoomBeforeFit = null;
+      _setZoom((_zoomMotion.target * step).clamp(1.0, _maxZoom));
+      return true;
+    }
+    if (action == 'timeline.zoom.fit') {
+      // A toggle, the way After Effects' own `\` is: away from the whole comp
+      // and back to it, keeping the magnification it left.
+      final was = _zoomBeforeFit;
+      if (_zoomMotion.target > 1) {
+        _zoomBeforeFit = _zoomMotion.target;
+        _setZoom(1);
+      } else {
+        _zoomBeforeFit = null;
+        _setZoom((was ?? 1).clamp(1.0, _maxZoom));
+      }
+      return true;
+    }
     if (action == 'graph.ease' ||
         action == 'graph.ease.in' ||
         action == 'graph.ease.out') {
@@ -2648,6 +2713,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.pasteClaim == _pasteKeysIntoSelection) _ui!.pasteClaim = null;
     if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
     _ui?.selectedEffects.removeListener(_onEffectSelectionChanged);
+    _ui?.playheadFrame.removeListener(_edgeFollow);
     _boundTools?.removeListener(_onToolChanged);
     _zoomMotion.dispose();
     _barDrag.dispose();
@@ -3210,6 +3276,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                   ? _graphHalf(context, ui, comp,
                                       axis: axis,
                                       channels: channels,
+                                      rows: rows,
                                       work: work,
                                       graphWork: graphWork,
                                       frames: frames,
@@ -3539,6 +3606,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     CompositionReference comp, {
     required TimelineAxis axis,
     required List<GraphChannel> channels,
+    required List<LayerRow> rows,
     required ({int start, int end, bool whole}) work,
     required (double, double)? graphWork,
     required int frames,
@@ -3546,6 +3614,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required int fpsDen,
   }) {
     final t = ThemeScope.of(context).theme;
+    // The one shared target list (docs/07 §4.5), for the ruler's edges and
+    // markers and for the pane's own key drags. Built from the read model, so
+    // it costs no bridge calls (K-184).
+    final snap = timelineSnapTargets(
+      rows: rows,
+      comp: comp,
+      playheadFrame: ui.playheadFrame.value,
+      work: work,
+      fps: ui.model.fps,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -3575,6 +3653,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 setState(() {});
                               },
                               onMarkersChanged: () => setState(() {}),
+                              // The graph shares the ruler, so it shares the
+                              // ruler's snapping (docs/07 §4.5).
+                              snapTargets: snap,
+                              magnet: _magnet,
                               onSeek: (f) => ui.scrubTo(
                                   f.clamp(0, frames == 0 ? 0 : frames - 1)),
                               cache: TimelineCacheBar(
@@ -3629,6 +3711,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     fpsNum: fpsNum,
                                     fpsDen: fpsDen,
                                     magnet: _magnet,
+                                    snapTargets: snap,
                                     lens: _graphLens,
                                     autoFit: _graphAutoFit,
                                     normalise: _normalise,
@@ -8463,6 +8546,39 @@ class _SelectedKey {
   });
 }
 
+/// Everything a drag on the Timeline can land on (docs/07 §4.5), built from
+/// the read model and the memoised marker list — so it costs no bridge calls
+/// (K-184).
+///
+/// One list for the whole panel: the lanes' keys and bars, the ruler's
+/// work-area edges and markers, and the graph's key drags all reach for the
+/// same things, and a target that only some of them can see would be a second
+/// answer to "what is there".
+List<SnapTarget> timelineSnapTargets({
+  required List<LayerRow> rows,
+  required CompositionReference comp,
+  required int playheadFrame,
+  required ({int start, int end, bool whole}) work,
+  required double fps,
+}) =>
+    snapTargetsOf(
+      layers: [for (final row in rows) row.entry],
+      compMarkers: markersOf(comp),
+      keyRows: [
+        for (final layer in rows)
+          for (final row in layer.foldRows)
+            (
+              rowId: foldRowPath(layer.id, row),
+              frames: [
+                for (final k in laneKeysOf(row)) laneKeyFrame(k, fps),
+              ],
+            ),
+      ],
+      playheadFrame: playheadFrame,
+      work: work,
+      fps: fps,
+    );
+
 /// The right column: the ruler, the playhead, and one bar per layer.
 class _LayerArea extends StatelessWidget {
   final CompositionReference comp;
@@ -8852,6 +8968,10 @@ class _LayerArea extends StatelessWidget {
                     onChanged();
                   },
                   onMarkersChanged: onChanged,
+                  // The work-area edges and the markers snap to the same
+                  // shared list the keys and the bars do (docs/07 §4.5).
+                  snapTargets: snap,
+                  magnet: magnet,
                   // On the ruler's floor, over the work-area band, which is
                   // where the interface spec puts it (docs/07 §3.2, §12A.1).
                   cache: TimelineCacheBar(
@@ -9061,6 +9181,8 @@ class _LayerArea extends StatelessWidget {
                                                   BarBounds.free,
                                               summaryKeys: rows[i].summaryKeys,
                                               fps: fps,
+                                              snapTargets: snap,
+                                              magnet: magnet,
                                             ),
                                           // A Sequence layer's own clips and
                                           // their speed envelope, in the room
@@ -9237,19 +9359,9 @@ class _LayerArea extends StatelessWidget {
   /// Everything a lane key can land on (docs/07 §4.5), built once for the
   /// panel from the read model and the memoised marker list — so it costs no
   /// bridge calls, and no lane pays for another lane's targets.
-  List<SnapTarget> _snapTargets() => snapTargetsOf(
-        layers: [for (final row in rows) row.entry],
-        compMarkers: markersOf(comp),
-        keyRows: [
-          for (final layer in rows)
-            for (final row in layer.foldRows)
-              (
-                rowId: foldRowPath(layer.id, row),
-                frames: [
-                  for (final k in laneKeysOf(row)) laneKeyFrame(k, fps),
-                ],
-              ),
-        ],
+  List<SnapTarget> _snapTargets() => timelineSnapTargets(
+        rows: rows,
+        comp: comp,
         playheadFrame: playhead.value,
         work: work,
         fps: fps,
@@ -10868,6 +10980,13 @@ class _Bar extends StatefulWidget {
   /// The comp's rate, to place [summaryKeys] on the frame axis.
   final double fps;
 
+  /// Everything the bar's ends can land on (docs/07 §4.5) — the panel's one
+  /// shared list, the same one the lane keys reach for.
+  final List<SnapTarget> snapTargets;
+
+  /// Whether the magnet is on; `Ctrl` held suspends it for the moment.
+  final bool magnet;
+
   const _Bar({
     super.key,
     required this.comp,
@@ -10885,6 +11004,8 @@ class _Bar extends StatefulWidget {
     required this.bounds,
     this.summaryKeys = const [],
     required this.fps,
+    this.snapTargets = const [],
+    this.magnet = true,
   });
 
   @override
@@ -10928,6 +11049,7 @@ class _BarState extends State<_Bar> {
       _delta = 0;
       _deltaPx = 0;
       _grab = null;
+      _caught = null;
       widget.dragPreview.value = null;
     });
   }
@@ -10936,6 +11058,62 @@ class _BarState extends State<_Bar> {
   /// drag-start: a drag's start position is where the slop was exceeded,
   /// which read a fast edge grab as a grab of the middle.
   double _downDx = 0;
+
+  /// What the drag in flight last landed on, so the capture can be drawn — the
+  /// same hairline a lane key's drag draws (docs/07 §4.5).
+  SnapTarget? _caught;
+
+  /// How far the bar has travelled, in whole frames, with the magnet applied
+  /// (§4.1: **both ends are sources**, nearest capture wins).
+  ///
+  /// The pointer's own travel is kept in [_deltaPx] and the snap taken from it
+  /// afresh on every move, never from the snapped answer — otherwise a caught
+  /// end could not be pulled off its target again.
+  int _snappedDelta(int inFrame, int outFrame) {
+    // A *travel*, not a place: the axis's end padding must not be taken off it.
+    final raw = widget.axis.framesOfPx(_deltaPx);
+    final perFrame = widget.axis.perFrame;
+    final magnet = widget.magnet &&
+        !snapSuspended(
+            controlPressed: HardwareKeyboard.instance.isControlPressed);
+    if (!magnet || perFrame <= 0) {
+      _caught = null;
+      return raw.round();
+    }
+    // Whichever ends this grab moves. A trim moves one; a move moves both, and
+    // then the *nearer* capture is the one that takes the drag.
+    final sources = switch (_grab ?? BarGrab.move) {
+      BarGrab.move => [inFrame.toDouble(), outFrame.toDouble()],
+      BarGrab.trimIn => [inFrame.toDouble()],
+      BarGrab.trimOut => [outFrame.toDouble()],
+    };
+    // The bar's own ends are dropped from its targets: a target sitting where
+    // a source already is is a magnet at zero travel, which pins the bar where
+    // it started. Every kind at once, because what makes it useless is the
+    // frame, not what is standing on it.
+    final targets = widget.snapTargets
+        .where((s) => s.frame != inFrame && s.frame != outFrame);
+    var best = raw.round();
+    var bestPx = double.infinity;
+    SnapTarget? caught;
+    for (final source in sources) {
+      final snapped = snapFrame(
+        frame: source + raw,
+        targets: targets,
+        perFrame: perFrame,
+        magnet: true,
+      );
+      final on = snapped.caught;
+      if (on == null) continue;
+      final px = ((on.frame - (source + raw)) * perFrame).abs();
+      if (px >= bestPx) continue;
+      bestPx = px;
+      caught = on;
+      best = (on.frame - source).round();
+    }
+    _caught = caught;
+    return best;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -10998,6 +11176,19 @@ class _BarState extends State<_Bar> {
       // there are.
       child: Stack(
         children: [
+          // What the drag landed on, marked while it holds it (docs/07 §4.5) —
+          // the same hairline the lane keys draw, because it is the same
+          // service. Behind the bar, so the bar it caught is still legible.
+          if (_caught != null)
+            Positioned(
+              key: ValueKey<String>(
+                  'tl-bar-snap-caught-${widget.entry.layer.internallayerId}'),
+              left: widget.axis.xOf(_caught!.frame) - 0.5,
+              top: 0,
+              bottom: 0,
+              width: 1,
+              child: IgnorePointer(child: ColoredBox(color: t.accent)),
+            ),
           if (ghost != null)
             Positioned(
               key: ValueKey<String>(
@@ -11099,9 +11290,7 @@ class _BarState extends State<_Bar> {
                           // picks the edge up again from where it stuck.
                           _delta = clampBarDelta(
                             grab: _grab ?? BarGrab.move,
-                            // A *travel*, not a place: the axis's end padding
-                            // must not be taken off it.
-                            delta: widget.axis.framesOfPx(_deltaPx).round(),
+                            delta: _snappedDelta(inFrame, outFrame),
                             inFrame: inFrame,
                             outFrame: outFrame,
                             bounds: widget.bounds,
@@ -11373,6 +11562,7 @@ class _BarState extends State<_Bar> {
       _delta = 0;
       _deltaPx = 0;
       _grab = null;
+      _caught = null;
     });
     widget.dragPreview.value = null;
     if (grab == null || delta == 0) return;

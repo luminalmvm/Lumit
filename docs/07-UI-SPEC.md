@@ -989,12 +989,14 @@ Top to bottom: the **time ruler**'s clock in its upper half; its lower half carr
 **markers ribbon**, the **work area bar** and — on the band's own row at the ruler's floor
 — the **cache bar**; then layer lanes.
 
-- **Markers ribbon**: comp markers (point or span) with labels; double-click creates one;
+- **Markers ribbon**: comp markers (point or span) with labels; double-click the ruler's own
+  ground creates one and opens its label editor (built, TI-9);
   drag to move; markers snap. **Beat markers** (generated via the Audio panel, §12) render
   in the same ribbon, visually distinct, and behave as first-class snap targets. Layer
   markers render on the layer's own row.
 - **Work area**: `B` and `N` set start/end at the playhead; drag the ends; double-click the
-  bar to reset to the full comp. Work area is the preview range and default export range,
+  band to reset to the full comp (built, TI-9 — the reset writes the engine's own "not
+  narrowed", which is what the whole comp *is*). Work area is the preview range and default export range,
   and playback **loops** it (§10's default loop mode): reaching its end resumes from its
   start. It draws as **one band in `animated`** (K-441,
   [15-DESIGN.md](15-DESIGN.md) §12A.1): the ruler's **lower half** only, so the ticks and
@@ -1380,10 +1382,16 @@ stands exactly where the cut will land, and with the magnet on the cut takes the
 in reach before falling back to the nearest frame. A cut is a clip boundary, so it lands on a
 whole frame even when what caught it sits between two.
 
-Still to build: snapping for the gestures other than a lane key drag and the razor — the layer
-**bar** drag, the work-area handles and marker drags all still land where the pointer puts
-them. The arithmetic is shared and pure (`panels/timeline_snap.dart`), so each is a
-wiring job rather than a design one.
+**Every dragged thing snaps now (TI-9).** The layer **bar** drag takes **both of its ends as
+sources** and the nearer capture wins — so a bar can be laid against a marker by either end —
+while a trim offers only the end in hand; the **work-area handles** and **marker drags** each
+reach for the same shared list, minus themselves (an edge or a flag that can snap to where it
+already is is one that never moves); and the **graph's key drags** reach for the timeline's
+landmarks in the time axis — markers, beat markers, the playhead, the work-area edges, layer
+ends and edit points — but **not for other keyframes**, which are everywhere on that pane and
+would make every drag sticky against the very things being rearranged. Each draws the same
+capture hairline while a target holds it, and `Ctrl` suspends the reach everywhere. The
+arithmetic is the one shared pure module (`panels/timeline_snap.dart`).
 
 ### 4.6 Navigation, zoom, and scroll
 
@@ -1433,7 +1441,8 @@ wiring job rather than a design one.
   without it the lanes have the shorter viewport, scroll further, and the two halves come
   apart at the bottom of a long stack.
 - `=`/`-` zoom time in/out; `Shift+=` zooms to the work area; `\` toggles between full-comp
-  zoom and the previous zoom (AE-compatible).
+  zoom and the previous zoom (AE-compatible). `=`/`-`/`\` are built (TI-9), each holding the
+  **playhead** still as the slider does — a key press has no pointer to zoom about.
 - Dragging in the ruler scrubs the playhead. Scrubbing previews video always; holding
   `Ctrl` while scrubbing also scrubs audio. **Scrubbing while playing stops playback**
   (K-254) and the playhead stays where the drag left it: the engine hands back a frame
@@ -1453,8 +1462,12 @@ carries the time-zoom slider, the magnet, and the horizontal scrollbar. **The wh
 scrolls, dragging never does**: a plain wheel moves the rows, `Shift+wheel` scrolls
 sideways, `Ctrl+wheel` zooms time about the pointer, and a drag on empty lane space is the
 keyframe marquee. A zoom with no pointer to zoom about — the slider — holds the playhead
-still instead (§4.6, K-293), so what is being worked on stays on screen. Still to build:
-`=`/`-`/`\`, and edge-follow during playback.
+still instead (§4.6, K-293), so what is being worked on stays on screen. **Edge-follow is
+built as a page flip** (TI-9): while the transport runs, a playhead that leaves the viewport
+puts the lanes on the next page rather than scrolling under it, so what is being watched
+stays still. It never fights a hand, because taking hold of the playhead stops the transport
+(K-254). Still to build: the *smooth* alternative and the setting that chooses between the
+two, and `Shift+=`.
 
 ### 4.7 Editing behaviours
 

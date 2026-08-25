@@ -42,6 +42,7 @@ import 'graph_maths.dart';
 import 'key_block.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
+import 'timeline_snap.dart';
 import 'transform_rows_frb.dart';
 
 /// A value drag in flight **in the layer area**, published for the graph pane to
@@ -1254,6 +1255,13 @@ class GraphEditorFrb extends StatefulWidget {
   final int fpsNum;
   final int fpsDen;
   final bool magnet;
+
+  /// The Timeline's shared snap targets (docs/07 §4.5). A key drag on this
+  /// pane reaches for the same landmarks a lane key's does. Empty leaves it
+  /// snapping to whole frames alone, which is what a pane built on its own in
+  /// a test wants.
+  final List<SnapTarget> snapTargets;
+
   final GraphLens lens;
 
   /// Auto-fit: the vertical range follows the curves (docs/07 §5.3). Off, the
@@ -1315,6 +1323,7 @@ class GraphEditorFrb extends StatefulWidget {
     required this.fpsNum,
     required this.fpsDen,
     required this.magnet,
+    this.snapTargets = const [],
     required this.lens,
     required this.autoFit,
     this.normalise = false,
@@ -2129,12 +2138,61 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           _KeyDrag drag, (double, double) range, double height) =>
       _editsFor(_keyDragMove(drag, range, height));
 
+  /// Where the **grabbed** key sits in the document, or null when the drag's
+  /// id no longer names a key (a channel list rebuilt under it).
+  double? _grabbedFrame(_KeyDrag drag) {
+    final cut = drag.grabbedId.lastIndexOf('#');
+    if (cut < 0) return null;
+    final id = drag.grabbedId.substring(0, cut);
+    final index = int.tryParse(drag.grabbedId.substring(cut + 1));
+    if (index == null) return null;
+    for (final channel in widget.channels) {
+      if (channel.id != id) continue;
+      if (index < 0 || index >= channel.keys.length) return null;
+      return _keyFrame(channel.keys[index], widget.fps);
+    }
+    return null;
+  }
+
+  /// A key drag's sideways travel, taken to the nearest **time landmark**
+  /// while the magnet is on (§4.5): markers (beat markers among them), the
+  /// playhead, the work-area edges, layer ends and edit points — but **not
+  /// other keyframes**, which are everywhere on this pane and would make every
+  /// drag sticky against the very things it is rearranging.
+  ///
+  /// Decided from the grabbed key alone and then applied to the whole
+  /// selection, so a run of keys keeps its shape rather than each key finding
+  /// its own target. `Ctrl` suspends it, as everywhere else.
+  ///
+  /// Pure, so the preview, the commit and the capture indicator all read one
+  /// answer — which is why it can be called from `build`.
+  ({double frames, SnapTarget? caught}) _snappedKeyTravel(_KeyDrag drag) {
+    final perFrame = widget.axis.perFrame;
+    final raw = perFrame <= 0 ? 0.0 : drag.dxPx / perFrame;
+    final base = _grabbedFrame(drag);
+    if (!widget.magnet ||
+        base == null ||
+        perFrame <= 0 ||
+        snapSuspended(
+            controlPressed: HardwareKeyboard.instance.isControlPressed)) {
+      return (frames: raw, caught: null);
+    }
+    final snapped = snapFrame(
+      frame: base + raw,
+      targets: widget.snapTargets.where((s) => s.kind != SnapKind.keyframe),
+      perFrame: perFrame,
+      magnet: true,
+    );
+    final caught = snapped.caught;
+    if (caught == null) return (frames: raw, caught: null);
+    return (frames: caught.frame - base, caught: caught);
+  }
+
   /// A key drag's move: the same delta on every selected key — sideways in
   /// frames, and (in the value lens) up or down in the units of whichever
   /// range that key's own curve is drawn against.
   _KeyMove _keyDragMove(_KeyDrag drag, (double, double) range, double height) {
-    final perFrame = widget.axis.perFrame;
-    final dFrames = perFrame <= 0 ? 0.0 : drag.dxPx / perFrame;
+    final dFrames = _snappedKeyTravel(drag).frames;
     return (channel, frame, value) {
       // Per channel, because Normalise gives each curve its own range: the
       // same travel in pixels is a different travel in value on each of them,
@@ -3159,6 +3217,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                 ..._tangentHandles(range, height),
                 ..._keyHandles(t, range, height),
               ],
+              // What a key drag has landed on, marked while it holds it —
+              // the same hairline the lanes and the ruler draw (docs/07 §4.5).
+              ..._snapCapture(t),
               // The live readout, beside the key in hand (§6.2).
               ..._valueHint(range, height, constraints.maxWidth),
               // Over the live pane rather than instead of it, so the grid and
@@ -3357,6 +3418,25 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// with the key being worked on, follows a drag live — the key it reads is
   /// the *shown* key, travel and all — and leaves when the selection does (P1).
   /// One key only: with a block in hand the block's own badge is the readout.
+  /// The capture line: where a key drag's snap has taken it, drawn full height
+  /// while the target holds the drag (docs/07 §4.5) and gone on release.
+  List<Widget> _snapCapture(LumitTheme t) {
+    final drag = _keyDrag;
+    if (drag == null || widget.lens != GraphLens.value) return const [];
+    final caught = _snappedKeyTravel(drag).caught;
+    if (caught == null) return const [];
+    return [
+      Positioned(
+        key: const ValueKey<String>('graph-snap-caught'),
+        left: widget.axis.xOf(caught.frame) - 0.5,
+        top: 0,
+        bottom: 0,
+        width: 1,
+        child: IgnorePointer(child: ColoredBox(color: t.accent)),
+      ),
+    ];
+  }
+
   List<Widget> _valueHint(
       (double, double) range, double height, double paneWidth) {
     if (widget.lens != GraphLens.value || widget.selectedKeys.length != 1) {

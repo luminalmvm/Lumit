@@ -11,6 +11,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -30,6 +31,8 @@ import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/drag_escape.dart';
+import 'timeline_snap.dart';
 
 /// The Timeline's **panel header strip** (§12A.1, §12A.6: 22 tall): the panel's
 /// own kicker, then the open compositions as tabs running the full width, then
@@ -1109,10 +1112,21 @@ class TimelineRuler extends StatefulWidget {
   final double height;
   final ValueChanged<int> onSeek;
 
-  /// Dragging a work-area edge (K-202). Given the new span; null leaves the
-  /// edges as plain marks, which is what a caller with nothing to commit to
-  /// wants.
-  final void Function(BridgeSpan span)? onWorkArea;
+  /// Dragging a work-area edge (K-202), or double-clicking the band to give
+  /// the whole comp back (docs/07 §4.1) — which is what the **null span**
+  /// means, the same "not narrowed" the engine holds. The callback itself
+  /// being null leaves the edges as plain marks, which is what a caller with
+  /// nothing to commit to wants.
+  final void Function(BridgeSpan? span)? onWorkArea;
+
+  /// Everything a drag on this ruler can land on (docs/07 §4.5) — the panel's
+  /// one shared list, gathered from the read model, so an edge and a marker
+  /// snap to the same things a keyframe does. Empty leaves both unsnapped.
+  final List<SnapTarget> snapTargets;
+
+  /// Whether the magnet is on. `Ctrl` held suspends it for the moment, the
+  /// same escape hatch every other drag in the panel offers.
+  final bool magnet;
 
   /// Where the work area falls, in frames — worked out once by the panel and
   /// handed down, because asking the engine again in each widget that draws it
@@ -1140,6 +1154,8 @@ class TimelineRuler extends StatefulWidget {
     this.onWorkArea,
     this.onMarkersChanged,
     this.cache,
+    this.snapTargets = const [],
+    this.magnet = true,
   });
 
   @override
@@ -1156,6 +1172,72 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// edge is drawn while the button is down.
   int? _dragFrame;
   bool _dragIsStart = false;
+
+  /// What the drag in flight last landed on, so the capture can be drawn
+  /// (docs/07 §4.5: the target MUST be indicated at the moment of capture).
+  /// One field for both drags, because only one of them can be running.
+  SnapTarget? _caught;
+
+  /// `Escape` while the button is down puts the edge — or the flag — back and
+  /// writes nothing (§4.1, P3). One for the ruler, for the same reason.
+  final DragEscape _escape = DragEscape();
+
+  /// Double-clicks on the ruler's ground, counted by timestamps rather than by
+  /// an `onDoubleTap` recogniser: registering one would hold every *single*
+  /// tap back until its timer expired, and a single tap here is the scrub that
+  /// moves the playhead.
+  final DoubleTap _rulerTaps = DoubleTap();
+
+  @override
+  void dispose() {
+    _escape.dispose();
+    super.dispose();
+  }
+
+  /// Where a drag on the ruler lands: the pointer's own frame, taken to the
+  /// nearest shared target while the magnet is on and `Ctrl` is not held
+  /// (docs/07 §4.5). Sets [_caught], so the caller is already inside its own
+  /// `setState`.
+  ///
+  /// [except] drops the thing being dragged out of its own target list — an
+  /// edge that can snap to itself is an edge pinned where it started.
+  int _snapped(double frame, {required bool Function(SnapTarget) except}) {
+    final result = snapFrame(
+      frame: frame,
+      targets: widget.snapTargets.where((s) => !except(s)),
+      perFrame: widget.axis.perFrame,
+      magnet: widget.magnet &&
+          !snapSuspended(
+              controlPressed: HardwareKeyboard.instance.isControlPressed),
+    );
+    _caught = result.caught;
+    return result.frame.round();
+  }
+
+  /// Double-clicking empty ruler makes a marker there and asks what it says
+  /// (docs/07 §4.1). Cancelling the editor leaves the marker, unlabelled: the
+  /// double-click is what created it, and the dialogue only names it.
+  Future<void> _createMarkerAt(int frame) async {
+    final markers = markersWithFrb(widget.comp, frame: frame, label: '');
+    _writeMarkers(markers);
+    final made =
+        markers.where((m) => frameAtTime(widget.comp, m.time) == frame);
+    if (made.isEmpty) return;
+    final id = made.first.id;
+    final label = await showMarkerLabelDialogFrb(context: context, initial: '');
+    if (label == null || label.isEmpty || !mounted) return;
+    _writeMarkers([
+      for (final m in markersOf(widget.comp))
+        if (m.id == id)
+          BridgeMarker(
+              id: m.id,
+              time: m.time,
+              label: label,
+              durationFrames: m.durationFrames)
+        else
+          m,
+    ]);
+  }
 
   /// The marker being dragged, and the frame it has reached — the same
   /// arrangement as the work area's above, for the same reason: a flag that
@@ -1194,10 +1276,38 @@ class _TimelineRulerState extends State<TimelineRuler> {
   /// every frame of travel, which is what made the drag feel heavy. A
   /// work-area edge can afford it because the Viewer preview range changes as
   /// it moves; a marker has nothing to show until it lands.
-  void _dragMarkerTo(int frame) {
-    final to = frame.clamp(0, _dragMarkerLast < 0 ? 0 : _dragMarkerLast);
-    if (to == _dragMarkerFrame) return;
-    setState(() => _dragMarkerFrame = to);
+  void _dragMarkerTo(double frame) {
+    setState(() {
+      // Snapped like every other drag on the timeline (docs/07 §4.5), and not
+      // to the flag's own frame — which would pin it where it started.
+      final at = _snapped(frame,
+          except: (s) =>
+              s.kind == SnapKind.marker && s.frame == _dragMarkerFrom);
+      _dragMarkerFrame = at.clamp(0, _dragMarkerLast < 0 ? 0 : _dragMarkerLast);
+    });
+  }
+
+  /// Where the flag being dragged sits in the document, so it can be kept out
+  /// of its own snap targets.
+  double _dragMarkerFrom = 0;
+
+  /// Put a marker drag back where it found the flag, writing nothing.
+  void _abandonMarkerDrag() {
+    if (!mounted) return;
+    setState(() {
+      _dragMarker = null;
+      _dragMarkerFrame = null;
+      _caught = null;
+    });
+  }
+
+  /// The same for a work-area edge.
+  void _abandonWorkDrag() {
+    if (!mounted) return;
+    setState(() {
+      _dragFrame = null;
+      _caught = null;
+    });
   }
 
   /// The drag ended: write where the flag has been sitting, once.
@@ -1206,6 +1316,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
     setState(() {
       _dragMarker = null;
       _dragMarkerFrame = null;
+      _caught = null;
     });
     if (to == null) return;
     // The same placement rule adding a marker follows, so a flag dropped onto
@@ -1252,7 +1363,23 @@ class _TimelineRulerState extends State<TimelineRuler> {
     return GestureDetector(
       key: const ValueKey('tl-ruler'),
       behavior: HitTestBehavior.opaque,
-      onTapDown: (d) => widget.onSeek(axis.frameAt(d.localPosition.dx)),
+      onTapDown: (d) {
+        widget.onSeek(axis.frameAt(d.localPosition.dx));
+        if (!_rulerTaps.tap()) return;
+        // The second click of a pair, on ground nothing else claimed — a flag
+        // and a work-area handle are opaque, so neither reaches here.
+        // **On the band**: the work area goes back to the whole comp
+        // (docs/07 §4.1). Anywhere else: a marker is made at that frame.
+        final x = d.localPosition.dx;
+        final onBand = d.localPosition.dy >= widget.height / 2 &&
+            x >= axis.xOf(work.start) &&
+            x <= axis.xOf(work.end);
+        if (onBand) {
+          widget.onWorkArea?.call(null);
+        } else if (widget.onMarkersChanged != null) {
+          _createMarkerAt(axis.frameAt(x));
+        }
+      },
       onHorizontalDragUpdate: (d) =>
           widget.onSeek(axis.frameAt(d.localPosition.dx)),
       child: Container(
@@ -1325,8 +1452,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       key: ValueKey('tl-work-${isStart ? 'start' : 'end'}'),
                       behavior: HitTestBehavior.opaque,
                       supportedDevices: dragDevices,
-                      onHorizontalDragStart: (_) =>
-                          setState(() => _dragIsStart = isStart),
+                      onHorizontalDragStart: (_) {
+                        setState(() => _dragIsStart = isStart);
+                        _escape.begin(_abandonWorkDrag);
+                      },
                       // The drag is staged: the band and handle draw from
                       // `_dragFrame` alone, and the document hears nothing
                       // until the pointer lifts — one write, one undo step,
@@ -1334,16 +1463,31 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       // (owner, 2026-08-21: a mid-drag commit per frame made
                       // the drag lag and undo walk back through every frame
                       // it crossed).
+                      // Nothing moves once `Escape` has taken the drag, though
+                      // the pointer carries on.
                       onHorizontalDragUpdate: (d) {
-                        final frame = axis
-                            .frameAt(d.globalPosition.dx - _originX(context));
-                        if (frame == _dragFrame) return;
-                        setState(() => _dragFrame = frame);
+                        if (!_escape.running) return;
+                        final at = axis.frameAtExact(
+                            d.globalPosition.dx - _originX(context));
+                        setState(() {
+                          // Snapped to the shared targets, this edge excepted
+                          // — an edge that snaps to itself never moves.
+                          _dragFrame = _snapped(at,
+                              except: (s) =>
+                                  s.kind ==
+                                  (isStart
+                                      ? SnapKind.workAreaStart
+                                      : SnapKind.workAreaEnd));
+                        });
                       },
                       onHorizontalDragEnd: (_) {
+                        final commit = _escape.end();
                         final frame = _dragFrame;
-                        setState(() => _dragFrame = null);
-                        if (frame == null) return;
+                        setState(() {
+                          _dragFrame = null;
+                          _caught = null;
+                        });
+                        if (frame == null || !commit) return;
                         // A refusal is not an exception for a drag to carry:
                         // a degenerate comp (no frames to work on) has no
                         // valid span, and the document keeps the one it has.
@@ -1360,8 +1504,10 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       },
                       // A cancelled drag commits nothing: the band snaps back
                       // to the document's span, which is what cancel means.
-                      onHorizontalDragCancel: () =>
-                          setState(() => _dragFrame = null),
+                      onHorizontalDragCancel: () {
+                        _escape.end();
+                        _abandonWorkDrag();
+                      },
                       // Nothing of its own to draw: the band's own edges *are*
                       // the two handles (docs/15 §12A.1), and a second mark
                       // over them only thickened the line. The grab stays the
@@ -1427,24 +1573,37 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     onSecondaryTapUp: (d) =>
                         _markerMenu(context, marker, d.globalPosition),
                     supportedDevices: dragDevices,
-                    onHorizontalDragStart: (d) => setState(() {
-                      _dragMarker = marker.id;
-                      _dragMarkerFrame = null;
-                      // Measured from the point, not the flag's left edge,
-                      // because the point is what the frame means.
-                      _dragMarkerGrab =
-                          d.localPosition.dx - MarkerFlag.width / 2;
-                      _dragMarkerLast = comp.durationFrames() - 1;
-                    }),
-                    onHorizontalDragUpdate: (d) => _dragMarkerTo(axis.frameAt(
-                        d.globalPosition.dx -
-                            _originX(context) -
-                            _dragMarkerGrab)),
-                    onHorizontalDragEnd: (_) => _dropMarker(marker),
-                    onHorizontalDragCancel: () => setState(() {
-                      _dragMarker = null;
-                      _dragMarkerFrame = null;
-                    }),
+                    onHorizontalDragStart: (d) {
+                      setState(() {
+                        _dragMarker = marker.id;
+                        _dragMarkerFrame = null;
+                        _dragMarkerFrom =
+                            frameAtTime(comp, marker.time).toDouble();
+                        // Measured from the point, not the flag's left edge,
+                        // because the point is what the frame means.
+                        _dragMarkerGrab =
+                            d.localPosition.dx - MarkerFlag.width / 2;
+                        _dragMarkerLast = comp.durationFrames() - 1;
+                      });
+                      _escape.begin(_abandonMarkerDrag);
+                    },
+                    onHorizontalDragUpdate: (d) {
+                      if (!_escape.running) return;
+                      _dragMarkerTo(axis.frameAtExact(d.globalPosition.dx -
+                          _originX(context) -
+                          _dragMarkerGrab));
+                    },
+                    onHorizontalDragEnd: (_) {
+                      if (_escape.end()) {
+                        _dropMarker(marker);
+                      } else {
+                        _abandonMarkerDrag();
+                      }
+                    },
+                    onHorizontalDragCancel: () {
+                      _escape.end();
+                      _abandonMarkerDrag();
+                    },
                     child: MarkerFlag(
                       label: marker.label,
                       fill: t.marker,
@@ -1453,6 +1612,18 @@ class _TimelineRulerState extends State<TimelineRuler> {
                     ),
                   ),
                 ),
+              ),
+            // What a work-area edge or a marker drag has landed on, marked
+            // while it holds it — the same hairline a lane key's drag draws,
+            // because it is the same service (docs/07 §4.5).
+            if (_caught != null)
+              Positioned(
+                key: const ValueKey('tl-ruler-snap-caught'),
+                left: axis.xOf(_caught!.frame) - 0.5,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                child: IgnorePointer(child: ColoredBox(color: t.accent)),
               ),
             // The cached segments, on the band's own row at the ruler's floor
             // (§12A.1). Last, so they lie over the band — the band is what

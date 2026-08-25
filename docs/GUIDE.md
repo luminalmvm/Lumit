@@ -8699,6 +8699,33 @@ straight back. So Free → Auto → Free is a round trip, not a reset. The other
 simpler: dragging a handle at all takes that side back to Free, because you have just
 overruled the neighbours, and there is no sense in the curve arguing with your hand.
 
+### The magnet, and what a drag can land on
+
+Every dragged thing on the Timeline wants to land on the things already there: the start
+of a layer, a cut inside one, a keyframe, a marker, the playhead, the ends of the work
+area. That wanting is the **magnet** — the button on the lane bottom bar — and it now
+governs every drag on the panel rather than only a keyframe's. Drag a layer's bar and
+either of its ends can be the one that lands; drag a work-area edge, a marker flag, or a
+keyframe in the graph, and each reaches for the same list. While something has hold of a
+drag, a thin line is drawn where it will land, so a drag that jumps looks like a service
+rather than a fault. Holding `Ctrl` turns the magnet off for as long as you hold it, which
+is the way out on the one occasion in ten when the place you want is exactly the place a
+magnet will not let you put it.
+
+Two rules keep it honest. **How near is measured in pixels on screen, never in time**, so
+zooming in *is* the precision control: at a wide zoom a marker fifty frames away is worth
+reaching for, and at a tight one a frame away is not. And **whatever you are dragging is
+left out of its own list** — a work-area edge that could snap to itself, or a bar to its
+own start, would simply refuse to move.
+
+Two smaller things live on the ruler. Double-click the **work-area band** and the work
+area goes back to being the whole composition; double-click the ruler's own ground and a
+**marker** is made there, with its label editor open and waiting. And while the transport
+is running the lanes **flip a page** whenever the playhead runs off the right-hand edge,
+rather than scrolling continuously under it: what you are watching stays still, and the
+view moves only at the moment it has to. Taking hold of the playhead stops playback, so
+this can never happen under your hand.
+
 ### The Ease popover
 
 A small box with four lines. **Curve** picks the shape by name — Easy ease, Slow start,

@@ -248,9 +248,13 @@ K-208's both-halves slide, selection on the raw down). Additions:
   `forbidden` only *during* a refused drop, per P1.
 - A bar hovered (not selected) firms its leading edge to full strength; nothing else
   changes (P1). Selection keeps brightening the fill (§12A.1).
-- **Bar drags snap** (§4.5's still-to-build): both ends are sources against the shared
-  target list, nearest capture wins, the caught target draws the same capture line a lane
-  key drag draws, `Ctrl` suspends. The arithmetic is `timeline_snap.dart`; this is wiring.
+- **Bar drags snap** (TI-9): both ends are sources against the shared target list, nearest
+  capture wins, the caught target draws the same capture line a lane key drag draws, `Ctrl`
+  suspends. The arithmetic is `timeline_snap.dart`; this was wiring. One thing the wiring
+  found: a target standing exactly where one of the bar's **own** ends already is is a
+  magnet at zero travel, and it pins the bar where the drag began. Both ends are therefore
+  dropped from the bar's own target list — by frame, whatever kind is standing there, since
+  what makes such a target useless is the place and not the thing.
 - **Escape mid-drag reverts** the bar to where it started and writes nothing (P3).
 
 ### 4.2 Lane keys
@@ -313,11 +317,26 @@ Corrections and additions:
 
 ### 4.5 Snapping (completing docs/07 §4.5)
 
-Sources and targets as spec'd. The still-unwired gestures — **bar drag, work-area
+Sources and targets as spec'd. The formerly unwired gestures — **bar drag, work-area
 handles, marker drag, block stretch** — all route through `snapFrame` with the shared
 target list, each drawing the capture line while a target holds the drag. `Ctrl` suspends
-everywhere. The graph's key drags gain target snapping (markers, beat markers, playhead,
-work-area edges) in the time axis, not only whole frames.
+everywhere. The block stretch landed in TI-2; the other three, and the graph's, in **TI-9**.
+
+- **One list, one builder.** `timelineSnapTargets` (timeline_panel_frb.dart) is the single
+  gatherer both halves of the panel call — the lane area for its keys, bars and ruler, and
+  the graph half for its ruler and its pane. It reads the memoised marker list and the read
+  model, so a panel rebuild costs no bridge call (K-184).
+- **Each drag drops itself.** A work-area edge leaves its own kind out, a marker leaves its
+  own frame out, a bar leaves both of its ends out. A target where the dragged thing already
+  stands is a magnet at zero travel: it does not snap the drag, it forbids it.
+- The graph's key drags gain target snapping in the time axis — markers (beat markers among
+  them), the playhead, the work-area edges, layer ends and edit points — but **not other
+  keyframes**: on a pane whose whole content is keyframes, a key drag that reached for them
+  would stick to the neighbours it is being pulled past. The travel is decided from the
+  **grabbed** key alone and then applied to the whole selection, so a run of keys keeps its
+  shape; every landmark is on a whole frame, so the existing whole-frame rounding lands the
+  key exactly on what caught it. `Ctrl` suspends the *reach*; the magnet's own whole-frame
+  rounding is unchanged by it, as it has been on this pane since K-333.
 
 ---
 
@@ -486,14 +505,30 @@ Shipped: scrub on drag (previews video; stops playback per K-254), staged work-a
 drags with the band's edges as handles, marker drag committing once on release, marker
 right-click menu, one-per-frame replacement. Additions, each spec'd already and unbuilt:
 
-- **Double-click the work-area band resets it to the whole comp** (docs/07 §4.1).
+- **Double-click the work-area band resets it to the whole comp** (docs/07 §4.1) — built in
+  TI-9. The reset writes a **null span**, the engine's own "not narrowed", because that *is*
+  the whole comp; `onWorkArea` therefore takes `BridgeSpan?` rather than gaining a second
+  callback for the one case that clears it.
 - **Double-click empty ruler creates a marker** at that frame and opens its label editor
-  (docs/07 §4.1's "still to come").
-- Work-area and marker drags **snap** (§4.5) with the capture line.
+  (docs/07 §4.1's "still to come") — built in TI-9. Both double-clicks are counted by
+  timestamps on the ruler's existing `onTapDown` (the shared `DoubleTap`), never by an
+  `onDoubleTap` recogniser: one on this surface would hold every single click — the scrub —
+  back until its timer expired. Which of the two a pair of clicks means is decided by where
+  it lands: on the band, in the ruler's lower half, the work area is given back; anywhere
+  else on the ground a marker is made. A flag and a work-area handle are opaque, so neither
+  reaches this handler at all. Cancelling the label editor leaves the marker: the
+  double-click is what made it, and the dialogue only names it.
+- Work-area and marker drags **snap** (§4.5) with the capture line — built in TI-9 — and
+  **answer `Escape`**, which puts the edge or the flag back and writes nothing (P3, gap 19).
+  One `DragEscape` and one `_caught` serve both, since only one of them can be in flight.
 - The ruler ground shows no special cursor; the band's handles keep `resizeLeftRight`
-  (shipped); a marker flag hovers to `click` (shipped) and brightens its pill one step.
-- `B`/`N` set work-area start/end at the playhead (docs/07 §4.1 — keymap actions to add;
-  both new keymap entries need their `engine_labels.dart` + arb pair, K-303).
+  (shipped); a marker flag hovers to `click` (shipped). Brightening its pill one step is
+  polish 26 and lands with **TI-10**, which owns the hover ladder for every surface at once.
+- `B`/`N` set work-area start/end at the playhead (docs/07 §4.1) — **already shipped**, and
+  TI-9's audit was wrong to list them as missing: `workarea.set.start` / `workarea.set.end`
+  are bound to `B` and `N` in `lumit-keymap`'s default map, described there, handled in
+  `main.dart`'s shell handler, and carry their `engine_labels.dart` + arb pair already
+  (`keySetWorkAreaStartToThePlayhead`, `keySetWorkAreaEndToThePlayhead`). Nothing to add.
 
 ---
 
@@ -558,24 +593,33 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     (timeline_panel_frb.dart ~3361); the graph honours it (graph_editor_frb.dart :1620).
 17. **[missing] Property-name click selects the property's keys** (K-500; today K-196
     selects the property only). (§2.1)
-18. **[missing] Snapping for bar drags, work-area handles, marker drags and the block
-    stretch**, each with the capture line (docs/07 §4.5's own still-to-build;
-    timeline_extras_frb.dart work/marker drags commit unsnapped). (§4.5, §7) — **the
-    block stretch landed in TI-2**; bar, work-area and marker drags stay with TI-9.
-19. **[missing] Escape reverts any drag in flight** (study §2.2; P3). **Landed in TI-2**
-    for the bar, the lane key and the block stretch, on one shared `DragEscape`
+18. ~~**[missing] Snapping for bar drags, work-area handles, marker drags and the block
+    stretch**~~ — the block stretch landed in TI-2; the **bar, work-area, marker and graph
+    key drags landed in TI-9**, on one shared gatherer with the capture line on each.
+    (§4.5, §7)
+19. ~~**[missing] Escape reverts any drag in flight**~~ (study §2.2; P3). **Landed in
+    TI-2** for the bar, the lane key and the block stretch, on one shared `DragEscape`
     (`widgets/drag_escape.dart`); **the graph's three drags — key, tangent handle and
-    transform box — adopted it in TI-7**, on one `DragEscape` the state holds, since only
-    one of them can be in flight at a time. The marker and work-area drags stay with
-    TI-9.
-20. **[missing] Double-click resets the work area / creates a marker** (docs/07 §4.1;
-    ruler has no double-tap, timeline_extras_frb.dart ~1253).
-21. **[missing] `B`/`N` work-area keymap actions** (docs/07 §4.1; no such actions in the
-    keymap). Each needs its engine label + arb pair (K-303).
+    transform box — adopted it in TI-7**; **the marker and work-area drags in TI-9**, on
+    one `DragEscape` the ruler holds. Every drag in this panel now answers `Escape`.
+20. ~~**[missing] Double-click resets the work area / creates a marker**~~ — **landed,
+    TI-9**, both counted by timestamps on the ruler's own `onTapDown` and told apart by
+    where the pair of clicks landed. (§7)
+21. ~~**[missing] `B`/`N` work-area keymap actions**~~ — **the audit was wrong**: they
+    were already shipped, bound in `lumit-keymap`'s default map, handled in `main.dart`
+    and labelled in `engine_labels.dart` with their arb keys. Corrected in §7 by TI-9;
+    nothing was added.
 22. ~~**[missing] Value labels in a fixed right-hand gutter**~~ — **landed, TI-6**
     (§12A.2). (§6.3)
-23. **[missing] Edge-follow scrolling during playback; `=`/`-`/`\` zoom keys**
-    (docs/07 §4.6 still-to-build).
+23. ~~**[missing] Edge-follow scrolling during playback; `=`/`-`/`\` zoom keys**~~ —
+    **landed, TI-9.** Edge-follow is a **page flip** (the playhead leaving the viewport
+    puts the lanes on the next page), guarded by the transport being on — and a scrub
+    stops the transport (K-254), which is what keeps the promise that nothing recentres
+    under a hand. The *smooth* alternative and the setting that chooses between the two
+    are deferred with docs/07 §4.6, as is `Shift+=` (zoom to work area), which this note
+    never listed. The zoom keys hold the **playhead** still, the answer the slider already
+    gives a zoom with no pointer to zoom about (K-293); `\` remembers the magnification it
+    came away from, so pressing it twice is a round trip.
 24. **[missing] Acceleration lens, auto view, beat-marker lines in the graph, waveform
     ghosting, Retime lenses** (docs/07 §5.1–5.3 still-to-build — recorded here for
     completeness; they stay on their existing TODO lines and are not in this
@@ -653,11 +697,14 @@ anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
   come back without a merge on the write path. Files: `crates/lumit-core/src/anim.rs`
   (+`sequence.rs`), `crates/lumit-bridge/src/api/effect.rs`, codegen,
   `graph_maths.dart`, `graph_editor_frb.dart`, `timeline_panel_frb.dart`, arb keys.
-- **TI-9 — Snapping and ruler completion** (§4.5, §7; gaps 18, 20–21, 23). Bar/work-area/
-  marker snapping with capture lines, double-click reset/create, `B`/`N` actions (engine
-  labels + arb), edge-follow during playback, `=`/`-`/`\`. Files:
-  `timeline_panel_frb.dart`, `timeline_extras_frb.dart`, `timeline_snap.dart`,
-  `crates/lumit-bridge/src/api/keymap.rs`.
+- **TI-9 — Snapping and ruler completion** (§4.5, §7; gaps 18–21, 23). **Landed.**
+  Bar, work-area, marker and graph-key snapping on one shared gatherer
+  (`timelineSnapTargets`) with the capture line on each; `Escape` on the ruler's two drags;
+  the two double-clicks; edge-follow as a page flip; `=`/`-`/`\`. **No engine change and
+  no new strings**: `B`/`N` were already bound and labelled (§7), so `keymap.rs` was never
+  touched and the arb is untouched. Files: `timeline_panel_frb.dart`,
+  `timeline_extras_frb.dart`, `graph_editor_frb.dart`; tests in
+  `test/frb/timeline_ruler_snap_test.dart` and `test/frb/graph_editor_frb_test.dart`.
 - **TI-10 — The hover, cursor and hint pass** (polish 25–27). The cursor table, the
   hover ladder, the scrub modifier-ladder chip (shared widget, wired here for the
   timeline's rows; Effect controls adopts it in its own panel work). Files:
