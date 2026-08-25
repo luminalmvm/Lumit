@@ -124,15 +124,21 @@
       vec3 violet = vec3(0.227, 0.165, 0.420);  // #3a2a6b
       vec3 wine   = vec3(0.416, 0.184, 0.247);  // #6a2f3f
 
+      // Each colour arrives over a short span of the noise rather than drifting
+      // across the whole of it. A wide ramp averages the three hues together
+      // everywhere, which reads as one soft mush and hides the fine filaments
+      // the noise already has; a narrow ramp lets those filaments show, and the
+      // filaments are the wisps. Narrow, though, not sharp - the spans still
+      // overlap, so blue meets red through violet rather than against it.
       vec3 col = ink;
-      col = mix(col, indigo, smoothstep(0.15, 0.85, f) * 0.95);
-      col = mix(col, violet, clamp(length(q) - 0.35, 0.0, 1.0) * 1.1);
+      col = mix(col, indigo, smoothstep(0.30, 0.60, f));
+      col = mix(col, violet, smoothstep(0.55, 0.82, length(q)) * 0.85);
       // The wine is weighted low, as it is in the wash this replaces, but it is
-      // no longer confined there: a third of its strength reaches the top.
-      col = mix(col, wine, clamp(r.x - 0.26, 0.0, 1.0) * 2.1 * (0.35 + 0.65 * (1.0 - uv.y)));
+      // no longer confined there: a good part of its strength reaches the top.
+      col = mix(col, wine, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
       // A second, looser pass of the same red, so it reads as a tint through
       // the whole field rather than a single band of it.
-      col = mix(col, wine, smoothstep(0.45, 0.95, q.y + r.y) * 0.35);
+      col = mix(col, wine, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
       // Only the top eases off, under the header. The bottom has no edge to
       // hide: the whole field is faded out there by its mask.
