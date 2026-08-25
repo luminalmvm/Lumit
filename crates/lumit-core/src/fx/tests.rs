@@ -7061,6 +7061,77 @@ fn beams_percent_length_converts_against_its_own_run() {
     );
 }
 
+// Card wipe's Transition width was a per cent of the frame measured along
+// whichever axis Flip order runs (K-558), so its conversion reads the
+// instance's own order: 25 % is 480 pixels across a 1920 frame going left to
+// right, and 270 down a 1080 one going top to bottom.
+#[test]
+fn card_wipes_percent_width_converts_along_its_own_order() {
+    for (order, want) in [(0u32, 480.0), (1, 480.0), (2, 270.0), (3, 270.0)] {
+        let mut inst = instantiate("card_wipe").unwrap();
+        inst.effect.version = 1;
+        for p in &mut inst.params {
+            match p.id.as_str() {
+                "transition_width" => p.value = EffectValue::Float(Property::fixed(25.0)),
+                "flip_order" => p.value = EffectValue::Choice(order),
+                _ => {}
+            }
+        }
+        let mut effects = vec![inst];
+        migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+        let read =
+            |effects: &[crate::model::EffectInstance]| match effects[0].param("transition_width") {
+                Some(EffectValue::Float(p)) => p.value_at(0.0),
+                _ => panic!("transition_width must be a float"),
+            };
+        assert!((read(&effects) - want).abs() < 1e-9, "order {order}");
+        assert_eq!(effects[0].effect.version, 2);
+        migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+        assert!(
+            (read(&effects) - want).abs() < 1e-9,
+            "order {order} idempotent"
+        );
+    }
+}
+
+// And the arithmetic it now feeds: the band is a distance across the frame, so
+// `packed` divides it through the raster's own extent along the order axis —
+// the same width is a different share of a wide frame and a tall one.
+#[test]
+fn card_wipes_width_is_a_band_across_the_frame() {
+    let mut c = effects::card_wipe::CardWipe::read(Params::EMPTY);
+    c.transition_width = 480.0;
+
+    // Left to right on a 1920x1080 raster: a quarter of the width.
+    let p = c.packed(1920.0, 1080.0);
+    assert!((p.one_minus_width - 0.75).abs() < 1e-6);
+    assert!((p.inv_width - 4.0).abs() < 1e-6);
+
+    // The same band, ordered top to bottom, is a share of the height instead.
+    c.flip_order = 2;
+    let p = c.packed(1920.0, 1080.0);
+    assert!((p.one_minus_width - (1.0 - 480.0 / 1080.0)).abs() < 1e-6);
+
+    // A band wider than the frame is the whole frame — every card together —
+    // and one narrower than a hundredth of it still leaves the ramp a slope.
+    c.flip_order = 0;
+    c.transition_width = 9000.0;
+    assert!(c.packed(1920.0, 1080.0).one_minus_width.abs() < 1e-6);
+    c.transition_width = 0.0;
+    assert!((c.packed(1920.0, 1080.0).inv_width - 100.0).abs() < 1e-6);
+}
+
+// A fresh Card wipe's band is half of the comp it landed on, not half of a
+// nominal 1080p frame (K-558).
+#[test]
+fn a_fresh_card_wipe_bands_half_of_its_own_comp() {
+    let inst = builtins::instantiate_for_raster("card_wipe", 3840.0, 2160.0).unwrap();
+    let Some(EffectValue::Float(p)) = inst.param("transition_width") else {
+        panic!("transition_width must be a float");
+    };
+    assert!((p.value_at(0.0) - 1920.0).abs() < 1e-9);
+}
+
 // And the arithmetic Length now feeds: it is a distance in raster pixels, so
 // the share of the run it covers is the one division. The declared default
 // draws the whole run, which is the picture Beam has always shipped, and a
@@ -10263,6 +10334,9 @@ fn every_parameter_declares_a_unit() {
             ("iris_wipe", "outer_radius"),
             ("iris_wipe", "inner_radius"),
             ("iris_wipe", "feather"),
+            // K-558: the flipping wave's width is a distance across the frame,
+            // so it follows the raster like every other distance.
+            ("card_wipe", "transition_width"),
             ("point_control", "point_x"),
             ("point_control", "point_y"),
             ("points_sample", "position_x"),

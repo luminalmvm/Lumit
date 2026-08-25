@@ -14970,7 +14970,7 @@
       "slug": "card-wipe",
       "match_name": "card_wipe",
       "label": "Card wipe",
-      "version": 1,
+      "version": 2,
       "category": "Transition",
       "category_slug": "transition",
       "params": [
@@ -14989,12 +14989,11 @@
           "id": "transition_width",
           "label": "Transition width",
           "kind": "float",
-          "unit": "percent",
-          "default": 50.0,
+          "unit": "px",
+          "default": 960.0,
           "slider_min": 1.0,
-          "slider_max": 100.0,
-          "hard_min": 1.0,
-          "hard_max": 100.0
+          "slider_max": 3840.0,
+          "hard_min": 1.0
         },
         {
           "id": "rows",

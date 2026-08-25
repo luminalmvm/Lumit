@@ -8773,10 +8773,17 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
     let base = {
         let mut c = CardWipe::read(Params::EMPTY);
         c.seed = 12_345;
+        // Transition width is px@comp (K-558) and the declared default is half
+        // a nominal 1080p frame, which on a 32-pixel corpus would clamp to the
+        // whole frame and flatten the ramp this oracle exists to check. Half
+        // of *this* raster is what the default means, so that is what it gets.
+        c.transition_width = w as f32 * 0.5;
         c
     };
     let op_of = |c: CardWipe| {
-        let p = c.packed();
+        // Transition width is px@comp (K-558), so `packed` takes the raster it
+        // is being drawn on to turn the band into a share of the frame.
+        let p = c.packed(w as f32, h as f32);
         CardWipeOp {
             grid: p.grid,
             completion: p.completion,
@@ -8808,7 +8815,7 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
     shuffled.randomness = 100.0;
     let mut rightward = base;
     rightward.flip_order = 1;
-    rightward.transition_width = 10.0;
+    rightward.transition_width = w as f32 * 0.1;
     let mut leftward = rightward;
     leftward.flip_order = 0;
     let mut downward = base;
@@ -8842,7 +8849,7 @@ fn wgsl_card_wipe_matches_the_cpu_oracle() {
         ("mixed", faded),
         ("mix-zero", none),
     ] {
-        let p = c.packed();
+        let p = c.packed(w as f32, h as f32);
         let mut cpu = img.clone();
         lumit_core::fx::cpu::card_wipe(&mut cpu, w, h, &p);
         let gpu = read(c);
@@ -14819,9 +14826,11 @@ fn the_matte_scales_the_card_wipe_completion() {
     let c = {
         let mut c = CardWipe::read(Params::EMPTY);
         c.seed = 12_345;
+        // Half of *this* raster, for the reason the oracle above gives.
+        c.transition_width = w as f32 * 0.5;
         c
     };
-    let p = c.packed();
+    let p = c.packed(w as f32, h as f32);
     let op = CardWipeOp {
         grid: p.grid,
         completion: p.completion,

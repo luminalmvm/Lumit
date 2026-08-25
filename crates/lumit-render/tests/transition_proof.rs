@@ -203,7 +203,9 @@ fn render_the_three_transition_effects() {
             &mut wave,
             w,
             h,
-            &cw(50.0, 4, 7, 45.0, 0, 0, 0, 0.0).packed(),
+            // Transition width is px@comp since K-558: 45 % of the frame's
+            // width, which is the axis the Left-to-right order runs along.
+            &cw(50.0, 4, 7, fw * 0.45, 0, 0, 0, 0.0).packed(fw, fh),
         );
         write("5-cards-wave", &to_srgb(&over_grey(&wave)));
         let mut shuffled = lin.clone();
@@ -211,7 +213,8 @@ fn render_the_three_transition_effects() {
             &mut shuffled,
             w,
             h,
-            &cw(55.0, 6, 10, 25.0, 2, 2, 2, 70.0).packed(),
+            // Top-to-bottom, so a quarter of the frame's *height*.
+            &cw(55.0, 6, 10, fh * 0.25, 2, 2, 2, 70.0).packed(fw, fh),
         );
         write("6-cards-shuffled", &to_srgb(&over_grey(&shuffled)));
     }

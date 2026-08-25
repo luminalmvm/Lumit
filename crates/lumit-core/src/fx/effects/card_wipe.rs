@@ -47,7 +47,9 @@ pub const FLIP_ORDER_OPTIONS: &[&str] = &[
 #[effect(
     match_name = "card_wipe",
     label = "Card wipe",
-    version = 1,
+    // 2: Transition width crossed from a per cent of the frame to px@comp
+    // (K-558). `migrate_percent_to_px` converts a v1 instance on load.
+    version = 2,
     category = Transition,
     // One hash, one divide and one bilinear tap a pixel.
     cost = Cheap,
@@ -74,17 +76,24 @@ pub struct CardWipe {
     #[bounded(min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
     pub completion: f32,
 
-    /// How much of the whole wipe one card's own flip takes, per cent. At 100
-    /// every card flips together; at a few per cent they go one after another in
-    /// a hard wave. Floored above zero so the ramp has a slope.
+    /// How wide the flipping wave is, px@comp (K-558) measured across the frame
+    /// along whichever axis Flip order runs. As wide as the frame, every card
+    /// flips together; a narrow band and they go one after another in a hard
+    /// wave. The default is half a nominal 1080p frame's width, and
+    /// `instantiate_for_raster` writes half of the actual comp's, so a fresh
+    /// Card wipe wipes the same way on a comp of any size.
+    ///
+    /// **It is a share of the frame that has become a distance**, not a share of
+    /// the *wipe*: the Flip order ramp is a position across the grid, so the
+    /// width of the band running along it is measured in the same space. The
+    /// share is taken once, host-side, in [`packed`](Self::packed).
     #[slider(
         label = "Transition width",
         min = 1.0,
-        max = 100.0,
-        default = 50.0,
+        max = 3840.0,
+        default = 960.0,
         hard_min = 1.0,
-        hard_max = 100.0,
-        unit = Percent
+        unit = Px
     )]
     pub transition_width: f32,
 
@@ -148,15 +157,23 @@ impl CardWipe {
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4). Flip
     /// order collapses to an axis and an affine pair, so the kernel reads the
     /// ramp rather than branching four ways.
+    ///
+    /// The raster is passed because Transition width is px@comp (K-558) and the
+    /// ramp it describes is a fraction of the frame: the band's width divides
+    /// through the raster's own extent along the order axis, once, here — so
+    /// the kernel is handed the same two numbers it always was and neither
+    /// path learns a new unit. Both the width and the raster carry the same
+    /// preview factor, so a Half preview wipes exactly as the export does.
     #[must_use]
-    pub fn packed(self) -> cpu::CardWipeParams {
+    pub fn packed(self, raster_w: f32, raster_h: f32) -> cpu::CardWipeParams {
         let (order_axis, order_bias, order_scale) = match self.flip_order {
             1 => (0u32, 1.0, -1.0),
             2 => (1u32, 0.0, 1.0),
             3 => (1u32, 1.0, -1.0),
             _ => (0u32, 0.0, 1.0),
         };
-        let width = (self.transition_width / 100.0).clamp(0.01, 1.0);
+        let extent = if order_axis == 0 { raster_w } else { raster_h };
+        let width = (self.transition_width.max(0.0) / extent.max(1.0)).clamp(0.01, 1.0);
         cpu::CardWipeParams {
             grid: [self.columns.clamp(1, 256), self.rows.clamp(1, 256)],
             completion: (self.completion / 100.0).clamp(0.0, 1.0),
@@ -183,6 +200,6 @@ impl EffectDef for CardWipeDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::card_wipe(rgba, w, h, &CardWipe::read(p).packed());
+        cpu::card_wipe(rgba, w, h, &CardWipe::read(p).packed(w as f32, h as f32));
     }
 }

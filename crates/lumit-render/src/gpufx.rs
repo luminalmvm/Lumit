@@ -2371,7 +2371,7 @@ impl GpuEffect for CardWipe {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let c = effects::card_wipe::CardWipe::read(p).packed();
+        let c = effects::card_wipe::CardWipe::read(p).packed(w as f32, h as f32);
         fx.card_wipe(
             ctx,
             tex,

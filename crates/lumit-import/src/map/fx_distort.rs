@@ -522,7 +522,18 @@ fn venetian_blinds(fx: &mut Fx<'_, '_>) {
 /// and Flip Order's Gradient.
 fn card_wipe(fx: &mut Fx<'_, '_>) {
     fx.carry(2, "completion", Unit::Direct);
-    fx.carry(4, "transition_width", Unit::Direct);
+    // Transition width is a per cent of the frame in After Effects and px@comp
+    // in Lumit (K-558), measured along whichever axis the flip order runs — so
+    // the order has to be read before the width is converted. AE's 3 and 4 are
+    // its two vertical orders.
+    let (comp_w, comp_h) = fx.conv.size;
+    let ae_order = fx.raw(20).unwrap_or(1.0).round() as i64;
+    let basis = if matches!(ae_order, 3 | 4) {
+        comp_h
+    } else {
+        comp_w
+    };
+    fx.carry(4, "transition_width", Unit::Scale(basis / 100.0));
     fx.drop_ae(6); // Back Layer — a card turns to nothing, which is AE with no back layer
                    // AE's Rows & Columns switch: Independent, or Columns Follows Rows.
     let independent = fx.raw(8).unwrap_or(1.0).round() as i64 == 1;
@@ -531,7 +542,7 @@ fn card_wipe(fx: &mut Fx<'_, '_>) {
     fx.drop_ae(14); // Card Scale
     fx.choice(16, "flip_axis", &[0, 1, 2], "Horizontal axis");
     fx.choice(18, "flip_direction", &[0, 1, 2], "Forwards");
-    let gradient_order = fx.raw(20).unwrap_or(1.0).round() as i64 == 5;
+    let gradient_order = ae_order == 5;
     fx.choice(20, "flip_order", &[0, 1, 2, 3, -1], "Left to right");
     if gradient_order {
         fx.drop_ae(22); // Gradient Layer — its spread is not in the capture
@@ -1764,7 +1775,9 @@ mod tests {
             ],
         ));
         assert_eq!(keys_of(&r, "completion")[1], (2.0, 100.0, 50.0));
-        assert_eq!(f(&r, "transition_width"), 30.0);
+        // Flip Order 3 is Top to bottom, so AE's 30 % of the frame is 30 % of
+        // its *height* in px@comp (K-558).
+        assert_eq!(f(&r, "transition_width"), 0.30 * H);
         assert_eq!((f(&r, "rows"), f(&r, "columns")), (4.0, 9.0));
         assert_eq!(choice(&r, "flip_axis"), 1);
         assert_eq!(choice(&r, "flip_direction"), 1);

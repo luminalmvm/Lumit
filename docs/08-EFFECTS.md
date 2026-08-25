@@ -4544,8 +4544,10 @@ Maps AE's Card Wipe ([11-AE-IMPORT.md](11-AE-IMPORT.md)). A **Transition** effec
 first in the catalogue to put a **camera** in front of a pixel — a fixed one, with no controls
 on it (see the fourth decision).
 
-**Parameters:** Completion (per cent, 0..100, default 50, hard 0..100), Transition width (per
-cent, 1..100, default 50, hard 1..100), Rows (whole number, 1..64, default 6, hard 1..256),
+**Parameters:** Completion (per cent, 0..100, default 50, hard 0..100), Transition width
+(**px@comp**, K-558, 1..3840, default 960, hard min 1 — the flipping wave's width across the
+frame, measured along whichever axis Flip order runs, and centred on the actual comp by
+`instantiate_for_raster`), Rows (whole number, 1..64, default 6, hard 1..256),
 Columns (whole number, 1..64, default 8, hard 1..256), Flip axis (Horizontal axis / Vertical
 axis / Random, default Horizontal axis), Flip direction (Forwards / Backwards / Random,
 default Forwards), Flip order (Left to right / Right to left / Top to bottom / Bottom to top,
@@ -4565,7 +4567,9 @@ x0, x1      = ⌈i·W ÷ Columns⌉, ⌈(i+1)·W ÷ Columns⌉        # and like
 # 2. when this card flips
 o           = Flip order's ramp at (i, j), 0..1
 o           = o + (hash(seed, i, j) − o)·(Randomness ÷ 100)
-t           = clamp((c − o·(1 − w)) ÷ w, 0, 1)             # c = Completion÷100, w = width÷100
+t           = clamp((c − o·(1 − w)) ÷ w, 0, 1)             # c = Completion÷100
+                                                          # w = width ÷ the frame's extent
+                                                          #     along the order axis, host-side
 θ           = ±t·½π                                        # the sign is Flip direction
 
 # 3. where the card is now — the camera is at distance D = 3 card half-widths
@@ -4579,8 +4583,15 @@ out         = sample · coverage
 out         = orig·(1 − mix) + out·mix
 ```
 
-Five decisions:
+Six decisions:
 
+- **Transition width is a distance across the frame, not a share of the wipe** (K-558). The
+  Flip order ramp `o` is a *position* — where a card sits along the order axis, 0 to 1 — so the
+  band running along it is measured in the same space, and since K-558 that space is quoted in
+  pixels. The share is taken once, host-side, dividing by the raster's own extent along that
+  axis, so both kernels are handed the same `1 ÷ w` and `1 − w` they always were and neither
+  learns a new unit. Width and raster carry the same preview factor, so a Half preview wipes
+  exactly as the export does.
 - **It is geometry, not particles** (docs/impl/ae-effect-parity.md's standing exclusion). A
   card is a rectangle with one rotation on it, its position is a function of its grid index,
   and nothing is simulated, integrated or advected. That is what makes it a kernel with a

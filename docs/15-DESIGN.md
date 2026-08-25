@@ -1100,9 +1100,11 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   about what "scale a curve" means before it could be written.
 - **Units are plain mono, never caps** (§7.1): mono at 10, muted, no tracking, in the gap
   beside the value. **Shipped:** the unit comes from the parameter's own declaration, so
-  `centre_x` reads `%` on Radial blur and `px` on the dozen effects whose centre is px@comp
-  — a distinction the frontend's own id-keyed table could not draw, and got wrong for all of
-  them in the same direction. A parameter whose number genuinely has no unit draws no rider,
+  a Mix reads `%` and a Radius `px` on the same card — a distinction the frontend's own
+  id-keyed table could not draw, and got wrong in one direction for a whole family. (Its
+  worked example used to be Radial blur's per-cent `centre_x` against the dozen effects whose
+  centre is px@comp; since K-558 every centre is px@comp, which is the id-keyed table's other
+  failure — being right by accident until it is not.) A parameter whose number genuinely has no unit draws no rider,
   and neither does a control carrying no number. A **pair** draws one rider for the two, after
   both wells: x and y are two halves of one measurement.
 - **Position-type parameters get a crosshair point picker** — pick the point on the Viewer —

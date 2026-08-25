@@ -139,6 +139,11 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // whatever frame it landed on.
             ("radial_blur", "centre_x") => w * 0.5,
             ("radial_blur", "centre_y") => h * 0.5,
+            // Card wipe's Transition width is a distance across the frame
+            // (K-558), and its declared half-a-frame default is only *half a
+            // frame* on the comp it landed on. The default Flip order runs
+            // left to right, so the width is the axis it is measured along.
+            ("card_wipe", "transition_width") => w * 0.5,
             // Tile's centre is the same default for a stronger reason (K-542):
             // its whole-frame default tile is only the *identity* if it is cut
             // from the middle of the frame, so a schema constant of 960, 540 on
@@ -328,6 +333,23 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
                 }
                 if let EffectValue::Float(prop) = &mut p.value {
                     scale_property(prop, run / 100.0);
+                }
+            }
+            e.effect.version = 2;
+        }
+        // Card wipe v1 → v2: Transition width was a per cent of the frame
+        // measured along whichever axis Flip order runs (K-558), so the basis
+        // is the width for the two horizontal orders and the height for the two
+        // vertical ones — read off the instance's own choice.
+        if e.effect.match_name == "card_wipe" && e.effect.version < 2 {
+            let vertical = matches!(e.param("flip_order"), Some(EffectValue::Choice(2 | 3)));
+            let basis = if vertical { h } else { w };
+            for p in &mut e.params {
+                if p.id != "transition_width" {
+                    continue;
+                }
+                if let EffectValue::Float(prop) = &mut p.value {
+                    scale_property(prop, basis / 100.0);
                 }
             }
             e.effect.version = 2;

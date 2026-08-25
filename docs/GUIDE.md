@@ -4071,6 +4071,20 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   understand it as a real project. Today the chain is empty (this is the first format), but
   the machinery is in place, so future changes have a home and old files keep opening. A
   current-version file skips all of it and loads directly, so ordinary saves are untouched.
+- **When a control changes what its number means (`lumit-core::fx::migrate_percent_to_px`)** —
+  a saved project stores a bare number for every control, and the number only means something
+  because the effect says what unit it is in. So when a control's unit changes — a centre that
+  used to be "half way across the frame" becoming "960 pixels" — every project saved before
+  the change is holding a number in the old unit, and rendering it as though it were the new
+  one would move the picture. Each effect therefore carries a small version number of its own,
+  and on load an instance whose version is behind gets its old numbers converted and its
+  version stamped forward. Done once, and never twice: the version is the record that it
+  happened. The conversion needs to know how big the composition is — half a frame is only a
+  pixel count once you know the frame — so it runs from inside the composition as the project
+  is read, rather than from the general "fill in missing controls" pass, which is handed a bare
+  list of effects and has no frame to measure against. Keyframed controls convert whole: every
+  value scales and so does the steepness recorded at each key, which leaves the animation
+  curve exactly the shape it was.
 - **The frame cupboard decides what to drop (`lumit-cache`, docs 06 §5.3)** — the store of
   rendered frames has a strict size limit (a budget in megabytes, not a count — one big frame
   costs as much as many small ones). When it's full and a new frame arrives, it throws out the
