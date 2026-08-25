@@ -427,6 +427,27 @@ cube form the bound is interpolation error on a 65-point log-spaced grid: for th
 smooth view transforms real configs ship, ≤ 2 × 10⁻³ on the display-encoded [0,1]
 output — half an 8-bit code value — asserted in-domain by the golden suite (§7).
 
+**Measured, WP6, dense sweeps rather than sample points** (`bake.rs`'s bound tests
+carry these numbers and the sweeps that produce them):
+
+| What | Bound | Measured |
+|---|---|---|
+| Factorised, the curve stage, signed sweep of ±32 | 1 × 10⁻⁵ rel. | 7.3 × 10⁻⁶, worst near x = 20 |
+| Factorised, whole curve-then-matrix chain, same sweep | — | 1.9 × 10⁻⁵ rel., worst near x = 25 |
+| Shaper + cube, neutrals in domain | 2 × 10⁻³ | 1.6 × 10⁻⁴ |
+| Shaper + cube, mild colour in domain | 2 × 10⁻³ | 2.9 × 10⁻⁴ |
+| Shaper + cube, deep saturation (x, x/4, x/20) | 5 × 10⁻³ ceiling | 2.2 × 10⁻³ |
+| Shaper + cube, harsher saturation (x, x/20, 0) | *none stated* | 5.6 × 10⁻² |
+
+Two readings the table settles. First, the **1 × 10⁻⁵ is a statement about the
+curve**, and at the curve it holds with room; a whole chain is that error times the
+matrix's gain, because the matrix mixes three independently-wrong channels and its
+row sums exceed one. Quoting one number for both would be quoting the wrong one, so
+the tests hold the curve to 10⁻⁵ and the chain to 3 × 10⁻⁵ and say why. Second, the
+deep-saturation **ceiling belongs to its probe family, not to the world**: the last
+row is twenty-five times it, and that is exactly the domain-edge risk this section
+names as unbounded rather than a regression against it.
+
 **The risk that cannot be bounded away is the domain edge — of the cube form.** A baked
 cube clamps what its shaper cannot reach: scene-linear values above the shaper ceiling
 (`2^hi`), and — the sharper case — **negative components**, which edges-only Rec.709
@@ -546,7 +567,12 @@ Fidelity is proven, not asserted, and the proof is data checked into the reposit
    match within the §5.4 bound in-domain (out-of-domain rows carry their own looser
    bound and exist to be tightened).
 3. **CLF suite**: the CLF specification's implementation-test files, vendored, parsed
-   and evaluated against their published expectations.
+   and evaluated against their published expectations. **Landed** — see WP6. Note
+   what "published expectations" turned out to mean: no answer key is published
+   alongside the documents, so each row's expected value is anchored in the
+   document's own stated formula, the specification's own worked example, an
+   identity that holds by construction, or arithmetic on the document's own
+   coefficients. Every one is stated per file in `clf/clf.fixture`.
 4. **CPU = GPU**: the WGSL samplers against the CPU samplers, ≤ 2 fp16 ULP on random
    cubes and curves — the lut.md pattern, skip-on-no-GPU as ever.
 5. **K-031 parity**: the standing preview-equals-export matrix gains an OCIO row — a
@@ -701,6 +727,56 @@ frozen, the CLF suite vendored, the out-of-domain rows with their documented loo
 bounds, the parity row in every shipped configuration, and a README in the fixture
 directory stating provenance and the regeneration recipe. Tightening §5.4's
 out-of-domain bound later must only ever mean editing tolerances downward.
+
+**Landed, except for two data drops that need a machine with the reference library
+on it.** What is in CI now:
+
+- **The CLF suite (§7.3) is real.** Eight documents from the specification's own
+  example and implementation-test set are vendored byte for byte in
+  `crates/lumit-colour/tests/fixtures/clf/`, each evaluated against expected values
+  that are published rather than measured — a spec example's own worked numbers, a
+  generating formula the document prints in its own `Description`, an identity that
+  holds by construction, or arithmetic on the document's own coefficients. This is
+  the part of §7 that never needed the library, and it found two reader faults on
+  the day it landed: vendor elements inside an `Info` block were being read as
+  process nodes, and an XML comment inside an `Array` glued the numbers either side
+  of it into one token.
+- **The §5.4 bounds are re-measured** with dense sweeps rather than sample points,
+  and the numbers are in the table there. They hold, with one clarification worth
+  more than the reassurance: the 10⁻⁵ figure is the *curve's*, and a chain's error
+  is that times the matrix's gain.
+- **§7.5's parity row is the colour matrix** in
+  `crates/lumit-render/tests/ocio_parity.rs`: no config, every built-in colour
+  family named at export, a config's display/view, and a config's space at export,
+  each requiring the Viewer's eight-bit present and the export's deep one to be one
+  picture — plus a plain-gamma view that must render *differently*, without which
+  the other rows pass equally well when nothing is bound at all.
+
+What remains is **exactly two artefact drops**, both data:
+
+1. `tests/fixtures/aces-1.2/` and `aces-1.2.fixture`;
+2. `tests/fixtures/aces-cg/` and `aces-cg.fixture`, together with the vendored
+   builtin bakes in `crates/lumit-colour/vendored/` that the same session produces.
+
+Neither is a coding job any more. `conformance.rs` already resolves a reference row's
+id through the config it names (`space: <from> -> <to>`, `view: <display> / <view>`)
+and runs both of §7.2's gates over it, and a non-ignored test proves that reader
+today against a stand-in config and the published sRGB numbers — so a drop is two
+paths, one deleted `#[ignore]`, and a test run. The exact recipe is written down:
+`tests/fixtures/README.md` for the fixtures (the library as a pinned PyPI wheel, both
+config sources, the generator, the row format, and which door the reference run must
+enter each config by — §2.1's two readings differ, and getting it wrong moves every
+view row by a primaries matrix while reading as a tolerance problem), and
+`vendored/README.md` for the bakes (the required provenance lines, the shaper and
+grid stated as fixed rather than chosen, the red-fastest cube order, and the rule
+that a bake and the rows proving it come from one session at one version).
+
+`vendored/README.md` also names the debt concretely, read off `cg-config-v4.0.0`:
+eighteen builtin styles, four implemented. Two want no bake at all — `pass_thru` is
+the identity under a second name, and `ACEScc_to_ACES2065-1` is a log curve beside
+the ACEScct already written out — five need bakes, and eight are display encodings
+of which five want a mirrored curve the op set does not express. The shortest path
+to a v2 config that loads end to end is one bake, one style port and one decision.
 
 ## 9. Test plan — the core invariants
 

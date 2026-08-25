@@ -9304,12 +9304,32 @@ config format itself, in Rust, the same way it already hosts OpenFX plugins itse
 reads `.cube` LUT files itself. When a config loads, each conversion it describes is
 worked out once and "baked" into a small table — think of a curve plus a 65×65×65 cube of
 pre-computed answers — and that one table is what both the Viewer and the export use.
-One implementation, one answer. How do we know our answers match the official library's?
-We generated thousands of test values with the official library once, saved them in the
-repository, and the test suite checks our engine against them on every change. And when a
-config uses some feature we have not built, Lumit refuses it *by name* — it tells you what
-it cannot do — rather than quietly producing almost-right colours, because a plausible
-wrong picture is the one failure this design refuses to ship.
+One implementation, one answer.
+
+**How do we know our answers are right?** Only ever by comparing them against numbers
+somebody else published — never against numbers Lumit produced, because a table made by
+the code it is supposed to test proves nothing but that the code agrees with itself.
+Three kinds of published number are checked in today. The first is *constants from the
+standards*: the sRGB curve's own published values, the ACES constants the Academy prints,
+white points that must come out white by the definition of a white point. The second is
+the **CLF suite**. CLF is the film industry's file format for writing a colour transform
+down as a list of steps — a matrix, then a curve, then a table — and Lumit reads it, so
+the specification's own example documents are checked into the repository and run
+through our reader, each one against an expectation the document itself publishes (some
+of them literally print the formula that generated their table). Those found two real
+faults the day they landed, which is what a test suite is for.
+
+The third kind is the one still outstanding: a run of the **official OpenColorIO library**
+over a real studio config, producing a few hundred expected answers to check ours
+against. That needs somebody to sit at a machine with the library installed, and the
+recipe for doing it — which library, which configs, which command — is written down in
+the fixtures folder so it can be done on any computer and the results simply dropped in.
+Until then the tests that would read those numbers are marked as waiting, by name, rather
+than quietly passing.
+
+And when a config uses some feature we have not built, Lumit refuses it *by name* — it
+tells you what it cannot do — rather than quietly producing almost-right colours, because
+a plausible wrong picture is the one failure this design refuses to ship.
 
 ### Colours off the end of the scale
 

@@ -491,9 +491,14 @@ does not gate the four. Delete each phase here when it lands, as with everything
     the seam crossed with no codegen left owing),
     ~~PS6~~ (landed: the live teal wire, Points sample's rows, Particulate's
     surface verified, and K-509's no-stream mark),
-    PS7 (goldens, the K-475 budget gates, and K-509's clamp question).
-    docs/impl/particulate.md remains the effect's own design. Delete each
-    package from this line as it lands.
+    ~~PS7~~ (landed: `particulate-golden.txt` and its two gates, B12-B14 as
+    `lumit-bench` scenarios with the floor subtracted, the export walk's
+    undegraded field pinned, and K-510 — a driven value is clamped to its
+    parameter's hard range at the effect's socket).
+    **The programme is complete.** docs/impl/particulate.md remains the effect's
+    own design; the deferred family (Connect points, Clone to points, Trail,
+    Scatter, Emit-from-image, cross-layer taps) is points-stream.md §2.3, each
+    its own package, none started.
 - ~~**Phase 4 - the website**~~ - **landed 2026-08-24** (K-438, K-439, K-476, the
     `WebHero` drawing under K-458): lumitlab.com carries the application's own tokens -
     the three greys, the four text tiers, the two hairlines, clay as the only accent -
@@ -562,15 +567,41 @@ well, *Choose…*, *Clear*, the state line, the fixed working-space reading), th
 colour picker grows a section per display with its views as rows and says calmly when a
 named config is not in force, the export's colour dropdown lists the config's spaces
 under their own heading with per-name enable off `can_deliver_colour_space`, and a
-footage row's **Colour space** submenu assigns one. What remains:
+footage row's **Colour space** submenu assigns one. One thing it left owed:
 
-- **WP6 - the conformance suite completed**: reference fixtures for both ACES configs,
-    the CLF suite, out-of-domain bounds, the K-031 parity row in every configuration
-    (note §7).
 - **The working-space reading has one sentence, not two** (note §2.1, §6.4): the Project
     settings row always says "Linear Rec. 709", because `BridgeColourSummary` carries no
     flag for a legacy config composing through its `scene_linear` role. It wants a field
     on the summary and a second sentence behind it.
+
+**WP6 has landed too**, except for the two things it always said it could not invent.
+The CLF suite is real: eight documents from the Common LUT Format specification's own
+example and implementation-test set, vendored byte for byte in
+`crates/lumit-colour/tests/fixtures/clf/`, each gated against values that are
+published rather than measured — and they found two reader faults the day they
+landed (vendor elements inside an `Info` block read as process nodes; an XML comment
+inside an `Array` gluing the numbers either side of it into one token). The §5.4
+bounds are re-measured with dense sweeps and hold, with the clarification that the
+1e-5 figure is the *curve's* and a chain's error is that times its matrix's gain.
+And the K-031 parity row is now a colour matrix in
+`crates/lumit-render/tests/ocio_parity.rs`: no config, every built-in colour family
+at export, a config's display/view, a config's space at export — plus a plain-gamma
+view that must render differently, without which the rest pass when nothing is bound.
+
+What remains of OCIO is **exactly two artefact drops, both data**:
+
+- **`tests/fixtures/aces-1.2/` + `aces-1.2.fixture`** and **`tests/fixtures/aces-cg/`
+    + `aces-cg.fixture`**, the latter with the vendored `BuiltinTransform` bakes in
+    `crates/lumit-colour/vendored/` from the same session. Neither is a coding job:
+    `conformance.rs` already resolves a row's config edge and runs both gates, and a
+    non-ignored test proves that reader today, so a drop is two paths, one deleted
+    `#[ignore]` and a test run. The recipes are written down and runnable on any
+    machine — `tests/fixtures/README.md` (a pinned PyPI wheel, both config sources,
+    the generator, the row format) and `vendored/README.md` (the provenance header,
+    the fixed shaper and grid, the red-fastest cube order). Until the bakes exist,
+    the ACES 2.x output styles refuse by name and the v2 configs do not resolve end
+    to end; `vendored/README.md` lists which eighteen styles `cg-config-v4.0.0` needs
+    and which two of them want no bake at all.
 
 ## Next - engine/bridge follow-ups
 
