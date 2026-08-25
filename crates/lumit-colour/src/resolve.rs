@@ -377,12 +377,13 @@ impl LoadedConfig {
             } => {
                 // The config writes 4×4 row-major with a 4-vector offset; only
                 // the upper 3×4 has any meaning for RGB.
-                let mut m34 = [0.0_f32; 12];
+                let mut m34: matrix::Matrix34 = [0.0; 12];
                 for row in 0..3 {
                     for col in 0..3 {
-                        m34[row * 4 + col] = m.get(row * 4 + col).copied().unwrap_or(0.0);
+                        m34[row * 4 + col] =
+                            f64::from(m.get(row * 4 + col).copied().unwrap_or(0.0));
                     }
-                    m34[row * 4 + 3] = offset.get(row).copied().unwrap_or(0.0);
+                    m34[row * 4 + 3] = f64::from(offset.get(row).copied().unwrap_or(0.0));
                 }
                 let m34 = match dir {
                     Direction::Forward => m34,

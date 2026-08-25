@@ -16,7 +16,16 @@
 use crate::error::{ColourError, Result};
 
 /// A 3×4 colour matrix, row-major (three rows of `[a b c offset]`).
-pub type Matrix34 = [f32; 12];
+///
+/// The coefficients are held in **double** and evaluated in single. That split
+/// is not fussiness, it is a measured fidelity fix: a config's `from_reference`
+/// is usually its `to_reference` inverted, so a space-to-space chain routinely
+/// carries a matrix immediately followed by its own inverse. Rounding that
+/// inverse to `f32` before composing leaves a residue of about 3 × 10⁻¹⁰ in the
+/// product, which a clamped 65504 in one channel turns into 2 × 10⁻⁵ of error in
+/// another — ACEScc → ACEScg, measured against the reference library, is exactly
+/// that. Composed in double the residue is 10⁻¹⁶ and the pair cancels.
+pub type Matrix34 = [f64; 12];
 
 /// The matrix that changes nothing.
 pub const IDENTITY: Matrix34 = [
@@ -24,6 +33,18 @@ pub const IDENTITY: Matrix34 = [
     0.0, 1.0, 0.0, 0.0, //
     0.0, 0.0, 1.0, 0.0,
 ];
+
+/// The coefficients as the samplers see them: single precision, exactly what
+/// [`crate::bake`] hands the graphics card. Every evaluation goes through this,
+/// so the processor and the card multiply the same twelve numbers (K-031).
+#[must_use]
+pub fn single(m: &Matrix34) -> [f32; 12] {
+    let mut out = [0.0_f32; 12];
+    for (o, v) in out.iter_mut().zip(m) {
+        *o = *v as f32;
+    }
+    out
+}
 
 /// Apply a 3×4 matrix to one colour.
 ///
@@ -33,6 +54,7 @@ pub const IDENTITY: Matrix34 = [
 /// drift (docs/impl/ocio.md §4.2).
 #[must_use]
 pub fn apply(m: &Matrix34, rgb: [f32; 3]) -> [f32; 3] {
+    let m = single(m);
     let mut out = [0.0_f32; 3];
     for (row, o) in out.iter_mut().enumerate() {
         let b = row * 4;
@@ -44,10 +66,10 @@ pub fn apply(m: &Matrix34, rgb: [f32; 3]) -> [f32; 3] {
 /// `second ∘ first`: the one matrix that does `first` then `second`.
 #[must_use]
 pub fn concat(first: &Matrix34, second: &Matrix34) -> Matrix34 {
-    let mut out = [0.0_f32; 12];
+    let mut out = [0.0_f64; 12];
     for row in 0..3 {
         for col in 0..3 {
-            let mut acc = 0.0_f32;
+            let mut acc = 0.0_f64;
             for k in 0..3 {
                 acc += second[row * 4 + k] * first[k * 4 + col];
             }
@@ -66,28 +88,22 @@ pub fn concat(first: &Matrix34, second: &Matrix34) -> Matrix34 {
 /// The inverse matrix, or [`ColourError::SingularMatrix`] when there is none.
 pub fn invert(m: &Matrix34) -> Result<Matrix34> {
     let a = [
-        m[0] as f64,
-        m[1] as f64,
-        m[2] as f64,
-        m[4] as f64,
-        m[5] as f64,
-        m[6] as f64,
-        m[8] as f64,
-        m[9] as f64,
-        m[10] as f64,
+        m[0], m[1], m[2], //
+        m[4], m[5], m[6], //
+        m[8], m[9], m[10],
     ];
     let inv = invert3(&a).ok_or(ColourError::SingularMatrix)?;
-    let t = [m[3] as f64, m[7] as f64, m[11] as f64];
-    let mut out = [0.0_f32; 12];
+    let t = [m[3], m[7], m[11]];
+    let mut out = [0.0_f64; 12];
     for row in 0..3 {
         for col in 0..3 {
-            out[row * 4 + col] = inv[row * 3 + col] as f32;
+            out[row * 4 + col] = inv[row * 3 + col];
         }
         let mut acc = 0.0_f64;
         for k in 0..3 {
             acc += inv[row * 3 + k] * t[k];
         }
-        out[row * 4 + 3] = -acc as f32;
+        out[row * 4 + 3] = -acc;
     }
     Ok(out)
 }
@@ -96,18 +112,9 @@ pub fn invert(m: &Matrix34) -> Result<Matrix34> {
 #[must_use]
 pub fn from_3x3(m: &[f64; 9]) -> Matrix34 {
     [
-        m[0] as f32,
-        m[1] as f32,
-        m[2] as f32,
-        0.0,
-        m[3] as f32,
-        m[4] as f32,
-        m[5] as f32,
-        0.0,
-        m[6] as f32,
-        m[7] as f32,
-        m[8] as f32,
-        0.0,
+        m[0], m[1], m[2], 0.0, //
+        m[3], m[4], m[5], 0.0, //
+        m[6], m[7], m[8], 0.0,
     ]
 }
 
@@ -324,7 +331,7 @@ mod tests {
         let m = rgb_to_rgb(&AP1, &AP0).expect("AP1→AP0 derives");
         let published = [0.695_452_241_4_f64, 0.140_678_696_5, 0.163_869_062_2];
         for (g, p) in m[0..3].iter().zip(published) {
-            assert!((*g as f64 - p).abs() < 1e-5, "got {:?}", &m[0..3]);
+            assert!((*g - p).abs() < 1e-5, "got {:?}", &m[0..3]);
         }
         assert!(close(apply(&m, [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0], 1e-5));
     }

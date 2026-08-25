@@ -179,10 +179,11 @@ fn matrix_op(what: &str, node: &Node) -> Result<Op> {
     let scale = in_scale / out_scale;
     for row in 0..3 {
         for col in 0..3 {
-            m[row * 4 + col] = node.array.get(row * cols + col).copied().unwrap_or(0.0) * scale;
+            m[row * 4 + col] =
+                f64::from(node.array.get(row * cols + col).copied().unwrap_or(0.0) * scale);
         }
         m[row * 4 + 3] = if cols == 4 {
-            node.array.get(row * cols + 3).copied().unwrap_or(0.0) / out_scale
+            f64::from(node.array.get(row * cols + 3).copied().unwrap_or(0.0) / out_scale)
         } else {
             0.0
         };

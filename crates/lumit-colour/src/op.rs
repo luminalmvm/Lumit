@@ -500,9 +500,30 @@ pub struct Chain {
 }
 
 impl Chain {
+    /// Build a chain, **folding neighbouring matrices into one**.
+    ///
+    /// The fold is fidelity, not tidiness, and it is the second half of the fix
+    /// [`crate::matrix::Matrix34`] describes. A config's `from_reference` is
+    /// normally its `to_reference` inverted, so `A → B` where both declare the
+    /// same primaries matrix resolves to `M` immediately followed by `M⁻¹` —
+    /// mathematically nothing at all, but evaluated one after the other in
+    /// single precision it detours through an intermediate that can be five
+    /// orders of magnitude larger than the answer, and brings back the rounding
+    /// of that intermediate rather than the answer. ACEScc → ACEScg on the
+    /// legacy ACES config is exactly this: blue arrives at −246 and comes back
+    /// to 0.045 having lost 2 × 10⁻⁵ on the way. The reference library composes
+    /// adjacent matrices for the same reason, so this is agreement with it and
+    /// not a Lumit invention.
     #[must_use]
     pub fn new(ops: Vec<Op>) -> Self {
-        Self { ops }
+        let mut folded: Vec<Op> = Vec::with_capacity(ops.len());
+        for op in ops {
+            match (folded.last_mut(), &op) {
+                (Some(Op::Matrix(prev)), Op::Matrix(m)) => *prev = matrix::concat(prev, m),
+                _ => folded.push(op),
+            }
+        }
+        Self { ops: folded }
     }
 
     /// The chain that does nothing.
@@ -528,14 +549,15 @@ impl Chain {
         for op in self.ops.iter().rev() {
             ops.push(op.inverted(what)?);
         }
-        Ok(Chain { ops })
+        Ok(Chain::new(ops))
     }
 
-    /// `self` then `next`, as one chain.
+    /// `self` then `next`, as one chain. Joining is where a matrix meets its
+    /// own inverse, so it folds (see [`Chain::new`]).
     #[must_use]
     pub fn then(mut self, next: Chain) -> Chain {
         self.ops.extend(next.ops);
-        self
+        Chain::new(self.ops)
     }
 
     /// Whether the whole chain can bake to the cheap factorised form (§5.1).
@@ -812,6 +834,42 @@ mod tests {
         assert!(matches!(back.ops.first(), Some(Op::Matrix(_))));
         let c = [0.3, 0.5, 0.7];
         assert!(close(back.eval(chain.eval(c)), c, 1e-4));
+    }
+
+    /// The regression for the one thing the legacy ACES fixture caught that no
+    /// hand-built row had: `ACES - ACEScc → ACES - ACEScg` resolves to the
+    /// AP1→AP0 matrix immediately followed by its own inverse, because both
+    /// spaces declare the same `to_reference` matrix. Applied one after the
+    /// other in single precision, an input whose red has clamped to the top of
+    /// the ACEScc table drags blue out to −246 and brings it back 2.3 × 10⁻⁵
+    /// wrong — five hundred times the row's own tolerance, on a chain that is
+    /// mathematically nothing at all. The fold, and the double-precision
+    /// coefficients it composes, are what make the pair cancel.
+    #[test]
+    fn a_matrix_meeting_its_own_inverse_leaves_nothing_behind() {
+        let m = Op::Matrix([
+            0.695452,
+            0.140679,
+            0.163869,
+            0.0, //
+            0.0447946,
+            0.859671,
+            0.0955343,
+            0.0, //
+            -0.00552588,
+            0.00402521,
+            1.0015,
+            0.0,
+        ]);
+        let chain = Chain::new(vec![m.clone(), m.inverted("test").expect("invertible")]);
+        assert_eq!(chain.ops.len(), 1, "the pair folded into one matrix");
+        // What the ACEScc curve hands the matrix at the failing probe.
+        let c = [65504.0, 28684.941, 0.045_310_933];
+        let got = chain.eval(c);
+        for k in 0..3 {
+            let off = (got[k] - c[k]).abs() / c[k].abs();
+            assert!(off < 1e-7, "channel {k}: {got:?} came back from {c:?}");
+        }
     }
 
     #[test]

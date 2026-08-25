@@ -349,7 +349,10 @@ pub fn tables(artefact: &Artefact) -> lumit_gpu::OcioTables {
                 .map_or(lumit_colour::bake::CURVE_SHAPER, |c| c.shaper);
             lumit_gpu::OcioTables::Curves {
                 pre: pre.map(|c| c.table.data.clone()),
-                matrix,
+                // Double on the way here so compositions cancel exactly; single
+                // from here on, because this is what the card multiplies and
+                // the CPU sampler rounds to the same twelve numbers (K-031).
+                matrix: lumit_colour::matrix::single(&matrix),
                 post: post.map(|c| c.table.data.clone()),
                 shaper: shaper(&curve_shaper),
             }
