@@ -3921,6 +3921,18 @@ void main() {
       final start =
           tester.getCenter(find.byKey(const ValueKey('tl-work-start')));
       final end = tester.getCenter(find.byKey(const ValueKey('tl-work-end')));
+      // The lane ground's wash, which must follow the hand even though the
+      // document does not — it reads the panel's one span, so it stands for
+      // the graph highlight and the snap targets too (owner, 2026-08-25:
+      // the highlight sat still until the release).
+      double laneWashEnd() => tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((w) => w.painter)
+          .whereType<WorkAreaGroundPainter>()
+          .first
+          .endX!;
+      final washBefore = laneWashEnd();
+
       final gesture = await tester.startGesture(end);
       await tester.pump();
       // Cross a good stretch of the span in steps, as a hand does.
@@ -3931,6 +3943,8 @@ void main() {
       }
       expect(workAreaFrames(p.comp), equals(before),
           reason: 'mid-drag, the document has not been written');
+      expect(laneWashEnd(), lessThan(washBefore),
+          reason: 'mid-drag, the lane highlight is already at the staged span');
 
       await gesture.up();
       await tester.pumpAndSettle();
@@ -4357,7 +4371,8 @@ void main() {
 
       expect(cell(solid), findsOneWidget, reason: 'a solid can become one');
       expect(cell(adjustment), findsOneWidget, reason: 'and so can this one');
-      expect(cell(text), findsOneWidget, reason: 'text draws, so text takes it');
+      expect(cell(text), findsOneWidget,
+          reason: 'text draws, so text takes it');
       expect(cell(hidden), findsOneWidget,
           reason: 'a hidden layer is still a layer that draws');
       expect(cell(camera), findsNothing, reason: 'a camera shows nothing');

@@ -1133,6 +1133,12 @@ class TimelineRuler extends StatefulWidget {
   /// is a per-rebuild cost on a panel that rebuilds a lot (docs/13).
   final ({int start, int end, bool whole}) work;
 
+  /// The staged span while a work-area edge is mid-drag, null once it is
+  /// over. The document hears nothing until the pointer lifts, so without
+  /// this the panel's lane and graph highlights sit still until the release
+  /// while the ruler's own band moves (owner, 2026-08-25).
+  final ValueChanged<({int start, int end, bool whole})?>? onWorkPreview;
+
   /// A marker was moved, renamed or removed on the ruler (K-254) — the ruler
   /// has already written it to the document, and this is the panel being told
   /// so the rest of it redraws. Null in a ruler with no markers to edit.
@@ -1152,6 +1158,7 @@ class TimelineRuler extends StatefulWidget {
     required this.onSeek,
     required this.work,
     this.onWorkArea,
+    this.onWorkPreview,
     this.onMarkersChanged,
     this.cache,
     this.snapTargets = const [],
@@ -1308,6 +1315,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
       _dragFrame = null;
       _caught = null;
     });
+    widget.onWorkPreview?.call(null);
   }
 
   /// The drag ended: write where the flag has been sitting, once.
@@ -1500,6 +1508,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                                       ? SnapKind.workAreaStart
                                       : SnapKind.workAreaEnd));
                         });
+                        widget.onWorkPreview?.call(_work);
                       },
                       onHorizontalDragEnd: (_) {
                         final commit = _escape.end();
@@ -1508,6 +1517,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
                           _dragFrame = null;
                           _caught = null;
                         });
+                        widget.onWorkPreview?.call(null);
                         if (frame == null || !commit) return;
                         // A refusal is not an exception for a drag to carry:
                         // a degenerate comp (no frames to work on) has no

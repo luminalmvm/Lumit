@@ -919,6 +919,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The work area, held between document revisions — see the note in [_body].
   ({int start, int end, bool whole})? _workArea;
+
+  /// The ruler's staged span while a work-area edge is mid-drag: substituted
+  /// for the document's below, so the lane and graph highlights move with the
+  /// hand while the write still lands once, on release.
+  ({int start, int end, bool whole})? _workPreview;
   BigInt? _workRevision;
   CompositionReference? _workComp;
 
@@ -2941,7 +2946,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       _workComp = comp;
       _workArea = workAreaFrames(comp);
     }
-    final work = _workArea!;
+    final work = _workPreview ?? _workArea!;
     // The block heights, as a plain list. Still needed even though the rows
     // now carry their own height: a drag measures its travel against the
     // *stack* ([layerDragTarget]), a drop reads a slot out of it
@@ -3459,6 +3464,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 comp.setWorkArea(span: span);
                                 setState(() {});
                               },
+                              onWorkPreview: (span) =>
+                                  setState(() => _workPreview = span),
                               onMarkersChanged: () => setState(() {}),
                               // The graph shares the ruler, so it shares the
                               // ruler's snapping (docs/07 §4.5).
@@ -3665,6 +3672,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       onEase: _openEasePopover,
                       onDeselectAll: () => _deselectAll(ui),
                       work: work,
+                      onWorkPreview: (span) =>
+                          setState(() => _workPreview = span),
                       onKeysSelected: _onLaneKeysSelected,
                       onKeyMenu: _laneKeyMenu,
                       onWheel: (e, x) => _wheel(e, x, axis),
@@ -8129,6 +8138,10 @@ class _LayerArea extends StatelessWidget {
   /// The work area in frames, read once by the panel (K-203).
   final ({int start, int end, bool whole}) work;
 
+  /// The ruler's mid-drag span, handed straight up to the panel — see
+  /// `_workPreview` there.
+  final ValueChanged<({int start, int end, bool whole})?> onWorkPreview;
+
   /// The layer drag in flight, and the block heights it slides by — the
   /// outline makes the gesture, and these are what let this side move with it
   /// rather than sit still while its layers are reordered (K-208).
@@ -8189,6 +8202,7 @@ class _LayerArea extends StatelessWidget {
     required this.onEase,
     required this.onDeselectAll,
     required this.work,
+    required this.onWorkPreview,
     required this.layerDrag,
     required this.blockHeights,
     required this.fpsNum,
@@ -8405,6 +8419,7 @@ class _LayerArea extends StatelessWidget {
                     comp.setWorkArea(span: span);
                     onChanged();
                   },
+                  onWorkPreview: onWorkPreview,
                   onMarkersChanged: onChanged,
                   // The work-area edges and the markers snap to the same
                   // shared list the keys and the bars do (docs/07 §4.5).
