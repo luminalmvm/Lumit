@@ -214,6 +214,12 @@ class TransformRowFrb extends StatefulWidget {
   /// axes left-aligned in the rest. Ignored when [valueColumn] is set.
   final bool twoColumn;
 
+  /// The group this row came out of, drawn before its name on a **flat
+  /// sheet** (K-499): the dope sheet lists `Transform · Position`, where the
+  /// fold-out draws `Position` under the Transform twirl. Null everywhere the
+  /// row sits inside its own group.
+  final String? nameGroup;
+
   const TransformRowFrb({
     super.key,
     required this.comp,
@@ -230,6 +236,7 @@ class TransformRowFrb extends StatefulWidget {
     this.onLabelTap,
     this.graphColours,
     this.twoColumn = false,
+    this.nameGroup,
   });
 
   @override
@@ -336,6 +343,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       onTap: widget.onLabelTap,
       child: Row(
         children: [
+          ...flatGroupPrefix(t, widget.nameGroup),
           Flexible(
             child: Text(
               group.label,

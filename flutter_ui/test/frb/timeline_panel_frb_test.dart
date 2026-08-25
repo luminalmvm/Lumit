@@ -5577,9 +5577,14 @@ void main() {
       expect(find.text('Transform'), findsOneWidget,
           reason: 'the group the property came out of names it');
       expect(find.text('Opacity'), findsOneWidget);
-      // At frame 0 the curve reads 0, written the way the sheet writes whole
-      // numbers.
-      expect(find.text('0'), findsWidgets);
+      // At frame 0 the curve reads 0 — in a **well** now (K-499), so it reads
+      // with the axis's own suffix exactly as the Layers fold row's does.
+      expect(
+          find.descendant(
+              of: find.byKey(ValueKey<String>(
+                  'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
+              matching: find.text('0%')),
+          findsOneWidget);
 
       // And a lane beside it, at the same path Layers mode uses.
       expect(
@@ -5749,11 +5754,18 @@ void main() {
           tester.getRect(find.byKey(const ValueKey('tl-keys-filters'))).height,
           closeTo(d.secondaryRow, 0.5));
 
-      // The property's value is mono at 10 in `animated`, and the layer's
-      // count mono at 9 muted — the drawing's own two sizes.
-      final value =
-          tester.renderObject<RenderParagraph>(find.text('0').last).text.style!;
-      expect(value.fontSize, 10);
+      // The property's value is the fold row's **well** (K-499), so its
+      // metrics are the well's: mono at [wellTextSize], and `animated`
+      // because the property is keyed. The count stays mono at 9 muted — the
+      // drawing's own size for a count.
+      final value = tester
+          .renderObject<RenderParagraph>(find.descendant(
+              of: find.byKey(ValueKey<String>(
+                  'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
+              matching: find.text('0%')))
+          .text
+          .style!;
+      expect(value.fontSize, wellTextSize);
       expect(value.color, LumitTheme.dark().animated);
       final count = tester
           .renderObject<RenderParagraph>(find.text('1 property'))
@@ -5770,9 +5782,92 @@ void main() {
       // property row starts 30 in, clear of the twirl and the colour dot.
       expect(laneKeyHalf * 2, 11);
       expect(keysPropertyIndent, 30);
-      final group = tester.getRect(find.text('Transform'));
-      expect(group.left - prop.left, closeTo(keysPropertyIndent, 0.5),
-          reason: 'the group name starts at the drawing\'s indent');
+      // The indent is where the **row** starts, and since K-499 what starts
+      // there is the stopwatch — the drawing's 30 measured to the first thing
+      // on the row, exactly as a Layers fold row measures to its own.
+      final stopwatch = tester
+          .getRect(find.byKey(const ValueKey('kf-stopwatch-tl-tf-opacity')));
+      expect(stopwatch.left - prop.left, closeTo(keysPropertyIndent, 0.5),
+          reason: 'the row starts at the drawing\'s indent');
+      expect(tester.getRect(find.text('Transform')).left,
+          greaterThan(stopwatch.right),
+          reason: 'and the name follows the controls, as the fold row lays '
+              'them out');
+    });
+
+    /// **K-499: a Keys row *is* a Layers fold row.** The owner's finding was
+    /// that the dope sheet's rows had gone read-only — a name and a number
+    /// where the fold-out offers a stopwatch, a navigator and a well. The
+    /// anatomy, pinned: the layer number on the layer's row, and on the
+    /// property's the four controls in the fold row's own order.
+    testWidgets('a Keys property row carries the fold row\'s anatomy',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      // The layer number, back in the sheet (K-461's column).
+      expect(
+          find.descendant(
+              of: find.byKey(
+                  ValueKey<String>('tl-keys-row-${layer.internallayerId}')),
+              matching: find.text('1')),
+          findsOneWidget,
+          reason: 'the layer says which layer it is');
+
+      final row = find.byKey(ValueKey<String>(
+          'tl-keys-prop-${layer.internallayerId}/transform/opacity'));
+      for (final control in [
+        'kf-stopwatch-tl-tf-opacity',
+        'kf-prev-tl-tf-opacity',
+        'kf-toggle-tl-tf-opacity',
+        'kf-next-tl-tf-opacity',
+        'tl-tf-opacity',
+      ]) {
+        expect(
+            find.descendant(
+                of: row, matching: find.byKey(ValueKey<String>(control))),
+            findsOneWidget,
+            reason:
+                '$control belongs to a fold row, so it belongs to this one');
+      }
+
+      // The group still names the row, with the drawing's middle dot.
+      expect(find.text('Transform'), findsOneWidget);
+      expect(find.text('·'), findsOneWidget);
+    });
+
+    /// The open question §3.2 left for this package, answered by test rather
+    /// than by ruling: **the Keys wells write through K-189's playhead edit
+    /// rule**, because they are the fold-out's own wells. A typed value lands
+    /// on the key under the playhead — it does not flatten the curve, and it
+    /// does not plant a second key where one already sits.
+    testWidgets('a Keys value well writes into the key at the playhead',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p);
+      await mount(tester, p);
+      await openKeys(tester, layer);
+
+      List<BridgeKeyframe> keys() =>
+          (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
+      expect(keys().length, 2);
+
+      final well = find.byKey(const ValueKey('tl-tf-opacity'));
+      await tester.tap(well);
+      await tester.pump();
+      await tester.enterText(
+          find.descendant(of: well, matching: find.byType(EditableText)), '42');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(keys().length, 2,
+          reason: 'the curve is neither flattened nor added to');
+      expect(keys().first.value, 42,
+          reason: 'the playhead sits on the first key, so that is the one the '
+              'well wrote (K-189)');
+      expect(keys().last.value, 60, reason: 'and the other is untouched');
     });
 
     /// Interpolation is drawn as shape (§6.2): diamond linear, square hold,

@@ -158,35 +158,81 @@ and §12A.1a's bullet. The exact anatomy, recorded:
   mode) · label dot · name · `n properties` count hard right. Raised on `surface_2`,
   selection fill when picked — as built otherwise.
 - **Property row**: **stopwatch** (square under Sharp, the shared
-  `keyframe_controls_frb.dart` control) · **◄ ◆ ► navigator** (drawn once animating, the
-  reserved slot rule of the effect controls) · the name as the drawing writes it —
-  `Group · Name`, group muted, a middle dot between — · the **value in an editable well**,
-  scrub-drag and click-to-type, the same `transform_rows_frb.dart` /
-  `effect_param_row_frb.dart` machinery the Layers fold-out and Effect controls share, so
-  a parameter behaves the same wherever it is shown (docs/07 §4.3's one-implementation
-  rule). The resting value text keeps `animated` — on this sheet every listed row is
-  keyed — and the unit stays outside the well.
-- The property-name click follows §2.1 (selects the property and its keys); the value
-  well and stopwatch never re-aim the selection (K-196's rule, unchanged).
+  `keyframe_controls_frb.dart` control) · **◄ ◆ ► navigator** (drawn once animating) ·
+  the name as the drawing writes it — `Group · Name`, group muted, a middle dot between —
+  · the **value in an editable well**, scrub-drag and click-to-type, the same
+  `transform_rows_frb.dart` / `effect_param_row_frb.dart` machinery the Layers fold-out
+  and Effect controls share, so a parameter behaves the same wherever it is shown
+  (docs/07 §4.3's one-implementation rule). The resting value text keeps `animated` — on
+  this sheet every listed row is keyed.
+- **Built in TI-4 by making a Keys row *be* a Layers fold row**, not by drawing a second
+  one: `_KeysOutline` lists `_FoldRow` itself, which is what makes "the rows match" a
+  fact rather than a resemblance to maintain. Three things the note asked for bent to
+  that, and the fold row won each time, because a second answer is the thing K-499 was
+  ruling against:
+  - the **navigator has no reserved slot** — it draws where the fold-out's loose gutter
+    puts it, once the row is animating. The reserved slot is the Effect controls' fixed
+    columns (K-443); the fold-out is not measured in them, and on this sheet the slot is
+    never empty anyway (Animated, the default, lists only keyed rows).
+  - the **unit rides where its own row puts it**: inside the well as a suffix on a
+    transform axis (`100%`), outside it as a rider on an effect parameter. That is one
+    parameter behaving the same wherever it is shown, which is the rule that matters.
+  - `keysPropertyIndent` (the drawing's 30) now measures to the **stopwatch**, the first
+    thing on the row, as a Layers fold row's indent measures to its own.
+  Two rows gained the name gesture they never had — a mask's value row and a Flow row —
+  so §2.1's property-name rule is true of every row the sheet can list, and the group
+  prefix is one shared `flatGroupPrefix` inside each row's own label.
+- The property-name click follows §2.1 (selects the property **and its keys**); the value
+  well and stopwatch pick the row without taking its keys — K-334's press-selects meeting
+  K-196's rule that a control which edits does not re-aim the *key* selection.
 - The rows stay flat (no group headings) and the filters row stays as built.
 
 ### 3.3 Graph mode
 
-The Graph outline is **not built to its drawing** (today it shows the full Layers columns;
-timeline_panel_frb.dart ~2983 chooses `_Outline` whenever `_keys` is false). Per K-442,
-§12A.2 and `GraphMode.dc.html` it must become:
+Built in TI-6. Per K-442, §12A.2 and `GraphMode.dc.html` the Graph outline is:
 
 - The **filtered animated list**: Show — Animated (default) / All, no Selected; one row
   per animated property, carrying an **include-in-graph tick** and a **swatch in the
-  curve's colour**, the name (`Position · X` style, the axis split out), and the value at
-  the playhead — `animated` when the row is shown in the graph, muted when unticked.
-- A **Normalise** checkbox at the row's far right of the filter row (drawn; behaviour:
-  each shown curve scaled to its own min–max so unlike units share the pane — a view
-  setting, never data).
+  curve's colour**, the name, and the value at the playhead — `animated` when the row is
+  shown in the graph, muted when unticked. It is the same flattened sheet Keys mode
+  draws (`keysLayerRows`), under the graph's own Show filter, so a property has one row
+  model wherever it is listed; the twirl set is Keys mode's own `_keysShut` for the same
+  reason (`_flatSheet`), and a layer opened on one sheet is open on the other.
+- **The tick is the selection.** A ticked property is a property in `_selectedProperties`
+  — the set the Layers outline picks with and the set `graphChannels` reads — so there is
+  one answer anywhere in the panel to "which curves are up". Ticking is `Ctrl`-clicking a
+  name without the modifier; clicking the **name** selects that property alone and takes
+  its keys with it (§2.1). A tick never carries the row's keys: it says what to look at,
+  and selecting keyframes is the name's job (K-196).
+- **Two departures from the drawing, deliberate.** The drawing splits a two-axis property
+  into `Position · X` and `Position · Y` rows, each separately ticked; the row here is the
+  **property**, because the tick's granularity is the property — a per-axis tick would
+  need a second membership set beside the selection, and one selection is worth more than
+  one row per curve. A multi-axis row draws **one swatch per axis** instead, exactly as
+  the Layers fold row already names both of its curves. And an **unticked** row's swatch
+  is muted rather than coloured: an unticked property has no curve, so it has no colour
+  to promise.
+- A **Normalise** checkbox at the far right of the filter row. **Its scaling, decided
+  here** (the open question closed): each shown curve is fitted to **its own min–max**,
+  not to a shared symmetric range — the point is that a rotation in degrees and an
+  opacity in per cent both fill the height. It is implemented as a **range per channel**
+  (`GraphEditorFrbState.rangeOf`) rather than as a scaling of values, so every coordinate
+  in the pane stays in the property's own units and a pointer's y still comes back as a
+  real value: a drag under Normalise writes exactly what it would write without it. The
+  shared range — the grid and the gutter's numbers — becomes 0–100 read as per cent,
+  because with unlike units on one pane there is no single value axis left to label. Each
+  channel's own range is fitted from the **document's** keys, not the shown ones, so a
+  normalised curve does not rescale under its own drag. A view setting, never data.
 - A **Key readout row** pinned at the outline's foot while exactly one key is selected:
   `KEY f<frame> <value><unit>` then `In [well] % Out [well] %` — the influence wells
-  editable, committing through the same tangent write the handles use.
-- A setting restores an outline identical to Layers mode (K-442, unbuilt).
+  editable, committing through the same tangent write the handles use (a side becomes a
+  bezier at its current speed and the influence asked for). Two or more selected keys are
+  a block, whose badge is the readout, and the row draws nothing at all rather than an
+  empty strip.
+- A setting restores an outline identical to Layers mode (K-442): Settings ▸ Interface ▸
+  Panels ▸ *Graph mode keeps the Layers outline*, off by default. It is also the only way
+  to reach a **value well** while the graph is up — the graph's own outline reads values
+  rather than editing them — which is what the K-333/K-334/K-336 regression tests use.
 
 ---
 
@@ -367,8 +413,12 @@ middle of **every** key, same-shape pairs included.
   ease (the study's explicit bar). This needs an engine/bridge seam (a tangent-mode field
   on `BridgeSideInterp`'s bezier arm or a sibling), designed inside its work package
   under docs/impl/keyframe-eval.md's maths.
-- **Value labels move to a fixed right-hand gutter** (§12A.2; the drawing's 34px strip on
-  a translucent ground). Today `_GraphPainter` pins them to the viewport's left edge.
+- **Value labels live in a fixed right-hand gutter** (§12A.2; the drawing's 34px strip on
+  a translucent ground — `graphGutterWidth`). Pinned to the **viewport's** right edge, not
+  the canvas's: the pane is as wide as the whole composition inside the Timeline's
+  horizontal scroll view, so a gutter fixed to the canvas would be off screen at every
+  zoom but one. Drawn last, over the curves, so a curve can be seen running under its own
+  numbers. Built in TI-6 (it used to pin them to the viewport's *left* edge).
 - Curves already run edge to edge; the ruler, work area, cache bar and playhead are shared
   (shipped). Zoom/pan stays: wheel pans value (auto-fit off), `Alt`+wheel zooms value
   about the pointer, `Ctrl`/`Shift`+wheel keep the time bindings, `F` fits (shipped).
@@ -430,10 +480,10 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 
 7. **[missing] Keys rows' anatomy** — layer number, stopwatch, navigator, value wells
    (K-499; `_KeysOutline` :6331, `_KeysLayerRow` :6436). Source: owner finding a. (§3.2)
-8. **[missing] Graph mode's outline** — filtered colour-ticked list, Normalise, the Key
-   readout row with In/Out % wells, the Layers-identical-outline setting
-   (timeline_panel_frb.dart ~2983 always takes `_Outline`). Source: K-442, §12A.2,
-   GraphMode drawing. (§3.3)
+   — **landed, TI-4.**
+8. ~~**[missing] Graph mode's outline**~~ — **landed, TI-6**: the filtered colour-ticked
+   list, Normalise, the Key readout row with In/Out % wells and the
+   Layers-identical-outline setting. Source: K-442, §12A.2, GraphMode drawing. (§3.3)
 9. **[missing] Dashed handle lines, hollow endpoint rings** (drawing). (§6.1)
 10. **[missing] Value hint pill** beside a selected/dragged graph key, and the lane
     drag's `f · value` badge (drawing; study §3 "live readout"). (§4.2, §6.2)
@@ -513,8 +563,9 @@ anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
 - **TI-3 — The seamless key mark** (§5; bug 2). `keyMarkPath`, the one-`drawPath`
   painter, the centre-column raster test and mixed-pair golden. Files:
   `timeline_panel_frb.dart` (painter + `keyHalfPath` oracle), a paint test.
-- **TI-4 — Keys rows to K-499** (§3.2; gap 7). Layer number, stopwatch, navigator and
-  value wells on the Keys property rows via the shared row machinery. Files:
+- **TI-4 — Keys rows to K-499** (§3.2; gap 7). **Landed.** Layer number, stopwatch,
+  navigator and value wells on the Keys property rows via the shared row machinery —
+  by listing `_FoldRow` itself. Files:
   `timeline_panel_frb.dart` (`_KeysOutline`, `_KeysLayerRow`),
   `keyframe_controls_frb.dart` reuse; widget tests pinning the anatomy.
 - **TI-5 — Graph handles and drag geometry** (§6.1–6.2; bugs 3, 6; gaps 9–10). Dashed
@@ -522,10 +573,11 @@ anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
   handle-travel regression test, selected key in `text_primary` one step larger, the
   value hint pill (graph and lane badge), hover/cursor on keys and rings. Files:
   `graph_editor_frb.dart`, `timeline_panel_frb.dart` (lane badge).
-- **TI-6 — Graph mode's drawn surface** (§3.3, §6.3; gaps 8, 22). The filtered
-  colour-ticked outline with Normalise and the Key readout row (In/Out wells), the
-  right-hand value gutter, the Layers-identical-outline setting. Files:
-  `timeline_panel_frb.dart`, `graph_editor_frb.dart`, settings page, arb keys.
+- **TI-6 — Graph mode's drawn surface** (§3.3, §6.3; gaps 8, 22). **Landed.** The
+  filtered colour-ticked outline with Normalise and the Key readout row (In/Out wells),
+  the right-hand value gutter, the Layers-identical-outline setting. Files:
+  `timeline_panel_frb.dart`, `graph_editor_frb.dart`, `settings.dart`,
+  `settings_window_frb.dart`, arb keys.
 - **TI-7 — Graph transform box and numeric entry** (§6.2; gaps 12–13). The selection box
   with edge/corner scaling and `Ctrl` taper, sharing TI-2's escape/undo/snap behaviour;
   the double-click exact-fields editor. Files: `graph_editor_frb.dart`, `key_block.dart`
@@ -554,7 +606,9 @@ TI-4 and TI-6 are independent of each other.
   `Ctrl`+click stay the only planting gesture (docs/07 §4.3's, shipped)? Leaning: keep
   `Ctrl`+click only, since double-click is being given to numeric entry on a key and two
   double-click meanings a few pixels apart misfire.
-- Normalise's exact scaling (per-curve min–max vs shared symmetric range) — decide inside
-  TI-6 with the drawing open.
-- Whether the Keys-mode value wells write through the playhead edit rule K-189 unchanged
-  (they should: same machinery) — confirm with a test in TI-4 rather than a ruling.
+- ~~Whether the Keys-mode value wells write through the playhead edit rule K-189
+  unchanged~~ — **closed in TI-4, by test rather than by ruling.** They do, because they
+  are the fold-out's own wells: a typed value lands on the key under the playhead,
+  flattening nothing and planting nothing
+  (`timeline_panel_frb_test.dart`, "a Keys value well writes into the key at the
+  playhead").

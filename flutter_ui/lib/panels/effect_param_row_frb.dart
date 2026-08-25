@@ -161,6 +161,12 @@ class EffectParamRowFrb extends StatelessWidget {
   /// The parameter's graph line colour while it is selected.
   final Color? graphColour;
 
+  /// The group this row came out of, drawn before its name on a **flat
+  /// sheet** (K-499): the dope sheet lists `Glow · Intensity`, where the
+  /// fold-out draws `Intensity` under the effect's own heading. Null wherever
+  /// the row sits inside that heading.
+  final String? nameGroup;
+
   /// The rest of this effect's parameter values, by id — what a control needs
   /// when its behaviour depends on a *sibling*. The depth-of-field focal point
   /// is the case that asks for it: its dropper reads the layer named by the
@@ -220,6 +226,7 @@ class EffectParamRowFrb extends StatelessWidget {
     this.riders = const [],
     this.onAction,
     this.driven,
+    this.nameGroup,
   });
 
   @override
@@ -262,14 +269,20 @@ class EffectParamRowFrb extends StatelessWidget {
     final labelStyle = !enabled
         ? t.body.copyWith(color: t.textDisabled)
         : (graphColour == null ? t.body : t.body.copyWith(color: graphColour));
+    final labelText = Text(
+      engineLabel(param.label),
+      style: labelStyle,
+      overflow: TextOverflow.ellipsis,
+    );
     final label = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onLabelTap,
-      child: Text(
-        engineLabel(param.label),
-        style: labelStyle,
-        overflow: TextOverflow.ellipsis,
-      ),
+      child: nameGroup == null
+          ? labelText
+          : Row(children: [
+              ...flatGroupPrefix(t, nameGroup),
+              Flexible(child: labelText),
+            ]),
     );
 
     // The unit goes on the control itself, inside the riders: `100 %` then the

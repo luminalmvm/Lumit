@@ -41,6 +41,7 @@ import '../icons/lumit_icon.dart';
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
 
@@ -85,6 +86,27 @@ BridgeScalar scalarWithValueAt(
   }
   return BridgeScalar.keyframed(next);
 }
+
+/// A property's name as a **flat sheet** writes it (K-499, §3.2 of
+/// `docs/impl/timeline-interaction.md`): the group it came out of, muted, a
+/// middle dot, then the property's own name — `Transform · Opacity`.
+///
+/// Returned as the widgets that go *before* the name **inside a row's own
+/// label**, rather than as a row of its own, so a property is one row wherever
+/// it is listed. The fold-out draws no prefix — its group is the twirl it sits
+/// under — and the dope sheet, which has no twirls to sit under, draws one.
+List<Widget> flatGroupPrefix(LumitTheme t, String? group) => group == null
+    ? const <Widget>[]
+    : [
+        Flexible(
+          child: Text(group,
+              style: t.body.copyWith(color: t.textMuted),
+              overflow: TextOverflow.ellipsis),
+        ),
+        const SizedBox(width: 6),
+        Text('·', style: t.body.copyWith(color: t.textDisabled)),
+        const SizedBox(width: 6),
+      ];
 
 /// A value field for a scalar that is **keyframed**: it shows the value under
 /// the playhead and an edit writes the key sitting there (docs/07 §4.3).

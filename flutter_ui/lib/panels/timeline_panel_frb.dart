@@ -718,9 +718,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// mode, where shut-by-default is the right answer.
   final Set<String> _keysShut = {};
 
+  /// Whether the view now showing is a **flat sheet** of property rows — Keys
+  /// mode, and Graph mode's own filtered outline (§3.3).
+  ///
+  /// The two share one twirl set for the reason Keys mode has its own at all:
+  /// a sheet whose point is its property rows opens with every layer down, and
+  /// a layer opened on one of these sheets should be open on the other. Layers
+  /// mode keeps [_open], where shut-by-default is the right answer. With the
+  /// *outline identical to Layers mode* setting on (K-442), Graph mode is not
+  /// a flat sheet at all and goes back to Layers mode's set.
+  bool get _flatSheet => _keys || (_graph && !_layersOutlineInGraph);
+
   /// Whether [id]'s twirl is down in the mode now showing.
   bool _isOpen(String id) =>
-      _keys ? !_keysShut.contains(id) : _open.contains(id);
+      _flatSheet ? !_keysShut.contains(id) : _open.contains(id);
 
   /// Open or shut one twirl in the mode now showing. Layers mode's paths reach
   /// below the layer (`<layer>/transform` and the rest); Keys mode's twirls are
@@ -729,7 +740,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Exactly this path: shutting a group in Layers mode leaves what was open
   /// *inside* it remembered, so twirling it back down finds it as it was.
   void _setOpen(String path, bool open) {
-    if (_keys) {
+    if (_flatSheet) {
       if (open) {
         _keysShut.remove(path);
       } else {
@@ -748,7 +759,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// before it opens the rows it names, so a reveal shows what it says rather
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
-    if (_keys) {
+    if (_flatSheet) {
       _keysShut.add(id);
       return;
     }
@@ -756,7 +767,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   }
 
   /// Which layers' twirls are down, as [layerRows] and [keysLayerRows] want it.
-  Set<String> _openSet(List<BridgeLayerEntry> layers) => _keys
+  Set<String> _openSet(List<BridgeLayerEntry> layers) => _flatSheet
       ? {
           for (final e in layers)
             if (!_keysShut.contains(e.layer.internallayerId.toString()))
@@ -1342,6 +1353,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _publishPropertySelection();
       });
 
+  /// The graph outline's **tick** (§3.3): put this property's curves on the
+  /// pane, or take them off, leaving every other row where it is.
+  ///
+  /// Deliberately the `Ctrl`-click of [_selectProperty] without the modifier
+  /// — the tick *is* that gesture given a target of its own, so the two cannot
+  /// come to different answers about what is on the pane. It does not carry
+  /// the row's keys: a tick says which curve to look at, and selecting its
+  /// keyframes is what clicking the name is for (K-196's rule, that a control
+  /// which edits does not re-aim the selection).
+  void _toggleInGraph(String path) {
+    setState(() {
+      if (!_selectedProperties.remove(path)) {
+        _selectedProperties.add(path);
+        _highlighted = layerIdOfPath(path) ?? _highlighted;
+      }
+      _graphKeySelection.clear();
+    });
+    _publishPropertySelection();
+  }
+
   /// The other direction: an effect picked in the Effect controls panel lights
   /// its row here (K-300). A no-op when the selection is already what this
   /// panel published, which is what keeps the two from bouncing.
@@ -1507,6 +1538,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// *shows*; nothing here touches the document.
   bool _keysShowAll = false;
   bool _keysSelectedOnly = false;
+
+  /// Graph mode's own **Show** filter (§3.3, §12A.2): **Animated** by default,
+  /// **All** to list every property a layer has. There is deliberately no
+  /// *Selected* here — the graph's outline *is* how properties are chosen, so
+  /// a filter that hid the unchosen ones would hide the only way back.
+  bool _graphShowAll = false;
+
+  /// Graph mode's **Normalise** (§3.3): each shown curve scaled to its own
+  /// min–max, so unlike units share the pane. A view setting, never data.
+  bool _normalise = false;
+
+  /// Settings ▸ Interface ▸ Panels ▸ *Graph mode keeps the Layers outline*
+  /// (K-442), read once per build so the twirl helpers can answer without a
+  /// `BuildContext`.
+  bool _layersOutlineInGraph = false;
 
   /// Switch views. The easing claim follows, because which panel owns the
   /// selected keys' easing depends on which view is up.
@@ -2778,6 +2824,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   Widget build(BuildContext context) {
     final ui = Provider.of<LumitUiState>(context);
     _bindTools(ui);
+    // Read once, into a field, because [_flatSheet] is asked from callbacks
+    // that have no `BuildContext` — and it can only change while this panel is
+    // rebuilding anyway.
+    _layersOutlineInGraph = ui.workspace.interface.graphOutlineLikeLayers;
     final comp = ui.selectedComp;
     if (comp == null) {
       // Footage dropped with nothing open offers to make the composition it
@@ -2859,9 +2909,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // sheet's answer: the properties flattened out of the fold-out, filtered
     // to what is animated, and — with `Selected only` on — only the layers in
     // hand (K-455).
-    final rows = _keys
+    //
+    // **Graph mode asks it too** (§3.3): its outline is the filtered animated
+    // list, which is the same flattened sheet under a different filter — and
+    // one row per property is what a tick can be put beside. With the
+    // *identical outline* setting on (K-442) it takes the Layers answer
+    // instead, which is the whole point of the setting.
+    final rows = _flatSheet
         ? keysLayerRows(
-            layers: _keysSelectedOnly
+            layers: _keys && _keysSelectedOnly
                 ? [
                     for (final e in layers)
                       if (ui.selectedLayerIds.contains(e.layer.internallayerId))
@@ -2873,7 +2929,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             // nothing and takes no marquee.
             open: _openSet(layers),
             rowHeight: t.density.laneRow,
-            animatedOnly: !_keysShowAll,
+            animatedOnly: _keys ? !_keysShowAll : !_graphShowAll,
             hasAudio: _hasAudio,
             flowParams: _flowParams,
             volumeDb: _volumeDb)
@@ -3098,6 +3154,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             matteToggles: anyMatte,
                             graphColours: graphColours,
                             outlineViewport: outlineViewport,
+                            channels: channels,
                             outlineWidth: outlineWidth),
                         Expanded(
                           // **Only this half rebuilds when the zoom moves**
@@ -3177,6 +3234,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     /// answer, so they line up either way.
     required bool matteToggles,
     required Map<String, List<Color>> graphColours,
+
+    /// The curves on the pane, so the Key readout row can name the one key in
+    /// hand (§3.3).
+    required List<GraphChannel> channels,
     required double outlineViewport,
     required double outlineWidth,
   }) {
@@ -3240,6 +3301,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 onSelectedOnly: (v) =>
                                     setState(() => _keysSelectedOnly = v),
                               )
+                            // Graph mode takes the same row under its own
+                            // filter, with Normalise where the sheet's scope
+                            // words are (§3.3).
+                            else if (_graph && !_layersOutlineInGraph)
+                              _KeysFilterRow(
+                                showAll: _graphShowAll,
+                                selectedOnly: false,
+                                onShowAll: (v) =>
+                                    setState(() => _graphShowAll = v),
+                                onSelectedOnly: (_) {},
+                                normalise: _normalise,
+                                onNormalise: (v) =>
+                                    setState(() => _normalise = v),
+                              )
                             else
                               _ColumnHeader(
                                 order: groupOrder,
@@ -3268,46 +3343,70 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 onTap: () => _deselectAll(ui),
                                 child: SingleChildScrollView(
                                   controller: _vOutline,
-                                  child: _keys
-                                      ? _KeysOutline(
+                                  child: _graph && !_layersOutlineInGraph
+                                      ? _GraphOutline(
                                           rows: rows,
                                           comp: comp,
                                           selectedIds: ui.selectedLayerIds,
                                           selectedProperties:
                                               _selectedProperties,
+                                          graphColours: graphColours,
                                           highlighted: _highlighted,
                                           onToggle: _toggle,
                                           onSelectProperty: _selectProperty,
+                                          onToggleInGraph: _toggleInGraph,
                                           onSelect: (l) => _selectLayer(ui, l,
                                               among: layers),
                                           playheadFrame: ui.playheadFrame.value,
                                         )
-                                      : _Outline(
-                                          comp: comp,
-                                          rows: rows,
-                                          onOpenSequence: _toggleSequenceView,
-                                          layerDrag: _layerDrag,
-                                          renameRequest: _renameRequest,
-                                          blockHeights: blockHeights,
-                                          groupOrder: groupOrder,
-                                          widths: groupWidths,
-                                          matteToggles: matteToggles,
-                                          selectedIds: ui.selectedLayerIds,
-                                          highlighted: _highlighted,
-                                          selectedProperties:
-                                              _selectedProperties,
-                                          graphColours: graphColours,
-                                          onSelectProperty: _selectProperty,
-                                          onEditProperty: _selectOnEdit,
-                                          onToggle: _toggle,
-                                          playheadFrame: ui.playheadFrame.value,
-                                          onSeek: ui.scrubTo,
-                                          onSelect: (l) => _selectLayer(ui, l,
-                                              among: layers),
-                                          onHighlight: (id) =>
-                                              setState(() => _highlighted = id),
-                                          onChanged: ui.model.refresh,
-                                        ),
+                                      : _keys
+                                          ? _KeysOutline(
+                                              rows: rows,
+                                              comp: comp,
+                                              selectedIds: ui.selectedLayerIds,
+                                              selectedProperties:
+                                                  _selectedProperties,
+                                              highlighted: _highlighted,
+                                              onToggle: _toggle,
+                                              onSelectProperty: _selectProperty,
+                                              onEditProperty: _selectOnEdit,
+                                              onSelect: (l) => _selectLayer(
+                                                  ui, l,
+                                                  among: layers),
+                                              playheadFrame:
+                                                  ui.playheadFrame.value,
+                                              onSeek: ui.scrubTo,
+                                              onChanged: ui.model.refresh,
+                                            )
+                                          : _Outline(
+                                              comp: comp,
+                                              rows: rows,
+                                              onOpenSequence:
+                                                  _toggleSequenceView,
+                                              layerDrag: _layerDrag,
+                                              renameRequest: _renameRequest,
+                                              blockHeights: blockHeights,
+                                              groupOrder: groupOrder,
+                                              widths: groupWidths,
+                                              matteToggles: matteToggles,
+                                              selectedIds: ui.selectedLayerIds,
+                                              highlighted: _highlighted,
+                                              selectedProperties:
+                                                  _selectedProperties,
+                                              graphColours: graphColours,
+                                              onSelectProperty: _selectProperty,
+                                              onEditProperty: _selectOnEdit,
+                                              onToggle: _toggle,
+                                              playheadFrame:
+                                                  ui.playheadFrame.value,
+                                              onSeek: ui.scrubTo,
+                                              onSelect: (l) => _selectLayer(
+                                                  ui, l,
+                                                  among: layers),
+                                              onHighlight: (id) => setState(
+                                                  () => _highlighted = id),
+                                              onChanged: ui.model.refresh,
+                                            ),
                                 ),
                               ),
                             ),
@@ -3371,6 +3470,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               ),
             ],
           )),
+          // The Key readout row, while exactly one key is in hand (§3.3).
+          if (_graph && !_layersOutlineInGraph)
+            _KeyReadoutRow(
+              channels: channels,
+              selectedKeys: _graphKeySelection,
+              fps: ui.model.fps,
+              onChanged: ui.model.refresh,
+            ),
           // The outline's own end of the bottom bar: the column-group
           // toggles, where the lane side carries the zoom and the scrollbar
           // (K-448). The block was already reserved to keep the two halves the
@@ -3501,6 +3608,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     magnet: _magnet,
                                     lens: _graphLens,
                                     autoFit: _graphAutoFit,
+                                    normalise: _normalise,
                                     vegas: _vegas(context),
                                     penArmed:
                                         ui.tools.tool.group == ToolGroup.pen,
@@ -3799,7 +3907,20 @@ class _FoldRow extends StatelessWidget {
   /// curves still draw — but nothing on them can be touched.
   final bool locked;
 
+  /// The group this row came out of, or null (K-499, §3.2). Set only by the
+  /// **flat sheet** — Keys mode lists a layer's properties with no twirls
+  /// above them, so each row has to say where it came from: the row draws
+  /// `Transform · Opacity` instead of `Opacity`.
+  final String? nameGroup;
+
+  /// Draw the row at [baseIndent] flat, rather than stepping in by its depth.
+  /// The dope sheet's rows are all one level — an effect's parameter is beside
+  /// a transform property, not inside anything — so nesting them would indent
+  /// by a hierarchy the sheet does not draw.
+  final bool flat;
+
   const _FoldRow({
+    super.key,
     required this.comp,
     required this.layer,
     required this.row,
@@ -3816,13 +3937,17 @@ class _FoldRow extends StatelessWidget {
     required this.onToggle,
     required this.onChanged,
     required this.locked,
+    this.nameGroup,
+    this.flat = false,
   });
 
   @override
   Widget build(BuildContext context) {
     // Just inside the layer's twirl, then one step per level, so a parameter
-    // sits under its effect and an effect under Effects.
-    final indent = baseIndent + 8.0 + (row.depth - 1) * 12.0;
+    // sits under its effect and an effect under Effects — unless the sheet is
+    // flat, where every row starts in the same column.
+    final indent =
+        flat ? baseIndent : baseIndent + 8.0 + (row.depth - 1) * 12.0;
 
     // No per-row change listener: the whole panel repaints from the read model
     // when anything commits (K-184), so the numbers shown are the document's.
@@ -4027,6 +4152,7 @@ class _FoldRow extends StatelessWidget {
           ),
         ),
       FoldTransformRow(:final group, :final transform) => TransformRowFrb(
+          nameGroup: nameGroup,
           comp: comp,
           layer: layer,
           transform: transform,
@@ -4044,6 +4170,7 @@ class _FoldRow extends StatelessWidget {
           graphColours: graphColours[path],
         ),
       FoldEffectParamRow() => _TimelineParamRow(
+          nameGroup: nameGroup,
           comp: comp,
           layer: layer,
           row: row as FoldEffectParamRow,
@@ -4058,6 +4185,8 @@ class _FoldRow extends StatelessWidget {
           graphColour: graphColours[path]?.firstOrNull,
         ),
       FoldFlowRow() => _FlowRow(
+          nameGroup: nameGroup,
+          onLabelTap: () => onSelectProperty(path),
           comp: comp,
           layer: layer,
           row: row as FoldFlowRow,
@@ -4103,6 +4232,8 @@ class _FoldRow extends StatelessWidget {
           onLabelTap: () => onSelectProperty(path),
         ),
       FoldMaskValueRow(:final mask, :final value) => _MaskValueRow(
+          nameGroup: nameGroup,
+          onLabelTap: () => onSelectProperty(path),
           comp: comp,
           layer: layer,
           mask: mask,
@@ -4148,6 +4279,10 @@ class _TimelineParamRow extends StatefulWidget {
   final VoidCallback? onLabelTap;
   final Color? graphColour;
 
+  /// The effect this parameter came out of, drawn before its name on the flat
+  /// sheet (K-499).
+  final String? nameGroup;
+
   const _TimelineParamRow({
     required this.comp,
     required this.layer,
@@ -4158,6 +4293,7 @@ class _TimelineParamRow extends StatefulWidget {
     required this.onChanged,
     this.onLabelTap,
     this.graphColour,
+    this.nameGroup,
   });
 
   @override
@@ -4197,6 +4333,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       onSeek: widget.onSeek,
       onLabelTap: widget.onLabelTap,
       graphColour: widget.graphColour,
+      nameGroup: widget.nameGroup,
       onWrite: (effect, param, value) {
         _editor.write(widget.layer, effect, param, value);
         setState(() {});
@@ -4226,6 +4363,14 @@ class _FlowRow extends StatelessWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
+  /// The group this row came out of, drawn before its name on the flat sheet
+  /// (K-499). Null in the fold-out, where the Flow twirl says it instead.
+  final String? nameGroup;
+
+  /// Clicking the name selects the property and its keys (K-500 §2.1) — the
+  /// handle every other property row has and this one did not.
+  final VoidCallback? onLabelTap;
+
   const _FlowRow({
     required this.comp,
     required this.layer,
@@ -4234,6 +4379,8 @@ class _FlowRow extends StatelessWidget {
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
+    this.nameGroup,
+    this.onLabelTap,
   });
 
   @override
@@ -4306,7 +4453,16 @@ class _FlowRow extends StatelessWidget {
         else
           const SizedBox(width: fxKeyframeGutter),
         const SizedBox(width: 4),
-        Expanded(child: Text(row.kind.label, style: t.body)),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onLabelTap,
+            child: Row(children: [
+              ...flatGroupPrefix(t, nameGroup),
+              Flexible(child: Text(row.kind.label, style: t.body)),
+            ]),
+          ),
+        ),
         SizedBox(width: valueColumn.width, child: control),
       ],
     );
@@ -4798,6 +4954,13 @@ class _MaskValueRow extends StatefulWidget {
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
 
+  /// The mask this value belongs to, drawn before its name on the flat sheet
+  /// (K-499). Null in the fold-out, where the mask's own row says it.
+  final String? nameGroup;
+
+  /// Clicking the name selects the property and its keys (K-500 §2.1).
+  final VoidCallback? onLabelTap;
+
   const _MaskValueRow({
     required this.layer,
     required this.comp,
@@ -4807,6 +4970,8 @@ class _MaskValueRow extends StatefulWidget {
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
+    this.nameGroup,
+    this.onLabelTap,
   });
 
   @override
@@ -4908,8 +5073,17 @@ class _MaskValueRowState extends State<_MaskValueRow> {
           ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(maskValueLabel(widget.value),
-              style: t.body, overflow: TextOverflow.ellipsis),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onLabelTap,
+            child: Row(children: [
+              ...flatGroupPrefix(t, widget.nameGroup),
+              Flexible(
+                child: Text(maskValueLabel(widget.value),
+                    style: t.body, overflow: TextOverflow.ellipsis),
+              ),
+            ]),
+          ),
         ),
         // Left of the value column, exactly where an effect parameter's field
         // sits, so every number down an open layer forms one column.
@@ -6508,11 +6682,23 @@ class _KeysFilterRow extends StatelessWidget {
   final ValueChanged<bool> onShowAll;
   final ValueChanged<bool> onSelectedOnly;
 
+  /// **Graph mode's** reading of the same row (§3.3): the same Show pair, and
+  /// **Normalise** hard right where the dope sheet puts its scope words.
+  ///
+  /// One widget rather than two, because it is one row: the same words in the
+  /// same places, saying what is on screen. Non-null switches it to the
+  /// graph's shape — there is no *Selected* scope there, since the outline is
+  /// itself how curves are chosen.
+  final ValueChanged<bool>? onNormalise;
+  final bool normalise;
+
   const _KeysFilterRow({
     required this.showAll,
     required this.selectedOnly,
     required this.onShowAll,
     required this.onSelectedOnly,
+    this.onNormalise,
+    this.normalise = false,
   });
 
   /// One filter word. Framed and at foreground strength while it is the one in
@@ -6563,21 +6749,34 @@ class _KeysFilterRow extends StatelessWidget {
               on: !showAll,
               onPressed: () => onShowAll(false)),
           const SizedBox(width: 6),
-          // The key that does the same thing from the keyboard, said quietly
-          // beside the words it belongs to.
-          Text('U', style: t.mono.copyWith(fontSize: 9, color: t.textDisabled)),
-          const Spacer(),
-          _word(context,
-              keyName: 'tl-keys-scope-layers',
-              label: l10n.keysScopeLayers,
-              on: !selectedOnly,
-              onPressed: () => onSelectedOnly(false)),
-          const SizedBox(width: 2),
-          _word(context,
-              keyName: 'tl-keys-scope-selected',
-              label: l10n.keysScopeSelected,
-              on: selectedOnly,
-              onPressed: () => onSelectedOnly(true)),
+          if (onNormalise case final set?) ...[
+            const Spacer(),
+            Text(l10n.graphNormalise.toUpperCase(), style: t.kicker),
+            const SizedBox(width: 6),
+            SizedBox(
+              key: const ValueKey('tl-graph-normalise'),
+              width: 9,
+              height: 9,
+              child: HouseCheckbox(value: normalise, onChanged: set),
+            ),
+          ] else ...[
+            // The key that does the same thing from the keyboard, said quietly
+            // beside the words it belongs to.
+            Text('U',
+                style: t.mono.copyWith(fontSize: 9, color: t.textDisabled)),
+            const Spacer(),
+            _word(context,
+                keyName: 'tl-keys-scope-layers',
+                label: l10n.keysScopeLayers,
+                on: !selectedOnly,
+                onPressed: () => onSelectedOnly(false)),
+            const SizedBox(width: 2),
+            _word(context,
+                keyName: 'tl-keys-scope-selected',
+                label: l10n.keysScopeSelected,
+                on: selectedOnly,
+                onPressed: () => onSelectedOnly(true)),
+          ],
         ],
       ),
     );
@@ -6602,8 +6801,14 @@ class _KeysOutline extends StatelessWidget {
   final String? highlighted;
   final ValueChanged<String> onToggle;
   final ValueChanged<String> onSelectProperty;
+
+  /// Touching a row's controls picks the row (K-334) — without taking its
+  /// keyframes, which is the name's own gesture (K-196, §3.2).
+  final ValueChanged<String> onEditProperty;
   final ValueChanged<LayerReference> onSelect;
   final int playheadFrame;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onChanged;
 
   const _KeysOutline({
     required this.rows,
@@ -6613,6 +6818,319 @@ class _KeysOutline extends StatelessWidget {
     required this.highlighted,
     required this.onToggle,
     required this.onSelectProperty,
+    required this.onEditProperty,
+    required this.onSelect,
+    required this.playheadFrame,
+    required this.onSeek,
+    required this.onChanged,
+  });
+
+  /// The value wells' column. Keys mode draws no column groups at all, so
+  /// there is no header to line up under and the fold rows' own default width
+  /// is the measure — the same [renderGroupWidth] a Layers fold row's values
+  /// span before anybody drags the group wider.
+  static const ValueColumn valueColumn = ValueColumn(renderGroupWidth, 0);
+
+  @override
+  Widget build(BuildContext context) {
+    // No clock reading of its own any more: each row is a fold row, and a fold
+    // row samples what it shows in its own well.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          _KeysLayerRow(
+            key: ValueKey<String>('tl-keys-row-${rows[i].id}'),
+            row: rows[i],
+            number: i + 1,
+            selected: selectedIds.contains(rows[i].entry.layer.internallayerId),
+            highlighted: highlighted == rows[i].id ||
+                selectedProperties.any((p) => isUnderPath(rows[i].id, p)),
+            onToggle: () => onToggle(rows[i].id),
+            onSelect: () => onSelect(rows[i].entry.layer),
+          ),
+          // **The Layers fold row itself** (K-499): the owner's ruling is that
+          // a Keys row is a fold row — stopwatch, ◄ ◆ ► navigator, name,
+          // editable value well — and the way to make two rows behave alike is
+          // for them to be one row. So this is [_FoldRow], flat and told which
+          // group it came out of, rather than a second drawing of it. Every
+          // gesture the fold-out has comes with it, including the one the sheet
+          // was missing: the value is editable here, through the same
+          // playhead-edit rule (K-189) the fold-out writes by.
+          for (final row in rows[i].drawnRows)
+            _FoldRow(
+              key: ValueKey<String>(
+                  'tl-keys-prop-${foldRowPath(rows[i].id, row)}'),
+              comp: comp,
+              layer: rows[i].entry.layer,
+              row: row,
+              valueColumn: valueColumn,
+              // No render-time column on this sheet: a dope sheet measures
+              // keys, not cost.
+              timingsColumn: const ValueColumn(0, 0),
+              baseIndent: keysPropertyIndent,
+              flat: true,
+              nameGroup: foldRowName(row)?.group,
+              path: foldRowPath(rows[i].id, row),
+              selectedProperties: selectedProperties,
+              // The dope sheet draws no curves, so it names no colours.
+              graphColours: const {},
+              onSelectProperty: onSelectProperty,
+              onEditProperty: onEditProperty,
+              playheadFrame: playheadFrame,
+              onSeek: onSeek,
+              onToggle: onToggle,
+              onChanged: onChanged,
+              locked: rows[i].entry.info.switches.locked,
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+/// What rides beside a graph channel's value, or null for a number with no
+/// unit — the readout row's answer to §12A.3's rule.
+///
+/// An effect parameter's unit is its **declaration's** (K-443), never its id.
+/// A transform axis has no declaration to ask, so it is read off the property
+/// itself: the two scales and opacity are per cent, the three rotations are
+/// degrees, and everything else is a distance — pixels at composition size
+/// (K-419).
+String? graphChannelUnit(GraphChannel channel) {
+  if (channel.param case final param?) return unitRiderText(param.unit);
+  if (channel.retime) return l10n.unitSymbolSeconds;
+  if (channel.maskValue case final value?) {
+    return switch (value) {
+      MaskValue.opacity => l10n.unitSymbolPercent,
+      MaskValue.feather || MaskValue.expansion => l10n.unitSymbolPx,
+      MaskValue.path => null,
+    };
+  }
+  return switch (channel.prop) {
+    null => null,
+    BridgeTransformProp.opacity ||
+    BridgeTransformProp.scaleX ||
+    BridgeTransformProp.scaleY =>
+      l10n.unitSymbolPercent,
+    BridgeTransformProp.rotation ||
+    BridgeTransformProp.rotationX ||
+    BridgeTransformProp.rotationY =>
+      l10n.unitSymbolDegrees,
+    _ => l10n.unitSymbolPx,
+  };
+}
+
+/// The **Key readout row** (§3.3, `GraphMode.dc.html`): pinned at the foot of
+/// Graph mode's outline while exactly one key is selected, reading
+/// `KEY f<frame> <value><unit>` and offering that key's two influences as
+/// editable wells.
+///
+/// **One key only**, because that is what it can say: two or more are a block,
+/// and a block's readout is its own badge. It draws from the selection alone,
+/// so it arrives and leaves with the key rather than being another thing to
+/// dismiss (P1) — and it draws *nothing* when there is no single key, keeping
+/// the outline's foot the height it was.
+///
+/// The wells commit through the same write the tangent handles make: a side
+/// becomes a bezier at its current speed and the influence asked for, so
+/// typing 33 into **In** and dragging the handle to a third of the span are
+/// the same edit and one undo step.
+class _KeyReadoutRow extends StatelessWidget {
+  final List<GraphChannel> channels;
+  final Set<String> selectedKeys;
+  final double fps;
+  final VoidCallback onChanged;
+
+  const _KeyReadoutRow({
+    required this.channels,
+    required this.selectedKeys,
+    required this.fps,
+    required this.onChanged,
+  });
+
+  /// The one selected key, as its channel and its index — or null when the
+  /// selection is not exactly one key that still exists.
+  (GraphChannel, int)? get _one {
+    if (selectedKeys.length != 1) return null;
+    final id = selectedKeys.first;
+    final hash = id.lastIndexOf('#');
+    if (hash < 0) return null;
+    final index = int.tryParse(id.substring(hash + 1));
+    if (index == null) return null;
+    final channelId = id.substring(0, hash);
+    for (final channel in channels) {
+      if (channel.id != channelId) continue;
+      if (index < 0 || index >= channel.keys.length) return null;
+      return (channel, index);
+    }
+    return null;
+  }
+
+  /// Write one side's influence, keeping the speed it already reads at — the
+  /// tangent handle's own commit, reached by typing instead of by dragging.
+  void _setInfluence(GraphChannel channel, int index, bool isOut, double v) {
+    final keys = channel.keys;
+    final side = sideWithInfluence(keys, index, isOut, v);
+    commitChannelEdits({
+      channel: BridgeScalar.keyframed([
+        for (var i = 0; i < keys.length; i++)
+          if (i == index)
+            BridgeKeyframe(
+              time: keys[i].time,
+              value: keys[i].value,
+              interpIn: isOut ? keys[i].interpIn : side,
+              interpOut: isOut ? side : keys[i].interpOut,
+            )
+          else
+            keys[i],
+      ]),
+    });
+    onChanged();
+  }
+
+  Widget _well(String name, double percent, ValueChanged<num> set) => SizedBox(
+        width: 40,
+        child: DragValueField(
+          key: ValueKey<String>(name),
+          value: percent,
+          min: 0,
+          max: 100,
+          decimals: 0,
+          onChanged: set,
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final one = _one;
+    if (one == null) return const SizedBox.shrink();
+    final (channel, index) = one;
+    final key = channel.keys[index];
+    final frame = (rationalSeconds(key.time) * (fps <= 0 ? 1 : fps)).round();
+    final value = key.value;
+    return Container(
+      key: const ValueKey('tl-graph-key-readout'),
+      height: t.density.secondaryRow,
+      decoration: BoxDecoration(
+        color: t.surface1,
+        border: Border(top: BorderSide(color: t.hairline)),
+      ),
+      padding: const EdgeInsets.only(left: 10, right: 8),
+      child: Row(
+        children: [
+          Text(l10n.graphKeyKicker.toUpperCase(), style: t.kicker),
+          const SizedBox(width: 8),
+          Text(l10n.graphKeyFrame(frame),
+              style: t.mono.copyWith(fontSize: 10, color: t.textPrimary)),
+          const SizedBox(width: 8),
+          Text(keysNumberText(value),
+              style: t.mono.copyWith(fontSize: 10, color: t.textPrimary)),
+          if (graphChannelUnit(channel) case final String unit) ...[
+            const SizedBox(width: 3),
+            Text(unit, style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
+          ],
+          const Spacer(),
+          Text(l10n.graphEaseIn.toUpperCase(), style: t.kicker),
+          const SizedBox(width: 6),
+          _well(
+              'tl-graph-key-in',
+              (sideInfluence(key.interpIn) * 100).roundToDouble(),
+              (v) => _setInfluence(channel, index, false, v.toDouble())),
+          const SizedBox(width: 3),
+          Text(l10n.unitSymbolPercent,
+              style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
+          const SizedBox(width: 8),
+          Text(l10n.graphEaseOut.toUpperCase(), style: t.kicker),
+          const SizedBox(width: 6),
+          _well(
+              'tl-graph-key-out',
+              (sideInfluence(key.interpOut) * 100).roundToDouble(),
+              (v) => _setInfluence(channel, index, true, v.toDouble())),
+          const SizedBox(width: 3),
+          Text(l10n.unitSymbolPercent,
+              style: t.mono.copyWith(fontSize: 9, color: t.textMuted)),
+        ],
+      ),
+    );
+  }
+}
+
+/// How far a Graph-mode property row is indented — the drawing's own 24,
+/// clear of the layer band's twirl so the ticks line up in a column.
+const double graphPropertyIndent = 24;
+
+/// What rides beside a fold row's number, or null for a number with no unit
+/// (§12A.3's rule, read for a row rather than for a parameter).
+///
+/// A transform axis carries its own suffix where it has one; the ones with
+/// none are distances, and a distance in Lumit is pixels at composition size
+/// (K-419), which is what the graph's readout says. An effect parameter's unit
+/// is its **declaration's**, never its id.
+String? foldRowUnit(LayerFoldRow row) => switch (row) {
+      FoldTransformRow(:final group) =>
+        group.axes.first.suffix ?? l10n.unitSymbolPx,
+      FoldEffectParamRow(:final param) => unitRiderText(param.unit),
+      FoldRetimeRow() => l10n.unitSymbolSeconds,
+      FoldMaskValueRow(:final value) => switch (value) {
+          MaskValue.opacity => l10n.unitSymbolPercent,
+          MaskValue.feather || MaskValue.expansion => l10n.unitSymbolPx,
+          MaskValue.path => null,
+        },
+      _ => null,
+    };
+
+/// **Graph mode's outline** (§3.3, §12A.2, `GraphMode.dc.html`): the filtered
+/// animated list — one row per property, carrying an include-in-graph tick, a
+/// swatch in its curve's colour, its name and what it reads at the playhead.
+///
+/// **The tick is the selection.** A property on the pane is a property in
+/// [selectedProperties] — the same set the Layers outline picks with and the
+/// same set `graphChannels` reads — so ticking one is `Ctrl`-clicking its
+/// name, and there is exactly one answer anywhere in the panel to "which
+/// curves are up". Clicking the **name** selects that property alone and takes
+/// its keys with it (K-500 §2.1), which is how a single curve is got at.
+///
+/// Two departures from the drawing, both recorded in
+/// `docs/impl/timeline-interaction.md` §3.3: the row is the **property**, not
+/// the axis, because the tick's granularity is the property (a two-axis
+/// Position draws one dot per axis instead, as the Layers fold row already
+/// does); and an **unticked** row's swatch is muted rather than coloured,
+/// because an unticked property has no curve and therefore no colour to
+/// promise.
+class _GraphOutline extends StatelessWidget {
+  /// The same flattened [LayerRow] list Keys mode draws from, under the
+  /// graph's own Show filter.
+  final List<LayerRow> rows;
+  final CompositionReference comp;
+  final Set<UuidValue> selectedIds;
+  final List<String> selectedProperties;
+
+  /// The stroke colours of the curves each property path resolves to.
+  final Map<String, List<Color>> graphColours;
+  final String? highlighted;
+  final ValueChanged<String> onToggle;
+
+  /// Click the name: select this property and its keys.
+  final ValueChanged<String> onSelectProperty;
+
+  /// Tick the box: add or remove this property's curves without disturbing
+  /// the rest.
+  final ValueChanged<String> onToggleInGraph;
+  final ValueChanged<LayerReference> onSelect;
+  final int playheadFrame;
+
+  const _GraphOutline({
+    required this.rows,
+    required this.comp,
+    required this.selectedIds,
+    required this.selectedProperties,
+    required this.graphColours,
+    required this.highlighted,
+    required this.onToggle,
+    required this.onSelectProperty,
+    required this.onToggleInGraph,
     required this.onSelect,
     required this.playheadFrame,
   });
@@ -6620,17 +7138,17 @@ class _KeysOutline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    // One clock reading for the whole sheet: every row reads its value at the
-    // same moment, and asking the comp for it once is the difference between
-    // one memoised lookup and one per row.
+    // One clock reading for the whole list, as the dope sheet does: every row
+    // reads at the same moment, off one memoised lookup.
     final time = timeOfFrame(comp, playheadFrame);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final layer in rows) ...[
+        for (final (index, layer) in rows.indexed) ...[
           _KeysLayerRow(
-            key: ValueKey<String>('tl-keys-row-${layer.id}'),
+            key: ValueKey<String>('tl-graph-row-${layer.id}'),
             row: layer,
+            number: index + 1,
             selected: selectedIds.contains(layer.entry.layer.internallayerId),
             highlighted: highlighted == layer.id ||
                 selectedProperties.any((p) => isUnderPath(layer.id, p)),
@@ -6640,49 +7158,95 @@ class _KeysOutline extends StatelessWidget {
           for (final row in layer.drawnRows)
             Builder(builder: (context) {
               final path = foldRowPath(layer.id, row);
-              final name = foldRowName(row)!;
-              final selected = selectedProperties.contains(path);
-              return GestureDetector(
-                key: ValueKey<String>('tl-keys-prop-$path'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onSelectProperty(path),
-                child: Container(
-                  height: layer.rowHeight,
-                  color: selected ? t.surface2 : null,
-                  padding:
-                      const EdgeInsets.only(left: keysPropertyIndent, right: 8),
+              final name = foldRowName(row);
+              if (name == null) return const SizedBox.shrink();
+              final shown = selectedProperties.contains(path);
+              final colours = graphColours[path] ?? const <Color>[];
+              final dots = shown && colours.isNotEmpty ? colours.length : 1;
+              return SizedBox(
+                key: ValueKey<String>('tl-graph-prop-$path'),
+                height: layer.rowHeight,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                      left: graphPropertyIndent, right: 8),
                   child: Row(
                     children: [
-                      if (name.group case final String group) ...[
-                        Text(group,
-                            style: t.body.copyWith(color: t.textMuted),
-                            overflow: TextOverflow.ellipsis),
-                        const SizedBox(width: 8),
-                        Text('·',
-                            style: t.body.copyWith(color: t.textDisabled)),
-                        const SizedBox(width: 8),
-                      ],
-                      // **Expanded, and no Spacer**: two flex children share
-                      // the free space rather than queueing, which would put
-                      // the value half way across the row instead of hard
-                      // right where the drawing has it.
-                      Expanded(
-                        child: Text(
-                          name.label,
-                          style: t.body.copyWith(
-                              color:
-                                  selected ? t.textPrimary : t.textSecondary),
-                          overflow: TextOverflow.ellipsis,
+                      SizedBox(
+                        key: ValueKey<String>('tl-graph-tick-$path'),
+                        width: 9,
+                        height: 9,
+                        child: HouseCheckbox(
+                          value: shown,
+                          onChanged: (_) => onToggleInGraph(path),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // What the property reads here, in `animated` — the
-                      // token that means "this is animated" (§3.1), which on
-                      // this sheet every listed row is.
-                      if (keysRowValue(row, time) case final String value)
+                      // One swatch per curve the property draws, so a two-axis
+                      // row names both of them.
+                      for (var i = 0; i < dots; i++) ...[
+                        Container(
+                          width: _labelDotSize,
+                          height: _labelDotSize,
+                          decoration: BoxDecoration(
+                            color: shown && i < colours.length
+                                ? colours[i]
+                                : t.textDisabled,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                      ],
+                      const SizedBox(width: 5),
+                      // The name is the row's handle: clicking it selects the
+                      // property and its keys.
+                      Expanded(
+                        child: GestureDetector(
+                          key: ValueKey<String>('tl-graph-name-$path'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onSelectProperty(path),
+                          child: Row(
+                            children: [
+                              if (name.group case final String group) ...[
+                                Flexible(
+                                  child: Text(group,
+                                      style:
+                                          t.body.copyWith(color: t.textMuted),
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                                const SizedBox(width: 6),
+                                Text('·',
+                                    style:
+                                        t.body.copyWith(color: t.textDisabled)),
+                                const SizedBox(width: 6),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  name.label,
+                                  style: t.body.copyWith(
+                                      color:
+                                          shown ? t.textPrimary : t.textMuted),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // What it reads at the playhead: `animated` while it is
+                      // on the pane, muted while it is not (§3.3).
+                      if (keysRowValue(row, time) case final String value) ...[
                         Text(value,
-                            style: t.mono
-                                .copyWith(fontSize: 10, color: t.animated)),
+                            style: t.mono.copyWith(
+                                fontSize: 10,
+                                color: shown ? t.animated : t.textMuted)),
+                        if (foldRowUnit(row) case final String unit) ...[
+                          const SizedBox(width: 4),
+                          Text(unit,
+                              style: t.mono
+                                  .copyWith(fontSize: 9, color: t.textMuted)),
+                        ],
+                      ],
                     ],
                   ),
                 ),
@@ -6698,6 +7262,12 @@ class _KeysOutline extends StatelessWidget {
 /// colour, its name and how many properties it is showing.
 class _KeysLayerRow extends StatelessWidget {
   final LayerRow row;
+
+  /// The layer's address in the sheet, counting from 1 — **the number Layers
+  /// mode gives it** (K-461), which K-499 brings back here: a flat list of
+  /// properties says which layer it is reading, and the number is how a layer
+  /// is named aloud.
+  final int number;
   final bool selected;
   final bool highlighted;
   final VoidCallback onToggle;
@@ -6706,6 +7276,7 @@ class _KeysLayerRow extends StatelessWidget {
   const _KeysLayerRow({
     super.key,
     required this.row,
+    required this.number,
     required this.selected,
     required this.highlighted,
     required this.onToggle,
@@ -6741,6 +7312,16 @@ class _KeysLayerRow extends StatelessWidget {
                 ),
               ),
             ),
+            // The number, then the dot: mono and muted in the same 18px cell
+            // the Layers outline's `#` column stands in, and **before** the
+            // label dot for the reason K-461 gives — the number is the row's
+            // address, the dot belongs to the name it colours.
+            SizedBox(
+              width: _numberCellWidth,
+              child: Text('$number',
+                  style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+            ),
+            const SizedBox(width: identityGap),
             // The label colour as a bullet, the same 6px swatch the Layers
             // outline carries — read here, not picked: the dope sheet has no
             // business changing a layer's colour.
