@@ -303,6 +303,108 @@ void main() {
     /// 7. **The width ladder gives way in the mockups' own order.** The
     /// 360-wide artboard shows the preview card and the Items column; the
     /// 260-wide docked panel has already dropped both, keeping Size and fps.
+    /// 4a. **A wider panel widens Path, not Name** (owner, desk test). It used
+    /// to be the other way about: Name was the flexible column and Path a
+    /// fixed 40, so every pixel the panel gained went to names that already
+    /// fitted while the one value longer than its column by nature stayed
+    /// clipped at 40.
+    testWidgets('the panel\'s spare width all lands in the Path column',
+        (tester) async {
+      final p = withItems();
+      final header =
+          find.byKey(const ValueKey<String>('project-column-header'));
+      double heading(WidgetTester tester, String word) => tester
+          .getRect(find.descendant(of: header, matching: find.text(word)))
+          .width;
+
+      // The mockup's own artboard is too narrow for the arrangement Name asks
+      // for, so Name is still the column that gives and the drawing is
+      // untouched: 148 of name and a 40 of path, exactly as before.
+      await mount(tester, p, width: 360);
+      await settleFrb(tester, minRounds: 6);
+      expect(heading(tester, 'NAME'), 148,
+          reason: 'the 360 artboard draws as it always did');
+      expect(heading(tester, 'PATH'), projectPathColumn,
+          reason: 'and Path is at its narrowest there');
+
+      await mount(tester, p, width: 480);
+      await settleFrb(tester, minRounds: 6);
+      expect(heading(tester, 'NAME'), projectNameColumn,
+          reason: 'past the width it asks for, Name settles at its own');
+
+      await mount(tester, p, width: 560);
+      await settleFrb(tester, minRounds: 6);
+      expect(heading(tester, 'NAME'), projectNameColumn,
+          reason: 'and keeps it however wide the panel grows');
+      expect(heading(tester, 'SIZE'), projectSizeColumn,
+          reason: 'and so does every column between');
+      expect(heading(tester, 'PATH'), projectPathColumn + 128,
+          reason: 'every pixel past the arrangement is Path\'s: 560 less the '
+              'insets, the Name column and the other three columns');
+    });
+
+    /// 4b. **The seams between the headings drag**, on the Timeline outline's
+    /// own rule: a seam widens the column to its left and every other column
+    /// keeps its width, so the drag moves one boundary and nothing else.
+    testWidgets('dragging a column seam moves that column and no other',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 560);
+      await settleFrb(tester, minRounds: 6);
+
+      final header =
+          find.byKey(const ValueKey<String>('project-column-header'));
+      double heading(String word) => tester
+          .getRect(find.descendant(of: header, matching: find.text(word)))
+          .width;
+
+      // The seam right of NAME — the one drawn before the Items column.
+      final seam = find.byKey(const ValueKey<String>('project-seam-name'));
+      expect(seam, findsOneWidget);
+      await tester.drag(seam, const Offset(40, 0));
+      await tester.pump();
+
+      expect(heading('NAME'), projectNameColumn + 40,
+          reason: 'the seam widened the column it follows');
+      expect(heading('SIZE'), projectSizeColumn,
+          reason: 'and left the columns between alone');
+      expect(heading('PATH'), projectPathColumn + 128 - 40,
+          reason: 'Path gave up exactly what Name took, since it holds the '
+              'panel\'s slack');
+
+      // Back past its minimum: the column stops there rather than vanishing.
+      await tester.drag(seam, const Offset(-400, 0));
+      await tester.pump();
+      expect(heading('NAME'), minProjectColumnWidth(ProjectColumn.name),
+          reason: 'a column stops at what its cells need');
+    });
+
+    /// 4c. **A column whose cells cannot use more room has no handle** — the
+    /// Timeline's [groupIsFixedWidth] rule. Items counts children and fps
+    /// writes a rate; both are as wide as their number and no wider.
+    testWidgets('a fixed-width column offers no seam handle', (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 560);
+      await settleFrb(tester, minRounds: 6);
+
+      expect(find.byKey(const ValueKey<String>('project-seam-name')),
+          findsOneWidget,
+          reason: 'Name takes hold');
+      expect(find.byKey(const ValueKey<String>('project-seam-size')),
+          findsOneWidget,
+          reason: 'and so does Size');
+      for (final fixed in [ProjectColumn.items, ProjectColumn.fps]) {
+        expect(projectColumnIsFixedWidth(fixed), isTrue);
+        // The seam is still drawn — the gap has to be there — but it carries
+        // no hairline and no handle, so it is not a key the panel offers.
+        final gap = find.byKey(ValueKey<String>('project-seam-${fixed.name}'));
+        expect(tester.widgetList(gap).length, 1,
+            reason: 'the gap keeps its width so the columns stay aligned');
+      }
+      expect(projectColumnIsFixedWidth(ProjectColumn.path), isTrue,
+          reason: 'Path has no width of its own to drag: it is the slack');
+    });
+
     testWidgets('the optional columns hide as the panel narrows',
         (tester) async {
       final p = withItems();

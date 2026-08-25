@@ -37,6 +37,7 @@
 // one row, costing nothing at the bridge (the budget test expects zero).
 
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -137,11 +138,79 @@ const double projectItemsColumn = 36;
 const double projectSizeColumn = 64;
 const double projectFpsColumn = 22;
 
-/// The Path column, at the list's right (§12A.3a). Narrow on purpose — the
-/// mockup's own 40 — because it is the one column that is *context* rather
-/// than a fact about the item: it says where the file is, and the head of the
-/// path plus an ellipsis is what answers that at a glance.
+/// The Path column, at the list's right (§12A.3a). **Its starting width**, not
+/// its width: Path is the column the panel's spare room goes to (owner, desk
+/// test), so 40 is the narrowest it is ever drawn and every pixel the panel
+/// gains past the mockup's own 360 lands here. It earns that room more than
+/// any other column — it is the one value longer than its column by nature,
+/// and the one that elides rather than clipping.
 const double projectPathColumn = 40;
+
+/// The width the Name column settles at. **Name no longer stretches** (owner,
+/// desk test) — it was the flexible column and Path the fixed one, which is
+/// backwards: a name with room to spare gains nothing by having more, while a
+/// path is cut short at every width. So Name keeps this size and Path takes
+/// the slack.
+///
+/// **Why 220 rather than the 148 the mockup's 360 artboard resolves to.** That
+/// 148 is what a *flexible* Name was left with once the columns had taken
+/// theirs — it was never a width anybody chose, and it was measured on a
+/// drawing whose rows wear no badges. A row does: `in use`, `proxy` and
+/// `missing` all sit between the name and the columns, and the whole badge run
+/// comes to about 150. Freezing Name at 148 and handing every spare pixel to
+/// Path left a badged row with no name at all and a row that overflowed its
+/// panel. 220 is the mockup's own column with a badge run's room added to it.
+///
+/// Below the width this arrangement asks for, Name is still the one that
+/// gives — it is the row's flexible slot — so the 360 artboard draws exactly
+/// as it did, at 148.
+const double projectNameColumn = 220;
+
+/// The panel's columns, left to right. The seams between their headings drag,
+/// the way the Timeline outline's group seams do
+/// (`state/timeline_columns.dart`): a seam widens the column to its left and
+/// leaves the rest alone.
+///
+/// Session-lived, like the Timeline's group widths — nothing writes a column
+/// width to the settings file, and the two panels answer this question the
+/// same way.
+enum ProjectColumn { name, items, size, fps, path }
+
+/// Each column's width before anybody has dragged it.
+const Map<ProjectColumn, double> defaultProjectColumnWidths = {
+  ProjectColumn.name: projectNameColumn,
+  ProjectColumn.items: projectItemsColumn,
+  ProjectColumn.size: projectSizeColumn,
+  ProjectColumn.fps: projectFpsColumn,
+  ProjectColumn.path: projectPathColumn,
+};
+
+/// **Items and fps are fixed**, on the Timeline's own rule
+/// ([groupIsFixedWidth]): a column whose cells cannot use more room buys only
+/// blank space by being widened, so the seam beside it is not a handle at all.
+/// A count of children and a frame rate are both as wide as the number they
+/// write. Name and Size each hold something that gains from more room, and
+/// Path takes whatever is left over, so it has no width of its own to drag.
+bool projectColumnIsFixedWidth(ProjectColumn column) =>
+    column == ProjectColumn.items ||
+    column == ProjectColumn.fps ||
+    column == ProjectColumn.path;
+
+/// How narrow a column may be dragged: enough for what cannot shrink.
+double minProjectColumnWidth(ProjectColumn column) => switch (column) {
+      // **Enough for everything else a row keeps in this column.** The twirl,
+      // the type mark and their gaps come to 42, and the badge run — `in use`,
+      // `proxy`, `missing` — to about 150 more. Narrower than this and the
+      // slack handed to Path would push a badged row's own marks off the right
+      // of the panel, which is what a drag past here used to do.
+      ProjectColumn.name => 200,
+      ProjectColumn.items => projectItemsColumn,
+      // Enough for the widest size the cell writes ("3840x2160" clipped to its
+      // tail is still a reading).
+      ProjectColumn.size => 40,
+      ProjectColumn.fps => projectFpsColumn,
+      ProjectColumn.path => projectPathColumn,
+    };
 
 /// The colour-chip filter beside the search well (§12A.3a): the mockup's six
 /// 6px dots, 3px apart, in a strip padded 4px either side.
@@ -217,26 +286,100 @@ const double _widthForSize = 190;
 const double _widthForImportLabel = 420;
 const double _widthForFooterLabels = 380;
 
-/// Which optional columns a given panel width can carry.
+/// Which optional columns a given panel width can carry, how wide each of them
+/// has been dragged, and — because the two answers cannot be given apart —
+/// where the Name column ends.
 class ProjectColumns {
   final bool items;
   final bool size;
   final bool fps;
   final bool path;
 
+  /// Each column's dragged width. Absent falls back to the default, so a map
+  /// only has to carry what somebody actually moved.
+  final Map<ProjectColumn, double> widths;
+
+  /// The panel width these were worked out for. Kept because the Name column
+  /// is capped by what the metadata columns leave — see [nameWidth].
+  final double panelWidth;
+
   const ProjectColumns({
     required this.items,
     required this.size,
     required this.fps,
     required this.path,
+    required this.panelWidth,
+    this.widths = defaultProjectColumnWidths,
   });
 
-  factory ProjectColumns.forWidth(double width) => ProjectColumns(
+  factory ProjectColumns.forWidth(
+    double width, {
+    Map<ProjectColumn, double> widths = defaultProjectColumnWidths,
+  }) =>
+      ProjectColumns(
         items: width >= _widthForItems,
         size: width >= _widthForSize,
         fps: width >= _widthForFps,
         path: width >= _widthForPath,
+        panelWidth: width,
+        widths: widths,
       );
+
+  double widthOf(ProjectColumn column) =>
+      widths[column] ?? defaultProjectColumnWidths[column]!;
+
+  bool shows(ProjectColumn column) => switch (column) {
+        ProjectColumn.name => true,
+        ProjectColumn.items => items,
+        ProjectColumn.size => size,
+        ProjectColumn.fps => fps,
+        ProjectColumn.path => path,
+      };
+
+  /// The columns drawn at this width, in order.
+  List<ProjectColumn> get visible => [
+        for (final c in ProjectColumn.values)
+          if (shows(c)) c
+      ];
+
+  /// **The panel's spare width goes to the last column** (owner, desk test).
+  /// Normally that is Path; at the widths where the ladder has already dropped
+  /// Path it is whichever metadata column is still standing, so the values
+  /// stay anchored to the panel's right edge as they always have.
+  ///
+  /// Null when no metadata column is drawn at all: there is nothing but Name,
+  /// and Name is still the row's flexible slot, so the room is already its.
+  ProjectColumn? get stretching {
+    final drawn = visible.where((c) => c != ProjectColumn.name);
+    return drawn.isEmpty ? null : drawn.last;
+  }
+
+  /// The width the metadata columns are laid out at: each column's own width,
+  /// except the last, which is given every pixel the panel has past the
+  /// mockup's own arrangement.
+  ///
+  /// **Name is still the row's `Expanded` slot, and that is the whole trick.**
+  /// Everything to its right is a fixed box, so what Name is left with is the
+  /// panel width less all of them — and because the last box swallows the
+  /// slack, that remainder settles at [projectNameColumn] and stays there
+  /// however wide the panel grows. Narrow the panel past it and the arithmetic
+  /// runs the other way with nothing extra to write: the last column is
+  /// already at its minimum, and Name gives way exactly as it used to, taking
+  /// a row's indent and its badges with it.
+  double laidOutWidth(ProjectColumn column) =>
+      widthOf(column) + (column == stretching ? _slack : 0);
+
+  /// The width the panel has beyond the arrangement its columns ask for. Never
+  /// negative: below that the columns are at their widths and Name is short.
+  double get _slack {
+    var wanted =
+        _headerPadLeft + widthOf(ProjectColumn.name) + projectRowPadding;
+    for (final column in visible) {
+      if (column == ProjectColumn.name) continue;
+      wanted += projectRowGap + widthOf(column);
+    }
+    return math.max(0, panelWidth - wanted);
+  }
 
   /// The trailing cells of a row or of the header — the same widths, the same
   /// gaps, the same right edge, so a value lands under its heading. The owner
@@ -247,6 +390,12 @@ class ProjectColumns {
   /// (§12A.3a: `text_disabled`), and because it is the one column that elides
   /// rather than clipping — a path is longer than its column by nature, and an
   /// ellipsis says so where a hard cut looks like the value ending there.
+  ///
+  /// [seam] builds the gap that precedes a column's cell. The header passes a
+  /// drag handle — a seam resizes the column to its *left*, as the Timeline's
+  /// does — and the rows pass nothing, so they keep the plain [projectRowGap]
+  /// the header's handle is drawn inside. Both sides therefore reserve the
+  /// same width and stay column-aligned.
   List<Widget> cells({
     String? items,
     String? size,
@@ -254,35 +403,82 @@ class ProjectColumns {
     String? path,
     required TextStyle style,
     TextStyle? pathStyle,
+    Widget Function(ProjectColumn before)? seam,
   }) =>
       [
-        if (this.items) ..._cell(projectItemsColumn, items, style),
-        if (this.size) ..._cell(projectSizeColumn, size, style),
-        if (this.fps) ..._cell(projectFpsColumn, fps, style),
-        if (this.path)
-          ..._cell(projectPathColumn, path, pathStyle ?? style,
-              overflow: TextOverflow.ellipsis),
+        for (final column in visible)
+          if (column != ProjectColumn.name)
+            ..._cell(
+              column,
+              seam?.call(column) ?? const SizedBox(width: projectRowGap),
+              switch (column) {
+                ProjectColumn.items => items,
+                ProjectColumn.size => size,
+                ProjectColumn.fps => fps,
+                ProjectColumn.path => path,
+                ProjectColumn.name => null,
+              },
+              column == ProjectColumn.path ? pathStyle ?? style : style,
+              overflow: column == ProjectColumn.path
+                  ? TextOverflow.ellipsis
+                  : TextOverflow.clip,
+            ),
       ];
 
-  static List<Widget> _cell(
-    double width,
+  List<Widget> _cell(
+    ProjectColumn column,
+    Widget gap,
     String? text,
     TextStyle style, {
     TextOverflow overflow = TextOverflow.clip,
-  }) =>
-      [
-        const SizedBox(width: projectRowGap),
-        SizedBox(
-          width: width,
-          child: text == null
-              ? null
-              : Text(text,
-                  style: style,
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
-                  overflow: overflow),
+  }) {
+    return [
+      gap,
+      SizedBox(
+        width: laidOutWidth(column),
+        child: text == null
+            ? null
+            : Text(text,
+                style: style,
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: overflow),
+      ),
+    ];
+  }
+}
+
+/// The handle between two column headings: it resizes the column to its left,
+/// and everything else keeps its width (docs/07 §4.2's rule for the Timeline
+/// outline, which this mirrors). It is drawn *inside* the gap the rows already
+/// carry between their cells, so adding it moves no column.
+///
+/// A hairline marks the ones that take hold; a seam beside a fixed-width
+/// column draws nothing and offers no resize cursor, so the panel never shows
+/// a handle that does not work.
+class _ColumnSeam extends StatelessWidget {
+  final ValueChanged<double>? onResize;
+  const _ColumnSeam({super.key, required this.onResize});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final resize = onResize;
+    if (resize == null) return const SizedBox(width: projectRowGap);
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (d) => resize(d.delta.dx),
+        child: SizedBox(
+          width: projectRowGap,
+          child: Center(
+            child: Container(width: 1, height: 10, color: t.hairlineStrong),
+          ),
         ),
-      ];
+      ),
+    );
+  }
 }
 
 /// What a click on a row does to the selection.
@@ -610,6 +806,29 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// The row being renamed in place, by id.
   String? _renamingId;
 
+  /// Each column's width. Dragging a header seam changes one of these and
+  /// leaves the rest alone, so the panel's columns move by exactly what the
+  /// drag moved — the Timeline outline's own rule (`_resizeGroup`).
+  ///
+  /// Session-lived, like the Timeline's group widths and like this panel's own
+  /// twirls: nothing writes a column width to the settings file.
+  Map<ProjectColumn, double> _columnWidths = {...defaultProjectColumnWidths};
+
+  /// Widen (or narrow) one column, never below what its cells need — and not
+  /// at all for a column that has no width of its own to change.
+  void _resizeColumn(ProjectColumn column, double delta) => setState(() {
+        if (projectColumnIsFixedWidth(column)) return;
+        final next = ((_columnWidths[column] ?? 0) + delta)
+            .clamp(minProjectColumnWidth(column), 900.0);
+        _columnWidths = {..._columnWidths, column: next};
+      });
+
+  /// The column a seam belongs to: the one drawn immediately before [column].
+  ProjectColumn _leftOf(ProjectColumns cols, ProjectColumn column) {
+    final order = cols.visible;
+    return order[order.indexOf(column) - 1];
+  }
+
   /// The folders the user has shut, by id (K-243). Closed rather than open, so
   /// a project opens showing everything it has — which is what the panel did
   /// before folders could be shut at all. Session state, like the search text:
@@ -639,7 +858,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final t = ThemeScope.of(context).theme;
     final state = Provider.of<LumitState>(context);
     final roots = state.project?.getItems() ?? const <ItemReference>[];
-    final cols = ProjectColumns.forWidth(width);
+    final cols = ProjectColumns.forWidth(width, widths: _columnWidths);
 
     if (roots.isEmpty) {
       return Column(
@@ -968,7 +1187,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       );
 
   /// The column headings. Kicker words, and the values below them are laid out
-  /// by the same [ProjectColumns.cells] call, so they cannot come apart.
+  /// by the same [ProjectColumns.cells] call, so they cannot come apart. The
+  /// gaps between them are the drag handles that resize the columns.
   Widget _columnHeader(LumitTheme t, ProjectColumns cols) => Container(
         key: const ValueKey('project-column-header'),
         height: projectColumnHeaderHeight(t),
@@ -979,8 +1199,20 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             left: _headerPadLeft, right: projectRowPadding),
         child: Row(
           children: [
+            // Name is the flexible slot, and what it is left with is
+            // [projectNameColumn] — see [ProjectColumns.laidOutWidth].
             Expanded(child: Text(l10n.name.toUpperCase(), style: t.kicker)),
             ...cols.cells(
+              seam: (before) => _ColumnSeam(
+                key: ValueKey<String>(
+                    'project-seam-${_leftOf(cols, before).name}'),
+                // The seam resizes the column it follows, which is the one the
+                // eye reads it as belonging to — and nothing at all beside a
+                // column that has no width of its own to change.
+                onResize: projectColumnIsFixedWidth(_leftOf(cols, before))
+                    ? null
+                    : (delta) => _resizeColumn(_leftOf(cols, before), delta),
+              ),
               items: l10n.projectColumnItems.toUpperCase(),
               size: l10n.projectColumnSize.toUpperCase(),
               fps: l10n.unitFps.toUpperCase(),
@@ -2014,6 +2246,12 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
                 const SizedBox(width: projectRowGap),
                 _glyph(t),
                 const SizedBox(width: projectRowGap),
+                // The row's flexible slot, and so the Name column: everything
+                // to its right is a fixed box and the last of those swallows
+                // the panel's spare width, so what is left here settles at
+                // [projectNameColumn] however wide the panel grows (owner,
+                // desk test). The indent and the badges come out of it exactly
+                // as they always did.
                 Expanded(child: _nameOrEditor(t)),
                 // Placed somewhere (§12A.3a). Before the missing badge, so a
                 // broken file that is nonetheless *in* a comp reads left to
