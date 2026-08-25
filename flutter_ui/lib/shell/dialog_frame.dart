@@ -387,6 +387,13 @@ Widget dialogDropdown<T>(
   required String Function(T) label,
   required ValueChanged<T>? onChanged,
   double? width,
+
+  /// A heading over an option, for a list that comes in named runs — the
+  /// export's colour spaces, where the config's own names sit under one.
+  String? Function(T)? group,
+
+  /// Why an option cannot be chosen (K-485: disabled, never hidden).
+  String? Function(T)? disabledReason,
 }) =>
     SizedBox(
       width: width,
@@ -397,5 +404,7 @@ Widget dialogDropdown<T>(
         options: options,
         label: label,
         onChanged: onChanged,
+        group: group,
+        disabledReason: disabledReason,
       ),
     );

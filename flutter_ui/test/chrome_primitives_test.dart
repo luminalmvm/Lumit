@@ -326,4 +326,37 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
   });
+
+  /// **A choice a list cannot honour is drawn dead, not dropped** (K-485). The
+  /// export's colour dropdown lists every space the project's colour config
+  /// names, and some of them the config cannot actually deliver; removing those
+  /// rows would leave the reader hunting for a name they know is in their own
+  /// file, so the row stays, quiet, with the reason on hover.
+  testWidgets('a dropdown option with a reason cannot be chosen',
+      (tester) async {
+    String? chosen;
+    await tester.pumpWidget(host(BareDropdown<String>(
+      value: 'a',
+      options: const ['a', 'b'],
+      label: (v) => v,
+      disabledReason: (v) => v == 'b' ? 'not from here' : null,
+      onChanged: (v) => chosen = v,
+    )));
+    await tester.pump();
+
+    await tester.tap(find.byType(BareDropdown<String>));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Text>(find.text('b')).style?.color, t.textDisabled,
+        reason: 'listed, and visibly not on offer');
+    await tester.tap(find.text('b'));
+    await tester.pumpAndSettle();
+    expect(chosen, isNull, reason: 'a dead row writes nothing');
+    expect(find.text('b'), findsOneWidget,
+        reason: 'and it does not close the menu either');
+
+    await tester.tap(find.text('a').last);
+    await tester.pumpAndSettle();
+    expect(chosen, 'a');
+  });
 }

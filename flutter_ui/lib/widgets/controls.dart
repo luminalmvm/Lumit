@@ -770,6 +770,12 @@ class BareDropdown<T> extends StatelessWidget {
   /// a Timeline row rather than in a dialog or a bar (§12A.6, K-451).
   final bool dense;
 
+  /// Why an option cannot be chosen, or null where it can — K-485's
+  /// disabled-not-hidden rule inside a list. The row stays in the menu, drawn
+  /// quiet, with the reason on hover; a list that removed it would leave the
+  /// reader hunting for a name they know exists.
+  final String? Function(T)? disabledReason;
+
   const BareDropdown({
     super.key,
     required this.value,
@@ -779,6 +785,7 @@ class BareDropdown<T> extends StatelessWidget {
     this.group,
     this.face,
     this.dense = false,
+    this.disabledReason,
   });
 
   @override
@@ -818,11 +825,22 @@ class BareDropdown<T> extends StatelessWidget {
                       style: t.small.copyWith(color: t.textMuted),
                     ),
                   ),
-                MenuRow(
-                  selected: options[i] == value,
-                  onPressed: () => close(options[i]),
-                  child: Text(label(options[i])),
-                ),
+                if (disabledReason?.call(options[i]) case final why?)
+                  LumitTooltip(
+                    message: why,
+                    child: MenuRow(
+                      selected: options[i] == value,
+                      onPressed: () {},
+                      child: Text(label(options[i]),
+                          style: TextStyle(color: t.textDisabled)),
+                    ),
+                  )
+                else
+                  MenuRow(
+                    selected: options[i] == value,
+                    onPressed: () => close(options[i]),
+                    child: Text(label(options[i])),
+                  ),
               ],
             ],
           ),
