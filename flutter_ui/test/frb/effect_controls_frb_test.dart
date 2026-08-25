@@ -1708,31 +1708,40 @@ void main() {
     });
 
     /// The same parameter id, two units, two effects — the case the deleted
-    /// map got wrong.
-    testWidgets('centre_x reads px on one effect and % on another',
+    /// map got wrong. Radial blur's Centre carried this test until K-558 made
+    /// every centre px@comp; Amplitude is the case that remains (Shake's is a
+    /// distance, Lightning's a share of its own bolt).
+    testWidgets('amplitude reads px on one effect and % on another',
         (tester) async {
       final p = withLayer();
-      p.layer.addEffect(name: 'mirror');
+      p.layer.addEffect(name: 'shake');
       p.uiState.model.refresh();
       await mount(tester, p, transform: false);
-      expect(find.text('px'), findsWidgets,
-          reason: "Mirror's Centre is px@comp");
+      final shakeAmp = find.ancestor(
+        of: find.text('Amplitude'),
+        matching: find.byType(EffectParamRowFrb),
+      );
+      expect(
+        find.descendant(of: shakeAmp, matching: find.text('px')),
+        findsOneWidget,
+        reason: "Shake's Amplitude is px@comp",
+      );
 
       final second = withLayer();
-      second.layer.addEffect(name: 'radial_blur');
+      second.layer.addEffect(name: 'lightning');
       second.uiState.model.refresh();
       await mount(tester, second, transform: false);
-      final centre = find.ancestor(
-        of: find.text('Centre'),
-        matching: find.byType(EffectPointRowFrb),
+      final boltAmp = find.ancestor(
+        of: find.text('Amplitude'),
+        matching: find.byType(EffectParamRowFrb),
       );
       expect(
-        find.descendant(of: centre, matching: find.text('%')),
+        find.descendant(of: boltAmp, matching: find.text('%')),
         findsOneWidget,
-        reason: "Radial blur's Centre is a per cent of the frame",
+        reason: "Lightning's Amplitude is a share of its own bolt",
       );
       expect(
-        find.descendant(of: centre, matching: find.text('px')),
+        find.descendant(of: boltAmp, matching: find.text('px')),
         findsNothing,
       );
     });
