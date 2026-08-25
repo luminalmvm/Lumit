@@ -386,6 +386,38 @@ unsafe fn create_exportable_image(
     }
 }
 
+/// How big the card is, in bytes: the largest **device-local** Vulkan memory
+/// heap this adapter reports, or 0 if it is not a Vulkan adapter.
+///
+/// The number behind [`crate::video_memory_bytes`] on Linux; see it for why the
+/// largest heap and not the sum. Cheap — one `vkGetPhysicalDeviceMemoryProperties`
+/// against an adapter already open — so it is read once at context creation and
+/// stashed, rather than opening a Vulkan instance later just to ask.
+pub(crate) fn device_local_bytes(adapter: &wgpu::Adapter) -> u64 {
+    // SAFETY: the closure only *reads* the adapter's memory properties. It
+    // creates and destroys nothing, and neither the instance nor the physical
+    // device handle outlives the call.
+    unsafe {
+        adapter.as_hal::<wgpu::hal::api::Vulkan, _, _>(|hal_adapter| {
+            let Some(hal_adapter) = hal_adapter else {
+                return 0;
+            };
+            let props = hal_adapter
+                .shared_instance()
+                .raw_instance()
+                .get_physical_device_memory_properties(hal_adapter.raw_physical_device());
+            props
+                .memory_heaps
+                .iter()
+                .take(props.memory_heap_count as usize)
+                .filter(|heap| heap.flags.contains(vk::MemoryHeapFlags::DEVICE_LOCAL))
+                .map(|heap| heap.size)
+                .max()
+                .unwrap_or(0)
+        })
+    }
+}
+
 /// Open a wgpu Vulkan device with the external-memory extensions DMA-BUF export
 /// needs (`VK_KHR_external_memory`, `VK_KHR_external_memory_fd`,
 /// `VK_EXT_external_memory_dma_buf`). wgpu 24's Vulkan backend does not enable

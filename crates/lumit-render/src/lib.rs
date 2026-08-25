@@ -96,6 +96,11 @@ pub use realise::Realiser;
 /// direct dependency on `lumit-gpu` just to ask.
 pub use lumit_gpu::adapter_sample_count;
 
+/// How much memory the graphics card has, re-exported for the same reason: the
+/// bridge answers Settings' VRAM ceiling with it and would otherwise need a
+/// direct `lumit-gpu` dependency to ask.
+pub use lumit_gpu::video_memory_bytes;
+
 /// The Viewer's display view (K-314), re-exported for the same reason: the
 /// bridge sets it on [`HeadlessRenderer::set_display_view`] and would otherwise
 /// need a `lumit-gpu` dependency to name the type it is passing.

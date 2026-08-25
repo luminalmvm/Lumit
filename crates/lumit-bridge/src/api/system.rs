@@ -17,8 +17,9 @@
 //! 15.5 GB on a 16 GB host). That errs low, which is the safe direction for a
 //! budget ceiling — the same choice `video_memory_bytes` makes below.
 //!
-//! Video memory stays Windows-only: the first DXGI adapter's dedicated video
-//! memory, with 0 elsewhere.
+//! Video memory is answered on all three too (K-582): the first DXGI adapter's
+//! dedicated video memory on Windows, and on the other two through the graphics
+//! API the engine already links — see [`video_memory_bytes`].
 
 use flutter_rust_bridge::frb;
 
@@ -231,13 +232,20 @@ pub fn system_memory_bytes() -> u64 {
     }
 }
 
-/// The primary adapter's dedicated video memory in bytes, or 0 where it
-/// cannot be asked.
+/// The graphics card's memory in bytes, or 0 where it cannot be asked.
 ///
-/// The *first* adapter DXGI enumerates, which is the one the renderer takes
-/// too. A machine with a discrete card behind an integrated one would report
-/// the integrated adapter's memory; that is a smaller ceiling than the truth,
-/// which errs the safe way for a budget.
+/// On Windows, the *first* adapter DXGI enumerates, which is the one the
+/// renderer takes too. A machine with a discrete card behind an integrated one
+/// would report the integrated adapter's memory; that is a smaller ceiling than
+/// the truth, which errs the safe way for a budget.
+///
+/// macOS and Linux answer through the graphics API the engine already links —
+/// Metal's recommended working-set size, or the largest device-local Vulkan
+/// heap — so the answer comes from [`lumit_render::video_memory_bytes`] rather
+/// than from a second copy of that knowledge here. See it for the details and
+/// for what returns 0. Linux's answer needs an adapter, which only the renderer
+/// opens, so it is 0 until one exists; the frontend's fallback covers that
+/// exactly as it covers a platform with no implementation at all.
 #[frb(sync)]
 pub fn video_memory_bytes() -> u64 {
     #[cfg(windows)]
@@ -261,7 +269,7 @@ pub fn video_memory_bytes() -> u64 {
     }
     #[cfg(not(windows))]
     {
-        0
+        lumit_render::video_memory_bytes()
     }
 }
 
@@ -358,6 +366,26 @@ mod tests {
             "thawing leaves nothing to restore to"
         );
         restore_frozen_cursor();
+    }
+
+    /// Video memory is answered on all three desktops (K-582) — but not all
+    /// three answer at the same *moment*, which is the part worth pinning.
+    /// Windows asks DXGI and macOS asks Metal, and both work with no renderer
+    /// open, so a zero there is a broken implementation rather than a machine
+    /// that will not say. Linux can only read the Vulkan heaps through an
+    /// adapter, which only the renderer opens, so it answers 0 until one has
+    /// been — the frontend's fallback covers that exactly as it covers a
+    /// platform with no implementation at all, and asserting otherwise here
+    /// would fail on a perfectly healthy machine.
+    #[test]
+    fn the_card_says_how_big_it_is_where_it_can_be_asked_without_a_renderer() {
+        #[cfg(any(windows, target_os = "macos"))]
+        {
+            assert!(
+                video_memory_bytes() > 0,
+                "the card's memory should be positive on Windows/macOS"
+            );
+        }
     }
 
     /// A platform with no implementation answers `false` rather than pretending,

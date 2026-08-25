@@ -140,12 +140,24 @@ Notes:
 
 One component owns memory. Nothing render-related allocates outside it.
 
-- **Budgets**: defaults — VRAM: 70% of the DXGI-reported budget for dedicated GPUs, 40% of
+- **Budgets**: defaults — VRAM: 70% of the reported card memory for dedicated GPUs, 40% of
   system RAM treated as the ceiling for shared-memory GPUs; RAM: 60% of physical RAM for the
   sum of caches, decode queues, and working buffers. Both user-overridable in preferences. The
   governor subscribes to DXGI video-memory budget-change notifications and to OS memory
   pressure, and shrinks its budgets live — Windows will demote VRAM allocations anyway when
   another application competes; Lumit yields before WDDM forces it.
+- **Where "the reported card memory" comes from** (K-582): each platform is asked through
+  the graphics API the engine already links, and each answers a *ceiling*, never a live
+  free-space figure. Windows: the first DXGI adapter's `DedicatedVideoMemory`. macOS:
+  Metal's `recommendedMaxWorkingSetSize`, which on Apple Silicon is a share of the unified
+  memory rather than a separate pool — which is exactly the ceiling wanted. Linux: the
+  largest **device-local** Vulkan memory heap, read through the adapter the renderer opens.
+  Largest, not the sum: a discrete card commonly reports a second, small device-local heap
+  (the host-visible BAR window) that is a view of the same memory, and adding it would count
+  part of the card twice. Every one of them errs low, which is the safe direction for a
+  budget. A platform or build that cannot be asked answers **0**, and the frontend falls
+  back to its own documented ceiling rather than pretending — Linux answers 0 until a
+  renderer has opened an adapter, for the same reason.
 - **Accounting**: every frame-sized allocation (cache entries, node output textures, decode
   buffers, ring buffers, staging) is registered with size, tier, and owner. The governor's
   ledger MUST equal reality; an unaccounted frame allocation fails code review

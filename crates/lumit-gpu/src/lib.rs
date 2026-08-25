@@ -186,6 +186,60 @@ pub fn adapter_sample_count(requested: u32) -> Option<u32> {
         .map(|&flags| sample_count_from(flags, requested))
 }
 
+/// How much memory the card has, in bytes, published the first time a context
+/// opens an adapter — the Linux half of [`video_memory_bytes`].
+///
+/// Same "first context wins" shape as [`ADAPTER_SAMPLE_FLAGS`] and for the same
+/// reason: the adapter is only in hand inside [`GpuContext::headless`], and
+/// Vulkan's memory heaps can only be read through one. macOS needs no such
+/// stash — Metal answers from a device handle anyone can ask for — and Windows
+/// answers from DXGI in the bridge, without any adapter at all.
+#[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+static ADAPTER_VIDEO_MEMORY: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+
+/// The graphics card's memory in bytes, or **0 where it cannot be asked** —
+/// the ceiling the VRAM cache budget is set against (K-194).
+///
+/// Windows is not here: the bridge reads the first DXGI adapter's dedicated
+/// video memory directly, which works before any renderer exists. The other two
+/// answer through the graphics API they already link:
+///
+/// * **macOS** — Metal's `recommendedMaxWorkingSetSize`, which is what Apple
+///   says an application may hold on the card before the system starts pushing
+///   back. On Apple Silicon that is a share of the unified memory, not a
+///   separate pool, which is exactly the ceiling wanted.
+/// * **Linux** — the largest **device-local** Vulkan memory heap. Largest
+///   rather than the sum, because a discrete card commonly reports a second,
+///   small device-local heap (the host-visible BAR window) that is a *view of
+///   the same memory*; adding it would count some of the card twice. Erring low
+///   is the safe direction for a budget, which is the same choice
+///   `system_memory_bytes` makes on Linux.
+///
+/// Both are behind the zero-copy Viewer features that pull `metal` and `ash`
+/// (on by default in the shipped build). A build without them answers 0, as
+/// does any other platform: 0 means "not known here", and the frontend falls
+/// back to its own documented ceiling rather than pretending.
+#[must_use]
+pub fn video_memory_bytes() -> u64 {
+    #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
+    {
+        metal::Device::system_default()
+            .map(|device| device.recommended_max_working_set_size())
+            .unwrap_or(0)
+    }
+    #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+    {
+        ADAPTER_VIDEO_MEMORY.get().copied().unwrap_or(0)
+    }
+    #[cfg(not(any(
+        all(target_os = "macos", feature = "shared-texture-macos"),
+        all(target_os = "linux", feature = "shared-texture-linux")
+    )))]
+    {
+        0
+    }
+}
+
 /// [`supported_sample_count`] against an already-fetched flag set — the shared
 /// rule, so the adapter-side check and [`GpuContext::sample_count`] cannot
 /// drift apart.
@@ -564,6 +618,10 @@ impl GpuContext {
             ..Default::default()
         }))
         .ok_or(GpuError::NoAdapter)?;
+        // The one moment an adapter is in hand, which is the only place Vulkan
+        // will say how big the card is (see [`video_memory_bytes`]).
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        let _ = ADAPTER_VIDEO_MEMORY.set(shared_linux::device_local_bytes(&adapter));
         let software = matches!(
             adapter.get_info().device_type,
             wgpu::DeviceType::Cpu | wgpu::DeviceType::Other

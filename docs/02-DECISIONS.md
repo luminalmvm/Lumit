@@ -16827,3 +16827,41 @@ platform channel; the exit without a drop; a two-file batch undone in one step; 
 folder of three numbered stills beside a `readme.txt` landing as one item; and a dropped
 `.lum` and `.aep` importing nothing and posting their notices
 (`flutter_ui/test/frb/project_panel_frb_test.dart`).
+
+## K-582 — The card's size is asked on all three desktops, each in its own API
+
+**Status: DECIDED (2026-08-26).** `video_memory_bytes` answers on Windows, macOS and Linux
+rather than on Windows alone, closing the gap K-194 left when it made the cache budgets typed
+numbers that need a real ceiling. It is the K-204 argument applied to the
+second of the two numbers: installed RAM was answerable everywhere, so all three answered it;
+the card's memory is answerable everywhere too, once each platform is asked in its own words.
+
+**The three questions.** Windows keeps the first DXGI adapter's `DedicatedVideoMemory`, asked
+in the bridge. macOS asks Metal for `recommendedMaxWorkingSetSize` — Apple's own statement of
+how much an application may hold on the card before the system pushes back, which on Apple
+Silicon is a share of the unified memory rather than a separate pool, and is therefore exactly
+the ceiling a budget wants. Linux reads the **largest device-local Vulkan memory heap**:
+largest and not the sum, because a discrete card commonly reports a second, small device-local
+heap — the host-visible BAR window — that is a view of the same memory, so adding it would
+count part of the card twice. All three err low, which is the safe direction for a ceiling.
+
+**No new dependency, and no scraping.** Both new answers come from crates `lumit-gpu` already
+links for the zero-copy Viewer (`metal` for K-195's IOSurface path, `ash` for K-177's DMA-BUF
+path), so the number costs the build nothing. Reading `/sys` or shelling out to `vulkaninfo`
+was refused outright: a graphics fact parsed out of text is a fact that goes wrong quietly on
+the machine nobody tested.
+
+**Linux answers 0 until a renderer exists, and that is deliberate.** Vulkan's heaps can only
+be read through a physical device, and the only place this engine has an adapter in hand is
+`GpuContext::headless`. Rather than open a second Vulkan instance behind a settings query, the
+figure is read there once and published to a `OnceLock` — the same "first context wins" shape
+`ADAPTER_SAMPLE_FLAGS` uses (K-274), legitimate for the same reason: the backend is pinned and
+the adapter chosen deterministically, so every context in a process opens the same card. Before
+any renderer has been built the answer is 0, which is the existing contract for "not known
+here" and which the frontend already handles by falling back to its own documented ceiling.
+
+**Where it is proved.** `the_card_says_how_big_it_is_where_it_can_be_asked_without_a_renderer`
+(`crates/lumit-bridge/src/api/system.rs`) asserts a positive figure on Windows and macOS, the
+two that answer with no renderer open, and deliberately asserts nothing on Linux, where 0 is a
+healthy machine's honest answer. macOS and Linux compile under `cfg` on any host but can only
+*run* on their own, so CI on those two is the runtime proof.

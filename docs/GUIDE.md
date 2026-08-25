@@ -3971,7 +3971,13 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   machine: how much memory its frame cache may hold, how much disk the on-disk cache may use,
   and how much video memory (VRAM, the graphics card's own memory) the cache of
   already-drawn frames on the GPU may hold. All three apply the moment you change them —
-  nudge a budget down and the matching cache trims itself to fit at once. The defaults match
+  nudge a budget down and the matching cache trims itself to fit at once. The top of each
+  slider is not a guess: Lumit asks the machine how much it has. Installed memory has a
+  plain answer on every system; the graphics card takes three different questions, one per
+  platform (Windows asks DXGI for the card's dedicated memory, macOS asks Metal how much it
+  recommends an application hold, and Linux reads the largest block of memory Vulkan says
+  belongs to the card). Where a machine will not answer, the slider falls back to a fixed
+  figure rather than inventing one. The defaults match
   what Lumit used before the page existed, so nothing changes until you move a slider. A
   **Clear cache** button underneath empties the memory and video-memory caches straight away
   (handy after a big edit, or if you just want a clean start) — the on-disk cache is left
