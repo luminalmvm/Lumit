@@ -521,16 +521,14 @@ fn directional_blur(
     fx.done()
 }
 
-/// "Radial Blur" → **Radial blur** (docs/08 §3.10). Amount carries as pixels;
-/// Lumit's centre is a per cent of the frame rather than a point in it, and
-/// AE's antialiasing and seed have no counterpart.
+/// "Radial Blur" → **Radial blur** (docs/08 §3.10). Amount carries as pixels
+/// and the centre is a point on both sides since K-558 — AE's layer pixels are
+/// Lumit's px@comp, so the two numbers copy across — while AE's antialiasing
+/// and seed have no counterpart.
 fn radial_blur(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, "radial_blur", "Radial Blur")?;
     fx.float(conv, "ADBE Radial Blur-0001", "amount", 1.0, 0.0);
-    let (w, h) = conv.size;
-    fx.float_axis(conv, "ADBE Radial Blur-0002", 0, "centre_x", 100.0 / w, 0.0);
-    fx.float_axis(conv, "ADBE Radial Blur-0002", 1, "centre_y", 100.0 / h, 0.0);
-    fx.rebased(conv, "Center");
+    fx.point(conv, "ADBE Radial Blur-0002", "centre_x", "centre_y", 1.0);
     // 1 Spin, 2 Zoom — AE's default of 1 is Spin, which is Lumit's 0.
     fx.choice(conv, "ADBE Radial Blur-0003", "radial_type", |v| {
         (u32::from(v == 2), None)

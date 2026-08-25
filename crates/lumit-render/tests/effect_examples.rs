@@ -156,6 +156,14 @@ fn showcase(match_name: &str) -> Vec<(&'static str, EffectValue)> {
             ("intensity", f(7.0)),
         ],
         "median" => vec![("radius", f(3.0))],
+        // Radial blur's centre is px@comp since K-558, and the schema default
+        // is the nominal 1080p middle. This plate is 1920x816, so the picture
+        // asks for *its* middle — which is what `instantiate_for_raster` would
+        // have written had the effect been dropped on this comp.
+        "radial_blur" => vec![
+            ("centre_x", f(f64::from(W) * 0.5)),
+            ("centre_y", f(f64::from(H) * 0.5)),
+        ],
         // A four-pixel period is right on a screen and gone by the time the
         // figure has been scaled to page width, so the example uses a coarse one.
         "scanlines" => vec![("intensity", f(0.9)), ("scanline_period", f(12.0))],

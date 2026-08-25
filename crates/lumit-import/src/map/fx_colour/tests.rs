@@ -278,10 +278,11 @@ fn directional_blur_keeps_the_angle_and_the_length() {
     assert!(!ran.rebased("Blur Length"));
 }
 
-/// **Radial blur's centre is a point in After Effects and a per cent of the
-/// frame in Lumit, so each axis divides through its own dimension.**
+/// **Radial blur's centre is a point on both sides since K-558**, so the two
+/// numbers copy across — AE's layer pixels are Lumit's px@comp — and nothing
+/// is rebased any more.
 #[test]
-fn radial_blur_converts_its_centre_per_axis() {
+fn radial_blur_carries_its_centre_as_pixels() {
     let mut centre = leaf("ADBE Radial Blur-0002", serde_json::json!([480.0, 810.0]));
     centre.value_type = Some("point".to_string());
     let ran = run(&effect(
@@ -298,8 +299,8 @@ fn radial_blur_converts_its_centre_per_axis() {
 
     assert_eq!(ran.inst.effect.match_name, "radial_blur");
     assert!(close(ran.keys("amount")[0].value, 30.0));
-    assert!(close(ran.f("centre_x"), 25.0));
-    assert!(close(ran.f("centre_y"), 75.0));
+    assert!(close(ran.f("centre_x"), 480.0));
+    assert!(close(ran.f("centre_y"), 810.0));
     // AE's Type 2 is Zoom, Lumit's index 1.
     assert_eq!(ran.choice("radial_type"), 1);
     assert!(ran.dropped("Antialiasing (Best Quality)"));

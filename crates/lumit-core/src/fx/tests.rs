@@ -3418,15 +3418,14 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
     );
     assert_eq!(d.packed(), (200.0, 0.0, 1, 1.0));
 
-    // Radial blur reads Centre/Amount/Type/Edges: Centre resolves to a
-    // *fraction* (30/70%, unconverted — resolve_stack has no width/height to
-    // scale it by), Amount 150 px@comp = 150px, Type defaults to Spin, Edges
-    // to Repeat.
+    // Radial blur reads Centre/Amount/Type/Edges: Centre is px@comp since
+    // K-558 and resolves like every other pixel row (px_scale 1 here), Amount
+    // 150 px@comp = 150px, Type defaults to Spin, Edges to Repeat.
     let mut radial = instantiate("radial_blur").unwrap();
     for p in &mut radial.params {
         match p.id.as_str() {
-            "centre_x" => p.value = EffectValue::Float(Property::fixed(30.0)),
-            "centre_y" => p.value = EffectValue::Float(Property::fixed(70.0)),
+            "centre_x" => p.value = EffectValue::Float(Property::fixed(300.0)),
+            "centre_y" => p.value = EffectValue::Float(Property::fixed(700.0)),
             _ => {}
         }
     }
@@ -3437,7 +3436,7 @@ fn blur_family_split_resolves_each_effect_and_loads_legacy_as_gaussian() {
         1.0,
         &MarkerContext::NONE,
     );
-    assert_eq!(rb.packed(), ([0.3, 0.7], 150.0, true, 1, 1.0));
+    assert_eq!(rb.packed(), ([300.0, 700.0], 150.0, true, 1, 1.0));
 
     // The Type choice flips Spin/Zoom; Edges is honoured (Mirror = 2).
     for p in &mut radial.params {
@@ -3613,7 +3612,8 @@ fn cpu_radial_blur_spins_and_zooms_from_centre() {
     let at = |x: u32, y: u32| ((y * w + x) * 4) as usize;
     let imp = at(12, 8);
     img[imp..imp + 4].copy_from_slice(&[1.0, 1.0, 1.0, 1.0]);
-    let centre = [0.5f32, 0.5f32];
+    // px@comp, resolved onto this 17x17 raster (K-558): pixel 8's centre.
+    let centre = [8.5f32, 8.5f32];
 
     // Amount 0 and mix 0 are both the exact identity, either type (the
     // same zero-tap-offset reasoning as blur_directional's length 0).
@@ -6941,6 +6941,109 @@ fn lens_flare_background_migrates_to_the_blend_menu() {
     }
 }
 
+// The share-of-the-frame → px@comp conversions (K-558) read old projects
+// forward, which is K-258's rule applied to a *unit* change rather than to a
+// missing row: what a saved file rendered, it still renders.
+//
+// Radial blur's centre was a per cent of the frame, so 30 / 70 on a 1920x1080
+// comp is the pixel 576, 756 — and the same point either way, which is the
+// only thing the conversion has to be true about. The declared version is the
+// gate: a file read twice converts once, and a file saved since the conversion
+// is left exactly alone.
+#[test]
+fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
+    let (w, h) = (1920.0, 1080.0);
+    let mut inst = instantiate("radial_blur").unwrap();
+    inst.effect.version = 1;
+    for p in &mut inst.params {
+        match p.id.as_str() {
+            "centre_x" => p.value = EffectValue::Float(Property::fixed(30.0)),
+            "centre_y" => p.value = EffectValue::Float(Property::fixed(70.0)),
+            _ => {}
+        }
+    }
+    let mut effects = vec![inst];
+    migrate_percent_to_px(&mut effects, w, h);
+    let read = |effects: &[crate::model::EffectInstance], id: &str| match effects[0].param(id) {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        _ => panic!("{id} must be a float"),
+    };
+    assert!((read(&effects, "centre_x") - 576.0).abs() < 1e-9);
+    assert!((read(&effects, "centre_y") - 756.0).abs() < 1e-9);
+    assert_eq!(effects[0].effect.version, 2, "the instance is v2 now");
+
+    // Idempotent: a second read converts nothing, because the version says so.
+    migrate_percent_to_px(&mut effects, w, h);
+    assert!((read(&effects, "centre_x") - 576.0).abs() < 1e-9);
+    assert!((read(&effects, "centre_y") - 756.0).abs() < 1e-9);
+
+    // A keyframed centre keeps its curve: every value scales, and so do the
+    // bezier speeds, which live on the value axis (see `scale_property`).
+    let mut animated = instantiate("radial_blur").unwrap();
+    animated.effect.version = 1;
+    for p in &mut animated.params {
+        if p.id == "centre_x" {
+            p.value = EffectValue::Float(Property {
+                animation: crate::anim::Animation::Keyframed(vec![
+                    crate::anim::Keyframe {
+                        time: crate::time::Rational::new(0, 1).unwrap(),
+                        value: 25.0,
+                        interp_in: crate::anim::SideInterp::Linear,
+                        interp_out: crate::anim::SideInterp::Bezier {
+                            speed: 10.0,
+                            influence: 1.0 / 3.0,
+                        },
+                    },
+                    crate::anim::Keyframe {
+                        time: crate::time::Rational::new(1, 1).unwrap(),
+                        value: 75.0,
+                        interp_in: crate::anim::SideInterp::Linear,
+                        interp_out: crate::anim::SideInterp::Linear,
+                    },
+                ]),
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+    let mut effects = vec![animated];
+    migrate_percent_to_px(&mut effects, w, h);
+    let Some(EffectValue::Float(p)) = effects[0].param("centre_x") else {
+        panic!("centre_x must be a float");
+    };
+    let crate::anim::Animation::Keyframed(keys) = &p.animation else {
+        panic!("centre_x must still be keyframed");
+    };
+    assert!((keys[0].value - 480.0).abs() < 1e-9, "25% of 1920");
+    assert!((keys[1].value - 1440.0).abs() < 1e-9, "75% of 1920");
+    assert!(
+        matches!(keys[0].interp_out, crate::anim::SideInterp::Bezier { speed, .. }
+            if (speed - 192.0).abs() < 1e-9),
+        "the speed scales with the values it describes"
+    );
+
+    // Nothing else moves: a Percent row on another effect is not a distance.
+    let mut untouched = instantiate("tile").unwrap();
+    untouched.effect.version = 1;
+    let mut effects = vec![untouched];
+    let before = effects[0].clone();
+    migrate_percent_to_px(&mut effects, w, h);
+    assert_eq!(effects[0].params, before.params);
+}
+
+// A fresh Radial blur spins about the middle of the comp it landed on, not
+// about the schema's nominal 1080p centre (K-558, the `instantiate_for_raster`
+// rule every other centre already follows).
+#[test]
+fn a_fresh_radial_blur_centres_on_its_own_comp() {
+    let inst = builtins::instantiate_for_raster("radial_blur", 3840.0, 2160.0).unwrap();
+    let read = |id: &str| match inst.param(id) {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        _ => panic!("{id} must be a float"),
+    };
+    assert!((read("centre_x") - 1920.0).abs() < 1e-9);
+    assert!((read("centre_y") - 1080.0).abs() < 1e-9);
+}
+
 // "This layer" (K-288): a fresh Lens flare added to a layer points its Matte
 // source at that layer, so switching Source to Matte flares the lights in
 // the picture the effect is already on — and on an adjustment layer, the
@@ -9914,6 +10017,11 @@ fn every_parameter_declares_a_unit() {
             ("blur", "radius"),
             ("directional_blur", "length"),
             ("radial_blur", "amount"),
+            // K-558: Radial blur's centre is the last point to stop being a
+            // per cent of the frame, so it joins the pass that follows the
+            // raster.
+            ("radial_blur", "centre_x"),
+            ("radial_blur", "centre_y"),
             ("sharpen", "radius"),
             ("sprite_flare", "light_x"),
             ("sprite_flare", "light_y"),
@@ -12661,10 +12769,12 @@ fn the_point_units_the_panel_hard_coded_are_declared_per_effect() {
     ] {
         assert_eq!(unit_of(effect, id), Some(Unit::Px), "{effect}.{id}");
     }
-    // Its one `false` entry: Radial blur's centre is a per cent of the frame,
-    // and `packed` turns it into a fraction of the raster's own width/height.
-    assert_eq!(unit_of("radial_blur", "centre_x"), Some(Unit::Percent));
-    assert_eq!(unit_of("radial_blur", "centre_y"), Some(Unit::Percent));
+    // Its one `false` entry is gone: since K-558 Radial blur's centre is
+    // px@comp like every other centre, so the map it encoded could now be
+    // written on the id alone — which is exactly why the knowledge stays in
+    // the declarations rather than in a Dart table.
+    assert_eq!(unit_of("radial_blur", "centre_x"), Some(Unit::Px));
+    assert_eq!(unit_of("radial_blur", "centre_y"), Some(Unit::Px));
     // The `centre_x` rows an id-keyed map called percentages by mistake.
     for effect in ["iris_wipe", "linear_wipe", "lens_distort", "mirror"] {
         assert_eq!(unit_of(effect, "centre_x"), Some(Unit::Px), "{effect}");

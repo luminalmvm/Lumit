@@ -56,10 +56,10 @@ struct DirBlurParams {
 /// the oracle's exact kernel size.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RadialBlurOp {
-    /// Centre as a *fraction* of the raster (not raster pixels) — the
-    /// kernel scales it by its own `textureDimensions`, exactly like the
-    /// CPU reference scales it by the `w`/`h` it is handed.
-    pub centre_frac: [f32; 2],
+    /// Centre in raster pixels (K-558: px@comp, already scaled to this
+    /// raster by the resolve step) — the kernel reads it as it stands,
+    /// exactly like the CPU reference does.
+    pub centre_px: [f32; 2],
     /// Peak tap spread in raster pixels, reached at the frame's farthest
     /// corner from Centre.
     pub amount_px: f32,
@@ -388,7 +388,7 @@ impl FxEngine {
             w,
             h,
             bytemuck::bytes_of(&RadialBlurParams {
-                centre: op.centre_frac,
+                centre: op.centre_px,
                 amount: op.amount_px,
                 taps: op.taps,
                 spin: u32::from(op.spin),

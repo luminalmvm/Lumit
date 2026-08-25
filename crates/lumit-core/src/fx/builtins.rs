@@ -132,6 +132,13 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // "here" somebody can see, and the schema cannot know the raster.
             ("points_sample", "position_x") => w * 0.5,
             ("points_sample", "position_y") => h * 0.5,
+            // Radial blur's centre became px@comp with K-558, so it joins the
+            // list for the reason every other member is on it: a stored 960,
+            // 540 is the middle of a 1080p comp and the top-left quarter of a
+            // 4K one, and a fresh radial blur must spin about the middle of
+            // whatever frame it landed on.
+            ("radial_blur", "centre_x") => w * 0.5,
+            ("radial_blur", "centre_y") => h * 0.5,
             // Tile's centre is the same default for a stronger reason (K-542):
             // its whole-frame default tile is only the *identity* if it is cut
             // from the middle of the frame, so a schema constant of 960, 540 on
@@ -238,6 +245,66 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
                     extra: serde_json::Map::new(),
                 });
             }
+        }
+    }
+}
+
+/// Scale every value a property holds by `k`, curve shape included.
+///
+/// A span's four control points are `(v, v + speed·influence·Δt)` at each end
+/// (see [`crate::anim::CubicSpan::from_ae`]), so a value axis multiplied by `k`
+/// is exactly the same curve scaled — provided the speeds go with it. Times and
+/// influences are untouched: they live on the other axis.
+fn scale_property(p: &mut Property, k: f64) {
+    use crate::anim::{Animation, SideInterp};
+    let scale_side = |s: &mut SideInterp| {
+        if let SideInterp::Bezier { speed, .. } = s {
+            *speed *= k;
+        }
+    };
+    match &mut p.animation {
+        Animation::Static(v) => *v *= k,
+        Animation::Keyframed(keys) => {
+            for key in keys {
+                key.value *= k;
+                scale_side(&mut key.interp_in);
+                scale_side(&mut key.interp_out);
+            }
+        }
+        // An expression computes its own number; rewriting someone's script is
+        // worse than leaving it, and the row is now read as pixels either way.
+        Animation::Expression(_) => {}
+    }
+}
+
+/// Convert a saved instance's share-of-the-frame values into px@comp (K-558),
+/// the K-258-style compatibility read for the conversions K-558 ordered.
+///
+/// **Why this is not part of [`backfill_builtin_params`].** A per cent of the
+/// frame only becomes a pixel count once the frame is known, and the backfill is
+/// handed a bare stack. The project reader calls this from inside the
+/// composition, where `w`/`h` are at hand; the effect's declared `version` is
+/// the gate, so a file read twice converts once and a file saved since the
+/// conversion is left alone.
+pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
+    for e in effects.iter_mut() {
+        if e.effect.namespace != EffectNamespace::Builtin {
+            continue;
+        }
+        // Radial blur v1 → v2: Centre x and Centre y were a per cent of the
+        // frame's width and height (K-558).
+        if e.effect.match_name == "radial_blur" && e.effect.version < 2 {
+            for p in &mut e.params {
+                let basis = match p.id.as_str() {
+                    "centre_x" => w,
+                    "centre_y" => h,
+                    _ => continue,
+                };
+                if let EffectValue::Float(prop) = &mut p.value {
+                    scale_property(prop, basis / 100.0);
+                }
+            }
+            e.effect.version = 2;
         }
     }
 }

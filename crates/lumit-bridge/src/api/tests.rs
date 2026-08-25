@@ -7193,9 +7193,10 @@ fn the_cache_strip_crosses_with_both_nibbles() {
 // ---------------------------------------------------------------------------
 
 /// Every declared parameter says what its number is, so the row's rider is
-/// read off the declaration rather than off a table keyed by parameter id —
-/// which could not tell Radial blur's per-cent Centre from the effects whose
-/// `centre_x` is px@comp.
+/// read off the declaration rather than off a table keyed by parameter id.
+/// Two rows of the same effect disagree — a Mix is a per cent and a Radius is
+/// pixels — which is reason enough on its own; and Radial blur's Centre, the
+/// one `centre_x` that was a per cent, crossed to px@comp with K-558.
 #[test]
 fn a_parameter_declares_its_unit_across_the_seam() {
     use crate::api::effect::{list_parameters, BridgeUnit};
@@ -7210,9 +7211,7 @@ fn a_parameter_declares_its_unit_across_the_seam() {
 
     assert_eq!(unit("blur", "radius"), BridgeUnit::Px);
     assert_eq!(unit("blur", "mix"), BridgeUnit::Percent);
-    // The same parameter id, two different units — the whole reason this
-    // crosses at all.
-    assert_eq!(unit("radial_blur", "centre_x"), BridgeUnit::Percent);
+    assert_eq!(unit("radial_blur", "centre_x"), BridgeUnit::Px);
     assert_eq!(unit("mirror", "centre_x"), BridgeUnit::Px);
     assert_eq!(unit("lens_flare", "light_x"), BridgeUnit::Px);
     assert_eq!(unit("dof", "focus_point_x"), BridgeUnit::Px);

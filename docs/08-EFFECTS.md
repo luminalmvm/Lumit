@@ -1030,9 +1030,10 @@ cancellation.
   sharing the family's reach; the tap count still clamps (`cpu::dir_blur_taps`), so a long
   streak stays bounded in cost. ROI `full-frame` (an unbounded Length cannot be padded
   statically).
-- **Radial blur** (match_name `radial_blur`): Centre X / Centre Y (% of comp width/height,
-  50/50 default — the schema has no Point-shaped `ParamKind`, so this follows Transform's own
-  `anchor_x`/`anchor_y` split), Amount (px@comp, default 150, slider 0–2000, hard-unbounded above),
+- **Radial blur** (match_name `radial_blur`): Centre X / Centre Y (**px@comp**, K-558, default
+  960/540 and centred on the actual comp by `instantiate_for_raster` — the schema has no
+  Point-shaped `ParamKind`, so this follows Transform's own `anchor_x`/`anchor_y` split),
+  Amount (px@comp, default 150, slider 0–2000, hard-unbounded above),
   Type (Spin / Zoom, default Spin) and **Edges** (Transparent / Repeat / Mirror). Amount is the
   peak per-pixel tap spread, reached at the frame's farthest corner from Centre, and may exceed
   100 % now it is its own effect (the tap count clamps in `cpu::radial_blur_taps`). Both types

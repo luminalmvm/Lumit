@@ -17,7 +17,9 @@ use lumit_fx_macros::Effect;
 #[effect(
     match_name = "radial_blur",
     label = "Radial blur",
-    version = 1,
+    // 2: the centre pair crossed from a per cent of the frame to px@comp
+    // (K-558). `migrate_percent_to_px` converts a v1 instance on load.
+    version = 2,
     category = BlurSharpen,
     cost = Moderate,
     roi = FullFrame,
@@ -42,17 +44,16 @@ pub struct RadialBlur {
     )]
     pub amount: f32,
 
-    /// % of comp width. `resolve_stack` carries only `diag_px` (no separate
-    /// width/height), so this stays a plain number here and [`packed`](Self::
-    /// packed) turns it into a *fraction* the CPU/GPU function scales by its own
-    /// w — exactly how chromatic aberration derives the frame centre. Not
-    /// spatial, therefore: a fraction of the raster does not move when the
-    /// raster does.
-    #[slider(label = "Centre X", min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
+    /// px@comp (K-558: no point is a per cent of the frame). The schema default
+    /// is the nominal 1080p centre; `instantiate_for_raster` centres a fresh
+    /// instance on the actual comp, and the resolve step scales the stored
+    /// pixels to the raster being rendered, so a Half preview spins about the
+    /// same place as the export.
+    #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
 
-    /// % of comp height (see [`centre_x`](Self::centre_x)).
-    #[slider(label = "Centre Y", min = 0.0, max = 100.0, default = 50.0, unit = Percent)]
+    /// px@comp; see [`centre_x`](Self::centre_x).
+    #[slider(label = "Centre Y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub centre_y: f32,
 
     /// Spin (arcs about Centre) or Zoom (rays through it).
@@ -81,18 +82,19 @@ pub struct RadialBlur {
 }
 
 impl RadialBlur {
-    /// The centre as a raster fraction, the peak spread in raster pixels,
-    /// whether it spins, the edge policy and the mix (docs/impl/
-    /// effect-registry.md §2.4).
+    /// The centre in raster pixels, the peak spread in raster pixels, whether
+    /// it spins, the edge policy and the mix (docs/impl/effect-registry.md
+    /// §2.4).
     ///
-    /// `amount` arrives already converted from % diagonal by the resolve step.
+    /// Both the centre and the amount arrive already scaled to the raster by
+    /// the resolve step, which is what a `Unit::Px` parameter gets.
     /// The stored Choices map exactly as the old arm mapped them: anything but
     /// index 1 is Spin, and the edge index goes through [`EdgesMode`] clamped to
     /// the known set, falling back to Repeat. Both render paths read this one
     /// method, so the CPU reference and the WGSL kernel cannot drift apart.
     pub fn packed(self) -> ([f32; 2], f32, bool, u32, f32) {
         (
-            [self.centre_x / 100.0, self.centre_y / 100.0],
+            [self.centre_x, self.centre_y],
             self.amount.max(0.0),
             self.radial_type != 1,
             EdgesMode::from_code(self.edge.min(2))
@@ -112,7 +114,7 @@ impl EffectDef for RadialBlurDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        let (centre_frac, amount_px, spin, edge, mix) = RadialBlur::read(p).packed();
-        cpu::blur_radial(rgba, w, h, centre_frac, amount_px, spin, edge, mix);
+        let (centre_px, amount_px, spin, edge, mix) = RadialBlur::read(p).packed();
+        cpu::blur_radial(rgba, w, h, centre_px, amount_px, spin, edge, mix);
     }
 }

@@ -8,7 +8,7 @@
 // exactly `pos` at Centre, with no epsilon guard needed.
 
 struct Params {
-    centre: vec2<f32>, // fraction of the raster (not raster pixels)
+    centre: vec2<f32>, // raster px (K-558: px@comp, already scaled)
     amount: f32,        // peak tap spread, raster px, at the farthest corner
     taps: i32,          // == cpu::radial_blur_taps(amount)
     spin: u32,          // 1 = Spin (tangent direction), 0 = Zoom (radial)
@@ -95,7 +95,7 @@ fn radial_blur(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let fsize = vec2<f32>(size);
-    let centre = p.centre * fsize;
+    let centre = p.centre;
     let diag = sqrt(fsize.x * fsize.x + fsize.y * fsize.y);
     var k = 0.0;
     if (diag > 0.0) {

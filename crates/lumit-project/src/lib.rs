@@ -298,8 +298,15 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
     // so the panel has values to draw and edits have ids to write.
     for item in &mut doc.items {
         if let lumit_core::model::ProjectItem::Composition(comp) = item {
+            let (w, h) = (f64::from(comp.width), f64::from(comp.height));
             for layer in &mut comp.layers {
                 lumit_core::fx::backfill_builtin_params(&mut layer.effects);
+                // And convert the share-of-the-frame values K-558 turned into
+                // px@comp. Separate because it needs the composition's own
+                // size, which is why it is done here rather than in the
+                // backfill: a per cent is only a pixel count once the frame is
+                // known.
+                lumit_core::fx::migrate_percent_to_px(&mut layer.effects, w, h);
             }
         }
     }

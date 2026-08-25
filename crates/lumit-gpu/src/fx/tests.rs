@@ -2625,19 +2625,22 @@ fn wgsl_radial_blur_matches_the_cpu_oracle() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for edge in [0u32, 1, 2] {
+        // Centres are raster pixels since K-558 (px@comp, resolved to this
+        // raster): the middle of the 32x24 corpus, and a point three tenths
+        // across and seven tenths down it.
         for (centre, amount, spin, mix) in [
-            ([0.5f32, 0.5f32], 6.0f32, true, 1.0f32),
-            ([0.5, 0.5], 6.0, false, 1.0),
-            ([0.3, 0.7], 9.5, true, 0.6),
-            ([0.3, 0.7], 9.5, false, 0.6),
-            ([0.5, 0.5], 0.0, true, 1.0),
+            ([16.0f32, 12.0f32], 6.0f32, true, 1.0f32),
+            ([16.0, 12.0], 6.0, false, 1.0),
+            ([9.6, 16.8], 9.5, true, 0.6),
+            ([9.6, 16.8], 9.5, false, 0.6),
+            ([16.0, 12.0], 0.0, true, 1.0),
         ] {
             let mut cpu = img.clone();
             lumit_core::fx::cpu::blur_radial(&mut cpu, w, h, centre, amount, spin, edge, mix);
 
             let tex = upload_linear_f32(&ctx, &img, w, h);
             let op = RadialBlurOp {
-                centre_frac: centre,
+                centre_px: centre,
                 amount_px: amount,
                 taps: lumit_core::fx::cpu::radial_blur_taps(amount),
                 spin,
@@ -12618,9 +12621,11 @@ fn the_matte_scales_the_radial_blur_amount() {
     let (w, h) = (32u32, 24u32);
     let img = corpus(w, h);
     for spin in [false, true] {
-        let (centre, amount, edge, mix) = ([0.4f32, 0.6f32], 12.0f32, 1u32, 1.0f32);
+        // Raster px since K-558: four tenths across the 32x24 corpus and six
+        // tenths down it.
+        let (centre, amount, edge, mix) = ([12.8f32, 14.4f32], 12.0f32, 1u32, 1.0f32);
         let op = RadialBlurOp {
-            centre_frac: centre,
+            centre_px: centre,
             amount_px: amount,
             taps: lumit_core::fx::cpu::radial_blur_taps(amount),
             spin,

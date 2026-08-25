@@ -5316,13 +5316,13 @@ pub fn blur_radial(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    centre_frac: [f32; 2],
+    centre_px: [f32; 2],
     amount_px: f32,
     spin: bool,
     edge: u32,
     mix: f32,
 ) {
-    blur_radial_matted(rgba, w, h, centre_frac, amount_px, spin, edge, mix, &[]);
+    blur_radial_matted(rgba, w, h, centre_px, amount_px, spin, edge, mix, &[]);
 }
 
 /// [`blur_radial`] driven by a matte (K-395, docs/08 §2.6): each pixel's
@@ -5335,7 +5335,7 @@ pub fn blur_radial_matted(
     rgba: &mut [f32],
     w: u32,
     h: u32,
-    centre_frac: [f32; 2],
+    centre_px: [f32; 2],
     amount_px: f32,
     spin: bool,
     edge: u32,
@@ -5344,7 +5344,7 @@ pub fn blur_radial_matted(
 ) {
     let original = rgba.to_vec();
     let (fw, fh) = (w as f32, h as f32);
-    let centre = (centre_frac[0] * fw, centre_frac[1] * fh);
+    let centre = (centre_px[0], centre_px[1]);
     let diag = (fw * fw + fh * fh).sqrt();
     let k_full = if diag > 0.0 {
         amount_px / (0.5 * diag)

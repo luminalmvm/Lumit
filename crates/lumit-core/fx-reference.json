@@ -263,7 +263,7 @@
       "slug": "radial-blur",
       "match_name": "radial_blur",
       "label": "Radial blur",
-      "version": 1,
+      "version": 2,
       "category": "Blur & sharpen",
       "category_slug": "blur-sharpen",
       "params": [
@@ -281,19 +281,19 @@
           "id": "centre_x",
           "label": "Centre X",
           "kind": "float",
-          "unit": "percent",
-          "default": 50.0,
+          "unit": "px",
+          "default": 960.0,
           "slider_min": 0.0,
-          "slider_max": 100.0
+          "slider_max": 3840.0
         },
         {
           "id": "centre_y",
           "label": "Centre Y",
           "kind": "float",
-          "unit": "percent",
-          "default": 50.0,
+          "unit": "px",
+          "default": 540.0,
           "slider_min": 0.0,
-          "slider_max": 100.0
+          "slider_max": 2160.0
         },
         {
           "id": "radial_type",
