@@ -264,7 +264,14 @@
       // coming down long after the front has run off the canvas.
       float e = clamp((bdist - inner) / (far + trail - inner), 0.0, 1.0);
       float arrived = (1.0 - pow(1.0 - e, 1.0 / 3.0)) * u_span.x;
-      float age = clamp((u_ms - arrived) / u_span.y, 0.0, 1.0);
+      // The settle is not the same length everywhere. Out at the edge it takes
+      // the full time, which is where the lingering is worth having - that is
+      // the last thing to arrive and the last thing being looked at. In the
+      // middle, where the front went by first and there is still a whole page
+      // arriving around it, it comes down in a little over a third of that and
+      // gets out of the way.
+      float span = u_span.y * mix(0.38, 1.0, e);
+      float age = clamp((u_ms - arrived) / span, 0.0, 1.0);
       float ring = vis
         * (1.0 - age) * (1.0 - age)
         // ... and how much field there is at this pixel to overexpose. The
