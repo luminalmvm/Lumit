@@ -633,6 +633,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // request for its own field.
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
+    // `Ctrl+A` selects every item this panel is showing (K-522), asked for the
+    // same way the search focus is: the shell routes the chord to whichever
+    // panel is focused rather than deciding what "everything" means itself.
+    _boundUi!.selectAllRequest.addListener(_onSelectAllRequested);
   }
 
   void _onSearchRequested() {
@@ -642,10 +646,27 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     }
   }
 
+  /// Every row currently listed — which is every row the *search and the label
+  /// filter* leave, and the open folders' children only. Selecting rows that
+  /// are not on screen would be selecting things the user cannot see.
+  void _onSelectAllRequested() {
+    if (!mounted) return;
+    if (!(_boundUi?.selectAllRequestIsFor(Panel.project) ?? false)) return;
+    if (_visibleIds.isEmpty) return;
+    setState(() {
+      _selectedIds
+        ..clear()
+        ..addAll(_visibleIds);
+      _anchorId = _visibleIds.last;
+    });
+    _publishSelection();
+  }
+
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
+    _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
     _changes?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();

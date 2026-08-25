@@ -7199,6 +7199,20 @@ its ancestors what surrounds it, so an opener finds the marker if there is one
 above it and finds nothing if there is not — which is exactly the question
 "am I inside a menu?".
 
+### Ctrl+A means "everything here" (K-522)
+
+Select all used to mean one thing wherever you pressed it: every layer in the
+composition. In the Project panel that was plainly wrong — it selected things
+you could not see and left the list in front of you untouched.
+
+What "everything" is now depends on which panel has the focus ring: items in the
+Project panel, layers in the Timeline, effects in the Effect controls panel,
+nodes in the Node graph. The shell does not decide any of that. It bumps a
+counter that every panel can watch, and each panel answers only if it is the
+focused one — the same arrangement `Ctrl+F` already used to put the cursor in
+the right search box. Where no panel claims the chord, it still means every
+layer, which is what the Timeline wants and what the Edit menu's own row does.
+
 ### How windows answer the keyboard (K-319)
 
 **Every house control holds focus.** The buttons, the checkboxes, the radios,

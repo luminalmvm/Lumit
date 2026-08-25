@@ -14356,3 +14356,21 @@ then cannot leave the application window is a worse answer than a disabled row, 
 would have to be unbuilt when real windows arrive. If a drawing later asks for a floating
 panel in its own right, that is a different feature with a different name.
 
+## K-522 — Select all is the focused panel's, not the composition's
+
+**DECIDED 2026-08-25** (owner desktop test; `LumitUiState.selectAllRequest` in
+`flutter_ui/lib/main.dart`).
+`edit.select.all` meant one thing wherever it was pressed — every layer in the composition —
+so `Ctrl+A` in the Project panel selected things that were not on screen and left the list
+in front of the user untouched.
+
+**What "everything" is now depends on the focused panel**: items in the Project panel,
+layers in the Timeline, effects in the Effect controls panel, nodes in the Node graph. The
+shell routes rather than decides: it bumps a notifier and each panel answers only while it
+is the focused one — the same arrangement `Ctrl+F` already used for the search boxes
+(docs/07 §15). Where no panel claims it the chord still means every layer, which is the
+Timeline's answer and the Edit menu row's.
+
+The keymap is unchanged: `Mod+A` was already bound to `edit.select.all` in the Global
+context and the engine stays the one place a binding is written down (K-199). What changed
+is only what the action means once it has been looked up.

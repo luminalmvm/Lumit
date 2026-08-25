@@ -140,12 +140,28 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     _boundUi = ui;
     ui.selectedLayer.addListener(_readDriven);
     ui.model.addListener(_readDriven);
+    // `Ctrl+A` here means every effect on the layer (K-522), not every layer
+    // in the composition — the shell routes the chord to the focused panel.
+    ui.selectAllRequest.addListener(_onSelectAllRequested);
     _readDriven();
   }
 
   void _unbindDriven() {
     _boundUi?.selectedLayer.removeListener(_readDriven);
     _boundUi?.model.removeListener(_readDriven);
+    _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
+  }
+
+  /// Pick the whole effect stack of the layer this panel is showing.
+  void _onSelectAllRequested() {
+    final ui = _boundUi;
+    if (!mounted || ui == null) return;
+    if (!ui.selectAllRequestIsFor(Panel.effectControls)) return;
+    final layer = ui.selectedLayer.value ?? _lastLayer;
+    if (layer == null) return;
+    final info = ui.model.byId(layer.internallayerId)?.info;
+    if (info == null || info.effects.isEmpty) return;
+    ui.setEffectSelection(layer, [for (final e in info.effects) e.id]);
   }
 
   /// The one read behind the *driven* rows. A wire's colour is its **source**

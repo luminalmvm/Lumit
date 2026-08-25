@@ -667,6 +667,44 @@ class LumitUiState extends ChangeNotifier {
   /// Whether [panel] is the one a [panelSearchRequest] is meant for.
   bool searchRequestIsFor(Panel panel) => activePanel.value == panel;
 
+  /// Bumped when `Ctrl+A` asks the focused panel to select everything it holds
+  /// (K-522).
+  ///
+  /// **Select all is per panel.** `edit.select.all` used to mean one thing
+  /// wherever it was pressed — every layer in the composition — so `Ctrl+A` in
+  /// the Project panel selected layers you could not see instead of the items
+  /// in front of you. What "everything" is depends on where you are: items in
+  /// the Project panel, layers in the Timeline, effects in the Effect controls
+  /// panel, nodes in the Node graph.
+  ///
+  /// Built like [panelSearchRequest] and for the same reason: each panel keeps
+  /// its own selection, and the shell has no business reaching into one. A
+  /// panel listens, and answers only when it is the focused one — which
+  /// [selectAllRequestIsFor] is how it asks.
+  final ValueNotifier<int> selectAllRequest = ValueNotifier(0);
+
+  /// The panels that keep a selection of their own, and so answer `Ctrl+A`
+  /// themselves rather than letting it mean "every layer".
+  ///
+  /// The Timeline is deliberately absent: its selection *is* the composition's
+  /// layers, which the shell already holds, so the shell answers for it.
+  static const Set<Panel> _selectAllPanels = {
+    Panel.project,
+    Panel.effectControls,
+    Panel.graph,
+  };
+
+  /// Ask the focused panel to select everything, and say whether one was asked.
+  /// False means the shell should fall back to selecting every layer.
+  bool requestSelectAll() {
+    if (!_selectAllPanels.contains(activePanel.value)) return false;
+    selectAllRequest.value++;
+    return true;
+  }
+
+  /// Whether [panel] is the one a [selectAllRequest] is meant for.
+  bool selectAllRequestIsFor(Panel panel) => activePanel.value == panel;
+
   /// A finer selection's claim on Delete (K-234), set by the Timeline while it
   /// is mounted and cleared when it goes.
   ///
@@ -1676,6 +1714,7 @@ class LumitUiState extends ChangeNotifier {
     consoleRequest.dispose();
     viewerZoomRequest.dispose();
     panelSearchRequest.dispose();
+    selectAllRequest.dispose();
     super.dispose();
   }
 
@@ -2718,7 +2757,12 @@ class _LumitAppViewState extends State<LumitAppView> {
         // and the paste lands a frame later rather than being declined here.
         pasteSelectionFrb(state, ui, comp, ui.selectedLayer.value);
       case 'edit.select.all':
-        if (comp == null) {
+        // The focused panel answers first (K-522): "everything" is the items
+        // in the Project panel, the effects on the layer, the nodes in the
+        // graph. Only where no panel claims it does it mean every layer.
+        if (ui.requestSelectAll()) {
+          handled = true;
+        } else if (comp == null) {
           handled = false;
         } else {
           ui.setSelection(comp.getLayers());
