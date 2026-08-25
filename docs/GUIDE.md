@@ -5098,6 +5098,53 @@ percentage — is parked in an **`ae` namespace** on whichever object it belonge
 Lumit's own file format carries fields it does not understand through a save
 untouched, so that data survives indefinitely and a later version can pick it up.
 
+### Agreeing with other programs about what a colour means — `crates/lumit-colour` (K-489, K-490)
+
+Two editors can both be told "this shot is ACEScct" and still show different pictures,
+unless they agree on what that name *means*. **OpenColorIO** is the standard that
+settles it: a studio publishes a **config** — one text file naming colour spaces and a
+folder of look-up tables it points at — and every serious program reads the same file.
+Load one into Lumit and the config's own names appear wherever Lumit already asks a
+colour question: what a piece of footage arrived as, what the Viewer is showing it
+through, what an export writes.
+
+The official implementation is a C++ library, and Lumit deliberately does not use it.
+The reason is the promise the whole application is built on: the preview *is* the
+export, pixel for pixel. That library computes one way on the processor and another way
+on the graphics card, by design — good enough for film work, but two answers cannot be
+one answer. So Lumit reads the format itself, exactly as it hosts OpenFX plugins itself
+and reads `.cube` files itself.
+
+The trick that makes it affordable is **baking**. A config describes a transform as a
+recipe: multiply by this matrix, take that logarithm, look this up in a table. Running
+that recipe on every pixel of every frame would be hopeless, so it is run **once**, on
+the processor, over a grid of sample colours, and the answers are kept in a small
+table. That table is the *artefact*, and both the Viewer and the export sample the same
+one — not two implementations that agree, one dispatch used twice.
+
+There are two shapes of artefact, and which one a transform gets is decided
+mechanically. If every step in the recipe treats red, green and blue separately, plus
+matrices, the artefact is just a **sampled curve and a matrix** — exact, and still
+correct on values outside the sampled range because the original steps are kept beside
+the table and used out there. Camera input transforms are this shape by construction.
+Everything else — a display's view, anything that mixes the channels — gets a
+**shaper and a cube**: scene light has no top end, so a logarithmic squash (the
+*shaper*) brings it into 0–1, and a 65×65×65 grid holds the answers. That form has an
+honest cost, written down rather than hidden: what the shaper cannot reach, the cube
+clamps, and a very bright, very saturated colour is read off a coarse part of the grid.
+In-gamut material never notices; wide-gamut material under a config that does its own
+gamut mapping can.
+
+The part worth understanding as a *policy* rather than a mechanism is what happens when
+a config asks for something Lumit has not implemented. It is **refused by name** —
+"this config needs `FixedFunctionTransform`, which Lumit does not support yet" — and
+never approximated. Writing a colour transform is easy; writing one that is subtly
+wrong is easier, and a wrong picture that looks plausible is the failure nobody
+catches. So the crate has a taxonomy of refusals, one per thing it cannot do, and a
+suite of golden fixtures — inputs with expected outputs that Lumit did not produce —
+that gates everything it claims it *can* do. A transform with no passing fixture is not
+a supported transform.
+
 ## 5. Making a change safely (the recipe)
 
 1. **Find the doc first.** Specs (`docs/00–16`) say what the behaviour should be; impl
