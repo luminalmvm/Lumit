@@ -1398,8 +1398,10 @@ measurement — the panel shows the numbers, it does not turn them on.
   selected — on every layer in the comp. Mask rows are in that same selection (K-234), and
   `Delete` with one picked deletes the mask rather than its layer: a panel holding a finer
   selection than the layer one is asked before the shell's `Delete` removes anything.
-  Still to
-  build here: moving/deleting a whole *lane* selection, and the expression toggle.
+  **Keyframes are the finest rung of that ladder** (items 6.24 and 6.6): a drag on any key
+  already in the lane selection carries the whole selection, one undo step, and `Delete`
+  with keys in hand removes those keys and leaves the layer and its masks alone. Still to
+  build here: the expression toggle.
 
 ### 4.4 Sequence layers
 

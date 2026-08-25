@@ -490,6 +490,12 @@ String columnGroupLabel(TimelineGroup group) => switch (group) {
 /// Decide every layer's row, once for the whole panel. `flowParams` and
 /// `volumeDb` are the panel's once-per-revision reads, riding down onto the
 /// fold rows (K-184).
+///
+/// [animatedOnly] is the **Animated filter** (K-441, 6.43): every layer builds
+/// its fold-out as though every twirl in it were down, and then keeps only what
+/// is keyed ([animatedFoldRows]). A layer with nothing keyed comes back shut,
+/// which is also a layer with no summary diamonds to draw — it has no keys
+/// anywhere, so the two answers cannot disagree.
 List<LayerRow> layerRows({
   required List<BridgeLayerEntry> layers,
   required Set<String> open,
@@ -499,23 +505,27 @@ List<LayerRow> layerRows({
   Map<String, double> sequenceExtra = const {},
   Map<String, BridgeFlowParams> flowParams = const {},
   Map<String, BridgeScalar> volumeDb = const {},
+  bool animatedOnly = false,
 }) {
   final out = <LayerRow>[];
   for (final entry in layers) {
     final id = entry.layer.internallayerId.toString();
+    final built = layerFoldRows(
+        entry: entry,
+        open: animatedOnly ? everyFoldPath : open,
+        hasAudio: hasAudio[id] ?? false,
+        flowParams: flowParams[id],
+        volumeDb: volumeDb[id]);
+    final fold = animatedOnly ? animatedFoldRows(built) : built;
+    final isOpen = animatedOnly ? fold.isNotEmpty : open.contains(id);
     out.add(LayerRow(
       entry: entry,
       id: id,
-      open: open.contains(id),
+      open: isOpen,
       rowHeight: rowHeight,
-      foldRows: layerFoldRows(
-          entry: entry,
-          open: open,
-          hasAudio: hasAudio[id] ?? false,
-          flowParams: flowParams[id],
-          volumeDb: volumeDb[id]),
+      foldRows: fold,
       // Only for a shut layer: an open one shows the real thing.
-      summaryKeys: open.contains(id)
+      summaryKeys: isOpen
           ? const []
           : layerKeys(
               entry: entry,
@@ -1799,6 +1809,18 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// default: landing between frames is the deliberate exception.
   bool _magnet = true;
 
+  /// The **Animated filter** (K-441, 6.43): with it on the outline lists only
+  /// the rows that carry keyframes, across every layer; off, the twirl-down
+  /// lists come back exactly as they were.
+  ///
+  /// Off by default, because Layers mode is the layer stack first and a filter
+  /// on at rest is a panel that appears to be missing rows. The `U` family
+  /// stays what it has always been — the reveal cycle, which twirls a layer
+  /// open onto what is animated — so the two answers to "show me the
+  /// animation" are the keyboard's and the strip's, and neither moves the
+  /// other.
+  bool _animatedOnly = false;
+
   bool _syncingScroll = false;
 
   /// The zoom `\` came away from, so pressing it again goes back there. Null
@@ -1824,7 +1846,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is kept, not looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
-    _ui!.deleteClaim = _deleteSelectedMasks;
+    _ui!.deleteClaim = _deleteClaim;
     _ui!.copyClaim = _copySelectedKeys;
     _ui!.pasteClaim = _pasteKeysIntoSelection;
     _publishEasingClaim();
@@ -2023,22 +2045,39 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   }
 
   /// Remove the selected keys — the lane key menu's *Delete key* (K-500 §2.1),
-  /// the same removal the graph's Delete makes.
+  /// the same removal the graph's Delete makes, and what `Delete` itself does
+  /// with lane keys in hand (6.6).
   ///
   /// One undo step however many rows it reaches across: a block deleted in one
-  /// gesture comes back in one (K-458).
-  void _deleteSelectedKeys() {
+  /// gesture comes back in one (K-458). Returns whether anything went, which is
+  /// what lets the Delete claim answer honestly.
+  bool _deleteSelectedKeys() {
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final channels = _selectionChannels(ui);
     final selection = _actionKeySelection(channels);
-    if (selection.isEmpty) return;
+    if (selection.isEmpty) return false;
     asOneUndoStep(
         _project,
         () => deleteKeysFromChannels(
             channels: channels, selectedKeys: selection));
     setState(_laneKeySelection.clear);
     ui.model.refresh();
+    return true;
   }
+
+  /// What `Delete` acts on in this panel, finest selection first (K-234).
+  ///
+  /// **Keyframes before masks before layers.** The shell asks this before it
+  /// deletes anything, so a rung that answers `true` is a rung that has already
+  /// done the work — and each rung is a selection strictly *inside* the one
+  /// below it, which is what makes the order the only sane one: picking a
+  /// keyframe and pressing Delete must not cost the layer it sits on.
+  ///
+  /// Graph mode's own keys are not on this ladder: they are claimed by the
+  /// `edit.delete.selection` handler, which the graph reaches first.
+  bool _deleteClaim() =>
+      (!_graph && _laneKeySelection.isNotEmpty && _deleteSelectedKeys()) ||
+      _deleteSelectedMasks();
 
   /// The right-click menu on a lane keyframe (K-500 §2.1): the graph key's own
   /// menu — Linear / Easy ease / Hold / Delete key — plus *Ease…*, which opens
@@ -2667,7 +2706,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui?.renderTimings.removeListener(_onTimingsChanged);
     _ui?.revealPropertyRequest.removeListener(_onRevealRequested);
     _ui?.selectPropertyRequest.removeListener(_onSelectPropertyRequested);
-    if (_ui?.deleteClaim == _deleteSelectedMasks) _ui!.deleteClaim = null;
+    if (_ui?.deleteClaim == _deleteClaim) _ui!.deleteClaim = null;
     if (_ui?.copyClaim == _copySelectedKeys) _ui!.copyClaim = null;
     if (_ui?.pasteClaim == _pasteKeysIntoSelection) _ui!.pasteClaim = null;
     if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
@@ -2963,7 +3002,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         hasPicture: _hasPicture,
         sequenceExtra: _sequenceExtra,
         flowParams: _flowParams,
-        volumeDb: _volumeDb);
+        volumeDb: _volumeDb,
+        animatedOnly: _animatedOnly);
 
     // The property rows on screen, in display order — what a Shift+click
     // range runs along — and the graph channels the selection resolves to,
@@ -3449,6 +3489,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             onToggle: (group) => setState(() {
               if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
             }),
+            animatedOnly: _animatedOnly,
+            onToggleAnimated: () =>
+                setState(() => _animatedOnly = !_animatedOnly),
             comp: comp,
             model: ui.model,
             playhead: ui.playheadFrame,
@@ -8699,6 +8742,43 @@ class _SelectedKey {
   });
 }
 
+/// Write a finished key gesture: every key [moved] holds re-timed to where it
+/// has been seen to travel, the whole set **one undo step** (K-458).
+///
+/// One writer for the block stretch and for a lane key's drag (6.24), because
+/// they are one act — a set of keys, and a rule saying where each of them
+/// lands. Grouped by row before anything is written, so a row's keys move
+/// together and the strictly-ascending check inside [moveLaneKeys] sees the
+/// finished list rather than one key at a time.
+///
+/// Returns whether anything was written.
+bool _commitKeyGesture({
+  required List<_SelectedKey> places,
+  required KeyStretch moved,
+  required bool whole,
+  required int fpsNum,
+  required int fpsDen,
+  required ProjectReference? project,
+}) {
+  final byRow = <String, (_SelectedKey, Map<int, BridgeRational>)>{};
+  for (final place in places) {
+    if (!moved.keys.contains('${place.rowId}#${place.index}')) continue;
+    final frame = moved.frameOf(place.frame, whole: whole);
+    (byRow[place.rowId] ??= (place, {})).$2[place.index] =
+        timeOfSubframe(frame, fpsNum, fpsDen);
+  }
+  if (byRow.isEmpty) return false;
+  var changed = false;
+  asOneUndoStep(project, () {
+    for (final (place, times) in byRow.values) {
+      if (moveLaneKeys(entry: place.entry, row: place.row, times: times)) {
+        changed = true;
+      }
+    }
+  });
+  return changed;
+}
+
 /// Everything a drag on the Timeline can land on (docs/07 §4.5), built from
 /// the read model and the memoised marker list — so it costs no bridge calls
 /// (K-184).
@@ -9016,6 +9096,27 @@ class _LayerArea extends StatelessWidget {
         ..add(id);
     }
     onKeysSelected(next);
+  }
+
+  /// The release of a lane key's drag: every key it carried written where it
+  /// travelled, one undo step (6.24).
+  ///
+  /// Done here rather than in the lane because the selection reaches across
+  /// rows and layers, and a lane knows only its own — the same reason the
+  /// block stretch commits here.
+  void _moveHeldKeys(KeyStretch moved) {
+    if (_commitKeyGesture(
+      places: _selectedKeyPlaces(),
+      moved: moved,
+      whole: magnet &&
+          !snapSuspended(
+              controlPressed: HardwareKeyboard.instance.isControlPressed),
+      fpsNum: fpsNum,
+      fpsDen: fpsDen,
+      project: project,
+    )) {
+      onChanged();
+    }
   }
 
   /// Every **selected** key, with where it sits: the one walk the block box,
@@ -9556,6 +9657,7 @@ class _LayerArea extends StatelessWidget {
         stretch: stretch,
         onKeyMenu: (index, position) => onKeyMenu('$rowId#$index', position),
         onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
+        onMoveKeys: _moveHeldKeys,
         onChanged: onChanged,
       ),
     );
@@ -9605,6 +9707,11 @@ class _KeyLane extends StatefulWidget {
   /// Right-click on one of this lane's diamonds, at the pointer in global
   /// coordinates.
   final void Function(int index, Offset position) onKeyMenu;
+
+  /// The release of a key drag: write the whole selection where the gesture
+  /// has carried it (6.24). The area does the writing, because the keys are on
+  /// rows this lane does not have.
+  final ValueChanged<KeyStretch> onMoveKeys;
   final VoidCallback onChanged;
 
   const _KeyLane({
@@ -9624,6 +9731,7 @@ class _KeyLane extends StatefulWidget {
     required this.stretch,
     required this.onSelectKey,
     required this.onKeyMenu,
+    required this.onMoveKeys,
     required this.onChanged,
   });
 
@@ -9633,6 +9741,19 @@ class _KeyLane extends StatefulWidget {
 
 class _KeyLaneState extends State<_KeyLane> {
   int? _dragging;
+
+  /// The keys this drag is carrying, captured at its start (6.24) — the whole
+  /// lane selection, which is spread across rows this lane cannot see.
+  Set<String> _held = const {};
+
+  /// Whether a modifier was down when the gesture began, so a release that
+  /// turns out to have been a click toggles rather than replaces.
+  bool _additive = false;
+
+  /// Whether the start of the gesture already took the key into the selection.
+  /// If it did, a release that turns out to have been a click must not act
+  /// again: `Ctrl` would toggle straight back out the key the press just added.
+  bool _pickedAtStart = false;
 
   /// Which of this lane's keys the pointer is over (§4.2, polish 26). The mark
   /// brightens halfway to `text_primary` — the pre-selection hint, saying "this
@@ -9688,7 +9809,19 @@ class _KeyLaneState extends State<_KeyLane> {
                 controlPressed: HardwareKeyboard.instance.isControlPressed),
       );
     }
-    if (_dragging != i) return base;
+    return base;
+  }
+
+  /// Where the drag has taken the key it holds: the pointer's travel, held
+  /// inside the axis and taken to the nearest target (docs/07 §4.5).
+  ///
+  /// The one key the hand is on decides the travel; [_publish] then applies
+  /// that travel to the whole selection, so a run of keys keeps its shape
+  /// rather than each of them finding its own target — the rule the graph's
+  /// key drag has always followed.
+  double _snappedFrame(int i) {
+    final base =
+        laneKeyFrame(widget.keys[i], widget.fps) + widget.barShift.toDouble();
     final perFrame = widget.axis.perFrame;
     final moved = perFrame <= 0 ? base : base + _deltaPx / perFrame;
     final clamped = moved.clamp(0.0, widget.axis.frames.toDouble());
@@ -9713,9 +9846,32 @@ class _KeyLaneState extends State<_KeyLane> {
     return snapped.frame;
   }
 
+  /// Tell every lane how far the gesture has carried the selection (6.24).
+  ///
+  /// Broadcast rather than kept here for the reason the block stretch is
+  /// (K-458): the keys in hand sit on rows in another part of the tree, and a
+  /// travel only this lane knew about would move one diamond while the rest of
+  /// the selection sat still until the release put them somewhere they had not
+  /// been seen to go.
+  ///
+  /// Nothing to say while the travel is zero, and so nothing published: a
+  /// gesture that has not moved leaves every key reading its own time, which is
+  /// what keeps a key already sitting between frames from being rounded onto
+  /// one by a drag that went nowhere.
+  void _publish() {
+    final i = _dragging;
+    if (i == null) return;
+    final base =
+        laneKeyFrame(widget.keys[i], widget.fps) + widget.barShift.toDouble();
+    final by = _snappedFrame(i) - base;
+    widget.stretch.value =
+        by == 0 ? null : KeyStretch.shift(keys: _held, by: by);
+  }
+
   /// Put the key back where the drag found it, leaving nothing behind — what
   /// `Escape` does, and what a cancelled gesture does.
   void _abandon() {
+    widget.stretch.value = null;
     if (!mounted) return;
     setState(() {
       _dragging = null;
@@ -9724,21 +9880,30 @@ class _KeyLaneState extends State<_KeyLane> {
     });
   }
 
+  /// The release: every key the gesture held written where it has been seen to
+  /// travel, as one undo step (6.24, K-458).
+  ///
+  /// **A gesture that never moved was a click**, and a click on a key selects
+  /// exactly that key (K-500 §2.1). The two are told apart here rather than by
+  /// a second recogniser because the diamond has only one, deliberately: a tap
+  /// recogniser beside the drag would make the drag wait out the slop, and the
+  /// pixels it waited through are frames the key would never travel.
   void _commit(int index) {
-    final frame = _frameOf(index);
+    final moved = widget.stretch.value;
+    final wasClick = _deltaPx == 0;
+    widget.stretch.value = null;
     setState(() {
       _dragging = null;
       _deltaPx = 0;
       _caught = null;
     });
-    if (frame == laneKeyFrame(widget.keys[index], widget.fps)) return;
-    final moved = moveLaneKey(
-      entry: widget.entry,
-      row: widget.row,
-      index: index,
-      time: timeOfSubframe(frame, widget.fpsNum, widget.fpsDen),
-    );
-    if (moved) widget.onChanged();
+    if (wasClick) {
+      if (!_pickedAtStart) widget.onSelectKey(index, _additive);
+      return;
+    }
+    // A drag that stayed inside the frame it started on writes nothing — there
+    // is no travel to apply, and an undo step for it would undo nothing.
+    if (moved != null) widget.onMoveKeys(moved);
   }
 
   @override
@@ -9845,15 +10010,27 @@ class _KeyLaneState extends State<_KeyLane> {
                 onSecondaryTapUp: (d) => widget.onKeyMenu(i, d.globalPosition),
                 onHorizontalDragStart: (_) {
                   final keyboard = HardwareKeyboard.instance;
-                  widget.onSelectKey(
-                    i,
-                    keyboard.isShiftPressed ||
-                        keyboard.isControlPressed ||
-                        keyboard.isMetaPressed,
-                  );
+                  // Read at the gesture's **start**, because the modifier
+                  // decides what the gesture means when it begins (K-500 §2.1).
+                  _additive = keyboard.isShiftPressed ||
+                      keyboard.isControlPressed ||
+                      keyboard.isMetaPressed;
+                  // **A key already in the catch keeps the catch** (6.24) — the
+                  // rule the graph's own key drag follows, and the rule the key
+                  // menu already followed. Narrowing the selection here would
+                  // make a whole-selection drag impossible to start, since this
+                  // recogniser fires the moment the pointer goes down. A key
+                  // *outside* the catch takes it, so a drag always carries
+                  // something that includes the key in hand.
+                  _pickedAtStart =
+                      !widget.selectedKeys.contains('${widget.rowId}#$i');
+                  if (_pickedAtStart) widget.onSelectKey(i, _additive);
                   setState(() {
                     _dragging = i;
                     _deltaPx = 0;
+                    // Captured now so the set cannot change underneath the
+                    // drag, exactly as the block stretch captures its own.
+                    _held = {...widget.selectedKeys};
                   });
                   _escape.begin(_abandon);
                 },
@@ -9863,6 +10040,7 @@ class _KeyLaneState extends State<_KeyLane> {
                 onHorizontalDragUpdate: (d) {
                   if (!_escape.running) return;
                   setState(() => _deltaPx += d.delta.dx);
+                  _publish();
                 },
                 onHorizontalDragEnd: (_) {
                   if (_escape.end()) _commit(i);
@@ -10123,23 +10301,16 @@ class _KeyBlockOverlayState extends State<_KeyBlockOverlay> {
   /// and the strictly-ascending check inside [moveLaneKeys] sees the finished
   /// list rather than one key at a time.
   void commit(KeyStretch moved) {
-    final byRow = <String, (_SelectedKey, Map<int, BridgeRational>)>{};
-    for (final place in widget.places) {
-      if (!moved.keys.contains('${place.rowId}#${place.index}')) continue;
-      final frame = moved.frameOf(place.frame, whole: _whole);
-      (byRow[place.rowId] ??= (place, {})).$2[place.index] =
-          timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
+    if (_commitKeyGesture(
+      places: widget.places,
+      moved: moved,
+      whole: _whole,
+      fpsNum: widget.fpsNum,
+      fpsDen: widget.fpsDen,
+      project: widget.project,
+    )) {
+      widget.onChanged();
     }
-    if (byRow.isEmpty) return;
-    var changed = false;
-    asOneUndoStep(widget.project, () {
-      for (final (place, times) in byRow.values) {
-        if (moveLaneKeys(entry: place.entry, row: place.row, times: times)) {
-          changed = true;
-        }
-      }
-    });
-    if (changed) widget.onChanged();
   }
 
   /// Put the block back where the stretch found it and write nothing.
@@ -10237,8 +10408,11 @@ class _KeyBlockOverlayState extends State<_KeyBlockOverlay> {
             _badge(t, KeyBlock(first: first, last: last, count: block.count),
                 right: right, top: boxTop),
             // The stretch's own live readout, under the hand and gone on
-            // release (§4.2, P1).
-            if (live != null)
+            // release (§4.2, P1). Not for a **move**: the lane the hand is on
+            // is already showing the frame the key has reached, and a second
+            // pill saying the same thing in other words is two readouts for one
+            // gesture.
+            if (live != null && live.shift == 0)
               _stretchHint(first, last,
                   left: left, right: right, bottom: boxBottom),
           ],
@@ -10537,11 +10711,19 @@ class _ColumnToggles extends StatelessWidget {
   /// Parent glyphs, and the word arrives in the tooltip as it does everywhere.
   final ChromeLabels labels;
 
+  /// The Animated filter, which belongs on this end of the bar because it is
+  /// the same kind of statement as the toggles beside it: what the **outline**
+  /// draws. Everything right of the strip's rule is the document's.
+  final bool animatedOnly;
+  final VoidCallback onToggleAnimated;
+
   const _ColumnToggles({
     required this.groups,
     required this.hidden,
     required this.onToggle,
     required this.labels,
+    required this.animatedOnly,
+    required this.onToggleAnimated,
     required this.comp,
     required this.model,
     required this.playhead,
@@ -10608,6 +10790,32 @@ class _ColumnToggles extends StatelessWidget {
               ),
               const SizedBox(width: 4),
             ],
+            // The Animated filter, last of the outline's own marks (K-441,
+            // 6.43). One toggle rather than the withdrawn Keys sheet's *Show —
+            // All / Animated* pair: two states are two states, and a word that
+            // reads like its neighbours on a strip of them says which is in
+            // force without spending a row on saying so twice.
+            LumitTooltip(
+              message:
+                  animatedOnly ? l10n.tipAnimatedShowing : l10n.tipAnimatedOnly,
+              child: HouseButton(
+                key: const ValueKey('tl-filter-animated'),
+                small: true,
+                frameless: true,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: onToggleAnimated,
+                child: labels == ChromeLabels.words
+                    ? Text(l10n.filterAnimated.toUpperCase(),
+                        style: animatedOnly ? t.kickerOn : t.kicker)
+                    : glyph.LumitIcon(
+                        LumitIcons.animated,
+                        size: iconSize,
+                        colour: animatedOnly ? t.textPrimary : t.textMuted,
+                        semanticLabel: l10n.filterAnimated,
+                      ),
+              ),
+            ),
+            const SizedBox(width: 4),
             // **The two groups read apart** (§12A.1): everything left of this
             // rule says which *columns* the outline draws; everything right of
             // it is comp-wide — shy, master motion blur, and the overflow of

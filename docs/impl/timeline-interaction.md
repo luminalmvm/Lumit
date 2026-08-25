@@ -154,6 +154,21 @@ One model for the Layers lanes and the graph. Each sentence is testable.
 As built and ruled (K-461/K-462/K-463); no interaction change from this note beyond §2's
 property-name rule. Hover on a row washes the row one step (`surface_2`), P1-transient.
 
+**The Animated filter** (6.43, K-441, placed by K-570): one toggle at the right-hand end
+of the outline's own bottom bar, beside the column toggles and left of the rule that
+divides them from the document's switches — because it makes the same kind of statement
+they do, about what the outline draws. On, every layer lists only the rows that carry
+keyframes and the headings that lead down to one (`animatedFoldRows`); off, the twirl set
+is in charge again and nothing about it has changed underneath. A layer with nothing keyed
+keeps its own row and lists nothing: hiding layers is the shy switch's job.
+
+The filter reaches **past** the twirl set rather than writing into it — the rows are built
+as though every twirl were down and then filtered — so a layer's twirls are inert while it
+is on, and All finds the outline exactly as it was left. The `U` family is untouched and
+stays the keyboard road to the same question (`U` animated, `UU` modified, `UUU` shut): it
+twirls one layer open onto what qualifies, where the filter answers for the whole
+composition at once.
+
 ### 3.2 Keys mode rows (K-499 — the owner's finding *a*) — **frozen (K-529)**
 
 > The sheet is gone. What this section decided outlives it as the reason the fold row is
@@ -291,6 +306,26 @@ K-208's both-halves slide, selection on the raw down). Additions:
   side where the axis has run out, so the readout is never clipped by the edge.
 - A shut layer's **summary diamonds** stay a statement, not a target (K-441) — but the row
   they sit on admits the marquee everywhere the bar itself is not (§2.1).
+- **A drag on a key already in the catch carries the whole catch** (6.24, landed): the
+  travel is worked out from the key in hand — clamped to the axis, taken to the nearest
+  target — and then applied to every held key, so a run of keys keeps its shape rather
+  than each of them finding its own target. That is the graph's rule (`_snappedKeyTravel`)
+  applied where it was missing. The travel is published as a `KeyStretch.shift` on the
+  panel's one notifier, which is why every lane draws its own held keys moving before the
+  release: the selection reaches across rows in two scroll views, exactly as the block
+  stretch's does, and the two now commit through one writer (`_commitKeyGesture`). One
+  undo step for the whole drag. A key *outside* the catch takes the selection first and
+  travels alone.
+- **Click and drag are told apart at the release**, not by a second recogniser: a gesture
+  that ends where it began is a click and selects that key alone (K-500 §2.1); one that
+  moved is a drag and leaves the selection as it found it. A tap recogniser beside the
+  drag would make the drag wait out the arena's slop, and the pixels waited through are
+  frames the key would never travel.
+- **`Delete` removes the selected lane keys** (6.6, landed) — the panel's Delete claim
+  (K-234) with keyframes on its first rung, masks on its second. Each rung is a selection
+  strictly inside the one below it, which is what makes the order the only sane one:
+  picking a keyframe and pressing Delete must not cost the layer it sits on. Graph mode's
+  keys are not on the ladder; the `edit.delete.selection` handler reaches them first.
 
 ### 4.3 The block tools (K-458)
 

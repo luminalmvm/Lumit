@@ -4,8 +4,10 @@
 // checks the row-height maths.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/icons/icons.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
 
 void main() {
@@ -102,6 +104,69 @@ void main() {
 
     test('nothing in flight is no shift', () {
       expect(keyShiftOf(null, 'a'), 0);
+    });
+  });
+
+  group('The Animated filter keeps what is keyed, and its way in (6.43)', () {
+    /// A row that carries one keyframe, at [frame] seconds' worth of nothing —
+    /// the time never matters here, only that the row has a key at all.
+    FoldRetimeRow keyed(int depth) => FoldRetimeRow(
+          BridgeScalar.keyframed([
+            const BridgeKeyframe(
+              time: BridgeRational(num: 0, den: 1),
+              value: 0,
+              interpIn: BridgeSideInterp.linear(),
+              interpOut: BridgeSideInterp.linear(),
+            ),
+          ]),
+          depth: depth,
+        );
+
+    /// A row that can never be keyed, for the depth it stands at.
+    FoldVolumeRow still(int depth) => FoldVolumeRow(depth: depth);
+
+    FoldGroupRow heading(String path, int depth) =>
+        FoldGroupRow(path: path, label: path, open: true, depth: depth);
+
+    test('a heading with nothing keyed under it goes with its contents', () {
+      final rows = [heading('transform', 1), still(2), still(2)];
+      expect(animatedFoldRows(rows), isEmpty);
+    });
+
+    test('a heading stays when one row beneath it is keyed', () {
+      final rows = [heading('transform', 1), still(2), keyed(2)];
+      final kept = animatedFoldRows(rows);
+      expect(kept.length, 2);
+      expect(kept.first, rows.first, reason: 'the heading leads down to it');
+      expect(kept.last, rows.last);
+    });
+
+    test('an effect keeps its own name and the Effects heading above it', () {
+      final rows = [
+        heading('effects', 1),
+        heading('effects/glow', 2),
+        keyed(3),
+        heading('effects/blur', 2),
+        still(3),
+      ];
+      expect(animatedFoldRows(rows), [rows[0], rows[1], rows[2]],
+          reason: 'the effect with nothing keyed goes, headings and all');
+    });
+
+    test('a sibling heading that qualifies does not save the one that does not',
+        () {
+      final rows = [
+        heading('transform', 1),
+        still(2),
+        heading('effects', 1),
+        keyed(2),
+      ];
+      expect(animatedFoldRows(rows), [rows[2], rows[3]]);
+    });
+
+    test('nothing keyed anywhere is no rows at all', () {
+      expect(animatedFoldRows([still(1), still(2)]), isEmpty);
+      expect(animatedFoldRows(const []), isEmpty);
     });
   });
 }

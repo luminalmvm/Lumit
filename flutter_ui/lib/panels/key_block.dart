@@ -53,12 +53,15 @@ class KeyBlock {
   static bool isBlock(int count) => count >= 2;
 }
 
-/// A block stretch in flight: which keys it moves, the end that stays put and
-/// the end that is being dragged.
+/// A block gesture in flight: which keys it moves, and where it puts them —
+/// a **stretch** about an anchor, or a **move** that carries the whole
+/// selection the same distance.
 ///
 /// Held by the panel and read by every lane, the way a bar drag is (K-208): the
 /// keys are spread across rows in two scroll views, and a stretch that only the
-/// handle knew about would move the box while the diamonds sat still.
+/// handle knew about would move the box while the diamonds sat still. A lane
+/// key's drag on a multi-key selection is the same broadcast for the same
+/// reason (6.24) — the keys it carries are on rows the dragged one cannot see.
 class KeyStretch {
   /// The keys the gesture moves, as `rowId#index` — the block's own selection,
   /// captured when the handle was taken hold of so that it cannot change
@@ -72,12 +75,26 @@ class KeyStretch {
   final double from;
   final double to;
 
+  /// A move's travel in frames, or zero for a stretch. Decided from the key in
+  /// hand and applied to every held key, so a run of keys keeps its shape
+  /// rather than each of them finding its own frame — the rule the graph's own
+  /// key drag follows (`_snappedKeyTravel`).
+  final double shift;
+
   const KeyStretch({
     required this.keys,
     required this.anchor,
     required this.from,
     required this.to,
-  });
+  }) : shift = 0;
+
+  /// A **move** of the whole selection [by] frames (6.24): no anchor, no
+  /// scale, every held key the same distance along.
+  const KeyStretch.shift({required this.keys, required double by})
+      : anchor = 0,
+        from = 0,
+        to = 0,
+        shift = by;
 
   KeyStretch movedTo(double to) =>
       KeyStretch(keys: keys, anchor: anchor, from: from, to: to);
@@ -102,6 +119,11 @@ class KeyStretch {
   /// thing, and a stretch that left every key on a fraction of a frame while a
   /// drag of one landed on a whole one would be two rules for one act.
   double frameOf(double frame, {required bool whole}) {
+    // A move needs no rounding of its own: [shift] is the travel of the key in
+    // hand, which the magnet has already taken to a whole frame, so a key that
+    // started on one lands on one. Rounding again would be the only thing that
+    // could pull a key off the shape the selection was holding.
+    if (shift != 0) return frame + shift;
     final moved = scaledAbout(anchor: anchor, from: from, to: to, at: frame);
     if (!whole) return moved;
     // **The dragged end lands exactly where the drag put it.** [to] is the

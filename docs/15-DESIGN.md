@@ -844,9 +844,16 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 
 - **Modes are Layers and Graph** (K-529, superseding K-455 and K-458's second half). Keys —
   the dope sheet — was withdrawn after desktop testing; §12A.1a is kept as frozen history
-  and describes nothing the editor draws. Layers mode carries an **Animated filter** (`U`):
-  on, the outline shows only keyframed properties across all layers; All restores the full
-  twirl-down lists. Block selection, end-handle stretch and the Ease popover are Layers
+  and describes nothing the editor draws. Layers mode carries an **Animated filter**: on,
+  the outline shows only keyframed properties across all layers — the headings that lead
+  down to one coming with it, the ones with nothing under them going — and All restores the
+  full twirl-down lists. It is **one toggle at the right-hand end of the outline's bottom
+  bar** (K-570, placing K-441's filter and superseding its `(U)`): the same kind of
+  statement as the column toggles beside it, on the outline's own side of that bar's rule,
+  rather than the withdrawn Keys sheet's *Show — All / Animated* pair in a row of its own.
+  `U` stays the **reveal cycle** it has always been (`U` animated, `UU` modified, `UUU`
+  shut), which is the keyboard's answer to the same question, one layer at a time. Block
+  selection, end-handle stretch and the Ease popover are Layers
   behaviours, and so is the **Interpolation / Reverse / Copy / Paste-at-playhead strip**,
   which came to the Layers bottom bar when Keys went (K-529).
 - **Composition tabs run the full width of the panel header**, between the panel's own

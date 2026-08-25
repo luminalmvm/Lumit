@@ -984,6 +984,10 @@
   "@fileTypeTheme": {
     "description": "A file type in the system’s file dialogues: a .lumtheme colour scheme."
   },
+  "filterAnimated": "Animated",
+  "@filterAnimated": {
+    "description": "Label of the Animated filter, a toggle at the right-hand end of the Timeline outline’s bottom bar. On, the outline lists only the properties that carry keyframes."
+  },
   "findMissingFootage": "Find missing footage",
   "@findMissingFootage": {
     "description": "Context-menu item: search a folder for files that have moved."
@@ -5206,6 +5210,14 @@
   "tipAnimate": "Animate",
   "@tipAnimate": {
     "description": "Tooltip on the stopwatch that starts animating a property. Under five words."
+  },
+  "tipAnimatedOnly": "Show animated only",
+  "@tipAnimatedOnly": {
+    "description": "Tooltip on the Timeline’s Animated filter while it is off: turning it on lists only keyframed properties. Under five words."
+  },
+  "tipAnimatedShowing": "Showing animated only",
+  "@tipAnimatedShowing": {
+    "description": "Tooltip on the Timeline’s Animated filter while it is on. Under five words."
   },
   "tipAspectLocked": "Aspect locked",
   "@tipAspectLocked": {

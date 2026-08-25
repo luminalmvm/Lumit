@@ -16258,3 +16258,29 @@ Fronting a composition is neither of those events, and does **not** clear the Ef
 controls panel: the layer it is showing lives on in the comp you came from, so its rows
 stay up until a layer is selected in the new comp. Only a layer missing from its own comp's
 read model has gone, and that alone is the placeholder.
+
+## K-570 — The Animated filter is one toggle on the outline's own bar
+
+**Status: DECIDED (2026-08-25).** K-441 gave Layers mode an **Animated filter** and named
+`U` beside it; the withdrawn Keys sheet drew that filter as a *Show — All / Animated* pair
+on a chrome row of its own (15-DESIGN §12A.1a, `Keys.dc.html`). Layers mode has no such row
+to spare — its second row is the column headers — and adding a third would be a chrome row
+in no mockup. So the filter lands as **one toggle at the right-hand end of the outline's
+bottom bar**, beside the column toggles and left of the rule that divides them from the
+composition's own switches. Two states are two states; a word that reads like its
+neighbours on a strip of them says which is in force without spending a row on saying so
+twice, and it obeys the chrome-labels setting (K-440) exactly as they do — the word
+ANIMATED, or the set's own glyph.
+
+**`U` is not the filter's key.** It stays the reveal cycle it has always been — `U`
+animated, `UU` modified, `UUU` shut — which twirls one layer open onto what qualifies. The
+filter answers the same question for the whole composition at once, so the two are
+different acts and each keeps its own road in; this supersedes the `(U)` in K-441's bullet
+and nothing else in it.
+
+**The filter reaches past the twirl set rather than writing into it.** Every layer's
+fold-out is built as though every twirl in it were down and then filtered to the rows that
+carry keyframes, with the headings that lead down to one (`animatedFoldRows`) — so All
+finds the outline exactly as it was left, and a layer's twirls are inert while the filter
+is on. A layer with nothing keyed keeps its own row and lists nothing under it: hiding a
+layer is the shy switch's job, not a property filter's.

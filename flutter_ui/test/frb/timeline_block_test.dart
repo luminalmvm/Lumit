@@ -405,5 +405,154 @@ void main() {
       expect(find.byKey(const ValueKey('tl-key-menu-linear')), findsOneWidget);
       expect(find.byKey(const ValueKey('tl-key-menu-delete')), findsOneWidget);
     });
+
+    // ---------------------------------------------------------------------
+    // 6.24 — a drag on one of several selected keys moves them all.
+    // ---------------------------------------------------------------------
+
+    /// The lane had one rule for one key and no rule at all for several: a
+    /// diamond dragged out of a selection of three moved alone and quietly
+    /// narrowed the catch to itself, which is not what any other surface in the
+    /// panel does with a multiple selection. The graph has always applied the
+    /// travel of the key in hand to the whole of it (`_editsFor`).
+    testWidgets('dragging one of several selected keys carries them all',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p, frames: [300, 900, 1500]);
+      await mount(tester, p);
+      await openTransform(tester, layer);
+      await selectTheBlock(tester);
+
+      final lane = laneKeyOf(layer);
+      expect(selectedOn(tester, lane), {0, 1, 2});
+      final perFrame = perFrameOf(tester, p, lane);
+      final key =
+          find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#1'));
+      final gesture =
+          await dragging(tester, tester.getCenter(key), perFrame * 200);
+
+      final live = drawnFrames(tester, lane);
+      expect(live, [500.0, 1100.0, 1700.0],
+          reason: 'every held key travelled the same distance, live');
+      expect(selectedOn(tester, lane), {0, 1, 2},
+          reason: 'taking hold of a selected key keeps the selection');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect([
+        for (final k in opacityKeys(layer)) p.comp.frameAtTime(time: k.time)
+      ], [
+        500,
+        1100,
+        1700
+      ]);
+    });
+
+    testWidgets('the whole drag is one undo step', (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p, frames: [300, 900, 1500]);
+      await mount(tester, p);
+      await openTransform(tester, layer);
+      await selectTheBlock(tester);
+
+      final perFrame = perFrameOf(tester, p, laneKeyOf(layer));
+      final key =
+          find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#0'));
+      final gesture =
+          await dragging(tester, tester.getCenter(key), perFrame * 200);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(p.comp.frameAtTime(time: opacityKeys(layer).first.time), 500);
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      expect([
+        for (final k in opacityKeys(layer)) p.comp.frameAtTime(time: k.time)
+      ], [
+        300,
+        900,
+        1500
+      ], reason: 'one Ctrl-Z puts the whole drag back');
+    });
+
+    testWidgets('a key outside the selection takes the drag on its own',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p, frames: [300, 900, 1500]);
+      await mount(tester, p);
+      await openTransform(tester, layer);
+      await selectTheBlock(tester);
+
+      final lane = laneKeyOf(layer);
+      final perFrame = perFrameOf(tester, p, lane);
+      // Narrow the catch to the middle key — the outer two stand under the
+      // block's own handles — then drag the last one: it is not in the
+      // selection, so it selects itself and travels alone.
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#1')));
+      await tester.pumpAndSettle();
+      expect(selectedOn(tester, lane), {1});
+
+      final gesture = await dragging(
+          tester,
+          tester.getCenter(
+              find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#2'))),
+          perFrame * 200);
+      expect(drawnFrames(tester, lane), [300.0, 900.0, 1700.0]);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect([
+        for (final k in opacityKeys(layer)) p.comp.frameAtTime(time: k.time)
+      ], [
+        300,
+        900,
+        1700
+      ]);
+    });
+
+    // ---------------------------------------------------------------------
+    // 6.6 — Delete takes the selected lane keys.
+    // ---------------------------------------------------------------------
+
+    /// The lane key selection selected and eased and did nothing else: `Delete`
+    /// fell straight past it to the shell, which deleted the *layer* the keys
+    /// sat on. The panel claims the key first now (K-234's ladder), above the
+    /// mask rung and below nothing.
+    testWidgets('Delete removes the selected lane keys, not the layer',
+        (tester) async {
+      final p = withComp();
+      final layer = keyedLayer(p, frames: [300, 900, 1500]);
+      await mount(tester, p);
+      await openTransform(tester, layer);
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#1')));
+      await tester.pumpAndSettle();
+      expect(selectedOn(tester, laneKeyOf(layer)), {1});
+
+      expect(p.uiState.deleteClaim?.call(), isTrue,
+          reason: 'the panel claims Delete while keys are in hand');
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+
+      expect([
+        for (final k in opacityKeys(layer)) p.comp.frameAtTime(time: k.time)
+      ], [
+        300,
+        1500
+      ]);
+      expect(p.uiState.model.layers.length, 1,
+          reason: 'the layer the keys sat on is untouched');
+    });
+
+    testWidgets('Delete falls through when no lane key is selected',
+        (tester) async {
+      final p = withComp();
+      keyedLayer(p);
+      await mount(tester, p);
+      expect(p.uiState.deleteClaim?.call(), isFalse,
+          reason: 'nothing finer than the layer is in hand, so the shell acts');
+    });
   }, skip: !engineAvailable);
 }

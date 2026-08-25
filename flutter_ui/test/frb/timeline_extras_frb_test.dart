@@ -19,6 +19,7 @@ import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 
@@ -1230,6 +1231,78 @@ void main() {
       final drawn =
           tester.widget<glyph.LumitIcon>(find.byType(glyph.LumitIcon));
       expect(drawn.glyph, LumitIcons.adjustment);
+    });
+
+    // -----------------------------------------------------------------------
+    // 6.43 — the Animated filter (K-441).
+    // -----------------------------------------------------------------------
+
+    /// **Animated lists what is keyed, All brings the twirls back.** The filter
+    /// reaches past the twirl set entirely: a layer that has never been opened
+    /// shows its keyed rows the moment the filter is on, and a keyed row's
+    /// headings come with it while the ones with nothing under them go.
+    testWidgets('the Animated filter lists only the rows that carry keys',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final f in [10, 40])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final id = layer.internallayerId;
+      Finder row(String path) =>
+          find.byKey(ValueKey<String>('tl-keys-prop-$id/$path'));
+
+      // Shut by default, so nothing of the fold-out is drawn at all.
+      expect(row('transform'), findsNothing);
+
+      final filter = find.byKey(const ValueKey('tl-filter-animated'));
+      expect(filter, findsOneWidget);
+      await tester.tap(filter);
+      await tester.pumpAndSettle();
+
+      expect(row('transform'), findsOneWidget,
+          reason: 'the heading that leads to the keyed row came with it');
+      expect(row('transform/opacity'), findsOneWidget);
+      expect(row('transform/position'), findsNothing,
+          reason: 'a transform row with nothing keyed is not listed');
+
+      // All: the twirl set is back in charge, and it says shut.
+      await tester.tap(filter);
+      await tester.pumpAndSettle();
+      expect(row('transform'), findsNothing);
+      expect(row('transform/opacity'), findsNothing);
+    });
+
+    /// A layer with nothing keyed anywhere lists nothing under it — but it is
+    /// still a layer in the stack, so its own row stays. Hiding layers is the
+    /// shy switch's job, not a property filter's.
+    testWidgets('a layer with nothing keyed keeps its row and shows no rows',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      await tester.tap(find.byKey(const ValueKey('tl-filter-animated')));
+      await tester.pumpAndSettle();
+
+      final id = layer.internallayerId;
+      expect(find.byKey(ValueKey<String>('tl-row-$id')), findsOneWidget);
+      expect(
+          find.byKey(ValueKey<String>('tl-keys-prop-$id/transform')),
+          findsNothing);
     });
   }, skip: !engineAvailable);
 }

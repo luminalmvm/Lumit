@@ -386,6 +386,46 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
       _ => const [],
     };
 
+/// The rows of [rows] the **Animated filter** admits (K-441, 6.43): every row
+/// that actually carries keyframes, and the headings that lead down to one.
+///
+/// In plain terms: with the filter on, a layer shows its keyed properties and
+/// nothing else — Transform's heading only when a transform property is keyed,
+/// an effect's name only when one of its parameters is, and a mask's row only
+/// when one of its values is. A heading with nothing keyed beneath it goes with
+/// its contents, which is the whole point: the filter answers "what is
+/// animated in this composition", not "what could be".
+///
+/// Read **backwards** because that is where the answer is: a heading's fate is
+/// decided by the rows *after* it, so one pass from the end carries "the
+/// shallowest row still kept" along with it and every heading shallower than
+/// that is a heading something kept sits under. Any row with no keys of its own
+/// is treated as a possible container, so the mask row above a keyed feather
+/// survives on the same rule the Effects heading does — one rule, not one per
+/// kind of heading.
+List<LayerFoldRow> animatedFoldRows(List<LayerFoldRow> rows) {
+  final keep = List<bool>.filled(rows.length, false);
+  // The depth of the shallowest row kept since here, or null while nothing has
+  // been kept at all — in which case no row to the left of this one can be a
+  // container, because there is nothing left for it to contain. Set to the
+  // row's own depth on every keep rather than to the smaller of the two: a
+  // heading that is kept **covers** everything after it, so the next heading
+  // leftward is measured against that heading, not against the deepest row of
+  // some group two before it.
+  int? need;
+  for (var i = rows.length - 1; i >= 0; i--) {
+    final row = rows[i];
+    final container = need != null && row.depth < need;
+    if (!container && laneKeysOf(row).isEmpty) continue;
+    keep[i] = true;
+    need = row.depth;
+  }
+  return [
+    for (var i = 0; i < rows.length; i++)
+      if (keep[i]) rows[i],
+  ];
+}
+
 /// What a keyed row is called when it is read **out of its fold-out** — the
 /// dope sheet's flat list, where "Position" on its own would not say which of
 /// a comp's Positions it is (15-DESIGN §12A.1).
@@ -729,22 +769,6 @@ void asOneUndoStep(ProjectReference? project, void Function() body) {
     project.endUndoGroup();
   }
 }
-
-/// Move a lane row's keyframe [index] to [time], as ONE op — one undo step
-/// for the whole drag.
-///
-/// A transform row moves the key on *every* axis it covers: the axes key
-/// together, so the row's one diamond stands for all of their keys. Refused
-/// (returning false, changing nothing) when the move would land on or past a
-/// neighbour — two keys cannot share a time, and the engine refuses a curve
-/// whose times do not strictly ascend.
-bool moveLaneKey({
-  required BridgeLayerEntry entry,
-  required LayerFoldRow row,
-  required int index,
-  required BridgeRational time,
-}) =>
-    moveLaneKeys(entry: entry, row: row, times: {index: time});
 
 /// Move **several** of a lane row's keyframes at once, as one op per row — the
 /// block stretch, Reverse and the Ease popover's Stagger all land here
