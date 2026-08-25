@@ -20,16 +20,42 @@ use crate::{GpuContext, WORKING_FORMAT};
 
 use super::{work_texture, FxEngine};
 
+/// The evaluate passes' workgroup width: one thread per candidate, and the
+/// same 64 the kernel declares.
+const EVAL_WORKGROUP: u32 = 64;
+
+/// `max_compute_workgroups_per_dimension` as **every** device guarantees it.
+///
+/// The context asks for `wgpu::Limits::default()`, so this is not a number to
+/// look up on the adapter — it is the number the device was opened with, and a
+/// dispatch past it is a validation error on the best card there is.
+const MAX_WORKGROUPS_PER_DIM: u32 = 65_535;
+
 /// The most births one frame's window may record before the oldest are let go.
 ///
 /// The candidate set is Emit rate times the longest life, and both of those are
 /// open-ended controls — a rate of a million and a life of an hour is a typeable
 /// document, and a buffer sized off it is an allocation with no ceiling
-/// (14-ENGINEERING-RULES §6). Eight times the hard cap is thirty-two megabytes
-/// of flags, and dropping candidates *older* than that changes nothing the cap
-/// rule would not already have dropped: what survives an overload is the newest
-/// `cap`, and there are eight times that many newer candidates still in play.
-pub const MAX_CANDIDATES: u64 = 8_000_000;
+/// (14-ENGINEERING-RULES §6). Dropping candidates *older* than this changes
+/// nothing the cap rule would not already have dropped: what survives an
+/// overload is the newest `cap`, and there are four times that many newer
+/// candidates still in play.
+///
+/// **Why it is this number and not a round one.** It was 8 000 000, chosen as a
+/// memory budget alone — thirty-two megabytes of flags. Memory was never the
+/// binding constraint: [`ParticulatePass::evaluate`] dispatches one workgroup
+/// per 64 candidates, so 8 000 000 candidates asks for 125 000 workgroups
+/// against a limit of 65 535, and the device rejects the dispatch. What the
+/// user saw was the whole frame break — the failed compute pass invalidates the
+/// encoder, so the draw that follows it cannot begin either, and every later
+/// frame at that rate does it again. Typing a big Emit rate is enough to reach
+/// it (the row's slider stops at 1 000 but its hard maximum is open), which is
+/// exactly how it was reached.
+///
+/// So the ceiling is the *dispatch* limit, and the memory budget follows from
+/// it rather than the other way round: 65 535 × 64 candidates is 4 194 240, or
+/// about sixteen megabytes of flags.
+pub const MAX_CANDIDATES: u64 = (MAX_WORKGROUPS_PER_DIM as u64) * (EVAL_WORKGROUP as u64);
 
 /// One resolved Particulate. Mirrors `lumit_core::fx::points::PointsParams`,
 /// `DrawStyle` and the threaded schedule, flattened to the numbers the kernel
@@ -301,7 +327,15 @@ impl FxEngine {
         op: &ParticulateOp<'_>,
     ) -> Option<ParticulatePass> {
         use wgpu::util::DeviceExt;
-        let candidates = op.candidates;
+        // **The dispatch can never be illegal**, whatever a caller hands over
+        // (docs/14 §4). Every in-tree caller trims its schedule to
+        // [`MAX_CANDIDATES`] before it gets here, so this cannot fire today; it
+        // is the crate boundary's own answer to the question the trim answers
+        // upstream, because a `lumit-gpu` entry point that faults the device on
+        // some input is a fault in `lumit-gpu`. Keeping the oldest candidates
+        // draws the wrong particles — the cap rule keeps the *newest* — but a
+        // wrong frame is recoverable and an invalidated encoder is not.
+        let candidates = op.candidates.min(MAX_CANDIDATES as u32);
         let cap = op.cap;
         if candidates == 0 || cap == 0 || op.mix <= 0.0 || op.frames.len() < 2 {
             return None;
@@ -518,13 +552,13 @@ impl ParticulatePass {
         });
         cp.set_bind_group(0, &self.bind, &[]);
         cp.set_pipeline(&fx.particulate_alive);
-        cp.dispatch_workgroups(self.candidates.div_ceil(64), 1, 1);
+        cp.dispatch_workgroups(self.candidates.div_ceil(EVAL_WORKGROUP), 1, 1);
         cp.set_pipeline(&fx.particulate_scan);
         cp.dispatch_workgroups(self.blocks, 1, 1);
         cp.set_pipeline(&fx.particulate_blocks);
         cp.dispatch_workgroups(1, 1, 1);
         cp.set_pipeline(&fx.particulate_scatter);
-        cp.dispatch_workgroups(self.candidates.div_ceil(64), 1, 1);
+        cp.dispatch_workgroups(self.candidates.div_ceil(EVAL_WORKGROUP), 1, 1);
     }
 }
 

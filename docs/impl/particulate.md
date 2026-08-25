@@ -315,6 +315,18 @@ the dial here is **Max particles**:
   step 5 (the flow→blend swap) as an effect-declared cheapening.
 - CPU fallback (ladder step 6) renders the same particles at the same cap — slower is
   allowed, different is not.
+- **The candidate ceiling is a dispatch limit, not a memory budget.** Max particles bounds
+  what is *drawn*; what is *evaluated* is the candidate set — every birth in the window
+  `[t − max_life, t]` — and Emit rate and Life are both open-ended rows, so that set needs
+  a ceiling of its own. The schedule is trimmed to it, dropping the **oldest** candidates,
+  which changes nothing the cap rule would not already have dropped (§3.2). The number is
+  `MAX_CANDIDATES` in `lumit-gpu`, and it is derived rather than chosen: the evaluate pass
+  dispatches one workgroup per 64 candidates against a
+  `max_compute_workgroups_per_dimension` of 65 535, so the ceiling is 65 535 × 64 =
+  4 194 240. It was first set at 8 000 000 as a memory budget alone, which asks the device
+  for 125 000 workgroups — a validation error that invalidates the encoder and takes the
+  frame's draw down with it, reached by typing a large Emit rate. Any future change to the
+  workgroup width moves the ceiling with it; the two constants sit together for that reason.
 
 These numbers become CI gates in the perf harness when the effect lands (docs/13 §7.3),
 per the verification-beats-assertion rule.
