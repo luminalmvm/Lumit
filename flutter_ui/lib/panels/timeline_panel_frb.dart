@@ -7008,6 +7008,16 @@ class _OutlineRowState extends State<_OutlineRow> {
             BridgeLayerSwitch.shy,
             offIcon: LumitIcon.shy,
             tip: switches.shy ? l10n.switchShy : l10n.switchMarkShy),
+        // Guide (K-497), the cell beside shy that docs/07 §4.2 names for it.
+        // **Drawn on every row**, unlike the two kind-gated cells in the Modes
+        // column: any layer can be reference-only — a match photograph, a
+        // grid, an animatic — so there is no kind the mark would do nothing
+        // on. The two strengths are the column's own: lit `text_primary` while
+        // the layer is a guide, resting at `text_muted` when it is not.
+        _switch(
+            context, id, 'guide', null, switches.guide, BridgeLayerSwitch.guide,
+            mark: LumitIcons.guide,
+            tip: switches.guide ? l10n.switchGuide : l10n.switchMarkGuide),
       ],
     );
   }

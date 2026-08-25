@@ -12,7 +12,7 @@
 
 /// One draggable cluster of outline columns.
 enum TimelineGroup {
-  /// Visibility · audio · solo · lock · shy.
+  /// Visibility · audio · solo · lock · shy · guide.
   switches,
 
   /// Twirl · label chip · layer number · name. The one flexible-width group:
@@ -75,8 +75,12 @@ const double cellGap = outlineGap;
 /// one place they most need air.
 const double identityGap = outlineGap;
 
-/// The five A/V switch cells.
-const double switchesGroupWidth = 5 * switchCellWidth;
+/// The A/V switch cells — **six** since K-497's guide switch took the cell
+/// beside shy (docs/07 §4.2 puts it there by name). Guide and shy are the two
+/// housekeeping marks in the column: one hides the row from this list, the
+/// other keeps the layer out of every file Lumit writes, and neither is a
+/// Modes-column question about *how* the layer is rendered.
+const double switchesGroupWidth = 6 * switchCellWidth;
 
 /// The render group's span: **its switch cells and nothing more** (owner,
 /// 2026-08-24). It was 150 — over twice as wide — to give the fold-out's value

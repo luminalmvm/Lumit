@@ -67,6 +67,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6c3-3 7-3 10 0"/><path d="M2 9c3 3 9 3 12 0"/></svg>';
   static const String shyOn =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6c3-3 7-3 10 0" opacity=".35"/><path d="M2 9c3 3 9 3 12 0"/></svg>';
+  static const String guide =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6 1v14M1 10h14" stroke-dasharray="2 1.5"/></svg>';
   static const String effectsSwitch =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3.5c-1.2 0-1.8.8-2 2L2.5 12.5M2 7.5h4"/><path d="M8.5 6.5l5 6M13.5 6.5l-5 6"/></svg>';
   static const String motionBlur =
@@ -237,6 +239,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l6 11H2z"/><path d="M8 6v3M8 11v.5"/></svg>';
   static const String inUse =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>';
+  static const String proxy =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5H2.5v8.5"/><rect x="5.5" y="5.5" width="8" height="8"/></svg>';
 
   // --- Graph panel ---
   static const String autoWire =
@@ -300,6 +304,7 @@ abstract final class LumitIcons {
     'Unlocked': unlocked,
     'Shy': shy,
     'Shy on': shyOn,
+    'Guide': guide,
     'Effects switch': effectsSwitch,
     'Motion blur': motionBlur,
     'Flow': flow,
@@ -378,6 +383,7 @@ abstract final class LumitIcons {
     'Relink': relink,
     'Missing': missing,
     'In use': inUse,
+    'Proxy': proxy,
     'Auto-wire': autoWire,
     'Heal': heal,
     'Frame all': frameAll,

@@ -3,10 +3,10 @@
 // One quiet strip under the dock (docs/07-UI-SPEC.md §1), left to right:
 // whether the document is saved, the cache meter (how full the rendered-frame
 // store is, with the exact megabytes), the latest notice with its close
-// button, and the running export — its progress and a Cancel that works from
-// anywhere, not only with the dialogue open. The engine's poll latches its
-// state between calls, so this and the export dialogue can both ask without
-// stealing each other's answer.
+// button, and the background jobs — a MAKE-PROXY transcode and an export, each
+// with its progress and a Cancel that works from anywhere, not only with the
+// dialogue open. Both engine polls latch their state between calls, so this and
+// the export dialogue can both ask without stealing each other's answer.
 
 import 'dart:async';
 
@@ -14,6 +14,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -29,11 +30,26 @@ import 'cache_confirm_frb.dart';
 /// which cost the idle strip ~12 bridge calls a second for the answer "no".
 final ValueNotifier<int> statusLineExportStarted = ValueNotifier<int>(0);
 
+/// The same signal for **MAKE-PROXY** (K-501), which is background work of
+/// exactly the same shape — start, poll, cancel — and so is surfaced in
+/// exactly the same place rather than in a progress bar of the Project
+/// panel's own.
+///
+/// Bumped twice per job, and by two different callers: by the Project panel
+/// when it starts one, so the strip knows to begin polling, and by the strip
+/// itself when the job stops running, so the panel re-reads the item that just
+/// gained a proxy. One notifier rather than two, because "the proxy job moved"
+/// is the only thing either side is asking about.
+final ValueNotifier<int> proxyJobChanged = ValueNotifier<int>(0);
+
 class StatusLineFrb extends StatefulWidget {
   /// The poll seam, injected by tests so no engine has to run an export.
   final BridgeExportState Function()? poll;
 
-  const StatusLineFrb({super.key, this.poll});
+  /// The same seam for the proxy job.
+  final BridgeProxyState Function()? proxyPollFn;
+
+  const StatusLineFrb({super.key, this.poll, this.proxyPollFn});
 
   @override
   State<StatusLineFrb> createState() => _StatusLineFrbState();
@@ -41,6 +57,7 @@ class StatusLineFrb extends StatefulWidget {
 
 class _StatusLineFrbState extends State<StatusLineFrb> {
   BridgeExportState _export = const BridgeExportState.idle();
+  BridgeProxyState _proxy = const BridgeProxyState.idle();
   Timer? _timer;
 
   /// One pending repaint for a cache bump that arrived while the tick was
@@ -56,7 +73,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     // One poll up front: a strip mounted over a running export (a hot reload
     // mid-export, say) has to pick it up without waiting for a start signal.
     _export = (widget.poll ?? exportPoll)();
+    _proxy = (widget.proxyPollFn ?? proxyPoll)();
     statusLineExportStarted.addListener(_tick);
+    proxyJobChanged.addListener(_tick);
     // Playback fills the caches, so the meter ticks while it runs.
     _ui.playing.addListener(_tick);
     // A frame banked or delivered outside playback — the idle fill, a scrub —
@@ -72,8 +91,15 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// pixels of mostly text.
   void _tick() {
     _export = (widget.poll ?? exportPoll)();
+    final was = _proxy is BridgeProxyState_Running;
+    _proxy = (widget.proxyPollFn ?? proxyPoll)();
     _syncTimer();
     if (mounted) setState(() {});
+    // The job stopped running on this tick, so the item it belonged to has
+    // just gained its proxy (the poll is what attaches it). Told after the
+    // repaint, and only on the edge, so a panel listening does one re-read per
+    // job rather than one per tick.
+    if (was && _proxy is! BridgeProxyState_Running) proxyJobChanged.value++;
   }
 
   /// The tick runs only while something on the strip is actually moving: an
@@ -82,7 +108,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// state, notices are a ValueListenable, banked frames bump
   /// [LumitUiState.cacheChanged] — so an idle strip costs no bridge calls.
   void _syncTimer() {
-    if (_export is BridgeExportState_Running || _ui.playing.value) {
+    if (_export is BridgeExportState_Running ||
+        _proxy is BridgeProxyState_Running ||
+        _ui.playing.value) {
       _timer ??=
           Timer.periodic(const Duration(milliseconds: 500), (_) => _tick());
     } else {
@@ -103,6 +131,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   @override
   void dispose() {
     statusLineExportStarted.removeListener(_tick);
+    proxyJobChanged.removeListener(_tick);
     _ui.playing.removeListener(_tick);
     _ui.cacheChanged.removeListener(_bumped);
     _ui.frameArrived.removeListener(_bumped);
@@ -152,6 +181,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
               children: [
                 Flexible(child: _notice(t, state)),
                 const Spacer(),
+                ..._proxySection(t),
                 ..._exportSection(t),
               ],
             ),
@@ -219,6 +249,66 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       },
     );
   }
+
+  /// The running MAKE-PROXY, drawn exactly as the export beside it is
+  /// (K-501): what it is doing, how far along, and a Cancel that works from
+  /// anywhere. It sits **before** the export section, so a long export that
+  /// starts later never pushes the shorter job off the strip.
+  List<Widget> _proxySection(LumitTheme t) => switch (_proxy) {
+        BridgeProxyState_Idle() => const [],
+        BridgeProxyState_Running(:final frame, :final total) => [
+            Flexible(
+              child: Text(
+                l10n.makingProxyFrame('$frame', '$total'),
+                key: const ValueKey('status-proxy-progress'),
+                style: t.small,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 120,
+              child: HouseProgressBar(
+                fraction: total == BigInt.zero
+                    ? 0.0
+                    : frame.toDouble() / total.toDouble(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            HouseButton(
+              key: const ValueKey('status-proxy-cancel'),
+              small: true,
+              frameless: true,
+              onPressed: proxyCancel,
+              child: Text(l10n.cancel, style: t.small),
+            ),
+            const SizedBox(width: 8),
+          ],
+        BridgeProxyState_Done(:final path) => [
+            Flexible(
+              child: Text(
+                l10n.proxyMade(path),
+                key: const ValueKey('status-proxy-done'),
+                style: t.small,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+        BridgeProxyState_Failed(:final error) => [
+            Flexible(
+              child: Text(
+                error == 'cancelled'
+                    ? l10n.proxyCancelled
+                    : l10n.proxyFailed(error),
+                key: const ValueKey('status-proxy-failed'),
+                style: t.small.copyWith(color: t.warning),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+      };
 
   List<Widget> _exportSection(LumitTheme t) => switch (_export) {
         BridgeExportState_Idle() => const [],

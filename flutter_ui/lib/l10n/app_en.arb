@@ -8474,5 +8474,71 @@
   "nodePreviewNoPicture": "A driver makes a value, not a picture.",
   "@nodePreviewNoPicture": {
     "description": "Empty-state line in the Node preview panel when the picked box is a driver — a box that produces a number, colour or other value rather than an image — so there is nothing to show a picture of."
+  },
+  "switchGuide": "Guide",
+  "@switchGuide": {
+    "description": "Timeline layer switch tooltip, shown when the layer IS a guide layer: it draws in the Viewer and is left out of every exported file. One word."
+  },
+  "switchMarkGuide": "Mark as guide",
+  "@switchMarkGuide": {
+    "description": "Timeline layer switch tooltip, shown when the layer is not a guide layer yet: clicking marks it reference-only. Two or three words."
+  },
+  "projectItemProxy": "proxy",
+  "@projectItemProxy": {
+    "description": "Project panel row badge, beside the item name: this footage item is being read from its proxy rather than the original file. Lower case, one word, like the other row badges."
+  },
+  "setProxyEllipsis": "Set proxy…",
+  "@setProxyEllipsis": {
+    "description": "Project panel row menu, on a footage row: attach an existing file as this item's proxy. Opens a file picker, hence the ellipsis."
+  },
+  "makeProxy": "Make proxy",
+  "@makeProxy": {
+    "description": "Project panel row menu, on a footage row: transcode a smaller stand-in file for this item and attach it."
+  },
+  "useProxy": "Use proxy",
+  "@useProxy": {
+    "description": "Project panel row menu, on a footage row that has a proxy: a ticked entry, read from the proxy or from the original."
+  },
+  "clearProxy": "Clear proxy",
+  "@clearProxy": {
+    "description": "Project panel row menu, on a footage row that has a proxy: forget it. The file on disk is left alone."
+  },
+  "projectFooterProxies": "Proxies",
+  "@projectFooterProxies": {
+    "description": "Project panel bottom bar, the project-wide switch: whether every preview reads from proxies where there are any. Displayed in capitals by the panel."
+  },
+  "tipUseProxiesOn": "Reading from proxies",
+  "@tipUseProxiesOn": {
+    "description": "Tooltip on the Project panel's project-wide proxies switch while it is on."
+  },
+  "tipUseProxiesOff": "Reading from originals",
+  "@tipUseProxiesOff": {
+    "description": "Tooltip on the Project panel's project-wide proxies switch while it is off."
+  },
+  "makingProxyFrame": "Making proxy {frame} / {total}",
+  "@makingProxyFrame": {
+    "description": "Status line, while a proxy is being made: how far the transcode has got. {frame} is the frame written so far and {total} the clip's length in frames.",
+    "placeholders": {
+      "frame": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "proxyMade": "Proxy made: {path}",
+  "@proxyMade": {
+    "description": "Status line, when a proxy has finished and attached itself to its item. {path} is the file it wrote.",
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "proxyCancelled": "Proxy cancelled",
+  "@proxyCancelled": {
+    "description": "Status line, when the person making a proxy pressed Cancel. Nothing half-written is left behind."
+  },
+  "proxyFailed": "Proxy failed: {error}",
+  "@proxyFailed": {
+    "description": "Status line, when a proxy could not be made. {error} is the engine's own reason, in English.",
+    "placeholders": {
+      "error": { "type": "String" }
+    }
   }
 }

@@ -897,6 +897,16 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **The open composition tab carries no accent tick** — the seated surface colour alone
   marks it, as the mockup draws it. (The workspace tabs keep their accent underline;
   §3.1's "active tab tick" means those.)
+- **The switches column is six cells** (K-497): visibility · audio · solo ·
+  lock · shy · **guide**. Guide and shy are the column's two housekeeping
+  marks — one hides the row from this list, the other keeps the layer out of
+  every file Lumit writes — and neither is a Modes-column question about *how*
+  a layer is rendered, which is why the guide cell sits here rather than there.
+  It is drawn on **every** row, unlike the two kind-gated cells in Modes: any
+  layer can be reference-only, so there is no kind the mark would do nothing
+  on. Its glyph is the set's own **Guide** — a frame with two dashed guides
+  running across and past it — lit `text_primary` while the layer is a guide
+  and resting at `text_muted` when it is not.
 - **The switches and Modes columns are fixed at their minimum width** — their toggles
   never stretch to fill a wider column, so there is nothing to gain by widening either,
   and neither seam is a drag handle (K-448; Modes added 2026-08-24 on the owner's word).
@@ -1070,6 +1080,21 @@ carries. The rules worth writing down:
 - **State reads as an outlined badge** beside the name: `in use` in `success`, `missing`
   in `warning`, each outlined in its own colour at ~28%, mono at 9 with no tracking. A
   badge reports a state, so it is deliberately **not** a kicker.
+- **A third badge, `proxy`, is deliberately colourless** (K-501): it is drawn in
+  `text_muted` rather than in a state colour, because the other two report
+  something that wants acting on — placed, or lost — and reading from a
+  stand-in wants nothing. It is drawn only while the item's *use proxy* tick is
+  on, so the badge means "this item is being read from its proxy" rather than
+  "a proxy exists somewhere"; it sits between `in use` and `missing`.
+- **The bottom bar carries the project-wide proxies switch** (K-501), after the
+  new-item controls and a hairline: a switch that governs the whole document
+  reads apart from the commands that make things, the same separation the
+  Timeline's bottom bar draws for its comp-wide toggles (§12A.1). It is the
+  bar's own icon-and-kicker shape, so it sheds its word and keeps its mark as
+  the panel narrows, and it takes the switch conventions' two strengths —
+  `text_primary` on, `text_muted` off, never the accent. **Both halves of the
+  count truncate**: the `n missing ·` half was fixed-width, which overflowed a
+  narrow bar rather than shortening.
 - **The search well is an inset well** (§2.1), the row's full width, at the standard 20.
 - **The bottom bar carries the new-item controls at the left** — icon plus a 0.08em kicker
   word — **and a factual count at the right** (`1 missing · 10 items`) in mono at 0.06em,

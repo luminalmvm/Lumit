@@ -927,8 +927,21 @@ touching the file (K-024):
 ### 3.3 Proxies and relinking
 
 - Each footage item shows a **proxy badge** when a proxy exists (glossary §5): states are
-  *none / generating (progress) / ready / stale*. A global proxy toggle in the panel header
+  *none / generating (progress) / ready / stale*. A global proxy toggle
   switches all previews between proxy and original.
+  **Shipped (K-501):** the row wears a colourless `proxy` badge while its own
+  *use proxy* tick is on, and the row menu carries the four commands on footage
+  rows — **Set proxy…** (a file picker), **Make proxy** (the transcode), a
+  ticked **Use proxy**, and **Clear proxy**, the last two offered only once
+  there is a proxy to act on. MAKE-PROXY is background work of the export's own
+  shape, so it reports where the export does: the status line, with its
+  progress and a Cancel that works from anywhere. The **project-wide switch is
+  on the panel's bottom bar**, after the new-item controls and a hairline —
+  this panel has no header band of its own (§12A.3a's six bands are the
+  mockup's, and the search row's width is pinned to the pixel), and the bottom
+  bar is already where its panel-wide controls live. *Generating* and *stale*
+  are not badge states: progress is on the status line, and the engine forms no
+  opinion about a stale proxy (K-501 has the renderer fall back silently).
 - **Missing footage** shows a distinct badge and renders as a placeholder slate in comps
   (never a crash, never a silent black). The **relink flow**: *Relink…* opens a file picker;
   on relinking one item, Lumit MUST scan the chosen folder for the project's other missing
@@ -1149,9 +1162,11 @@ audio/muted, solo, lock/unlocked, and the twirl; the rest keep their Iconoir gly
 the set grows one. **Shy** is a real switch on the layer: it
 hides the row from this list while the toolbar's shy filter is on, and never changes what
 renders. **Guide** is the opposite pair (K-497): the layer draws in the Viewer as it always
-did and no file Lumit writes contains it, at any depth and whatever the solos say. Its cell
-belongs in the switches group beside shy, and its op (`SetLayerGuide`) and switch are in the
-engine waiting for it. **Lock** holds the layer still where the gestures live — bar move/trim, razor,
+did and no file Lumit writes contains it, at any depth and whatever the solos say.
+**Shipped:** its cell is the sixth in the switches group, beside shy, drawn on
+every layer kind — any layer can be reference-only — with the set's own Guide
+glyph lit `text_primary` on and `text_muted` off. The switches group is
+therefore `6 × switchCellWidth`. **Lock** holds the layer still where the gestures live — bar move/trim, razor,
 rename, reorder and delete all refuse — though property-row edits are not yet guarded
 (docs/TODO.md). The flow cell awaits per-layer optical flow in the engine; a Precomp
 shows collapse there and other kinds leave it empty. Quality and

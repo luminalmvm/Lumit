@@ -102,6 +102,15 @@ hand-written `BUILTINS` literal are all deleted, and with them the migration-onl
 Flutter is the only frontend (K-174, K-182); git history is the parity reference.
 These are v1-scope surfaces it does not yet match.
 
+**Timeline outline ([07-UI-SPEC.md](07-UI-SPEC.md) §4.2):**
+- **A switch cell on a locked layer throws.** `lock_guards` refuses every switch
+    but the lock, shy and the label (`lumit-core/src/ops.rs`), and the outline's
+    cells call `set_switch` unguarded — so clicking the eye, solo, fx, motion
+    blur, 3D or guide on a locked row raises out of a tap handler instead of
+    saying no. Pre-existing, and it wants one answer for all six cells rather
+    than a guard per cell: either the cells stand down while the row is locked,
+    or the refusal becomes a status-line notice.
+
 **Viewer bars ([07-UI-SPEC.md](07-UI-SPEC.md) §2.2):**
 - The wireframe/overlay menu's own *separation* (§2.2 item 5) — since K-466 the view
     menu carries the layer-controls switch, which turns wireframes, handles and hover

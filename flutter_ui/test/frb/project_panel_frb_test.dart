@@ -24,6 +24,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 
 import 'frb_test_support.dart';
 
@@ -1401,6 +1403,142 @@ void main() {
           tester.widget<Text>(find.byKey(const ValueKey('project-info-codec')));
       expect(codec.data, isNot('footage'),
           reason: 'the codec line replaced the kind-of-item fallback');
+    });
+
+    /// **Proxies on the row menu (K-501).** Four commands and one badge, all
+    /// over the seam: attach a file, read from it or not, forget it.
+    testWidgets('the proxy commands round-trip from the row menu',
+        (tester) async {
+      final p = freshProject();
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: ProjectPanelFrb(
+          // The Set proxy… picker, stubbed: the same seam the relink uses.
+          relinkPicker: () async => 'C:/clips/shot_proxy.mov',
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      Future<void> openMenu() async {
+        await tester.tapAt(
+          tester.getCenter(rowText('shot.mov')),
+          buttons: kSecondaryButton,
+        );
+        await tester.pumpAndSettle();
+      }
+
+      final badge = find.byKey(ValueKey<String>('proxy-${footage.internalid}'));
+      expect(badge, findsNothing, reason: 'nothing attached, nothing to say');
+
+      // Nothing attached: the two commands that need a proxy are absent
+      // rather than dead.
+      await openMenu();
+      expect(
+          find.byKey(const ValueKey('project-menu-set-proxy')), findsOneWidget);
+      expect(find.byKey(const ValueKey('project-menu-make-proxy')),
+          findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('project-menu-use-proxy')), findsNothing);
+      expect(
+          find.byKey(const ValueKey('project-menu-clear-proxy')), findsNothing);
+
+      // Set proxy… attaches the picked file, switched on.
+      await tester.tap(find.byKey(const ValueKey('project-menu-set-proxy')));
+      await tester.pumpAndSettle();
+      expect(footage.getProxy()?.path, contains('shot_proxy.mov'));
+      expect(footage.getProxy()?.enabled, isTrue);
+      expect(badge, findsOneWidget,
+          reason: 'a row reading from its proxy says so');
+
+      // Use proxy is the tick, and it writes both ways.
+      await openMenu();
+      await tester.tap(find.byKey(const ValueKey('project-menu-use-proxy')));
+      await tester.pumpAndSettle();
+      expect(footage.getProxy()?.enabled, isFalse);
+      expect(badge, findsNothing,
+          reason: 'attached but switched off has nothing to announce');
+
+      await openMenu();
+      await tester.tap(find.byKey(const ValueKey('project-menu-use-proxy')));
+      await tester.pumpAndSettle();
+      expect(footage.getProxy()?.enabled, isTrue);
+
+      // Clear proxy detaches it, and the two commands go with it.
+      await openMenu();
+      await tester.tap(find.byKey(const ValueKey('project-menu-clear-proxy')));
+      await tester.pumpAndSettle();
+      expect(footage.getProxy(), isNull);
+      expect(badge, findsNothing);
+
+      await openMenu();
+      expect(
+          find.byKey(const ValueKey('project-menu-use-proxy')), findsNothing);
+    });
+
+    /// A comp row has no media reference, so it is offered none of the four.
+    testWidgets('the proxy commands are footage-only', (tester) async {
+      final p = freshProject();
+      p.state.project!.newComposition(name: 'Scene');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await tester.tapAt(
+        tester.getCenter(rowText('Scene')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(const ValueKey('project-menu-set-proxy')), findsNothing);
+      expect(
+          find.byKey(const ValueKey('project-menu-make-proxy')), findsNothing);
+    });
+
+    /// **The project-wide switch (K-501)** lives on the bottom bar, after the
+    /// new-item controls: it lights at `text_primary` while it is on, rests at
+    /// `text_muted`, and writes the document both ways.
+    testWidgets('the bottom bar carries the project-wide proxies switch',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      final t = LumitTheme.dark();
+      const key = ValueKey('project-use-proxies');
+      // The mark, not the word: the word sheds on a narrow panel (§12A.6) and
+      // the mark is what is always there to read the state off.
+      ColorFilter? ink() => tester
+          .widget<SvgPicture>(find.descendant(
+              of: find.byKey(key), matching: find.byType(SvgPicture)))
+          .colorFilter;
+
+      expect(p.state.project!.useProxies(), isTrue,
+          reason: 'a project reads from its proxies by default');
+      expect(ink(), ColorFilter.mode(t.textPrimary, BlendMode.srcIn));
+
+      await tester.tap(find.byKey(key));
+      await tester.pumpAndSettle();
+      expect(p.state.project!.useProxies(), isFalse,
+          reason: 'the click reached the document');
+      expect(ink(), ColorFilter.mode(t.textMuted, BlendMode.srcIn),
+          reason: 'two strengths, never the accent');
+
+      await tester.tap(find.byKey(key));
+      await tester.pumpAndSettle();
+      expect(p.state.project!.useProxies(), isTrue);
     });
   }, skip: !engineAvailable);
 }

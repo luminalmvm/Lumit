@@ -925,7 +925,9 @@ void main() {
 
       // Across the row: the two cluster seams a solid layer draws cells on
       // either side of, and then picker to picker.
-      expect(at('twirl').left - at('shy').right, closeTo(outlineGap, 0.5),
+      // Guide is the cluster's last cell since K-497, so it is the mark the
+      // identity cluster stands a gap away from.
+      expect(at('twirl').left - at('guide').right, closeTo(outlineGap, 0.5),
           reason: 'the seam between the switches and the identity cluster is '
               'one gap, where it had been 7');
       // A solid draws the adjustment cell (K-484), so it is the last mark in
@@ -1096,6 +1098,9 @@ void main() {
       // lights left the column for the row menu (K-483) and the adjustment
       // toggle took the freed cell once the engine grew its kind flip (K-484).
       expect(renderGroupWidth, 5 * switchCellWidth);
+      // And the A/V column is exactly its own six: visibility, audio, solo,
+      // lock, shy and — since K-497 — guide.
+      expect(switchesGroupWidth, 6 * switchCellWidth);
 
       for (final group in [TimelineGroup.switches, TimelineGroup.render]) {
         final key = ValueKey<String>('tl-seam-${group.name}');

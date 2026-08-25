@@ -4139,6 +4139,7 @@ void main() {
         'tl-solo-$id',
         'tl-locked-$id',
         'tl-shy-$id',
+        'tl-guide-$id',
         'tl-twirl-$id',
         'tl-label-$id',
         'tl-name-$id',
@@ -4190,6 +4191,7 @@ void main() {
         'tl-solo-$id',
         'tl-locked-$id',
         'tl-shy-$id',
+        'tl-guide-$id',
       ]) {
         expect(dx(key), greaterThan(dx('tl-parent-$id')),
             reason: 'the whole switches cluster moved past the pickers');
@@ -4323,6 +4325,50 @@ void main() {
       await tester.pumpAndSettle();
       expect(layer.getKind(), BridgeLayerKind.solid);
       expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn));
+    });
+
+    /// **The guide switch (K-497)**, the sixth cell in the A/V column. Unlike
+    /// the two kind-gated cells in the Modes column it is drawn on every row —
+    /// any layer can be reference-only — and it lights the way the rest of the
+    /// column does, writing the document both ways.
+    testWidgets('the guide switch is drawn on every kind and writes both ways',
+        (tester) async {
+      final p = withComp();
+      final solid = p.comp.addSolidLayer();
+      final text = p.comp.addTextLayer();
+      final camera = p.comp.addCameraLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final t = LumitTheme.dark();
+
+      for (final layer in [solid, text, camera]) {
+        expect(
+            find.byKey(ValueKey<String>('tl-guide-${layer.internallayerId}')),
+            findsOneWidget,
+            reason: 'every kind can be reference-only');
+      }
+
+      final cell =
+          find.byKey(ValueKey<String>('tl-guide-${solid.internallayerId}'));
+      ColorFilter? tint() => tester
+          .widget<SvgPicture>(
+              find.descendant(of: cell, matching: find.byType(SvgPicture)))
+          .colorFilter;
+
+      expect(solid.getSwitches().guide, isFalse);
+      expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn),
+          reason: 'off rests at text_muted');
+
+      await tester.tap(cell);
+      await tester.pumpAndSettle();
+      expect(solid.getSwitches().guide, isTrue,
+          reason: 'the click reached the document');
+      expect(tint(), ColorFilter.mode(t.textPrimary, BlendMode.srcIn),
+          reason: 'on lights at text_primary, and never the accent');
+
+      await tester.tap(cell);
+      await tester.pumpAndSettle();
+      expect(solid.getSwitches().guide, isFalse);
     });
 
     /// The toolbar's readouts: the timecode counts frames at the comp's own

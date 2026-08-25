@@ -13744,3 +13744,78 @@ decides that itself and falls back to the original without reporting missing med
 deliberately, so a present clip cannot open the relink dialogue. A panel wanting a "proxy is
 broken" mark needs a new query over the renderer; there is none, and inventing one in Dart
 would be a second opinion about media the engine has already formed.
+
+## K-504 — The panels' halves of guide layers and proxies: a sixth switch cell, a colourless badge, and the project-wide tick on the bottom bar
+
+**DECIDED 2026-08-25.** The interface work K-497 and K-501 left owed, now that
+K-503 carries both across the seam. Nothing in either is reversed; this settles
+four placements they deliberately left to the panels.
+
+**The guide switch is the switches column's sixth cell, not a sixth Modes
+cell.** docs/07 §4.2 already named the place — *beside shy* — and building it
+confirmed why: the switches column holds what the Timeline keeps about a layer
+(seen, heard, soloed, held still, hidden from this list) while Modes holds how
+the layer is rendered (flow, effects, motion blur, 3D, adjustment). Guide is
+the first kind: it changes no pixel in the Viewer at all, and only decides
+whether the layer is in a file. `switchesGroupWidth` is therefore
+`6 × switchCellWidth`.
+
+**It is drawn on every row**, unlike the two cells in Modes that stand empty by
+layer kind (K-168, K-484). Those two blank because a footage layer cannot flow
+into a precomp and a camera cannot become an adjustment layer — the mark would
+do nothing. Any layer at all can be reference-only: a match photograph, a grid,
+a title-safe rectangle, an animatic. A cell that means something everywhere is
+drawn everywhere.
+
+**The set gains two glyphs, and neither is an existing mark reused.** *Guide* is
+a frame with two dashed guides running across it and out past its edges — the
+lines you pull off a ruler — deliberately not the Viewer bar's *Grid* (a frame
+with four solid lines inside it) or *Safe zones* (a frame inside a frame): a
+mark that means one thing on the Viewer's bar and another in an outline row is
+a mark nobody can read, which is the reasoning that removed the Exposure glyph
+from the Modes column in K-483. *Proxy* is a small square standing in front of a
+larger outline — a second file in front of the first. Both are drawn to §5's
+grammar (16 grid, 1.5 stroke) in `tool/icons/glyphs.json`; the set is 120.
+
+**The `proxy` badge is colourless, and it follows the tick rather than the
+file.** §12A.3a's two badges wear a state colour because each reports something
+that wants acting on — this is placed, this is lost. Reading from a stand-in
+wants nothing, so the third badge takes the family's shape at `text_muted` and
+claims none of the palette. It is drawn only while the item's own *use proxy*
+tick is on, which makes it mean "this item is being read from its proxy": a
+badge on an item whose tick is off would announce a fact about the project file
+rather than about what is on screen. *Generating* and *stale*, which docs/07
+§3.3 listed as badge states, are not: progress belongs on the status line with
+the other background work, and the engine forms no opinion about a stale proxy
+at all (K-501 has the renderer fall back silently, and inventing the judgement
+in Dart would be a second opinion about media the engine has already formed).
+
+**MAKE-PROXY reports where the export does.** It is a job of exactly the same
+shape — start, poll, cancel, one at a time — so it takes the status line's own
+strip rather than a progress row of the Project panel's, with a Cancel that
+works from anywhere. One notifier carries both edges of the job: the panel
+bumps it to get the strip polling, and the strip bumps it when the job stops.
+The finished file attaches itself on the poll that sees it land, and that op is
+in the item scope, so the panel re-reads through the change stream it already
+listens to — no second path.
+
+**The project-wide switch is on the Project panel's bottom bar**, not in a
+header. docs/07 §3.3 had said *panel header*, written before the redesign gave
+the panel its six mockup-fixed bands (§12A.3a) — there is no header band, and
+the search row's width is measured to the pixel against the drawing. The bottom
+bar is already where this panel's panel-wide controls live (import, new folder,
+new composition, the missing filter), and the switch reads apart from them
+after a hairline, exactly as the Timeline's comp-wide toggles read apart from
+its column toggles. It is drawn in the bar's own icon-and-kicker shape so that
+§12A.6's step 4 sheds its word and keeps its mark rather than removing the
+control on a narrow panel — which is what a word-only toggle would have done,
+and is why the *Proxy* glyph had to exist. The `n missing ·` half of the count
+became flexible in the same change: it was fixed-width, so a narrow bar
+carrying a broken item overflowed instead of shortening.
+
+**The four commands are on the row menu, not on the row.** Set proxy… ·
+Make proxy · a ticked Use proxy · Clear proxy, offered on footage rows alone
+(nothing else has a media reference for a stand-in to stand in for) and the last
+two only once there is a proxy, so the menu never lists a word that would do
+nothing — the rule the layer menu's ticked *Accepts lights* entry set in K-483.
+The row itself keeps one badge and no buttons, as the mockup draws it.

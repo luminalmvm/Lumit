@@ -46,14 +46,18 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
+import '../icons/lumit_icon.dart' as glyph;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/drag_payloads.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/status_line_frb.dart';
 import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
@@ -532,6 +536,16 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   final Map<String, bool> _used = {};
   final Map<String, int> _labels = {};
 
+  /// Each footage item's proxy (K-501), or null where it has none — for the
+  /// `proxy` badge and for the row menu's four commands. A document read like
+  /// every other entry here, so it is asked once per document change and never
+  /// in a rebuild: the budget test expects a hover to cost nothing.
+  final Map<String, BridgeProxy?> _proxies = {};
+
+  /// The project-wide *use proxies* switch (K-501), cached with the rest: it is
+  /// a document read, so a rebuild must never ask for it again.
+  bool? _useProxies;
+
   /// The colour chip the filter row is holding, or null for "show everything"
   /// (§12A.3a). Session state, like the search text and the shut folders: a
   /// filter is where you are looking, not something about the document.
@@ -647,7 +661,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               ),
             ),
           ),
-          _footer(t, items: 0, missing: 0, width: width),
+          _footer(t,
+              items: 0, missing: 0, width: width, project: state.project),
         ],
       );
     }
@@ -708,6 +723,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           audio: _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null,
           label: label,
           inUse: _used[id] ??= _isUsed(item),
+          proxy: _proxies.putIfAbsent(
+              id,
+              () => item is ItemReference_Footage
+                  ? item.field0.getProxy()
+                  : null),
           selected: _selectedIds.contains(id),
           renaming: _renamingId == id,
           selectionCount: _selectedIds.length,
@@ -778,7 +798,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           ),
         ),
         _scrollStrip(t),
-        _footer(t, items: itemCount, missing: missingCount, width: width),
+        _footer(t,
+            items: itemCount,
+            missing: missingCount,
+            width: width,
+            project: state.project),
       ],
     );
   }
@@ -1045,7 +1069,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// rather than being dropped. The count's `n missing ·` half is the
   /// "show only missing" filter, which the mockup likewise has no row for.
   Widget _footer(LumitTheme t,
-      {required int items, required int missing, required double width}) {
+      {required int items,
+      required int missing,
+      required double width,
+      ProjectReference? project}) {
     final active = _missingOnly && missing > 0;
     final labels = width >= _widthForFooterLabels;
     final count = t.kicker.copyWith(letterSpacing: _footerCountTracking);
@@ -1102,13 +1129,67 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               ),
             ),
           ),
+          // **The project-wide proxies switch** (K-501, docs/07 §3.3). It sits
+          // on the bottom bar after a divider, apart from the new-item
+          // controls, for the reason the Timeline's own comp-wide toggles do
+          // (§12A.1): a switch that governs the whole document reads apart
+          // from the commands that make things.
+          //
+          // Drawn like the controls beside it — the set's own mark with a
+          // kicker word after it — so it sheds the word and keeps the mark as
+          // the panel narrows (§12A.6's step 4), rather than vanishing at the
+          // width where a word-only control would have to. Its two strengths
+          // are the switch conventions': `text_primary` on, `text_muted` off,
+          // and never the accent (§3.1's list is closed).
+          if (project != null) ...[
+            Container(
+                width: 1,
+                height: 10,
+                color: t.hairline,
+                margin: const EdgeInsets.symmetric(horizontal: _footerIconGap)),
+            Builder(builder: (context) {
+              final on = _useProxies ??= project.useProxies();
+              final ink = on ? t.textPrimary : t.textMuted;
+              return LumitTooltip(
+                message: on ? l10n.tipUseProxiesOn : l10n.tipUseProxiesOff,
+                child: GestureDetector(
+                  key: const ValueKey('project-use-proxies'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    project.setUseProxies(useProxies: !on);
+                    _documentChanged();
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      glyph.LumitIcon(LumitIcons.proxy,
+                          size: projectFooterIconSize, colour: ink),
+                      if (labels) ...[
+                        const SizedBox(width: _footerIconGap),
+                        Text(
+                          l10n.projectFooterProxies.toUpperCase(),
+                          style: t.kicker.copyWith(
+                              letterSpacing: _footerLabelTracking, color: ink),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
           const Spacer(),
           // The missing half reads *before* the total, so the bar ends on the
           // item count (the owner's order). The two stay separate strings: a
           // translator sees each phrase whole, and the order is the layout's
           // business rather than something spliced into a sentence.
+          // Flexible like the total beside it: both halves are the bar's
+          // truncating text (§12A.6's step 1), and the missing half used to be
+          // fixed — which meant a narrow bar carrying a broken item overflowed
+          // rather than shortening.
           if (missing > 0)
-            LumitTooltip(
+            Flexible(
+                child: LumitTooltip(
               message: active ? l10n.tipShowEverything : l10n.tipMissingOnly,
               child: GestureDetector(
                 key: const ValueKey('missing-toggle'),
@@ -1122,7 +1203,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-            ),
+            )),
           // The count never pushes the bar wider than the panel: it is the
           // flexible text the width ladder's first step truncates (§12A.6).
           Flexible(
@@ -1499,6 +1580,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       _paths.clear();
       _used.clear();
       _labels.clear();
+      _proxies.clear();
+      _useProxies = null;
       _dropThumbs();
     });
   }
@@ -1633,6 +1716,10 @@ class _ProjectRowFrb extends StatefulWidget {
 
   /// Whether any composition places this item — the `in use` badge.
   final bool inUse;
+
+  /// This item's proxy (K-501), or null where it has none. Null on every kind
+  /// but footage — nothing else has a media reference to stand in for.
+  final BridgeProxy? proxy;
   final bool selected;
   final bool renaming;
 
@@ -1694,6 +1781,7 @@ class _ProjectRowFrb extends StatefulWidget {
     required this.audio,
     required this.label,
     required this.inUse,
+    required this.proxy,
     required this.selected,
     required this.renaming,
     required this.columns,
@@ -1897,6 +1985,11 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
               onRelink: item is ItemReference_Footage
                   ? () => _doRelink((item as ItemReference_Footage).field0)
                   : null,
+              proxy: widget.proxy,
+              // The same picker seam the relink uses — picking a proxy file
+              // and picking a replacement are the same gesture over the same
+              // dialogue, and tests inject one stub for both.
+              proxyPicker: widget.relinkPicker,
               // Read here, not in build: raising the menu is a gesture.
               folders: widget.folderChoices(),
               onMoveToFolder: widget.onMoveToFolder,
@@ -1932,6 +2025,24 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
                     key: ValueKey<String>('in-use-${_idOf(item)}'),
                     label: l10n.projectItemInUse,
                     colour: t.success,
+                  ),
+                ],
+                // Reading from a stand-in (K-501). **Quiet on purpose**: the
+                // other two badges wear a state colour because they report
+                // something that wants acting on — placed, or lost. A proxy is
+                // neither; it is a fact about which file the item is being
+                // read from, so it takes the badge family's shape at
+                // `text_muted` and claims none of the palette.
+                //
+                // Drawn only while the tick is on: the badge says "this item
+                // is being read from its proxy", so a proxy that is attached
+                // and switched off has nothing to announce.
+                if (widget.proxy?.inUse ?? false) ...[
+                  const SizedBox(width: projectRowGap),
+                  ProjectBadge(
+                    key: ValueKey<String>('proxy-${_idOf(item)}'),
+                    label: l10n.projectItemProxy,
+                    colour: t.textMuted,
                   ),
                 ],
                 if (widget.missing) ...[
@@ -2161,6 +2272,10 @@ enum _ProjectMenuAction {
   relink,
   findMissing,
   addAudioOnly,
+  setProxy,
+  makeProxy,
+  useProxy,
+  clearProxy,
   moveToRoot,
   delete
 }
@@ -2185,6 +2300,14 @@ Future<void> showProjectMenuFrb({
 
   /// The tag the item wears now, so the strip can mark it.
   int label = 0,
+
+  /// This item's proxy (K-501), or null where it has none — which is what
+  /// decides whether the menu offers *Use proxy* and *Clear proxy* at all.
+  BridgeProxy? proxy,
+
+  /// Where **Set proxy…** gets its path. The panel's own relink seam, so a
+  /// test stubs one dialogue for both.
+  Future<String?> Function()? proxyPicker,
 
   /// The folders **Move to folder** offers, name and handle, in the order the
   /// panel lists them. Empty — a project with no folders in it — leaves the
@@ -2244,6 +2367,46 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.addAudioOnly),
               child: Text(l10n.addAudioOnly),
             ),
+          // **Proxies, on the item's own menu** (K-501, docs/07 §3.3). Four
+          // commands and no dialogue: attach a file, make one, read from it or
+          // not, forget it. Offered on footage alone — a comp and a folder
+          // have no media reference for a stand-in to stand in for — and the
+          // last two only once there is a proxy, so the menu never lists a
+          // word that would do nothing.
+          if (isFootage) ...[
+            MenuRow(
+              key: const ValueKey('project-menu-set-proxy'),
+              onPressed: () => close(_ProjectMenuAction.setProxy),
+              child: Text(l10n.setProxyEllipsis),
+            ),
+            MenuRow(
+              key: const ValueKey('project-menu-make-proxy'),
+              onPressed: () => close(_ProjectMenuAction.makeProxy),
+              child: Text(l10n.makeProxy),
+            ),
+            if (proxy != null) ...[
+              // Ticked, in the shape the layer menu's Accepts lights uses
+              // (K-483): a word says what the tick means, where a glyph could
+              // not.
+              MenuRow(
+                key: const ValueKey('project-menu-use-proxy'),
+                onPressed: () => close(_ProjectMenuAction.useProxy),
+                child: Row(
+                  children: [
+                    SizedBox(
+                        width: 16,
+                        child: proxy.enabled ? const Text('✓') : null),
+                    Expanded(child: Text(l10n.useProxy)),
+                  ],
+                ),
+              ),
+              MenuRow(
+                key: const ValueKey('project-menu-clear-proxy'),
+                onPressed: () => close(_ProjectMenuAction.clearProxy),
+                child: Text(l10n.clearProxy),
+              ),
+            ],
+          ],
           // The colour tag, as the strip itself rather than a submenu: the
           // chips ARE the choice, so putting them on the menu row costs one
           // click where a submenu costs two and a hover in between. The same
@@ -2341,6 +2504,46 @@ Future<void> showProjectMenuFrb({
     case _ProjectMenuAction.addAudioOnly:
       if (item case ItemReference_Footage(:final field0)) {
         openComp?.addAudioLayer(footage: field0);
+        onLocalEdit();
+      }
+    case _ProjectMenuAction.setProxy:
+      if (item case ItemReference_Footage(:final field0)) {
+        final path = proxyPicker != null
+            ? await proxyPicker()
+            : await pickFootage()
+                .then((paths) => paths.isEmpty ? null : paths.first);
+        if (path == null) return;
+        field0.setProxy(path: path);
+        onLocalEdit();
+      }
+    case _ProjectMenuAction.makeProxy:
+      if (item case ItemReference_Footage(:final field0)) {
+        // The engine's own refusals — one transcode at a time, and nothing to
+        // read from on this machine — reach the status line as its notice,
+        // rather than as an exception out of a menu handler.
+        try {
+          field0.makeProxy();
+        } catch (e) {
+          if (context.mounted) {
+            Provider.of<LumitState>(context, listen: false)
+                .postNotice(l10n.proxyFailed('$e'), error: true);
+          }
+          return;
+        }
+        // The transcode reports on the status line, where every other piece of
+        // background work does; this is the start signal that gets the strip
+        // polling. The finished file attaches itself on the poll that sees it
+        // land, and the item scope of that op is what brings this panel back.
+        proxyJobChanged.value++;
+      }
+    case _ProjectMenuAction.useProxy:
+      if (item case ItemReference_Footage(:final field0)) {
+        field0.setUseProxy(on_: !(proxy?.enabled ?? false));
+        onLocalEdit();
+      }
+    case _ProjectMenuAction.clearProxy:
+      if (item case ItemReference_Footage(:final field0)) {
+        field0.clearProxy();
         onLocalEdit();
       }
     case _ProjectMenuAction.moveToRoot:
