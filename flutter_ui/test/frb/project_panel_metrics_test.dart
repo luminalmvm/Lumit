@@ -343,6 +343,87 @@ void main() {
               'insets, the Name column and the other three columns');
     });
 
+    /// 4a-ii. **Widening the *panel* moves no column's left edge** (owner,
+    /// desk test: "Path's column still shifts"). Every metadata column is a
+    /// fixed box anchored off the panel's right edge, and the only one that
+    /// may change is Path — which grows to the right of where it starts. The
+    /// header and the rows are checked separately, because they are two
+    /// arrangements of the same widths and only one of them had to be wrong
+    /// for the owner to see a column move.
+    testWidgets('widening the panel moves only Path, and only its right edge',
+        (tester) async {
+      final p = withItems();
+
+      final header =
+          find.byKey(const ValueKey<String>('project-column-header'));
+      Rect heading(String word) => tester
+          .getRect(find.descendant(of: header, matching: find.text(word)));
+      // The comp's row states a size and a rate; the path cell is the footage
+      // row's, so both sides of the list are measured.
+      Rect cell(int index) {
+        final row = find.byKey(ValueKey<String>('project-row-${p.compId}'));
+        final texts =
+            find.descendant(of: row, matching: find.byType(Text)).evaluate();
+        return tester.getRect(find.byWidget(texts.elementAt(index).widget));
+      }
+
+      await mount(tester, p, width: 480);
+      await settleFrb(tester, minRounds: 6);
+      final before = {
+        for (final word in ['ITEMS', 'SIZE', 'FPS', 'PATH']) word: heading(word)
+      };
+      // Name, then the size and the rate: a composition states neither a
+      // child count nor a path, so those two cells are its whole trailing run.
+      final rowBefore = [for (var i = 1; i <= 2; i++) cell(i)];
+
+      await mount(tester, p, width: 600);
+      await settleFrb(tester, minRounds: 6);
+
+      for (final word in ['ITEMS', 'SIZE', 'FPS', 'PATH']) {
+        expect(heading(word).left, closeTo(before[word]!.left, 0.01),
+            reason: '$word starts where it started: 120 more panel does not '
+                'move a column boundary');
+      }
+      for (final word in ['ITEMS', 'SIZE', 'FPS']) {
+        expect(heading(word).width, closeTo(before[word]!.width, 0.01),
+            reason: '$word keeps its width too — Path holds the slack');
+      }
+      expect(heading('PATH').width, closeTo(before['PATH']!.width + 120, 0.01),
+          reason: 'every pixel the panel gained is Path\'s');
+
+      final rowAfter = [for (var i = 1; i <= 2; i++) cell(i)];
+      for (var i = 0; i < rowBefore.length; i++) {
+        expect(rowAfter[i].left, closeTo(rowBefore[i].left, 0.01),
+            reason: 'a row\'s cells hold the same boundaries as the header');
+        expect(rowAfter[i].width, closeTo(rowBefore[i].width, 0.01));
+      }
+    });
+
+    /// 4a-iii. **Path reads from its left edge; every other column from its
+    /// right.** This is what stops the *word* moving as the column grows: a
+    /// right-anchored reading in a box that gains 120px travels 120px with it,
+    /// which is the shift the owner kept seeing even though the boundary
+    /// itself never moved.
+    testWidgets('the Path column is anchored left, the rest right',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 480);
+      await settleFrb(tester, minRounds: 6);
+
+      final header =
+          find.byKey(const ValueKey<String>('project-column-header'));
+      TextAlign? alignOf(String word) => tester
+          .widget<Text>(find.descendant(of: header, matching: find.text(word)))
+          .textAlign;
+
+      expect(alignOf('PATH'), TextAlign.left,
+          reason: 'the column that grows reads from the edge that stays put');
+      for (final word in ['ITEMS', 'SIZE', 'FPS']) {
+        expect(alignOf(word), TextAlign.right,
+            reason: '$word is a fixed box holding a number');
+      }
+    });
+
     /// 4b. **The seams between the headings drag**, on the Timeline outline's
     /// own rule: a seam widens the column to its left and every other column
     /// keeps its width, so the drag moves one boundary and nothing else.
@@ -395,14 +476,48 @@ void main() {
           reason: 'and so does Size');
       for (final fixed in [ProjectColumn.items, ProjectColumn.fps]) {
         expect(projectColumnIsFixedWidth(fixed), isTrue);
-        // The seam is still drawn — the gap has to be there — but it carries
-        // no hairline and no handle, so it is not a key the panel offers.
+        // The seam is still drawn — the gap has to be there, and the rule in
+        // it says where the column ends — but it offers no drag and no resize
+        // cursor, so the panel never shows a handle that does nothing.
         final gap = find.byKey(ValueKey<String>('project-seam-${fixed.name}'));
         expect(tester.widgetList(gap).length, 1,
             reason: 'the gap keeps its width so the columns stay aligned');
+        expect(find.descendant(of: gap, matching: find.byType(MouseRegion)),
+            findsNothing,
+            reason: 'and offers no resize cursor');
       }
       expect(projectColumnIsFixedWidth(ProjectColumn.path), isTrue,
           reason: 'Path has no width of its own to drag: it is the slack');
+    });
+
+    /// 4d. **Every column boundary is ruled, draggable or not** (owner: the
+    /// `items|size` and `fps|path` seams were missing theirs). The seam is the
+    /// Timeline header's own treatment — a 1×10 `hairline_strong` rule centred
+    /// in the gap — and it marks the boundary; whether it *moves* is a
+    /// separate question, answered by the cursor and the drag above.
+    testWidgets('every column boundary wears the timeline\'s seam',
+        (tester) async {
+      final p = withItems();
+      await mount(tester, p, width: 560);
+      await settleFrb(tester, minRounds: 6);
+
+      // One seam precedes each column but Name, so at this width: name|items,
+      // items|size, size|fps, fps|path.
+      for (final left in [
+        ProjectColumn.name,
+        ProjectColumn.items,
+        ProjectColumn.size,
+        ProjectColumn.fps,
+      ]) {
+        final seam = find.byKey(ValueKey<String>('project-seam-${left.name}'));
+        expect(seam, findsOneWidget, reason: '${left.name} has a boundary');
+        final rule =
+            find.descendant(of: seam, matching: find.byType(Container));
+        expect(rule, findsOneWidget,
+            reason: 'the ${left.name} boundary is ruled like the Timeline\'s');
+        expect(tester.getRect(rule).size, const Size(1, 10),
+            reason: 'a 1x10 rule, the Timeline header\'s own');
+      }
     });
 
     testWidgets('the optional columns hide as the panel narrows',

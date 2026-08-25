@@ -440,7 +440,19 @@ class ProjectColumns {
             ? null
             : Text(text,
                 style: style,
-                textAlign: TextAlign.right,
+                // **Path reads from its own left edge; every other column
+                // reads from its right** (owner, desk test). The metadata
+                // columns are fixed boxes whose values are numbers, and a
+                // number belongs against the column's right edge. Path is the
+                // one box that grows with the panel, and a value anchored to
+                // the right of a growing box travels with it — which is
+                // exactly the "Path's column still shifts" the owner kept
+                // reading as the panel was widened. Anchored left, its heading
+                // and its values stand still and only the room after them
+                // grows, which is what "only Path stretches" has to look like.
+                textAlign: column == ProjectColumn.path
+                    ? TextAlign.left
+                    : TextAlign.right,
                 maxLines: 1,
                 overflow: overflow),
       ),
@@ -453,9 +465,18 @@ class ProjectColumns {
 /// outline, which this mirrors). It is drawn *inside* the gap the rows already
 /// carry between their cells, so adding it moves no column.
 ///
-/// A hairline marks the ones that take hold; a seam beside a fixed-width
-/// column draws nothing and offers no resize cursor, so the panel never shows
-/// a handle that does not work.
+/// **Every boundary is drawn; only some of them take hold.** The seam is the
+/// Timeline header's own treatment — a 1×10 `hairline_strong` rule centred in
+/// the gap — and it stands at every column boundary, because it is what says
+/// where one column ends and the next begins. What varies is whether it
+/// resizes: beside a fixed-width column (items, fps, path) it is a plain rule
+/// with no drag and no resize cursor, and beside a column with a width of its
+/// own it is a handle.
+///
+/// It used to draw nothing at all where it could not drag, which left the
+/// `items|size` and `fps|path` boundaries unmarked while their neighbours were
+/// ruled — a header that looked half-finished rather than one that told you
+/// which seams move.
 class _ColumnSeam extends StatelessWidget {
   final ValueChanged<double>? onResize;
   const _ColumnSeam({super.key, required this.onResize});
@@ -464,7 +485,14 @@ class _ColumnSeam extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final resize = onResize;
-    if (resize == null) return const SizedBox(width: projectRowGap);
+    if (resize == null) {
+      return SizedBox(
+        width: projectRowGap,
+        child: Center(
+          child: Container(width: 1, height: 10, color: t.hairlineStrong),
+        ),
+      );
+    }
     return MouseRegion(
       cursor: SystemMouseCursors.resizeColumn,
       child: GestureDetector(
