@@ -263,9 +263,10 @@
     }
   `;
 
-  // The reveal takes a tenth of a second, out of the wordmark's box and across
-  // the whole canvas.
-  const REVEAL_MS = 100;
+  // The reveal takes an eighth of a second and a bit, out of the wordmark's box
+  // and across the whole canvas. It starts when the lockup lands, whatever this
+  // is set to.
+  const REVEAL_MS = 150;
 
   // Two things have to happen before the field appears: it has to have a frame
   // in it, and the wordmark has to be home. They are independent, so the cue
