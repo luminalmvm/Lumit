@@ -774,6 +774,11 @@ mod tests {
 
         // Time nought is a pass-through even with a wire on it.
         let mut w = inst("wiggle");
+        // Wiggle seeds its noise from the node's id, and a fresh instance gets
+        // a new id every run — so an unpinned node makes this a different
+        // signal each time, and any numeric bound below becomes a coin toss.
+        // Pin the id: one fixed wobble, one fixed answer.
+        w.id = uuid::Uuid::from_u128(0x5000_7401);
         set(&mut w, "amount", 10.0);
         set(&mut w, "frequency", 8.0);
         let mut s0 = inst("smooth");
@@ -811,6 +816,8 @@ mod tests {
             .map(|i| read(&chain(&s1), f64::from(i) * 0.02))
             .collect();
         let travel = |v: &[f32]| v.windows(2).map(|w| (w[1] - w[0]).abs()).sum::<f32>();
+        // With that pinned wobble the nine-tap window leaves 0.205 of the raw
+        // travel, so 0.6 is a wide, fixed margin rather than a coin toss.
         assert!(
             travel(&smoothed) < travel(&raw) * 0.6,
             "smoothing must calm the signal: {} against {}",
