@@ -476,8 +476,14 @@ controls cannot be pulled by a lerp of the host's numbers and carry the raw cont
 the kernel instead: Exposure's factor is `exp2(stops·k)`, Temperature's gains are rebuilt
 from `t·k` (the blue gain floors), and Hue shift builds the matrix for `angle·k` from the
 same coefficients in `f32` (`cpu::hue_matrix_px`). Contrast and Vignette stay on
-`Strength` because scaling their amount *is* the dissolve, and Threshold because a cut has
-no honest per-pixel form that returns the colour picture at black.
+`Strength` because scaling their amount *is* the dissolve.
+
+**Threshold takes the same shape for a different quantity (K-559):** its matte scales the
+**Level** — a plain `level·k`, not a `matte_toward`, because a Level of 0 is a real
+setting and not the effect's neutral — so the cut *moves* across the frame rather than
+fading. Everything else about it is the paragraph above, `cpu::threshold_matted` and
+`fx_threshold.wgsl`'s `matte_on` included, and it is held by a `check_matte_claim` row
+like every other claim. This is what supersedes K-426's Threshold sentence.
 
 **And the Distortion family claims it the same way (K-427, docs/08 §2.6):** a distortion's
 amount is a *distance*, so the matte multiplies the displacement per pixel. Fourteen more

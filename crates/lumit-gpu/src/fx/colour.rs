@@ -911,7 +911,8 @@ struct ThresholdParams {
     level: f32,
     hw: f32,
     mix_amt: f32,
-    _pad0: f32,
+    /// 1 = scale the level by the matte (K-559).
+    matte_on: f32,
 }
 
 /// One resolved Tritone (docs/08 §3.60): the three stops of the ramp.
@@ -1059,21 +1060,24 @@ impl FxEngine {
 
     /// Apply one Threshold (docs/08 §3.59) to a linear working texture,
     /// returning a new texture of the same size. One pointwise pass; alpha is
-    /// untouched, so a thresholded picture keeps its shape.
+    /// untouched, so a thresholded picture keeps its shape. A bound `matte`
+    /// scales the level per pixel (K-559).
     pub fn threshold(
         &self,
         ctx: &GpuContext,
         src: &wgpu::Texture,
         w: u32,
         h: u32,
+        matte: Option<&wgpu::Texture>,
         op: &ThresholdOp,
     ) -> wgpu::Texture {
         let out = work_texture(ctx, w, h, "fx-threshold-out");
-        self.dispatch(
+        self.dispatch_matted(
             ctx,
             &self.threshold,
             src,
             src,
+            matte,
             &out,
             w,
             h,
@@ -1081,7 +1085,7 @@ impl FxEngine {
                 level: op.level,
                 hw: op.half_width,
                 mix_amt: op.mix,
-                _pad0: 0.0,
+                matte_on: f32::from(matte.is_some()),
             }),
         );
         out

@@ -11711,7 +11711,11 @@
         }
       ],
       "groups": [],
-      "matte_role": "strength"
+      "matte": {
+        "param": "matte",
+        "meaning": "scales Level per pixel: white cuts where you set it, black cuts at 0, so the threshold moves across the frame"
+      },
+      "matte_role": "own"
     },
     {
       "slug": "tritone",

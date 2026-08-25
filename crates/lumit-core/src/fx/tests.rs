@@ -11431,6 +11431,7 @@ fn every_effect_carries_a_matte_row() {
                 | "photo_filter"
                 | "shadow_highlight"
                 | "posterize"
+                | "threshold"
                 | "add_grain"
                 | "lightning"
                 | "radio_waves"
@@ -11454,7 +11455,7 @@ fn every_effect_carries_a_matte_row() {
         assert_eq!(
             !s.matte.generic(),
             claims,
-            "{} — the effects that claim the matte inside their own maths are              listed here (K-395, K-426, K-427); anything else that wants a deeper meaning              must say so here too",
+            "{} — the effects that claim the matte inside their own maths are              listed here (K-395, K-426, K-427, K-559); anything else that wants a deeper meaning              must say so here too",
             s.match_name
         );
         // Every image effect takes one, whatever it means by it.

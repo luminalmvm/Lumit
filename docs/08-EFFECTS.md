@@ -387,8 +387,9 @@ and Posterize's Levels toward 256 (black matte: a step too fine to see). Where s
 amount is *mathematically* the dissolve — the output is a straight lerp of the input —
 nothing changes and the effect keeps the strength semantic: Contrast and Vignette are
 exactly that, as are Tritone, Black and white, Tint, Curves, Levels, Invert, LUT and
-Broadcast safe at Mix; Threshold stays there because a cut has no honest per-pixel form that
-returns the colour picture at black (the only formula is the lerp). The formula is one
+Broadcast safe at Mix. **Threshold is the exception the owner named** (K-559): its matte
+scales the **Level** instead — `level·k` at each pixel, before the cut — so the threshold
+moves across the frame, which is behaviour and not a fade. The formula is one
 helper on each path (`cpu::matte_toward` and its WGSL twin): `neutral·(1 − k) + value·k`,
 spelled so that k = 1 is the value to the bit, which is what keeps an empty matte
 byte-identical to the effect before the claim (K-258).
@@ -3952,6 +3953,13 @@ Two decisions:
 Alpha is untouched: a thresholded picture keeps its shape, and the frame does not become a
 white rectangle. Unpremultiplied (§2.2). `cheap` cost, `Exact` ROI. Mix 0 is the bit-exact
 identity.
+
+**The Matte scales the Level (K-559, §2.6):** the cut's position is multiplied by the
+matte at each pixel, so white cuts where the Level is set, black cuts at 0 — where every
+pixel with any light in it comes back white — and grey cuts somewhere between. The
+threshold *moves* across the frame, which is the one thing the strength dissolve cannot
+do; it is not a lerp toward a neutral, because a Level of 0 is a real setting rather than
+the effect doing nothing.
 
 **Softness is not AE's.** AE's Threshold has one control. Softness defaults to 0, where it is
 AE's picture, so an import is faithful (K-401).

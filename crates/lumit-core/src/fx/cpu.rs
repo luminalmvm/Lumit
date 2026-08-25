@@ -6860,7 +6860,19 @@ pub fn posterize_matted(rgba: &mut [f32], n: f32, mix: f32, matte: &[f32]) {
 /// Unpremultiplied (§2.2); alpha is untouched, so a thresholded picture keeps
 /// its shape. Mix 0 is the bit-exact identity.
 pub fn threshold(rgba: &mut [f32], level: f32, hw: f32, mix: f32) {
-    for px in rgba.chunks_exact_mut(4) {
+    threshold_matted(rgba, level, hw, mix, &[]);
+}
+
+/// [`threshold`] driven by a matte (K-559, docs/08 §2.6): each pixel's matte
+/// strength **scales the Level** — `level·k` before the cut — so a bright matte
+/// region cuts where the user set it and a dark one cuts near black, which is a
+/// cut that moves across the frame rather than a hard cut faded back over the
+/// picture. The multiply, not [`matte_toward`]: black is Level 0, where every
+/// lit pixel is already white, and k = 1 is `level` to the bit, so an empty
+/// matte is the unmatted path to the byte (K-258).
+pub fn threshold_matted(rgba: &mut [f32], level: f32, hw: f32, mix: f32, matte: &[f32]) {
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        let level = level * matte_strength(matte, i * 4);
         let a = px[3];
         let u = unpremult(px);
         let t = perceptual(u[0] * LUMA[0] + u[1] * LUMA[1] + u[2] * LUMA[2]);

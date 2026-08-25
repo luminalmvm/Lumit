@@ -1832,7 +1832,7 @@ impl GpuEffect for Threshold {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let (level, half_width, mix) = effects::threshold::Threshold::read(p).packed();
         fx.threshold(
@@ -1840,6 +1840,7 @@ impl GpuEffect for Threshold {
             tex,
             w,
             h,
+            aux.matte(),
             &lumit_gpu::fx::ThresholdOp {
                 level,
                 half_width,

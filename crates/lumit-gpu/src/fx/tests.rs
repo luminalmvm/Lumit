@@ -10301,7 +10301,7 @@ fn wgsl_threshold_matches_the_cpu_oracle() {
             half_width,
             mix,
         };
-        let out = fx.threshold(&ctx, &tex, w, h, &op);
+        let out = fx.threshold(&ctx, &tex, w, h, None, &op);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -10313,7 +10313,7 @@ fn wgsl_threshold_matches_the_cpu_oracle() {
             assert!(gpu != img, "{name}: the picture must actually cut");
         }
 
-        let out2 = fx.threshold(&ctx, &tex, w, h, &op);
+        let out2 = fx.threshold(&ctx, &tex, w, h, None, &op);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU threshold must be bit-stable");
     }
@@ -13254,6 +13254,59 @@ fn the_matte_pulls_posterize_levels_toward_256() {
     assert!(
         worst < 1.0 / 64.0,
         "a black matte must be a step too fine to see, not {worst}"
+    );
+}
+
+#[test]
+fn the_matte_scales_the_threshold_level() {
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    let img = claim_corpus(w, h);
+    // Softness 10, so the crossing is a ramp rather than a step: a hard cut
+    // turns a last-bit disagreement about the level into a whole white pixel,
+    // which would make the parity check a coin toss on the pixels that land on
+    // the line (§3.59 decision 2). The claim is in where the crossing sits, and
+    // a soft crossing tests that more strictly, not less.
+    let op = ThresholdOp {
+        level: 0.6,
+        half_width: 0.05,
+        mix: 1.0,
+    };
+    check_matte_claim(
+        &ctx,
+        &MatteClaim {
+            name: "threshold",
+            w,
+            h,
+            img: &img,
+            cpu: &|px, m| {
+                lumit_core::fx::cpu::threshold_matted(px, op.level, op.half_width, op.mix, m)
+            },
+            plain: &|px| lumit_core::fx::cpu::threshold(px, op.level, op.half_width, op.mix),
+            gpu: &|t, m| fx.threshold(&ctx, t, w, h, m, &op),
+            tol: 5e-2,
+        },
+    );
+    // A black matte cuts at level 0: every lit pixel is above it, so the
+    // picture goes white where it has any light at all — the far end of a cut
+    // that moves, and nothing a strength dissolve could produce (K-559).
+    let mut px = img.clone();
+    let black: Vec<f32> = (0..(w * h) as usize)
+        .flat_map(|_| [0.0, 0.0, 0.0, 1.0])
+        .collect();
+    lumit_core::fx::cpu::threshold_matted(&mut px, op.level, op.half_width, op.mix, &black);
+    let lit = px
+        .chunks_exact(4)
+        .zip(img.chunks_exact(4))
+        .filter(|(o, i)| i[3] > 0.0 && i[0].max(i[1]).max(i[2]) > 0.01 && o[0] >= o[3] * 0.99)
+        .count();
+    assert!(
+        lit > 100,
+        "a black matte must cut at 0, whitening every lit pixel — only {lit} came back white"
     );
 }
 
