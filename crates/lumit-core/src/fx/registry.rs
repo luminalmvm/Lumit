@@ -164,6 +164,15 @@ pub struct DriverCx<'a> {
     /// the drivers that read their input over a window rather than at a point.
     /// `None` when the port is unwired or the evaluation budget is spent.
     pub sample_input: &'a dyn Fn(&str, f64) -> Option<super::params::Value>,
+    /// The **points stream** feeding the named data input this frame, for the
+    /// drivers that declare one (points-stream.md §2.2, §3.3). `None` is the
+    /// documented empty stream: an unwired socket, a bypassed producer, or a
+    /// walk whose budget is spent.
+    ///
+    /// Shared rather than handed over, because one producer's stream may feed
+    /// several wires and it is eight arrays of up to the cap; evaluated once
+    /// per producer per frame by the walk's own memo.
+    pub points_input: &'a dyn Fn(&str) -> Option<std::rc::Rc<super::points::PointsStream>>,
 }
 
 /// Where Audio level gets its samples (K-471 §1.3).

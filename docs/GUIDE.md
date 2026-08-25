@@ -9351,6 +9351,29 @@ how to read the crowd. Because the stream is pure arithmetic — never read off 
 rendered picture — the driver can work it out on the processor, bit-for-bit the same on
 every machine, and what it reports is always exactly the crowd the picture draws.
 
+**Reading the crowd means working the crowd out first — including whatever is driving
+it.** Particulate's own settings can be on wires too: an Audio level into Emit rate, a
+Wiggle into Position. So when Points sample asks "where is everybody", the answer cannot
+be worked out from the numbers typed into Particulate's panel — it has to be worked out
+from the numbers Particulate is actually running on this frame, wires and all. That makes
+the wiring walk *re-enter itself*: answering one wire sends it off to answer several
+others first. It cannot go round for ever, because the one arrangement that would send it
+in a circle — the particles depending on a number that depends on the particles — is the
+loop the graph refuses when you draw it. And because two boxes reading one Particulate
+would otherwise work the same crowd out twice, the walk remembers each producer's answer
+for the rest of that frame: one Particulate, one crowd, however many things are reading
+it.
+
+**One thing a wire on Emit rate does *not* do: rewrite the past.** How many particles
+exist is the running total of the emission rate since the layer began — so it is read off
+the rate you *authored*, frame by frame, all the way back. A wire on Emit rate is a number
+for *this* frame; it does not go back and re-decide how many particles were born a
+thousand frames ago. That is deliberate twice over: re-walking every wire for every past
+frame would make one picture cost a thousand wiring walks, and a history that rewrote
+itself as a wire wobbled would make particles blink in and out rather than drift. The
+picture and the Points sample driver both follow that same rule, which is why the number
+the driver reports is always the crowd you are looking at.
+
 **One wire the graph will politely refuse**: feeding Particulate's own particles back
 into Particulate's own settings (say, wiring Count into Emit rate). That is a loop — the
 particles would depend on a number that depends on the particles — and like every other

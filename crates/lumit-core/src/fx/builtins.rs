@@ -127,6 +127,11 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // raster.
             ("point_control", "point_x") => w * 0.5,
             ("point_control", "point_y") => h * 0.5,
+            // Points sample's query point (K-494) is the same default for the
+            // same reason: "how far is the nearest particle from here" wants a
+            // "here" somebody can see, and the schema cannot know the raster.
+            ("points_sample", "position_x") => w * 0.5,
+            ("points_sample", "position_y") => h * 0.5,
             // Wave 2's Distort II batch (docs/08 §3.55): a Bezier warp's twelve
             // points are the frame's own corners with the handles at the
             // thirds — the patch that is exactly the identity — and every one

@@ -116,6 +116,21 @@ The v1 driver set is the six the drawings show, in a **Drivers** catalogue categ
 | **Remap** | Value, in/out ranges (number) | Value (number) | Linear range map with clamp choice. |
 | **Smooth** | Value (number), Time (number) | Value (number) | Temporal smoothing of its input — a temporal dependency, declared as such (§2.3). |
 
+The points-stream programme adds a seventh (K-492, K-494, points-stream.md §2.2), the
+first with a **data** input rather than only numbers:
+
+| Driver | Inputs | Outputs | Notes |
+|---|---|---|---|
+| **Points sample** | Points (stream, **wire-only** — no stored value, nothing to keyframe, no panel row), Position (px@comp) | Count, Nearest distance (number) | Reads a points stream and makes numbers of it: how many particles are alive, and how far the nearest is from Position. Unwired reads as an empty stream — Count 0, Nearest distance 1e9, "nothing anywhere near". Pointwise, so its `driver_window` is nought. |
+
+**Reading a stream makes the walk re-entrant.** Answering the Points sample's wire
+evaluates the producer's stream, and the producer's own parameters may themselves be
+driven — so `Eval::output` calls back into itself through `Eval::stream`. That terminates
+because the loop it could otherwise make (the stream feeding a driver that feeds the
+producer) is refused at commit by the cycle check, and it is bounded anyway by the same
+evaluation budget and depth every other wire spends. One stream is evaluated per producer
+per frame's walk, however many wires read it.
+
 **Two corrections from the build (2026-08-24).** *Colour cycle* was drawn here with Phase
 alone, and a colour cycle that cannot cycle without a keyframe is not one — it gained
 **Rate**, so hue is `phase + rate x layer time`, and **Saturation** and **Brightness**,

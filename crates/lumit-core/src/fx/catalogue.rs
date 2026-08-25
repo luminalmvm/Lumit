@@ -23,6 +23,7 @@ use super::drivers::{
     audio_level::{AudioLevel, AudioLevelDef},
     colour_cycle::{ColourCycle, ColourCycleDef},
     math::{Math, MathDef},
+    points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
     smooth::{Smooth, SmoothDef},
     wiggle::{Wiggle, WiggleDef},
@@ -265,4 +266,9 @@ crate::catalogue![
     MathDef => Math,
     RemapDef => Remap,
     SmoothDef => Smooth,
+    // The first driver that reads data rather than only numbers (K-492,
+    // K-494): a Points stream in, a count and a distance out. Last, because it
+    // arrived last and the order here is the order the Graph panel's search
+    // shows.
+    PointsSampleDef => PointsSample,
 ];

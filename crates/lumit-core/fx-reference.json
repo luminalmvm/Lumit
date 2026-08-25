@@ -15420,6 +15420,36 @@
       ],
       "groups": [],
       "matte_role": "none"
+    },
+    {
+      "slug": "points-sample",
+      "match_name": "points_sample",
+      "label": "Points sample",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "position_x",
+          "label": "Position x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "position_y",
+          "label": "Position y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
     }
   ]
 }

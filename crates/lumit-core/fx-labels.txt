@@ -110,6 +110,7 @@ Cooling filter (LBB)
 Core colour
 Core radius
 Corner pin
+Count
 Curves
 Custom
 Cut
@@ -380,6 +381,7 @@ Motion vectors
 Multiply
 NTSC
 Near blur
+Nearest distance
 Noise
 Noise type
 None
@@ -427,6 +429,7 @@ Point control
 Point x
 Point y
 Points
+Points sample
 Polar coordinates
 Polar to rectangular
 Position x

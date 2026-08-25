@@ -8823,5 +8823,17 @@
   "scrubLadderShift": "SHIFT ×10",
   "@scrubLadderShift": {
     "description": "The coarsest rung of the small floating chip shown while a number is being dragged to change it. Holding Shift makes the drag ten times as fast. SHIFT is the key's name on the keyboard and stays as it is."
+  },
+  "fxPointsSample": "Points sample",
+  "@fxPointsSample": {
+    "description": "Graph panel — the name of a driver: it reads a points stream and makes numbers from it."
+  },
+  "fxCount": "Count",
+  "@fxCount": {
+    "description": "Graph panel — an output socket on the Points sample driver: how many particles are alive this frame."
+  },
+  "fxNearestDistance": "Nearest distance",
+  "@fxNearestDistance": {
+    "description": "Graph panel — an output socket on the Points sample driver: how far the nearest particle is from the chosen point, in pixels."
   }
 }

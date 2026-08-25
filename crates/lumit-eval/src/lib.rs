@@ -1631,6 +1631,108 @@ mod tests {
         assert_ne!(key(&doc, &driven, 1.0), key(&doc, &off, 1.0));
     }
 
+    /// **A points wire folds like any other wire** (points-stream.md §3.4).
+    ///
+    /// No new term reaches the key for it: the edge hashes as an edge, and the
+    /// producer's own parameters were always hashed with the stack. What that
+    /// buys is checked here, because the three cases are the three stale frames
+    /// a missing term would have left behind — cutting the wire, editing the
+    /// producer's Emit rate, and an edit that carries no picture with it.
+    #[test]
+    fn a_points_wire_reaches_the_frame_key() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+            for p in &mut inst.params {
+                if p.id == id {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                    return;
+                }
+            }
+            panic!("no parameter {id}");
+        };
+
+        let mut producer = lumit_core::fx::instantiate("particulate").unwrap();
+        set(&mut producer, "emit_rate", 200.0);
+        let blur = lumit_core::fx::instantiate("blur").unwrap();
+        let sampler = lumit_core::fx::instantiate("points_sample").unwrap();
+        let (producer_id, blur_id, sampler_id) = (producer.id, blur.id, sampler.id);
+
+        let wired = LayerGraph {
+            nodes: vec![sampler.clone()],
+            edges: vec![
+                Edge {
+                    from: OutputRef::EffectData {
+                        effect: producer_id,
+                        port: "points".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Driver(sampler_id),
+                        port: "points".into(),
+                    },
+                },
+                Edge {
+                    from: OutputRef::Driver {
+                        node: sampler_id,
+                        port: "nearest_distance".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Effect(blur_id),
+                        port: "radius".into(),
+                    },
+                },
+            ],
+            layout: Vec::new(),
+            exposed: Vec::new(),
+        };
+
+        let layer_with = |graph: LayerGraph, effects: Vec<lumit_core::model::EffectInstance>| {
+            let mut l = text_layer("hello", 0.0, 5.0, 0.0);
+            l.effects = effects;
+            l.graph = graph;
+            l
+        };
+        let stack = vec![producer.clone(), blur.clone()];
+        let doc = Document::new();
+        let driven = comp_with(vec![layer_with(wired.clone(), stack.clone())]);
+
+        // Cutting the points wire is a different picture, so a different name —
+        // the driver falls back to its empty-stream value the moment it goes.
+        let mut cut = wired.clone();
+        cut.edges.remove(0);
+        assert_ne!(
+            key(&doc, &driven, 1.0),
+            key(&doc, &comp_with(vec![layer_with(cut, stack.clone())]), 1.0),
+            "a points wire is a picture, so cutting it renames the frame"
+        );
+
+        // Editing the producer's Emit rate renames it: the crowd the driver
+        // measures is a different crowd.
+        let mut faster = producer.clone();
+        set(&mut faster, "emit_rate", 400.0);
+        assert_ne!(
+            key(&doc, &driven, 1.0),
+            key(
+                &doc,
+                &comp_with(vec![layer_with(wired.clone(), vec![faster, blur.clone()])]),
+                1.0
+            ),
+        );
+
+        // And an edit that carries no picture — where the sampler sits on the
+        // canvas, and the layer's name — leaves the name alone.
+        let mut moved = wired.clone();
+        moved
+            .layout
+            .push((NodeRef::Driver(sampler_id), [120.0, 40.0]));
+        let mut renamed = layer_with(moved, stack);
+        renamed.name = "an entirely different name".into();
+        assert_eq!(
+            key(&doc, &driven, 1.0),
+            key(&doc, &comp_with(vec![renamed]), 1.0),
+        );
+    }
+
     /// §2.3's other half: a **temporal** driver declares how far either side of
     /// the frame it reads, and that range is in the key — so widening Smooth's
     /// window retires the frames smoothed with the narrow one.

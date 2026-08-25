@@ -9798,11 +9798,18 @@ fn every_parameter_declares_a_unit() {
     // cannot acquire a second unit. Stroke's Spacing is a per cent *of the
     // brush*, so it rides on Brush size and is not here.
     //
-    // The Controls family (K-414) brings the last two, and they are the one
-    // pair here that never *reaches* the rescale pass: a Point control draws
+    // The Controls family (K-414) brings two more, and they are the first pair
+    // here that never *reaches* the rescale pass: a Point control draws
     // nothing, so it resolves to no op at all. They are declared px@comp all
     // the same, because that is what the numbers mean (K-260) and because what
     // reads them through an expression is going to put them in a picture.
+    //
+    // **Points sample's Position** (K-494) is the last pair, and the second
+    // that never reaches the rescale: a driver resolves at px@comp always, so
+    // its query point and the stream it searches are in the same units by
+    // construction, whatever raster the preview is drawn at. Declared px@comp
+    // for the same reason as the Point control's — that is what the number
+    // means, and the distance it answers with lands in a picture.
     assert_eq!(
         spatial,
         vec![
@@ -9983,6 +9990,8 @@ fn every_parameter_declares_a_unit() {
             ("iris_wipe", "feather"),
             ("point_control", "point_x"),
             ("point_control", "point_y"),
+            ("points_sample", "position_x"),
+            ("points_sample", "position_y"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor (K-419): RGB split's
