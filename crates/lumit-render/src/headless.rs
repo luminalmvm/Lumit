@@ -4538,10 +4538,9 @@ surfaces:
         let mut scenes: Vec<(&str, Document, Uuid)> = Vec::new();
         let (solid_doc, solid_comp, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
         scenes.push(("a solid underneath", solid_doc, solid_comp));
-        let dir = std::env::temp_dir().join("lumit-occlusion-fixture");
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        match lumit_media::index::tests_support::fixture(&dir) {
-            Some(clip) => {
+        let fixture = footage_fixture();
+        match &fixture {
+            Some((_dir, clip)) => {
                 let mut doc = Document::new();
                 let item = Uuid::now_v7();
                 doc.items.push(ProjectItem::Footage(FootageItem {
@@ -5030,9 +5029,7 @@ surfaces:
                 return;
             }
         };
-        let dir = std::env::temp_dir().join("lumit-matrix-fixture");
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let Some(clip) = lumit_media::index::tests_support::fixture(&dir) else {
+        let Some((_fixture_dir, clip)) = footage_fixture() else {
             eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
             return;
         };
@@ -5128,9 +5125,7 @@ surfaces:
                 return;
             }
         };
-        let dir = std::env::temp_dir().join("lumit-matrix-fixture");
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let Some(clip) = lumit_media::index::tests_support::fixture(&dir) else {
+        let Some((_fixture_dir, clip)) = footage_fixture() else {
             eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
             return;
         };
@@ -5206,6 +5201,26 @@ surfaces:
                 "{name}: the interactive and export paths must be bit-identical (K-031)"
             );
         }
+    }
+
+    /// A footage fixture written into a directory of this test's own, and the
+    /// directory beside it — which the caller must keep alive, because dropping
+    /// it deletes the clip.
+    ///
+    /// **Why it is not one shared directory.** These tests used a fixed path
+    /// under the system temp directory, so the clip was written once per
+    /// machine rather than once per run. But `tests_support::fixture` calls
+    /// ffmpeg with `-y`: two tests reaching it at the same moment — the suite's
+    /// own parallelism, or a second `cargo test` on the same machine — meant
+    /// one **truncating the file the other was decoding**, and a half-written
+    /// mp4 decodes to black. It failed as "footage renders black inside a held
+    /// precomp", which reads like a render bug and is not one. Every other call
+    /// site in the workspace already makes its own `TempDir`; these now do too,
+    /// and re-encoding two seconds of 320×240 is a fifth of a second.
+    fn footage_fixture() -> Option<(tempfile::TempDir, std::path::PathBuf)> {
+        let dir = tempfile::tempdir().ok()?;
+        let clip = lumit_media::index::tests_support::fixture(dir.path())?;
+        Some((dir, clip))
     }
 
     /// A document with one comp holding a full-frame solid of `colour`.
@@ -5406,6 +5421,102 @@ surfaces:
         assert_ne!(
             driven, cut,
             "an exposure driven by Nearest distance must change the picture"
+        );
+    }
+
+    /// **The degradation rung never engages on an export walk** (K-475, PS7;
+    /// docs/13 §2's note under B12–B14).
+    ///
+    /// Under governor pressure Particulate draws the newest `cap/2`, halving
+    /// again as pressure demands. That rung is interaction-only and must never
+    /// touch an export — an exported file quietly missing half its particles is
+    /// the failure that costs money, and it would look like nothing at all.
+    ///
+    /// Today **nothing can set the cap below the declared one**: `ParticulateOp
+    /// ::cap` is filled in one place, from the schema value, and no governor
+    /// signal reaches an effect kernel. That is a guarantee rather than an
+    /// accident only if something pins it, and the pin needs two halves:
+    ///
+    /// - the picture is **cap-sensitive** — the same comp with Max particles
+    ///   halved in the *document* renders differently — so the assertion below
+    ///   has teeth rather than comparing two pictures that could not differ;
+    /// - the export walk's picture is the **full-cap** one, bit for bit.
+    ///
+    /// The day a pressure signal reaches this kernel, this is the test that has
+    /// to be rewritten to say "except under pressure, and never on export".
+    #[test]
+    fn particulate_exports_its_whole_declared_field() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 24u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        // Far more particles born than the cap admits, so the cap is what
+        // decides the field and halving it is visibly half a field.
+        let build = |cap: f64| {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let mut fx = lumit_core::fx::instantiate("particulate").unwrap();
+            for p in &mut fx.params {
+                let v = match p.id.as_str() {
+                    "position_x" => f64::from(cw) * 0.5,
+                    "position_y" => f64::from(ch) * 0.5,
+                    "width" => f64::from(cw),
+                    "height" => f64::from(ch),
+                    "emit_rate" => 600.0,
+                    "life" => 2.0,
+                    "size" => 3.0,
+                    "max_particles" => cap,
+                    _ => continue,
+                };
+                p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+            }
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = vec![fx];
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+
+        let declared = 200.0;
+        let (doc, comp_id) = build(declared);
+        let (export, _, _) = r
+            .render_rgba(&doc, comp_id, 7, 1.0)
+            .expect("the export path renders");
+        let (preview, _, _) = r
+            .render_preview(&doc, comp_id, 7, crate::plan::Quality::default(), 1.0)
+            .expect("the interactive path renders");
+
+        // What the rung would draw: the newest half of the same field.
+        let (halved_doc, halved_comp) = build(declared / 2.0);
+        let (halved, _, _) = r
+            .render_preview(
+                &halved_doc,
+                halved_comp,
+                7,
+                crate::plan::Quality::default(),
+                1.0,
+            )
+            .expect("the halved declaration renders");
+
+        assert_ne!(
+            preview, halved,
+            "halving Max particles drew the same picture — this fixture cannot see the rung at \
+             all, so the assertions below would prove nothing"
+        );
+        assert_eq!(
+            export, preview,
+            "the export walk drew a different field from the interactive one (K-031)"
+        );
+        assert_ne!(
+            export, halved,
+            "the export walk drew the newest half — the degradation rung is on the export path \
+             (K-475: interaction-only, never on export)"
         );
     }
 
@@ -5983,9 +6094,7 @@ surfaces:
                 return;
             }
         };
-        let dir = std::env::temp_dir().join("lumit-matrix-fixture");
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        let Some(clip) = lumit_media::index::tests_support::fixture(&dir) else {
+        let Some((_fixture_dir, clip)) = footage_fixture() else {
             eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
             return;
         };
