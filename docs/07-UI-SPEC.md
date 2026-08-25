@@ -313,7 +313,7 @@ anywhere, including other monitors.
   layer-controls switch, the region of interest of item 7 and the composition background
   of item 10), the **channel** (item 3) and the **exposure** (item 12, with its reset mark
   to the left of the number while it is engaged); a hairline seam;
-  the **snapshot** (item 14). Then, spaced 10, the five transport marks and the **clock**
+  the **snapshot pair** (item 14). Then, spaced 10, the five transport marks and the **clock**
   (item 11). At the right-hand end the **reading** — `comp · time · source → preview ·
   zoom` — which is where degradation is stated (item 9), and the preview progress bar,
   which is nothing at all until a frame is genuinely waited on.
@@ -428,12 +428,13 @@ Every control on either strip keeps the behaviour its item below defines. The it
     never reads a picture this way. While it is hidden the tone map MUST also read as **off**
     whatever the comp stored — hiding the control must never strand an engaged look with
     nothing left to turn it off. The exposure of item 12 is never hidden.
-14. **Snapshots** (K-416, K-466): **one mark, two gestures**, behind the bar's hairline
-    seam. A **click** stores what the Viewer is showing this instant; a **press and hold**
-    puts the stored picture back over the live one for as long as the button is down,
-    which is the before/after read every grade leans on. A press released before the hold
-    delay never flashes a comparison, and one held past it never takes a second
-    photograph.
+14. **Snapshots** (K-416, K-532, superseding K-466's single mark): **a pair of marks**
+    behind the bar's hairline seam — **Take** and **Show**. A click on Take stores what
+    the Viewer is showing this instant; a **press and hold** on Show puts the stored
+    picture back over the live one for as long as the button is down, which is the
+    before/after read every grade leans on. They MUST be two marks and not one glyph
+    carrying both gestures: a snapshot with nothing on screen to say it exists, and no
+    control naming the comparison, is a snapshot nobody finds.
     One slot in v1 (After Effects' four-slot family can follow on the same mechanism).
     It is a *display* affordance and lives entirely in the display: the stage photographs
     its own picture through a `RepaintBoundary` around the picture alone — so the layer
@@ -1911,6 +1912,17 @@ at a pixel", which is not only colour: the depth-of-field **focal point** carrie
 reads *depth*, not colour. Clicking it arms the tool; clicking it again, pressing Escape, or
 pressing away from the picture puts it away. It lights while armed, so a dropper armed and
 forgotten is visible from across the panel.
+
+**A pick is a drag, not a click** (K-532). Pressing on the picture writes nothing. It starts a
+gesture: every move stages the sample under the pointer and **previews it through the same
+staged path a scrub-drag uses** — the colour sweeps, the point slides — and the **release
+commits that last sample once**, which is the gesture's one undo step. **Escape** mid-drag puts
+back what was being previewed and puts the tool away; nothing was committed, so there is
+nothing to undo. A press on a picture no window has been read of stages nothing, so it commits
+nothing and leaves the tool armed for the next attempt. Previews are rate-limited exactly as a
+value drag's are, and the newest position is never dropped. A pick MUST NOT ask the engine
+anything per pointer move beyond the window reads below: a position pick reads the
+composition's size **once, when the tool is armed**.
 
 While armed, the Viewer grows a **magnifier** that follows the pointer. It is on screen only
 while the pointer is **over the picture** — arming the tool shows nothing until then, and a

@@ -1376,13 +1376,22 @@ class _Stage extends StatelessWidget {
 }
 
 /// The armed dropper over the picture: the magnifier, the sample-size wheel,
-/// and the click that picks (docs/07 §6.1).
+/// and the **drag** that picks (docs/07 §6.1, K-532).
+///
+/// **A pick is a drag.** The press does not write anything. It starts a
+/// gesture: every move stages the sample under the pointer and previews it, so
+/// a colour is *swept* and a point is *slid* into place while the picture
+/// answers; the release commits that last sample once, which is the one undo
+/// step. Escape puts back what the drag was previewing. This is the same
+/// stage/preview/commit every value field uses — a pick that wrote on
+/// mouse-down was the one gesture in the application that decided before you
+/// could see what you had chosen.
 ///
 /// **Why it lives here.** The pixels being picked are the Viewer's, and only
 /// this panel knows where the picture actually sits on screen at the current
 /// magnification and pan. What is *done* with the pick is not this panel's
-/// business at all: the parameter that armed the tool handed over a closure,
-/// and this calls it.
+/// business at all: the parameter that armed the tool handed over closures,
+/// and this calls them.
 ///
 /// Nothing at all while the tool is not armed — not a hit-test, not a listener.
 class DropperLayer extends StatefulWidget {
@@ -1437,6 +1446,19 @@ class _DropperLayerState extends State<DropperLayer> {
   /// position is the only one worth answering.
   final PreviewThrottle _throttle = PreviewThrottle();
 
+  /// The previews the pick drag itself sends, bounded separately from the reads
+  /// above: a render is a great deal more work than a 66 KiB window, and the
+  /// two rates have nothing to do with each other.
+  final PreviewThrottle _previews = PreviewThrottle();
+
+  /// The sample the drag has staged — what a release would commit, and what a
+  /// preview shows. Null before the first covered sample of a gesture, which is
+  /// what makes a press on a picture nothing has been read of commit nothing.
+  DropperSample? _staged;
+
+  /// Whether a press is down and the pick is being dragged.
+  bool _dragging = false;
+
   @override
   void initState() {
     super.initState();
@@ -1452,6 +1474,10 @@ class _DropperLayerState extends State<DropperLayer> {
     widget.uiState.dropper.removeListener(_onArmChanged);
     _hideViewfinder();
     _throttle.cancel();
+    // A held preview tick must not fire into a panel that has gone. Nothing is
+    // reverted here: reverting renders, and rendering from `dispose` is the
+    // setState-while-tearing-down fault transform_rows had to defer round.
+    _previews.cancel();
     super.dispose();
   }
 
@@ -1464,6 +1490,12 @@ class _DropperLayerState extends State<DropperLayer> {
   /// picture, and nothing else.
   void _onArmChanged() {
     _hideViewfinder();
+    // Whatever a drag had staged belongs to the arm that is going, not to the
+    // one arriving. No revert here: disarming is *also* what a committed pick
+    // does, and putting the old value back after a commit would undo it.
+    _previews.cancel();
+    _staged = null;
+    _dragging = false;
     if (mounted) {
       setState(() {
         _cursor = null;
@@ -1501,8 +1533,22 @@ class _DropperLayerState extends State<DropperLayer> {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
     if (widget.uiState.dropper.value == null) return false;
+    // Escape mid-drag puts back what was being previewed *and* puts the tool
+    // away — the convention every staged gesture keeps (docs/07 §4).
+    _abandon();
     widget.uiState.disarmDropper();
     return true;
+  }
+
+  /// Throw away a drag in progress: stop the previews, and ask whatever armed
+  /// the tool to put its own value back. Nothing was ever committed, so there
+  /// is no undo step to unwind — only a picture to correct.
+  void _abandon() {
+    _previews.cancel();
+    final staged = _staged;
+    _staged = null;
+    _dragging = false;
+    if (staged != null) widget.uiState.dropper.value?.onRevert?.call();
   }
 
   @override
@@ -1545,6 +1591,8 @@ class _DropperLayerState extends State<DropperLayer> {
             _viewfinderEntry?.markNeedsBuild();
           },
           onPointerDown: (e) => _pressed(arm, e.localPosition),
+          onPointerUp: (e) => _released(arm, e.localPosition),
+          onPointerCancel: (_) => _abandon(),
           child: const SizedBox.expand(),
         ),
       ),
@@ -1639,6 +1687,10 @@ class _DropperLayerState extends State<DropperLayer> {
     final arm = widget.uiState.dropper.value;
     if (arm != null) _syncViewfinder(arm);
     if (!widget.fitted.contains(local)) return;
+    // A move with the button down is the pick itself moving: stage the sample
+    // under the pointer and show it. The read below still happens when the
+    // window has run out, so a sweep across the picture keeps answering.
+    if (_dragging && arm != null) _stage(arm, local);
     if (_covered(local)) return;
     _throttle.request(() => _request(local));
   }
@@ -1659,25 +1711,60 @@ class _DropperLayerState extends State<DropperLayer> {
     return windowCovers(window, x, y);
   }
 
-  /// A press picks when it lands on the picture, and puts the tool away when it
-  /// lands anywhere else — the same escape the egui build gave, so a dropper
-  /// armed in error is dismissed by clicking away from the frame.
+  /// A press **starts** a pick when it lands on the picture, and puts the tool
+  /// away when it lands anywhere else — the same escape the egui build gave, so
+  /// a dropper armed in error is dismissed by clicking away from the frame.
+  ///
+  /// Nothing is written here. The press only stages what is under it, so that a
+  /// click that never moves still has a value to commit on release.
   void _pressed(DropperArm arm, Offset local) {
     if (!widget.fitted.contains(local)) {
       widget.uiState.disarmDropper();
       return;
     }
+    _dragging = true;
+    _staged = null;
+    _stage(arm, local);
+  }
+
+  /// One tick of the pick drag: the sample under the pointer, staged and
+  /// previewed.
+  ///
+  /// Nothing is staged off a window that does not answer for this pixel — a
+  /// frame the playhead has since left, or one the pointer has outrun. Another
+  /// read is asked for instead, and the next move stages off the reply; a
+  /// release with nothing staged commits nothing at all rather than a value
+  /// lifted from a picture that is not the one on screen.
+  void _stage(DropperArm arm, Offset local) {
     final window = widget.uiState.dropperPatch.value;
-    // Nothing read yet, or nothing that answers for this pixel — a frame the
-    // playhead has since left, or a window the pointer has outrun. Ask again
-    // rather than committing a value off a picture that is not the one on
-    // screen; the next reply lands before the pointer can click twice.
     if (window == null || !_covered(local)) {
       _request(local);
       return;
     }
     final (x, y) = windowPixelAt(window, _u(local), _v(local));
-    arm.onPick(sampleFromWindow(window, _region, x, y));
+    _staged = sampleFromWindow(window, _region, x, y);
+    if (arm.onPreview == null) return;
+    // Built inside the closure, so a held tick sends where the pointer is now
+    // rather than where it was when the interval started ([PreviewThrottle]).
+    _previews.request(() {
+      final staged = _staged;
+      if (staged != null) arm.onPreview!(staged);
+    });
+  }
+
+  /// The release: **one** commit, of the last sample the drag staged, and the
+  /// tool goes away. A press on a picture nothing has been read of stages
+  /// nothing, so it commits nothing and stays armed for the next attempt.
+  void _released(DropperArm arm, Offset local) {
+    if (!_dragging) return;
+    _dragging = false;
+    // A held preview would otherwise render provisional values *after* the
+    // commit and put the pre-commit picture back on screen.
+    _previews.cancel();
+    final staged = _staged;
+    _staged = null;
+    if (staged == null) return;
+    arm.onPick(staged);
     widget.uiState.disarmDropper();
   }
 
@@ -2648,13 +2735,21 @@ class _ViewerBar extends StatelessWidget {
           color: t.hairline,
         ),
         SizedBox(width: viewerBarGap - viewerMarkEdge),
-        // Snapshots (K-416, §2.2 item 14), one mark for the pair the drawing
-        // draws as one: a click photographs the picture, a press and hold puts
-        // the photograph back over it for as long as the button is down. Two
-        // gestures, one control, and neither can be mistaken for the other.
-        _SnapshotButton(
+        // Snapshots (K-416, K-532, §2.2 item 14): **two marks**, because a
+        // snapshot nobody can see they have taken is a snapshot nobody uses.
+        // Take photographs the picture on a plain click; Show, beside it, puts
+        // the photograph back over the live one while it is held — and is
+        // muted, saying why, until there is one to show.
+        viewerBarMark(
+          key: const ValueKey('viewer-snapshot'),
+          icon: LumitIcon.snapshot,
+          colour: t.textMuted,
+          onPressed: onSnapshotTake,
+          tip: l10n.tipViewerSnapshotTake,
+        ),
+        viewerBarGapBox(viewerBarGap),
+        _SnapshotShowButton(
           hasSnapshot: hasSnapshot,
-          onTake: onSnapshotTake,
           onHold: onSnapshotHold,
         ),
       ];
@@ -3083,84 +3178,50 @@ class ChannelFacePainter extends CustomPainter {
       old.channel != channel || old.theme != theme;
 }
 
-/// **Snapshot and compare, on one mark** (K-416, K-466).
+/// **Show the snapshot**, the second half of the pair (K-416, K-532).
 ///
-/// The drawing gives the pair a single glyph, so the two gestures share it:
-/// a **click** photographs the picture as it stands, and a **press and hold**
-/// puts the photograph back over the live picture for as long as the button is
-/// down — the before/after read every grade leans on. Nothing crosses the
-/// bridge either way: what is stored is what the stage's own boundary
-/// rasterised, and releasing the button is the whole of a comparison's life.
+/// A **press and hold** puts the stored picture back over the live one for as
+/// long as the button is down — the before/after read every grade leans on —
+/// and releasing it is the whole of a comparison's life. Nothing crosses the
+/// bridge: what is stored is what the stage's own boundary rasterised.
 ///
-/// The two are told apart by the hold itself rather than by a modifier: a press
-/// that is still down after [_holdDelay] is a comparison and never becomes a
-/// second photograph, and a press released before it is a photograph and never
-/// flashes one.
-class _SnapshotButton extends StatefulWidget {
+/// **Its own mark rather than a hold on Take** (K-532, superseding that half of
+/// K-466). Folding both gestures onto one glyph left a taken snapshot with
+/// nothing on screen to say it existed or how to see it: the only way to find
+/// the comparison was to hold a button that, as far as anyone could tell, took
+/// photographs. A second mark states the affordance — and states its absence,
+/// by standing muted with a tooltip saying why, until one has been taken.
+///
+/// A raw [Listener] rather than a gesture recogniser: the comparison must last
+/// exactly as long as the button is down, and a recogniser only reports once
+/// the gesture is over.
+class _SnapshotShowButton extends StatelessWidget {
   final bool hasSnapshot;
-  final VoidCallback onTake;
   final ValueChanged<bool> onHold;
 
-  const _SnapshotButton({
+  const _SnapshotShowButton({
     required this.hasSnapshot,
-    required this.onTake,
     required this.onHold,
   });
-
-  @override
-  State<_SnapshotButton> createState() => _SnapshotButtonState();
-}
-
-/// How long a press has to last to be a comparison rather than a photograph.
-const Duration _holdDelay = Duration(milliseconds: 180);
-
-class _SnapshotButtonState extends State<_SnapshotButton> {
-  Timer? _hold;
-  bool _showing = false;
-
-  @override
-  void dispose() {
-    _hold?.cancel();
-    super.dispose();
-  }
-
-  void _down() {
-    if (!widget.hasSnapshot) return;
-    _hold = Timer(_holdDelay, () {
-      _showing = true;
-      widget.onHold(true);
-    });
-  }
-
-  void _up({required bool cancelled}) {
-    _hold?.cancel();
-    _hold = null;
-    if (_showing) {
-      _showing = false;
-      widget.onHold(false);
-      return;
-    }
-    if (!cancelled) widget.onTake();
-  }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Listener(
-      onPointerDown: (_) => _down(),
-      onPointerUp: (_) => _up(cancelled: false),
-      onPointerCancel: (_) => _up(cancelled: true),
+      onPointerDown: hasSnapshot ? (_) => onHold(true) : null,
+      onPointerUp: hasSnapshot ? (_) => onHold(false) : null,
+      onPointerCancel: hasSnapshot ? (_) => onHold(false) : null,
       child: viewerBarMark(
-        key: const ValueKey('viewer-snapshot'),
-        icon: LumitIcon.snapshot,
-        colour: widget.hasSnapshot ? t.textPrimary : t.textMuted,
-        // The press is the Listener's. This only keeps the control live —
-        // what makes the pointer a hand and the button reachable from the
-        // keyboard, where a hold is not a gesture anyone can make.
-        onPressed: () {},
-        tip: widget.hasSnapshot
-            ? l10n.tipViewerSnapshotCompare
-            : l10n.tipViewerSnapshotTake,
+        key: const ValueKey('viewer-snapshot-show'),
+        icon: LumitIcon.eye,
+        colour: hasSnapshot ? t.textPrimary : t.textDisabled,
+        // The press is the Listener's. This only says whether the control is
+        // live — what mutes it, and what stops the pointer becoming a hand
+        // over a button that does nothing.
+        onPressed: hasSnapshot ? () {} : null,
+        tip: hasSnapshot
+            ? l10n.tipViewerSnapshotShow
+            : l10n.tipViewerSnapshotNone,
       ),
     );
   }

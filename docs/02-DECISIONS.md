@@ -14769,6 +14769,47 @@ one genuine improvement: `withAccent(defaultAccent)` reproduces the dark pair. L
 restores its own darkened clay #c23f58 (clay unaided sits under the contrast floor),
 the one scheme the derivation does not cover, said in the code. Both sites follow.
 
+## K-532 — A pick is a drag, and the snapshot gets its second mark back
+
+**DECIDED 2026-08-25.** Two owner findings on Viewer interaction, from testing the redesign.
+
+**A pick is a drag, not a click.** Arming a property's position picker and pressing on the
+picture wrote the position on mouse-down; the drag that followed moved nothing but the
+magnifier. The owner's ruling: the drag continuously updates the value — live, through the
+preview path, all the way — and the same for the colour dropper, which now **sweeps** the
+sampled colour as the pointer travels. So the pick is put on the same stage/preview/commit
+footing as every other gesture in the application (docs/07 §5.1's rows, §4's drag rules):
+the press stages, each move stages a fresh sample and previews it rate-limited, the release
+**commits once** — the gesture's one undo step — and **Escape reverts**, which costs nothing
+to unwind because nothing was ever committed. A press on a picture no window has been read
+of stages nothing and so commits nothing, leaving the tool armed for the next attempt; that
+is the old "ask again rather than commit off a picture that is not the one on screen" rule,
+kept.
+
+The picker previously read the composition's size at the click — once, and so within
+K-184. A preview per pointer move would have made that a bridge call per move, which the
+budget forbids, so the size is read **once when the tool is armed**: still a tap, still an
+edit, never a rebuild.
+
+Two supporting changes fall out. The staging behind an effect-parameter drag held **one**
+edit, so a gesture that moves two parameters — a linked pair scaling its sibling, or a
+point pick moving x and y — erased its own first half and previewed only the second. It
+holds a set now. Committing is untouched: a write still commits the one parameter it is
+handed, so a pair still costs the two ops a keyframe on a pair already costs.
+
+**The snapshot gets its second mark back**, superseding that part of K-466. The Viewer
+rebuild merged Take and Show onto one glyph — click to take, press and hold to compare. It
+worked, and it made taken snapshots undiscoverable: nothing on screen said a photograph
+existed, and nothing named the comparison, so the only route to it was holding a button
+that appeared to take pictures. The pre-merge pair returns: **Take** (the Snapshot glyph,
+plain click) and **Show** beside it (the existing Visible glyph — no new mark drawn),
+press-and-hold, muted with a tooltip saying why until a snapshot exists. The hold-to-compare
+gesture on Take goes; the second button supersedes it. Nothing else about K-416 changes —
+one slot, display-side, nothing across the bridge.
+
+New English strings: `tipViewerSnapshotShow`, `tipViewerSnapshotNone` (both restored from
+before the merge); `tipViewerSnapshotCompare` is retired with the gesture it described.
+
 ## K-533 — The Node graph's pick is a set, and the canvas pans with the middle button
 
 **DECIDED 2026-08-25.** The last of K-523's audit, and the only one that was a model

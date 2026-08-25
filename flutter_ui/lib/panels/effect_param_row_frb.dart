@@ -848,6 +848,17 @@ class EffectParamRowFrb extends StatelessWidget {
         BridgeEffectValue_Bool(:final field0) => field0,
         _ => false,
       };
+      // The value the pick would write, wherever the pointer is now: shared by
+      // the previews and the one commit, so what is watched and what lands can
+      // never be two different numbers.
+      BridgeEffectValue focus(DropperSample sample) {
+        final d = invert ? 1 - sample.depth : sample.depth;
+        final low = hardMin ?? 0, high = hardMax ?? 1;
+        return BridgeEffectValue.float(
+            BridgeScalar.static_(d.clamp(low, high)));
+      }
+
+      final before = value;
       return _DropperButton(
         id: 'fx-$id-${param.id}',
         tip: l10n.tipPickFocalPoint,
@@ -857,12 +868,11 @@ class EffectParamRowFrb extends StatelessWidget {
           label: engineLabel(param.label),
           sampleLayer: entry.layer,
           sampleLayerName: entry.info.name,
-          onPick: (sample) {
-            final d = invert ? 1 - sample.depth : sample.depth;
-            final low = hardMin ?? 0, high = hardMax ?? 1;
-            _set(BridgeEffectValue.float(
-                BridgeScalar.static_(d.clamp(low, high))));
-          },
+          onPreview: (sample) => _setLive(focus(sample)),
+          onPick: (sample) => _set(focus(sample)),
+          // Abandoned: put the focus the row had back through the same preview
+          // path. Nothing was committed, so this is the whole of the undoing.
+          onRevert: before == null ? null : () => _setLive(before),
         )),
       );
     }
@@ -1106,7 +1116,9 @@ class EffectParamRowFrb extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           // The dropper: lift this colour off the picture instead of choosing
-          // it (docs/07 §6.1).
+          // it (docs/07 §6.1). **Dragging sweeps it** (K-532): the parameter
+          // takes the colour under the pointer as it travels, previewed the
+          // whole way, and the release is the one edit.
           _DropperButton(
             id: 'fx-$id-${param.id}',
             tip: l10n.tipSampleFromViewer,
@@ -1114,14 +1126,17 @@ class EffectParamRowFrb extends StatelessWidget {
               id: 'fx-$id-${param.id}',
               reads: DropperReads.colour,
               label: engineLabel(param.label),
-              onPick: (sample) => _set(BridgeEffectValue.colour(BridgeColour(
-                // Scene-linear, exactly as the parameter stores it, so the
-                // sample passes through without a conversion to disagree over.
-                r: BridgeScalar.static_(sample.r.clamp(min, max)),
-                g: BridgeScalar.static_(sample.g.clamp(min, max)),
-                b: BridgeScalar.static_(sample.b.clamp(min, max)),
-                a: colour.a,
-              ))),
+              // The very value the picker writes, so a colour lifted off the
+              // picture and a colour chosen in the dialogue cannot be clamped
+              // or shaped differently. The sample is already scene-linear,
+              // exactly as the parameter stores it.
+              onPreview: (sample) =>
+                  _setLive(valueOf(PickedColour(sample.r, sample.g, sample.b))),
+              onPick: (sample) =>
+                  _set(valueOf(PickedColour(sample.r, sample.g, sample.b))),
+              // Abandoned: the colour the swatch had, back through the same
+              // preview path. Nothing was committed, so that is all of it.
+              onRevert: () => _setLive(BridgeEffectValue.colour(colour)),
             )),
           ),
         ],
@@ -1586,35 +1601,63 @@ class EffectPointRowFrb extends StatelessWidget {
             id: 'fx-$id-${xParam.id}',
             glyph: LumitIcons.pointPicker,
             tip: l10n.tipPickOnViewer,
-            arm: (ui) => ui.armDropper(DropperArm(
-              id: 'fx-$id-${xParam.id}',
-              reads: DropperReads.position,
-              label: stem,
-              onPick: (sample) {
-                // A `Px` pair writes fraction × comp size (K-260); a `Percent`
-                // pair writes fraction × 100. Which of the two it is comes
-                // from the declaration. The size is read here, at click time —
-                // a pick is an edit, not a rebuild (K-184).
-                double x = sample.xFrac * 100;
-                double y = sample.yFrac * 100;
-                if (pickPixels) {
-                  try {
-                    final size = comp.getSize();
-                    x = sample.xFrac * size.width;
-                    y = sample.yFrac * size.height;
-                  } catch (_) {
-                    return; // the comp has gone; drop the pick
-                  }
+            arm: (ui) {
+              // What one unit of the fraction is worth. A `Px` pair writes
+              // fraction × comp size (K-260); a `Percent` pair writes
+              // fraction × 100 — which is the same sum with the comp's size
+              // set to a hundred, so there is one arithmetic here and not two.
+              //
+              // The size is read **once, when the tool is armed** — a tap, and
+              // so an edit rather than a rebuild (K-184). It used to be read
+              // at the pick, which was also once; now that a pick previews per
+              // pointer move, reading it there would be a bridge call per
+              // move, which the budget forbids outright.
+              var spanX = 100.0, spanY = 100.0;
+              if (pickPixels) {
+                try {
+                  final size = comp.getSize();
+                  spanX = size.width.toDouble();
+                  spanY = size.height.toDouble();
+                } catch (_) {
+                  return; // the comp has gone; do not arm at all
                 }
-                // Both halves at once, so a pick is never scaled by the chain:
-                // it is a position, and a position is stated rather than
-                // nudged.
-                onWrite(id, xParam.id,
-                    BridgeEffectValue.float(BridgeScalar.static_(x)));
-                onWrite(id, yParam.id,
-                    BridgeEffectValue.float(BridgeScalar.static_(y)));
-              },
-            )),
+              }
+              // Both halves at once, so a pick is never scaled by the chain:
+              // it is a position, and a position is stated rather than nudged.
+              void put(
+                void Function(UuidValue, String, BridgeEffectValue) write,
+                DropperSample sample,
+              ) {
+                write(
+                    id,
+                    xParam.id,
+                    BridgeEffectValue.float(
+                        BridgeScalar.static_(sample.xFrac * spanX)));
+                write(
+                    id,
+                    yParam.id,
+                    BridgeEffectValue.float(
+                        BridgeScalar.static_(sample.yFrac * spanY)));
+              }
+
+              ui.armDropper(DropperArm(
+                id: 'fx-$id-${xParam.id}',
+                reads: DropperReads.position,
+                label: stem,
+                // **The drag is the pick** (K-532): the point follows the
+                // pointer through the preview, and the release states it once.
+                onPreview: (sample) => put(onLive, sample),
+                onPick: (sample) => put(onWrite, sample),
+                // Abandoned: the two numbers the row had, back through the
+                // same preview path. Nothing was committed either half.
+                onRevert: (sx == null || sy == null)
+                    ? null
+                    : () {
+                        onLive(id, xParam.id, BridgeEffectValue.float(sx));
+                        onLive(id, yParam.id, BridgeEffectValue.float(sy));
+                      },
+              ));
+            },
           ),
         ],
       ],
@@ -1839,7 +1882,15 @@ String _basename(String path) {
 /// value), and every call that consumes a stack gets a freshly read one with
 /// that edit written into it.
 class EffectStackEditor {
-  ({UuidValue effect, String param, BridgeEffectValue value})? _staged;
+  /// The parameters this gesture has staged, by effect and parameter id.
+  ///
+  /// **A map rather than one edit, because a gesture can move two parameters
+  /// at once.** A linked pair scales its sibling as it drags, and a point
+  /// picked on the Viewer moves x and y together — with a single slot the
+  /// second `live` call simply erased the first, so the preview showed one half
+  /// of the change moving and the other standing still. Committing is
+  /// unaffected: [write] still commits the one parameter it is given.
+  final Map<(UuidValue, String), BridgeEffectValue> _staged = {};
 
   /// Roughly one preview render per 20 ms, so a fast drag cannot outrun the
   /// renderer and queue up work it will only throw away — but the tick that
@@ -1848,22 +1899,17 @@ class EffectStackEditor {
   final PreviewThrottle _throttle = PreviewThrottle();
 
   /// The value a row should *show*, which during a drag is the staged one.
-  BridgeEffectValue? stagedValue(UuidValue effect, String param) {
-    final staged = _staged;
-    if (staged == null) return null;
-    return staged.effect == effect && staged.param == param
-        ? staged.value
-        : null;
-  }
+  BridgeEffectValue? stagedValue(UuidValue effect, String param) =>
+      _staged[(effect, param)];
 
   /// The layer's stack with the drag in progress written into it, freshly read.
   List<BridgeEffectInstance> stackWith(LayerReference layer) {
     final stack = layer.getEffects();
-    final staged = _staged;
-    if (staged != null) {
-      for (final instance in stack) {
-        if (instance.id() == staged.effect) {
-          instance.setValue(id: staged.param, value: staged.value);
+    for (final instance in stack) {
+      final id = instance.id();
+      for (final entry in _staged.entries) {
+        if (entry.key.$1 == id) {
+          instance.setValue(id: entry.key.$2, value: entry.value);
         }
       }
     }
@@ -1881,7 +1927,7 @@ class EffectStackEditor {
     required int frame,
     required double scale,
   }) {
-    _staged = (effect: effect, param: param, value: value);
+    _staged[(effect, param)] = value;
     // The stack is read *inside* the closure: a held tick must send the newest
     // staged value, not the one that was current when it was held.
     _throttle.request(() => comp.renderFrameWithPreview(
@@ -1906,19 +1952,25 @@ class EffectStackEditor {
     // A release ends the drag: a held preview tick would render provisional
     // values *after* the commit, putting the pre-commit picture back on screen.
     _throttle.cancel();
-    _staged = (effect: effect, param: param, value: value);
+    // **This parameter and no other.** Everything the gesture previewed is
+    // dropped first, so a commit writes exactly what it was handed: a pair
+    // writes its two halves as two ops, which is what a keyframe on a pair
+    // already costs, rather than folding a sibling into someone else's op.
+    _staged
+      ..clear()
+      ..[(effect, param)] = value;
     try {
       layer.setEffects(effects: stackWith(layer));
     } catch (_) {
       // Someone else edited the stack mid-drag. Drop ours and re-read.
     }
-    _staged = null;
+    _staged.clear();
   }
 
   /// Forget any drag in progress — a cancelled gesture.
   void clear() {
     _throttle.cancel();
-    _staged = null;
+    _staged.clear();
   }
 }
 

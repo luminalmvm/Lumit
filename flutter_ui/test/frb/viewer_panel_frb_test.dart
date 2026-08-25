@@ -52,6 +52,35 @@ import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
+/// A dropper window big enough to answer for anywhere on the picture, so a drag
+/// test can sweep the pointer without the read-back the engine would otherwise
+/// have to do. The pixels ramp left to right, which is what makes a preview
+/// that followed the pointer distinguishable from one that did not.
+BridgeSampledPixels wholePicture({int width = 100, int height = 50}) {
+  const side = dropperWindow;
+  final centreX = width ~/ 2, centreY = height ~/ 2;
+  final bytes = Uint8List(side * side * 4);
+  const half = side ~/ 2;
+  for (var row = 0; row < side; row++) {
+    for (var col = 0; col < side; col++) {
+      final x = centreX - half + col;
+      final i = (row * side + col) * 4;
+      bytes[i] = (x * 2).clamp(0, 255);
+      bytes[i + 3] = 255;
+    }
+  }
+  return BridgeSampledPixels(
+    window: side,
+    rgba: bytes,
+    width: width,
+    height: height,
+    x: centreX,
+    y: centreY,
+    frame: BigInt.zero,
+    layerAlone: false,
+  );
+}
+
 void main() {
   setUpAll(initEngineForTests);
 
@@ -218,6 +247,108 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byType(DropperViewfinder), findsOneWidget,
           reason: 'and it is still following the pointer');
+    });
+
+    /// **A pick is a drag** (K-532, docs/07 §6.1). The press writes nothing; it
+    /// starts a gesture that stages the sample under the pointer and previews
+    /// it, and the release commits **once** — the value where the pointer let
+    /// go, not the value where it went down. That is the finding: arming a
+    /// position picker and pressing wrote the position immediately, so the
+    /// drag that followed moved only the magnifier.
+    ///
+    /// The window is put in by hand: what the engine reads back is a real
+    /// round trip, and none of the arithmetic under test needs one.
+    testWidgets('a pick drag previews as it goes and commits once on release',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final picked = <DropperSample>[];
+      final previewed = <DropperSample>[];
+      var reverts = 0;
+      p.uiState.armDropper(DropperArm(
+        id: 'test',
+        reads: DropperReads.colour,
+        label: 'Key colour',
+        onPick: picked.add,
+        onPreview: previewed.add,
+        onRevert: () => reverts += 1,
+      ));
+      p.uiState.dropperPatch.value = wholePicture();
+      await tester.pump();
+
+      final stage = find.byType(DropperLayer);
+      final centre = tester.getCenter(stage);
+      final gesture = await tester.startGesture(centre);
+      await tester.pump();
+      expect(picked, isEmpty,
+          reason: 'the press stages the value, it does not write it');
+
+      // A sweep right, in steps, each one past the preview interval so the
+      // throttle lets it out rather than coalescing the lot into one.
+      for (var step = 1; step <= 4; step++) {
+        await gesture.moveTo(centre + Offset(step * 12.0, 0));
+        await tester.pump(const Duration(milliseconds: 25));
+      }
+      expect(previewed.length, greaterThan(1),
+          reason: 'the drag previewed as it went');
+      expect(previewed.last.xFrac, greaterThan(previewed.first.xFrac),
+          reason: 'and the preview followed the pointer across the picture');
+      expect(picked, isEmpty, reason: 'still nothing committed mid-drag');
+
+      await gesture.up();
+      await tester.pump();
+
+      expect(picked.length, 1, reason: 'one commit for the whole gesture');
+      expect(picked.single.xFrac, closeTo(previewed.last.xFrac, 1e-9),
+          reason: 'and it is the value the pointer let go on');
+      expect(reverts, 0);
+      expect(p.uiState.dropper.value, isNull,
+          reason: 'the tool put itself away');
+
+      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
+    });
+
+    /// **Escape mid-drag puts back what was staged** — the convention every
+    /// staged gesture in the application keeps. Nothing was committed, so the
+    /// revert has only the preview to undo, and no pick may be written.
+    testWidgets('Escape during a pick drag reverts and writes nothing',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final picked = <DropperSample>[];
+      var reverts = 0;
+      p.uiState.armDropper(DropperArm(
+        id: 'test',
+        reads: DropperReads.colour,
+        label: 'Key colour',
+        onPick: picked.add,
+        onPreview: (_) {},
+        onRevert: () => reverts += 1,
+      ));
+      p.uiState.dropperPatch.value = wholePicture();
+      await tester.pump();
+
+      final centre = tester.getCenter(find.byType(DropperLayer));
+      final gesture = await tester.startGesture(centre);
+      await tester.pump();
+      await gesture.moveTo(centre + const Offset(40, 0));
+      await tester.pump(const Duration(milliseconds: 25));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(reverts, 1, reason: 'what the drag was showing is put back');
+      expect(picked, isEmpty, reason: 'nothing was ever committed');
+      expect(p.uiState.dropper.value, isNull);
+
+      // And the release that follows the Escape must not resurrect the pick.
+      await gesture.up();
+      await tester.pump();
+      expect(picked, isEmpty);
+
+      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
     testWidgets('without a composition the empty stage offers the ways in',
@@ -452,7 +583,9 @@ void main() {
       expect(barKeys(tester), [
         // The ways of looking, then the seam and the snapshot.
         'viewer-grid', 'viewer-guides-menu', 'viewer-channel',
-        'viewer-exposure-reset', 'viewer-exposure', 'viewer-snapshot',
+        'viewer-exposure-reset', 'viewer-exposure',
+        // The snapshot pair (K-532): take, then show.
+        'viewer-snapshot', 'viewer-snapshot-show',
         // The transport and its clock.
         'viewer-home', 'viewer-step-back', 'viewer-play',
         'viewer-step-forward', 'viewer-end', 'viewer-timecode',
@@ -510,41 +643,57 @@ void main() {
     /// lifecycle** (K-416, docs/07 §2.2 item 14). Nothing here crosses the
     /// bridge: the stage photographs its own [RepaintBoundary], and Show puts
     /// the photograph back over the live picture while it is held.
-    /// **One mark, two gestures** (K-466): the drawing gives snapshot and
-    /// compare a single glyph, so a click photographs the picture and a press
-    /// and hold puts the photograph back over it. Neither can be mistaken for
-    /// the other — a press let go before the hold delay never flashes a
-    /// comparison, and one held past it never takes a second photograph.
-    testWidgets('a click takes a snapshot, and holding compares against it',
+    /// **Two marks** (K-532, superseding K-466's merged one): Take
+    /// photographs the picture on a plain click, and Show beside it puts the
+    /// photograph back over the live one while it is held. Show is muted until
+    /// a photograph exists, which is what makes a taken snapshot findable at
+    /// all — the merged mark said nothing about either.
+    testWidgets('Take photographs the picture and Show compares against it',
         (tester) async {
       final p = withLayer();
       await mount(tester, p);
 
-      final mark = find.byKey(const ValueKey('viewer-snapshot'));
+      final take = find.byKey(const ValueKey('viewer-snapshot'));
+      final show = find.byKey(const ValueKey('viewer-snapshot-show'));
       final shown = find.byKey(const ValueKey('viewer-snapshot-overlay'));
 
-      // Nothing photographed yet, so a hold shows nothing rather than
-      // flashing the live picture at itself.
-      await tester.ensureVisible(mark);
+      // Nothing photographed yet, so Show is deaf rather than flashing the
+      // live picture at itself.
+      await tester.ensureVisible(show);
       await tester.pump();
-      final empty = await tester.startGesture(tester.getCenter(mark));
+      final empty = await tester.startGesture(tester.getCenter(show));
       await tester.pump(const Duration(milliseconds: 300));
       expect(shown, findsNothing);
       await empty.up();
+      await tester.pump();
+
+      await pressBar(tester, 'viewer-snapshot');
       // The photograph is taken off the render tree, which is a real async
       // round trip rather than a frame.
       await tester.pumpAndSettle();
-
       expect(shown, findsNothing, reason: 'taking one does not display it');
+      expect(take, findsOneWidget);
 
-      final hold = await tester.startGesture(tester.getCenter(mark));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.ensureVisible(show);
+      await tester.pump();
+      final hold = await tester.startGesture(tester.getCenter(show));
+      await tester.pump();
       expect(shown, findsOneWidget,
           reason: 'held down, the picture is swapped');
 
       await hold.up();
       await tester.pump();
       expect(shown, findsNothing, reason: 'let go, the live picture is back');
+
+      // And Take is still a plain click: holding it must not compare, now that
+      // the second mark is what does.
+      await tester.ensureVisible(take);
+      await tester.pump();
+      final again = await tester.startGesture(tester.getCenter(take));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(shown, findsNothing, reason: 'holding Take compares nothing');
+      await again.up();
+      await tester.pumpAndSettle();
     });
 
     /// **A snapshot never stores more pixels than the panel can show.** The
@@ -568,11 +717,11 @@ void main() {
       await pressBar(tester, 'viewer-snapshot');
       await tester.pumpAndSettle();
 
-      final mark = find.byKey(const ValueKey('viewer-snapshot'));
+      final mark = find.byKey(const ValueKey('viewer-snapshot-show'));
       await tester.ensureVisible(mark);
       await tester.pump();
       final hold = await tester.startGesture(tester.getCenter(mark));
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
 
       final image = tester
           .widget<RawImage>(

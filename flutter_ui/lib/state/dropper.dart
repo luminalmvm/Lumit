@@ -2,11 +2,12 @@
 //
 // **In plain terms.** The dropper is the little pipette beside a parameter.
 // Click it and the tool arms: the Viewer grows a magnifier that follows the
-// pointer and shows the pixels under it, hugely enlarged, and the next click on
-// the picture lifts a value from them. What that value *is* depends on what
-// armed it — a colour for a colour swatch, a depth for a depth-of-field focal
-// point — which is why this file talks about "what is being read" rather than
-// about colour.
+// pointer and shows the pixels under it, hugely enlarged. Then press on the
+// picture and *drag*: the parameter takes whatever is under the pointer as it
+// travels, previewed the whole way, and letting go is the edit. What that value
+// *is* depends on what armed it — a colour for a colour swatch, a depth for a
+// depth-of-field focal point — which is why this file talks about "what is
+// being read" rather than about colour.
 //
 // **Which pixel grid all of this is in.** The engine's reply says which raster
 // it cut from, and that is the only grid the window can be indexed in: the
@@ -59,6 +60,13 @@ enum DropperReads {
 /// Naming the target instead would mean re-resolving a layer, an effect and a
 /// parameter index on the far side of the picture, which is the arrangement the
 /// egui build had and the source of its "target has since moved" silence.
+///
+/// **A pick is a drag, not a click** (K-532). The press starts it, every move
+/// stages a fresh sample and previews it, and the release commits once — the
+/// same stage/preview/commit the value fields use, so sweeping a colour or
+/// sliding a point across the picture is watched rather than guessed at. The
+/// three callbacks are that gesture's three moments: [onPreview] per move,
+/// [onPick] on release, [onRevert] if it is abandoned.
 @immutable
 class DropperArm {
   /// Which control armed it — `fx-<effect>-<param>`, say. Only ever compared,
@@ -80,14 +88,27 @@ class DropperArm {
   /// coming from rather than showing a colour nobody is picking.
   final String? sampleLayerName;
 
-  /// Write the picked value. Called once, on the click that picks.
+  /// Write the picked value. Called **once**, on the release that ends the
+  /// pick — never per pointer move, so the gesture is one undo step.
   final void Function(DropperSample sample) onPick;
+
+  /// Show this value without committing it: one staged tick of the drag, put
+  /// through the same preview path a scrub-drag uses. Called rate-limited, with
+  /// the newest sample. Null means this pick simply has nothing to preview
+  /// through, and the picture only changes on release.
+  final void Function(DropperSample sample)? onPreview;
+
+  /// Put back what was staged: Escape mid-drag, or a gesture cancelled under
+  /// us. Nothing was committed, so this only has the preview to undo.
+  final void Function()? onRevert;
 
   const DropperArm({
     required this.id,
     required this.reads,
     required this.label,
     required this.onPick,
+    this.onPreview,
+    this.onRevert,
     this.sampleLayer,
     this.sampleLayerName,
   });
@@ -209,7 +230,9 @@ int nextDropperRegion(int current, int steps) {
 /// three black ones mid-grey rather than the quarter-light it actually is.
 double srgbDecode(int byte) {
   final v = byte.clamp(0, 255) / 255.0;
-  return v <= 0.04045 ? v / 12.92 : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
+  return v <= 0.04045
+      ? v / 12.92
+      : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
 }
 
 /// Scene-linear light back to an sRGB byte — the inverse of [srgbDecode], for
@@ -252,7 +275,15 @@ DropperSample sampleFromWindow(
   final yFrac = (y + 0.5) / math.max(window.height, 1);
   if (count == 0) {
     return DropperSample(
-        r: 0, g: 0, b: 0, depth: 0, x: x, y: y, xFrac: xFrac, yFrac: yFrac, region: n);
+        r: 0,
+        g: 0,
+        b: 0,
+        depth: 0,
+        x: x,
+        y: y,
+        xFrac: xFrac,
+        yFrac: yFrac,
+        region: n);
   }
   final r = sr / count, g = sg / count, b = sb / count;
   return DropperSample(

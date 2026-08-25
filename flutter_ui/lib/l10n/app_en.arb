@@ -7793,10 +7793,6 @@
   "@tipTransportStart": {
     "description": "Tooltip on the Viewer transport's first button, an icon with no words: it takes the playhead to the composition's first frame."
   },
-  "tipViewerSnapshotCompare": "Snapshot — hold to compare",
-  "@tipViewerSnapshotCompare": {
-    "description": "Tooltip on the Viewer bar's snapshot mark once a snapshot exists. One mark, two gestures: a click photographs the picture again, and holding the button puts the stored photograph back over the live picture for as long as it is held."
-  },
   "viewerColourToneMap": "Tone mapping",
   "@viewerColourToneMap": {
     "description": "Entry in the Viewer header's colour-pipeline menu, with a tick beside it when it is on. It folds very bright values back under 1 so they can be seen rather than clipping flat. Preview only, so it never changes an export."
@@ -9180,5 +9176,13 @@
   "tipViewerAtEffect": "Picture at this effect",
   "@tipViewerAtEffect": {
     "description": "Tooltip on the Viewer's 'at effect' chip: clicking it shows the composition with that layer's effects stopping there, and clicking again returns the finished picture. Under five words."
+  },
+  "tipViewerSnapshotShow": "Show snapshot — hold",
+  "@tipViewerSnapshotShow": {
+    "description": "Tooltip on the Viewer bar's show-snapshot mark, the second of the snapshot pair. The stored picture is shown over the live one for as long as the button is held down, and goes when it is let go. Under five words."
+  },
+  "tipViewerSnapshotNone": "No snapshot yet",
+  "@tipViewerSnapshotNone": {
+    "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. Under five words."
   }
 }

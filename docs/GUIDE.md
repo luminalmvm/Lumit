@@ -1969,10 +1969,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   each blown up to a square you can aim at, with **dashed lines between every pair** so you can
   tell one pixel from the next. A **solid border** rings the pixels that will actually be taken:
   **just the centre one** to begin with, and **Shift+scroll** grows it to 3×3, 5×5, 7×7 and 9×9
-  so a grainy area averages out instead of grabbing one noisy pixel. Click to lift the value;
-  press **Escape**, click the pipette again, or click away from the picture to put the tool away.
-  Under the grid a strip says what you are about to take — the colour and its numbers, and the
-  size of the patch.
+  so a grainy area averages out instead of grabbing one noisy pixel. Under the grid a strip
+  says what you are about to take — the colour and its numbers, and the size of the patch.
+
+  **Taking the value is a drag, not a click.** Press on the picture and *keep the button down*:
+  the parameter takes whatever is under the pointer as you move, and the picture updates while
+  you go, so you can sweep across a face until the skin tone looks right, or slide a light's
+  position around until the flare sits where you want it, and watch the result the whole time.
+  Nothing is written to the project until you **let go** — that release is the edit, and one
+  press of undo takes the whole sweep back. Change your mind mid-sweep and press **Escape**:
+  what you started with comes back and the tool puts itself away. (A press that lands before the
+  first pixels have arrived from the engine simply does nothing and leaves the tool armed, so
+  you can try again.) Click the pipette again, or press away from the picture, to put the tool
+  away without picking anything.
 
   **The dropper is not only for colour.** It means "the value at this pixel", whatever value the
   thing you armed it from is after. Depth of field's **Focus** carries one: click the part of the
@@ -8998,12 +9007,15 @@ a key or a matte — and then the exposure, which is just a number reading `+0.0
 and the whole picture brightens or darkens by that many stops. It changes nothing an export
 will ever see; it is there so you can look into a shadow without grading one.
 
-A hairline seam, and then the **snapshot** mark. Click it and it photographs whatever the
-Viewer is showing this instant. Press and *hold* it and the photograph comes back over the
-live picture for as long as you hold — let go and you are back. That is the before/after
-every grade leans on, and it is one mark doing two things because a click and a hold are
-two gestures nobody confuses. Nothing about it goes near the engine or an export: it is a
-picture of the screen, kept in the frontend, thrown away when you take the next one.
+A hairline seam, and then the **two snapshot marks**. Click the camera and it photographs
+whatever the Viewer is showing this instant. Press and *hold* the eye beside it and the
+photograph comes back over the live picture for as long as you hold — let go and you are
+back. That is the before/after every grade leans on. The eye is greyed out until you have
+actually taken a photograph, and hovering it then says so. (It was briefly one mark doing
+both jobs — click to take, hold to compare — which worked but hid the comparison: nothing
+on screen told you a photograph existed or how to look at it.) Nothing about either goes
+near the engine or an export: it is a picture of the screen, kept in the frontend, thrown
+away when you take the next one.
 
 In the middle, the transport: to the start, back a frame, play, on a frame, to the end, and
 the clock. Click the clock and type a time to go there.
