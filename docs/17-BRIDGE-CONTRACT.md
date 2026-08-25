@@ -660,10 +660,8 @@ path, documented beside the types in
     surface plus its size (an NT handle there, an `IOSurfaceID` here). Only
     Linux needs more (fd, stride, offset, DRM format).
 - **Small stills still cross as pixels**, deliberately: footage thumbnails
-    (`BridgeRenderedFrame`), the 256×256 scope traces, the dropper's
-    129×129 windows (`BridgeSampledPixels`, K-210 — 66 KiB), and the Node
-    preview (`BridgeNodePreview`, K-486 — capped at 256px on its longest edge,
-    so 256 KiB at worst, the scope trace's own bound). All are bounded and
+    (`BridgeRenderedFrame`), the 256×256 scope traces and the dropper's
+    129×129 windows (`BridgeSampledPixels`, K-210 — 66 KiB). All are bounded and
     rare, which is what makes the per-byte codec tolerable there. A window is a
     *reading*, not a picture: it answers "what is around this pixel", and the
     size cap is enforced engine-side (`worker_thread::cut_patch`, `MAX_WINDOW`)
@@ -675,35 +673,37 @@ path, documented beside the types in
     **fraction of the picture**, not a pixel, and the reply says which raster it
     cut from: the engine may be working at preview resolution, so neither side
     can name a pixel in the other's grid.
-- **The Node preview is a prefix render, not a second Viewer (K-486, K-448).**
-    `CompositionReference::preview_node(frame, layer, node, max_edge)` asks for
-    the picture *at* one box of a layer's graph, and `WorkerResponse::NodePreview`
-    answers it. The node is spelt as the graph read model spells it — `source`,
-    `out`, or an effect instance's id — and a box that makes no picture (a
-    driver) is answered with **silence**, as a frame with nothing to read is.
-    The engine renders the composition with that layer's effect stack cut off
-    after the named box; the frame key already hashes each layer's effects, so a
-    prefix names its own frame and no field was added to the key. The Layer out
-    box cuts nothing and so rides the frame the Viewer has already banked.
-    It is a **thumbnail path, not a frame path**: the panel asks when the pick,
-    the playhead, the layer or the document moves, never in a rebuild and never
-    sixty times a second, so a second zero-copy transport would be a whole
-    Viewer's plumbing for a still. Closing the panel stops the second render
-    outright — nothing is left asking.
+- **The Viewer's picture may be cut short at an effect (K-524, superseding
+    K-486's thumbnail seam).** `CompositionReference::render_frame(frame, scale,
+    mode, prefix)` takes an optional `BridgePrefixPoint` — a layer (which
+    carries its composition) and the effect instance to stop **after**. With one
+    set, the engine renders the composition with that layer's effect stack
+    truncated there and publishes it down the ordinary zero-copy frame
+    transport, at the Viewer's own quality. There is no second render path and
+    no second viewport: the prefix is a *way of looking*, like the exposure and
+    the tone map beside it.
+    The point rides the render request rather than having a call of its own, so
+    turning the chip on or off costs the one render it was always going to
+    cost. **The worker latches it**, exactly as it latches where the user is
+    looking: the drag previews, playback and the idle fill that follow all show
+    the same picture, so nine `RenderCompRequestWithPreview` constructors did
+    not each grow a parameter. A render request that carries no point clears it.
+    A point naming another composition's layer, a layer that has gone, or an
+    effect the layer no longer carries **cuts nothing** and shows the honest
+    picture — a stale chip is harmless rather than wrong.
+    The frame key already hashes each layer's effects, so a truncated stack
+    names its own frame and the cache cannot hand the chip the full picture; no
+    field was added to the key. **But a prefix change renames every frame
+    without moving the document revision**, which is the one case the worker's
+    name memo cannot see, so latching a new point empties it — the same rule
+    the viewer look already follows.
 - **Readings ride the frame stream and have their own lane.** A scope trace
-    (`WorkerResponse::Scope`), a dropper patch (`WorkerResponse::Sampled`) and a
-    Node preview (`WorkerResponse::NodePreview`) come back on the worker's one
-    response stream, so none needs a second channel. In the worker's drain
-    policy each is its own class: a frame, a trace, a patch and a preview are
-    four different questions, and none may supersede another — only its own
-    kind, where the newest wins (a pointer that has moved on makes the previous
-    position worthless; so does a playhead). A preview needs that lane most:
-    it is asked only when something moves, so one thrown away is never
-    re-asked and the panel would hold a stale picture for good. A trace **says which trace it is**:
-    `BridgeScopeTrace.kind` echoes the requested code back, because two panels may
-    be asking at once — the Scopes panel and the Levels row's histogram (K-413) —
-    and on one shared stream each has to be able to tell whether the picture that
-    just arrived answers its own question.
+    (`WorkerResponse::Scope`) and a dropper patch (`WorkerResponse::Sampled`)
+    come back on the worker's one response stream, so neither needs a second
+    channel. In the worker's drain policy each is its own class: a frame, a
+    trace and a patch are three different questions, and none may supersede
+    another — only its own kind, where the newest wins (a pointer that has
+    moved on makes the previous position worthless; so does a playhead).
 - **Instrumentation rides it too (K-276).** Two further messages come back on the
     same stream, both small and both about a frame rather than being one:
     `WorkerResponse::RenderProgress` (`BridgeRenderProgress`: frame, stage code,

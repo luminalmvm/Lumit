@@ -13,8 +13,9 @@ import 'layer.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
+import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `place_footage`, `project`, `runs_as_video`, `to_engine`
+// These functions are ignored because they are not marked as `pub`: `add_at_top`, `bridge_marker`, `colour_view_pair`, `commit`, `composition`, `core_marker`, `core_markers`, `dispatch`, `document`, `footage_span_and_size`, `has_picture`, `place_footage`, `project`, `runs_as_video`, `to_engine`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -774,35 +775,6 @@ class CompositionReference {
           leaveAttributes: leaveAttributes,
           adjustDuration: adjustDuration);
 
-  /// Ask the worker for the picture **at** one node of `layer`'s graph — the
-  /// Node preview panel's whole seam (K-486, K-448).
-  ///
-  /// `node` is spelt as the graph read model spells it: `source`, `out`, or
-  /// an effect instance's id. A driver's id makes no picture and is answered
-  /// with silence, as is a node the layer no longer carries — the panel draws
-  /// its own empty face rather than waiting for something that is not coming.
-  ///
-  /// `max_edge` is the longest edge of the picture wanted, capped at 256
-  /// (`worker_thread::MAX_PREVIEW_EDGE`): the composite runs at that size, so
-  /// a preview costs a fraction of a Viewer frame, and the payload stays the
-  /// bounded thumbnail K-183 allows rather than becoming a second frame
-  /// transport. The answer arrives as `WorkerResponse::NodePreview`, on the
-  /// stream the frames and traces already ride.
-  ///
-  /// **Asked when something changes, never in a rebuild**: the panel asks on
-  /// a selection, playhead or document change and holds the picture. A
-  /// request superseded by a newer one is dropped in its own lane, so a scrub
-  /// with the panel open renders one preview rather than one per frame
-  /// crossed, and closing the panel stops the second render outright — there
-  /// is nothing left asking.
-  void previewNode(
-          {required BigInt frame,
-          required LayerReference layer,
-          required String node,
-          required int maxEdge}) =>
-      BridgeLib.instance.api.crateApiCompositionCompositionReferencePreviewNode(
-          that: this, frame: frame, layer: layer, node: node, maxEdge: maxEdge);
-
   /// Add this composition to the export queue, and start the queue when
   /// `start` is set.
   ///
@@ -823,12 +795,21 @@ class CompositionReference {
   /// Ask for `frame` at `scale` — 1.0 meaning "shown at comp resolution".
   /// Below 1.0 the engine decodes and composites smaller, which is how a
   /// Viewer that is not filling the screen stays cheap.
+  ///
+  /// `prefix` is the Viewer's "at effect" chip (K-524): the layer whose
+  /// effect stack to cut short and the effect to stop after, or `None` for
+  /// the picture as the document has it. It rides *this* request rather than
+  /// having a call of its own, so turning the chip on or off costs the one
+  /// render it was always going to cost — and the worker latches it, so the
+  /// drags, the playback and the idle fill that follow show the same picture
+  /// without each growing a parameter.
   void renderFrame(
           {required BigInt frame,
           required double scale,
-          required BridgePlaybackMode mode}) =>
+          required BridgePlaybackMode mode,
+          BridgePrefixPoint? prefix}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderFrame(
-          that: this, frame: frame, scale: scale, mode: mode);
+          that: this, frame: frame, scale: scale, mode: mode, prefix: prefix);
 
   /// Ask for `frame` with one clip's retime replaced — the live envelope
   /// drag, which never touches the document.

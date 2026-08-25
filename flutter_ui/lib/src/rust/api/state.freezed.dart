@@ -55,7 +55,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         renderedSharedTexture,
     TResult Function(WorkerResponse_Scope value)? scope,
     TResult Function(WorkerResponse_Sampled value)? sampled,
-    TResult Function(WorkerResponse_NodePreview value)? nodePreview,
     TResult Function(WorkerResponse_PlaybackEnded value)? playbackEnded,
     TResult Function(WorkerResponse_CacheFilled value)? cacheFilled,
     TResult Function(WorkerResponse_RenderProgress value)? renderProgress,
@@ -73,8 +72,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         return scope(_that);
       case WorkerResponse_Sampled() when sampled != null:
         return sampled(_that);
-      case WorkerResponse_NodePreview() when nodePreview != null:
-        return nodePreview(_that);
       case WorkerResponse_PlaybackEnded() when playbackEnded != null:
         return playbackEnded(_that);
       case WorkerResponse_CacheFilled() when cacheFilled != null:
@@ -109,7 +106,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         renderedSharedTexture,
     required TResult Function(WorkerResponse_Scope value) scope,
     required TResult Function(WorkerResponse_Sampled value) sampled,
-    required TResult Function(WorkerResponse_NodePreview value) nodePreview,
     required TResult Function(WorkerResponse_PlaybackEnded value) playbackEnded,
     required TResult Function(WorkerResponse_CacheFilled value) cacheFilled,
     required TResult Function(WorkerResponse_RenderProgress value)
@@ -126,8 +122,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         return scope(_that);
       case WorkerResponse_Sampled():
         return sampled(_that);
-      case WorkerResponse_NodePreview():
-        return nodePreview(_that);
       case WorkerResponse_PlaybackEnded():
         return playbackEnded(_that);
       case WorkerResponse_CacheFilled():
@@ -158,7 +152,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         renderedSharedTexture,
     TResult? Function(WorkerResponse_Scope value)? scope,
     TResult? Function(WorkerResponse_Sampled value)? sampled,
-    TResult? Function(WorkerResponse_NodePreview value)? nodePreview,
     TResult? Function(WorkerResponse_PlaybackEnded value)? playbackEnded,
     TResult? Function(WorkerResponse_CacheFilled value)? cacheFilled,
     TResult? Function(WorkerResponse_RenderProgress value)? renderProgress,
@@ -175,8 +168,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         return scope(_that);
       case WorkerResponse_Sampled() when sampled != null:
         return sampled(_that);
-      case WorkerResponse_NodePreview() when nodePreview != null:
-        return nodePreview(_that);
       case WorkerResponse_PlaybackEnded() when playbackEnded != null:
         return playbackEnded(_that);
       case WorkerResponse_CacheFilled() when cacheFilled != null:
@@ -208,7 +199,6 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult Function(BridgeSharedFrameInfo field0)? renderedSharedTexture,
     TResult Function(BridgeScopeTrace field0)? scope,
     TResult Function(BridgeSampledPixels field0)? sampled,
-    TResult Function(BridgeNodePreview field0)? nodePreview,
     TResult Function()? playbackEnded,
     TResult Function()? cacheFilled,
     TResult Function(BridgeRenderProgress field0)? renderProgress,
@@ -226,8 +216,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         return scope(_that.field0);
       case WorkerResponse_Sampled() when sampled != null:
         return sampled(_that.field0);
-      case WorkerResponse_NodePreview() when nodePreview != null:
-        return nodePreview(_that.field0);
       case WorkerResponse_PlaybackEnded() when playbackEnded != null:
         return playbackEnded();
       case WorkerResponse_CacheFilled() when cacheFilled != null:
@@ -261,7 +249,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         renderedSharedTexture,
     required TResult Function(BridgeScopeTrace field0) scope,
     required TResult Function(BridgeSampledPixels field0) sampled,
-    required TResult Function(BridgeNodePreview field0) nodePreview,
     required TResult Function() playbackEnded,
     required TResult Function() cacheFilled,
     required TResult Function(BridgeRenderProgress field0) renderProgress,
@@ -277,8 +264,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         return scope(_that.field0);
       case WorkerResponse_Sampled():
         return sampled(_that.field0);
-      case WorkerResponse_NodePreview():
-        return nodePreview(_that.field0);
       case WorkerResponse_PlaybackEnded():
         return playbackEnded();
       case WorkerResponse_CacheFilled():
@@ -308,7 +293,6 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult? Function(BridgeSharedFrameInfo field0)? renderedSharedTexture,
     TResult? Function(BridgeScopeTrace field0)? scope,
     TResult? Function(BridgeSampledPixels field0)? sampled,
-    TResult? Function(BridgeNodePreview field0)? nodePreview,
     TResult? Function()? playbackEnded,
     TResult? Function()? cacheFilled,
     TResult? Function(BridgeRenderProgress field0)? renderProgress,
@@ -325,8 +309,6 @@ extension WorkerResponsePatterns on WorkerResponse {
         return scope(_that.field0);
       case WorkerResponse_Sampled() when sampled != null:
         return sampled(_that.field0);
-      case WorkerResponse_NodePreview() when nodePreview != null:
-        return nodePreview(_that.field0);
       case WorkerResponse_PlaybackEnded() when playbackEnded != null:
         return playbackEnded();
       case WorkerResponse_CacheFilled() when cacheFilled != null:
@@ -600,72 +582,6 @@ class _$WorkerResponse_SampledCopyWithImpl<$Res>
           ? _self.field0
           : field0 // ignore: cast_nullable_to_non_nullable
               as BridgeSampledPixels,
-    ));
-  }
-}
-
-/// @nodoc
-
-class WorkerResponse_NodePreview extends WorkerResponse {
-  const WorkerResponse_NodePreview(this.field0) : super._();
-
-  final BridgeNodePreview field0;
-
-  /// Create a copy of WorkerResponse
-  /// with the given fields replaced by the non-null parameter values.
-  @JsonKey(includeFromJson: false, includeToJson: false)
-  @pragma('vm:prefer-inline')
-  $WorkerResponse_NodePreviewCopyWith<WorkerResponse_NodePreview>
-      get copyWith =>
-          _$WorkerResponse_NodePreviewCopyWithImpl<WorkerResponse_NodePreview>(
-              this, _$identity);
-
-  @override
-  bool operator ==(Object other) {
-    return identical(this, other) ||
-        (other.runtimeType == runtimeType &&
-            other is WorkerResponse_NodePreview &&
-            (identical(other.field0, field0) || other.field0 == field0));
-  }
-
-  @override
-  int get hashCode => Object.hash(runtimeType, field0);
-
-  @override
-  String toString() {
-    return 'WorkerResponse.nodePreview(field0: $field0)';
-  }
-}
-
-/// @nodoc
-abstract mixin class $WorkerResponse_NodePreviewCopyWith<$Res>
-    implements $WorkerResponseCopyWith<$Res> {
-  factory $WorkerResponse_NodePreviewCopyWith(WorkerResponse_NodePreview value,
-          $Res Function(WorkerResponse_NodePreview) _then) =
-      _$WorkerResponse_NodePreviewCopyWithImpl;
-  @useResult
-  $Res call({BridgeNodePreview field0});
-}
-
-/// @nodoc
-class _$WorkerResponse_NodePreviewCopyWithImpl<$Res>
-    implements $WorkerResponse_NodePreviewCopyWith<$Res> {
-  _$WorkerResponse_NodePreviewCopyWithImpl(this._self, this._then);
-
-  final WorkerResponse_NodePreview _self;
-  final $Res Function(WorkerResponse_NodePreview) _then;
-
-  /// Create a copy of WorkerResponse
-  /// with the given fields replaced by the non-null parameter values.
-  @pragma('vm:prefer-inline')
-  $Res call({
-    Object? field0 = null,
-  }) {
-    return _then(WorkerResponse_NodePreview(
-      null == field0
-          ? _self.field0
-          : field0 // ignore: cast_nullable_to_non_nullable
-              as BridgeNodePreview,
     ));
   }
 }

@@ -19,7 +19,7 @@ import 'solid.dart';
 part 'state.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `adopt`, `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
@@ -157,58 +157,43 @@ class BridgeLayerTiming {
           effects == other.effects;
 }
 
-/// The picture at one node of a layer's graph — the Node preview panel's
-/// payload (K-486, K-448, docs/impl/node-graph.md §8 WP5).
+/// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's
+/// point (K-524, superseding K-486's thumbnail seam).
 ///
-/// **A thumbnail, not a Viewer.** The panel shows the picture *at* a node: the
-/// composition rendered with that layer's effect stack cut off there. It is a
-/// still that changes when the selection, the playhead or the document does —
-/// never sixty times a second — so it crosses as pixels the way the scope
-/// traces do, bounded to the same 256px longest edge and so to the same 256 KiB
-/// at worst. K-183's rule is about *frames*, which stream; this is one small
-/// answer to one question about a picture, and giving it a second zero-copy
-/// transport of its own would be a whole Viewer's plumbing for a thumbnail.
-class BridgeNodePreview {
-  /// Which node this is the picture at, so a reply that arrives after the
-  /// selection has moved on is recognised as stale rather than drawn. A
-  /// string, as every other node reference crosses (`graph/<node>` paths):
-  /// `source`, `out`, or the effect instance's id.
-  final String node;
+/// **In plain terms.** Picking an effect and turning the chip on shows the
+/// composition rendered with that layer's stack stopping after the picked
+/// effect and nothing past it. The point is named by the layer it is on (which
+/// carries its composition) and the effect instance it stops after, which is
+/// everything the engine needs to shorten the stack.
+///
+/// It rides the ordinary render request, so the picture comes back down the one
+/// frame transport at the Viewer's own quality — this names a *way of looking*,
+/// not a second viewport.
+class BridgePrefixPoint {
+  /// The layer whose stack is cut, and — through its `comp_id` — the
+  /// composition the cut belongs to. A point naming another composition's
+  /// layer cuts nothing, so a stale chip is harmless rather than wrong.
+  final LayerReference layer;
 
-  /// Which frame it is of, stale-checked for the same reason.
-  final BigInt frame;
-  final int width;
-  final int height;
+  /// The effect instance the stack stops **after**. An effect the layer no
+  /// longer carries cuts nothing, for the same reason.
+  final UuidValue effect;
 
-  /// Tightly packed display-ready sRGB RGBA8, `width * height * 4`.
-  final Uint8List rgba;
-
-  const BridgeNodePreview({
-    required this.node,
-    required this.frame,
-    required this.width,
-    required this.height,
-    required this.rgba,
+  const BridgePrefixPoint({
+    required this.layer,
+    required this.effect,
   });
 
   @override
-  int get hashCode =>
-      node.hashCode ^
-      frame.hashCode ^
-      width.hashCode ^
-      height.hashCode ^
-      rgba.hashCode;
+  int get hashCode => layer.hashCode ^ effect.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is BridgeNodePreview &&
+      other is BridgePrefixPoint &&
           runtimeType == other.runtimeType &&
-          node == other.node &&
-          frame == other.frame &&
-          width == other.width &&
-          height == other.height &&
-          rgba == other.rgba;
+          layer == other.layer &&
+          effect == other.effect;
 }
 
 /// How far the frame the user is waiting for has got (docs/13 §7.1).
@@ -262,8 +247,8 @@ class BridgeRenderProgress {
 /// A small still picture as plain pixels — the thumbnail payload
 /// (`FootageReference::thumbnail`). **Not a Viewer transport**: the read-back
 /// frame path was deleted in K-183, so the only pixel payloads that cross the
-/// bridge are these thumbnails, the scope traces and the Node preview
-/// ([`BridgeNodePreview`], K-486), each small by construction.
+/// bridge are these thumbnails, the scope traces and the dropper's windows,
+/// each small by construction.
 class BridgeRenderedFrame {
   /// Which frame of the source this is (0 for a thumbnail's poster frame).
   final BigInt frame;
@@ -590,13 +575,6 @@ sealed class WorkerResponse with _$WorkerResponse {
   const factory WorkerResponse.sampled(
     BridgeSampledPixels field0,
   ) = WorkerResponse_Sampled;
-
-  /// The picture at one graph node — the answer to one
-  /// `CompositionReference::preview_node`, riding the same stream for the
-  /// same reason a trace does.
-  const factory WorkerResponse.nodePreview(
-    BridgeNodePreview field0,
-  ) = WorkerResponse_NodePreview;
 
   /// Playback finished on its own — it ran off the end of the composition.
   ///

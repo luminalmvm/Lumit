@@ -176,13 +176,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMediaInfo dco_decode_box_autoadd_bridge_media_info(dynamic raw);
 
   @protected
-  BridgeNodePreview dco_decode_box_autoadd_bridge_node_preview(dynamic raw);
-
-  @protected
   BridgeNodeRef dco_decode_box_autoadd_bridge_node_ref(dynamic raw);
 
   @protected
   BridgePoint dco_decode_box_autoadd_bridge_point(dynamic raw);
+
+  @protected
+  BridgePrefixPoint dco_decode_box_autoadd_bridge_prefix_point(dynamic raw);
 
   @protected
   BridgeProjectCacheLocation
@@ -478,9 +478,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeNodePosition dco_decode_bridge_node_position(dynamic raw);
 
   @protected
-  BridgeNodePreview dco_decode_bridge_node_preview(dynamic raw);
-
-  @protected
   BridgeNodeRef dco_decode_bridge_node_ref(dynamic raw);
 
   @protected
@@ -518,6 +515,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgePortType dco_decode_bridge_port_type(dynamic raw);
+
+  @protected
+  BridgePrefixPoint dco_decode_bridge_prefix_point(dynamic raw);
 
   @protected
   BridgePresetInfo dco_decode_bridge_preset_info(dynamic raw);
@@ -852,6 +852,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMediaInfo? dco_decode_opt_box_autoadd_bridge_media_info(dynamic raw);
 
   @protected
+  BridgePrefixPoint? dco_decode_opt_box_autoadd_bridge_prefix_point(
+      dynamic raw);
+
+  @protected
   BridgeProjectCacheLocation?
       dco_decode_opt_box_autoadd_bridge_project_cache_location(dynamic raw);
 
@@ -1059,15 +1063,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
-  BridgeNodePreview sse_decode_box_autoadd_bridge_node_preview(
-      SseDeserializer deserializer);
-
-  @protected
   BridgeNodeRef sse_decode_box_autoadd_bridge_node_ref(
       SseDeserializer deserializer);
 
   @protected
   BridgePoint sse_decode_box_autoadd_bridge_point(SseDeserializer deserializer);
+
+  @protected
+  BridgePrefixPoint sse_decode_box_autoadd_bridge_prefix_point(
+      SseDeserializer deserializer);
 
   @protected
   BridgeProjectCacheLocation
@@ -1413,10 +1417,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
-  BridgeNodePreview sse_decode_bridge_node_preview(
-      SseDeserializer deserializer);
-
-  @protected
   BridgeNodeRef sse_decode_bridge_node_ref(SseDeserializer deserializer);
 
   @protected
@@ -1456,6 +1456,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgePortType sse_decode_bridge_port_type(SseDeserializer deserializer);
+
+  @protected
+  BridgePrefixPoint sse_decode_bridge_prefix_point(
+      SseDeserializer deserializer);
 
   @protected
   BridgePresetInfo sse_decode_bridge_preset_info(SseDeserializer deserializer);
@@ -1846,6 +1850,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgePrefixPoint? sse_decode_opt_box_autoadd_bridge_prefix_point(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeProjectCacheLocation?
       sse_decode_opt_box_autoadd_bridge_project_cache_location(
           SseDeserializer deserializer);
@@ -2066,16 +2074,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMediaInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_bridge_node_preview(
-      BridgeNodePreview self, SseSerializer serializer);
-
-  @protected
   void sse_encode_box_autoadd_bridge_node_ref(
       BridgeNodeRef self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_point(
       BridgePoint self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_prefix_point(
+      BridgePrefixPoint self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_project_cache_location(
@@ -2454,10 +2462,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeNodePosition self, SseSerializer serializer);
 
   @protected
-  void sse_encode_bridge_node_preview(
-      BridgeNodePreview self, SseSerializer serializer);
-
-  @protected
   void sse_encode_bridge_node_ref(BridgeNodeRef self, SseSerializer serializer);
 
   @protected
@@ -2505,6 +2509,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_port_type(
       BridgePortType self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_prefix_point(
+      BridgePrefixPoint self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_preset_info(
@@ -2918,6 +2926,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_media_info(
       BridgeMediaInfo? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_prefix_point(
+      BridgePrefixPoint? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_project_cache_location(

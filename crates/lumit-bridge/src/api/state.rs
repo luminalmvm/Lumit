@@ -132,8 +132,8 @@ pub struct BridgeSharedFrameInfo {
 /// A small still picture as plain pixels — the thumbnail payload
 /// (`FootageReference::thumbnail`). **Not a Viewer transport**: the read-back
 /// frame path was deleted in K-183, so the only pixel payloads that cross the
-/// bridge are these thumbnails, the scope traces and the Node preview
-/// ([`BridgeNodePreview`], K-486), each small by construction.
+/// bridge are these thumbnails, the scope traces and the dropper's windows,
+/// each small by construction.
 #[frb(non_opaque)]
 #[derive(Clone)]
 pub struct BridgeRenderedFrame {
@@ -207,31 +207,28 @@ pub struct BridgeSampledPixels {
     pub layer_alone: bool,
 }
 
-/// The picture at one node of a layer's graph — the Node preview panel's
-/// payload (K-486, K-448, docs/impl/node-graph.md §8 WP5).
+/// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's
+/// point (K-524, superseding K-486's thumbnail seam).
 ///
-/// **A thumbnail, not a Viewer.** The panel shows the picture *at* a node: the
-/// composition rendered with that layer's effect stack cut off there. It is a
-/// still that changes when the selection, the playhead or the document does —
-/// never sixty times a second — so it crosses as pixels the way the scope
-/// traces do, bounded to the same 256px longest edge and so to the same 256 KiB
-/// at worst. K-183's rule is about *frames*, which stream; this is one small
-/// answer to one question about a picture, and giving it a second zero-copy
-/// transport of its own would be a whole Viewer's plumbing for a thumbnail.
+/// **In plain terms.** Picking an effect and turning the chip on shows the
+/// composition rendered with that layer's stack stopping after the picked
+/// effect and nothing past it. The point is named by the layer it is on (which
+/// carries its composition) and the effect instance it stops after, which is
+/// everything the engine needs to shorten the stack.
+///
+/// It rides the ordinary render request, so the picture comes back down the one
+/// frame transport at the Viewer's own quality — this names a *way of looking*,
+/// not a second viewport.
 #[frb(non_opaque)]
-#[derive(Clone)]
-pub struct BridgeNodePreview {
-    /// Which node this is the picture at, so a reply that arrives after the
-    /// selection has moved on is recognised as stale rather than drawn. A
-    /// string, as every other node reference crosses (`graph/<node>` paths):
-    /// `source`, `out`, or the effect instance's id.
-    pub node: String,
-    /// Which frame it is of, stale-checked for the same reason.
-    pub frame: u64,
-    pub width: u32,
-    pub height: u32,
-    /// Tightly packed display-ready sRGB RGBA8, `width * height * 4`.
-    pub rgba: Vec<u8>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgePrefixPoint {
+    /// The layer whose stack is cut, and — through its `comp_id` — the
+    /// composition the cut belongs to. A point naming another composition's
+    /// layer cuts nothing, so a stale chip is harmless rather than wrong.
+    pub layer: crate::api::layer::LayerReference,
+    /// The effect instance the stack stops **after**. An effect the layer no
+    /// longer carries cuts nothing, for the same reason.
+    pub effect: Uuid,
 }
 
 /// How far the frame the user is waiting for has got (docs/13 §7.1).
@@ -318,10 +315,6 @@ pub enum WorkerResponse {
     /// `CompositionReference::sample_pixels`, riding the same stream for the
     /// same reason a trace does.
     Sampled(BridgeSampledPixels),
-    /// The picture at one graph node — the answer to one
-    /// `CompositionReference::preview_node`, riding the same stream for the
-    /// same reason a trace does.
-    NodePreview(BridgeNodePreview),
     /// Playback finished on its own — it ran off the end of the composition.
     ///
     /// Sent so the transport can show itself stopped without the frontend having

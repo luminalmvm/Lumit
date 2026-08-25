@@ -2810,39 +2810,33 @@ fn a_scope_needs_five_colour_triples() {
     ));
 }
 
-/// The Node preview's seam accepts a node the way the graph read model spells
-/// it and asks the worker for a picture (K-486, K-448) — one dispatch, whatever
-/// the node, because deciding what a node *is* needs the document and the
-/// document lives on the worker's side of this call.
-///
-/// The cap matters as much as the call: a preview crosses as pixels, so the
-/// longest edge it may ask for is bounded (K-183's "small by construction"),
-/// and asking for a wall-sized one must be clamped rather than honoured.
+/// The Viewer's "at effect" chip rides the ordinary render request (K-524):
+/// one dispatch whether the chip is on or off, because deciding what an effect
+/// id *means* needs the document and the document lives on the worker's side
+/// of this call. A point naming an effect nothing carries dispatches just the
+/// same and cuts nothing — a stale chip is harmless, never a refusal.
 #[test]
-fn a_node_preview_is_asked_for_by_the_nodes_own_name() {
+fn the_viewer_asks_for_a_prefix_on_the_render_it_was_making_anyway() {
+    use crate::api::composition::BridgePlaybackMode;
+    use crate::api::state::BridgePrefixPoint;
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
 
-    for node in [
-        "source",
-        "out",
-        &uuid::Uuid::now_v7().to_string(),
-        "nonsense",
+    for prefix in [
+        None,
+        Some(BridgePrefixPoint {
+            layer,
+            effect: uuid::Uuid::now_v7(),
+        }),
     ] {
         assert!(
             matches!(
-                comp.preview_node(0, layer, node.to_owned(), 256),
+                comp.render_frame(0, 1.0, BridgePlaybackMode::Adaptive, prefix),
                 Err(BridgeError::InvalidWorkerState) | Ok(())
             ),
-            "asking for the picture at {node} must dispatch or say the worker is not up"
+            "a render with prefix {prefix:?} must dispatch or say the worker is not up"
         );
     }
-
-    assert_eq!(
-        crate::api::worker_thread::MAX_PREVIEW_EDGE,
-        256,
-        "a preview is a thumbnail: the same 256 KiB bound the scope traces cross at"
-    );
 }
 
 /// A comp nests into another as a Precomp layer, and refuses to nest into
