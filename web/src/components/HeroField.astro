@@ -112,8 +112,7 @@
       );
     }
 
-    // A hash that is still random at screen coordinates, and the value noise
-    // built on it. The hash above feeds its input straight to sin(), and the
+    // A hash that is still random at screen coordinates. The hash above feeds its input straight to sin(), and the
     // dot of two pixel coordinates comes to a few hundred thousand - a number
     // whose sine a 32-bit float can no longer tell you anything useful about.
     // What comes back is not noise but wide, soft bands, which is precisely the
@@ -125,17 +124,6 @@
       vec3 q = fract(vec3(p.xyx) * 0.1031);
       q += dot(q, q.yzx + 33.33);
       return fract((q.x + q.y) * q.z);
-    }
-
-    float pnoise(vec2 p) {
-      vec2 i = floor(p);
-      vec2 f = fract(p);
-      vec2 u = f * f * (3.0 - 2.0 * f);
-      return mix(
-        mix(phash(i), phash(i + vec2(1.0, 0.0)), u.x),
-        mix(phash(i + vec2(0.0, 1.0)), phash(i + vec2(1.0, 1.0)), u.x),
-        u.y
-      );
     }
 
     // Interleaved gradient noise. Plain random noise clumps - by chance it puts
@@ -196,29 +184,32 @@
       // the whole field rather than a single band of it.
       col = mix(col, wine, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
-      // Grain: two octaves of the same value noise the field is made of, at
-      // roughly a pixel across. Not one random value per pixel - white noise
-      // clumps, and a clump that never moves reads as dirt on the screen
-      // rather than as grain. This is what the tiled SVG grain was made of
-      // too, drawn now instead of repeated. It goes on the field's own colour,
-      // so it thins out with the field and never lands on the page's black.
+      // Grain: one value per pixel, which is as fine as grain can be drawn.
+      // Anything built on a lattice, however small, is grain a pixel and a bit
+      // across and reads coarser than the tiled grain it replaced. It goes on
+      // the field's own colour, so it thins out with the field and never lands
+      // on the page's black.
       vec2 gp = gl_FragCoord.xy;
-      float g = pnoise(gp * 0.8) * 0.62 + pnoise(gp * 1.9) * 0.38;
-      col += (g - 0.5) * 0.05;
+      col += (phash(gp) - 0.5) * 0.05;
 
       // One level of dither underneath it, well below anything the eye reads
       // as texture, so the smooth parts of the field cannot step either.
       col += (ign(gp) - 0.5) / 255.0;
 
-      // The field dissolves into the page's black rather than ramping into it.
-      // The ramp is still there - a pixel is not simply page or field, which is
-      // what made the last attempt look like sand - but where each pixel sits
-      // on that ramp is jittered. The place where one 8-bit step would meet the
-      // next is scattered over a third of the band instead of drawn as a line,
-      // which is the banding gone without a hard edge anywhere.
+      // The field dissolves into the page's black rather than ramping into it,
+      // and it dissolves along the same kind of shape it is made of: the matte
+      // is one more sample of the same noise, so the field breaks up into soft
+      // patches on the way down instead of thinning evenly. Jittering the ramp
+      // per pixel was the earlier attempt at this, and per-pixel speckle over a
+      // third of the screen is what read as sand.
+      //
+      // It takes the banding with it either way. The edge between one 8-bit
+      // step and the next can only show when it lies along a straight line, and
+      // here there is no straight line for it to lie along.
       vec3 page = vec3(0.043, 0.047, 0.055);  // #0b0c0e, the page itself
       float fade = smoothstep(0.0, 0.42, uv.y);
-      col = mix(page, col, clamp(fade + (ign(gp.yx + 23.7) - 0.5) * 0.35, 0.0, 1.0));
+      float matte = fbm(p * 1.1 + vec2(3.7, 11.3));
+      col = mix(page, col, clamp(fade * 1.5 - 0.25 + (matte - 0.5) * 0.9, 0.0, 1.0));
 
       gl_FragColor = vec4(col, 1.0);
     }
