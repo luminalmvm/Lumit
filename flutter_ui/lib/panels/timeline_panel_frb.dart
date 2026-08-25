@@ -337,6 +337,19 @@ const double _blockHandleGrab = 11;
 const double _zoomGlyphSmall = 9;
 const double _zoomGlyphLarge = 14;
 
+/// How much one step of the zoom is worth — a press of `=` / `-`, or a click
+/// on one of the landscapes flanking the slider (§6.5). A doubling, which is
+/// what After Effects' own keys do: the wheel's gentler notch is for a hand
+/// that can keep rolling, and a discrete step is one jump.
+const double zoomKeyStep = 2;
+
+/// The zoom one step [inward] (or out) of [zoom], within the range the slider
+/// covers — the whole composition at 1, [maxZoom] at the far end.
+double zoomNudged(double zoom,
+        {required bool inward, required double maxZoom}) =>
+    (inward ? zoom * zoomKeyStep : zoom / zoomKeyStep)
+        .clamp(1.0, maxZoom < 1 ? 1.0 : maxZoom);
+
 /// How near the end of a bar counts as grabbing its edge to trim rather than its
 /// middle to move.
 const double _trimGrab = 8;
@@ -1788,11 +1801,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   bool _syncingScroll = false;
 
-  /// How much one press of the zoom keys is worth. A doubling, which is what
-  /// After Effects' `=`/`-` do: the wheel's gentler notch is for a hand that
-  /// can keep rolling, and a key press is one discrete jump.
-  static const double _zoomKeyStep = 2;
-
   /// The zoom `\` came away from, so pressing it again goes back there. Null
   /// until it has been used, and dropped by any other zoom — going back to a
   /// magnification the user has since left is not what "the previous zoom"
@@ -2366,10 +2374,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // still, because a key press has no pointer to zoom about — the same
     // answer the bottom bar's slider gives (K-293).
     if (action == 'timeline.zoom.in' || action == 'timeline.zoom.out') {
-      final step =
-          action == 'timeline.zoom.in' ? _zoomKeyStep : 1 / _zoomKeyStep;
       _zoomBeforeFit = null;
-      _setZoom((_zoomMotion.target * step).clamp(1.0, _maxZoom));
+      _setZoom(zoomNudged(_zoomMotion.target,
+          inward: action == 'timeline.zoom.in', maxZoom: _maxZoom));
       return true;
     }
     if (action == 'timeline.zoom.fit') {
@@ -10798,9 +10805,41 @@ class _LaneBottomBar extends StatelessWidget {
   /// Painter-drawn and small, both deliberately: the pair only says
   /// "less / more" if the sizes plainly differ, and an Iconoir glyph under
   /// 16px crunches (K-209), so these are filled shapes with no stroke to lose.
+  /// One end of the slider: the landscape, and **a click on it nudges the
+  /// zoom one step** (§6.5). The pair had been decoration — a picture of what
+  /// the two ends mean — while every other icon in this bar does something,
+  /// and a step at a time is exactly what a slider is bad at.
+  ///
+  /// The glyph keeps its drawn size and its place; only the height of what
+  /// takes the click grows, to the bar's own, so aiming at the smaller of the
+  /// two is not a test of aim. The step is the keys' step, so the slider's
+  /// ends and `=` / `-` cannot disagree.
+  Widget _zoomEnd(LumitTheme t, {required bool inward}) {
+    final size = inward ? _zoomGlyphLarge : _zoomGlyphSmall;
+    return LumitTooltip(
+      message: inward ? l10n.tipZoomIn : l10n.tipZoomOut,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          key: ValueKey<String>('tl-zoom-${inward ? 'in' : 'out'}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () =>
+              onZoom(zoomNudged(zoom, inward: inward, maxZoom: maxZoom)),
+          child: SizedBox(
+            width: size,
+            height: t.density.secondaryRow,
+            child: Center(
+              child: lumitIcon(LumitIcon.zoomExtent,
+                  size: size, color: t.textMuted),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   List<Widget> _zoomAndMagnet(LumitTheme t) => [
-        lumitIcon(LumitIcon.zoomExtent,
-            size: _zoomGlyphSmall, color: t.textMuted),
+        _zoomEnd(t, inward: false),
         const SizedBox(width: 4),
         LumitTooltip(
           message: l10n.tipZoomPercent('${(zoom * 100).round()}'),
@@ -10825,8 +10864,7 @@ class _LaneBottomBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 4),
-        lumitIcon(LumitIcon.zoomExtent,
-            size: _zoomGlyphLarge, color: t.textMuted),
+        _zoomEnd(t, inward: true),
         const SizedBox(width: 6),
         LumitTooltip(
           message: magnet ? l10n.tipSnapOn : l10n.tipSnapOff,

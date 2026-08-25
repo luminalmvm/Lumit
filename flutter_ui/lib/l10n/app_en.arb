@@ -5611,6 +5611,14 @@
   "@tipViewerToneMap": {
     "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this sentence is the only description of it. \"The knee\" is where the rolloff starts; \"what is up there\" means detail brighter than the display can show. Preview only."
   },
+  "tipZoomIn": "Zoom in",
+  "@tipZoomIn": {
+    "description": "Tooltip on the large landscape glyph at the right end of the Timeline's zoom slider. Clicking it zooms one step in."
+  },
+  "tipZoomOut": "Zoom out",
+  "@tipZoomOut": {
+    "description": "Tooltip on the small landscape glyph at the left end of the Timeline's zoom slider. Clicking it zooms one step out."
+  },
   "tipZoomPercent": "Zoom — {percent}%",
   "@tipZoomPercent": {
     "description": "Tooltip on the Timeline's zoom slider. {percent} is a whole number.",

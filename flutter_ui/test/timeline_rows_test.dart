@@ -72,6 +72,23 @@ void main() {
     });
   });
 
+  group('The slider\'s two landscapes nudge the zoom (§6.5)', () {
+    test('a step is a doubling either way', () {
+      expect(zoomNudged(4, inward: true, maxZoom: 64), 8);
+      expect(zoomNudged(4, inward: false, maxZoom: 64), 2);
+      expect(zoomKeyStep, 2);
+    });
+
+    test('the ends of the slider are the ends of the nudge', () {
+      // The whole composition, and no further out than that.
+      expect(zoomNudged(1, inward: false, maxZoom: 64), 1);
+      expect(zoomNudged(1.5, inward: false, maxZoom: 64), 1);
+      expect(zoomNudged(48, inward: true, maxZoom: 64), 64);
+      // A comp shorter than full zoom-in shows has nowhere to travel.
+      expect(zoomNudged(1, inward: true, maxZoom: 1), 1);
+    });
+  });
+
   group('Lane keys travel with a bar being moved (§6.26)', () {
     test('a move carries them, an edge trim does not', () {
       expect(keyShiftOf(barDragPreview('a', BarGrab.move, 12), 'a'), 12);
