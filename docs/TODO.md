@@ -59,6 +59,10 @@ format is the owner's own later; Mix keeps its name (K-563); multi-window stays 
   colours inherit from the folder, an item's own colour overriding; B2 is built.
 - R: the easing panel grows editable custom easings that persist with the user (the
   Flow-plugin shape), on the docked panel that exists.
+- B11's shelf half (owner, 2026-08-25): a project-stored swatch list shown inside the
+  colour picker - saved colours you click to apply, stored in the `.lum`, one op, its
+  own undo step. The reference half (a parameter remembering it uses a token, edits
+  propagating) is explicitly NOT commissioned.
 
 **FP3 - engine features.**
 - The three Settings pages, engine first (K-465's omitted nav entries): audio output
