@@ -14,6 +14,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';

@@ -26,6 +26,7 @@ import 'package:lumit_flutter/panels/effects_presets_panel_frb.dart';
 import 'package:lumit_flutter/panels/scopes_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/dock.dart';
