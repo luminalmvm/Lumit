@@ -2011,8 +2011,32 @@ class _PopupScope extends InheritedWidget {
   bool updateShouldNotify(_PopupScope old) => old.depth != depth;
 }
 
+/// A window point in the coordinate space of the overlay that is going to draw
+/// it (K-560).
+///
+/// **In plain terms.** A control says where it is with `localToGlobal`, which
+/// answers in window pixels. A popup is not laid out in the window, though — it
+/// is laid out inside an [Overlay], and the two only agree while nothing
+/// between them moves or resizes the picture. The UI scale does exactly that
+/// (widgets/ui_scale.dart), so at 125% a menu opened halfway down the window
+/// was placed a quarter of the way further down again. Asking the overlay's own
+/// box to convert the point undoes whatever is between the two, at any scale,
+/// and is the identity when there is nothing.
+///
+/// An overlay with no box yet — nothing has laid it out — leaves the point
+/// alone, which is the old behaviour and always right at 1×.
+Offset overlayLocal(BuildContext context, Offset windowPoint) {
+  final box = Overlay.of(context).context.findRenderObject();
+  return box is RenderBox && box.hasSize
+      ? box.globalToLocal(windowPoint)
+      : windowPoint;
+}
+
 Future<T?> showLumitPopup<T>({
   required BuildContext context,
+  // Where the popup is anchored, in **window** coordinates — what a control's
+  // `localToGlobal` hands back. It is converted into the overlay's own space
+  // here (K-560), once, so no call site has to know what is between them.
   required Offset position,
   required Widget Function(void Function(T?) close) builder,
   // Whether what is underneath still feels the pointer while this popup is up.
@@ -2022,6 +2046,7 @@ Future<T?> showLumitPopup<T>({
   bool hoverThrough = false,
 }) {
   final overlay = Overlay.of(context);
+  final anchor = overlayLocal(context, position);
   final completer = Completer<T?>();
   late OverlayEntry entry;
   late _PopupHandle handle;
@@ -2072,7 +2097,7 @@ Future<T?> showLumitPopup<T>({
           ),
           Positioned.fill(
             child: CustomSingleChildLayout(
-              delegate: _PopupLayout(position),
+              delegate: _PopupLayout(anchor),
               // Scrolls only when it has to: a shorter popup shrink-wraps and
               // behaves exactly as before.
               child: SingleChildScrollView(

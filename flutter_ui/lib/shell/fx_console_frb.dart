@@ -155,8 +155,12 @@ Future<void> showFxConsoleFrb({
     entry.remove();
   }
 
+  // The anchor arrives in window coordinates and the console is laid out in
+  // the overlay's own space, which is not the same space at any UI scale but
+  // 100% (K-560) — so it is converted here, exactly as a popup's is.
+  final at = anchor == null ? null : overlayLocal(context, anchor);
   entry = OverlayEntry(
-    builder: (_) => _FxConsole(model: model, anchor: anchor, onClose: close),
+    builder: (_) => _FxConsole(model: model, anchor: at, onClose: close),
   );
   overlay.insert(entry);
   return completer.future;

@@ -451,9 +451,13 @@ class _GhostLayer extends StatelessWidget {
           final panel = drag.dragged;
           final t = drag.theme;
           if (panel == null || t == null) return const SizedBox.shrink();
+          // The pointer is a window coordinate and the pill is placed in the
+          // overlay's own space; at any UI scale but 100% those differ, and
+          // the pill would trail the pointer by the difference (K-560).
+          final at = overlayLocal(context, drag.pointer);
           return Positioned(
-            left: drag.pointer.dx + 10,
-            top: drag.pointer.dy + 8,
+            left: at.dx + 10,
+            top: at.dy + 8,
             child:
                 IgnorePointer(child: _GhostPill(title: panel.title, theme: t)),
           );
