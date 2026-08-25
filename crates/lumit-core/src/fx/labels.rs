@@ -55,15 +55,18 @@ pub fn user_facing_labels() -> BTreeSet<String> {
         out.insert(category.label().to_owned());
     }
     // The graph canvas's own words (K-471): the two derived nodes, the ports
-    // no schema declares, and every driver's declared output. The bridge draws
-    // a socket from each, so each is a word the engine can send.
+    // no schema declares, and every declared data port — a driver's outputs, a
+    // driver's wire-only inputs (K-492), and a picture operation's data outputs
+    // such as Particulate's Points. The bridge draws a socket from each, so
+    // each is a word the engine can send.
     out.insert(crate::graph::SOURCE_LABEL.to_owned());
     out.insert(crate::graph::OUT_LABEL.to_owned());
     for port in crate::graph::DERIVED_PORTS {
         out.insert(port.label.to_owned());
     }
     for def in super::BUILTIN_DEFS.iter() {
-        for port in def.signature().outputs() {
+        let signature = def.signature();
+        for port in signature.inputs().iter().chain(signature.outputs()) {
             out.insert(port.label.to_owned());
         }
     }

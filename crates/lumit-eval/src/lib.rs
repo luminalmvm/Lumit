@@ -297,6 +297,15 @@ fn feed_edge(h: &mut blake3::Hasher, edge: &lumit_core::graph::Edge) {
             h.update(node.as_bytes());
             name(h, port);
         }
+        // A points wire is an edge like any other, so it folds like one
+        // (points-stream.md §3.4): cutting it names a different frame, and no
+        // new term is needed to say so. A fresh tag byte, so the two id-and-port
+        // shapes above cannot hash alike with it.
+        OutputRef::EffectData { effect, port } => {
+            h.update(&[2]);
+            h.update(effect.as_bytes());
+            name(h, port);
+        }
     }
     match &edge.to {
         InputRef::Matte { effect } => {

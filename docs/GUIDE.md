@@ -9356,6 +9356,17 @@ into Particulate's own settings (say, wiring Count into Emit rate). That is a lo
 particles would depend on a number that depends on the particles — and like every other
 loop it is refused calmly when you try to connect it, rather than half-working.
 
+**And one rule about *order*.** When a points wire joins two boxes that are both in the
+effect list, the one making the particles has to sit **above** the one reading them —
+because a later effect's stream can depend on the picture arriving at it, and that picture
+is not made yet when something earlier asks for it. Drawn the wrong way round, the wire is
+refused with the same "this would close a loop" message. But dragging the effects into a
+new order is a different matter: rearranging the list is an edit to the *list*, and Lumit
+will not refuse a perfectly ordinary drag because of a wire somewhere else. So if you drag
+the producer below its reader, the wire is quietly dropped as part of that same drag —
+one action, one undo. It is the same thing that happens when you delete the effect a wire
+is plugged into: the wire goes with it, rather than being left pointing at nothing.
+
 **What comes later** plugs into the same socket: Connect points (lines between nearby
 particles), Clone to points (a layer stamped at every particle), Trail, Scatter, and
 emitting particles from the image's own bright pixels. Each is a named future package;

@@ -79,6 +79,7 @@ impl EffectDef for AudioLevelDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
+            inputs: &[],
             outputs: &[
                 Port {
                     id: AMPLITUDE_PORT,

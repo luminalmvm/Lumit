@@ -95,6 +95,18 @@ pub enum OutputRef {
     /// render (§1.4). It overrides the effect's Matte *parameter* while it
     /// exists.
     SourceMatte,
+    /// A **stack** effect's declared data output — the first wire whose source
+    /// is an effect rather than a driver (K-492, points-stream.md §1.1).
+    ///
+    /// The effect goes on making its picture for the chain; this taps the data
+    /// it declares beside it, which today means Particulate's Points stream.
+    /// A data edge, never an image edge: it cannot reorder, branch or skip the
+    /// chain, so `Layer::effects` is still the picture's only authority.
+    EffectData {
+        effect: Uuid,
+        /// The port's stable id, as the effect's signature declares it.
+        port: String,
+    },
 }
 
 /// Where a wire goes.
@@ -225,6 +237,44 @@ pub fn truncated_effects(
     Some(std::sync::Arc::new(copy))
 }
 
+/// Whether `edge` obeys the **downstream-only** rule for a stack-to-stack data
+/// wire (K-492, points-stream.md §1.2): the producing effect must sit strictly
+/// earlier in `effects` than the consuming one.
+///
+/// **Why the rule exists.** A points stream is data, but a stack consumer reads
+/// it *at its own position in the chain*. When an emit-from-image producer makes
+/// its stream depend on the picture arriving at it, a wire pointing back up the
+/// stack would ask for a stream that is not defined yet — the consumer's own
+/// output would be part of its input. Requiring the producer to be upstream is
+/// what keeps that question answerable, and is the recorded carve-out.
+///
+/// `true` for everything else: a driver's wire, the source matte, and a data
+/// wire into a *driver*, which is not in the chain and so has no position in it.
+/// An edge naming an effect the stack does not carry is `true` here too —
+/// dangling is [`LayerGraph::prune_to`]'s business and `UnknownNode`'s, not this
+/// rule's.
+fn flows_down_the_stack(edge: &Edge, effects: &[EffectInstance]) -> bool {
+    let (
+        OutputRef::EffectData {
+            effect: producer, ..
+        },
+        InputRef::Param {
+            node: NodeRef::Effect(consumer),
+            ..
+        },
+    ) = (&edge.from, &edge.to)
+    else {
+        return true;
+    };
+    let at = |id: &Uuid| effects.iter().position(|e| e.id == *id);
+    match (at(producer), at(consumer)) {
+        // Strictly earlier — so an effect can never feed its own data input
+        // either, which is the smallest loop of all.
+        (Some(from), Some(to)) => from < to,
+        _ => true,
+    }
+}
+
 impl LayerGraph {
     /// Whether this layer carries no wiring at all — the overwhelming case, and
     /// what keeps the field out of the saved file.
@@ -256,15 +306,31 @@ impl LayerGraph {
     ///
     /// Only `NodeRef::Effect` entries are considered: a driver, the Source and
     /// the Layer out are not the effect stack's to remove.
+    ///
+    /// Two things dangle now that a wire can *source* from an effect (K-492).
+    /// A removed producer takes its outgoing data wires with it, exactly as a
+    /// removed consumer takes its incoming ones. And a **reorder** can break a
+    /// wire without removing anything at all: a stack-to-stack points wire must
+    /// flow down the stack (§1.2), so dragging the producer below its consumer
+    /// inverts it. That is still a stack edit, still not refusable on the
+    /// wiring's behalf, so it heals here the same way — the edge is dropped,
+    /// inside the same commit and so inside the same undo step.
     pub fn prune_to(&mut self, effects: &[EffectInstance]) -> bool {
         let alive = |id: &Uuid| effects.iter().any(|e| e.id == *id);
         let gone = |node: &NodeRef| matches!(node, NodeRef::Effect(id) if !alive(id));
         let before = (self.edges.len(), self.layout.len(), self.exposed.len());
-        // A wire's *source* is a driver or the layer's own alpha, neither of
-        // which the stack can remove — only its destination can dangle.
-        self.edges.retain(|e| match &e.to {
-            InputRef::Param { node, .. } => !gone(node),
-            InputRef::Matte { effect } => alive(effect),
+        self.edges.retain(|e| {
+            // The source: a driver or the layer's own alpha is not the stack's
+            // to remove, but an effect is.
+            let source_stands = match &e.from {
+                OutputRef::Driver { .. } | OutputRef::SourceMatte => true,
+                OutputRef::EffectData { effect, .. } => alive(effect),
+            };
+            let destination_stands = match &e.to {
+                InputRef::Param { node, .. } => !gone(node),
+                InputRef::Matte { effect } => alive(effect),
+            };
+            source_stands && destination_stands && flows_down_the_stack(e, effects)
         });
         self.layout.retain(|(node, _)| !gone(node));
         self.exposed.retain(|node| !gone(node));
@@ -299,27 +365,60 @@ impl LayerGraph {
             if self.edges[..i].iter().any(|e| e.to == edge.to) {
                 return Err(GraphError::InputAlreadyWired);
             }
-            let from = self.output_type(&edge.from)?;
+            // The downstream-only rule (K-492) is about where the two *boxes*
+            // sit, not about what their sockets carry, so it is answered before
+            // any port is looked up — a wire drawn back up the stack gets the
+            // loop sentence whether or not its ports would have matched, which
+            // is the honest reading of what such a wire asks for.
+            if !flows_down_the_stack(edge, effects) {
+                return Err(GraphError::Cycle);
+            }
+            let from = self.output_type(&edge.from, effects)?;
             let to = self.input_type(&edge.to, effects)?;
             if from != to {
                 return Err(GraphError::PortTypeMismatch);
             }
         }
-        self.check_acyclic()
+        self.check_acyclic(effects)
     }
 
     /// The type a wire's source carries.
-    fn output_type(&self, from: &OutputRef) -> Result<PortType, GraphError> {
+    fn output_type(
+        &self,
+        from: &OutputRef,
+        effects: &[EffectInstance],
+    ) -> Result<PortType, GraphError> {
         match from {
             OutputRef::SourceMatte => Ok(PortType::Matte),
             OutputRef::Driver { node, port } => {
                 let inst = self.node(*node).ok_or(GraphError::UnknownNode)?;
-                let def = crate::fx::BUILTIN_DEFS
-                    .get(&inst.effect.match_name)
+                Self::def_of(inst)?
+                    .signature()
+                    .output(port)
+                    .ok_or(GraphError::UnknownPort)
+            }
+            // A stack effect's declared data output — the signature answers for
+            // it exactly as it answers for a driver's, which is why the seam and
+            // the validator read one method whichever kind an entry is.
+            OutputRef::EffectData { effect, port } => {
+                let inst = effects
+                    .iter()
+                    .find(|e| e.id == *effect)
                     .ok_or(GraphError::UnknownNode)?;
-                def.signature().output(port).ok_or(GraphError::UnknownPort)
+                Self::def_of(inst)?
+                    .signature()
+                    .output(port)
+                    .ok_or(GraphError::UnknownPort)
             }
         }
+    }
+
+    /// The catalogue entry behind an instance. An effect this build does not
+    /// know has no ports to wire, which is the same answer a missing node gets.
+    fn def_of(inst: &EffectInstance) -> Result<&'static dyn crate::fx::EffectDef, GraphError> {
+        crate::fx::BUILTIN_DEFS
+            .get(&inst.effect.match_name)
+            .ok_or(GraphError::UnknownNode)
     }
 
     /// The type a wire's destination accepts.
@@ -336,10 +435,8 @@ impl LayerGraph {
                     .iter()
                     .find(|e| e.id == *effect)
                     .ok_or(GraphError::UnknownNode)?;
-                let def = crate::fx::BUILTIN_DEFS
-                    .get(&inst.effect.match_name)
-                    .ok_or(GraphError::UnknownNode)?;
-                def.schema()
+                Self::def_of(inst)?
+                    .schema()
                     .matte
                     .param()
                     .map(|_| PortType::Matte)
@@ -354,49 +451,79 @@ impl LayerGraph {
                     NodeRef::Source | NodeRef::Out => None,
                 }
                 .ok_or(GraphError::UnknownNode)?;
-                let def = crate::fx::BUILTIN_DEFS
-                    .get(&inst.effect.match_name)
-                    .ok_or(GraphError::UnknownNode)?;
+                let def = Self::def_of(inst)?;
                 def.schema()
                     .params
                     .iter()
                     .find(|p| p.id == port)
                     .and_then(|p| p.kind.port_type())
+                    // A **declared data input** beside the schema's parameters
+                    // (K-492 §4.1): wire-only, with no stored value to fall
+                    // back on, which is why `InputRef::Param` needs no new arm
+                    // to reach it.
+                    .or_else(|| def.signature().input(port))
                     .ok_or(GraphError::UnknownPort)
             }
         }
     }
 
-    /// Refuse a loop among the driver nodes.
+    /// Refuse a loop among the driver nodes **and the effects that hand out
+    /// data** (K-492, points-stream.md §1.2).
     ///
-    /// Kahn's algorithm over the driver-to-driver wires; anything left when no
-    /// node has an unwired input is in a loop. Only drivers can close one — an
-    /// effect node is never a wire's *source*, so the image chain cannot take
-    /// part.
-    fn check_acyclic(&self) -> Result<(), GraphError> {
-        // (source driver, destination driver) for every wire between two of
-        // them, in document order — no map iteration anywhere, so the walk is
-        // the same on every machine.
+    /// Kahn's algorithm; anything left when no node has an unwired input is in
+    /// a loop. Until points wires existed only drivers could close one, because
+    /// an effect was never a wire's *source*. `OutputRef::EffectData` makes a
+    /// genuine loop constructible: Points sample reads Particulate's stream and
+    /// its Count is wired back into Particulate's Emit rate — the stream depends
+    /// on the parameters and the parameters on the stream. So the walk grows
+    /// effect nodes into it, and an effect gets a link in each direction: out of
+    /// it for the data it hands over, into it for a wire onto one of its
+    /// parameters. This is what makes the demand-driven driver walk (§1.3)
+    /// terminate, so it has to be airtight rather than nearly right.
+    ///
+    /// **The image chain is deliberately not in this link set.** An effect's
+    /// *picture* depends on the previous effect's picture, but a stream depends
+    /// only on the producer's own parameters and the time (K-474), so adding
+    /// chain links would refuse the perfectly sound arrangement of a Points
+    /// sample driving a parameter of an effect *above* its producer. The chain's
+    /// own constraint on data wires is the positional one
+    /// ([`flows_down_the_stack`]), which is checked separately and exactly where
+    /// it applies.
+    fn check_acyclic(&self, effects: &[EffectInstance]) -> Result<(), GraphError> {
+        // (source, destination) for every wire between two evaluated nodes, in
+        // document order — no map iteration anywhere, so the walk is the same on
+        // every machine.
         let links: Vec<(Uuid, Uuid)> = self
             .edges
             .iter()
-            .filter_map(|e| match (&e.from, &e.to) {
-                (
-                    OutputRef::Driver { node: from, .. },
+            .filter_map(|e| {
+                let from = match &e.from {
+                    OutputRef::Driver { node, .. } => *node,
+                    OutputRef::EffectData { effect, .. } => *effect,
+                    OutputRef::SourceMatte => return None,
+                };
+                let to = match &e.to {
                     InputRef::Param {
-                        node: NodeRef::Driver(to),
+                        node: NodeRef::Driver(id) | NodeRef::Effect(id),
                         ..
-                    },
-                ) => Some((*from, *to)),
-                _ => None,
+                    } => *id,
+                    InputRef::Param {
+                        node: NodeRef::Source | NodeRef::Out,
+                        ..
+                    }
+                    | InputRef::Matte { .. } => return None,
+                };
+                Some((from, to))
             })
             .collect();
-        let mut settled: Vec<Uuid> = Vec::with_capacity(self.nodes.len());
+        // Drivers and effects alike: an effect that hands out data is a node in
+        // this walk, not a fixed point outside it.
+        let all: Vec<Uuid> = self.nodes.iter().chain(effects).map(|n| n.id).collect();
+        let mut settled: Vec<Uuid> = Vec::with_capacity(all.len());
         loop {
-            let ready: Vec<Uuid> = self
-                .nodes
+            let ready: Vec<Uuid> = all
                 .iter()
-                .map(|n| n.id)
+                .copied()
                 .filter(|id| !settled.contains(id))
                 .filter(|id| {
                     !links
@@ -405,7 +532,7 @@ impl LayerGraph {
                 })
                 .collect();
             if ready.is_empty() {
-                return if settled.len() == self.nodes.len() {
+                return if settled.len() == all.len() {
                     Ok(())
                 } else {
                     Err(GraphError::Cycle)
@@ -719,6 +846,384 @@ mod tests {
         let json = serde_json::to_string(&graph).expect("serialises");
         let back: LayerGraph = serde_json::from_str(&json).expect("deserialises");
         assert_eq!(back, graph);
+    }
+
+    // -----------------------------------------------------------------------
+    // The points edge (K-492, points-stream.md §1).
+    // -----------------------------------------------------------------------
+
+    /// A wire out of a stack effect's declared data output.
+    fn points_edge(producer: &EffectInstance, to: InputRef) -> Edge {
+        Edge {
+            from: OutputRef::EffectData {
+                effect: producer.id,
+                port: "points".to_owned(),
+            },
+            to,
+        }
+    }
+
+    /// A wire onto a stack effect's parameter socket.
+    fn onto(effect: &EffectInstance, port: &str) -> InputRef {
+        InputRef::Param {
+            node: NodeRef::Effect(effect.id),
+            port: port.to_owned(),
+        }
+    }
+
+    /// §1.1: the first wire whose source is a *stack* effect survives the file
+    /// format like every other, effect id and port id both.
+    #[test]
+    fn a_points_edge_round_trips_through_json() {
+        let particulate = inst("particulate");
+        let blur = inst("blur");
+        let graph = LayerGraph {
+            edges: vec![points_edge(&particulate, onto(&blur, "radius"))],
+            layout: vec![(NodeRef::Effect(particulate.id), [8.0, 16.0])],
+            ..LayerGraph::default()
+        };
+        let json = serde_json::to_string(&graph).expect("serialises");
+        let back: LayerGraph = serde_json::from_str(&json).expect("deserialises");
+        assert_eq!(back, graph);
+        assert_eq!(
+            back.wire_into(&onto(&blur, "radius")),
+            Some(&OutputRef::EffectData {
+                effect: particulate.id,
+                port: "points".to_owned(),
+            }),
+            "and the wire is findable by its destination, as a driver's is"
+        );
+    }
+
+    /// §1.1 and §4.1: a stack effect's declared data output is looked up through
+    /// its signature, exactly as a driver's output is — so a port Particulate
+    /// does not declare is refused, and so is one on an effect that declares no
+    /// data output at all.
+    #[test]
+    fn an_effect_data_wire_names_a_port_the_signature_declares() {
+        let particulate = inst("particulate");
+        let smooth = inst("smooth");
+        let effects = vec![particulate.clone()];
+
+        // The real port, into a driver socket of the wrong type: found, and
+        // refused for the type rather than for the name.
+        let graph = LayerGraph {
+            nodes: vec![smooth.clone()],
+            edges: vec![points_edge(
+                &particulate,
+                InputRef::Param {
+                    node: NodeRef::Driver(smooth.id),
+                    port: "value".to_owned(),
+                },
+            )],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            graph.validate(&effects),
+            Err(GraphError::PortTypeMismatch),
+            "a points stream is not a number"
+        );
+
+        // A port name Particulate does not declare.
+        let mut graph = graph;
+        let OutputRef::EffectData { port, .. } = &mut graph.edges[0].from else {
+            unreachable!()
+        };
+        *port = "no_such_output".into();
+        assert_eq!(graph.validate(&effects), Err(GraphError::UnknownPort));
+
+        // An effect that declares no data output has none to tap.
+        let blur = inst("blur");
+        let graph = LayerGraph {
+            nodes: vec![smooth.clone()],
+            edges: vec![points_edge(
+                &blur,
+                InputRef::Param {
+                    node: NodeRef::Driver(smooth.id),
+                    port: "value".to_owned(),
+                },
+            )],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            graph.validate(std::slice::from_ref(&blur)),
+            Err(GraphError::UnknownPort)
+        );
+
+        // And an effect the stack does not carry at all.
+        let graph = LayerGraph {
+            nodes: vec![smooth],
+            edges: vec![points_edge(
+                &particulate,
+                InputRef::Param {
+                    node: NodeRef::Driver(inst("smooth").id),
+                    port: "value".to_owned(),
+                },
+            )],
+            ..LayerGraph::default()
+        };
+        assert_eq!(graph.validate(&[]), Err(GraphError::UnknownNode));
+    }
+
+    /// The recorded carve-out (K-492, §1.2): a stack-to-stack points wire flows
+    /// **down** the stack. Tested in both directions, and on the smallest loop
+    /// of all — an effect wired into itself.
+    #[test]
+    fn a_stack_to_stack_points_wire_must_flow_down_the_stack() {
+        let particulate = inst("particulate");
+        let blur = inst("blur");
+        let wire = |effects: Vec<EffectInstance>, to: &EffectInstance| {
+            let graph = LayerGraph {
+                edges: vec![points_edge(&particulate, onto(to, "points_in"))],
+                ..LayerGraph::default()
+            };
+            graph.validate(&effects)
+        };
+
+        // Producer above consumer: not refused for its direction. (It is
+        // refused for its port — no stack effect declares a Points input until
+        // the family lands — which is exactly the answer that proves the
+        // ordering rule let it through.)
+        assert_eq!(
+            wire(vec![particulate.clone(), blur.clone()], &blur),
+            Err(GraphError::UnknownPort),
+            "downstream is allowed to reach the port check"
+        );
+
+        // Producer below consumer: refused before any port is looked up.
+        assert_eq!(
+            wire(vec![blur.clone(), particulate.clone()], &blur),
+            Err(GraphError::Cycle),
+            "a points wire drawn back up the stack closes a loop"
+        );
+
+        // And an effect feeding its own data input: not strictly earlier than
+        // itself, so the same refusal.
+        assert_eq!(
+            wire(vec![particulate.clone()], &particulate),
+            Err(GraphError::Cycle),
+            "a producer cannot feed itself"
+        );
+    }
+
+    /// §1.2: the rule constrains the *stack*, not the whole graph. A points
+    /// wire into a **driver** has no position in the image chain to be wrong
+    /// about, wherever its producer sits.
+    #[test]
+    fn a_points_wire_into_a_driver_has_no_stack_position_to_break() {
+        let particulate = inst("particulate");
+        let blur = inst("blur");
+        let smooth = inst("smooth");
+        let graph = LayerGraph {
+            nodes: vec![smooth.clone()],
+            edges: vec![points_edge(
+                &particulate,
+                InputRef::Param {
+                    node: NodeRef::Driver(smooth.id),
+                    port: "value".to_owned(),
+                },
+            )],
+            ..LayerGraph::default()
+        };
+        // The type is wrong (a stream is not a number), but never the ordering
+        // — with the producer last in the stack as much as first.
+        for effects in [
+            vec![particulate.clone(), blur.clone()],
+            vec![blur, particulate],
+        ] {
+            assert_eq!(graph.validate(&effects), Err(GraphError::PortTypeMismatch));
+        }
+    }
+
+    /// §1.2's sharpest risk: the cycle check must walk **through** effect data
+    /// sources, or the demand-driven driver walk that PS4 builds on it would not
+    /// terminate. The v1 loop is real — a driver reads Particulate's stream and
+    /// its output is wired back into a Particulate parameter.
+    ///
+    /// Checked against the walk itself rather than through `validate`, because
+    /// the driver that declares a Points *input* arrives with Points sample and
+    /// the type check would refuse these graphs first. The link set is the part
+    /// under test and it is the part that would rot.
+    #[test]
+    fn the_cycle_walk_goes_through_an_effects_data_output() {
+        let particulate = inst("particulate");
+        let smooth = inst("smooth");
+        let stack = vec![particulate.clone()];
+
+        let stream_into = |driver: &EffectInstance| {
+            points_edge(
+                &particulate,
+                InputRef::Param {
+                    node: NodeRef::Driver(driver.id),
+                    port: "points".to_owned(),
+                },
+            )
+        };
+        let back_into_producer = |driver: &EffectInstance| {
+            param_edge(
+                driver,
+                "value",
+                NodeRef::Effect(particulate.id),
+                "emit_rate",
+            )
+        };
+
+        // One leg only: the stream feeds a driver, and nothing returns.
+        let open = LayerGraph {
+            nodes: vec![smooth.clone()],
+            edges: vec![stream_into(&smooth)],
+            ..LayerGraph::default()
+        };
+        open.check_acyclic(&stack).expect("a line is not a loop");
+
+        // Both legs: the stream depends on the parameters and the parameters on
+        // the stream.
+        let closed = LayerGraph {
+            nodes: vec![smooth.clone()],
+            edges: vec![stream_into(&smooth), back_into_producer(&smooth)],
+            ..LayerGraph::default()
+        };
+        assert_eq!(closed.check_acyclic(&stack), Err(GraphError::Cycle));
+
+        // The driver's output alone, with no stream read, is not a loop — so
+        // the refusal above is about the round trip and not about an effect
+        // merely being in the walk.
+        let driven = LayerGraph {
+            nodes: vec![smooth.clone()],
+            edges: vec![back_into_producer(&smooth)],
+            ..LayerGraph::default()
+        };
+        driven
+            .check_acyclic(&stack)
+            .expect("a driven parameter is not a loop");
+    }
+
+    /// The same walk, adversarially: loops that close through **two** producers
+    /// and two drivers, and a long line that only looks like one.
+    #[test]
+    fn a_cycle_through_two_producers_is_refused_and_a_long_line_is_not() {
+        let (p1, p2) = (inst("particulate"), inst("particulate"));
+        let (d1, d2) = (inst("smooth"), inst("remap"));
+        let stack = vec![p1.clone(), p2.clone()];
+
+        let stream = |from: &EffectInstance, to: &EffectInstance| Edge {
+            from: OutputRef::EffectData {
+                effect: from.id,
+                port: "points".to_owned(),
+            },
+            to: InputRef::Param {
+                node: NodeRef::Driver(to.id),
+                port: "points".to_owned(),
+            },
+        };
+        let drives = |from: &EffectInstance, to: &EffectInstance| {
+            param_edge(from, "value", NodeRef::Effect(to.id), "emit_rate")
+        };
+
+        // p1 → d1 → p2 → d2 → p1: four hops, no two of them adjacent.
+        let closed = LayerGraph {
+            nodes: vec![d1.clone(), d2.clone()],
+            edges: vec![
+                stream(&p1, &d1),
+                drives(&d1, &p2),
+                stream(&p2, &d2),
+                drives(&d2, &p1),
+            ],
+            ..LayerGraph::default()
+        };
+        assert_eq!(closed.check_acyclic(&stack), Err(GraphError::Cycle));
+
+        // The same four boxes with the last hop landing on a third effect
+        // instead: a line, however long.
+        let blur = inst("blur");
+        let open = LayerGraph {
+            nodes: vec![d1.clone(), d2.clone()],
+            edges: vec![
+                stream(&p1, &d1),
+                drives(&d1, &p2),
+                stream(&p2, &d2),
+                param_edge(&d2, "value", NodeRef::Effect(blur.id), "radius"),
+            ],
+            ..LayerGraph::default()
+        };
+        open.check_acyclic(&[p1.clone(), p2.clone(), blur])
+            .expect("a line is not a loop");
+
+        // Declared in reverse of evaluation order, so the walk cannot be
+        // relying on the order the boxes happen to sit in.
+        let reversed = LayerGraph {
+            nodes: vec![d2, d1],
+            edges: closed.edges.into_iter().rev().collect(),
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            reversed.check_acyclic(&[p2, p1]),
+            Err(GraphError::Cycle),
+            "a loop is a loop in whatever order it is written down"
+        );
+    }
+
+    /// §1.2: `prune_to`'s old comment — "a wire's *source* is a driver or the
+    /// layer's own alpha, neither of which the stack can remove" — stops being
+    /// true the moment a wire can source from an effect. A removed producer
+    /// takes its outgoing data wires with it.
+    #[test]
+    fn removing_a_producer_takes_its_data_wires_with_it() {
+        let particulate = inst("particulate");
+        let blur = inst("blur");
+        let mut graph = LayerGraph {
+            edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
+            layout: vec![(NodeRef::Effect(particulate.id), [0.0, 0.0])],
+            ..LayerGraph::default()
+        };
+
+        // The consumer alone stays: the producer is gone.
+        assert!(graph.prune_to(std::slice::from_ref(&blur)));
+        assert!(graph.edges.is_empty(), "the wire went with the box");
+        assert!(graph.layout.is_empty());
+
+        // And the whole stack still there prunes nothing.
+        let mut graph = LayerGraph {
+            edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
+            ..LayerGraph::default()
+        };
+        assert!(!graph.prune_to(&[particulate, blur]));
+        assert_eq!(graph.edges.len(), 1);
+    }
+
+    /// The healing half of the carve-out (K-492): a reorder that inverts a
+    /// points wire drops it, because a **stack** edit cannot be refused on the
+    /// wiring's behalf. Without this the document would hold a graph its own
+    /// validator refuses, and the next wire anybody drew would be refused for
+    /// it.
+    #[test]
+    fn an_inverting_reorder_heals_rather_than_refusing() {
+        let particulate = inst("particulate");
+        let blur = inst("blur");
+        let down = vec![particulate.clone(), blur.clone()];
+        let up = vec![blur.clone(), particulate.clone()];
+        let wired = LayerGraph {
+            edges: vec![points_edge(&particulate, onto(&blur, "points_in"))],
+            ..LayerGraph::default()
+        };
+
+        // Down the stack: nothing to heal.
+        let mut graph = wired.clone();
+        assert!(!graph.prune_to(&down));
+        assert_eq!(graph.edges.len(), 1);
+
+        // Dragged above its consumer: the wire goes.
+        let mut graph = wired.clone();
+        assert!(graph.prune_to(&up), "the reorder inverted the wire");
+        assert!(graph.edges.is_empty());
+
+        // And the state the heal prevents is genuinely unreachable: left in
+        // place, that same graph is what `validate` refuses.
+        assert_eq!(wired.validate(&up), Err(GraphError::Cycle));
+        // The pruned one is accepted against the new order, which is the
+        // property that keeps the next `SetLayerGraph` from being refused for a
+        // wire nobody drew.
+        graph.validate(&up).expect("healed, and so committable");
     }
 
     /// §4 and K-471's promise: an empty graph writes nothing at all, so a layer

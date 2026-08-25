@@ -2534,6 +2534,133 @@ mod tests {
         assert_eq!(read(&store), wired, "the undo brings the wires back");
     }
 
+    /// K-492: a **points** wire heals the two ways a stack edit can break one —
+    /// the producer removed, and the producer dragged below its consumer — and
+    /// each heal rides the same single-undo-step inverse a driver's does.
+    ///
+    /// The reorder is the new one. A stack-to-stack points wire must flow down
+    /// the stack, so a reorder can break a wire without removing anything at
+    /// all; and a reorder is a stack edit, which cannot be refused on the
+    /// wiring's behalf. Left in place the document would hold a graph its own
+    /// validator refuses, and the next wire anybody drew would be refused for
+    /// it — which is the state this test exists to prove unreachable.
+    ///
+    /// Driven through [`crate::ops::apply`] on a plain document rather than
+    /// through the store, because the effect that *declares* a Points input
+    /// arrives with the points family: until it does, no `EffectData` edge is
+    /// one `SetLayerGraph` would accept, so it could not be committed and the
+    /// undo could not put it back. The prune, the inverse's shape and the
+    /// healed graph's soundness are what is under test, and all three are here.
+    #[test]
+    fn a_points_wire_heals_on_a_removal_and_on_an_inverting_reorder() {
+        use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        let particulate = crate::fx::instantiate("particulate").expect("the catalogue knows it");
+        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let (producer, consumer) = (particulate.id, blur.id);
+
+        let wired = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::EffectData {
+                    effect: producer,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(consumer),
+                    port: "points_in".into(),
+                },
+            }],
+            layout: vec![(NodeRef::Effect(producer), [40.0, 12.0])],
+            ..LayerGraph::default()
+        };
+        let down = vec![particulate.clone(), blur.clone()];
+
+        // A document holding that stack, in wired order, with the wire on it.
+        let seeded = || {
+            let comp = test_comp();
+            let (comp_id, mut doc) = (comp.id, Document::new());
+            crate::ops::apply(
+                &mut doc,
+                &Op::AddItem {
+                    index: 0,
+                    item: Box::new(ProjectItem::Composition(comp)),
+                },
+            )
+            .expect("the comp goes in");
+            let mut layer = test_layer(Uuid::now_v7());
+            let layer_id = layer.id;
+            layer.effects = down.clone();
+            layer.graph = wired.clone();
+            crate::ops::apply(
+                &mut doc,
+                &Op::AddLayer {
+                    comp: comp_id,
+                    index: 0,
+                    layer: Box::new(layer),
+                },
+            )
+            .expect("the layer goes in");
+            (doc, comp_id, layer_id)
+        };
+        let read = |doc: &Document, comp: Uuid, layer: Uuid| -> LayerGraph {
+            doc.comp(comp)
+                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
+                .expect("the layer")
+                .graph
+                .clone()
+        };
+
+        // Each stack edit, and what the wire should do about it.
+        let cases: [(Vec<crate::model::EffectInstance>, &str); 3] = [
+            (
+                vec![blur.clone()],
+                "a removed producer takes its data wires with it",
+            ),
+            (
+                vec![blur.clone(), particulate.clone()],
+                "a reorder that inverts the wire drops it, removing nothing",
+            ),
+            (
+                down.clone(),
+                "and the producer still above its consumer keeps it",
+            ),
+        ];
+        for (effects, why) in cases {
+            let healed = effects != down;
+            let (mut doc, comp, layer) = seeded();
+            let inverse = crate::ops::apply(
+                &mut doc,
+                &Op::SetLayerEffects {
+                    comp,
+                    layer,
+                    effects: effects.clone(),
+                },
+            )
+            .expect("a stack edit is never refused on the wiring's behalf");
+
+            let after = read(&doc, comp, layer);
+            assert_eq!(after.edges.is_empty(), healed, "{why}");
+            if healed {
+                after
+                    .validate(&effects)
+                    .expect("what is left must be a graph the engine accepts");
+            }
+
+            // One undo step either way: a heal folds the graph's restoration
+            // into the stack's own inverse, stack first so the wires have
+            // their boxes back by the time the graph is validated.
+            match (&inverse, healed) {
+                (Op::Batch { ops }, true) => {
+                    assert!(
+                        matches!(ops.as_slice(), [Op::SetLayerEffects { .. }, Op::SetLayerGraph { graph, .. }] if **graph == wired),
+                        "the inverse restores the stack and then the whole graph"
+                    );
+                }
+                (Op::SetLayerEffects { .. }, false) => {}
+                _ => panic!("{why}: unexpected inverse {inverse:?}"),
+            }
+        }
+    }
+
     /// §1.5: a graph that breaks a rule is refused, and the document it was
     /// offered to is left exactly as it was — an edit that half-applied would
     /// undo to a state that was never on screen.

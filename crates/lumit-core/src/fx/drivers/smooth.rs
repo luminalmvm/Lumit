@@ -76,6 +76,7 @@ impl EffectDef for SmoothDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
+            inputs: &[],
             outputs: &[Port {
                 id: VALUE_PORT,
                 label: "Value",

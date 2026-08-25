@@ -79,8 +79,17 @@ pub enum Signature {
         /// whichever kind an entry is.
         extra: &'static [super::schema::Port],
     },
-    /// A driver: no image kernel, and these named output ports.
+    /// A driver: no image kernel, and these named data ports.
     Data {
+        /// The **data** input ports (K-492, points-stream.md §4.1): wire-only,
+        /// with no stored value, nothing to keyframe and no panel row.
+        ///
+        /// Empty for every driver that only reads its own parameters, which is
+        /// all of them until Points sample. A driver whose input is a *number*
+        /// declares it as an ordinary schema parameter instead — that one has a
+        /// value to fall back on when nothing is wired. A points stream has no
+        /// such value, which is the whole reason this list exists.
+        inputs: &'static [super::schema::Port],
         /// The output ports, in the order the node draws them.
         outputs: &'static [super::schema::Port],
     },
@@ -94,6 +103,29 @@ impl Signature {
         self.outputs().iter().find(|p| p.id == port).map(|p| p.ty)
     }
 
+    /// The type of the named **data input** port, or `None` for a port this
+    /// signature does not declare.
+    #[must_use]
+    pub fn input(self, port: &str) -> Option<super::schema::PortType> {
+        self.inputs().iter().find(|p| p.id == port).map(|p| p.ty)
+    }
+
+    /// This signature's declared **data** input ports — a driver's wire-only
+    /// inputs, and empty for a picture operation.
+    ///
+    /// A picture operation's image and matte inputs are not here: they are
+    /// drawn from `INPUT_PORT` and the schema's matte row at the seam, exactly
+    /// as its image *output* is. When the points family gives a stack effect a
+    /// Points input, this is the method that grows to answer for it, and every
+    /// caller already reads it.
+    #[must_use]
+    pub fn inputs(self) -> &'static [super::schema::Port] {
+        match self {
+            Signature::Image { .. } => &[],
+            Signature::Data { inputs, .. } => inputs,
+        }
+    }
+
     /// This signature's **data** output ports: a driver's declared outputs, or
     /// a picture operation's declared extras — empty for all but Particulate.
     ///
@@ -104,7 +136,7 @@ impl Signature {
     pub fn outputs(self) -> &'static [super::schema::Port] {
         match self {
             Signature::Image { extra } => extra,
-            Signature::Data { outputs } => outputs,
+            Signature::Data { outputs, .. } => outputs,
         }
     }
 }

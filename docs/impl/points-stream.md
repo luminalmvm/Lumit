@@ -87,8 +87,12 @@ Validation (`LayerGraph::validate`, same refusals, same calm messages):
   the producer's *input picture*, the stream at the consumer's position is already
   well-defined. A `SetLayerEffects` reorder that would invert a points wire **heals**
   (drops the edge) inside `prune_to`, the same rule as deleting the producer — the stack
-  edit cannot be refused on the wiring's behalf (node-graph.md §3). The rule and its
-  test land with the first stack consumer; v1 has none to enforce it on.
+  edit cannot be refused on the wiring's behalf (node-graph.md §3). Both halves landed
+  with PS3 rather than waiting for the first stack consumer: the rule is positional, so it
+  is answered from the two boxes' places in the list before any port is looked up, and
+  landing it early means the healing path exists before anything can reach the state it
+  prevents. The refusal is the existing `Cycle` sentence — a wire drawn back up the stack
+  is asking for the consumer's own output as part of its input.
 - **The cycle check walks through effect data sources.** v1 makes a genuine cycle
   constructible: Points sample reads Particulate's stream, and its Count output is wired
   into Particulate's Emit rate — the stream depends on the parameters, the parameters on
@@ -319,11 +323,13 @@ particulate.md, and docs/13 §7.3 gains the four budget rows (gated in PS7).
 
 ### PS3 — The points edge
 
-`OutputRef::EffectData`, `LayerGraph::validate`'s new arms (§1.2: type via signature,
-cycle check through effect data sources), `prune_to`'s source arm (and its corrected
-comment), serialisation round-trip. The bridge half of the edge: `BridgeOutputRef::
-EffectData`, effect boxes reporting signature extra outputs, `catalogue_ports`, docs/17
-§"The layer graph" gaining the arm.
+`OutputRef::EffectData`, `Signature::Data`'s `inputs` half of §4.1 (PS1 landed the
+outputs), `LayerGraph::validate`'s new arms (§1.2: type via signature, the downstream-only
+rule, cycle check through effect data sources), `prune_to`'s source arm and its
+inverting-reorder heal (and its corrected comment), serialisation round-trip. The bridge
+half of the edge: `BridgeOutputRef::EffectData`, effect boxes reporting signature extra
+outputs, driver boxes reporting signature data inputs, `catalogue_ports`, docs/17 §"The
+layer graph" gaining the arm.
 **Tests**: type-mismatch and cycle refusals including the Particulate ← Points sample ←
 Particulate loop of §1.2; prune on producer delete; JSON round-trip; the read model
 showing Particulate's teal output socket; old-file load → byte-identical re-save
@@ -332,7 +338,8 @@ showing Particulate's teal output socket; old-file load → byte-identical re-sa
 
 ### PS4 — The Points sample driver
 
-`Signature::Data` inputs; `crates/lumit-core/src/fx/drivers/points_sample.rs` per §2.2;
+`crates/lumit-core/src/fx/drivers/points_sample.rs` per §2.2 (the `Signature::Data` inputs
+it declares into landed with PS3);
 the driver walk gaining the layer's stack and timing context, the `EffectData` arm in
 `Eval`, and the per-producer per-frame stream memo (§3.3); `driver_window` 0; the
 empty-stream values pinned.

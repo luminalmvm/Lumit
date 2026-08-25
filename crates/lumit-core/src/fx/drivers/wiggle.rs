@@ -59,6 +59,7 @@ impl EffectDef for WiggleDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
+            inputs: &[],
             outputs: &[Port {
                 id: VALUE_PORT,
                 label: "Value",

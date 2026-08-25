@@ -295,7 +295,13 @@ impl Eval<'_> {
                 node: src,
                 port: src_port,
             } => self.output(*src, src_port, t, depth),
-            OutputRef::SourceMatte => None,
+            // Neither of these is a number a driver could be handed. The source
+            // matte is a texture; a points stream is a whole frame's particles,
+            // read through its own arm of the walk when the first driver
+            // declares a Points input (points-stream.md §3.3). Until then a
+            // socket fed by one reads as unwired, which is the documented no-op
+            // rather than a wrong number.
+            OutputRef::SourceMatte | OutputRef::EffectData { .. } => None,
         }
     }
 }

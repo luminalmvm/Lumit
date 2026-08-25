@@ -69,6 +69,7 @@ impl EffectDef for ColourCycleDef {
 
     fn signature(&self) -> Signature {
         Signature::Data {
+            inputs: &[],
             outputs: &[Port {
                 id: COLOUR_PORT,
                 label: "Colour",
