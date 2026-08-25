@@ -728,6 +728,90 @@ pub fn request(job: Job) -> Requested {
     Requested::Started
 }
 
+/// Every cached solve a document could be holding, as warm-pass jobs: one for
+/// each footage item a layer wears an enabled Camera track on.
+///
+/// Read off the document straight after its media is relinked, which is when
+/// `absolute_path` and the fingerprint are both filled in — no file is opened
+/// here and none is opened by the jobs, which carry `analyse: false` and
+/// therefore never get past the sidecar probe.
+///
+/// One job per **media**, not per layer: two layers cutting the same shot at the
+/// same settings are one analysis, and at different settings they are two
+/// answers only one of which the store can hold. First in document order wins,
+/// which is stable.
+///
+/// A footage item with no fingerprint or no resolved path is skipped: it is
+/// offline, and there is nothing to name a solve with.
+#[must_use]
+pub fn warm_jobs(doc: &Document) -> Vec<Job> {
+    let mut seen: std::collections::HashSet<Uuid> = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for item in &doc.items {
+        let lumit_core::model::ProjectItem::Composition(comp) = item else {
+            continue;
+        };
+        for layer in &comp.layers {
+            let LayerKind::Footage { item: media } = layer.kind else {
+                continue;
+            };
+            if camera_track_effect(layer).is_none() || !seen.insert(media) {
+                continue;
+            }
+            let Some(footage) = doc.items.iter().find_map(|i| match i {
+                lumit_core::model::ProjectItem::Footage(f) if f.id == media => Some(f),
+                _ => None,
+            }) else {
+                continue;
+            };
+            let (Some(fingerprint), false) = (
+                footage.media.fingerprint.as_ref(),
+                footage.media.absolute_path.is_empty(),
+            ) else {
+                continue;
+            };
+            if let Some(job) = job_for(
+                layer,
+                PathBuf::from(&footage.media.absolute_path),
+                fingerprint,
+                false,
+            ) {
+                out.push(job);
+            }
+        }
+    }
+    out
+}
+
+/// Read every one of `jobs` back out of the sidecar, on one thread, filling the
+/// store with whatever is already there. What opening a project does (K-417):
+/// until this runs, a solve-linked camera resolves only after somebody presses
+/// Analyse in the session, though the answer was on the disk all along.
+///
+/// **Not [`request`], deliberately.** `request` owns the one-analysis-at-a-time
+/// slot, so warming the second tracked clip of a project would answer
+/// [`Requested::Busy`] and simply not happen. A warm pass is a small file read
+/// per clip and nothing else — no decoder, no minutes — so the whole batch runs
+/// on one thread of its own, claims no slot, and cannot collide with an analysis
+/// the user starts while it is going.
+///
+/// `analyse` is forced off on the way past: nothing this function is handed may
+/// start tracking a clip nobody asked about.
+pub fn warm(jobs: Vec<Job>) {
+    if jobs.is_empty() {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("lumit-track-warm".into())
+        .spawn(move || {
+            let never = AtomicBool::new(false);
+            for mut job in jobs {
+                job.analyse = false;
+                run(job, &never);
+            }
+        });
+}
+
 /// Stop `media`'s analysis. Running: the flag is raised and the run ends between
 /// frames or inside the solve. Not running: the reading is set to cancelled, so
 /// a job still waiting to start does not.
@@ -1456,6 +1540,53 @@ mod tests {
         (doc, comp)
     }
 
+    /// Put the footage item online: a resolved path and a stamped fingerprint,
+    /// which is what a relinked project's items carry and the only shape
+    /// [`warm_jobs`] will look at.
+    fn online(doc: &mut Document, media: Uuid, tag: &str) {
+        for item in &mut doc.items {
+            if let ProjectItem::Footage(f) = item {
+                if f.id == media {
+                    f.media.absolute_path = "shot.mov".into();
+                    f.media.fingerprint = Some(fingerprint(tag));
+                }
+            }
+        }
+    }
+
+    /// A written-down solve: a camera sliding along x, looking straight down
+    /// its own z. Every frame distinct, so a warm pass landing on the wrong one
+    /// cannot pass, and no tracking is needed to make it.
+    fn written_solve() -> CameraSolve {
+        let poses = (0..FRAMES as i64)
+            .map(|n| SolvedPose {
+                frame: n,
+                rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                position: [n as f64 * 3.0, 0.0, -FAR_Z],
+                segment: 0,
+                focal_px: FOCAL,
+                mean_reprojection_px: 0.0,
+                source: lumit_track::PoseSource::Keyframe,
+            })
+            .collect();
+        CameraSolve {
+            poses,
+            segments: vec![lumit_track::SolveSegment {
+                first_frame: 0,
+                last_frame: FRAMES as i64 - 1,
+                focal_px: FOCAL,
+                ramp: false,
+            }],
+            points: vec![lumit_track::ScenePoint {
+                track: 0,
+                position: [0.0, 0.0, 0.0],
+            }],
+            keyframes: vec![0, FRAMES as i64 - 1],
+            mean_reprojection_px: 0.0,
+            notes: Vec::new(),
+        }
+    }
+
     /// What the frame key needs to know about the shot: it is a readable video
     /// of this size at this rate. Without a probe the layer is unkeyable by
     /// design, and there would be no key to compare.
@@ -1906,6 +2037,72 @@ mod tests {
             "masking a quarter of the frame cost most of the tracks"
         );
         clear();
+    }
+
+    /// Opening a project reads its solves back, and closing it lets them go.
+    ///
+    /// The whole point of the warm pass: the analysis ran in some earlier
+    /// session, the answer has been sitting in the sidecar ever since, and the
+    /// linked camera must resolve on the first frame drawn — with nobody
+    /// pressing Analyse and nothing decoded. The job the pass builds is checked
+    /// against the key the file was written under, because a warm pass asking
+    /// for a *different* analysis would find nothing and look identical to
+    /// having no cache at all.
+    #[test]
+    fn opening_a_project_reads_its_cached_solves_back() {
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+        let media = Uuid::now_v7();
+        let (mut doc, comp) = linked_document(media);
+        online(&mut doc, media, "warm-open");
+
+        let key = AnalysisKey::new(&fingerprint("warm-open"), AnalysisSettings::default(), &[]);
+        let solve = written_solve();
+        write_sidecar(dir.path(), key, FPS, FRAMES, &solve);
+        assert_eq!(
+            linked_pose(&doc, &comp, 0.0).map(|l| l.state),
+            Some(lumit_core::track::LinkState::Unresolved),
+            "the store starts empty, so the link starts unresolved"
+        );
+
+        let jobs = warm_jobs(&doc);
+        assert_eq!(jobs.len(), 1, "one tracked clip, one warm job");
+        assert_eq!(
+            jobs[0].key, key,
+            "the warm pass asked for a different analysis from the one on disk"
+        );
+        assert!(!jobs[0].analyse, "a warm job may never start tracking");
+        warm(jobs);
+
+        let mut waited = 0;
+        while !matches!(progress(media), Some(Progress::Done)) {
+            assert!(waited < 500, "the warm pass never finished");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            waited += 1;
+        }
+
+        for n in [0i64, 5, FRAMES as i64 - 1] {
+            let got = linked_pose(&doc, &comp, n as f64 / FPS).expect("the comp has a camera");
+            assert_eq!(
+                got.state,
+                lumit_core::track::LinkState::Derived,
+                "frame {n} did not resolve without Analyse being pressed"
+            );
+            assert_eq!(Some(got.pose), solved(media).and_then(|s| s.pose(n)));
+        }
+
+        // And closing the project lets them go, without touching the file that
+        // would warm them again.
+        clear();
+        assert!(
+            solved(media).is_none(),
+            "closing kept the solve in the store"
+        );
+        assert!(
+            read_sidecar(dir.path(), key).is_some(),
+            "closing deleted the sidecar it must never touch"
+        );
     }
 
     /// The thread path: `request` accepts one analysis, refuses a second while

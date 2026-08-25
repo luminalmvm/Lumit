@@ -111,6 +111,10 @@ impl ProjectReference {
             let mut s = STREAMS.write().map_err(|_| BridgeError::WriteFailed)?;
             s.remove(&self.id);
         }
+        // The camera solves go with the project (K-417). The `track/` sidecar
+        // is untouched, so reopening reads every one of them straight back —
+        // this is the session's copy being dropped, not the answer.
+        lumit_render::track::clear();
         drop(removed);
         Ok(())
     }

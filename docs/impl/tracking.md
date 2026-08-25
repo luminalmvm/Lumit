@@ -600,7 +600,8 @@ and the camera's badge; the point-cloud overlay; the warm pass wired to project
 open and `clear()` to project close; a Camera track on a **Precomp** layer (K-417
 allows it, and the analysis decodes media, so tracking a nested comp means
 rendering it first); keyframed masks as time-varying exclusion regions; and more
-than one analysis at a time if anyone ever wants it.
+than one analysis at a time if anyone ever wants it. *All but the last landed —
+see §5e.*
 
 ## 5c. Phase 4, stage 3 — the surface, as built
 
@@ -785,6 +786,39 @@ and lift by construction, so a picture that fades down in contrast is followed
 happily and *should* be. Only a frame with no structure at all severs the chain —
 the gradient normal matrix is singular and every KLT solve refuses — which is
 both the deterministic thing to write and a real thing footage does.
+
+## 5e. The finishing items, as built
+
+The three things stages 2 and 3 left owed, and the small debts beside them.
+
+**Warm and clear are wired to a project's life** (2026-08-25).
+`lumit_render::track::warm_jobs(doc)` reads one warm job off the document for
+every footage item a layer wears an enabled Camera track on — one per *media*,
+not per layer, skipping anything offline (no resolved path, no fingerprint,
+nothing to name a solve with). `warm(jobs)` reads all of them back off the
+sidecar. `api::state::adopt` collects the jobs beside the probe warm — after
+`resolve_all_media`, which is what stamps the fingerprints, and before the
+document moves into the store — and fires them after the registry lock, with
+`clear()` immediately in front so the departing project's solves go before this
+one's arrive. `ProjectReference::close` calls `clear()` and touches no file.
+
+Two things about it are choices rather than transcription:
+
+1. **The warm pass is not [`request`].** `request` owns the
+   one-analysis-at-a-time slot, so warming the second tracked clip of a project
+   would answer `Busy` and simply never happen — the wiring would look done and
+   work for exactly one clip. `warm` takes no slot: it is a small file read per
+   clip, the whole batch on one thread of its own, and it cannot collide with an
+   analysis the user starts while it is going. It forces `analyse` off on the way
+   past, so nothing handed to it can start tracking a clip nobody asked about.
+2. **The test writes the sidecar rather than earning one.** A solve is written
+   down by hand — a camera sliding along x, every frame distinct — filed under
+   the key the warm pass will ask for, and the assertion is that the linked
+   camera reads `Derived` with nobody pressing Analyse. Earning the file would
+   have re-run a whole synthetic analysis to test a disk read, and the key
+   equality is asserted directly, which is the part a warm pass can silently get
+   wrong: asking for a *different* analysis finds nothing and looks exactly like
+   having no cache at all.
 
 ## 5. Test plan
 

@@ -672,6 +672,14 @@ pub(crate) fn adopt(
         })
         .collect();
 
+    // And every camera solve this project's tracked clips already have on
+    // disk, as jobs that read the `track/` sidecar and decode nothing
+    // (K-417). Collected here for the same reason as the probe warm above —
+    // the paths are resolved and the fingerprints stamped by now, and the
+    // document is about to move into the store — and fired after the
+    // registry lock, below.
+    let solves = lumit_render::track::warm_jobs(&doc);
+
     let journal = journal_for(&doc);
     let store = DocumentStore::new(doc);
     let state = LumitBridgeState {
@@ -725,6 +733,13 @@ pub(crate) fn adopt(
     // with a live sink is a leak, and one registry at a time means after
     // the `PROJECTS` guard above has been dropped, not inside it.
     forget_streams_except(id)?;
+
+    // The departed projects' solves go the way their caches did, and this
+    // one's are read back off the sidecar — in that order, so the clear
+    // cannot empty what the warm has just filled. Outside the registry lock,
+    // like everything else below it.
+    lumit_render::track::clear();
+    lumit_render::track::warm(solves);
 
     // After the clear, so this project's requests are not the ones
     // cancelled, and outside the registry lock.
