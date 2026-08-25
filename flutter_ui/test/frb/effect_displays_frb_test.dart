@@ -15,7 +15,8 @@ import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/levels_display_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/panels/scopes_panel_frb.dart' show scopeColoursFor;
+import 'package:lumit_flutter/panels/scopes_panel_frb.dart'
+    show scopeColoursFor;
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/curve_editor.dart';
 
@@ -103,8 +104,8 @@ void main() {
       final id = p.layer.getEffects().single.id();
       final t = LumitTheme.dark();
 
-      Color lineNow() => tester.widget<CurveEditor>(find.byType(CurveEditor))
-          .line ??
+      Color lineNow() =>
+          tester.widget<CurveEditor>(find.byType(CurveEditor)).line ??
           t.textPrimary;
 
       // Tab 0 is Master: no channel colour of its own.
@@ -115,7 +116,8 @@ void main() {
         (2, ScopeColours.standard.green),
         (3, ScopeColours.standard.blue),
       ]) {
-        await tester.tap(find.byKey(ValueKey<String>('fx-curves-$id-tab-$tab')));
+        await tester
+            .tap(find.byKey(ValueKey<String>('fx-curves-$id-tab-$tab')));
         await tester.pumpAndSettle();
         expect(lineNow(), wanted, reason: 'channel $tab draws as itself');
       }

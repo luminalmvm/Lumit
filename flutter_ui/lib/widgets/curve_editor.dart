@@ -462,7 +462,8 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
   /// The channel's own colour, or null for the ones drawn in the theme's.
   Color? _colourOf(int channel) {
     final colours = widget.channelColours;
-    if (colours == null || channel < 0 || channel >= colours.length) return null;
+    if (colours == null || channel < 0 || channel >= colours.length)
+      return null;
     return colours[channel];
   }
 
