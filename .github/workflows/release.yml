@@ -140,12 +140,6 @@ jobs:
           # The bridge links FFmpeg's shared build; the launcher's rpath already
           # covers lib/, so the .so files ride along there.
           cp -a "$FFMPEG_ROOT"/lib/*.so* "$stage/lib/"
-          # The vendored ACES bakes are read at runtime from data/colour beside
-          # the launcher (crates/lumit-colour/src/builtin.rs) rather than
-          # compiled into the binary. The Flatpak repacks this stage wholesale,
-          # so one copy covers both artefacts.
-          mkdir -p "$stage/data/colour"
-          cp crates/lumit-colour/vendored/*.artefact "$stage/data/colour/"
           # Desktop entry, MIME types and icons for a by-hand install.
           mkdir -p "$stage/share"
           cp packaging/linux/io.github.luminalmvm.Lumit.desktop \

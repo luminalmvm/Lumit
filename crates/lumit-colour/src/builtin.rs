@@ -12,12 +12,10 @@
 //!    everything else. Small, and each one earns its place by being checkable.
 //! 2. **Vendored reference bakes** — high-resolution artefacts generated offline
 //!    with the reference library and checked in like any golden data, with the
-//!    library version and generation script recorded in the file's header. They
-//!    are not compiled into the binary — at 47 MiB that would ride in every
-//!    build — but read at runtime from a `colour/` data directory shipped
-//!    beside the executable, falling back to the crate's own `vendored/`
-//!    directory in a development checkout. A style whose file is absent
-//!    refuses by name, exactly as if it had never been vendored.
+//!    library version and generation script recorded in the file's header. This
+//!    is how the ACES output-transform styles are meant to arrive. **None is
+//!    vendored yet**; `vendored/README.md` records what a bake needs before it
+//!    can be, and until then those styles refuse.
 //!
 //! A style in neither tier refuses the config **by name**. Note the happy
 //! accident of history: the *legacy* ACES configs (1.0.3 and 1.2, still the most
@@ -28,7 +26,6 @@ use crate::bake::VendoredArtefact;
 use crate::error::{ColourError, Result};
 use crate::matrix;
 use crate::op::{Chain, Direction, LogParams, Negatives, Op};
-use std::path::{Path, PathBuf};
 
 /// Tier one: the styles implemented directly. Listed so a caller can say what
 /// is supported without guessing at a refusal.
@@ -90,45 +87,32 @@ fn acescc_params() -> LogParams {
     }
 }
 
-/// Where the vendored artefacts live at runtime, in the order a build looks:
-/// `data/colour/` beside the executable (a shipped Windows or Linux build),
-/// `../Resources/colour/` from it (a shipped macOS bundle, where nothing but
-/// executables may sit in `Contents/MacOS`), and the crate's own `vendored/`
-/// directory (a development checkout, which is also what the tests read).
-/// `None` when no directory exists — every vendored style then refuses by
-/// name. Same search shape as the export done-sound's, the one other data
-/// file shipped beside the binary.
-fn vendored_dir() -> Option<PathBuf> {
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(Path::to_path_buf));
-    let beside = exe_dir.as_ref().map(|d| d.join("data").join("colour"));
-    let resources = exe_dir
-        .as_ref()
-        .and_then(|d| d.parent())
-        .map(|contents| contents.join("Resources").join("colour"));
-    let dev = Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("vendored"));
-    [beside, resources, dev]
-        .into_iter()
-        .flatten()
-        .find(|d| d.is_dir())
-}
-
 /// Tier two: a reference bake vendored by style name.
 ///
-/// The style name is the file name — `<style>.artefact` in [`vendored_dir`] —
-/// but only for the styles [`VENDORED`] lists: a name from a config never
-/// reaches the filesystem unless this registry says so. Each file carries its
-/// own provenance header — which library version, which config, which day —
-/// and [`VendoredArtefact::from_text`] refuses a file that does not; a file
-/// that is absent, unreadable or refused leaves the style refusing by name.
+/// One `include_str!` arm per artefact, exactly as `../vendored/README.md`
+/// describes. Each file carries its own provenance header — which library
+/// version, which config, which day — and [`VendoredArtefact::from_text`]
+/// refuses a file that does not.
 fn vendored(style: &str) -> Option<VendoredArtefact> {
-    if !VENDORED.contains(&style) {
-        return None;
-    }
-    let path = vendored_dir()?.join(format!("{style}.artefact"));
-    let text = std::fs::read_to_string(path).ok()?;
-    VendoredArtefact::from_text(style, &text).ok()
+    let text = match style {
+        "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-100nit-REC709_2.0" => include_str!(
+            "../vendored/ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-100nit-REC709_2.0.artefact"
+        ),
+        "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-100nit-P3-D65_2.0" => include_str!(
+            "../vendored/ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-100nit-P3-D65_2.0.artefact"
+        ),
+        "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-1000nit-P3-D65_2.0" => include_str!(
+            "../vendored/ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-1000nit-P3-D65_2.0.artefact"
+        ),
+        "ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-1000nit-REC2020_2.0" => include_str!(
+            "../vendored/ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - HDR-1000nit-REC2020_2.0.artefact"
+        ),
+        "ACES-LMT - ACES 1.3 Reference Gamut Compression" => {
+            include_str!("../vendored/ACES-LMT - ACES 1.3 Reference Gamut Compression.artefact")
+        }
+        _ => return None,
+    };
+    VendoredArtefact::from_text(style, text).ok()
 }
 
 /// A vendored artefact as chain steps.

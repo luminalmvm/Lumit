@@ -274,11 +274,7 @@ builtins at all; the file-transform path covers them wholesale.
 `IDENTITY` and `pass_thru`, the three ACES log/primaries conversions, the AP0→XYZ utility,
 and all eight display encodings the CG config names. Tier two holds five artefacts — the
 four ACES 2.0 output transforms and the ACES 1.3 Reference Gamut Compression LMT — at 47
-MiB in `crates/lumit-colour/vendored/`, read at runtime from a `colour/` data directory
-shipped beside the executable (K-527: `data/colour/` on Windows and Linux,
-`Contents/Resources/colour/` on macOS, the crate's own `vendored/` in a development
-checkout) rather than compiled into every binary; a style whose file is absent refuses by
-name, exactly as if it had never been vendored. A vendored
+MiB, `include_str!`ed one arm each from `crates/lumit-colour/vendored/`. A vendored
 artefact is turned into ordinary chain steps rather than executed specially: the lg2
 shaper *is* a log curve with a lin-side offset and the cube *is* a 3D table, so a bake
 composes with a display encoding like anything else. **What tier two costs at the gamut

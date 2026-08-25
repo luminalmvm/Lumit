@@ -635,8 +635,7 @@ What OCIO still owes, all of it recorded and none of it blocking:
     time, each landing against the `aces-cg.fixture` rows that gate the bake it replaces.
     The number they exist to bring down is **0.117 at the Rec.709 blue primary**, which is
     what a 65-point cube costs on the ACES 2.0 rendering (K-518); inside the gamut the
-    same bake is better than 2 × 10⁻³. It also reclaims the 47 MiB of artefact files an
-    installation ships beside the binary (K-527).
+    same bake is better than 2 × 10⁻³. It also reclaims 47 MiB from the binary.
 - **The working-space reading has one sentence, not two** — see WP5 above.
 
 ## Next - engine/bridge follow-ups
