@@ -65,14 +65,13 @@
     -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
     mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
   }
-  /* The field arrives with the wordmark, not with the page: the canvas is
-     invisible until the shader has a frame ready AND the lockup has landed,
-     and then comes up in the time a frame and a half takes at thirty - a
-     lightbulb, not a fade. Until then the hero is black, so nothing flashes
-     and nothing competes with the animation. */
+  /* The canvas is hidden only until it has drawn once - an unpainted WebGL
+     canvas is pure black, which is not quite the page's black. After that it
+     stays visible, painting nothing but the page's own colour until the
+     wordmark lands, so there is no opacity left to animate: the arrival is the
+     shader's, and it happens in the shader. */
   canvas {
     opacity: 0;
-    transition: opacity 45ms linear;
   }
   canvas.lit {
     opacity: 1;
@@ -95,6 +94,10 @@
     #endif
     uniform vec2 u_res;
     uniform float u_t;
+    // The wordmark's own box, in this canvas's pixels, and how far the reveal
+    // has got out of it: 0 before it starts, 1 once it has covered everything.
+    uniform vec4 u_box;
+    uniform float u_reveal;
 
     float hash(vec2 p) {
       return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -212,22 +215,57 @@
       float matte = fbm(p * 1.1 + vec2(3.7, 11.3));
       col = mix(page, col, clamp(fade * 1.5 - 0.25 + (matte - 0.5) * 0.9, 0.0, 1.0));
 
+      // The field arrives by expanding out of the wordmark's own box rather
+      // than fading up everywhere at once. bdist is the distance from that box
+      // - zero on its edge, negative inside it - and the front is that distance
+      // travelled out to the furthest corner of the canvas, eased so it leaves
+      // quickly and arrives gently.
+      vec2 bd = max(u_box.xy - gl_FragCoord.xy, gl_FragCoord.xy - u_box.zw);
+      float bdist = length(max(bd, 0.0)) + min(max(bd.x, bd.y), 0.0);
+      float far = length(max(u_box.xy, u_res - u_box.zw)) + 1.0;
+      // The front starts inside the box, not on its edge: bdist is negative in
+      // there, so a front at zero would already be showing the whole box before
+      // the reveal had begun. Starting it past the box's own middle means it
+      // opens out of the wordmark rather than appearing as a rectangle.
+      float inner = -0.5 * min(u_box.z - u_box.x, u_box.w - u_box.y) - 20.0;
+      float front = mix(inner, far, 1.0 - pow(1.0 - u_reveal, 3.0));
+      float vis = 1.0 - smoothstep(front - 18.0, front + 2.0, bdist);
+
+      // Just inside the front the exposure overshoots, and settles again as the
+      // front moves on: the overshoot travels with the edge instead of
+      // happening to the whole screen at once. It is faded out over the last
+      // fifth of the reveal, or it would leave a bright corner behind when the
+      // front runs off the canvas.
+      float ring = vis
+        * smoothstep(front - 130.0, front - 6.0, bdist)
+        * (1.0 - smoothstep(0.8, 1.0, u_reveal));
+      col = col * (1.0 + ring * 1.6) + vec3(0.30, 0.28, 0.34) * ring * 0.55;
+
+      col = mix(page, col, vis);
+
       gl_FragColor = vec4(col, 1.0);
     }
   `;
 
-  // Two things have to happen before the field is visible: it has to have a
-  // frame in it, and the wordmark has to be home. They are independent, so each
-  // records itself and whichever finishes last does the lighting.
+  // The reveal takes a tenth of a second, out of the wordmark's box and across
+  // the whole canvas.
+  const REVEAL_MS = 100;
+
+  // Two things have to happen before the field appears: it has to have a frame
+  // in it, and the wordmark has to be home. They are independent, so the cue
+  // records when it came and whichever finishes last starts the reveal.
   //
   // The listener is set up here, at the top of the module, and not inside the
   // deferred start below - the wordmark lands about a second and a third in,
   // which is very likely before the browser ever calls us idle.
-  let cued = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let lightUp = () => {};
+  let cueAt: number | null = matchMedia("(prefers-reduced-motion: reduce)")
+    .matches
+    ? 0
+    : null;
+  let onCue = () => {};
   const cue = () => {
-    cued = true;
-    lightUp();
+    if (cueAt === null) cueAt = performance.now();
+    onCue();
   };
   document.addEventListener("wordmark:home", cue, { once: true });
   // No wordmark on the page, or a wordmark that never got going: the field is
@@ -291,10 +329,45 @@
     gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
     const uRes = gl.getUniformLocation(prog, "u_res");
     const uT = gl.getUniformLocation(prog, "u_t");
+    const uBox = gl.getUniformLocation(prog, "u_box");
+    const uReveal = gl.getUniformLocation(prog, "u_reveal");
 
-    const draw = (t: number) => {
+    // The wordmark's box, measured rather than assumed, in canvas pixels with
+    // the y axis the way the shader sees it. Measured on resize and once more
+    // when the reveal starts, and never in the draw: reading an element's box
+    // makes the browser work the layout out, which is not a thing to do sixty
+    // times a second. The animation moves paths inside the svg rather than the
+    // svg itself, so the box does not change while it plays.
+    let box = [0, 0, 0, 0];
+    const measure = () => {
+      const wm = document.querySelector(".wm");
+      const cr = canvas.getBoundingClientRect();
+      if (!wm || !cr.width || !cr.height) {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        box = [cx, cy, cx, cy];
+        return;
+      }
+      const b = wm.getBoundingClientRect();
+      const sx = canvas.width / cr.width;
+      const sy = canvas.height / cr.height;
+      box = [
+        (b.left - cr.left) * sx,
+        canvas.height - (b.bottom - cr.top) * sy,
+        (b.right - cr.left) * sx,
+        canvas.height - (b.top - cr.top) * sy,
+      ];
+    };
+
+    let revealAt: number | null = null;
+    const draw = (now: number) => {
       gl.uniform2f(uRes, canvas.width, canvas.height);
-      gl.uniform1f(uT, t);
+      gl.uniform1f(uT, now / 1000);
+      gl.uniform4f(uBox, box[0], box[1], box[2], box[3]);
+      gl.uniform1f(
+        uReveal,
+        revealAt === null ? 0 : Math.min(1, (now - revealAt) / REVEAL_MS),
+      );
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
@@ -312,22 +385,37 @@
     };
     new ResizeObserver(() => {
       resize();
-      draw(0);
+      measure();
+      draw(performance.now());
     }).observe(canvas);
     resize();
+    measure();
+
     // The first frame is drawn here rather than left to the observer above, so
-    // the field is ready even if that callback never comes. The clock is
-    // already running by the time anyone sees it, which is what makes the fade
-    // read as the field switching on mid-motion rather than starting from a
-    // standstill.
-    draw(0);
-    lightUp = () => canvas.classList.add("lit");
-    if (cued) lightUp();
+    // the field is ready even if that callback never comes. It paints nothing
+    // but the page's own black until the reveal starts, and the clock is
+    // already running by then, so the field is caught mid-motion rather than
+    // starting from a standstill.
+    const readyAt = performance.now();
+    draw(readyAt);
+    canvas.classList.add("lit");
+
+    // Whichever came last - the frame or the wordmark - is when the reveal
+    // starts. Measuring once more here rather than trusting the resize keeps
+    // the box right if the fonts settled after the field was set up.
+    const begin = () => {
+      measure();
+      revealAt = Math.max(cueAt ?? 0, readyAt);
+    };
+    if (cueAt !== null) begin();
+    else onCue = begin;
 
     // Reduced motion gets the field, held still - the colour is part of the
-    // page, the movement is the part that is optional.
+    // page, the movement is the part that is optional. The reveal is already
+    // over by the time anything is drawn.
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      draw(0);
+      revealAt = readyAt - REVEAL_MS;
+      draw(performance.now());
       return;
     }
 
@@ -336,7 +424,7 @@
     // that case needs no code.
     let frame = 0;
     const tick = (ms: number) => {
-      draw(ms / 1000);
+      draw(ms);
       frame = requestAnimationFrame(tick);
     };
     new IntersectionObserver((entries) => {
