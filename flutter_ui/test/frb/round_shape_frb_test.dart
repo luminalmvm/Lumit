@@ -91,6 +91,7 @@ void main() {
         'viewer-exposure-reset',
         'viewer-exposure',
         'viewer-snapshot',
+        'viewer-snapshot-show',
         'viewer-transport-pill',
         'viewer-home',
         'viewer-step-back',
