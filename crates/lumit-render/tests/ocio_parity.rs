@@ -1,5 +1,6 @@
 //! The graphics card's colour samplers against the processor's oracle
-//! (docs/impl/ocio.md §7.4), and the double-encode trap pinned (§5.2).
+//! (docs/impl/ocio.md §7.4), the double-encode trap pinned (§5.2), and the
+//! K-031 parity row in every shipped colour configuration (§7.5, docs/06 §3.3).
 //!
 //! **In plain terms.** `lumit-colour` works a colour transform out on the
 //! processor and bakes the answers into a small table. The Viewer and the
@@ -19,7 +20,16 @@
 
 use lumit_colour::op::{CdlParams, Direction, Op};
 use lumit_colour::{bake, Artefact, Chain, Shaper};
+use lumit_core::anim::Property;
+use lumit_core::model::{
+    Composition, Document, Layer, LayerKind, LinearColour, MediaRef, ProjectItem, SolidDef,
+    Switches, TransformGroup,
+};
+use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
 use lumit_render::colour::tables;
+use lumit_render::headless::HeadlessRenderer;
+use lumit_render::plan::Quality;
+use uuid::Uuid;
 
 /// Colours to compare, and the point of the list: the last eight rows are
 /// outside 0–1, which is the seam this whole design exists to close.
@@ -421,6 +431,284 @@ fn the_deep_display_carries_the_same_baked_view_as_the_eight_bit_one() {
         assert!(
             (i32::from(*x) - deep_as_8).abs() <= 1,
             "byte {i}: eight-bit {x}, deep {deep_as_8}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// §7.5 — the K-031 parity row, in every shipped colour configuration.
+//
+// The matrix in `headless.rs` walks constructions: a precomp, a matte, motion
+// blur, a driven parameter. This one walks the *colour* axis instead, which is
+// the axis docs/06 §3.3 names ("a reference comp in every shipped colour
+// configuration") and the one the OCIO work added rows to. Four of them:
+//
+//   1. no config at all — the built-in display transform, what every project
+//      before K-490 rendered through;
+//   2. a built-in colour family named at export — which must reach the shared
+//      display pass as *nothing*, because the family is a pack-stage transform
+//      strictly downstream of the parity point;
+//   3. a loaded config's display/view, the Viewer's case;
+//   4. a loaded config's space named at export, the delivery case.
+//
+// In each, the Viewer's eight-bit present and the export's deep one are one
+// dispatch with one table bound, so they carry one picture. That is the claim,
+// and here it is measured rather than described.
+// ---------------------------------------------------------------------------
+
+/// The config the bridge's own seam tests use: one space that is not the
+/// reference, one display with one view, and the roles resolution reads. Its
+/// view is an sRGB encode, which is also what the built-in pass does — so
+/// configuration 3 doubles as the double-encode trap at renderer level.
+const FIXTURE_CONFIG: &str = r"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+  reference: ref
+displays:
+  sRGB:
+    - !<View> {name: Standard, colorspace: out_srgb}
+    - !<View> {name: Flat gamma, colorspace: out_g22}
+colorspaces:
+  - !<ColorSpace>
+    name: ref
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: srgb_texture
+    to_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0]}
+  - !<ColorSpace>
+    name: out_srgb
+    from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
+  - !<ColorSpace>
+    name: out_g22
+    from_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], direction: inverse}
+";
+
+/// The reference comp: two overlapping solids at values that are neither black
+/// nor clipped, over a mid-grey backdrop, so a transform wrong by a curve shows
+/// and one wrong by a matrix shows too.
+fn reference_comp(config: Option<&std::path::Path>) -> (std::sync::Arc<Document>, Uuid) {
+    const SIZE: u32 = 32;
+    let mut doc = Document::new();
+    let mut layers = Vec::new();
+    for (name, colour, offset) in [
+        ("warm", LinearColour([0.42, 0.11, 0.06, 1.0]), -6.0),
+        ("cool", LinearColour([0.05, 0.18, 0.55, 1.0]), 6.0),
+    ] {
+        let def = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: def,
+            name: name.into(),
+            colour,
+            width: SIZE / 2,
+            height: SIZE,
+            extra: serde_json::Map::new(),
+        }));
+        let mut layer = solid_layer(name, def);
+        layer.transform.position_x = Property::fixed(f64::from(SIZE) / 2.0 + offset);
+        layer.transform.position_y = Property::fixed(f64::from(SIZE) / 2.0);
+        layers.push(layer);
+    }
+    let comp = Composition {
+        id: Uuid::now_v7(),
+        name: "Reference".into(),
+        width: SIZE,
+        height: SIZE,
+        frame_rate: FrameRate::new(24, 1).expect("a rate"),
+        duration: Duration(Rational::new(1, 1).expect("a second")),
+        // Mid grey rather than black: the background is the largest area of the
+        // frame, and black is the one value every wrong transform agrees on.
+        background: LinearColour([0.18, 0.18, 0.18, 1.0]),
+        work_area: None,
+        layers,
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+    let comp_id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    if let Some(path) = config {
+        doc.colour.config = Some(MediaRef {
+            relative_path: path.to_string_lossy().into_owned(),
+            absolute_path: path.to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        });
+    }
+    (std::sync::Arc::new(doc), comp_id)
+}
+
+fn solid_layer(name: &str, def: Uuid) -> Layer {
+    Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: Uuid::now_v7(),
+        name: name.into(),
+        kind: LayerKind::Solid { def },
+        in_point: CompTime(Rational::ZERO),
+        out_point: CompTime(Rational::new(1, 1).expect("a second")),
+        start_offset: CompTime(Rational::ZERO),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: Property::zero(),
+        audio_only: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        effects: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    }
+}
+
+/// One configuration's row: render the Viewer's present and the export's, and
+/// require one picture. Returns the eight-bit bytes so configurations can be
+/// compared with each other as well as with themselves.
+fn parity_row(
+    r: &mut HeadlessRenderer,
+    doc: &std::sync::Arc<Document>,
+    comp_id: Uuid,
+    what: &str,
+) -> Vec<u8> {
+    let (preview, pw, ph) = r
+        .render_preview(doc, comp_id, 0, Quality::default(), 1.0)
+        .unwrap_or_else(|e| panic!("{what}: the Viewer's present failed: {e}"));
+    let (deep, ew, eh) = r
+        .render_preview16(doc, comp_id, 0, Quality::default())
+        .unwrap_or_else(|e| panic!("{what}: the export's present failed: {e}"));
+    assert_eq!((pw, ph), (ew, eh), "{what}: two sizes for one comp");
+    assert_eq!(
+        preview.len(),
+        deep.len(),
+        "{what}: two channel counts for one comp"
+    );
+    for (i, (eight, sixteen)) in preview.iter().zip(&deep).enumerate() {
+        // The deep target holds the same value at sixteen bits, so the
+        // comparison happens at eight: what is measured is the picture, not the
+        // precision the deeper target buys.
+        let deep_as_8 = (f32::from(*sixteen) / 65_535.0 * 255.0).round() as i32;
+        assert!(
+            (i32::from(*eight) - deep_as_8).abs() <= 1,
+            "{what}: at channel {i} the Viewer wrote {eight} and the export wrote \
+             {deep_as_8}. Preview and export are one colour path (K-031, docs/06 §3.3)."
+        );
+    }
+    preview
+}
+
+#[test]
+fn preview_equals_export_in_every_colour_configuration() {
+    let mut r = match HeadlessRenderer::new() {
+        Ok(r) => r,
+        Err(_) => {
+            eprintln!("no adapter here, skipping the colour parity matrix");
+            return;
+        }
+    };
+
+    // 1 — no config. The built-in display transform, and the state every
+    // project is in until somebody names a config.
+    let (plain, plain_comp) = reference_comp(None);
+    r.sync_colour(&plain);
+    r.set_colour_view(None);
+    r.set_colour_output(None);
+    assert!(
+        r.colour().loaded().is_none(),
+        "no config named, so nothing should be loaded"
+    );
+    let built_in = parity_row(&mut r, &plain, plain_comp, "no config");
+
+    // 2 — a built-in colour family named at export. Every built-in space
+    // answers `None` to `ocio_name`, which is what the export asks, so the
+    // family reaches the display pass as nothing at all: it is a pack-stage
+    // transform, strictly downstream of the point K-031 is measured at. The row
+    // exists to hold that structure, because a built-in space that started
+    // binding a table here would silently move the parity point.
+    for space in lumit_render::export::BUILT_IN_COLOUR_SPACES {
+        assert!(
+            space.ocio_name().is_none(),
+            "{space:?} is a built-in and must not name a config space"
+        );
+        r.set_colour_output(space.ocio_name().map(str::to_owned));
+        let family = parity_row(&mut r, &plain, plain_comp, "the built-in colour family");
+        assert_eq!(
+            family, built_in,
+            "{space:?}: the built-in family must not touch the shared display pass"
+        );
+    }
+
+    // 3 and 4 need a config on disk. It is written rather than vendored because
+    // it is the same text the bridge's seam tests use, and one copy of a fixture
+    // that two crates both edit is a fixture that drifts.
+    let dir = tempfile::tempdir().expect("a directory");
+    let path = dir.path().join("config.ocio");
+    std::fs::write(&path, FIXTURE_CONFIG).expect("a config on disk");
+    let (managed, managed_comp) = reference_comp(Some(&path));
+    r.sync_colour(&managed);
+    assert!(
+        r.colour().loaded().is_some_and(|l| l.usable()),
+        "the fixture config should load: {:?}",
+        r.colour().loaded().and_then(|l| l.problem.clone())
+    );
+
+    // 3 — the Viewer looking through a display/view.
+    r.set_colour_output(None);
+    r.set_colour_view(Some(("sRGB".into(), "Standard".into())));
+    let through_view = parity_row(&mut r, &managed, managed_comp, "a config's display/view");
+
+    // 4 — a config space named at export. Same bake, same blit, bound at the
+    // other end of the same `display_tables` choice.
+    r.set_colour_view(None);
+    r.set_colour_output(Some("out_srgb".into()));
+    assert!(
+        r.can_deliver_colour_space("out_srgb"),
+        "the config names out_srgb, so the export must be able to deliver it"
+    );
+    let through_output = parity_row(&mut r, &managed, managed_comp, "a config space at export");
+
+    // The two ends of that choice are one transform: this config's view and its
+    // output space are both the sRGB encode, so the pictures are the same one.
+    assert_eq!(
+        through_view, through_output,
+        "the view the Viewer shows and the space the export delivers are one table"
+    );
+
+    // Non-vacuity, and it is worth being blunt about why this row exists. The
+    // two checks above both pass if no table is bound at all — this config's
+    // sRGB view IS the built-in transform, which is exactly what makes it a
+    // double-encode test and exactly what makes it a poor proof that anything
+    // was bound. So the config carries a second view that is plainly not the
+    // built-in, and switching to it must move the picture.
+    r.set_colour_output(None);
+    r.set_colour_view(Some(("sRGB".into(), "Flat gamma".into())));
+    let through_gamma = parity_row(
+        &mut r,
+        &managed,
+        managed_comp,
+        "a config's plain-gamma view",
+    );
+    assert_ne!(
+        through_gamma, built_in,
+        "a view that is not the built-in transform must render a different picture,          or nothing was bound and the rows above prove nothing"
+    );
+
+    // And **the double-encode trap** (§5.2) at renderer level: that baked sRGB
+    // encode must land where the built-in pass lands, not a second time on top
+    // of it. A pale picture here is the whole failure this design exists to
+    // prevent, and it would be a large difference rather than a rounding one.
+    assert_eq!(built_in.len(), through_view.len());
+    for (i, (a, b)) in built_in.iter().zip(&through_view).enumerate() {
+        let d = i32::from(*a) - i32::from(*b);
+        assert!(
+            d.abs() <= 1,
+            "byte {i}: the built-in pass wrote {a} and the config's identity view wrote {b}. \
+             A large difference means the target was encoded twice (docs/impl/ocio.md §5.2)."
         );
     }
 }
