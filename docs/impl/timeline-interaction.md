@@ -75,8 +75,11 @@ One model for Layers mode lanes, Keys mode and the graph. Each sentence is testa
   behind its bar, a Keys-mode layer band, and the area below the last layer. Only a
   control that uses the drag itself (a bar's own strip, a key's grab target, a block
   handle) may take the gesture first. Plain marquee **replaces**; `Shift`/`Ctrl` held when
-  the drag starts **adds** to the standing selection (the graph's `_applyMarquee` already
-  honours this; the lanes must match).
+  the drag starts **adds** to the standing selection. Held *when the drag starts*, and the
+  shared `MarqueeSelect` is where that is read — at `onPanDown`, reported to the owner
+  alongside the box: the graph asked `HardwareKeyboard` at the release instead, so letting
+  go of Shift half way through a box turned an adding drag into a replacing one. One
+  widget, one answer, both panes.
 - A plain click on any ground deselects everything (K-203, shipped).
 - **Clicking a property's name selects the property and all of its keys** — the name is
   the row's "select all" (After Effects' own gesture). `Ctrl`-click toggles the property's
@@ -91,8 +94,20 @@ One model for Layers mode lanes, Keys mode and the graph. Each sentence is testa
 - **Right-clicking a lane key** opens the same menu the graph key has — Linear / Ease /
   Hold / Delete key — plus *Ease…* (the popover on the current selection). A right-click
   on an unselected key selects it first; on a selected one it acts on the whole selection.
+  **Except on a block's outermost keys.** A block's two stretch handles stand exactly over
+  the first and last key of the selection, and a handle is opaque and drag-only: while a
+  block is up, its end keys take neither a click nor a right-click, and only the keys
+  between them answer. That is the carve-out above read literally — a handle *is* a control
+  that uses the drag — but it costs a selected key the ordinary gestures, which P5 forbids.
+  Recorded rather than fixed in TI-1, because the handle belongs to the block tools:
+  **TI-2** gives it a tap that falls through to the key beneath.
 - `Ctrl`+click on empty lane space of a **keyed** row plants a key at that time on that
-  property (docs/07 §4.3's sentence, unbuilt in the lanes; the graph ships it).
+  property (docs/07 §4.3's sentence; the graph shipped it first). The new key takes the
+  value its own curve already reads there, so planting one moves nothing — it is a place to
+  grab. A row with nothing keyed is left alone: turning a still property into an animated
+  one is the stopwatch's job. Both lanes and graph write through one helper,
+  `plantKeyOnChannels` (graph_editor_frb.dart), so a two-axis row's key lands on both axes
+  in one op — one lane diamond is one key, and one undo step.
 
 ### 2.2 Deselection and scope
 
@@ -106,10 +121,18 @@ One model for Layers mode lanes, Keys mode and the graph. Each sentence is testa
 - **Keys mode opens with every listed layer twirled open.** The dope sheet's point is the
   flattened property rows; a sheet of shut bands shows nothing and takes no marquee. The
   Keys twirl set starts as "all open" (its own default, still toggleable per layer) rather
-  than inheriting Layers mode's shut-by-default set.
+  than inheriting Layers mode's shut-by-default set. Held as the **inverse** set —
+  `_keysShut`, the layers the user has closed — so "all open" is the resting state without
+  a pass over the layers to seed it, and so a layer opened here is not opened in Layers
+  mode, where shut-by-default is the right answer. Everything that opens or shuts a layer
+  (the twirl, `U`, the reveal keys, `L`) goes through one pair of helpers — `_setOpen` and
+  `_shutLayerDeep` — which write whichever set the mode showing owns.
 - A Keys-mode **layer band selects on tap but never swallows a drag**: drags pass through
-  to the marquee. (Today `_KeysLayerLane` is an opaque `GestureDetector`,
-  timeline_panel_frb.dart ~8396, and eats both.)
+  to the marquee. (`_KeysLayerLane` was an opaque `GestureDetector` and ate both. It is now
+  translucent over an `IgnorePointer`ed child — a coloured child hit-tests for itself, so
+  ignoring it is as much of the fix as the behaviour flag is. Both recognisers then stand
+  in the arena, the band's tap in front of the marquee's pan, and a drag past the slop
+  takes the box.)
 
 ---
 
@@ -193,7 +216,11 @@ K-208's both-halves slide, selection on the raw down). Additions:
 - **While a key drag or block stretch runs, a badge under the pointer reads
   `f<frame> · <value>`** (frame only for a multi-key stretch: `f<first>–f<last>`), in the
   block badge's own 8px mono on `surface_4`. This is the drawing's value-hint pill and the
-  study's "live readout"; it vanishes on release.
+  study's "live readout"; it vanishes on release. The value is the one the lane's **own
+  keys** carry — a multi-axis row reads its lead axis, exactly as its diamonds do
+  (`laneKeysOf`) — rather than the row's sampled reading: sampling crosses the bridge, and
+  a drag would cross it on every pointer move (K-184). The pill flips to the key's other
+  side where the axis has run out, so the readout is never clipped by the edge.
 - A shut layer's **summary diamonds** stay a statement, not a target (K-441) — but the row
   they sit on admits the marquee everywhere the bar itself is not (§2.1).
 
@@ -307,7 +334,10 @@ middle of **every** key, same-shape pairs included.
   (graph_editor_frb.dart ~2668), which P4/K-439 forbid.
 - While one key is selected or dragged, the **value hint pill** rides beside it:
   `f<frame> · <value> · <in> / <out> %` in 8px mono on `surface_4` — the drawing's pill.
-  It follows a drag live and vanishes with the selection.
+  It follows a drag live and vanishes with the selection. **One** key: two or more are a
+  block, and the block's own badge is the readout. It rides on the **value** lens, where
+  the drawing puts it and where a key is one point; the speed lens draws a key as two dots
+  with a speed each, which is a different readout and not this one.
 - Box-select is additive with `Shift`/`Ctrl` (shipped) and restyles per §4.4.
 - **The selection transform box** (docs/07 §5.3, Caddis §2.1): two or more selected keys
   in the value lens draw the same block box the lanes draw, spanning the selection in

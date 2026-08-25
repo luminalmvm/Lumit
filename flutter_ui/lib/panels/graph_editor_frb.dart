@@ -109,6 +109,13 @@ enum GraphLens { value, speed }
 const double _keyGrab = 16;
 const double _handleGrab = 18;
 
+/// How wide a key's glyph is drawn, and how wide a **selected** one is: one
+/// size step larger, the drawing's 7 in a 6 world (§6.2). The target around it
+/// does not change with the selection — a mark that grew its own catch would
+/// move the pointer's meaning under a still hand.
+const double _keyGlyph = 10;
+const double _selectedKeyGlyph = 12;
+
 /// One animatable channel on the graph: a single scalar curve, where it came
 /// from, and how to write it back.
 class GraphChannel {
@@ -507,6 +514,76 @@ void applyInterpToSelection({
     if (touched) edits[channel] = BridgeScalar.keyframed(next);
   }
   if (edits.isNotEmpty) commitChannelEdits(edits);
+}
+
+/// Plant a key at [frame] on every channel here, each taking the value its own
+/// curve already reads there — so the picture does not move. Adding a key is a
+/// place to grab, not an edit (docs/07 §4.3, K-500 §2.1's lane gesture).
+///
+/// A channel with nothing keyed is left alone: the gesture is *"plant a key on
+/// this keyed row"*, and turning a static property into an animated one is the
+/// stopwatch's job, not a Ctrl-click's. A channel that already has a key on
+/// that frame is left alone too, because two keys at one time is not a curve
+/// the engine will take (K-301). A mask's **shape** channel is skipped: a path
+/// key holds a whole path, which the mask's own control plants.
+///
+/// Returns whether anything was written. One call, so a two-axis row's key
+/// lands on both axes in one op — one undo step, as a lane diamond is one key.
+bool plantKeyOnChannels({
+  required List<GraphChannel> channels,
+  required double frame,
+  required double fps,
+  required int fpsNum,
+  required int fpsDen,
+}) {
+  final seconds = frame / (fps <= 0 ? 1 : fps);
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    if (channel.isMaskPath) continue;
+    final keys = channel.keys;
+    if (keys.isEmpty) continue;
+    if (keys.any((k) => _keyFrame(k, fps).round() == frame.round())) continue;
+    edits[channel] = BridgeScalar.keyframed(_withKeyAt(
+        keys, frame, evaluateKeys(keys, seconds), fps, fpsNum, fpsDen));
+  }
+  if (edits.isEmpty) return false;
+  commitChannelEdits(edits);
+  return true;
+}
+
+/// Remove every key in [selectedKeys] from [channels] — the graph's Delete and
+/// the lane key menu's *Delete key* are the same removal (K-500 §2.1).
+///
+/// The last key of a curve leaves a static value holding what it held: a
+/// property that has lost its animation still has to read something.
+///
+/// Returns whether anything was written.
+bool deleteKeysFromChannels({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+}) {
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    final keys = channel.keys;
+    final rest = <BridgeKeyframe>[];
+    var removed = false;
+    double? lastRemoved;
+    for (var i = 0; i < keys.length; i++) {
+      if (selectedKeys.contains('${channel.id}#$i')) {
+        removed = true;
+        lastRemoved = keys[i].value;
+      } else {
+        rest.add(keys[i]);
+      }
+    }
+    if (!removed) continue;
+    edits[channel] = rest.isEmpty
+        ? BridgeScalar.static_(lastRemoved ?? 0)
+        : BridgeScalar.keyframed(rest);
+  }
+  if (edits.isEmpty) return false;
+  commitChannelEdits(edits);
+  return true;
 }
 
 /// Every selected key's frame, across every channel — what the block tools
@@ -1617,8 +1694,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onSelectionChanged();
   }
 
-  void _applyMarquee(Rect rect, (double, double) range, double height) {
-    if (!_addToSelection) widget.selectedKeys.clear();
+  /// [additive] is read by the marquee at the drag's *start* (K-500 §2.1) —
+  /// the modifier decides the gesture when it begins, not when it ends.
+  void _applyMarquee(
+      Rect rect, (double, double) range, double height, bool additive) {
+    if (!additive) widget.selectedKeys.clear();
     for (final channel in widget.channels) {
       final keys = channel.keys;
       for (var i = 0; i < keys.length; i++) {
@@ -1911,18 +1991,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final shown = _shownKeys(channel);
     if (index >= shown.length) return Offset.zero;
     final key = shown[index];
+    // The key drag's travel is already in [shown] — folded in by [_withKeyDrag]
+    // so that the handles and the curve move with the glyph rather than after
+    // it — so there is nothing to add here.
     var x = widget.axis.xOf(_keyFrame(key, widget.fps));
     var y = _keyY(channel, index, range, height, isOut: isOut);
-    final drag = _keyDrag;
-    if (drag != null && widget.selectedKeys.contains('${channel.id}#$index')) {
-      // With the magnet on the key lands on a whole frame, and it has to *look*
-      // as though it does while the pointer is still down: the release rounded
-      // the time but the drawing did not, so a key that would land on frame 12
-      // drew between 11 and 12 for the whole gesture and jumped on the way out
-      // (K-333). The same rounding, applied to the picture.
-      x += _snappedDx(key, drag.dxPx);
-      if (widget.lens == GraphLens.value) y += drag.dyPx;
-    }
     // A speed-lens dot in flight: sideways under the pointer, and the side
     // being dragged sits at the speed the pointer is asking for.
     final dot = _handleDrag;
@@ -2314,13 +2387,75 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return out;
   }
 
-  /// The keys as the painter should read them — the handle drag's provisional
-  /// sides swapped in, so the curve follows the handle live.
+  /// The keys as every reader should see them — the drag in flight folded in,
+  /// so the curve, the glyphs, the tangent endpoints and the lines between
+  /// them all derive from **one** moved list.
   ///
   /// `painting` is what tells a *row* drag's provisional value from the keys
   /// that really exist: the curve is drawn through it, the diamonds are not, so
   /// dragging an unkeyed value moves the line without appearing to key it.
   List<BridgeKeyframe> _shownKeys(GraphChannel channel,
+          {bool painting = false}) =>
+      _withKeyDrag(channel, _keysWithSideDrags(channel, painting: painting));
+
+  /// A key drag's travel, applied to the keys it holds.
+  ///
+  /// **Why it lives here rather than in [_keyPoint].** The delta used to be
+  /// added to the glyph's coordinates alone, so a dragged key moved while
+  /// [_handleEndpointFor] and [_HandlesPainter] went on reading the document's
+  /// unmoved key: the handle line stretched from the travelling glyph to a
+  /// stranded dot, and the dot never moved at all. Folding the same delta into
+  /// the shown keys moves the key *and* everything measured from it, because
+  /// they are all measured from this one list.
+  ///
+  /// The order is left alone. A key dragged past its neighbour keeps its index
+  /// for the length of the gesture — the ids in the selection, the glyph loop
+  /// and the handles are all indexed into this list, and re-sorting mid-drag
+  /// would re-aim them at each other's keys. The release sorts (and refuses a
+  /// collision) in [_keyDragEdits].
+  List<BridgeKeyframe> _withKeyDrag(
+      GraphChannel channel, List<BridgeKeyframe> keys) {
+    final drag = _keyDrag;
+    if (drag == null || (drag.dxPx == 0 && drag.dyPx == 0)) return keys;
+    final perFrame = widget.axis.perFrame;
+    // The value delta the release will write, in the units of this pane's
+    // vertical range — the same number [_keyDragEdits] works out, so the key
+    // draws where it lands.
+    final range = _range();
+    final height = _paneSize.height;
+    final span =
+        (range.$2 - range.$1).abs() < 1e-12 ? 1.0 : range.$2 - range.$1;
+    final dValue = widget.lens == GraphLens.value && height > 0
+        ? -drag.dyPx / height * span
+        : 0.0;
+
+    List<BridgeKeyframe>? moved;
+    for (var i = 0; i < keys.length; i++) {
+      if (!widget.selectedKeys.contains('${channel.id}#$i')) continue;
+      moved ??= [...keys];
+      final key = keys[i];
+      // [_snappedDx] is the rounding the commit uses, so with the magnet on
+      // the key draws on the whole frame it will land on (K-333); the clamp is
+      // the commit's too, so a key dragged off either end of the composition
+      // draws where it will actually come to rest.
+      final base = _keyFrame(key, widget.fps);
+      final frame = perFrame <= 0
+          ? base
+          : (base + _snappedDx(key, drag.dxPx) / perFrame)
+              .clamp(0.0, widget.frames.toDouble());
+      moved[i] = BridgeKeyframe(
+        time: timeOfSubframe(frame, widget.fpsNum, widget.fpsDen),
+        value: key.value + dValue,
+        interpIn: key.interpIn,
+        interpOut: key.interpOut,
+      );
+    }
+    return moved ?? keys;
+  }
+
+  /// The keys with the *other* drags' provisional geometry swapped in: a row
+  /// drag's published value, and a handle drag's shaped sides.
+  List<BridgeKeyframe> _keysWithSideDrags(GraphChannel channel,
       {bool painting = false}) {
     final row = rowValueDrag.value;
     if (row != null && row.matches(channel)) {
@@ -2395,27 +2530,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final targets = widget.selectedKeys.isNotEmpty
         ? widget.selectedKeys
         : {if (fallback != null) fallback};
-    final edits = <GraphChannel, BridgeScalar>{};
-    for (final channel in widget.channels) {
-      final keys = channel.keys;
-      final rest = <BridgeKeyframe>[];
-      var removed = false;
-      double? lastRemoved;
-      for (var i = 0; i < keys.length; i++) {
-        if (targets.contains('${channel.id}#$i')) {
-          removed = true;
-          lastRemoved = keys[i].value;
-        } else {
-          rest.add(keys[i]);
-        }
-      }
-      if (!removed) continue;
-      edits[channel] = rest.isEmpty
-          ? BridgeScalar.static_(lastRemoved ?? 0)
-          : BridgeScalar.keyframed(rest);
-    }
-    if (edits.isEmpty) return;
-    commitChannelEdits(edits);
+    final wrote = deleteKeysFromChannels(
+        channels: widget.channels, selectedKeys: targets);
+    if (!wrote) return;
     widget.selectedKeys.clear();
     widget.onSelectionChanged();
     widget.onChanged();
@@ -2500,7 +2617,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               Positioned.fill(
                 child: MarqueeSelect(
                   key: const ValueKey('graph-marquee'),
-                  onSelect: (rect) => _applyMarquee(rect, range, height),
+                  onSelect: (rect, additive) =>
+                      _applyMarquee(rect, range, height, additive),
                   onTapAt: (local) => _tapPane(local, range, height),
                   onClear: () {},
                 ),
@@ -2510,11 +2628,15 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomPaint(
+                    key: const ValueKey<String>('graph-handle-lines'),
                     painter: _HandlesPainter(
                       state: this,
                       range: range,
                       height: height,
-                      colour: t.warning,
+                      // `text_primary`, the colour of everything selected —
+                      // never the accent, and never `warning`, which has no
+                      // job on this pane (K-439, §6.1).
+                      colour: t.textPrimary,
                     ),
                   ),
                 ),
@@ -2531,11 +2653,13 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               // its influence bar runs out sideways from underneath it.
               if (widget.lens == GraphLens.value) ...[
                 ..._keyHandles(t, range, height),
-                ..._tangentHandles(t, range, height),
+                ..._tangentHandles(range, height),
               ] else ...[
-                ..._tangentHandles(t, range, height),
+                ..._tangentHandles(range, height),
                 ..._keyHandles(t, range, height),
               ],
+              // The live readout, beside the key in hand (§6.2).
+              ..._valueHint(range, height, constraints.maxWidth),
               // Over the live pane rather than instead of it, so the grid and
               // the axis stay readable behind the invitation to fill them.
               if (widget.channels.isEmpty)
@@ -2555,6 +2679,58 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         );
       },
     );
+  }
+
+  /// The drawing's **value hint pill**, riding beside the one key in hand:
+  /// `f<frame> · <value> · <in> / <out> %` (§6.2).
+  ///
+  /// Drawn from the selection, so it is transient by construction: it arrives
+  /// with the key being worked on, follows a drag live — the key it reads is
+  /// the *shown* key, travel and all — and leaves when the selection does (P1).
+  /// One key only: with a block in hand the block's own badge is the readout.
+  List<Widget> _valueHint(
+      (double, double) range, double height, double paneWidth) {
+    if (widget.lens != GraphLens.value || widget.selectedKeys.length != 1) {
+      return const [];
+    }
+    final id = widget.selectedKeys.first;
+    final hash = id.lastIndexOf('#');
+    if (hash < 0) return const [];
+    final index = int.tryParse(id.substring(hash + 1));
+    if (index == null) return const [];
+    final channelId = id.substring(0, hash);
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final keys = _shownKeys(channel);
+      if (index < 0 || index >= keys.length) return const [];
+      final key = keys[index];
+      final point = _keyPoint(channel, index, range, height, isOut: true);
+      final value = key.value;
+      // Room for the pill beside the key, or on its other side where the key
+      // has run out of pane — a readout clipped by the edge is no readout.
+      const width = 96.0;
+      final left = point.dx + 8 + width > paneWidth
+          ? point.dx - 8 - width
+          : point.dx + 8;
+      return [
+        Positioned(
+          key: const ValueKey<String>('graph-value-hint'),
+          left: left,
+          top: point.dy + 6,
+          child: HintPill(
+            text: l10n.graphKeyHint(
+              _keyFrame(key, widget.fps).round(),
+              value == value.roundToDouble()
+                  ? value.round().toString()
+                  : value.toStringAsFixed(2),
+              (sideInfluence(key.interpIn) * 100).round(),
+              (sideInfluence(key.interpOut) * 100).round(),
+            ),
+          ),
+        ),
+      ];
+    }
+    return const [];
   }
 
   /// The grabbable key glyphs.
@@ -2657,20 +2833,32 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               },
               // The glyph is small; the target around it is not (see
               // [_keyGrab]).
-              child: SizedBox(
-                width: _keyGrab,
-                height: _keyGrab,
-                child: Center(
-                  child: SizedBox(
-                    width: 10,
-                    height: 10,
-                    child: CustomPaint(
-                      painter: _KeyGlyphPainter(
-                        key_: keys[i],
-                        colour: chosen
-                            ? t.accent
-                            : t.curve[channel.colourIndex % t.curve.length],
-                        speedDot: widget.lens == GraphLens.speed,
+              child: MouseRegion(
+                // A key moves in time and value: the move cursor says so
+                // before the button goes down (P2).
+                cursor: SystemMouseCursors.move,
+                child: SizedBox(
+                  width: _keyGrab,
+                  height: _keyGrab,
+                  child: Center(
+                    child: SizedBox(
+                      // A selected key draws one size step larger — the
+                      // drawing's 7 in a 6 world — so the catch reads at a
+                      // glance without a second colour beyond `text_primary`.
+                      width: chosen ? _selectedKeyGlyph : _keyGlyph,
+                      height: chosen ? _selectedKeyGlyph : _keyGlyph,
+                      child: CustomPaint(
+                        painter: _KeyGlyphPainter(
+                          key_: keys[i],
+                          // Selected is `text_primary` — the one colour
+                          // selection speaks in. Not the accent: its jobs are
+                          // the playhead, the one filled button and the active
+                          // tab tick, and nothing else (K-439).
+                          colour: chosen
+                              ? t.textPrimary
+                              : t.curve[channel.colourIndex % t.curve.length],
+                          speedDot: widget.lens == GraphLens.speed,
+                        ),
                       ),
                     ),
                   ),
@@ -2685,8 +2873,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   }
 
   /// The draggable tangent endpoints for selected keys.
-  List<Widget> _tangentHandles(
-      LumitTheme t, (double, double) range, double height) {
+  // The theme is not asked for here: the ring paints itself from it
+  // ([_HandleRing]), so the dot's colours live where the dot is drawn.
+  List<Widget> _tangentHandles((double, double) range, double height) {
     final out = <Widget>[];
     for (final channel in widget.channels) {
       final keys = _shownKeys(channel);
@@ -2736,17 +2925,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               },
               // A generous target around a small dot: a handle that takes two
               // attempts to grab loses the keyframe's selection on the miss.
-              child: SizedBox(
-                width: grab,
-                height: grab,
-                child: Center(
-                  child: SizedBox(
-                    width: 8,
-                    height: 8,
-                    child: CustomPaint(painter: _HandleDotPainter(t.warning)),
-                  ),
-                ),
-              ),
+              child: _HandleRing(size: grab),
             ),
           ));
         }
@@ -3000,7 +3179,13 @@ class _GraphPainter extends CustomPainter {
   bool? hitTest(Offset position) => false;
 }
 
-/// The lines from selected keys to their tangent (or influence) endpoints.
+/// The lines from selected keys to their tangent (or influence) endpoints:
+/// the drawing's dashed hairline, 2 on and 2 off, in `text_primary`.
+///
+/// Dashed rather than solid because the line is scaffolding — it says which dot
+/// belongs to which key, and it must not be mistaken for a curve. The dashes
+/// are stepped along the line here rather than cut out of a path's metrics: it
+/// is one straight segment, so the arithmetic is a lerp.
 class _HandlesPainter extends CustomPainter {
   final GraphEditorFrbState state;
   final (double, double) range;
@@ -3034,9 +3219,25 @@ class _HandlesPainter extends CustomPainter {
             widget.axis.xOf(e.$1 * widget.fps),
             state._yOf(e.$2, range, height),
           );
-          canvas.drawLine(from, to, paint);
+          _dashed(canvas, from, to, paint);
         }
       }
+    }
+  }
+
+  /// 2 on, 2 off, from [from] to [to].
+  static void _dashed(Canvas canvas, Offset from, Offset to, Paint paint) {
+    const dash = 2.0;
+    const gap = 2.0;
+    final length = (to - from).distance;
+    if (length <= 0) return;
+    for (var at = 0.0; at < length; at += dash + gap) {
+      final end = (at + dash).clamp(0.0, length);
+      canvas.drawLine(
+        Offset.lerp(from, to, at / length)!,
+        Offset.lerp(from, to, end / length)!,
+        paint,
+      );
     }
   }
 
@@ -3094,17 +3295,79 @@ class _KeyGlyphPainter extends CustomPainter {
       old.key_.interpOut != key_.interpOut;
 }
 
-/// A tangent endpoint's dot.
+/// A tangent endpoint's dot: the drawing's **hollow ring** — a `text_primary`
+/// stroke round a hole punched in the pane's own ground, so the curve running
+/// under it does not read as running through it.
 class _HandleDotPainter extends CustomPainter {
   final Color colour;
-  const _HandleDotPainter(this.colour);
+  final Color fill;
+
+  /// The pointer is over the ring's target: the stroke comes up to full
+  /// strength, and goes back down when it leaves (P1 — nothing at rest).
+  final bool hovered;
+
+  const _HandleDotPainter(
+      {required this.colour, required this.fill, this.hovered = false});
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawCircle(Offset(size.width / 2, size.height / 2),
-        size.width / 2 - 1, Paint()..color = colour);
+    final centre = Offset(size.width / 2, size.height / 2);
+    final r = size.width / 2 - 1;
+    canvas.drawCircle(centre, r, Paint()..color = fill);
+    canvas.drawCircle(
+      centre,
+      r,
+      Paint()
+        ..color = hovered ? colour : colour.withValues(alpha: 0.8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
   }
 
   @override
-  bool shouldRepaint(_HandleDotPainter old) => old.colour != colour;
+  bool shouldRepaint(_HandleDotPainter old) =>
+      old.colour != colour || old.fill != fill || old.hovered != hovered;
+}
+
+/// A tangent handle's dot with its own hover state, so brightening one ring
+/// repaints that ring rather than rebuilding the pane under the pointer.
+class _HandleRing extends StatefulWidget {
+  final double size;
+  const _HandleRing({required this.size});
+
+  @override
+  State<_HandleRing> createState() => _HandleRingState();
+}
+
+class _HandleRingState extends State<_HandleRing> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return MouseRegion(
+      // A handle swings: the drag that matters is the vertical one, and the
+      // cursor says so before the button goes down (P2).
+      cursor: SystemMouseCursors.resizeUpDown,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Center(
+          child: SizedBox(
+            width: 8,
+            height: 8,
+            child: CustomPaint(
+              painter: _HandleDotPainter(
+                colour: t.textPrimary,
+                fill: t.surface0,
+                hovered: _hovered,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

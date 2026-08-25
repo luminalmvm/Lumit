@@ -1141,6 +1141,10 @@
   "@fxAdd": {
     "description": "Effect controls — a control on Echo."
   },
+  "fxAlignToMotion": "Align to motion",
+  "@fxAlignToMotion": {
+    "description": "Effect controls — a switch on Particulate: a particle turns to face the way it is travelling."
+  },
   "fxAllEdges": "All edges",
   "@fxAllEdges": {
     "description": "Effect controls — a Pinning option on Turbulent displace."
@@ -1329,6 +1333,10 @@
   "@fxDirection": {
     "description": "Effect controls — a control on Drop shadow: which way the light comes from."
   },
+  "fxDisc": "Disc",
+  "@fxDisc": {
+    "description": "Effect controls — one option in the Mode menu on Particulate: each particle is drawn as a soft round dot."
+  },
   "fxDistance": "Distance",
   "@fxDistance": {
     "description": "Effect controls — a control on Drop shadow: how far the shadow is offset."
@@ -1336,6 +1344,10 @@
   "fxDistribution": "Distribution",
   "@fxDistribution": {
     "description": "Effect controls — a control on Noise."
+  },
+  "fxDrag": "Drag",
+  "@fxDrag": {
+    "description": "Effect controls — a control on Particulate: how quickly a particle's own speed settles towards the wind's."
   },
   "fxDropShadow": "Drop shadow",
   "@fxDropShadow": {
@@ -1621,6 +1633,22 @@
   "@fxEdges": {
     "description": "Effect controls — a control on Radial blur."
   },
+  "fxEllipse": "Ellipse",
+  "@fxEllipse": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside an ellipse."
+  },
+  "fxEmitRate": "Emit rate",
+  "@fxEmitRate": {
+    "description": "Effect controls — a control on Particulate: how many particles are born each second."
+  },
+  "fxEmitter": "Emitter",
+  "@fxEmitter": {
+    "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."
+  },
+  "fxEmitterAngle": "Emitter angle",
+  "@fxEmitterAngle": {
+    "description": "Effect controls — a control on Particulate: rotates the shape particles are born along."
+  },
   "fxEndColour": "End colour",
   "@fxEndColour": {
     "description": "Effect controls — a control on Gradient."
@@ -1729,6 +1757,10 @@
   "@fxForceOnAllLayers": {
     "description": "Effect controls — a control on Posterize time."
   },
+  "fxForces": "Forces",
+  "@fxForces": {
+    "description": "Effect controls — a group heading on Particulate, over the controls that carry particles about once they are born."
+  },
   "fxFractalNoise": "Fractal noise",
   "@fxFractalNoise": {
     "description": "Effect controls — the name of an effect."
@@ -1793,6 +1825,10 @@
   "@fxGradient": {
     "description": "Effect controls — the name of an effect."
   },
+  "fxGravity": "Gravity",
+  "@fxGravity": {
+    "description": "Effect controls — a control on Particulate: a steady downward pull on every particle."
+  },
   "fxGreen": "Green",
   "@fxGreen": {
     "description": "Effect controls — a control on RGB split."
@@ -1812,6 +1848,10 @@
   "fxHardLight": "Hard light",
   "@fxHardLight": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxHeight": "Height",
+  "@fxHeight": {
+    "description": "Effect controls — a control on Particulate: how tall the shape particles are born inside is."
   },
   "fxHigh": "High",
   "@fxHigh": {
@@ -1848,6 +1888,10 @@
   "fxInFront": "In front",
   "@fxInFront": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxInitialSpeed": "Initial speed",
+  "@fxInitialSpeed": {
+    "description": "Effect controls — a control on Particulate: how fast a particle is travelling the moment it is born."
   },
   "fxInput": "Input",
   "@fxInput": {
@@ -1909,6 +1953,14 @@
   "@fxLensOptions": {
     "description": "Effect controls — a control on Tint."
   },
+  "fxLife": "Life",
+  "@fxLife": {
+    "description": "Effect controls — a control on Particulate: how long a particle lasts before it is gone."
+  },
+  "fxLifeJitter": "Life jitter",
+  "@fxLifeJitter": {
+    "description": "Effect controls — a control on Particulate: how much particle lifetimes differ from one another."
+  },
   "fxLift": "Lift",
   "@fxLift": {
     "description": "Effect controls — a control on Colour balance."
@@ -1936,6 +1988,10 @@
   "fxLights": "Lights",
   "@fxLights": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxLine": "Line",
+  "@fxLine": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born along a straight line."
   },
   "fxLinePeriod": "Line period",
   "@fxLinePeriod": {
@@ -1977,6 +2033,10 @@
   "@fxMapWhiteTo": {
     "description": "Effect controls — a control on Tint."
   },
+  "fxMaskPathEmitter": "Mask path",
+  "@fxMaskPathEmitter": {
+    "description": "Effect controls — on Particulate, both the Shape option that has particles born along a mask you have drawn and the row saying which mask that is."
+  },
   "fxMatte": "Matte",
   "@fxMatte": {
     "description": "Effect controls — a control on Lens flare."
@@ -1992,6 +2052,10 @@
   "fxMaxGhosts": "Max ghosts",
   "@fxMaxGhosts": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxMaxParticles": "Max particles",
+  "@fxMaxParticles": {
+    "description": "Effect controls — a control on Particulate: the most particles that may be alive at once, which is also how much of the frame's time the effect may spend."
   },
   "fxMirror": "Mirror",
   "@fxMirror": {
@@ -2057,6 +2121,10 @@
   "@fxOpacity": {
     "description": "Effect controls — a control on Drop shadow: how dark the shadow is."
   },
+  "fxOpacityOverLife": "Opacity over life",
+  "@fxOpacityOverLife": {
+    "description": "Effect controls — a curve on Particulate: how a particle's opacity changes between its birth and its end."
+  },
   "fxOpacityPct": "Opacity %",
   "@fxOpacityPct": {
     "description": "Effect controls — a control on Transform."
@@ -2068,6 +2136,14 @@
   "fxOverlay": "Overlay",
   "@fxOverlay": {
     "description": "Effect controls — a control on Echo."
+  },
+  "fxParticle": "Particle",
+  "@fxParticle": {
+    "description": "Effect controls — a group heading on Particulate, over the controls saying what one particle looks like."
+  },
+  "fxParticulate": "Particulate",
+  "@fxParticulate": {
+    "description": "Effect controls — the name of the particle effect, in the Add-effect menu and at the top of its controls."
   },
   "fxPerAxisWobble": "Per-axis wobble",
   "@fxPerAxisWobble": {
@@ -2088,6 +2164,14 @@
   "fxPinning": "Pinning",
   "@fxPinning": {
     "description": "Effect controls — a control on Turbulent displace."
+  },
+  "fxPoint": "Point",
+  "@fxPoint": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: every particle is born at the same spot."
+  },
+  "fxPoints": "Points",
+  "@fxPoints": {
+    "description": "Graph panel — the socket Particulate hands its particles out on, for another node to read."
   },
   "fxPositionX": "Position x",
   "@fxPositionX": {
@@ -2129,6 +2213,10 @@
   "@fxRamp": {
     "description": "Effect controls — a control on Vignette."
   },
+  "fxRectangle": "Rectangle",
+  "@fxRectangle": {
+    "description": "Effect controls — one option in the Shape menu on Particulate: particles are born anywhere inside a rectangle."
+  },
   "fxRed": "Red",
   "@fxRed": {
     "description": "Effect controls — a control on RGB split."
@@ -2140,6 +2228,10 @@
   "fxRemoveEdgeLeak": "Remove edge leak",
   "@fxRemoveEdgeLeak": {
     "description": "Effect controls — a control on Depth of field."
+  },
+  "fxRender": "Render",
+  "@fxRender": {
+    "description": "Effect controls — a group heading on Particulate, over the controls saying how a particle is drawn."
   },
   "fxRendered": "Rendered",
   "@fxRendered": {
@@ -2313,6 +2405,14 @@
   "@fxSize": {
     "description": "Effect controls — a control on Turbulent displace."
   },
+  "fxSizeJitter": "Size jitter",
+  "@fxSizeJitter": {
+    "description": "Effect controls — a control on Particulate: how much particle sizes differ from one another."
+  },
+  "fxSizeOverLife": "Size over life",
+  "@fxSizeOverLife": {
+    "description": "Effect controls — a curve on Particulate: how a particle's size changes between its birth and its end."
+  },
   "fxSliceRepeat": "Slice repeat",
   "@fxSliceRepeat": {
     "description": "Effect controls — a control on Block glitch."
@@ -2413,13 +2513,29 @@
   "@fxShadows": {
     "description": "Effect controls — a Curves knot, the curve's output at input 0.25."
   },
+  "fxSpeedJitter": "Speed jitter",
+  "@fxSpeedJitter": {
+    "description": "Effect controls — a control on Particulate: how much particle speeds differ from one another."
+  },
   "fxSpin": "Spin",
   "@fxSpin": {
     "description": "Effect controls — a control on Radial blur."
   },
+  "fxSpread": "Spread",
+  "@fxSpread": {
+    "description": "Effect controls — a control on Particulate: how wide the cone is that particles are launched into."
+  },
+  "fxSprite": "Sprite",
+  "@fxSprite": {
+    "description": "Effect controls — one option in the Mode menu on Particulate: each particle is drawn as a copy of another layer."
+  },
   "fxSpriteFlare": "Sprite flare",
   "@fxSpriteFlare": {
     "description": "Effect name in the Effects list. An art-directed lens flare drawn from a light position you set — a glow, a train of ghosts and a streak — rather than simulated through a real lens."
+  },
+  "fxSpriteLayer": "Sprite layer",
+  "@fxSpriteLayer": {
+    "description": "Effect controls — a control on Particulate: which layer is drawn in place of each particle."
   },
   "fxStarburstIntensity": "Starburst intensity",
   "@fxStarburstIntensity": {
@@ -2549,6 +2665,18 @@
   "@fxTrigger": {
     "description": "Effect controls — a control on Flash."
   },
+  "fxTurbulenceAmount": "Turbulence amount",
+  "@fxTurbulenceAmount": {
+    "description": "Effect controls — a control on Particulate: how far a swirling noise pushes particles off their path."
+  },
+  "fxTurbulenceScale": "Turbulence scale",
+  "@fxTurbulenceScale": {
+    "description": "Effect controls — a control on Particulate: how large the swirls of that noise are."
+  },
+  "fxTurbulenceSpeed": "Turbulence speed",
+  "@fxTurbulenceSpeed": {
+    "description": "Effect controls — a control on Particulate: how quickly those swirls change as a particle ages."
+  },
   "fxTurbulent": "Turbulent",
   "@fxTurbulent": {
     "description": "Effect controls — a Fractal type option on Fractal noise."
@@ -2620,6 +2748,14 @@
   "fxWidth": "Width",
   "@fxWidth": {
     "description": "Effect controls — a control on Light wrap. How far, in pixels, the background's light reaches inside the foreground's edge."
+  },
+  "fxWindX": "Wind x",
+  "@fxWindX": {
+    "description": "Effect controls — a control on Particulate: the air's own sideways speed, which moves particles only while Drag is above zero."
+  },
+  "fxWindY": "Wind y",
+  "@fxWindY": {
+    "description": "Effect controls — a control on Particulate: the air's own up-and-down speed, which moves particles only while Drag is above zero."
   },
   "fxWipe": "Wipe",
   "@fxWipe": {
@@ -8572,5 +8708,27 @@
     "placeholders": {
       "error": { "type": "String" }
     }
+  },
+  "graphKeyHint": "f{frame} · {value} · {inPct} / {outPct} %",
+  "@graphKeyHint": {
+    "description": "Graph editor: the small readout pill beside the one selected keyframe, saying which frame it sits on, the value it holds, and the influence of its incoming and outgoing eases in per cent. Very small mono type; the middle dots separate the parts.",
+    "placeholders": {
+      "frame": { "type": "int" },
+      "value": { "type": "String" },
+      "inPct": { "type": "int" },
+      "outPct": { "type": "int" }
+    }
+  },
+  "timelineKeyDragHint": "f{frame} · {value}",
+  "@timelineKeyDragHint": {
+    "description": "Timeline lanes: the small readout pill beside a keyframe while it is being dragged, saying which frame it has reached and the value it holds. Very small mono type; the middle dot separates the two.",
+    "placeholders": {
+      "frame": { "type": "int" },
+      "value": { "type": "String" }
+    }
+  },
+  "keyMenuEase": "Ease…",
+  "@keyMenuEase": {
+    "description": "Timeline lanes: the row of a keyframe's right-click menu that opens the Ease popover on the selected keyframes. The ellipsis says it opens something."
   }
 }

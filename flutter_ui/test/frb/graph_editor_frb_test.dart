@@ -15,6 +15,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/theme/theme.dart';
 
 import 'frb_test_support.dart';
 
@@ -1279,6 +1280,200 @@ void main() {
       ], beforeFrames, reason: 'every frame is held');
       expect(opacityKeys(p.layer)[1].value, lessThan(beforeValue),
           reason: 'and the value moved');
+    });
+
+    // --- the handles, and what a dragged key takes with it (§6.1–6.2) -----
+
+    /// Keys spread across the whole composition, so a handle's reach — a third
+    /// of the gap to its neighbour — is worth enough pixels to aim at. Keys a
+    /// few frames apart on a long comp draw their handles *on top of* the key,
+    /// which is honest geometry and useless for a test about which of the two
+    /// the pointer grabbed.
+    void spreadOpacity(dynamic p) {
+      final last = (p.comp as CompositionReference).durationFrames() - 1;
+      animateOpacity(p.comp as CompositionReference, p.layer as LayerReference,
+          frames: [0, last ~/ 2, last]);
+    }
+
+    /// Bring a key's handles out: easy-ease it (F9) and leave it selected.
+    Future<String> easedAndSelected(WidgetTester tester, dynamic p,
+        {int index = 1}) async {
+      await tester
+          .tap(find.byKey(ValueKey<String>(opacityKey(p.layer, index))));
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.f9);
+      await tester.pumpAndSettle();
+      return 'graph-handle-${(p.layer as LayerReference).internallayerId}'
+          '/transform/opacity@opacity#$index';
+    }
+
+    /// **The reported fault** (§6.1): the glyph moved under the pointer while
+    /// the handle line and its dot went on reading the document's unmoved key,
+    /// so the line stretched to a stranded endpoint and the dot never stirred.
+    /// Everything is measured from one moved list now, so it has to travel
+    /// *before* the release, not on it.
+    testWidgets('a dragged key carries its handles with it, live',
+        (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+      final base = await easedAndSelected(tester, p);
+
+      final keyFinder = find.byKey(ValueKey<String>(opacityKey(p.layer, 1)));
+      final outHandle = find.byKey(ValueKey<String>('$base-out'));
+      expect(outHandle, findsOneWidget);
+
+      final keyBefore = tester.getCenter(keyFinder);
+      final handleBefore = tester.getCenter(outHandle);
+
+      final gesture = await tester.startGesture(keyBefore);
+      await tester.pump();
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(0, -6));
+        await tester.pump();
+      }
+      final keyMid = tester.getCenter(keyFinder);
+      final handleMid = tester.getCenter(outHandle);
+
+      expect(keyMid.dy, lessThan(keyBefore.dy - 4),
+          reason: 'the key itself moved while the pointer was down');
+      expect(handleMid.dy - handleBefore.dy,
+          closeTo(keyMid.dy - keyBefore.dy, 1.5),
+          reason: 'and its handle travelled with it, before the release');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
+    /// The drawing's handle line: 2 on, 2 off, in `text_primary`. Solid
+    /// `warning` was neither (K-439 — `warning` has no job on this pane).
+    testWidgets('handle lines are dashed hairlines in text_primary',
+        (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+      await easedAndSelected(tester, p);
+
+      final t = LumitTheme.dark();
+      final lines = find.byKey(const ValueKey('graph-handle-lines'));
+      final painter = tester.widget<CustomPaint>(lines).painter as dynamic;
+      expect(painter.colour, t.textPrimary,
+          reason: 'selection speaks in text_primary, never warning');
+
+      // Three segments in a row: a solid line would paint one and stop.
+      final dash = t.textPrimary.withValues(alpha: 0.8);
+      expect(
+        lines,
+        paints
+          ..line(color: dash)
+          ..line(color: dash)
+          ..line(color: dash),
+        reason: 'the line is cut into dashes, not drawn whole',
+      );
+    });
+
+    /// The endpoint is the drawing's hollow ring — a `text_primary` stroke
+    /// round a hole in the pane's own ground — and it brightens under the
+    /// pointer and dims again when it leaves (P1). The cursor over it says
+    /// which way it swings before the button goes down (P2).
+    testWidgets('a handle endpoint is a hollow ring that answers the pointer',
+        (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+      final base = await easedAndSelected(tester, p);
+      final outHandle = find.byKey(ValueKey<String>('$base-out'));
+
+      final t = LumitTheme.dark();
+      dynamic ring() => tester
+          .widget<CustomPaint>(find.descendant(
+              of: outHandle, matching: find.byType(CustomPaint)))
+          .painter as dynamic;
+      expect(ring().colour, t.textPrimary);
+      expect(ring().fill, t.surface0,
+          reason: 'hollow: the ground shows through the ring');
+      expect(ring().hovered, isFalse, reason: 'nothing at rest');
+
+      expect(
+          tester
+              .widget<MouseRegion>(find
+                  .descendant(of: outHandle, matching: find.byType(MouseRegion))
+                  .first)
+              .cursor,
+          SystemMouseCursors.resizeUpDown);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(outHandle));
+      await tester.pump();
+      expect(ring().hovered, isTrue, reason: 'the ring brightens under it');
+
+      await mouse.moveTo(Offset.zero);
+      await tester.pump();
+      expect(ring().hovered, isFalse, reason: 'and leaves nothing behind');
+    });
+
+    /// A selected key is `text_primary` and one size step larger — never the
+    /// accent (K-439) — and its grab target does not change size with it.
+    testWidgets('a selected key draws in text_primary, one step larger',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      final t = LumitTheme.dark();
+      final key = find.byKey(ValueKey<String>(opacityKey(p.layer, 1)));
+      Finder glyph() =>
+          find.descendant(of: key, matching: find.byType(CustomPaint));
+      final restingGlyph = tester.getSize(glyph());
+      final restingTarget = tester.getSize(key);
+      expect((tester.widget<CustomPaint>(glyph()).painter as dynamic).colour,
+          isNot(t.accent));
+
+      expect(
+          tester
+              .widget<MouseRegion>(find
+                  .descendant(of: key, matching: find.byType(MouseRegion))
+                  .first)
+              .cursor,
+          SystemMouseCursors.move,
+          reason: 'a key moves in time and value, and says so');
+
+      await tester.tap(key);
+      await tester.pump();
+
+      expect((tester.widget<CustomPaint>(glyph()).painter as dynamic).colour,
+          t.textPrimary,
+          reason: 'what is selected is text_primary, never the accent');
+      expect(tester.getSize(glyph()).width, greaterThan(restingGlyph.width),
+          reason: 'and one size step larger');
+      expect(tester.getSize(key), restingTarget,
+          reason: 'the target under it does not move with the mark');
+    });
+
+    /// The drawing's value hint pill: one key in hand, its frame, value and
+    /// the influence of each side, gone when the selection is not exactly one.
+    testWidgets('one selected key carries the value hint pill', (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 100]);
+      await mountGraph(tester, p);
+
+      final pill = find.byKey(const ValueKey('graph-value-hint'));
+      expect(pill, findsNothing, reason: 'nothing at rest');
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      expect(pill, findsOneWidget);
+      expect(find.textContaining('f50 · 50 · 33 / 33 %'), findsOneWidget,
+          reason: 'the frame, the value, and both influences in per cent');
+
+      // A block of keys has its own badge; the single-key readout stands down.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 2))));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(pill, findsNothing, reason: 'two keys are a block, not a key');
     });
   }, skip: !engineAvailable);
 }

@@ -706,6 +706,63 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// name that does not line up with its bar is worse than no fold-out at all.
   final Set<String> _open = {};
 
+  /// Keys mode's twirl set — **the inverse of [_open]**: the layer ids the
+  /// user has shut, not the ones they have opened (K-500 §2.3).
+  ///
+  /// A dope sheet's point is its flattened property rows, so it opens with
+  /// every listed layer twirled down; a sheet of shut bands shows nothing and
+  /// takes no marquee. Remembering what is *shut* is what makes "all open" the
+  /// resting state without a pass over the layers to seed it, and keeps the
+  /// two modes' twirls apart: opening a layer here does not open it in Layers
+  /// mode, where shut-by-default is the right answer.
+  final Set<String> _keysShut = {};
+
+  /// Whether [id]'s twirl is down in the mode now showing.
+  bool _isOpen(String id) =>
+      _keys ? !_keysShut.contains(id) : _open.contains(id);
+
+  /// Open or shut one twirl in the mode now showing. Layers mode's paths reach
+  /// below the layer (`<layer>/transform` and the rest); Keys mode's twirls are
+  /// layers only, because its rows are the layer's properties, flat.
+  ///
+  /// Exactly this path: shutting a group in Layers mode leaves what was open
+  /// *inside* it remembered, so twirling it back down finds it as it was.
+  void _setOpen(String path, bool open) {
+    if (_keys) {
+      if (open) {
+        _keysShut.remove(path);
+      } else {
+        _keysShut.add(path);
+      }
+      return;
+    }
+    if (open) {
+      _open.add(path);
+    } else {
+      _open.remove(path);
+    }
+  }
+
+  /// Shut [id] and forget everything opened inside it — what a reveal key does
+  /// before it opens the rows it names, so a reveal shows what it says rather
+  /// than adding to whatever the last one left open.
+  void _shutLayerDeep(String id) {
+    if (_keys) {
+      _keysShut.add(id);
+      return;
+    }
+    _open.removeWhere((p) => p == id || isUnderPath(id, p));
+  }
+
+  /// Which layers' twirls are down, as [layerRows] and [keysLayerRows] want it.
+  Set<String> _openSet(List<BridgeLayerEntry> layers) => _keys
+      ? {
+          for (final e in layers)
+            if (!_keysShut.contains(e.layer.internallayerId.toString()))
+              e.layer.internallayerId.toString(),
+        }
+      : _open;
+
   /// Which layers' sources carry sound, by id. Cached because answering it
   /// probes the file with FFmpeg, which must never happen in a build — the same
   /// reason the Project panel caches missing media. Absent means "not asked
@@ -975,11 +1032,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// with nowhere to sit, and it came back as soon as the fold reopened — on a
   /// layer the user had since stopped working on.
   void _toggle(String path) => setState(() {
-        if (_open.remove(path)) {
-          _dropSelectionUnder(path);
-        } else {
-          _open.add(path);
-        }
+        final shutting = _isOpen(path);
+        _setOpen(path, !shutting);
+        if (shutting) _dropSelectionUnder(path);
       });
 
   /// Forget any selected property at or below [path], and any keyframes of
@@ -1219,12 +1274,41 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Shift+click range runs along. Rebuilt by every build.
   List<String> _visiblePropertyPaths = const [];
 
+  /// How many keyframes each of those rows draws, by path. Rebuilt by every
+  /// build, beside [_visiblePropertyPaths] and from the same rows.
+  Map<String, int> _visibleKeyCounts = const {};
+
+  /// Every lane key id belonging to [path] — `path#0`, `path#1`, and so on.
+  ///
+  /// A row's keys are numbered by their place in the row's own list, which is
+  /// the same numbering the marquee, the lanes and the block tools all use, so
+  /// a selection made from a name and one made from a box are the same thing.
+  Set<String> _keysOfProperty(String path) => {
+        for (var i = 0; i < (_visibleKeyCounts[path] ?? 0); i++) '$path#$i',
+      };
+
   /// Select [path] by click: plain replaces, Ctrl toggles, Shift extends from
   /// the last selected along the visible rows. Marks its layer either way.
+  ///
+  /// **A property's name is its row's "select all"** (K-500 §2.1): picking a
+  /// row picks its keyframes too, so the block box, the Ease popover and the
+  /// F9 family act on the row that was just clicked without the user drawing a
+  /// box round diamonds they can already see are all of them. Each of the three
+  /// click rules carries its keys the same way it carries its rows — Ctrl
+  /// toggles the row's keys in and out of the standing selection, Shift takes
+  /// the keys of every row the run passes over.
+  ///
+  /// The stopwatch and the value well are not this gesture: they animate and
+  /// they edit, and neither re-aims the selection (K-196).
   void _selectProperty(String path) => setState(() {
         final keys = HardwareKeyboard.instance;
         if (keys.isControlPressed || keys.isMetaPressed) {
-          if (!_selectedProperties.remove(path)) _selectedProperties.add(path);
+          if (_selectedProperties.remove(path)) {
+            _laneKeySelection.removeAll(_keysOfProperty(path));
+          } else {
+            _selectedProperties.add(path);
+            _laneKeySelection.addAll(_keysOfProperty(path));
+          }
         } else if (keys.isShiftPressed && _selectedProperties.isNotEmpty) {
           final a = _visiblePropertyPaths.indexOf(_selectedProperties.last);
           final b = _visiblePropertyPaths.indexOf(path);
@@ -1232,17 +1316,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             if (!_selectedProperties.contains(path)) {
               _selectedProperties.add(path);
             }
+            _laneKeySelection.addAll(_keysOfProperty(path));
           } else {
             for (var i = a < b ? a : b; i <= (a < b ? b : a); i++) {
               if (!_selectedProperties.contains(_visiblePropertyPaths[i])) {
                 _selectedProperties.add(_visiblePropertyPaths[i]);
               }
+              _laneKeySelection
+                  .addAll(_keysOfProperty(_visiblePropertyPaths[i]));
             }
           }
         } else {
           _selectedProperties
             ..clear()
             ..add(path);
+          _laneKeySelection
+            ..clear()
+            ..addAll(_keysOfProperty(path));
         }
         _graphKeySelection.clear();
         _highlighted = layerIdOfPath(path) ?? _highlighted;
@@ -1566,17 +1656,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final wanted = _revealPaths(id, entry, action);
         // Already showing this and nothing else: the key is a toggle, so the
         // second press shuts the layer rather than reopening what is open.
-        final showing = _open.contains(id) &&
+        final showing = _isOpen(id) &&
             wanted.every(_open.contains) &&
             !_open.any((p) => isUnderPath(id, p) && !wanted.contains(p));
         // Every reveal starts from the layer closed, so it shows what it says
         // rather than adding to whatever the last one left open.
-        _open.removeWhere((p) => p == id || isUnderPath(id, p));
+        _shutLayerDeep(id);
         _dropSelectionUnder(id);
         if (showing) continue;
-        _open
-          ..add(id)
-          ..addAll(wanted);
+        _setOpen(id, true);
+        _open.addAll(wanted);
       }
     });
     return true;
@@ -1593,9 +1682,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       for (final entry in _ui!.model.layers) {
         if (entry.layer.internallayerId != layerId) continue;
         final id = layerId.toString();
-        _open
-          ..add(id)
-          ..addAll(_revealPaths(id, entry, action));
+        _setOpen(id, true);
+        _open.addAll(_revealPaths(id, entry, action));
       }
     });
   }
@@ -1861,6 +1949,105 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// picked up.
   int get _selectedKeyCount =>
       _graph ? _graphKeySelection.length : _laneKeySelection.length;
+
+  /// A new lane key selection — from a box, a click, or a property's name.
+  ///
+  /// Picking keyframes picks their **properties** too, every distinct one the
+  /// selection touches, so the outline and the graph show what is in hand
+  /// (docs/07 §4.3). An empty selection leaves the properties alone: letting
+  /// go of the keys is not letting go of the rows they sat on.
+  void _onLaneKeysSelected(Set<String> keys) {
+    setState(() {
+      _laneKeySelection
+        ..clear()
+        ..addAll(keys);
+      if (keys.isEmpty) return;
+      _selectedProperties.clear();
+      for (final id in keys) {
+        final path = id.substring(0, id.lastIndexOf('#'));
+        if (!_selectedProperties.contains(path)) {
+          _selectedProperties.add(path);
+        }
+      }
+      _highlighted = layerIdOfPath(_selectedProperties.first) ?? _highlighted;
+    });
+  }
+
+  /// Remove the selected keys — the lane key menu's *Delete key* (K-500 §2.1),
+  /// the same removal the graph's Delete makes.
+  ///
+  /// One undo step however many rows it reaches across: a block deleted in one
+  /// gesture comes back in one (K-458).
+  void _deleteSelectedKeys() {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final channels = _selectionChannels(ui);
+    final selection = _actionKeySelection(channels);
+    if (selection.isEmpty) return;
+    asOneUndoStep(
+        _project,
+        () => deleteKeysFromChannels(
+            channels: channels, selectedKeys: selection));
+    setState(_laneKeySelection.clear);
+    ui.model.refresh();
+  }
+
+  /// The right-click menu on a lane keyframe (K-500 §2.1): the graph key's own
+  /// menu — Linear / Easy ease / Hold / Delete key — plus *Ease…*, which opens
+  /// the popover on whatever is selected.
+  ///
+  /// A right-click on an **unselected** key selects it first, so the menu acts
+  /// on the thing that was clicked; on a selected one it acts on the whole
+  /// selection, which is what makes it the block's menu as well as one key's.
+  void _laneKeyMenu(String id, Offset position) {
+    if (!_laneKeySelection.contains(id)) _onLaneKeysSelected({id});
+    showMenuAt<void>(
+      context: context,
+      position: position,
+      width: 170,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('tl-key-menu-linear'),
+          onPressed: () {
+            close(null);
+            _applyInterp(const BridgeSideInterp.linear());
+          },
+          child: Text(l10n.easeLinear),
+        ),
+        MenuRow(
+          key: const ValueKey('tl-key-menu-ease'),
+          onPressed: () {
+            close(null);
+            _applyInterp(easyEase);
+          },
+          child: Text(l10n.easeEasy),
+        ),
+        MenuRow(
+          key: const ValueKey('tl-key-menu-hold'),
+          onPressed: () {
+            close(null);
+            _applyInterp(const BridgeSideInterp.hold());
+          },
+          child: Text(l10n.easeHold),
+        ),
+        MenuRow(
+          key: const ValueKey('tl-key-menu-shape'),
+          onPressed: () {
+            close(null);
+            _openEasePopover(position);
+          },
+          child: Text(l10n.keyMenuEase),
+        ),
+        MenuRow(
+          key: const ValueKey('tl-key-menu-delete'),
+          onPressed: () {
+            close(null);
+            _deleteSelectedKeys();
+          },
+          child: Text(l10n.deleteKey),
+        ),
+      ],
+    );
+  }
 
   /// Open the Ease popover on the selection, anchored at [position] (K-458).
   ///
@@ -2287,7 +2474,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       // what it says rather than adding to whatever was already open.
       for (final layer in layers) {
         final id = layer.internallayerId.toString();
-        _open.removeWhere((path) => path == id || isUnderPath(id, path));
+        _shutLayerDeep(id);
         _dropSelectionUnder(id);
       }
       if (_revealTaps >= 3) {
@@ -2306,7 +2493,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // Nothing qualifies: leave the layer shut rather than opening it onto
         // a list of headings the reveal just said were empty.
         if (!groups.any) continue;
-        _open.add(id);
+        _setOpen(id, true);
         if (groups.transform) _open.add(transformPath(id));
         if (groups.effects.isNotEmpty) {
           _open.add(effectsPath(id));
@@ -2353,13 +2540,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         final id = entry.layer.internallayerId.toString();
         // Every tap starts from the layer closed, so the cycle shows exactly
         // what it says rather than adding to whatever was already open.
-        _open.removeWhere((p) => p == id || isUnderPath(id, p));
+        _shutLayerDeep(id);
         _dropSelectionUnder(id);
         if (_audioRevealTaps >= 3) continue;
         if (!(_hasAudio[id] ?? false)) continue;
-        _open
-          ..add(id)
-          ..add(audioPath(id));
+        _setOpen(id, true);
+        _open.add(audioPath(id));
         if (_audioRevealTaps >= 2) _open.add(waveformPath(id));
       }
       if (_audioRevealTaps >= 3) {
@@ -2681,7 +2867,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                         e,
                   ]
                 : layers,
-            open: _open,
+            // **All open unless shut** (K-500 §2.3): the dope sheet's point is
+            // the flattened property rows, and a sheet of shut bands shows
+            // nothing and takes no marquee.
+            open: _openSet(layers),
             rowHeight: t.density.laneRow,
             animatedOnly: !_keysShowAll,
             hasAudio: _hasAudio,
@@ -2709,6 +2898,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         for (final row in layer.drawnRows)
           if (row is! FoldWaveformRow) foldRowPath(layer.id, row),
     ];
+    // How many diamonds each of those rows draws, so a click on a property's
+    // *name* can take its keys with it (K-500 §2.1) without walking the model
+    // again from a callback that has no rows to hand. Read off the same rows
+    // the lanes draw from, so the two cannot disagree about how many keys a
+    // row has.
+    _visibleKeyCounts = {
+      for (final layer in rows)
+        for (final row in layer.drawnRows)
+          if (row is! FoldWaveformRow)
+            foldRowPath(layer.id, row): laneKeysOf(row).length,
+    };
     final channels =
         graphChannels(layers: ui.model.layers, selected: _selectedProperties);
     // The work area, in frames, read once for the whole panel (K-203) — and
@@ -3445,33 +3645,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       onEase: _openEasePopover,
                       onDeselectAll: () => _deselectAll(ui),
                       work: work,
-                      onKeysSelected: (keys) {
-                        // Picking keyframes picks
-                        // their properties too —
-                        // every distinct one the
-                        // box caught — so the
-                        // outline and the graph
-                        // show what was boxed
-                        // (docs/07 §4.3).
-                        setState(() {
-                          _laneKeySelection
-                            ..clear()
-                            ..addAll(keys);
-                          if (keys.isEmpty) {
-                            return;
-                          }
-                          _selectedProperties.clear();
-                          for (final id in keys) {
-                            final path = id.substring(0, id.lastIndexOf('#'));
-                            if (!_selectedProperties.contains(path)) {
-                              _selectedProperties.add(path);
-                            }
-                          }
-                          _highlighted =
-                              layerIdOfPath(_selectedProperties.first) ??
-                                  _highlighted;
-                        });
-                      },
+                      onKeysSelected: _onLaneKeysSelected,
+                      onKeyMenu: _laneKeyMenu,
                       onWheel: (e, x) => _wheel(e, x, axis),
                       onSeek: (f) =>
                           ui.scrubTo(f.clamp(0, frames == 0 ? 0 : frames - 1)),
@@ -7762,6 +7937,11 @@ class _LayerArea extends StatelessWidget {
   final Set<String> selectedKeys;
   final ValueChanged<Set<String>> onKeysSelected;
 
+  /// A right-click on a lane key, by id and at the pointer in global
+  /// coordinates — the panel opens the menu, because the rows it acts on
+  /// reach past this lane (K-500 §2.1).
+  final void Function(String id, Offset position) onKeyMenu;
+
   /// The block stretch in flight, written by the handle and read by every lane
   /// — the same arrangement the bar drag uses (K-208), and for the same
   /// reason: the keys being stretched are spread across rows in two scroll
@@ -7843,6 +8023,7 @@ class _LayerArea extends StatelessWidget {
     required this.vScroll,
     required this.selectedKeys,
     required this.onKeysSelected,
+    required this.onKeyMenu,
     required this.stretch,
     required this.project,
     required this.onEase,
@@ -7868,6 +8049,13 @@ class _LayerArea extends StatelessWidget {
     for (final layer in rows) {
       final step = layer.rowHeight;
       y += step; // the layer's own bar row
+      // **And the room an open Sequence view took** (K-248, §4.4). The view
+      // sits between the layer's own row and its fold-out, so a walk that
+      // stepped only by row heights put every row below one adrift by the
+      // view's extra height — the box caught keys the user had not drawn it
+      // round, and the block box that reads the same walk drew itself over
+      // the wrong rows.
+      y += layer.sequenceExtra ?? 0;
       for (final row in layer.drawnRows) {
         final rowTop = y;
         y += step;
@@ -7882,6 +8070,56 @@ class _LayerArea extends StatelessWidget {
       }
     }
     return caught;
+  }
+
+  /// The keyed lane row [y] pixels down the area, and its path.
+  ///
+  /// Null over a layer's own row, over an open Sequence view, over a row with
+  /// nothing keyed, and over the ground below the last layer — everywhere, in
+  /// other words, that has no property to plant a key on.
+  ({LayerRow layer, LayerFoldRow row, String rowId})? _rowAt(double y) {
+    var top = 0.0;
+    for (final layer in rows) {
+      final step = layer.rowHeight;
+      top += step; // the layer's own bar row
+      top += layer.sequenceExtra ?? 0;
+      for (final row in layer.drawnRows) {
+        if (y >= top && y < top + step) {
+          if (laneKeysOf(row).isEmpty) return null;
+          return (layer: layer, row: row, rowId: foldRowPath(layer.id, row));
+        }
+        top += step;
+      }
+    }
+    return null;
+  }
+
+  /// A click on lane ground: `Ctrl` plants a key on the keyed row under the
+  /// pointer at that time (docs/07 §4.3, K-500 §2.1), a plain click lets
+  /// everything go (K-203).
+  ///
+  /// The new key takes the value the curve already reads there, so planting
+  /// one moves nothing — it is a place to grab. A two-axis row keys both axes,
+  /// because one lane diamond stands for the whole row.
+  void _tapGround(Offset local) {
+    final keyboard = HardwareKeyboard.instance;
+    if (!keyboard.isControlPressed && !keyboard.isMetaPressed) {
+      onDeselectAll();
+      return;
+    }
+    final at = _rowAt(local.dy);
+    if (at == null) return;
+    final frame = magnet
+        ? axis.frameAt(local.dx).toDouble()
+        : axis.frameAtExact(local.dx);
+    final planted = plantKeyOnChannels(
+      channels: graphChannels(layers: [at.layer.entry], selected: [at.rowId]),
+      frame: frame,
+      fps: fps,
+      fpsNum: fpsNum,
+      fpsDen: fpsDen,
+    );
+    if (planted) onChanged();
   }
 
   /// Every **selected** key, with where it sits: the one walk the block box,
@@ -7899,6 +8137,7 @@ class _LayerArea extends StatelessWidget {
     for (final layer in rows) {
       final step = layer.rowHeight;
       y += step; // the layer's own bar row
+      y += layer.sequenceExtra ?? 0; // and an open Sequence view's room (§4.4)
       for (final row in layer.drawnRows) {
         final rowTop = y;
         y += step;
@@ -8069,13 +8308,26 @@ class _LayerArea extends StatelessWidget {
                             Positioned.fill(
                               child: MarqueeSelect(
                                 key: const ValueKey('tl-lane-marquee'),
-                                onSelect: (rect) =>
-                                    onKeysSelected(_keysIn(rect)),
+                                // **Additive with `Shift` or `Ctrl`** held when
+                                // the drag began (K-500 §2.1): the box adds to
+                                // what was already in hand rather than
+                                // replacing it, which is how a selection is
+                                // built up out of rows that are not next to
+                                // each other. The graph's box has always done
+                                // this; the lanes were replace-only.
+                                onSelect: (rect, additive) => onKeysSelected(
+                                    additive
+                                        ? {...selectedKeys, ..._keysIn(rect)}
+                                        : _keysIn(rect)),
                                 // A click that caught nothing is a click on empty
                                 // lane space, which is the deselect gesture: the
                                 // bars and the key handles above take their own
-                                // taps, so only the ground reaches here.
+                                // taps, so only the ground reaches here. With
+                                // `Ctrl` it plants a key on the keyed row it
+                                // landed on instead (docs/07 §4.3), which is why
+                                // the click is reported by position.
                                 onClear: onDeselectAll,
+                                onTapAt: _tapGround,
                               ),
                             ),
                             Column(
@@ -8436,6 +8688,7 @@ class _LayerArea extends StatelessWidget {
       snapTargets: snapTargets,
       selectedKeys: selectedKeys,
       stretch: stretch,
+      onKeyMenu: (index, position) => onKeyMenu('$rowId#$index', position),
       onSelectKey: (index, additive) {
         final id = '$rowId#$index';
         // A copy, never the live set: `onKeysSelected` clears it before it
@@ -8470,7 +8723,11 @@ const double _keysSelectedTint = 0.03;
 /// (K-455, §12A.1).
 ///
 /// Clicking it selects the layer, which is the one thing a layer's row does
-/// everywhere in this panel.
+/// everywhere in this panel — and **a drag on it is not its own** (K-500 §2.3,
+/// P5): it falls through to the marquee behind, so a box can be started
+/// anywhere on the sheet. A drawn mark that swallows gestures it does not use
+/// is a defect, and an opaque tap-only band across every layer left the resting
+/// dope sheet with no ground to box from at all.
 class _KeysLayerLane extends StatelessWidget {
   final LayerRow row;
   final TimelineAxis axis;
@@ -8492,24 +8749,30 @@ class _KeysLayerLane extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     final tint = t.labelColour(row.entry.info.label);
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+      // **Translucent, over an ignored child**: the band offers its tap and
+      // lets the pointer carry on to the marquee underneath, which is what a
+      // drag started here finds. Opaque — or a coloured child, which hit-tests
+      // for itself — stops the hit at this row and the box never begins.
+      behavior: HitTestBehavior.translucent,
       onTap: onSelect,
-      child: Container(
-        height: row.rowHeight,
-        color: tint.withValues(
-            alpha: selected ? _keysLayerTint * 2 : _keysLayerTint),
-        child: CustomPaint(
-          painter: _LaneKeysPainter(
-            frames: [
-              for (final k in row.summaryKeys) laneKeyFrame(k, fps),
-            ],
-            selected: const {},
-            axis: axis,
-            colour: t.animated,
-            chosen: t.textPrimary,
-            // A summary, not the keys you take hold of — the same half-scale
-            // rule a shut layer's bar follows in Layers mode (§12A.1).
-            half: _summaryKeyHalf,
+      child: IgnorePointer(
+        child: Container(
+          height: row.rowHeight,
+          color: tint.withValues(
+              alpha: selected ? _keysLayerTint * 2 : _keysLayerTint),
+          child: CustomPaint(
+            painter: _LaneKeysPainter(
+              frames: [
+                for (final k in row.summaryKeys) laneKeyFrame(k, fps),
+              ],
+              selected: const {},
+              axis: axis,
+              colour: t.animated,
+              chosen: t.textPrimary,
+              // A summary, not the keys you take hold of — the same half-scale
+              // rule a shut layer's bar follows in Layers mode (§12A.1).
+              half: _summaryKeyHalf,
+            ),
           ),
         ),
       ),
@@ -8552,6 +8815,10 @@ class _KeyLane extends StatefulWidget {
   /// F9 family and the easing buttons act on, beside the marquee. Additive
   /// (Shift, Ctrl) toggles one in or out of the catch.
   final void Function(int index, bool additive) onSelectKey;
+
+  /// Right-click on one of this lane's diamonds, at the pointer in global
+  /// coordinates.
+  final void Function(int index, Offset position) onKeyMenu;
   final VoidCallback onChanged;
 
   const _KeyLane({
@@ -8569,6 +8836,7 @@ class _KeyLane extends StatefulWidget {
     required this.selectedKeys,
     required this.stretch,
     required this.onSelectKey,
+    required this.onKeyMenu,
     required this.onChanged,
   });
 
@@ -8667,6 +8935,7 @@ class _KeyLaneState extends State<_KeyLane> {
     // two calls ran last.
     final frames = [for (var i = 0; i < widget.keys.length; i++) _frameOf(i)];
     final caught = _caught;
+    final dragging = _dragging;
     // **Every child of this Stack carries a key**, and the keys stay the same
     // whether or not a snap has been caught.
     //
@@ -8737,6 +9006,10 @@ class _KeyLaneState extends State<_KeyLane> {
                 // the lanes (F9, the bottom bar's buttons) had nothing to act
                 // on and looked like it did nothing.
                 supportedDevices: dragDevices,
+                // The key's own menu (K-500 §2.1) — Linear / Easy ease / Hold
+                // / Ease… / Delete key, the graph key's menu, on the mark the
+                // lanes draw.
+                onSecondaryTapUp: (d) => widget.onKeyMenu(i, d.globalPosition),
                 onHorizontalDragStart: (_) {
                   final keyboard = HardwareKeyboard.instance;
                   widget.onSelectKey(
@@ -8760,7 +9033,35 @@ class _KeyLaneState extends State<_KeyLane> {
               ),
             ),
           ),
+        // The live readout, while the pointer is down: what frame the key has
+        // reached and what it holds there (§4.2). Last in the stack so it is
+        // over the diamonds, and gone the moment the drag ends — nothing at
+        // rest (P1).
+        if (dragging != null && dragging < widget.keys.length)
+          _dragHint(frames[dragging], widget.keys[dragging].value),
       ],
+    );
+  }
+
+  /// The `f<frame> · <value>` pill beside the key being dragged.
+  ///
+  /// The value is the one this lane's own keys carry — a multi-axis row reads
+  /// its lead axis, exactly as its diamonds do (`laneKeysOf`) — so the readout
+  /// costs nothing but a lookup: a sampled row value would cross the bridge on
+  /// every pointer move.
+  Widget _dragHint(double frame, double value) {
+    final x = widget.axis.xOf(frame);
+    // Beside the key, or on its other side where the axis has run out: a
+    // readout clipped by the edge is no readout.
+    const pill = 72.0;
+    final left = x + 8 + pill > widget.axis.width ? x - 8 - pill : x + 8;
+    return Positioned(
+      key: const ValueKey<String>('tl-key-drag-hint'),
+      left: left,
+      top: 1,
+      child: HintPill(
+        text: l10n.timelineKeyDragHint(frame.round(), keysNumberText(value)),
+      ),
     );
   }
 }

@@ -6,13 +6,20 @@
 // coordinates and the owner decides what fell inside it. A plain click calls
 // [onClear] — a selection box around nothing means "select nothing" everywhere.
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import 'controls.dart';
 
 class MarqueeSelect extends StatefulWidget {
-  /// The finished box, in this widget's own coordinates.
-  final ValueChanged<Rect> onSelect;
+  /// The finished box, in this widget's own coordinates, and whether the drag
+  /// was **additive** — `Shift` or `Ctrl` held when it started (K-500 §2.1).
+  ///
+  /// Read at the drag's *start* rather than at its release, because that is
+  /// when the gesture was decided: letting go of Shift half way through a box
+  /// should not turn an adding drag into a replacing one, and neither should
+  /// pressing it.
+  final void Function(Rect rect, bool additive) onSelect;
 
   /// A plain click on the background: clear the owner's selection.
   final VoidCallback onClear;
@@ -37,15 +44,20 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
   Offset? _from;
   Offset? _to;
 
+  /// Whether the modifier that adds to the standing selection was down when
+  /// this drag began.
+  bool _additive = false;
+
   void _finish() {
     final from = _from;
     final to = _to;
+    final additive = _additive;
     setState(() {
       _from = null;
       _to = null;
     });
     if (from == null || to == null) return;
-    widget.onSelect(Rect.fromPoints(from, to));
+    widget.onSelect(Rect.fromPoints(from, to), additive);
   }
 
   @override
@@ -67,7 +79,13 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
             // Down, not start: a pan's start position is where the slop was
             // exceeded, which would eat the box's first corner and whatever
             // sat nearest it.
-            onPanDown: (d) => _from = d.localPosition,
+            onPanDown: (d) {
+              _from = d.localPosition;
+              final keys = HardwareKeyboard.instance;
+              _additive = keys.isShiftPressed ||
+                  keys.isControlPressed ||
+                  keys.isMetaPressed;
+            },
             onPanStart: (d) => setState(() => _to = d.localPosition),
             onPanUpdate: (d) => setState(() => _to = d.localPosition),
             onPanEnd: (_) => _finish(),

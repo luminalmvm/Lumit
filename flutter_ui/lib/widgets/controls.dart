@@ -3053,3 +3053,36 @@ class HouseProgressBar extends StatelessWidget {
     );
   }
 }
+
+/// The live readout a gesture carries with it: a small `surface4` pill of 8px
+/// mono, drawn beside the thing being moved and gone the moment it is let go
+/// (docs/impl/timeline-interaction.md P1, §4.2/§6.2).
+///
+/// In plain terms: while you drag a keyframe, a tiny label rides next to the
+/// pointer saying what frame and value it has reached, so you do not have to
+/// look away at a readout somewhere else. It never appears at rest.
+///
+/// The same shape as the key block's badge — one pill, one size, wherever the
+/// Timeline says a number under the hand.
+class HintPill extends StatelessWidget {
+  final String text;
+  const HintPill({super.key, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: t.surface4,
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Text(
+          text,
+          style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+        ),
+      ),
+    );
+  }
+}

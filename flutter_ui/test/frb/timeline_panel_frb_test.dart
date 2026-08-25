@@ -2357,6 +2357,57 @@ void main() {
           reason: 'a second drag moves it on again, not back');
     });
 
+    /// **The live readout** (docs/impl/timeline-interaction.md §4.2): while a
+    /// lane key is dragged a small pill rides beside it saying what frame it
+    /// has reached and what it holds there — and it is gone the moment the
+    /// pointer comes up, leaving nothing at rest (P1).
+    testWidgets('a lane key drag carries a frame and value badge',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final (f, v) in [(0, 20.0), (60, 80.0)])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: v,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId, group: 'Transform');
+
+      final handle = find.byKey(ValueKey<String>(
+          'tl-key-${layer.internallayerId}/transform/opacity#0'));
+      final hint = find.byKey(const ValueKey('tl-key-drag-hint'));
+      expect(hint, findsNothing, reason: 'nothing at rest');
+
+      final gesture = await tester.startGesture(tester.getCenter(handle),
+          kind: PointerDeviceKind.mouse);
+      await gesture.moveBy(const Offset(3, 0));
+      await tester.pump();
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(4, 0));
+        await tester.pump();
+      }
+      expect(hint, findsOneWidget,
+          reason: 'the readout is under the hand while the drag runs');
+      expect(
+          tester
+              .widget<Text>(
+                  find.descendant(of: hint, matching: find.byType(Text)))
+              .data,
+          matches(RegExp(r'^f\d+ · 20$')),
+          reason: 'the frame it has reached, and the value it holds');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(hint, findsNothing, reason: 'and leaves nothing behind');
+    });
+
     /// **The undo regression.** A drag on a *keyframed* value used to commit
     /// on every tick — [DragValueField] falls back to `onChanged` per tick
     /// when no `onChangeLive` is given — so the undo stack filled with a step
@@ -5465,13 +5516,11 @@ void main() {
       return layer;
     }
 
-    /// Switch the panel to Keys mode and twirl [layer] open, which is where
-    /// its property rows appear.
+    /// Switch the panel to Keys mode, which is all it takes: the dope sheet
+    /// opens with every layer twirled down (K-500 §2.3), so the property rows
+    /// are there as soon as the mode is.
     Future<void> openKeys(WidgetTester tester, LayerReference layer) async {
       await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
-      await tester.pumpAndSettle();
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-keys-twirl-${layer.internallayerId}')));
       await tester.pumpAndSettle();
     }
 
@@ -5572,11 +5621,16 @@ void main() {
       await mount(tester, p);
       await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
       await tester.pumpAndSettle();
+      // Shut by hand first: the sheet opens with every layer down (K-500
+      // §2.3), so there is nothing for `U` to reveal until one is closed.
+      await tester.tap(find
+          .byKey(ValueKey<String>('tl-keys-twirl-${layer.internallayerId}')));
+      await tester.pumpAndSettle();
       expect(
           find.byKey(ValueKey<String>(
               'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
           findsNothing,
-          reason: 'the layer starts shut');
+          reason: 'the twirl shut it');
 
       await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
       await tester.pumpAndSettle();
