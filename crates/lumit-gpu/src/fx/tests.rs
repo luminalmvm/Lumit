@@ -7559,16 +7559,22 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     // The shipped defaults, centred on this raster the way
     // `instantiate_for_raster` centres them on a real comp (K-542). This is the
     // identity, and the cases below build on it.
+    // The four sizes are px@comp since K-558, and the identity is one whole
+    // frame of *this* raster, which is what `instantiate_for_raster` writes.
     let base = {
         let mut t = Tile::read(Params::EMPTY);
         t.tile_centre_x = 16.0;
         t.tile_centre_y = 12.0;
+        t.tile_width = w as f32;
+        t.tile_height = h as f32;
+        t.output_width = w as f32;
+        t.output_height = h as f32;
         t
     };
     let tiled = {
         let mut t = base;
-        t.tile_width = 50.0;
-        t.tile_height = 50.0;
+        t.tile_width = w as f32 * 0.5;
+        t.tile_height = h as f32 * 0.5;
         t
     };
     let mut mirrored = tiled;
@@ -7579,22 +7585,23 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     phased_h.phase = 180.0;
     phased_h.horizontal_phase_shift = true;
     let mut windowed = tiled;
-    windowed.output_width = 60.0;
-    windowed.output_height = 60.0;
+    windowed.output_width = w as f32 * 0.6;
+    windowed.output_height = h as f32 * 0.6;
     let mut wide = tiled;
-    wide.tile_width = 25.0;
-    wide.tile_height = 200.0;
-    // The growing case (K-542): output past 100 % writes a wider raster.
+    wide.tile_width = w as f32 * 0.25;
+    wide.tile_height = h as f32 * 2.0;
+    // The growing case (K-542): an output window wider than the frame writes a
+    // wider raster.
     let mut grown = tiled;
-    grown.output_width = 200.0;
-    grown.output_height = 150.0;
+    grown.output_width = w as f32 * 2.0;
+    grown.output_height = h as f32 * 1.5;
     let mut off = tiled;
     off.mix = 0.0;
 
     // `cpu::tile_into` at the raster `cpu::tile_raster` sizes, against
     // `FxEngine::tile` at the raster it sizes for itself from the same rule.
     let run = |t: Tile| {
-        let p = t.packed();
+        let p = t.packed(w as f32, h as f32);
         let (ow, oh) = lumit_core::fx::cpu::tile_raster(w, h, &p);
         let mut cpu = vec![0.0f32; (ow * oh * 4) as usize];
         lumit_core::fx::cpu::tile_into(&img, w, h, &mut cpu, ow, oh, &p);

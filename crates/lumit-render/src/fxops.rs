@@ -1208,8 +1208,18 @@ mod tests {
         ops.begin(&effects::tile::TileDef, uuid::Uuid::now_v7());
         ops.push(effects::tile::Tile::TILE_CENTRE_X, Value::Float(4.0));
         ops.push(effects::tile::Tile::TILE_CENTRE_Y, Value::Float(4.0));
-        ops.push(effects::tile::Tile::OUTPUT_WIDTH, Value::Float(200.0));
-        ops.push(effects::tile::Tile::OUTPUT_HEIGHT, Value::Float(200.0));
+        // The four sizes are px@comp (K-558): one whole-frame tile, stamped
+        // over twice the frame.
+        ops.push(effects::tile::Tile::TILE_WIDTH, Value::Float(W as f32));
+        ops.push(effects::tile::Tile::TILE_HEIGHT, Value::Float(H as f32));
+        ops.push(
+            effects::tile::Tile::OUTPUT_WIDTH,
+            Value::Float((W * 2) as f32),
+        );
+        ops.push(
+            effects::tile::Tile::OUTPUT_HEIGHT,
+            Value::Float((H * 2) as f32),
+        );
         ops.push(effects::tile::Tile::MIX, Value::Float(100.0));
         ops.begin(&effects::exposure::ExposureDef, uuid::Uuid::now_v7());
         ops.push(effects::exposure::Exposure::STOPS, Value::Float(1.0));

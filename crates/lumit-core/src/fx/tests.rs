@@ -7022,7 +7022,7 @@ fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
     );
 
     // Nothing else moves: a Percent row on another effect is not a distance.
-    let mut untouched = instantiate("tile").unwrap();
+    let mut untouched = instantiate("levels").unwrap();
     untouched.effect.version = 1;
     let mut effects = vec![untouched];
     let before = effects[0].clone();
@@ -7130,6 +7130,73 @@ fn a_fresh_card_wipe_bands_half_of_its_own_comp() {
         panic!("transition_width must be a float");
     };
     assert!((p.value_at(0.0) - 1920.0).abs() < 1e-9);
+}
+
+// Tile's two sizes were per cents of the frame and are px@comp since K-558, so
+// a saved v1 instance converts each axis against its own extent: a 2x2 repeat
+// stamped over the whole frame is 960 x 540 out of 1920 x 1080. The centre was
+// pixels already and must not be touched twice.
+#[test]
+fn tiles_percent_sizes_convert_axis_by_axis() {
+    let mut inst = instantiate("tile").unwrap();
+    inst.effect.version = 1;
+    for p in &mut inst.params {
+        match p.id.as_str() {
+            "tile_width" | "tile_height" => p.value = EffectValue::Float(Property::fixed(50.0)),
+            "output_width" | "output_height" => {
+                p.value = EffectValue::Float(Property::fixed(200.0))
+            }
+            "tile_centre_x" => p.value = EffectValue::Float(Property::fixed(640.0)),
+            _ => {}
+        }
+    }
+    let mut effects = vec![inst];
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    let read = |effects: &[crate::model::EffectInstance], id: &str| match effects[0].param(id) {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        _ => panic!("{id} must be a float"),
+    };
+    let want = [
+        ("tile_width", 960.0),
+        ("tile_height", 540.0),
+        ("output_width", 3840.0),
+        ("output_height", 2160.0),
+        ("tile_centre_x", 640.0),
+    ];
+    for (id, v) in want {
+        assert!((read(&effects, id) - v).abs() < 1e-9, "{id}");
+    }
+    assert_eq!(effects[0].effect.version, 2);
+    // Read twice, converted once: the version is the gate.
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    for (id, v) in want {
+        assert!((read(&effects, id) - v).abs() < 1e-9, "{id} idempotent");
+    }
+}
+
+// And the arithmetic those pixels now feed: `packed` divides each size through
+// the raster it is drawn on, so a fresh whole-frame Tile is the identity's
+// 1.0 and a half-frame tile is a 2x2 repeat at any raster.
+#[test]
+fn tiles_sizes_are_shares_of_the_raster_it_draws_on() {
+    let mut t = effects::tile::Tile::read(Params::EMPTY);
+    t.tile_width = 1920.0;
+    t.tile_height = 1080.0;
+    t.output_width = 1920.0;
+    t.output_height = 1080.0;
+    let p = t.packed(1920.0, 1080.0);
+    assert_eq!((p.tile_frac, p.output_frac), ([1.0, 1.0], [1.0, 1.0]));
+
+    // The same numbers on a 4K raster are a quarter of it — which is why the
+    // stored size is honest pixels and `instantiate_for_raster` writes the
+    // comp's own.
+    let p = t.packed(3840.0, 2160.0);
+    assert_eq!((p.tile_frac, p.output_frac), ([0.5, 0.5], [0.5, 0.5]));
+
+    // A half-frame tile is the 2x2 repeat at either raster.
+    t.tile_width = 960.0;
+    t.tile_height = 540.0;
+    assert_eq!(t.packed(1920.0, 1080.0).tile_frac, [0.5, 0.5]);
 }
 
 // And the arithmetic Length now feeds: it is a distance in raster pixels, so
@@ -10191,6 +10258,12 @@ fn every_parameter_declares_a_unit() {
             ("turbulent_displace", "offset_y"),
             ("tile", "tile_centre_x"),
             ("tile", "tile_centre_y"),
+            // K-558: the tile's own size and the output window's size are
+            // sizes, so they are distances and follow the raster too.
+            ("tile", "tile_width"),
+            ("tile", "tile_height"),
+            ("tile", "output_width"),
+            ("tile", "output_height"),
             ("offset", "shift_x"),
             ("offset", "shift_y"),
             ("mirror", "centre_x"),
@@ -13923,6 +13996,14 @@ fn a_fresh_tile_changes_not_one_bit() {
                 (rw as f32 * 0.5, rh as f32 * 0.5),
                 "a fresh Tile must be cut from the middle of the comp it was dropped on"
             );
+            // And since K-558 the tile and the window are sizes in pixels, so
+            // the whole-frame default is the comp's own size (K-542's
+            // lands-as-identity, kept the way the centre keeps it).
+            assert_eq!(
+                (t.tile_width, t.tile_height, t.output_width, t.output_height),
+                (rw as f32, rh as f32, rw as f32, rh as f32),
+                "a fresh Tile's tile and window must be one whole frame of its own comp"
+            );
             continue;
         }
         let mut out = source.clone();
@@ -13946,24 +14027,26 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
         let mut t = effects::tile::Tile::read(crate::fx::Params::EMPTY);
         t.tile_centre_x = 16.0;
         t.tile_centre_y = 12.0;
-        t.tile_width = 50.0;
-        t.tile_height = 50.0;
-        t.output_width = ow;
-        t.output_height = oh;
+        t.tile_width = w as f32 * 0.5;
+        t.tile_height = h as f32 * 0.5;
+        // The window is px@comp since K-558, and the callers below say what
+        // they mean as a share of this raster.
+        t.output_width = w as f32 * ow;
+        t.output_height = h as f32 * oh;
         t.mix = mix;
-        t.packed()
+        t.packed(w as f32, h as f32)
     };
-    assert_eq!(cpu::tile_raster(w, h, &of(100.0, 100.0, 100.0)), (w, h));
-    assert_eq!(cpu::tile_raster(w, h, &of(60.0, 60.0, 100.0)), (w, h));
-    assert_eq!(cpu::tile_raster(w, h, &of(200.0, 150.0, 100.0)), (64, 36));
+    assert_eq!(cpu::tile_raster(w, h, &of(1.0, 1.0, 100.0)), (w, h));
+    assert_eq!(cpu::tile_raster(w, h, &of(0.6, 0.6, 100.0)), (w, h));
+    assert_eq!(cpu::tile_raster(w, h, &of(2.0, 1.5, 100.0)), (64, 36));
     assert_eq!(
-        cpu::tile_raster(w, h, &of(200.0, 150.0, 0.0)),
+        cpu::tile_raster(w, h, &of(2.0, 1.5, 0.0)),
         (w, h),
         "Mix 0 is the identity, and an identity does not reallocate"
     );
     // The ceiling holds a slider drag to a raster every backend can allocate.
     assert_eq!(
-        cpu::tile_raster(3840, 2160, &of(500.0, 500.0, 100.0)),
+        cpu::tile_raster(3840, 2160, &of(5.0, 5.0, 100.0)),
         (cpu::TILE_MAX_RASTER, cpu::TILE_MAX_RASTER),
         "the growth stops at the guaranteed maximum texture side"
     );
@@ -13979,12 +14062,12 @@ fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
             }
         })
         .collect();
-    let p = of(200.0, 150.0, 100.0);
+    let p = of(2.0, 1.5, 100.0);
     let (ow, oh) = cpu::tile_raster(w, h, &p);
     let mut grown = vec![0.0f32; (ow * oh * 4) as usize];
     cpu::tile_into(&img, w, h, &mut grown, ow, oh, &p);
     let mut flat = img.clone();
-    cpu::tile(&mut flat, w, h, &of(100.0, 100.0, 100.0));
+    cpu::tile(&mut flat, w, h, &of(1.0, 1.0, 100.0));
     let (ox, oy) = ((ow - w) / 2, (oh - h) / 2);
     for y in 0..h {
         for x in 0..w {

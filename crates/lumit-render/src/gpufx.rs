@@ -1245,7 +1245,9 @@ impl GpuEffect for Tile {
         p: Params<'_>,
         _aux: AuxSlot<'_>,
     ) -> Tex {
-        let t = effects::tile::Tile::read(p).packed();
+        // The four sizes are px@comp (K-558), so `packed` takes the raster they
+        // are being drawn on and turns them into the fractions both kernels read.
+        let t = effects::tile::Tile::read(p).packed(w as f32, h as f32);
         fx.tile(
             ctx,
             tex,

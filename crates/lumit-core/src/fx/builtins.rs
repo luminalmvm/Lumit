@@ -151,6 +151,13 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             // thing §1.2 says dropping an effect on must never do.
             ("tile", "tile_centre_x") => w * 0.5,
             ("tile", "tile_centre_y") => h * 0.5,
+            // And with K-558 the tile's own size and the output window's join
+            // it, for that same reason: they are sizes, so they are px@comp,
+            // and the identity is *one whole frame* — which is 1920 × 1080 on
+            // exactly one comp. The actual raster is what makes a fresh Tile
+            // the identity on all the others.
+            ("tile", "tile_width" | "output_width") => w,
+            ("tile", "tile_height" | "output_height") => h,
             // Wave 2's Distort II batch (docs/08 §3.55): a Bezier warp's twelve
             // points are the frame's own corners with the handles at the
             // thirds — the patch that is exactly the identity — and every one
@@ -348,6 +355,23 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
                 if p.id != "transition_width" {
                     continue;
                 }
+                if let EffectValue::Float(prop) = &mut p.value {
+                    scale_property(prop, basis / 100.0);
+                }
+            }
+            e.effect.version = 2;
+        }
+        // Tile v1 → v2: the tile's size and the output window's size were per
+        // cents of the frame (K-558). Both pairs are sizes, so both convert,
+        // each axis against its own extent — and the centre, which was px@comp
+        // already, is left alone.
+        if e.effect.match_name == "tile" && e.effect.version < 2 {
+            for p in &mut e.params {
+                let basis = match p.id.as_str() {
+                    "tile_width" | "output_width" => w,
+                    "tile_height" | "output_height" => h,
+                    _ => continue,
+                };
                 if let EffectValue::Float(prop) = &mut p.value {
                     scale_property(prop, basis / 100.0);
                 }

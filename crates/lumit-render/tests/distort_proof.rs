@@ -173,14 +173,16 @@ fn render_the_five_distort_effects() {
         write("4-turbdisplace-matte-dissolved", &to_srgb(&faded));
 
         // ---- Tile: the 2x2 default, and a mirrored, phase-shifted 3x3.
+        // The four sizes are px@comp since K-558, so the shares this proof
+        // draws are taken against the frame here rather than typed as per cents.
         let tile = |width: f32, height: f32, mirror: bool, phase: f32, out_w: f32| {
             let mut t = Tile::read(Params::EMPTY);
             t.tile_centre_x = fw * 0.5;
             t.tile_centre_y = fh * 0.5;
-            t.tile_width = width;
-            t.tile_height = height;
-            t.output_width = out_w;
-            t.output_height = out_w;
+            t.tile_width = fw * width;
+            t.tile_height = fh * height;
+            t.output_width = fw * out_w;
+            t.output_height = fh * out_w;
             t.mirror_edges = mirror;
             t.phase = phase;
             t
@@ -190,7 +192,7 @@ fn render_the_five_distort_effects() {
             &mut plain,
             w,
             h,
-            &tile(50.0, 50.0, false, 0.0, 100.0).packed(),
+            &tile(0.5, 0.5, false, 0.0, 1.0).packed(fw, fh),
         );
         write("5-tile-2x2", &to_srgb(&plain));
         let mut fancy = lin.clone();
@@ -198,7 +200,7 @@ fn render_the_five_distort_effects() {
             &mut fancy,
             w,
             h,
-            &tile(33.0, 33.0, true, 180.0, 80.0).packed(),
+            &tile(0.33, 0.33, true, 180.0, 0.8).packed(fw, fh),
         );
         write("6-tile-mirrored-phased", &to_srgb(&fancy));
 

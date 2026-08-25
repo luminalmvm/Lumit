@@ -2988,11 +2988,13 @@ mod tests {
         id
     }
 
-    /// **Tile above 100 % output reaches past the layer's own edges** (docs/08
-    /// §3.39, K-542), and the composite puts the wider picture in the same place.
+    /// **A Tile whose output window is wider than the frame reaches past the
+    /// layer's own edges** (docs/08 §3.39, K-542), and the composite puts the
+    /// wider picture in the same place.
     ///
     /// An 8×8 solid in a 32×32 comp covers the middle eight pixels and nothing
-    /// else. Give it a Tile at 300 % output and it covers twenty-four: the
+    /// else. Give it a Tile with a 24-pixel output window and it covers
+    /// twenty-four: the
     /// effect stack grew its working raster, the copies landed in the margin,
     /// and the layer transform placed the result so that not one of the original
     /// pixels moved. Without the growth the margin is still the comp background,
@@ -3006,7 +3008,9 @@ mod tests {
                 return;
             }
         };
-        let comp_with_tile = |output_pct: f64| {
+        // The output window is px@comp (K-558) and the layer is 8 x 8, so the
+        // frame's own size is 8 and the old 300 % is 24.
+        let comp_with_tile = |output_px: f64| {
             let mut doc = Document::new();
             let solid_id = Uuid::now_v7();
             doc.items.push(ProjectItem::Solid(SolidDef {
@@ -3021,7 +3025,7 @@ mod tests {
                 .expect("tile is a builtin");
             for p in &mut tile.params {
                 if p.id == "output_width" || p.id == "output_height" {
-                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(output_pct));
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(output_px));
                 }
             }
             let comp_id = Uuid::now_v7();
@@ -3078,8 +3082,9 @@ mod tests {
 
         let red_at = |rgba: &[u8], x: u32, y: u32| rgba[((y * 32 + x) * 4) as usize];
 
-        // 100 %: the identity. The layer is its own eight pixels and no more.
-        let (store, comp_id) = comp_with_tile(100.0);
+        // A whole-frame window: the identity. The layer is its own eight
+        // pixels and no more.
+        let (store, comp_id) = comp_with_tile(8.0);
         let (flat, w, h) = r
             .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
             .expect("render");
@@ -3087,11 +3092,12 @@ mod tests {
         assert!(red_at(&flat, 16, 16) > 200, "the solid itself is red");
         assert!(
             red_at(&flat, 6, 16) < 40,
-            "at 100 % output nothing reaches outside the layer"
+            "at a whole-frame output window nothing reaches outside the layer"
         );
 
-        // 300 %: the copies land in the margin and the margin is inside the comp.
-        let (store, comp_id) = comp_with_tile(300.0);
+        // Three frames wide: the copies land in the margin and the margin is
+        // inside the comp.
+        let (store, comp_id) = comp_with_tile(24.0);
         let (grown, _, _) = r
             .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
             .expect("render");
@@ -3101,7 +3107,7 @@ mod tests {
         );
         assert!(
             red_at(&grown, 1, 16) < 40,
-            "and it must stop at 300 %, not fill the comp"
+            "and it must stop at three frames wide, not fill the comp"
         );
         // Nothing the layer already covered moved.
         for y in 12..20 {

@@ -2831,19 +2831,19 @@ what the effect is.
 ### 3.39 Tile — the frame repeated across itself
 
 **Parameters:** Tile centre x and Tile centre y (px@comp, default the frame's own centre),
-Tile width and Tile height (per cent of the frame, 1..500, default 100), Output width and
-Output height (per cent of the frame, 1..500, default 100), Mirror edges (default off),
+Tile width and Tile height (px@comp, default the frame's own size), Output width and
+Output height (px@comp, default the frame's own size), Mirror edges (default off),
 Phase (dial, degrees, default 0), Horizontal phase shift (default off), Mix.
 
 **Algorithm sketch.** One rectangle of the picture is copied across the frame, into a
 raster that may be **larger** than the one it read:
 
 ```
-raster = (W, H) · max(output_width ÷ 100, 1), capped at 8 192 a side   # K-542
+raster = (W, H) · max(output size ÷ (W, H), 1), capped at 8 192 a side   # K-542
 origin = (raster − (W, H)) ÷ 2, whole pixels                 # where the frame sits in it
 p      = the output pixel's position in the INCOMING frame's coordinates
-tile   = (tile_width ÷ 100 · W,  tile_height ÷ 100 · H)      # raster pixels
-window = (output_width ÷ 100 · W, output_height ÷ 100 · H)
+tile   = (tile_width, tile_height)                           # px@comp, already raster pixels
+window = (output_width, output_height)
 outside the window, centred on the frame → transparent
 u  = (p − tile centre) ÷ tile + ½                            # position in tiles
     without Horizontal phase shift: u.x += floor(u.y)·phase ÷ 360
@@ -2867,8 +2867,14 @@ Four notes:
   fp32 does not always answer exactly, so both kernels short-circuit the identity rather
   than resampling through it. The centre default is the raster's own, filled by
   `instantiate_for_raster` — a fixed 960, 540 would shift the picture on any comp that is
-  not 1080p, which is precisely what the identity forbids.
-- **Output width and height above 100 % grow the working raster** (K-542). This is the
+  not 1080p, which is precisely what the identity forbids. **The four sizes are px@comp
+  and get their defaults the same way** (K-558, which supersedes K-542's per-cent
+  rationale for them): a size is a distance, so it is pixels, and a whole-frame tile is
+  1920 × 1080 on exactly one comp — `instantiate_for_raster` writes the comp's own, so
+  the default is still the exact identity anywhere and the *stored* number is honest
+  pixels. A project saved before the conversion has its per cents scaled against the
+  comp on load (schema v1 → v2), each axis against its own extent.
+- **An output window wider than the frame grows the working raster** (K-542). This is the
   point of the control, and AE's: the copies land *past* the frame's edges, the working
   picture grows evenly on all four sides to hold them, and every effect after Tile in the
   stack runs on that wider picture — so a warp or a directional blur below it finds tiled
@@ -2876,12 +2882,12 @@ Four notes:
   wider picture by the layer's own transform (the quad grows, the anchor slides with it),
   so not one of the original pixels moves. Below 100 % nothing grows: the window only
   clips, which needs no more room than the frame already has. The growth stops at 8 192
-  pixels a side, so a slider dragged to 500 % on a 4K comp cannot ask for a third of a
-  gigabyte of working texture.
+  pixels a side, so a slider dragged to five frames wide on a 4K comp cannot ask for a
+  third of a gigabyte of working texture.
   **Three places cannot grow, and crop back instead**: an adjustment layer's stack (what
   follows blends it against the composite beneath, which is comp-sized by definition), a
-  matte source's own stack, and a referenced layer's own stack. On those a Tile above
-  100 % reads as the plain clipped tiling. A layer mask is grown into the same margin with
+  matte source's own stack, and a referenced layer's own stack. On those a Tile whose window
+  is wider than the frame reads as the plain clipped tiling. A layer mask is grown into the same margin with
   nothing in it, so the copies Tile puts outside the layer are outside the mask.
 - **Mirror edges flips alternate tiles** rather than butting copies together, which is what
   makes a tiled texture seamless without a seamless source. With Output width and height a

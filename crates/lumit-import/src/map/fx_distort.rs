@@ -156,13 +156,16 @@ fn set_matte(fx: &mut Fx<'_, '_>) {
     fx.drop_ae(6); // Premultiply Matte Layer — Lumit composites premultiplied throughout
 }
 
-/// AE `ADBE Tile` → Tile (docs/11 §5): direct, every control.
+/// AE `ADBE Tile` → Tile (docs/11 §5): every control carries, and the four
+/// sizes convert — AE keeps them as per cents of the frame, Lumit as px@comp
+/// (K-558), so each axis is scaled by the comp's own extent.
 fn motion_tile(fx: &mut Fx<'_, '_>) {
+    let (comp_w, comp_h) = fx.conv.size;
     fx.point(1, "tile_centre_x", "tile_centre_y", Unit::Px);
-    fx.carry(2, "tile_width", Unit::Direct);
-    fx.carry(3, "tile_height", Unit::Direct);
-    fx.carry(4, "output_width", Unit::Direct);
-    fx.carry(5, "output_height", Unit::Direct);
+    fx.carry(2, "tile_width", Unit::Scale(comp_w / 100.0));
+    fx.carry(3, "tile_height", Unit::Scale(comp_h / 100.0));
+    fx.carry(4, "output_width", Unit::Scale(comp_w / 100.0));
+    fx.carry(5, "output_height", Unit::Scale(comp_h / 100.0));
     fx.toggle(6, "mirror_edges");
     fx.carry(7, "phase", Unit::Direct);
     fx.toggle(8, "horizontal_phase_shift");
@@ -1382,7 +1385,7 @@ mod tests {
     }
 
     #[test]
-    fn motion_tile_is_direct_on_every_control() {
+    fn motion_tile_converts_its_four_sizes_and_carries_the_rest() {
         let ae = "ADBE Tile";
         let r = run(&fx(
             ae,
@@ -1407,18 +1410,26 @@ mod tests {
             (f(&r, "tile_centre_x"), f(&r, "tile_centre_y")),
             (480.0, 270.0)
         );
+        // AE keeps the four sizes as per cents of the frame and Lumit as
+        // px@comp (K-558), so each axis converts against the comp's own extent
+        // — keyframes and their speeds with it.
         assert_eq!(
             keys_of(&r, "tile_width"),
-            vec![(0.0, 100.0, 0.0), (2.0, 25.0, -50.0)]
+            vec![(0.0, 1.00 * W, 0.0), (2.0, 0.25 * W, -0.50 * W)]
         );
-        assert_eq!(f(&r, "tile_height"), 40.0);
+        assert_eq!(f(&r, "tile_height"), 0.40 * H);
         assert_eq!(
             (f(&r, "output_width"), f(&r, "output_height")),
-            (150.0, 120.0)
+            (1.50 * W, 1.20 * H)
         );
         assert!(boolean(&r, "mirror_edges") && boolean(&r, "horizontal_phase_shift"));
         assert_eq!(f(&r, "phase"), 180.0);
-        assert!(r.report.rows.is_empty(), "a direct row reports nothing");
+        // The four conversions are the only rows: a number whose base changed
+        // is reported, and everything else here is one for one.
+        for name in ["Tile Width", "Tile Height", "Output Width", "Output Height"] {
+            assert!(rebased(&r, name), "{name} changed base and must say so");
+        }
+        assert_eq!(r.report.rows.len(), 4);
     }
 
     /// AE's "Shift Center To" is a destination and Lumit stores the shift, so

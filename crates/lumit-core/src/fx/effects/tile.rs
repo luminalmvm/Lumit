@@ -3,10 +3,10 @@
 //!
 //! **In plain terms.** Cut a rectangle out of the picture and stamp it side by
 //! side until the frame is full. Tile width and height say how big the rectangle
-//! is (as a per cent of the frame, so 50 gives a 2×2 grid), Tile centre says
-//! where it is cut from, and Output width and height say how much gets stamped.
-//! Below 100 % the rest of the frame goes transparent; above it the stamps carry
-//! on *past* the frame's edges and the working picture grows to hold them, which
+//! is in pixels (half the frame gives a 2×2 grid), Tile centre says where it is
+//! cut from, and Output width and height say how much gets stamped. Narrower
+//! than the frame and the rest of it goes transparent; wider and the stamps carry
+//! on past the frame's edges and the working picture grows to hold them, which
 //! is what lets a warp or a blur further down the stack find picture there
 //! instead of nothing. Mirror edges flips alternate stamps so they meet without
 //! a seam, and Phase slides every other row along so the grid stops reading as a
@@ -24,7 +24,10 @@ use lumit_fx_macros::Effect;
 #[effect(
     match_name = "tile",
     label = "Tile",
-    version = 1,
+    // 2: the tile's size and the output window's size crossed from per cents of
+    // the frame to px@comp (K-558). `migrate_percent_to_px` converts a v1
+    // instance on load.
+    version = 2,
     category = Distortion,
     // One bilinear tap a pixel; the arithmetic before it is a handful of
     // multiplies and a floor.
@@ -45,38 +48,42 @@ pub struct Tile {
     #[slider(label = "Tile centre y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub tile_centre_y: f32,
 
-    /// Per cent of the frame's width: 50 is a 2×2 repeat. The default is 100 —
-    /// one tile the size of the frame, cut from the middle of it, which is AE's
-    /// Motion Tile and is the exact identity (K-542 reverses §3.39's earlier
-    /// 2×2 default).
+    /// px@comp: how wide the stamped rectangle is — half the frame's width is a
+    /// 2×2 repeat. A size is a distance, so it is pixels and not a share of the
+    /// frame (K-558, which supersedes K-542's per-cent rationale for the pair).
     ///
-    /// **Not a spatial unit**, deliberately: a per cent of the raster does not
-    /// move when the raster does, so this needs no rescaling and gets none.
+    /// The declared default is a nominal 1080p frame's width, and
+    /// `instantiate_for_raster` writes the actual comp's, so a fresh Tile is one
+    /// whole-frame tile cut from the middle of the frame — AE's Motion Tile, and
+    /// the exact identity on a comp of any size (K-542's lands-as-identity, kept
+    /// the way the centre already keeps it).
     #[slider(
         label = "Tile width",
         min = 1.0,
-        max = 500.0,
-        default = 100.0,
+        max = 3840.0,
+        default = 1920.0,
         hard_min = 1.0,
-        unit = Percent
+        unit = Px
     )]
     pub tile_width: f32,
 
-    /// Per cent of the frame's height; see [`tile_width`](Self::tile_width).
+    /// px@comp, the frame's height by default; see [`tile_width`](Self::tile_width).
     #[slider(
         label = "Tile height",
         min = 1.0,
-        max = 500.0,
-        default = 100.0,
+        max = 2160.0,
+        default = 1080.0,
         hard_min = 1.0,
-        unit = Percent
+        unit = Px
     )]
     pub tile_height: f32,
 
-    /// Per cent of the frame's width: how wide the stamped area is, centred on
-    /// the frame. Below 100 the output is transparent outside it. 100 covers the
-    /// frame exactly, which is the default. **Above 100 the working picture
-    /// grows** (K-542): the stamps carry on past the frame's edges into a wider
+    /// px@comp: how wide the stamped area is, centred on the frame. Narrower
+    /// than the frame and the output is transparent outside it; the frame's own
+    /// width covers it exactly, which is the default (a nominal 1080p frame's,
+    /// with `instantiate_for_raster` writing the comp's own). **Wider than the
+    /// frame and the working picture grows** (K-542): the stamps carry on past
+    /// the frame's edges into a wider
     /// raster, and every effect after this one in the stack runs on that raster,
     /// so the copies are real picture to them rather than transparency. The
     /// composite places the wider picture by the layer's own transform, so
@@ -84,21 +91,21 @@ pub struct Tile {
     #[slider(
         label = "Output width",
         min = 1.0,
-        max = 500.0,
-        default = 100.0,
+        max = 3840.0,
+        default = 1920.0,
         hard_min = 1.0,
-        unit = Percent
+        unit = Px
     )]
     pub output_width: f32,
 
-    /// Per cent of the frame's height; see [`output_width`](Self::output_width).
+    /// px@comp, the frame's height by default; see [`output_width`](Self::output_width).
     #[slider(
         label = "Output height",
         min = 1.0,
-        max = 500.0,
-        default = 100.0,
+        max = 2160.0,
+        default = 1080.0,
         hard_min = 1.0,
-        unit = Percent
+        unit = Px
     )]
     pub output_height: f32,
 
@@ -131,21 +138,24 @@ pub struct Tile {
 impl Tile {
     /// The bundle both kernels consume (docs/impl/effect-registry.md §2.4).
     ///
-    /// The four per cents stay per cents here — they are fractions of the raster
-    /// the kernel already knows, and turning them into pixels host-side would
-    /// mean the kernel could not be handed a different raster. Phase becomes a
-    /// fraction of a tile, and the two switches become flags.
+    /// The four sizes are px@comp (K-558) and both kernels want fractions of the
+    /// raster — a fraction is what lets the same resolved op be handed a raster
+    /// of another size — so the division happens once, here, against the raster
+    /// being drawn on. Sizes and raster carry the same preview factor, so a Half
+    /// preview tiles exactly as the export does. Phase becomes a fraction of a
+    /// tile, and the two switches become flags.
     #[must_use]
-    pub fn packed(self) -> cpu::TileParams {
+    pub fn packed(self, raster_w: f32, raster_h: f32) -> cpu::TileParams {
+        let (rw, rh) = (raster_w.max(1.0), raster_h.max(1.0));
         cpu::TileParams {
             centre: [self.tile_centre_x, self.tile_centre_y],
             tile_frac: [
-                self.tile_width.max(1e-3) / 100.0,
-                self.tile_height.max(1e-3) / 100.0,
+                self.tile_width.max(1e-3) / rw,
+                self.tile_height.max(1e-3) / rh,
             ],
             output_frac: [
-                self.output_width.max(1e-3) / 100.0,
-                self.output_height.max(1e-3) / 100.0,
+                self.output_width.max(1e-3) / rw,
+                self.output_height.max(1e-3) / rh,
             ],
             phase: self.phase / 360.0,
             mirror_edges: self.mirror_edges,
@@ -164,6 +174,6 @@ impl EffectDef for TileDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::tile(rgba, w, h, &Tile::read(p).packed());
+        cpu::tile(rgba, w, h, &Tile::read(p).packed(w as f32, h as f32));
     }
 }
