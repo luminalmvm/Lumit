@@ -621,11 +621,8 @@ What is left is entirely interface, and none of it exists over the seam yet:
   It is waiting only for `BridgeExportSpec` to carry `use_proxies`; the guide-layer row
   beside it is waiting the same way for `RenderOptions::render_guides`.
 
-Two more rows sit beside them for the same reason and want the same kind of work: **motion
-blur** and **Retime blend** at export are comp-wide settings with no export override in
-`RenderOptions` — an export renders what the composition renders — and giving them one means
-an override that survives into nested comps, exactly as *effects off* and *solo ignored*
-already do in `apply_render_overrides`.
+The **motion blur** and **Retime blend** rows beside them are backed: `RenderOptions` carries
+both overrides now (K-502), and each is waiting only for `BridgeExportSpec` to carry it.
 
 **Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
 drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it

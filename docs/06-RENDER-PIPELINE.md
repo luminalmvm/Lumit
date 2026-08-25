@@ -432,6 +432,12 @@ breaks projects.
   the frame), and an adaptive sample limit (default 64, maximum 256).
 - **Per-layer switch** enables blur for that layer. Adaptive degradation MAY skip motion blur
   during interaction ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)); export never skips it.
+- **An export MAY override the master** (K-502, `RenderOptions::motion_blur`,
+  [15-DESIGN.md](15-DESIGN.md) §12A.4): *on for checked layers* sets the master in every
+  composition the export walks and leaves the per-layer switches alone; *off for all layers*
+  clears both. The override is applied to the export's own throwaway snapshot, so every path
+  that reads the switches — draw builder, frame key, occlusion cull — agrees at every depth,
+  and the project is untouched. The default leaves the compositions exactly as saved.
 - **Transform motion blur** is multi-sampling: the layer's steps 1–5 output is sampled at N
   times across the shutter window and accumulated (fp32 accumulator) with equal weights. N is
   adaptive: `N = clamp(ceil(max screen-space displacement in px / 2), 2, adaptive limit)`,

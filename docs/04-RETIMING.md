@@ -531,6 +531,12 @@ the plain one is ordinary and MUST NOT cost the tuning. Parked state is document
 saves, loads and undoes with the layer, and the policy and its parked group move in one op,
 so a single undo restores both.
 
+There is **no composition-wide master** for this policy, unlike motion blur: each layer and
+each clip carries its own, and that choice is the whole of it. So the export's *Retime blend*
+override (K-502, `RenderOptions::retime_blend`, [15-DESIGN.md](15-DESIGN.md) §12A.4) has two answers
+rather than three — leave every policy alone, or fall them all back to Nearest for the
+delivery, clips included. There is nothing for an "on for checked layers" to switch on.
+
 Requirements and expectations for Flow:
 
 - Quality expectation: clean, well-lit footage at 2× slow-down SHOULD show no obvious

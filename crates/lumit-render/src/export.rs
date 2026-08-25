@@ -8,8 +8,9 @@
 //! source. Runs on its own thread with its own decoders (K-017); progress
 //! streams back; cancel is checked every frame.
 
-use lumit_core::model::{Document, ProjectItem};
+use lumit_core::model::{Document, LayerKind, ProjectItem};
 pub use lumit_core::pixels::{px_tile, solid_rgba, srgb_decode, srgb_encode};
+use lumit_core::retime::Interpolation;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -996,6 +997,51 @@ pub enum DiskCachePolicy {
     ReadOnly,
 }
 
+/// The export's answer for motion blur (docs/15 §12A.4, the Time section's
+/// first row). Blur passes two gates — the composition's master switch and
+/// each layer's own switch (docs/06 §4, K-120) — so the three answers are the
+/// three useful things to say about the master while the checks stand.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum MotionBlurOverride {
+    /// *Current settings*: every composition's master and every layer's switch
+    /// stand exactly as saved. The default, so a spec written before this
+    /// existed exports the frames it always did.
+    #[default]
+    CompSetting,
+    /// *On for checked layers*: the master goes on in every composition in the
+    /// walk, nested ones included; the per-layer switches are left alone,
+    /// because they are the checks the phrase names.
+    OnForChecked,
+    /// *Off for all layers*: the master goes off **and** every layer's own
+    /// switch is cleared. Either alone would stop the blur — the master is the
+    /// one gate everything passes — but the row says *for all layers*, and a
+    /// snapshot in which a layer is still checked would only be true by
+    /// accident of which gate was shut.
+    OffForAll,
+}
+
+/// The export's answer for Retime blend (docs/15 §12A.4, the Time section's
+/// second row) — how a fractional source moment becomes pixels
+/// ([`lumit_core::retime::Interpolation`], docs/04 §10).
+///
+/// **Two answers, not the three the motion-blur row has**, and the difference
+/// is the model rather than the drawing: Lumit has no composition-wide frame
+/// blending master to switch on. A layer's Nearest/Blend/Flow choice *is* its
+/// check, so "on for checked layers" and "current settings" would be the same
+/// export, and offering both would be a picker where one option does nothing.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, serde::Serialize, serde::Deserialize)]
+pub enum RetimeBlendOverride {
+    /// *Current settings*: each layer's (and each Sequence clip's) own policy
+    /// stands. The default.
+    #[default]
+    CompSetting,
+    /// *Off for all layers*: every layer and every clip falls back to
+    /// [`Interpolation::Nearest`] — the crisp, whole-source-frame export, and
+    /// the cheapest one, since neither the blend pair nor the flow field is
+    /// asked for.
+    OffForAll,
+}
+
 /// What the export does to the composition on the way through — the render
 /// settings the export drawing puts beside the output format.
 #[derive(Clone, Copy, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
@@ -1018,6 +1064,12 @@ pub struct RenderOptions {
     /// the file, at every depth. On overrides that for the one export that
     /// wants the reference in the picture.
     pub render_guides: bool,
+    /// Force motion blur one way for the whole walk, or leave the
+    /// compositions' own settings alone ([`MotionBlurOverride`]).
+    pub motion_blur: MotionBlurOverride,
+    /// Force Retime blend off for the whole walk, or leave each layer's own
+    /// policy alone ([`RetimeBlendOverride`]).
+    pub retime_blend: RetimeBlendOverride,
     /// Read the proxies instead of the originals (K-501). **Off by default,
     /// whatever the project is set to**: a proxy is a working convenience, and
     /// delivery is the one moment it must not apply, so an export takes the
@@ -1039,6 +1091,8 @@ impl Default for RenderOptions {
             effects: true,
             honour_solo: true,
             render_guides: false,
+            motion_blur: MotionBlurOverride::default(),
+            retime_blend: RetimeBlendOverride::default(),
             use_proxies: false,
         }
     }
@@ -1050,7 +1104,10 @@ impl RenderOptions {
     /// so whether it changes this document depends on the document — see
     /// [`apply_render_overrides`].
     pub fn changes_document(&self) -> bool {
-        !self.effects || !self.honour_solo
+        !self.effects
+            || !self.honour_solo
+            || self.motion_blur != MotionBlurOverride::CompSetting
+            || self.retime_blend != RetimeBlendOverride::CompSetting
     }
 }
 
@@ -1100,6 +1157,15 @@ pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Opti
         let ProjectItem::Composition(comp) = item else {
             continue;
         };
+        // The master switch is a comp setting, so it is set here rather than in
+        // the layer loop — and in *every* comp, nested ones included, because
+        // "on for checked layers" that stopped at the top comp would leave a
+        // precomp's checked layers unblurred inside a blurred export.
+        match opts.motion_blur {
+            MotionBlurOverride::CompSetting => {}
+            MotionBlurOverride::OnForChecked => comp.motion_blur.enabled = true,
+            MotionBlurOverride::OffForAll => comp.motion_blur.enabled = false,
+        }
         for layer in &mut comp.layers {
             if drop_guides && layer.switches.guide {
                 // Reference-only means the whole layer: no picture, no sound,
@@ -1116,6 +1182,21 @@ pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Opti
             }
             if !opts.honour_solo {
                 layer.switches.solo = false;
+            }
+            if opts.motion_blur == MotionBlurOverride::OffForAll {
+                layer.switches.motion_blur = false;
+            }
+            if opts.retime_blend == RetimeBlendOverride::OffForAll {
+                layer.interpolation = Interpolation::Nearest;
+                // A Sequence layer's clips carry their own policy beside the
+                // layer's (docs/04 §10), and the decode planner reads the
+                // clip's when there is one — so a row left alone here would
+                // keep blending inside a sequence.
+                if let LayerKind::Sequence { clips } = &mut layer.kind {
+                    for clip in clips {
+                        clip.interpolation = Interpolation::Nearest;
+                    }
+                }
             }
         }
     }
@@ -3098,6 +3179,303 @@ mod tests {
         assert!(
             apply_render_overrides(&plain, &RenderOptions::default()).is_none(),
             "a document with no guide layer is not copied to skip nothing"
+        );
+    }
+
+    /// A two-level document for the motion-blur override: an outer comp
+    /// holding a Precomp of [`solid_doc`]'s comp, both comp masters off, and
+    /// the solid inside the nested comp **checked** for blur. Moving, so the
+    /// sub-frame samples are genuinely different placements rather than the
+    /// same one sixteen times. Answers the outer comp id and the nested one.
+    fn checked_blur_doc() -> (Arc<Document>, Uuid, Uuid) {
+        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+        use lumit_core::model::{Composition, LayerKind, LinearColour};
+        use lumit_core::time::{Duration as CompDuration, FrameRate, Rational};
+        let (doc, inner_id) = solid_doc(32, 16);
+        let mut doc = Document::clone(&doc);
+
+        let mut template = doc.comp(inner_id).unwrap().layers[0].clone();
+        for item in &mut doc.items {
+            if let ProjectItem::Composition(c) = item {
+                if c.id == inner_id {
+                    for l in &mut c.layers {
+                        l.switches.motion_blur = true;
+                        // A layer standing still smears into itself, which no
+                        // test could tell from not smearing at all.
+                        let key = |t: i64, value: f64| Keyframe {
+                            time: Rational::new(t, 1).unwrap(),
+                            value,
+                            interp_in: SideInterp::Linear,
+                            interp_out: SideInterp::Linear,
+                        };
+                        l.transform.position_x = Property {
+                            animation: Animation::Keyframed(vec![key(0, 0.0), key(5, 400.0)]),
+                            extra: serde_json::Map::new(),
+                        };
+                    }
+                    template = c.layers[0].clone();
+                }
+            }
+        }
+
+        let mut precomp = template.clone();
+        precomp.id = Uuid::now_v7();
+        precomp.name = "Nested".into();
+        precomp.kind = LayerKind::Precomp { comp: inner_id };
+        let outer_id = Uuid::now_v7();
+        doc.items.push(ProjectItem::Composition(Composition {
+            id: outer_id,
+            name: "Outer".into(),
+            width: 32,
+            height: 16,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: CompDuration(Rational::new(5, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![precomp],
+            markers: Vec::new(),
+            // Off, like the nested one: the point of *On for checked layers*
+            // is that it reaches a master that is off at every depth.
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        }));
+        (Arc::new(doc), outer_id, inner_id)
+    }
+
+    /// The blur the one shared helper (K-031) works out for a comp and a
+    /// layer: what the preview draws and what the export draws, from the same
+    /// call, so this test reads the picture rather than the switches.
+    fn blur_samples(doc: &Document, comp_id: Uuid) -> usize {
+        let comp = doc.comp(comp_id).unwrap();
+        let context = Arc::new(lumit_core::expression::ExpressionContext::detached());
+        crate::build::motion_blur_samples(comp, &comp.layers[0], 0.5, context).len()
+    }
+
+    /// *Motion blur* is the export's own answer, at every depth: *on for
+    /// checked layers* turns the master on in every comp in the walk and
+    /// leaves the checks alone, *off for all layers* shuts both, and *current
+    /// settings* copies nothing at all.
+    #[test]
+    fn the_motion_blur_override_reaches_every_comp_in_the_walk() {
+        let (doc, outer_id, inner_id) = checked_blur_doc();
+
+        // Current settings is the default and changes nothing: no clone, and
+        // the checked layer does not smear because its comp master is off.
+        assert!(
+            apply_render_overrides(&doc, &RenderOptions::default()).is_none(),
+            "the comp's own setting is passthrough, so nothing is copied"
+        );
+        assert_eq!(blur_samples(&doc, inner_id), 0);
+
+        let on = RenderOptions {
+            motion_blur: MotionBlurOverride::OnForChecked,
+            ..RenderOptions::default()
+        };
+        let delivery = apply_render_overrides(&doc, &on).expect("the masters change");
+        for comp in [outer_id, inner_id] {
+            assert!(
+                delivery.comp(comp).unwrap().motion_blur.enabled,
+                "the master goes on in every comp, nested ones included"
+            );
+        }
+        assert!(
+            delivery.comp(inner_id).unwrap().layers[0]
+                .switches
+                .motion_blur,
+            "the per-layer checks are what the phrase honours, so they stand"
+        );
+        // The picture, not the switch: the checked layer now smears.
+        assert_eq!(blur_samples(&delivery, inner_id), 16);
+        // And the snapshot the export was handed is untouched.
+        assert!(!doc.comp(inner_id).unwrap().motion_blur.enabled);
+
+        // Off for all layers, against a document where the master IS on.
+        let mut seeded = Document::clone(&delivery);
+        for item in &mut seeded.items {
+            if let ProjectItem::Composition(c) = item {
+                c.motion_blur.enabled = true;
+            }
+        }
+        let seeded = Arc::new(seeded);
+        assert_eq!(blur_samples(&seeded, inner_id), 16);
+        let off = RenderOptions {
+            motion_blur: MotionBlurOverride::OffForAll,
+            ..RenderOptions::default()
+        };
+        let delivery = apply_render_overrides(&seeded, &off).expect("the masters change back");
+        for comp in [outer_id, inner_id] {
+            assert!(!delivery.comp(comp).unwrap().motion_blur.enabled);
+        }
+        assert!(
+            !delivery.comp(inner_id).unwrap().layers[0]
+                .switches
+                .motion_blur,
+            "*for all layers* clears the checks too, not just the one gate"
+        );
+        assert_eq!(blur_samples(&delivery, inner_id), 0);
+    }
+
+    /// A comp whose one footage layer blends between source frames: 24fps
+    /// media in a 30fps comp, so the moment asked for lands between two frames
+    /// the file has. Answers the document, the comp and the probes.
+    fn blending_footage_doc() -> (
+        Arc<Document>,
+        Uuid,
+        std::collections::HashMap<Uuid, crate::source::SourceProbe>,
+    ) {
+        use lumit_core::model::{
+            Composition, FootageItem, LayerKind, LinearColour, MediaRef, Switches,
+        };
+        use lumit_core::time::{Duration as CompDuration, FrameRate, Rational};
+        let mut doc = Document::new();
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            id: item,
+            name: "shot.mp4".into(),
+            media: MediaRef {
+                relative_path: "shot.mp4".into(),
+                absolute_path: "shot.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+        }));
+        let (solid, comp_id) = solid_doc(32, 16);
+        let mut layer = solid.comp(comp_id).unwrap().layers[0].clone();
+        layer.kind = LayerKind::Footage { item };
+        layer.interpolation = Interpolation::Blend;
+        layer.switches = Switches::default();
+        let comp_id = Uuid::now_v7();
+        doc.items.push(ProjectItem::Composition(Composition {
+            id: comp_id,
+            name: "Scene".into(),
+            width: 32,
+            height: 16,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: CompDuration(Rational::new(5, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![layer],
+            markers: Vec::new(),
+            motion_blur: lumit_core::model::MotionBlur::default(),
+            extra: serde_json::Map::new(),
+        }));
+        let mut probes = std::collections::HashMap::new();
+        probes.insert(
+            item,
+            crate::source::SourceProbe::Video {
+                fps: 24.0,
+                width: 32,
+                height: 16,
+                frames: 120,
+                audio: false,
+            },
+        );
+        (Arc::new(doc), comp_id, probes)
+    }
+
+    /// Whether the decode plan the one walk builds (K-031) asks for a blended
+    /// pair of source frames — the picture Retime blend makes, read where both
+    /// the preview and the export read it.
+    fn plan_blends(
+        doc: &Document,
+        comp_id: Uuid,
+        probes: &dyn crate::source::SourceProbes,
+    ) -> bool {
+        let comp = doc.comp(comp_id).unwrap();
+        crate::plan::plan_comp_frame(doc, comp, 0.05, crate::plan::Quality::default(), probes)
+            .iter()
+            .any(|job| job.blend.is_some())
+    }
+
+    /// *Retime blend* off falls every layer back to Nearest, and the default
+    /// leaves each layer's own policy — and the document — exactly alone.
+    #[test]
+    fn the_retime_blend_override_stops_the_blend_and_the_default_never_copies() {
+        let (doc, comp_id, probes) = blending_footage_doc();
+
+        assert!(
+            apply_render_overrides(&doc, &RenderOptions::default()).is_none(),
+            "current settings is passthrough, so nothing is copied"
+        );
+        assert!(
+            plan_blends(&doc, comp_id, &probes),
+            "the scenario has to blend before the override can stop it"
+        );
+
+        let off = RenderOptions {
+            retime_blend: RetimeBlendOverride::OffForAll,
+            ..RenderOptions::default()
+        };
+        let delivery = apply_render_overrides(&doc, &off).expect("the policy changes");
+        assert_eq!(
+            delivery.comp(comp_id).unwrap().layers[0].interpolation,
+            Interpolation::Nearest
+        );
+        assert!(
+            !plan_blends(&delivery, comp_id, &probes),
+            "off for all layers asks the decoder for whole source frames"
+        );
+        // The project keeps the policy the editor chose.
+        assert_eq!(
+            doc.comp(comp_id).unwrap().layers[0].interpolation,
+            Interpolation::Blend
+        );
+    }
+
+    /// A Sequence layer's clips carry their own interpolation beside the
+    /// layer's, and the planner reads the clip's — so *off for all layers* has
+    /// to reach into the sequence or the row is only half true.
+    #[test]
+    fn the_retime_blend_override_reaches_a_sequences_own_clips() {
+        use lumit_core::sequence::{Clip, ClipSource};
+        use lumit_core::time::Rational;
+        let (doc, comp_id, _probes) = blending_footage_doc();
+        let mut seeded = Document::clone(&doc);
+        let footage = seeded
+            .items
+            .iter()
+            .find_map(|i| match i {
+                ProjectItem::Footage(f) => Some(f.id),
+                _ => None,
+            })
+            .unwrap();
+        for item in &mut seeded.items {
+            if let ProjectItem::Composition(c) = item {
+                let r = |n: i64| Rational::new(n, 1).unwrap();
+                let clip = Clip {
+                    interpolation: Interpolation::Blend,
+                    ..Clip::new(ClipSource::Footage(footage), r(0), r(5), r(0), r(5))
+                };
+                c.layers[0].kind = LayerKind::Sequence { clips: vec![clip] };
+            }
+        }
+        let off = RenderOptions {
+            retime_blend: RetimeBlendOverride::OffForAll,
+            ..RenderOptions::default()
+        };
+        let delivery =
+            apply_render_overrides(&Arc::new(seeded), &off).expect("the clip policy changes");
+        let LayerKind::Sequence { clips } = &delivery.comp(comp_id).unwrap().layers[0].kind else {
+            panic!("the layer is still a sequence");
+        };
+        assert_eq!(clips[0].interpolation, Interpolation::Nearest);
+    }
+
+    /// Both new fields default to the composition's own settings, so an export
+    /// spec written before they existed loads to what it always did.
+    #[test]
+    fn a_spec_without_the_time_overrides_loads_to_the_comp_settings() {
+        let mut json = serde_json::to_value(RenderOptions::default()).unwrap();
+        let obj = json.as_object_mut().unwrap();
+        assert!(obj.remove("motion_blur").is_some());
+        assert!(obj.remove("retime_blend").is_some());
+        let loaded: RenderOptions = serde_json::from_value(json).unwrap();
+        assert_eq!(loaded.motion_blur, MotionBlurOverride::CompSetting);
+        assert_eq!(loaded.retime_blend, RetimeBlendOverride::CompSetting);
+        assert!(
+            !loaded.changes_document(),
+            "and an old spec still copies no document"
         );
     }
 

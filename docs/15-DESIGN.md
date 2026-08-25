@@ -1193,12 +1193,28 @@ listed the rows nothing could honour; the engine half landed with K-479 and the 
 half with K-485. Audio-only output, colour depth, channels and alpha, the output colour
 space, crop and *use region of interest*, container metadata, the preset store with *Save
 as…* and *Edit*, the auto bitrate, and the render settings (quality, disk cache, effects,
-solo switches) are all on the page, with a per-format capability table saying which of them
-a given format can carry at all. **A control a format cannot honour is disabled, not drawn
+solo switches, motion blur, Retime blend) are all on the page, with a per-format capability
+table saying which of them a given format can carry at all. **A control a format cannot honour is disabled, not drawn
 live and not left out** — the engine refuses such a spec outright, so a dialog that let it
 be set would only be arranging a refusal, and one that hid the row would leave the reader
 wondering where it went. The same face is used for the rows no *subsystem* backs — **guide
 layers** and **proxies** ([TODO.md](TODO.md)) — each with a short reason on hover.
+
+**The Time section's two overrides say exactly what they do, and one of them has two
+answers rather than three** (K-502). *Motion blur* offers **Current settings**, **On for checked
+layers** and **Off for all layers**, because blur passes two gates — the composition's
+master switch and each layer's own switch ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md)
+§4) — and those are the three useful things to say about the master while the checks
+stand: leave it, turn it on in every composition in the walk (nested ones included, or a
+precomp's checked layers would stay sharp inside a blurred export), or shut it *and* clear
+every layer's check, which is what *for all layers* claims. *Retime blend* offers **Current
+settings** and **Off for all layers** only. There is no composition-wide frame-blending
+master in Lumit: a layer's Nearest/Blend/Flow choice ([04-RETIMING.md](04-RETIMING.md) §10)
+*is* its check, so "on for checked layers" would render the identical file as "current
+settings", and a picker whose third option does nothing is worse than a picker with two.
+*Off* falls every layer **and every Sequence clip** back to Nearest, the clip carrying its
+own policy beside the layer's. Both default to *Current settings*, both are applied to the
+export's throwaway snapshot by `apply_render_overrides`, and neither touches the project.
 
 **The Export dialog's preset controls are a strip of their own** (K-487). A preset sets and
 saves *every* section of the dialog, so it is chrome over the whole page rather than a row

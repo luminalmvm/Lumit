@@ -13630,3 +13630,42 @@ dialog's proxies row stays drawn dead (K-485) until `BridgeExportSpec` carries
 `use_proxies`, and the Project panel's set / clear / *use proxy* / *use proxies* controls and
 the MAKE-PROXY action with its progress are all interface work, listed in
 [TODO.md](TODO.md). No user-facing string is added by this entry.
+
+## K-502 — The export's Time overrides: motion blur has three answers, Retime blend has two
+
+**DECIDED 2026-08-25**, completing the two rows K-485 drew dead. The export dialog's Time
+section carried *Motion blur* and *Retime blend* as disabled controls reading "the
+composition's setting", because `RenderOptions` had no field for either. It has both now,
+applied by `apply_render_overrides` to the export's own throwaway snapshot — the route
+K-497 established for guide layers, and for the same reason: one edit to the snapshot makes
+the draw builder, the decode planner, the frame key and the occlusion cull agree at every
+depth, without a "this walk is for delivery" flag threaded through any of them. The project
+is never touched, and the Viewer never takes this path.
+
+**Motion blur has three answers because blur passes two gates.** A layer smears only when
+its composition's master switch and its own switch are both on (docs/06 §4, K-120), so the
+three useful things to say about the master while the checks stand are *Current settings*
+(the default — leave every comp and every layer exactly as saved), *On for checked layers*
+(the master goes on in **every composition the export walks**, nested ones included, and
+the per-layer switches are left alone, because they are the checks the phrase names), and
+*Off for all layers* (the master goes off **and** every layer's check is cleared). Either
+half of *off* would stop the blur on its own — the master is the one gate everything passes
+— but the row says *for all layers*, and a delivery snapshot in which a layer is still
+checked would be true only by accident of which gate was shut. *On for checked layers* that
+stopped at the top comp would leave a precomp's checked layers sharp inside a blurred
+export, which is why the master is set in the walk rather than on the fronted comp.
+
+**Retime blend has two, and the missing third is the model's answer rather than the
+drawing's.** Lumit has no composition-wide frame-blending master: a layer's (or a Sequence
+clip's) Nearest/Blend/Flow choice (docs/04 §10) **is** its check, fused into one tri-state
+rather than split into a switch and a mode as After Effects splits it. So "on for checked
+layers" would write the identical file as "current settings", and a picker whose third
+option does nothing is worse than a picker with two. The row offers *Current settings* and
+*Off for all layers*; *off* falls every layer **and every clip inside a Sequence layer**
+back to `Interpolation::Nearest`, the clip carrying its own policy beside the layer's and
+the decode planner reading the clip's when there is one — a sequence left alone would go on
+blending inside an export that said it would not.
+
+**Both default to the composition's own settings**, so an `ExportSpec` written before these
+fields existed — and every saved preset — deserialises to exactly the export it always
+produced, and the common export still clones no document at all.
