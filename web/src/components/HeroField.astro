@@ -227,8 +227,9 @@
       // The front is not a line but a soft edge, and it is not the same softness
       // on both sides. Outward - the side that has not arrived yet - it is
       // tight, because that edge is the shape of the thing expanding and a wide
-      // one loses it. Inward it runs a long way back, so what the front has
-      // just passed settles in gradually rather than snapping to full.
+      // one loses it. Inward it runs a very long way back - a third of the
+      // hero - so what the front has just passed goes on settling in well after
+      // the front itself has moved on.
       //
       // Both ends of the travel are written in terms of those two. It finishes
       // a trailing feather past the furthest corner, or the last pixels would
@@ -237,7 +238,7 @@
       // showing before the reveal had begun - a rectangle appearing rather than
       // a wordmark opening.
       float lead = 16.0;
-      float trail = 110.0;
+      float trail = 320.0;
       float inner = -0.5 * min(u_box.z - u_box.x, u_box.w - u_box.y)
         - lead - 20.0;
       float front = mix(inner, far + trail, 1.0 - pow(1.0 - u_reveal, 3.0));
