@@ -223,13 +223,19 @@
       vec2 bd = max(u_box.xy - gl_FragCoord.xy, gl_FragCoord.xy - u_box.zw);
       float bdist = length(max(bd, 0.0)) + min(max(bd.x, bd.y), 0.0);
       float far = length(max(u_box.xy, u_res - u_box.zw)) + 1.0;
-      // The front starts inside the box, not on its edge: bdist is negative in
-      // there, so a front at zero would already be showing the whole box before
-      // the reveal had begun. Starting it past the box's own middle means it
-      // opens out of the wordmark rather than appearing as a rectangle.
-      float inner = -0.5 * min(u_box.z - u_box.x, u_box.w - u_box.y) - 20.0;
-      float front = mix(inner, far, 1.0 - pow(1.0 - u_reveal, 3.0));
-      float vis = 1.0 - smoothstep(front - 28.0, front + 4.0, bdist);
+      // The front is not a line but a soft edge 110 px to either side of one,
+      // so what expands is a wash rather than a boundary. Everything else here
+      // is written in terms of that width: the travel ends a feather past the
+      // furthest corner, so the last pixels reach full strength rather than
+      // being caught half-lit, and it starts a feather inside the box for the
+      // same reason at the other end - a front any later than that would have
+      // the box already showing before the reveal had begun, which would read
+      // as a rectangle appearing rather than a wordmark opening.
+      float feather = 110.0;
+      float inner = -0.5 * min(u_box.z - u_box.x, u_box.w - u_box.y)
+        - feather - 20.0;
+      float front = mix(inner, far + feather, 1.0 - pow(1.0 - u_reveal, 3.0));
+      float vis = 1.0 - smoothstep(front - feather, front + feather, bdist);
 
       // Just inside the front the exposure overshoots, and settles again as the
       // front moves on: the overshoot travels with the edge instead of
