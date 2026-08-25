@@ -60,6 +60,9 @@ All figures are 95th percentile unless stated; measured by the harness in §7.
 | B9 | GPU device loss → preview resumed | ≤ 5 s | ≤ 5 s |
 | B10 | A/V sync error during playback | ≤ ±½ video frame | ≤ ±½ video frame |
 | B11 | Background cache fill of the 20 s work area from cold, while idle | ≤ 60 s | ≤ 240 s |
+| B12 | Particulate, default parameters (≈ 300 live particles), evaluate + draw | ≲ 0.2 ms | ≲ 0.6 ms |
+| B13 | Particulate, 20 000 live discs at the default cap, evaluate + draw | ≤ 1 ms | ≤ 4 ms |
+| B14 | Particulate at the 1 000 000 hard cap, evaluate + draw, one comp frame | ≤ 16 ms | — |
 
 ### 2.1 Document-scale budgets (the "thousands of layers" mandate)
 
@@ -104,6 +107,16 @@ Notes:
   real time (B6) has no excuse exporting slower than 2× with deeper pipelining and no display.
 - Budgets marked "reference comp" scale expectations, not guarantees, for other comps: a 4K
   comp with 40 layers may degrade — visibly, per §4 — but B1/B2 hold unconditionally.
+- B12–B14 are the four numbers K-475 makes Particulate's own, and they are per-effect rather
+  than per-comp because **Max particles is the user's budget dial**: the cap is the declared
+  peak scratch (§6), so an instance's cost is a number the document states rather than one
+  the governor has to guess. B12 says the effect is free to drop on. B13 says the default cap
+  plays. B14 says the hard cap **degrades rather than stalls** — one comp frame, not real
+  time, and the pass checks cancellation between its evaluate and its draw. The fourth of
+  K-475's claims is not a millisecond and so is not a row: under governor pressure the effect
+  draws the **newest `cap/2`**, halving again as pressure demands, which is the cap rule
+  applied a second time — deterministic, identical from any scrub direction, and **never on
+  the export path** (docs/06 §6.2). It is gated as a correctness test, not a timing one.
 
 ## 3. The resource governor
 
@@ -385,7 +398,9 @@ application depends on, run by the CI job **`performance gates (ratio vs baselin
 reference-desktop-class runner, on which the 10%-against-baseline rule replaces the interim
 1.6x and the budgets themselves gate. Unit-level benchmarks: every built-in effect with a
 per-dispatch time and memory measurement tied to its declared cost class, so an effect that
-outgrows its class fails its own test rather than only the end-to-end one.
+outgrows its class fails its own test rather than only the end-to-end one — B12–B14 are the
+first three of those, owed a harness scenario apiece when the reference-desktop runner
+exists (points-stream.md PS7).
 
 ## Open questions
 

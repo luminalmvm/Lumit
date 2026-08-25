@@ -240,6 +240,11 @@ impl Realiser<'_> {
                         // No mask paths through a referenced layer's own stack
                         // (K-408) — the same v1 boundary its mattes take.
                         &[],
+                        // And no birth schedules: a Particulate inside a
+                        // referenced layer's own stack takes the same v1
+                        // boundary, and an unscheduled op passes its picture
+                        // through.
+                        &[],
                         // A matte's own stack is part of the effect that reads
                         // it, not a row of its own: its cost is inside that
                         // layer's span already.
@@ -447,6 +452,7 @@ impl Realiser<'_> {
                 &flare_lens,
                 &mattes,
                 &l.mask_paths,
+                &l.points_schedules,
                 fx_ms.as_mut(),
                 // The composite below carries no name in v1 (K-421).
                 None,
@@ -722,6 +728,7 @@ impl Realiser<'_> {
                     &flare_lens,
                     &mattes,
                     &l.mask_paths,
+                    &l.points_schedules,
                     fx_ms.as_mut(),
                     // The per-effect cache (K-421), for a source the builder
                     // could name; a nested comp, text or shape runs as before.
@@ -827,7 +834,8 @@ impl Realiser<'_> {
                             &[],
                             &[],
                             // As above: a referenced layer's own stack walks no
-                            // mask path in v1 (K-408).
+                            // mask path, and carries no birth schedule, in v1.
+                            &[],
                             &[],
                             // A matte's own stack is part of the layer it
                             // gates, not a row of its own.

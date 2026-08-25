@@ -13921,3 +13921,76 @@ motion runs, not which mode decided it. And planting a key inside a span leaves 
 automatic neighbour automatic: preserving the curve's shape (K-221) cannot mean freezing a
 tangent whose whole definition is "wherever the neighbours put it", one of which has just
 moved.
+
+## K-507 — Particulate's rotation jitter is a dial, and it is a whole turn by default
+
+*Status: DECIDED. Resolves the question [docs/impl/particulate.md](impl/particulate.md) §2
+left parked in its Rotation row — "Plus per-particle jitter folded into the seed hash" —
+raised for settlement by PS2, which is the package that gives sprites something to point.
+See K-446, K-474 (a particle is a pure function of its birth index), K-475, and
+[docs/impl/points-stream.md](impl/points-stream.md) §5.*
+
+The note says the jitter exists, says it comes from the seed, and says nothing about how
+much of it there is. That silence cannot stand once Sprite mode is real: the two readings
+that need no new control both break something the note says elsewhere. A jitter of nothing
+makes the clause false. A jitter of a whole turn, always, makes the **Rotation** row above
+it a control that can never do anything — and a parameter that is permanently inert is a
+defect, not a default.
+
+**So it is a dial: Rotation jitter, degrees, 0–360, default 360.** Each particle takes a
+uniform draw of ±half of it about Rotation, from `hash(seed, birth index, 7)` — the same
+stateless generator every other per-particle die uses (docs/08 §2.4), so the clause "folded
+into the seed hash" is honoured exactly. It sits in the Particle group beside Rotation and
+Spin, and it is the fourth of the note's own jitters: Speed, Life and Size each expose
+theirs as a dial, and this one being the exception was the accident, not the design.
+
+**The default is the whole turn because that is the look, not because it is the middle of
+the range.** A hundred sprites all facing the same way reads as a mistake the moment
+anybody switches the mode, and "drop it on and it already looks right" is the rule the
+whole parameter surface was chosen under (particulate.md §2). Dial it to zero and Rotation
+means precisely what it says; leave it alone and a field of sprites looks like a field.
+
+**It is degrees, not a per cent.** The three sibling jitters are shares *of their own
+control*, which works because a speed, a lifetime and a size are all quantities with a
+magnitude to take a share of. A rotation's natural zero is not small, it is arbitrary — a
+per cent of a Rotation of 0° would be no spread at all, which is the inert-parameter
+failure again wearing the other hat. Degrees also make the interesting value sayable: 360
+is "any way at all", and there is no percentage that means that of nothing.
+
+## K-508 — The points stream's CPU/GPU agreement is one part in 10⁵ of each attribute's range, not two ULP
+
+*Status: DECIDED. Corrects the number in [docs/impl/particulate.md](impl/particulate.md)
+§5 and [docs/impl/points-stream.md](impl/points-stream.md) §3.2, which both say "≤ 2 ULP
+fp32". Everything either note says *about* the agreement stands; only the measure changes.
+The same shape of correction PS1 made to the drag guard, and for the same reason —
+a number written down in a design step that arithmetic will not honour. See K-019 (the CPU
+is the oracle), K-031, K-474.*
+
+**Two ULP is not a bound a GPU can meet against libm, and no amount of care in the kernel
+would change that.** A particle's position runs through `sin`, `cos` and `exp`; WebGPU
+guarantees those to a handful of ULP and drivers deliver about a part in 10⁶ relative,
+which is already forty times two ULP before anything is multiplied by a speed or fed into
+a noise lattice. The closed forms then amplify it honestly: a position is a speed times an
+age, and turbulence samples the field *at* that position, so a part-in-10⁶ difference in
+the launch direction reappears as a part-in-10⁶ difference in the drawn place. Nothing is
+wrong; the metric was.
+
+**The measure is also wrong in a second way: half of these quantities pass through zero.**
+A speed reversing sign has no meaningful ULP count — the two answers can be thirty million
+ULP apart and a nanometre apart at the same time — so a per-value ULP gate reports noise
+about the least significant particles in the set. The agreement that means something is
+against the attribute's **own range**.
+
+**So: every stream attribute agrees between the two paths to within 10⁻⁵ of that
+attribute's range over the frame's live set.** Measured on the reference desktop with every
+force on, the worst is 1.4 × 10⁻⁶ — a seven-fold margin — and the attributes that touch no
+transcendental (life, size, rotation, age) agree to about one ULP, which is the number the
+notes were reaching for and is achievable exactly where it is achievable. On a 1920-wide
+composition the gate is two hundredths of a pixel, which is the scale at which "the driver
+measured what the viewer sees" is a true sentence. `id` is exempt and exact: it is the
+birth index, not a measurement, and it agrees to the integer or the compaction has put a
+particle in the wrong slot. Colour is exempt too, for the opposite reason — particulate.md
+§4 declares that region at half precision, and the picture test is what holds it.
+
+**The pixels keep their own tolerance**, unchanged: the `moderate` perceptual epsilon of
+docs/08 §1.6, measured at 1.0 × 10⁻³ across all three render modes.

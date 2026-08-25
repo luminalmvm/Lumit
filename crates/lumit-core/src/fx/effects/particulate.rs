@@ -15,16 +15,16 @@
 //! the *declaration*: the controls, what they mean, and the reduction from the
 //! resolved bag to the numbers those formulas read.
 //!
-//! **What is here and what is not.** PS1 lands the parameters, the closed
-//! forms and the CPU disc reference. The GPU evaluate/compaction/draw passes,
-//! the sprite and streak modes, and the schedule's carriage beside the op are
-//! PS2 (points-stream.md §5); the Points socket is declared but nothing may
-//! wire it until PS3 lands the edge.
+//! **What is here and what is not.** PS1 landed the parameters, the closed
+//! forms and the CPU disc reference; PS2 adds the three render modes, the GPU
+//! evaluate/compaction/instanced-draw passes and the schedule's carriage beside
+//! the op. The Points socket is declared but nothing may wire it until PS3
+//! lands the edge.
 
 use crate::fx::points::{self, Emitter, EmitterShape, Forces, ParticleLook, PointsParams};
 use crate::fx::{
     cpu, CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen,
-    ParamGroup, Port, PortType, Signature,
+    ParamGroup, ParamId, Params, Port, PortType, ResolveCx, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -76,6 +76,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "colour",
             "end_colour",
             "rotation",
+            "rotation_jitter",
             "spin",
             "align_to_motion",
         ],
@@ -288,6 +289,22 @@ pub struct Particulate {
     #[dial(label = "Rotation", default = 0.0)]
     pub rotation: f32,
 
+    /// How much particles differ from one another in Rotation, degrees: each
+    /// takes a draw of ±half of this about it, from the seed (K-507).
+    ///
+    /// A whole turn by default, because that is what a field of sprites wants —
+    /// a hundred identical stamps all facing the same way reads as a mistake.
+    /// Dial it to zero and Rotation means exactly what it says.
+    #[slider(
+        min = 0.0,
+        max = 360.0,
+        default = 360.0,
+        hard_min = 0.0,
+        hard_max = 360.0,
+        unit = Degrees
+    )]
+    pub rotation_jitter: f32,
+
     /// How fast that rotation turns, degrees per second.
     #[slider(min = -720.0, max = 720.0, default = 0.0, unit = Degrees)]
     pub spin: f32,
@@ -348,9 +365,13 @@ pub struct Particulate {
     )]
     pub turbulence_speed: f32,
 
-    /// What a particle is drawn as. **Disc** is the reference mode; Sprite and
-    /// Streak land with the instanced draw (PS2).
-    #[choice(label = "Mode", options = ["Disc", "Sprite", "Streak"], default = 0)]
+    /// What a particle is drawn as. All three are the same instanced quad with
+    /// a different coverage inside it ([`points::RenderMode`]).
+    ///
+    /// The option list is [`points::RenderMode::OPTIONS`] rather than a second
+    /// copy of the words, so the labels and `RenderMode::from_code` cannot come
+    /// to disagree about which index means what.
+    #[choice(label = "Mode", options = *points::RenderMode::OPTIONS, default = 0)]
     pub mode: u32,
 
     /// How soft a disc's edge is, per cent.
@@ -415,6 +436,18 @@ pub struct Particulate {
 }
 
 impl Particulate {
+    /// The raster factor, for the one input the declaration cannot scale
+    /// (K-385): the mask path arrives in px@comp, and a Mask path emitter has
+    /// to place its births in the pixels the frame is actually being drawn at.
+    /// Stroke's and Scribble's row, for their reason.
+    pub const DERIVED_PX_SCALE: ParamId = ParamId::new("derived.px_scale");
+
+    /// This instance's raster factor, read back out of a resolved bag.
+    #[must_use]
+    pub fn px_scale_of(p: Params<'_>) -> f32 {
+        p.float(Self::DERIVED_PX_SCALE, 1.0)
+    }
+
     /// The bundle the closed forms read (docs/impl/effect-registry.md §2.4) —
     /// this effect's `packed`.
     ///
@@ -446,6 +479,7 @@ impl Particulate {
                 colour: self.colour,
                 end_colour: self.end_colour,
                 rotation_deg: self.rotation,
+                rotation_jitter_deg: self.rotation_jitter.clamp(0.0, 360.0),
                 spin_deg: self.spin,
                 align_to_motion: self.align_to_motion,
             },
@@ -459,6 +493,28 @@ impl Particulate {
             },
             cap: self.max_particles.clamp(1, points::CAP_HARD as i32) as u32,
             seed: self.seed,
+        }
+    }
+
+    /// How the stream is drawn — the Render group, reduced.
+    ///
+    /// **Streak length is not scaled by the raster** and must not be: it is a
+    /// duration, and the tail it asks for is a position the closed form works
+    /// out in whatever units the rest of the bag is already in.
+    #[must_use]
+    pub fn draw_style(self) -> points::DrawStyle {
+        let mode = points::RenderMode::from_code(self.mode);
+        points::DrawStyle {
+            mode,
+            feather: (self.feather / 100.0).clamp(0.0, 1.0),
+            // Only Streak has a tail; the other two ask the evaluation for none
+            // rather than computing a position nothing draws.
+            streak_seconds: if mode == points::RenderMode::Streak {
+                self.streak_length.max(0.0)
+            } else {
+                0.0
+            },
+            mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
     }
 
@@ -500,5 +556,11 @@ impl EffectDef for ParticulateDef {
     /// output beside its image, which is the first of its kind.
     fn signature(&self) -> Signature {
         Signature::Image { extra: POINTS_OUT }
+    }
+
+    /// The raster factor, so a Mask path emitter's px@comp vertices reach the
+    /// pixels this frame is drawn at (K-385).
+    fn resolve_derived(&self, cx: &ResolveCx<'_>, push: &mut dyn FnMut(ParamId, Value)) {
+        push(Particulate::DERIVED_PX_SCALE, Value::Float(cx.px_scale));
     }
 }

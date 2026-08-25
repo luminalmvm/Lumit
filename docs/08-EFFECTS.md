@@ -5243,6 +5243,88 @@ Like the Controls family above, it declares no image operation, takes no matte a
 Mix — for the same reason and by the same mechanism, though it is a Utility rather than a
 Control: it holds a *job*, not a value.
 
+### 3.86 Particulate — a particle system that is arithmetic, not history
+
+A **Generate** effect (K-446), and the first that hands something out beside its picture: a
+declared `Points` output carrying the same particles it drew, for the family that will
+consume them ([impl/points-stream.md](impl/points-stream.md)). The design is
+[impl/particulate.md](impl/particulate.md); this entry is the catalogue's account of it.
+
+**Parameters**, in four groups. *Emitter*: Shape (Point · Line · Ellipse · Rectangle · Mask
+path), Position (px@comp), Width / Height (px@comp, 0–2000, default 400), Emitter angle,
+Mask path (K-408), Emit rate (per second, 0–1000, default 150), Direction (degrees, default
+−90), Spread (degrees, 0–360, default 360), Initial speed (px@comp/s, default 90), Speed
+jitter (per cent, default 50). *Particle*: Life (seconds, default 2), Life jitter (per cent,
+default 30), Size (px@comp, default 4), Size jitter (per cent, default 40), Size over life
+and Opacity over life (curves, K-412 — flat, and 1 → 0), Colour and End colour
+(scene-linear, values above 1 legal), Rotation, **Rotation jitter** (degrees, 0–360, default
+360 — K-507), Spin (degrees/s), Align to motion. *Forces*: Gravity (px@comp/s²), Wind x /
+Wind y (px@comp/s — they act **through** Drag, and with Drag 0 they do nothing at all),
+Drag (per second, default 0.5), Turbulence amount / scale / speed. *Render*: Mode
+(Disc · Sprite · Streak), Feather (per cent), Sprite layer (K-123, K-142), Streak length
+(seconds), **Max particles** (1–200 000, hard 1 000 000, default 20 000 — not animatable),
+Seed. Plus the host Mix with its Blend (K-425).
+
+**Algorithm sketch.** No frame reads any other frame. The whole of a particle's life is
+decided by its **birth index** and a seed, so "where is it at frame 500?" is arithmetic:
+
+```
+carry += rate(f)·Δt ; n_f = floor(carry) ; carry -= n_f     # host, one scalar a frame
+t_b   = frame start + (j + ½)·Δt/n_f                        # birth time, spread in-frame
+die(a)= hash(seed, birth index, a)                          # every per-particle draw
+age   = t − t_b ;  alive if 0 ≤ age < life(die)
+p(age)= p0 + w·age + (v0 − w)·age·r(k·age) + g·age²·s(k·age) # closed form, no g/k
+Δp    = amount · noise2(p0/scale + phase, age·turb_speed)    # turbulence displaces
+keep the newest `cap` alive by birth index                   # the cap rule
+```
+
+Six notes:
+
+- **The forces are the set with closed-form integrals** (K-474), and that is the selection
+  criterion rather than a styling choice. `r` and `s` are `(1 − e^(−x))/x` and its
+  companion, written so **neither divides by the drag** — the published `g/k` form is
+  infinite at zero drag — with a series branch below `x = 0.1`. The note says `1e−4`; in
+  f32 the cancelling form has lost three of its seven digits by there, so the two branches
+  met parts-in-a-thousand apart, and 0.1 with one more term is where they genuinely agree.
+- **Forces are sampled at the current frame** and treated as constant over each life. Move
+  a Gravity keyframe and the whole field leans, which is physically wrong and what a motion
+  designer expects. Integrating a changing force *is* the simulation this design excludes.
+- **The GPU path is four passes** — count the live candidates, prefix-sum their ranks, place
+  them, draw one instanced quad each — and the compaction is a **prefix sum, never atomics**
+  (§2.4): a slot has to be a function of the birth index, or `id` order would be a
+  scheduling artefact and two renders of one frame could disagree.
+- **All three modes are one quad with a different coverage inside it.** A disc is a
+  feathered circle; a streak is that circle swept to `p(t − length)`, found by the closed
+  form again and not by history, and so exactly the disc when the length is zero; a sprite
+  is the referenced layer's picture in the quad. **An unset Sprite layer draws discs** —
+  the documented deviation from the unset-is-identity convention, because a render mode
+  must always draw something.
+- **Max particles is the budget dial** (K-475, [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md)
+  §2): it is the declared peak scratch, which is why it is a parameter and not a guess. Over
+  budget, the **newest** cap by birth index survives — visible, deterministic, and identical
+  from any scrub direction. Under governor pressure the same rule at half the cap is the
+  degradation rung: interaction only, never on export (docs/06 §6.2).
+- **Two things ride beside the op**, because neither is a number anybody typed: the layer's
+  clock, and the birth schedule — the whole history of the Emit rate track rather than its
+  value now. The draw builder scans both, exactly as it flattens a mask polyline (§1.2).
+
+`moderate` cost, `FullFrame` ROI (a particle may travel anywhere), premultiplied, temporal
+window `{0}` — the payoff of the closed forms, and what makes scrubbing one evaluation.
+`sample_temporally` on, so accumulation Motion blur gets true particle motion for free
+(K-132). Mix 0, Max particles 0 and an Emit rate that has produced nothing are all the
+bit-exact identity, as is a Mask path emitter whose row comes to no mask — the documented
+no-op (K-408).
+
+**The Matte takes the generic strength semantic** (§2.6): the particles are drawn in full
+and dissolved back by the matte's luma afterwards, which is the right reading for an effect
+that *adds* light rather than grading what was there.
+
+AE's nearest equivalents are CC Particle World and Particular, both of which are
+simulations; what is deliberately absent here is collisions, flocking and any other
+per-particle interaction, and the contract a future **Simulate** mode would have to meet is
+written down rather than left to be improvised
+([impl/particulate.md](impl/particulate.md) §8).
+
 ---
 
 ## 4. Tier 2 — AE parity direction (post-v1)

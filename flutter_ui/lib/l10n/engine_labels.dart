@@ -26,7 +26,9 @@
 ///
 /// `test/l10n/engine_labels_test.dart` reads both Rust sources and fails if
 /// either can send a word this table has no entry for, so an effect or a
-/// shortcut added to the engine cannot quietly ship untranslated.
+/// shortcut added to the engine cannot quietly ship untranslated. The same test
+/// reads the two *sentence* tables further down — the import report's reasons
+/// and the colour config's refusals — against their own Rust enums.
 library;
 
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -557,6 +559,7 @@ Map<String, String> get _table => {
       "Roll speed": l10n.fxRollSpeed,
       "Rotation": l10n.fxRotation,
       "Rotation amount": l10n.fxRotationAmount,
+      "Rotation jitter": l10n.fxRotationJitter,
       "Rotation °": l10n.fxRotationDeg,
       "Roughen": l10n.fxRoughen,
       "Roughen edges": l10n.fxRoughenEdges,
@@ -971,3 +974,90 @@ String? importReason(String key, Map<String, String> args) {
 
 /// Whether this build has a sentence for [key] — what the sync test asserts.
 bool hasImportReason(String key) => importReason(key, const {}) != null;
+
+// --- The colour config's refusals (K-005, K-490, docs/impl/ocio.md §6.1) ---
+//
+// The same shape as the import reasons above, for the same reason: "this config
+// needs FixedFunctionTransform" is a different whole text for every transform,
+// so an id (`unsupported_transform`) plus its facts by name cross the bridge and
+// the sentence is written here.
+//
+// One difference, and it matters. The import report's facts go through
+// [engineLabel]; **these do not**. Every blank below is a name out of somebody
+// else's config file — a colour space, a display, a look-up table — and putting
+// those through the label table would rename a config's own "Alpha" space into
+// whatever this application happens to call an effect's Alpha parameter. A
+// config's words are the user's words, and they cross verbatim (K-303).
+
+/// The one-line reason the project's colour config is not in force, or null
+/// when this build has no sentence for [key] — the caller shows the engine's
+/// own English (`BridgeColourSummary.problemEnglish`) instead, the same
+/// courtesy [engineLabel] extends to a label it has never seen.
+///
+/// `in_space` is not a refusal of its own: it is the colour space that was
+/// being worked out when the trouble surfaced, and it wraps whichever sentence
+/// came back so the reader knows where in the config to look.
+String? colourProblem(String key, Map<String, String> args) {
+  final sentence = _colourRefusal(key, (name) => args[name] ?? '');
+  if (sentence == null) return null;
+  final inSpace = args['in_space'] ?? '';
+  return inSpace.isEmpty ? sentence : l10n.ocioProblemInSpace(sentence, inSpace);
+}
+
+String? _colourRefusal(String key, String Function(String) a) {
+  switch (key) {
+    // The one refusal the renderer raises itself: the file the project names is
+    // not there to be parsed at all.
+    case 'config_unreadable':
+      return l10n.ocioConfigUnreadable(a('path'));
+
+    // Things a config may legitimately contain that Lumit's v1 transform set
+    // does not implement. Each names what it refused.
+    case 'unsupported_transform':
+      return l10n.ocioUnsupportedTransform(a('name'));
+    case 'unsupported_builtin':
+      return l10n.ocioUnsupportedBuiltin(a('style'));
+    case 'unsupported3d_lut_inverse':
+      return l10n.ocioUnsupported3dLutInverse(a('space'));
+    case 'non_monotone_curve':
+      return l10n.ocioNonMonotoneCurve(a('path'));
+    case 'singular_matrix':
+      return l10n.ocioSingularMatrix;
+    case 'unsupported_lut_format':
+      return l10n.ocioUnsupportedLutFormat(a('extension'));
+    case 'context_variable':
+      return l10n.ocioContextVariable(a('path'));
+    case 'unsupported_clf_node':
+      return l10n.ocioUnsupportedClfNode(a('node'));
+    case 'unsupported_clf_feature':
+      return l10n.ocioUnsupportedClfFeature(a('feature'));
+    case 'unsupported_config_version':
+      return l10n.ocioUnsupportedConfigVersion(a('version'));
+
+    // The config is supported in principle but does not hold up.
+    case 'unknown_colour_space':
+      return l10n.ocioUnknownColourSpace(a('name'));
+    case 'unknown_role':
+      return l10n.ocioUnknownRole(a('name'));
+    case 'unknown_display':
+      return l10n.ocioUnknownDisplay(a('name'));
+    case 'unknown_view':
+      return l10n.ocioUnknownView(a('display'), a('view'));
+    case 'unknown_look':
+      return l10n.ocioUnknownLook(a('name'));
+    case 'lut_file_not_found':
+      return l10n.ocioLutFileNotFound(a('name'));
+    case 'file_read':
+      return l10n.ocioFileRead(a('path'), a('reason'));
+    case 'parse':
+      return l10n.ocioParse(a('what'), a('reason'));
+    case 'table_too_large':
+      return l10n.ocioTableTooLarge(a('what'), a('size'), a('limit'));
+
+    default:
+      return null;
+  }
+}
+
+/// Whether this build has a sentence for [key] — what the sync test asserts.
+bool hasColourProblem(String key) => colourProblem(key, const {}) != null;

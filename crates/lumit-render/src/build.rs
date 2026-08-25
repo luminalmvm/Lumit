@@ -835,6 +835,77 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
+    // **The birth schedules — the timing carriage** (points-stream.md §3.3,
+    // K-474). One per enabled built-in that declares a Points output AND
+    // resolves to an op at all — the same two conditions `mask_paths_for`
+    // applies, so this list stays 1:1 with the ops `run_ops` walks, with its
+    // own counter there because the predicate is a different one.
+    //
+    // Scanned here for the reason the polylines are flattened here: it is not
+    // pixels, and it is not a number in the bag. The scan walks ONE SCALAR per
+    // frame from the layer's in point to this one — a minute of comp at 60 fps
+    // is 3 600 additions — and what it records is only the window a particle
+    // could still be alive from.
+    //
+    // The rate is read off the stored track with the frame's own expression
+    // context. A *driven* Emit rate reads its wire at this frame like any other
+    // parameter; the wire's value at earlier frames is not re-walked, because
+    // the driver graph is resolved once per frame and re-resolving it per
+    // scanned frame would make one picture cost a thousand driver walks. The
+    // birth schedule of a driven rate therefore follows the track it was
+    // authored on — named here, and PS4's business when a wire can reach it.
+    let points_schedules_for = |layer: &lumit_core::model::Layer,
+                                slt: f64,
+                                frame_slt: f64|
+     -> Vec<lumit_core::fx::points::PointsSchedule> {
+        use lumit_core::model::EffectNamespace;
+        let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+        layer
+            .effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter_map(|e| {
+                let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
+                let wants =
+                    lumit_core::fx::points::wants_schedule(def.signature()) && def.is_image_op();
+                wants.then_some((e, def))
+            })
+            .map(|(e, _def)| {
+                // A pinned effect (K-132) is evaluated at the true playhead, so
+                // its schedule is scanned there too: the picture and the
+                // particles it draws must be of one moment.
+                let t = if e.sample_temporally { slt } else { frame_slt };
+                let upto = (t / dt).floor() as i64;
+                let context = Arc::new(ExpressionContext {
+                    document: expr_doc.clone(),
+                    comp: Some(comp.id),
+                    layer: Some(layer.id),
+                    comp_time: t_comp,
+                    current_depth: 0,
+                });
+                let rate_at = |lt: f64| -> f64 {
+                    e.float_at_with_context("emit_rate", lt, context.clone())
+                        .unwrap_or(150.0)
+                };
+                // How far back a particle born then could still be alive now:
+                // Life plus its jitter is the ceiling exactly, and a frame more
+                // because the frame the window opens on is one whose births are
+                // partly inside it.
+                let at = |id: &str, fallback: f64| -> f64 {
+                    e.float_at_with_context(id, t, context.clone())
+                        .unwrap_or(fallback)
+                };
+                let jitter = (at("life_jitter", 30.0) / 100.0).clamp(0.0, 1.0);
+                let longest = at("life", 2.0).max(0.0) * (1.0 + jitter);
+                let window = ((longest / dt).ceil() as i64).saturating_add(1);
+                let mut schedule =
+                    lumit_core::fx::points::Schedule::scan(dt, upto, window, &rate_at);
+                schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+                lumit_core::fx::points::PointsSchedule { schedule, t }
+            })
+            .collect()
+    };
+
     // Solo / isolate (K-105): while any layer is soloed, only soloed layers
     // render — computed once for the whole comp.
     let any_solo = lumit_core::model::any_picture_solo(comp);
@@ -1139,6 +1210,7 @@ pub fn build_comp_draws_at(
                     dof_inputs: dof_inputs_for(layer.id, &layer.effects),
                     mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
                     mask_paths: mask_paths_for(layer, lt),
+                    points_schedules: points_schedules_for(layer, lt, frame_lt),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // The adjust stack resolves at comp scale but runs on
                     // the render target (K-266) — realise rescales.
@@ -1405,6 +1477,7 @@ pub fn build_comp_draws_at(
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
             mask_paths: mask_paths_for(layer, lt),
+            points_schedules: points_schedules_for(layer, lt, frame_lt),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             fx_ref_width,
             fx_input_key,

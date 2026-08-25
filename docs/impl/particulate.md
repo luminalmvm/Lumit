@@ -84,7 +84,8 @@ softly glowing motes over the footage.
 | Opacity over life | curve (K-412) | unit square | 1 → 0 | Declared default points `[[0,1],[1,0]]` — born solid, dies faded. |
 | Colour | colour | — | white | Scene-linear; values above 1.0 are legal and useful over glow. |
 | End colour | colour | — | white | Blended to over normalised age, in working space. |
-| Rotation | degrees | −360–360 (open) | 0 | Plus per-particle jitter folded into the seed hash. |
+| Rotation | degrees | −360–360 (open) | 0 | The angle every particle starts at. |
+| Rotation jitter | degrees | 0–360 | 360 | Per-particle spread about Rotation: a uniform draw of ±half of this, folded into the seed hash (K-507). A whole turn by default, because a field of sprites all facing one way reads as a mistake; at 0, Rotation means exactly what it says. |
 | Spin | degrees per second | −720–720 (open) | 0 | |
 | Align to motion | bool | — | off | Rotation follows the speed direction; Spin adds on top. |
 
@@ -263,9 +264,14 @@ of §3.1 for free.
   compaction, done by a deterministic prefix sum in birth-index order — never atomics
   racing for slots, which would make `id` order a scheduling artefact.
 - **CPU/GPU agreement**: `moderate` class, so the §1.6 perceptual epsilon governs the
-  *pixels*; the *points stream* values themselves (position, age, …) must agree to ≤ 2 ULP
-  fp32, because downstream consumers will read them as data, and data has no perceptual
-  tolerance.
+  *pixels*; the *points stream* values themselves (position, age, …) must agree to
+  **10⁻⁵ of each attribute's own range** over the frame's live set (K-508, corrected from
+  this note's original ≤ 2 ULP), because downstream consumers will read them as data, and
+  data has no perceptual tolerance. Two ULP is not a bound a GPU can meet against libm —
+  `sin`, `cos` and `exp` are a part in 10⁶ before a speed multiplies them — and half these
+  quantities pass through zero, where a ULP count means nothing at all. `id` is exempt and
+  exact (it is the birth index, not a measurement); colour is exempt because §4 declares
+  that region at half precision.
 
 ## 6. GPU/CPU split under the pipeline
 
@@ -359,7 +365,7 @@ Landed with the implementation, per K-007. lumit-core unless noted.
    index; halving degradation produces the newest `cap/2`; degradation never active on
    the export path (render test).
 8. **CPU/GPU twins**: pixels within the `moderate` perceptual epsilon; points-stream
-   attributes ≤ 2 ULP fp32 (§5's stricter data bound).
+   attributes within 10⁻⁵ of their own range (§5's stricter data bound, K-508).
 9. **Mask-path emitter**: empty polyline (no masks, deleted mask, nothing named) emits
    nothing and the effect passes its input through — the documented no-op.
 10. **Sprite fallback**: Sprite mode with an unset layer draws discs, not nothing.

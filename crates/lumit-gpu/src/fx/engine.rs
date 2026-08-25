@@ -587,7 +587,25 @@ impl FxEngine {
                 cache: None,
             });
         let lens_flare = super::LazyFlare::spawn(ctx);
+        // Particulate (docs/08 §3.86): four compute passes and one instanced
+        // draw off one module, so the closed forms and the quad that shows them
+        // are read from one file (docs/impl/particulate.md §6).
+        let particulate = super::ParticulatePipelines::new(
+            ctx,
+            &module(
+                &format!("{noise_core}{}", include_str!("../fx_particulate.wgsl")),
+                "fx-particulate",
+            ),
+        );
         Self {
+            particulate_layout: particulate.layout,
+            particulate_draw_layout: particulate.draw_layout,
+            particulate_empty_layout: particulate.empty_layout,
+            particulate_alive: particulate.alive,
+            particulate_scan: particulate.scan,
+            particulate_blocks: particulate.blocks,
+            particulate_scatter: particulate.scatter,
+            particulate_draw: particulate.draw,
             lens_flare,
             blur,
             dir_blur,

@@ -2281,6 +2281,10 @@
   "@fxRotationAmount": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxRotationJitter": "Rotation jitter",
+  "@fxRotationJitter": {
+    "description": "Effect controls — a control on Particulate: how much particle rotations differ from one another, in degrees."
+  },
   "fxRotationDeg": "Rotation °",
   "@fxRotationDeg": {
     "description": "Effect controls — a control on Transform."
@@ -8835,5 +8839,155 @@
   "fxNearestDistance": "Nearest distance",
   "@fxNearestDistance": {
     "description": "Graph panel — an output socket on the Points sample driver: how far the nearest particle is from the chosen point, in pixels."
+  },
+"ocioConfigUnreadable": "the colour config {path} could not be read, so the built-in transform is in use",
+  "@ocioConfigUnreadable": {
+    "description": "Project settings, Colour group. Why the project's colour config is not in force, lower case, shown as one calm line under the config path. The path is a file location and stays as it is.",
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "ocioUnsupportedTransform": "this config needs {name}, which Lumit does not support yet",
+  "@ocioUnsupportedTransform": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The name is a transform's name from the OpenColorIO file format and stays in English.",
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "ocioUnsupportedBuiltin": "this config needs the built-in transform {style}, which Lumit does not support yet",
+  "@ocioUnsupportedBuiltin": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The style is an OpenColorIO built-in transform name and stays in English.",
+    "placeholders": {
+      "style": { "type": "String" }
+    }
+  },
+  "ocioUnsupported3dLutInverse": "the colour space {space} would have to invert a 3D look-up table, which Lumit refuses rather than approximate",
+  "@ocioUnsupported3dLutInverse": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A look-up table is a table of colour values; the space is a name out of the user's own config file and stays as it is.",
+    "placeholders": {
+      "space": { "type": "String" }
+    }
+  },
+  "ocioNonMonotoneCurve": "the curve in {path} does not rise or fall consistently, so it cannot be inverted",
+  "@ocioNonMonotoneCurve": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The path names a look-up table file and stays as it is.",
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "ocioSingularMatrix": "a matrix in this transform has no inverse",
+  "@ocioSingularMatrix": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The transform cannot be run backwards because its numbers cannot be undone."
+  },
+  "ocioUnsupportedLutFormat": "Lumit does not read look-up tables in {extension} files yet",
+  "@ocioUnsupportedLutFormat": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The extension is a file suffix such as .cube and stays as it is.",
+    "placeholders": {
+      "extension": { "type": "String" }
+    }
+  },
+  "ocioContextVariable": "this config uses context variables in the path {path}, which Lumit does not support yet",
+  "@ocioContextVariable": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A context variable is a placeholder the config fills in per shot; the path stays as it is.",
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "ocioUnsupportedClfNode": "this look-up table uses the {node} process node, which Lumit does not support yet",
+  "@ocioUnsupportedClfNode": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The node is a step name from the Common LUT Format file standard and stays in English.",
+    "placeholders": {
+      "node": { "type": "String" }
+    }
+  },
+  "ocioUnsupportedClfFeature": "this look-up table uses {feature}, which Lumit does not support yet",
+  "@ocioUnsupportedClfFeature": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The feature is an option name from the Common LUT Format file standard and stays in English.",
+    "placeholders": {
+      "feature": { "type": "String" }
+    }
+  },
+  "ocioUnsupportedConfigVersion": "this config is written for OCIO profile version {version}, which Lumit does not read yet",
+  "@ocioUnsupportedConfigVersion": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. OCIO is the OpenColorIO standard and stays as it is; the version is a number.",
+    "placeholders": {
+      "version": { "type": "String" }
+    }
+  },
+  "ocioUnknownColourSpace": "this config has no colour space named {name}",
+  "@ocioUnknownColourSpace": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The name comes out of the user's own config file and stays as it is.",
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "ocioUnknownRole": "this config does not define the {name} role",
+  "@ocioUnknownRole": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A role is a config's own nickname for one of its colour spaces; the name stays in English.",
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "ocioUnknownDisplay": "this config has no display named {name}",
+  "@ocioUnknownDisplay": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A display is a kind of monitor the config knows how to show pictures on; the name stays as it is.",
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "ocioUnknownView": "the display {display} has no view named {view}",
+  "@ocioUnknownView": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Both names come out of the user's own config file and stay as they are.",
+    "placeholders": {
+      "display": { "type": "String" },
+      "view": { "type": "String" }
+    }
+  },
+  "ocioUnknownLook": "this config has no look named {name}",
+  "@ocioUnknownLook": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A look is a named creative grade the config offers; the name stays as it is.",
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "ocioLutFileNotFound": "the look-up table {name} was not found on this config's search path",
+  "@ocioLutFileNotFound": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The search path is the list of folders the config looks in; the name is a file name and stays as it is.",
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "ocioFileRead": "{path} could not be read: {reason}",
+  "@ocioFileRead": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The path is a file location and the reason is the operating system's own words; both stay as they are.",
+    "placeholders": {
+      "path": { "type": "String" },
+      "reason": { "type": "String" }
+    }
+  },
+  "ocioParse": "{what} could not be read: {reason}",
+  "@ocioParse": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Something in the file is not written the way the format expects. Both blanks are file names or the reader's own words and stay as they are.",
+    "placeholders": {
+      "what": { "type": "String" },
+      "reason": { "type": "String" }
+    }
+  },
+  "ocioTableTooLarge": "a look-up table in {what} is larger than Lumit allows ({size} points, limit {limit})",
+  "@ocioTableTooLarge": {
+    "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Points are entries in the table; size and limit are counts.",
+    "placeholders": {
+      "what": { "type": "String" },
+      "size": { "type": "String" },
+      "limit": { "type": "String" }
+    }
+  },
+  "ocioProblemInSpace": "{problem} (the colour space {space})",
+  "@ocioProblemInSpace": {
+    "description": "Project settings, Colour group. Wraps any of the ocio* reasons above when the trouble surfaced while working out one particular colour space, so the reader knows where to look. The space name comes out of the user's own config file and stays as it is.",
+    "placeholders": {
+      "problem": { "type": "String" },
+      "space": { "type": "String" }
+    }
   }
 }

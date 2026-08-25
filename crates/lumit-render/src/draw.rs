@@ -304,6 +304,19 @@ pub struct CompLayerDraw {
     /// documented no-op — an unset row, a mask since deleted, a layer with no
     /// masks — and never a fault.
     pub mask_paths: Vec<lumit_core::mask::MaskPolyline>,
+    /// **Every points producer's birth schedule** (points-stream.md §3.3,
+    /// K-474): one per op whose effect declares a `Points` output — Particulate
+    /// alone in v1 — 1:1 and in stack order with them, the same one-predicate,
+    /// one-order rule the mask paths follow.
+    ///
+    /// It is here for the mask path's reason and one more of its own: neither
+    /// half of it is a number anybody typed. The layer's own clock is not a
+    /// control, and the schedule is the *whole history* of the Emit rate track
+    /// rather than its value at this frame, so the resolved bag — one evaluated
+    /// number per declared row — has nowhere to put either. Scanned here
+    /// because this is the only place that holds a layer's timing beside its
+    /// stored tracks. A default schedule is the documented passthrough.
+    pub points_schedules: Vec<lumit_core::fx::points::PointsSchedule>,
     /// The `lens_file` paths of the layer's enabled built-in `lens_flare`
     /// effects (K-264), 1:1 with the stack's `lens_flare` ops —
     /// None = unset. The caller reads and hashes each file and passes the

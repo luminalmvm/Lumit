@@ -484,6 +484,7 @@ Rise
 Roll speed
 Rotation
 Rotation amount
+Rotation jitter
 Roughen
 Roughen edges
 Roundness

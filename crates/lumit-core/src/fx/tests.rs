@@ -13158,6 +13158,206 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     }
 }
 
+/// **The sprite fallback** (§9 item 10): Sprite mode with no layer bound draws
+/// discs, not nothing.
+///
+/// The documented deviation from the unset-is-identity convention, and the
+/// reason for it is one sentence long: a render mode must always draw
+/// something. Both paths take the fallback in the same place — the CPU's
+/// reference draw filters the sprite away here, the host resolves the mode to
+/// Disc before the kernel sees it — so there is one rule, not two.
+#[test]
+fn sprite_mode_with_no_layer_draws_discs() {
+    // In the middle of the little test buffer, not at the middle of a 1080p
+    // comp: a particle drawn off the edge would make every comparison below
+    // pass by drawing nothing at all.
+    let e = particulate(&[
+        ("mode", EffectValue::Choice(1)),
+        ("position_x", EffectValue::Float(Property::fixed(32.0))),
+        ("position_y", EffectValue::Float(Property::fixed(32.0))),
+        ("width", EffectValue::Float(Property::fixed(20.0))),
+        ("height", EffectValue::Float(Property::fixed(20.0))),
+    ]);
+    let s = particulate_stream(&e, 2.0);
+    assert!(!s.is_empty(), "the fixture drew no particles");
+    let style = points::DrawStyle {
+        mode: points::RenderMode::Sprite,
+        feather: 1.0,
+        streak_seconds: 0.0,
+        mix: 1.0,
+    };
+    let mut fallen_back = vec![0.0f32; 64 * 64 * 4];
+    points::draw_stream(&mut fallen_back, 64, 64, &s, &[], &style, None);
+    let mut discs = vec![0.0f32; 64 * 64 * 4];
+    points::draw_discs(&mut discs, 64, 64, &s, 1.0);
+    assert!(
+        discs.iter().any(|v| *v > 0.0),
+        "the fixture drew nothing into the buffer, so nothing below is a test"
+    );
+    assert_eq!(
+        fallen_back, discs,
+        "an unset sprite drew something other than the discs it falls back to"
+    );
+
+    // And with a sprite bound it draws the sprite — a flat white square, so a
+    // stamp that landed is a stamp that is *not* a feathered disc.
+    let sprite = vec![1.0f32; 4 * 4 * 4];
+    let mut stamped = vec![0.0f32; 64 * 64 * 4];
+    points::draw_stream(
+        &mut stamped,
+        64,
+        64,
+        &s,
+        &[],
+        &style,
+        Some(points::Sprite {
+            rgba: &sprite,
+            w: 4,
+            h: 4,
+        }),
+    );
+    assert_ne!(stamped, discs, "a bound sprite drew the disc anyway");
+}
+
+/// **Streak mode is the closed form again** (particulate.md §2, Render): the
+/// tail is where the particle *was* a Streak length ago, worked out from the
+/// same formula rather than remembered — so a streak at age zero has no tail at
+/// all, and a streak of no length is exactly a disc.
+#[test]
+fn a_streak_is_the_closed_form_looked_backwards() {
+    let e = particulate(&[
+        ("mode", EffectValue::Choice(2)),
+        ("position_x", EffectValue::Float(Property::fixed(32.0))),
+        ("position_y", EffectValue::Float(Property::fixed(32.0))),
+        ("width", EffectValue::Float(Property::fixed(20.0))),
+        ("height", EffectValue::Float(Property::fixed(20.0))),
+    ]);
+    let p = particulate_params(&e);
+    let dt = 1.0 / 60.0;
+    let sched = Schedule::scan(dt, 120, 600, &|_| 150.0);
+    let path = MaskPolyline::default();
+    let tail_seconds = 0.05f32;
+    let (s, tails) = points::evaluate_with_tail(&p, &sched, 2.0, &path, tail_seconds);
+    assert_eq!(
+        tails.len(),
+        s.len(),
+        "a tail per particle, in the same order"
+    );
+    assert!(!s.is_empty(), "the fixture drew no particles");
+
+    // The tail of particle i is the head of the *same* particle, evaluated a
+    // Streak length earlier — which is the whole claim, so it is checked
+    // against a second evaluation rather than against an approximation.
+    let earlier = points::evaluate(&p, &sched, 2.0 - f64::from(tail_seconds), &path);
+    let mut checked = 0;
+    for (i, id) in s.id.iter().enumerate() {
+        // Only particles already alive a Streak length ago: a younger one
+        // streaks from where it was born, which is the clamp, not the formula.
+        if s.age[i] < tail_seconds {
+            continue;
+        }
+        let Some(j) = earlier.id.iter().position(|o| o == id) else {
+            continue;
+        };
+        for (k, (was, now)) in tails[i].iter().zip(&earlier.position[j]).enumerate() {
+            let gap = (was - now).abs();
+            assert!(gap < 1e-3, "tail {i} axis {k} is {gap} from where it was");
+        }
+        checked += 1;
+    }
+    assert!(checked > 10, "only {checked} tails were checkable");
+
+    // A streak of no length is a disc: one distance function, two modes.
+    let style = |secs: f32| points::DrawStyle {
+        mode: points::RenderMode::Streak,
+        feather: 1.0,
+        streak_seconds: secs,
+        mix: 1.0,
+    };
+    let (short, no_tails) = points::evaluate_with_tail(&p, &sched, 2.0, &path, 0.0);
+    let mut capsules = vec![0.0f32; 64 * 64 * 4];
+    points::draw_stream(&mut capsules, 64, 64, &short, &no_tails, &style(0.0), None);
+    let mut discs = vec![0.0f32; 64 * 64 * 4];
+    points::draw_discs(&mut discs, 64, 64, &short, 1.0);
+    assert!(
+        discs.iter().any(|v| *v > 0.0),
+        "the fixture drew nothing into the buffer, so nothing here is a test"
+    );
+    assert_eq!(capsules, discs, "a streak of no length is not a disc");
+}
+
+/// **The rotation jitter** (K-507): every particle takes its own draw about
+/// Rotation, from the seed and from nothing else — so the spread is there, it
+/// is bounded by the dial, and it is the same spread on every machine.
+#[test]
+fn particulate_rotations_spread_by_their_dial() {
+    let spread_of = |jitter: f64| {
+        let e = particulate(&[
+            (
+                "rotation_jitter",
+                EffectValue::Float(Property::fixed(jitter)),
+            ),
+            // Spin and Align to motion would both move the rotation for
+            // reasons of their own; this is about the die alone.
+            ("spin", EffectValue::Float(Property::fixed(0.0))),
+            ("rotation", EffectValue::Float(Property::fixed(0.0))),
+        ]);
+        let s = particulate_stream(&e, 2.0);
+        assert!(!s.is_empty(), "the fixture drew no particles");
+        let lo = s.rotation.iter().copied().fold(f32::MAX, f32::min);
+        let hi = s.rotation.iter().copied().fold(f32::MIN, f32::max);
+        (lo, hi, s)
+    };
+
+    // At zero the dial does nothing at all, and Rotation means exactly what it
+    // says — which is the half of K-507 that a full turn by default would have
+    // made unreachable.
+    let (lo, hi, _) = spread_of(0.0);
+    assert!(
+        lo.abs() < 1e-6 && hi.abs() < 1e-6,
+        "no jitter still spread rotations over {lo}..{hi}"
+    );
+
+    // At a whole turn the spread fills it, and never leaves it.
+    let (lo, hi, whole) = spread_of(360.0);
+    let half = std::f32::consts::PI;
+    assert!(
+        lo >= -half - 1e-4 && hi <= half + 1e-4,
+        "{lo}..{hi} is not ±half a turn"
+    );
+    assert!(
+        hi - lo > 5.0,
+        "a whole turn of jitter only spread {}",
+        hi - lo
+    );
+
+    // Ninety degrees is a quarter of that, both ways.
+    let (lo, hi, _) = spread_of(90.0);
+    let quarter = std::f32::consts::FRAC_PI_4;
+    assert!(
+        lo >= -quarter - 1e-4 && hi <= quarter + 1e-4,
+        "90° of jitter spread {lo}..{hi}"
+    );
+
+    // And it is the seed's, not the clock's: one instance evaluated twice is
+    // the same spread, particle for particle. (A *second* instance would roll
+    // its own seed — which is the reseed button working, not a failure.)
+    let e = particulate(&[(
+        "rotation_jitter",
+        EffectValue::Float(Property::fixed(360.0)),
+    )]);
+    let once = particulate_stream(&e, 2.0);
+    let twice = particulate_stream(&e, 2.0);
+    assert!(
+        once.rotation == twice.rotation,
+        "the spread is not repeatable"
+    );
+    assert!(
+        !whole.rotation.is_empty(),
+        "the whole-turn case drew nothing"
+    );
+}
+
 /// **Frame-key sensitivity** (§9 item 11): the seed changes the key, an edit to
 /// a control changes it, and nothing else does. No new terms — the standard
 /// formula, which is the whole claim (particulate.md §5).

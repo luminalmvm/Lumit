@@ -53,6 +53,57 @@ pub const CAP_DEFAULT: i64 = 20_000;
 /// up to, and the peak scratch the governor grants against (docs/13 §6).
 pub const CAP_HARD: i64 = 1_000_000;
 
+/// What a particle is drawn as (particulate.md §2, Render group).
+///
+/// All three are the same instanced quad with a different coverage inside it,
+/// which is why they share one kernel and one CPU reference: a disc is a
+/// feathered circle, a streak is that circle swept from `p(t − length)` to
+/// `p(t)` — a capsule, and exactly a disc when the length is zero — and a
+/// sprite is the referenced layer's picture in the quad instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RenderMode {
+    /// A feathered disc: the reference mode, and what an unset Sprite falls
+    /// back to.
+    #[default]
+    Disc,
+    /// The Sprite layer's picture, rotated and scaled per particle. **Unset
+    /// draws discs** — a render mode must always draw something.
+    Sprite,
+    /// A capsule from the particle's position a Streak length ago to where it
+    /// is now, found by the closed form again rather than by history.
+    Streak,
+}
+
+impl RenderMode {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["Disc", "Sprite", "Streak"];
+
+    /// The mode for a stored Choice index; anything unknown is a Disc, the
+    /// declared default (a document from a newer build renders, K-065).
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => RenderMode::Sprite,
+            2 => RenderMode::Streak,
+            _ => RenderMode::Disc,
+        }
+    }
+}
+
+/// How the stream is drawn: the Render group, reduced (particulate.md §2).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DrawStyle {
+    pub mode: RenderMode,
+    /// Disc edge softness, `0..=1`.
+    pub feather: f32,
+    /// The tail's age offset in seconds — Streak length. Zero everywhere else.
+    pub streak_seconds: f32,
+    /// The host Mix, `0..=1`. Folded into the particle's own alpha rather than
+    /// run as a second pass: for a premultiplied `over`, scaling the source's
+    /// coverage by the Mix **is** the dissolve, exactly.
+    pub mix: f32,
+}
+
 /// Where a particle is born.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmitterShape {
@@ -136,6 +187,10 @@ pub struct ParticleLook {
     pub end_colour: [f32; 4],
     /// Rotation, degrees.
     pub rotation_deg: f32,
+    /// The per-particle spread of `rotation_deg`, **degrees**: each particle
+    /// takes a uniform draw of `±rotation_jitter_deg/2` about it, from the seed
+    /// hash (K-507).
+    pub rotation_jitter_deg: f32,
     /// Spin, degrees per second.
     pub spin_deg: f32,
     /// Rotation follows the direction of travel; `rotation_deg` adds on top.
@@ -347,6 +402,57 @@ impl Schedule {
         self.dt
     }
 
+    /// Let go of the oldest recorded frames until at most `max` births remain.
+    ///
+    /// **Why a scan needs a second ceiling.** The window is Life plus its
+    /// jitter, and how many births fall inside it is Emit rate times that —
+    /// both open-ended controls, so a rate of a million and a life of an hour
+    /// is a document somebody can type and a buffer sized off it is an
+    /// allocation with no ceiling (14-ENGINEERING-RULES §6). What this drops is
+    /// what the **cap rule** drops first anyway: the oldest candidates, when
+    /// there are already many times the cap of newer ones in play. Both render
+    /// paths read the trimmed schedule, so they see one candidate set and
+    /// agree.
+    pub fn trim_to_newest(&mut self, max: u64) {
+        while self.candidates() > max && self.counts.len() > 1 {
+            let dropped = u64::from(self.counts.remove(0));
+            self.first_frame += 1;
+            self.first_birth = self.first_birth.saturating_add(dropped);
+        }
+    }
+
+    /// The first frame [`counts`](Self::counts) describes, from the in point.
+    #[must_use]
+    pub fn first_frame(&self) -> i64 {
+        self.first_frame
+    }
+
+    /// The birth index of the first particle born in that frame — candidate
+    /// zero of this window.
+    #[must_use]
+    pub fn first_birth(&self) -> u64 {
+        self.first_birth
+    }
+
+    /// Births per recorded frame, oldest first.
+    ///
+    /// The GPU twin walks candidates rather than births: candidate *c* is birth
+    /// [`first_birth`](Self::first_birth)` + c`, and which frame owed it — and
+    /// so its birth time — is a search over the running sum of this. Handing
+    /// the counts over rather than a birth time per candidate is what keeps the
+    /// per-frame upload the size of the *window* instead of the size of the
+    /// particle set.
+    #[must_use]
+    pub fn counts(&self) -> &[u32] {
+        &self.counts
+    }
+
+    /// How many births this window records: the candidate set's size.
+    #[must_use]
+    pub fn candidates(&self) -> u64 {
+        self.counts.iter().map(|n| u64::from(*n)).sum()
+    }
+
     /// Every birth the schedule recorded, **newest first**: its birth index and
     /// its birth time in layer-time seconds.
     ///
@@ -374,6 +480,29 @@ impl Schedule {
             })
         })
     }
+}
+
+/// **The schedule, threaded beside the op** (points-stream.md §3.3): one
+/// producer's birth scan and the layer time it was scanned for.
+///
+/// **In plain terms.** Everything else a kernel needs arrives in the resolved
+/// parameter bag, because everything else is a number somebody typed. These two
+/// are not: the layer's own clock is not a control, and the birth schedule is
+/// the *whole history* of the Emit rate track rather than its value now. So
+/// they ride beside the op the way a mask's flattened polyline does (K-408) —
+/// built once by the draw builder, which is the only place that holds a layer's
+/// timing and its stored tracks, and handed to whichever render path runs.
+///
+/// A default one — no births, time zero — is the documented no-op: the effect
+/// passes its picture through, exactly as an empty polyline does.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PointsSchedule {
+    /// The births this frame can still see.
+    pub schedule: Schedule,
+    /// Layer time in seconds, the moment the stream is evaluated at. The
+    /// *sample* time for a sub-frame re-render, so accumulation motion blur
+    /// gets true particle motion for free (K-132).
+    pub t: f64,
 }
 
 /// One producer's cached birth scan (particulate.md §3.1,
@@ -411,6 +540,7 @@ mod attr {
     pub const LIFE: u32 = 4;
     pub const SIZE: u32 = 5;
     pub const TURB_PHASE: u32 = 6;
+    pub const ROTATION: u32 = 7;
 }
 
 /// The noise lattices turbulence displaces along, one per axis. Channels of the
@@ -555,10 +685,32 @@ fn birth_point(e: &Emitter, path: &MaskPolyline, u: f32, v: f32) -> Option<[f32;
 /// is why there is one of them.
 #[must_use]
 pub fn evaluate(p: &PointsParams, sched: &Schedule, t: f64, path: &MaskPolyline) -> PointsStream {
+    evaluate_with_tail(p, sched, t, path, 0.0).0
+}
+
+/// [`evaluate`], and beside it **where each particle was `tail` seconds ago** —
+/// what Streak mode draws its capsule back to (particulate.md §2, Render).
+///
+/// The tail is deliberately *not* a field of [`PointsStream`]: the stream's
+/// layout is the finalised one consumers read as data (particulate.md §4), and
+/// a tail is a fact about one render mode, not about a particle. It rides
+/// beside, in the same order, exactly as the GPU's own tail buffer does.
+///
+/// A tail of zero — every mode but Streak — is the head, so the capsule
+/// degenerates to the disc and the three modes really are one kernel.
+#[must_use]
+pub fn evaluate_with_tail(
+    p: &PointsParams,
+    sched: &Schedule,
+    t: f64,
+    path: &MaskPolyline,
+    tail: f32,
+) -> (PointsStream, Vec<[f32; 2]>) {
     let mut out = PointsStream::default();
+    let mut tails: Vec<[f32; 2]> = Vec::new();
     let cap = p.cap.min(CAP_HARD as u32) as usize;
     if cap == 0 {
-        return out;
+        return (out, tails);
     }
     let e = &p.emitter;
     let look = &p.particle;
@@ -618,12 +770,27 @@ pub fn evaluate(p: &PointsParams, sched: &Schedule, t: f64, path: &MaskPolyline)
         {
             *c = (from + (to - from) * u) * alpha;
         }
+        // The per-particle rotation spread (K-507): a uniform draw of ±half the
+        // dial about Rotation, from the seed hash like every other die, so two
+        // sprites born together do not point the same way.
+        let spread_rot =
+            (draw(p.seed, b, attr::ROTATION) - 0.5) * look.rotation_jitter_deg.to_radians();
         let rotation = if look.align_to_motion {
             speed_out[1].atan2(speed_out[0]) + look.rotation_deg.to_radians()
         } else {
             look.rotation_deg.to_radians()
-        } + look.spin_deg.to_radians() * age;
+        } + spread_rot
+            + look.spin_deg.to_radians() * age;
 
+        // Where it was a Streak length ago — the same closed form at an earlier
+        // age, never a remembered position. Clamped at birth: a particle
+        // younger than the tail streaks from where it was born.
+        if tail > 0.0 {
+            let back = (age - tail).max(0.0);
+            let (bp, _) = integrate(p0, v0, &p.forces, back);
+            let bd = turbulence(p0, phase, &p.forces, p.seed, back);
+            tails.push([bp[0] + bd[0], bp[1] + bd[1]]);
+        }
         out.position.push([pos[0] + d[0], pos[1] + d[1]]);
         out.speed.push(speed_out);
         out.age.push(age);
@@ -652,7 +819,8 @@ pub fn evaluate(p: &PointsParams, sched: &Schedule, t: f64, path: &MaskPolyline)
     out.rotation.reverse();
     out.colour.reverse();
     out.id.reverse();
-    out
+    tails.reverse();
+    (out, tails)
 }
 
 /// The CPU reference draw: a feathered disc per particle, over the picture
@@ -669,30 +837,216 @@ pub fn evaluate(p: &PointsParams, sched: &Schedule, t: f64, path: &MaskPolyline)
 /// visiting two million of them per particle to find that out is the shape a
 /// reference implementation cannot afford even as an oracle.
 pub fn draw_discs(rgba: &mut [f32], w: u32, h: u32, s: &PointsStream, feather: f32) {
-    let feather = feather.clamp(0.0, 1.0);
+    draw_stream(
+        rgba,
+        w,
+        h,
+        s,
+        &[],
+        &DrawStyle {
+            mode: RenderMode::Disc,
+            feather,
+            streak_seconds: 0.0,
+            mix: 1.0,
+        },
+        None,
+    );
+}
+
+/// The picture the Sprite mode stamps: the referenced layer's frame, linear
+/// premultiplied RGBA, `w × h` (K-123, layer-input.md).
+#[derive(Debug, Clone, Copy)]
+pub struct Sprite<'a> {
+    pub rgba: &'a [f32],
+    pub w: u32,
+    pub h: u32,
+}
+
+/// The shortest distance from `p` to the segment `a`–`b`.
+///
+/// The one shape all three modes share: with `a == b` it is the distance to a
+/// point, which is why a disc is a streak of no length and the kernel does not
+/// branch between them.
+fn seg_distance(p: [f32; 2], a: [f32; 2], b: [f32; 2]) -> f32 {
+    let (ex, ey) = (b[0] - a[0], b[1] - a[1]);
+    let len2 = ex * ex + ey * ey;
+    let t = if len2 > 0.0 {
+        (((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / len2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (p[0] - a[0] - ex * t).hypot(p[1] - a[1] - ey * t)
+}
+
+/// Whether an entry produces a points stream, and so wants the birth schedule
+/// threaded beside its op (points-stream.md §3.3).
+///
+/// **One predicate, so one order.** The draw builder fills a schedule per op
+/// that answers yes and the render walk consumes one per op that answers yes;
+/// two rules spelled two ways would hand a schedule to whichever effect
+/// happened to sit above. It lives here rather than on `Signature` because the
+/// rule belongs to this programme, not to the shape of a registry entry.
+#[must_use]
+pub fn wants_schedule(sig: crate::fx::Signature) -> bool {
+    sig.outputs()
+        .iter()
+        .any(|p| p.ty == crate::fx::PortType::Points)
+}
+
+/// A mask path in the raster the frame is being drawn at.
+///
+/// A polyline is flattened in **px@comp** — deliberately, so the same document
+/// gives the same curve at any preview divisor (K-408) — and every other
+/// distance the closed forms read has already been multiplied by the raster
+/// factor on its way through the bag. One place does the same to the path, so
+/// the two render paths cannot come to scale it differently.
+#[must_use]
+pub fn scale_path(poly: &MaskPolyline, px_scale: f32) -> MaskPolyline {
+    let k = px_scale.max(1e-6);
+    MaskPolyline {
+        points: poly.points.iter().map(|p| [p[0] * k, p[1] * k]).collect(),
+        arc: poly.arc.iter().map(|a| a * k).collect(),
+        closed: poly.closed,
+    }
+}
+
+/// One bilinear tap into a sprite, clamped at the edges.
+///
+/// Written as four `textureLoad`-shaped reads and three lerps rather than as a
+/// sampler call, because the WGSL twin does exactly this: a hardware sampler's
+/// filtering precision is the driver's business, and a stamped sprite is
+/// compared against this function.
+fn sprite_tap(sp: &Sprite<'_>, u: f32, v: f32) -> [f32; 4] {
+    let last_x = sp.w.saturating_sub(1) as f32;
+    let last_y = sp.h.saturating_sub(1) as f32;
+    let x = (u * sp.w as f32 - 0.5).clamp(0.0, last_x);
+    let y = (v * sp.h as f32 - 0.5).clamp(0.0, last_y);
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let texel = |ix: f32, iy: f32| -> [f32; 4] {
+        let ix = (ix.min(last_x) as u32).min(sp.w.saturating_sub(1));
+        let iy = (iy.min(last_y) as u32).min(sp.h.saturating_sub(1));
+        let d = ((iy * sp.w + ix) * 4) as usize;
+        sp.rgba
+            .get(d..d + 4)
+            .map_or([0.0; 4], |t| [t[0], t[1], t[2], t[3]])
+    };
+    let (a, b) = (texel(x0, y0), texel(x0 + 1.0, y0));
+    let (c, d) = (texel(x0, y0 + 1.0), texel(x0 + 1.0, y0 + 1.0));
+    let mut out = [0.0f32; 4];
+    for k in 0..4 {
+        let top = a[k] + (b[k] - a[k]) * fx;
+        let bot = c[k] + (d[k] - c[k]) * fx;
+        out[k] = top + (bot - top) * fy;
+    }
+    out
+}
+
+/// The CPU reference draw for all three render modes, over the picture
+/// (docs/08 §1.6, K-019).
+///
+/// **In plain terms.** Each particle is stamped into the buffer, oldest first
+/// so newer particles land on top — the same order, and so the same picture, as
+/// the instanced quads the GPU draws. What is stamped depends on the mode:
+///
+/// - **Disc**: a soft round dab. `feather` is `0..=1` — at 0 the edge is hard
+///   (with the half-pixel ramp any rasteriser needs so it is not jagged), at 1
+///   it fades out from its own centre.
+/// - **Streak**: the same dab swept along the line from `tails[i]` to the
+///   particle's position — a capsule, and exactly the disc when the tail is the
+///   head, which is why one distance function serves both.
+/// - **Sprite**: the referenced layer's picture in a square of the particle's
+///   own size, turned by its rotation and tinted by its colour. **An unset
+///   sprite draws discs** — a render mode must always draw something
+///   (particulate.md §2).
+///
+/// A dab and not a full-frame pass: a particle covers a few dozen pixels, and
+/// visiting two million of them per particle to find that out is the shape a
+/// reference implementation cannot afford even as an oracle.
+pub fn draw_stream(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 2]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+) {
+    let feather = style.feather.clamp(0.0, 1.0);
+    let mix = style.mix.clamp(0.0, 1.0);
+    // Sprite with nothing to stamp falls back to the disc, here and in the
+    // kernel, rather than the effect going quietly no-op.
+    let sprite = sprite.filter(|sp| {
+        style.mode == RenderMode::Sprite && sp.w > 0 && sp.h > 0 && !sp.rgba.is_empty()
+    });
     for i in 0..s.len() {
-        let (Some(&[cx, cy]), Some(&size), Some(&src)) =
+        let (Some(&head), Some(&size), Some(&colour)) =
             (s.position.get(i), s.size.get(i), s.colour.get(i))
         else {
             continue;
         };
         let radius = size * 0.5;
-        if radius <= 0.0 || src[3] <= 0.0 {
+        if radius <= 0.0 || colour[3] <= 0.0 || mix <= 0.0 {
             continue;
         }
+        // The host Mix, folded into the source's coverage. For a premultiplied
+        // `over` that is the dissolve exactly, so no second pass runs (K-425).
+        let src = [
+            colour[0] * mix,
+            colour[1] * mix,
+            colour[2] * mix,
+            colour[3] * mix,
+        ];
+        let tail = tails.get(i).copied().unwrap_or(head);
+        let (rot_s, rot_c) = s.rotation.get(i).copied().unwrap_or(0.0).sin_cos();
+        // A rotated square reaches √2 of its half-side at the corners; a
+        // capsule reaches its radius past either end.
+        let reach = if sprite.is_some() {
+            radius * std::f32::consts::SQRT_2
+        } else {
+            radius
+        };
+        let lo_x = head[0].min(tail[0]) - reach;
+        let hi_x = head[0].max(tail[0]) + reach;
+        let lo_y = head[1].min(tail[1]) - reach;
+        let hi_y = head[1].max(tail[1]) + reach;
+        let x0 = (lo_x.floor().max(0.0) as u32).min(w);
+        let x1 = ((hi_x.ceil().max(0.0) as u32).saturating_add(1)).min(w);
+        let y0 = (lo_y.floor().max(0.0) as u32).min(h);
+        let y1 = ((hi_y.ceil().max(0.0) as u32).saturating_add(1)).min(h);
         // Half a pixel of ramp even at no feather: an edge that lands between
         // two pixel centres has to be shared between them or the disc crawls.
         let edge = (feather * radius).max(0.5);
-        let x0 = ((cx - radius).floor().max(0.0) as u32).min(w);
-        let x1 = ((cx + radius).ceil().max(0.0) as u32 + 1).min(w);
-        let y0 = ((cy - radius).floor().max(0.0) as u32).min(h);
-        let y1 = ((cy + radius).ceil().max(0.0) as u32 + 1).min(h);
         for y in y0..y1 {
             for x in x0..x1 {
-                let dx = x as f32 + 0.5 - cx;
-                let dy = y as f32 + 0.5 - cy;
-                let cov = ((radius - dx.hypot(dy)) / edge).clamp(0.0, 1.0);
-                if cov <= 0.0 {
+                let p = [x as f32 + 0.5, y as f32 + 0.5];
+                let contrib = match &sprite {
+                    Some(sp) => {
+                        let (dx, dy) = (p[0] - head[0], p[1] - head[1]);
+                        // Into the sprite's own frame: undo the particle's turn,
+                        // then measure across a square of its size.
+                        let lx = dx * rot_c + dy * rot_s;
+                        let ly = -dx * rot_s + dy * rot_c;
+                        let (u, v) = (lx / size + 0.5, ly / size + 0.5);
+                        if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
+                            continue;
+                        }
+                        let t = sprite_tap(sp, u, v);
+                        // Both are premultiplied, so the tint is the plain
+                        // product: the sprite's own colour times the
+                        // particle's, its alpha times the particle's.
+                        [t[0] * src[0], t[1] * src[1], t[2] * src[2], t[3] * src[3]]
+                    }
+                    None => {
+                        let cov = ((radius - seg_distance(p, tail, head)) / edge).clamp(0.0, 1.0);
+                        if cov <= 0.0 {
+                            continue;
+                        }
+                        [src[0] * cov, src[1] * cov, src[2] * cov, src[3] * cov]
+                    }
+                };
+                if contrib[3] <= 0.0 && contrib[0] <= 0.0 && contrib[1] <= 0.0 && contrib[2] <= 0.0
+                {
                     continue;
                 }
                 let d = ((y * w + x) * 4) as usize;
@@ -701,9 +1055,9 @@ pub fn draw_discs(rgba: &mut [f32], w: u32, h: u32, s: &PointsStream, feather: f
                 };
                 // Premultiplied `over`: the particle's own colour, and what was
                 // there kept by however much of the pixel it did not cover.
-                let keep = 1.0 - src[3] * cov;
+                let keep = 1.0 - contrib[3];
                 for c in 0..4 {
-                    dst[c] = src[c] * cov + dst[c] * keep;
+                    dst[c] = contrib[c] + dst[c] * keep;
                 }
             }
         }

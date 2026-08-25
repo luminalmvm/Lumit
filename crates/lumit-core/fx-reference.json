@@ -8951,6 +8951,17 @@
           "dial_step": 15.0
         },
         {
+          "id": "rotation_jitter",
+          "label": "Rotation jitter",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 360.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0,
+          "hard_min": 0.0,
+          "hard_max": 360.0
+        },
+        {
           "id": "spin",
           "label": "Spin",
           "kind": "float",
@@ -9199,6 +9210,7 @@
             "colour",
             "end_colour",
             "rotation",
+            "rotation_jitter",
             "spin",
             "align_to_motion"
           ],

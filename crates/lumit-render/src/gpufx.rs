@@ -75,6 +75,7 @@ pub struct AuxSlot<'a> {
     matte: Option<&'a Tex>,
     layer: Option<&'a Tex>,
     path: Option<&'a lumit_core::mask::MaskPolyline>,
+    schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
 }
 
 /// The borrowed slot itself, as [`crate::fxops::run_ops`] resolved it.
@@ -117,13 +118,31 @@ impl<'a> AuxSlot<'a> {
         matte: Option<&'a Tex>,
         layer: Option<&'a Tex>,
         path: Option<&'a lumit_core::mask::MaskPolyline>,
+        schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
     ) -> Self {
         Self {
             data,
             matte,
             layer,
             path,
+            schedule,
         }
+    }
+
+    /// **This op's birth schedule** (points-stream.md §3.3): the births this
+    /// frame can still see, and the layer time to evaluate them at.
+    ///
+    /// A field beside the mask path, for the mask path's own reason and one
+    /// more of its own: neither of these is a number anybody typed. The
+    /// layer's clock is not a control, and the schedule is the *whole history*
+    /// of the Emit rate track rather than its value now — so the resolved bag,
+    /// which carries one evaluated number per declared row, has nowhere to put
+    /// either. The draw builder holds both and threads them through.
+    ///
+    ///  for every effect but Particulate, and a default schedule — no
+    /// births, time zero — is the documented passthrough.
+    pub fn schedule(self) -> Option<&'a lumit_core::fx::points::PointsSchedule> {
+        self.schedule
     }
 
     /// **This op's mask path** (K-408): the layer's chosen mask, flattened at
@@ -339,6 +358,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &AddGrain,
     &Scribble,
     &Stroke,
+    &Particulate,
 ];
 
 /// The GPU pass for `match_name`, or `None` when the effect has no image
@@ -3462,6 +3482,160 @@ impl GpuEffect for Stroke {
     }
 }
 
+/// Particulate's GPU op, built from the resolved bag and the schedule threaded
+/// beside it (docs/08 §3.86, points-stream.md §3.3).
+///
+/// Nothing here decides anything: `Particulate::points` and
+/// `Particulate::draw_style` did the reducing, in the one expression the CPU
+/// reference also reads, and this only lays the numbers out the way the kernel
+/// wants them. The two things it *does* work out are the two the bag cannot
+/// carry — the candidate window, and each recorded frame's distance from the
+/// evaluation time, subtracted in `f64` so a two-second age never has to be
+/// recovered from inside an hour-long clock.
+#[allow(clippy::too_many_arguments)]
+fn particulate_op<'a>(
+    packed: &'a lumit_core::fx::points::PointsParams,
+    style: lumit_core::fx::points::DrawStyle,
+    sched: &lumit_core::fx::points::PointsSchedule,
+    frames: &'a [[u32; 2]],
+    curves: &'a [f32],
+    path: &'a [[f32; 4]],
+    path_total: f32,
+    mode: u32,
+) -> lumit_gpu::fx::ParticulateOp<'a> {
+    let e = &packed.emitter;
+    let look = &packed.particle;
+    let f = &packed.forces;
+    let dt = sched.schedule.dt();
+    lumit_gpu::fx::ParticulateOp {
+        emitter_pos: e.position,
+        emitter_wh: [e.width, e.height],
+        emitter_angle_deg: e.angle_deg,
+        direction_deg: e.direction_deg,
+        spread_deg: e.spread_deg,
+        speed: e.speed,
+        speed_jitter: e.speed_jitter,
+        shape: e.shape as u32,
+        seed: packed.seed,
+        cap: packed.cap,
+        life: look.life,
+        life_jitter: look.life_jitter,
+        size: look.size,
+        size_jitter: look.size_jitter,
+        rotation_deg: look.rotation_deg,
+        rotation_jitter_deg: look.rotation_jitter_deg,
+        spin_deg: look.spin_deg,
+        align_to_motion: look.align_to_motion,
+        colour: look.colour,
+        end_colour: look.end_colour,
+        wind: f.wind,
+        gravity: f.gravity,
+        drag: f.drag,
+        turbulence: f.turbulence,
+        turbulence_scale: f.turbulence_scale,
+        turbulence_speed: f.turbulence_speed,
+        // The **fixed** central difference the CPU reference takes, so one
+        // frame key names one picture whatever raster is previewing.
+        eps: ((dt * 0.5) as f32).max(1e-6),
+        dt: dt as f32,
+        first_birth: sched.schedule.first_birth(),
+        frames,
+        candidates: frames.last().map_or(0, |f| f[0]),
+        curves,
+        path,
+        path_total,
+        tail_seconds: style.streak_seconds,
+        feather: style.feather,
+        mix: style.mix,
+        mode,
+    }
+}
+
+/// The per-frame table the kernel searches: `[birth offset, bits of
+/// (t − that frame's start)]`, oldest first, with a closing offset that is the
+/// candidate count.
+fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u32; 2]> {
+    let s = &sched.schedule;
+    let (dt, first) = (s.dt(), s.first_frame());
+    let mut out: Vec<[u32; 2]> = Vec::with_capacity(s.counts().len() + 1);
+    let mut offset = 0u32;
+    for (i, n) in s.counts().iter().enumerate() {
+        let rel = (sched.t - (first + i as i64) as f64 * dt) as f32;
+        out.push([offset, rel.to_bits()]);
+        offset = offset.saturating_add(*n);
+    }
+    out.push([offset, 0]);
+    out
+}
+
+/// Particulate (docs/08 §3.86, K-446, K-474, K-475): evaluate, compact, draw.
+///
+/// **The Sprite fallback is decided here** rather than in the kernel: an unset
+/// Sprite layer means the mode arrives as Disc, because a render mode must
+/// always draw something (particulate.md §2) and one branch resolved host-side
+/// cannot come to mean two things in two places.
+///
+/// **The degradation rung is [`lumit_gpu::fx::ParticulateOp::cap`]** (K-475):
+/// halve it and the newest half is what draws, by the same rule the cap itself
+/// applies. This pass always hands over the *declared* cap, which is why the
+/// rung is never on the export path — there is nothing on this path that could
+/// turn it on.
+struct Particulate;
+impl GpuEffect for Particulate {
+    fn match_name(&self) -> &'static str {
+        "particulate"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::particulate::Particulate as P;
+        use lumit_core::fx::points::RenderMode;
+        let inst = P::read(p);
+        let packed = inst.points();
+        let style = inst.draw_style();
+        let sprite = aux.layer_input();
+        let mode = match style.mode {
+            RenderMode::Disc => 0,
+            // Unset draws discs — the documented deviation from
+            // unset-is-identity, because a mode must draw something.
+            RenderMode::Sprite if sprite.is_some() => 1,
+            RenderMode::Sprite => 0,
+            RenderMode::Streak => 2,
+        };
+        let default_schedule = lumit_core::fx::points::PointsSchedule::default();
+        let sched = aux.schedule().unwrap_or(&default_schedule);
+        let frames = particulate_frames(sched);
+        let mut curves = Vec::with_capacity(packed.particle.size_curve.len() * 2);
+        curves.extend_from_slice(&packed.particle.size_curve);
+        curves.extend_from_slice(&packed.particle.opacity_curve);
+        let poly = lumit_core::fx::points::scale_path(&path_of(aux), P::px_scale_of(p));
+        let path: Vec<[f32; 4]> = poly
+            .points
+            .iter()
+            .zip(poly.arc.iter())
+            .map(|(pt, a)| [pt[0], pt[1], *a, 0.0])
+            .collect();
+        let op = particulate_op(
+            &packed,
+            style,
+            sched,
+            &frames,
+            &curves,
+            &path,
+            poly.length(),
+            mode,
+        );
+        fx.particulate(ctx, tex, w, h, sprite.filter(|_| mode == 1), &op)
+    }
+}
+
 struct AddGrain;
 impl GpuEffect for AddGrain {
     fn match_name(&self) -> &'static str {
@@ -3505,21 +3679,483 @@ mod tests {
     use super::*;
     use lumit_core::fx::BUILTIN_DEFS;
 
-    /// The one effect that is declared but does not draw yet.
+    // ------------------------------------------------------ Particulate (PS2)
+
+    /// One Particulate fixture: a busy, non-degenerate parameter set with every
+    /// force on, so a kernel that quietly skipped the drag terms or the
+    /// turbulence could not pass.
     ///
-    /// Particulate lands in two packages (points-stream.md §5): **PS1** brings
-    /// its controls, its closed forms and its CPU disc reference, and **PS2**
-    /// brings the evaluate/compaction/instanced-draw passes and the sprite
-    /// layer's texture with them. Between the two it is an effect the menu
-    /// offers, the panel draws and the picture passes straight through — which
-    /// is what an op with no table entry already does, deliberately and
-    /// without a fault (`fxops::run_ops`).
+    /// The numbers go through the effect's own `points`/`draw_style`, which is
+    /// the whole point of the §1.6 arrangement: the CPU reference and the
+    /// kernel read one expression's output, not two.
+    fn particulate_fixture(
+        mode: u32,
+        cap: i32,
+    ) -> (
+        lumit_core::fx::effects::particulate::Particulate,
+        lumit_core::fx::points::Schedule,
+        lumit_core::fx::points::PointsSchedule,
+    ) {
+        use lumit_core::fx::effects::particulate::Particulate as P;
+        let inst = P {
+            shape: 2,
+            position_x: 64.0,
+            position_y: 48.0,
+            width: 60.0,
+            height: 40.0,
+            emitter_angle: 20.0,
+            mask_path: false,
+            emit_rate: 220.0,
+            direction: -90.0,
+            spread: 200.0,
+            initial_speed: 70.0,
+            speed_jitter: 40.0,
+            life: 1.5,
+            life_jitter: 35.0,
+            size: 9.0,
+            size_jitter: 45.0,
+            size_over_life: lumit_core::fx::CurvePoints::default(),
+            opacity_over_life: lumit_core::fx::CurvePoints::default(),
+            colour: [0.9, 0.6, 0.3, 1.0],
+            end_colour: [0.2, 0.4, 1.0, 1.0],
+            rotation: 15.0,
+            rotation_jitter: 240.0,
+            spin: 90.0,
+            align_to_motion: false,
+            gravity: 120.0,
+            wind_x: 40.0,
+            wind_y: -10.0,
+            drag: 0.8,
+            turbulence_amount: 18.0,
+            turbulence_scale: 70.0,
+            turbulence_speed: 0.4,
+            mode,
+            feather: 60.0,
+            sprite_layer: false,
+            streak_length: 0.05,
+            max_particles: cap,
+            seed: 7,
+            mix: 100.0,
+        };
+        let dt = 1.0 / 24.0;
+        let t = 24.0 * dt;
+        let rate = f64::from(inst.emit_rate);
+        let sched = lumit_core::fx::points::Schedule::scan(
+            dt,
+            (t / dt).floor() as i64,
+            inst.window_frames(dt),
+            &|_| rate,
+        );
+        let carriage = lumit_core::fx::points::PointsSchedule {
+            schedule: sched.clone(),
+            t,
+        };
+        (inst, sched, carriage)
+    }
+
+    /// The GPU op for a fixture, through the very function the shipping pass
+    /// uses — so a drift between the two conversions is impossible rather than
+    /// merely unlikely.
+    #[allow(clippy::type_complexity)]
+    fn particulate_pieces(
+        inst: lumit_core::fx::effects::particulate::Particulate,
+        carriage: &lumit_core::fx::points::PointsSchedule,
+    ) -> (
+        lumit_core::fx::points::PointsParams,
+        lumit_core::fx::points::DrawStyle,
+        Vec<[u32; 2]>,
+        Vec<f32>,
+    ) {
+        let packed = inst.points();
+        let style = inst.draw_style();
+        let frames = particulate_frames(carriage);
+        let mut curves = Vec::new();
+        curves.extend_from_slice(&packed.particle.size_curve);
+        curves.extend_from_slice(&packed.particle.opacity_curve);
+        (packed, style, frames, curves)
+    }
+
+    /// **The centre of PS2** (points-stream.md §3.2, particulate.md §9 item 8):
+    /// the compacted GPU stream and the CPU reference describe the same
+    /// particles, attribute by attribute, to **one part in 10⁵ of each
+    /// attribute's own range** (K-508).
     ///
-    /// **PS2 deletes this constant**, and the two tests below then hold it to
-    /// the same rule as everything else: the moment a `particulate` pass
-    /// exists, `every_migrated_effect_has_a_gpu_entry` fails until the name is
-    /// gone from here.
-    const AWAITING_A_GPU_PASS: &[&str] = &["particulate"];
+    /// Pixels get a perceptual tolerance; these numbers get a numerical one,
+    /// because a consumer reads them as *data*. The measure is relative to the
+    /// attribute's range and not to each value, because half of these
+    /// quantities pass through zero — a speed reversing has no meaningful ULP
+    /// count, and asking for one is asking a metric a question it cannot
+    /// answer. The colour region is compared nowhere here: particulate.md §4
+    /// declares it at half precision, which is a storage width rather than an
+    /// agreement, and the picture test below is what holds it.
+    #[test]
+    fn the_particulate_stream_agrees_with_the_cpu_reference() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return; // no GPU here — skip, as the gpu crate's own tests do
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (128u32, 96u32);
+        let (inst, sched, carriage) = particulate_fixture(0, 20_000);
+        let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+        let cpu = lumit_core::fx::points::evaluate(
+            &packed,
+            &sched,
+            carriage.t,
+            &lumit_core::mask::MaskPolyline::default(),
+        );
+        assert!(
+            cpu.len() > 50,
+            "the fixture made only {} particles",
+            cpu.len()
+        );
+
+        let op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, 0);
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let (count, words) = fx
+            .particulate_stream(&ctx, &tex, w, h, &op)
+            .expect("the stream reads back");
+        assert_eq!(count as usize, cpu.len(), "live counts differ");
+
+        let cap = op.cap as usize;
+        let f = |i: usize| f32::from_bits(words[i]);
+        // `id` is not a measurement — it is the birth index, and it agrees
+        // exactly or the compaction has put a particle in the wrong slot.
+        for i in 0..cpu.len() {
+            let id =
+                u64::from(words[10 * cap + i * 2]) | (u64::from(words[10 * cap + i * 2 + 1]) << 32);
+            assert_eq!(
+                id, cpu.id[i],
+                "id {i} — the compaction is not in birth order"
+            );
+        }
+        let names = [
+            "position x",
+            "position y",
+            "speed x",
+            "speed y",
+            "age",
+            "life",
+            "size",
+            "rotation",
+        ];
+        let mut worst_gap = [0.0f32; 8];
+        let mut range = [0.0f32; 8];
+        for i in 0..cpu.len() {
+            for (k, (a, b)) in [
+                (f(i * 2), cpu.position[i][0]),
+                (f(i * 2 + 1), cpu.position[i][1]),
+                (f(2 * cap + i * 2), cpu.speed[i][0]),
+                (f(2 * cap + i * 2 + 1), cpu.speed[i][1]),
+                (f(4 * cap + i), cpu.age[i]),
+                (f(5 * cap + i), cpu.life[i]),
+                (f(6 * cap + i), cpu.size[i]),
+                (f(7 * cap + i), cpu.rotation[i]),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                worst_gap[k] = worst_gap[k].max((a - b).abs());
+                range[k] = range[k].max(b.abs());
+            }
+        }
+        let mut worst = 0.0f32;
+        for k in 0..8 {
+            let rel = worst_gap[k] / range[k].max(1e-3);
+            eprintln!(
+                "particulate stream: {} worst |Δ| {:.2e} over a range of {:.2e} — {rel:.2e}",
+                names[k], worst_gap[k], range[k]
+            );
+            worst = worst.max(rel);
+        }
+        assert!(
+            worst < 1e-5,
+            "worst relative gap {worst:.2e} — the closed forms have parted"
+        );
+    }
+
+    /// The picture, in all three render modes (particulate.md §9 item 8): the
+    /// instanced quads land where the software dabs land, inside the
+    /// `moderate` class's perceptual epsilon.
+    #[test]
+    fn the_particulate_draw_matches_the_cpu_reference_in_every_mode() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (128u32, 96u32);
+        // A flat sprite, so the comparison is of *placement* rather than of two
+        // bilinear filters: a solid square samples identically either side.
+        let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
+        let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
+        for mode in [0u32, 1, 2] {
+            let (inst, sched, carriage) = particulate_fixture(mode, 4_000);
+            let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+            let (cpu_stream, tails) = lumit_core::fx::points::evaluate_with_tail(
+                &packed,
+                &sched,
+                carriage.t,
+                &lumit_core::mask::MaskPolyline::default(),
+                style.streak_seconds,
+            );
+            let mut cpu = vec![0.0f32; (w * h * 4) as usize];
+            lumit_core::fx::points::draw_stream(
+                &mut cpu,
+                w,
+                h,
+                &cpu_stream,
+                &tails,
+                &style,
+                (mode == 1).then_some(lumit_core::fx::points::Sprite {
+                    rgba: &sprite_px,
+                    w: 8,
+                    h: 8,
+                }),
+            );
+
+            let op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, mode);
+            let tex =
+                lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+            let out = fx.particulate(&ctx, &tex, w, h, (mode == 1).then_some(&sprite_tex), &op);
+            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+            let drawn: f32 = gpu.iter().sum();
+            assert!(drawn > 1.0, "mode {mode} drew nothing ({drawn})");
+            let worst = cpu
+                .iter()
+                .zip(&gpu)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            eprintln!("particulate mode {mode}: worst |Δ| {worst:.3e}");
+            assert!(worst < 2e-2, "mode {mode}: worst |Δ| {worst}");
+
+            // Bit-stable against itself (docs/08 §2.4): two evaluations of one
+            // frame are one picture.
+            let again = fx.particulate(&ctx, &tex, w, h, (mode == 1).then_some(&sprite_tex), &op);
+            let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+            assert_eq!(gpu, twice, "mode {mode} is not bit-stable");
+        }
+    }
+
+    /// **The K-475 numbers** (docs/13 §2, rows B12–B14), measured rather than
+    /// asserted.
+    ///
+    /// Ignored by default and printed with `--nocapture`, because a timing
+    /// gate on whatever machine happens to be running CI teaches nobody
+    /// anything: the gates themselves belong to the perf harness on the
+    /// reference-desktop runner (PS7). What this is for is the number in the
+    /// commit message and the number the next person checks against it.
+    ///
+    /// `cargo test -p lumit-render --lib particulate_budget -- --ignored --nocapture`
+    #[test]
+    #[ignore = "a measurement, not a gate — PS7 owns the harness"]
+    fn particulate_budget_numbers() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (1920u32, 1080u32);
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let dt = 1.0 / 60.0;
+        for (name, rate, cap, size) in [
+            // The floor first: the same call with nothing to draw, which is one
+            // full-frame copy and one round trip to the queue. Every number
+            // below carries it, and none of them is the effect.
+            ("the floor (no particles)", 0.0f64, 20_000i32, 4.0f32),
+            ("B12 default look", 150.0, 20_000, 4.0),
+            ("B13 20 000 discs", 10_000.0, 20_000, 4.0),
+            ("B14 the 1 000 000 hard cap", 500_000.0, 1_000_000, 2.0),
+        ] {
+            let (mut inst, _, _) = particulate_fixture(0, cap);
+            inst.shape = 3;
+            inst.position_x = 960.0;
+            inst.position_y = 540.0;
+            inst.width = 1600.0;
+            inst.height = 900.0;
+            inst.emit_rate = rate as f32;
+            inst.size = size;
+            inst.life = 2.0;
+            let t = 4.0;
+            let mut schedule = lumit_core::fx::points::Schedule::scan(
+                dt,
+                (t / dt).floor() as i64,
+                inst.window_frames(dt),
+                &|_| rate,
+            );
+            schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+            let carriage = lumit_core::fx::points::PointsSchedule { schedule, t };
+            let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+            let op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, 0);
+            // A few runs to warm the driver and let the card clock up, then
+            // twenty timed **without waiting between them**: a flush and a poll
+            // per iteration measures the round trip to the queue, which is
+            // latency the effect does not own and a real frame does not pay
+            // once per effect.
+            for _ in 0..4 {
+                let _ = fx.particulate(&ctx, &tex, w, h, None, &op);
+            }
+            ctx.flush();
+            ctx.device.poll(wgpu::Maintain::Wait);
+            let runs = 20;
+            let started = std::time::Instant::now();
+            for _ in 0..runs {
+                let _ = fx.particulate(&ctx, &tex, w, h, None, &op);
+            }
+            ctx.flush();
+            ctx.device.poll(wgpu::Maintain::Wait);
+            let each = started.elapsed().as_secs_f64() / f64::from(runs);
+            // Nothing to draw answers `None` — the honest passthrough, and
+            // the floor row's whole point.
+            let count = fx
+                .particulate_stream(&ctx, &tex, w, h, &op)
+                .map_or(0, |(c, _)| c);
+            println!(
+                "{name}: {count} live of {} candidates, {:.3} ms evaluate + draw at {w}x{h}",
+                op.candidates,
+                each * 1000.0
+            );
+        }
+    }
+
+    /// The whole seam, end to end: an instance in a stack, a schedule threaded
+    /// beside its op, and a picture that moved — plus the claim that the
+    /// **degradation rung is never on the export path** (K-475).
+    ///
+    /// The rung is `ParticulateOp::cap`, and there is exactly one place that
+    /// fills it. This asserts that place hands over the *declared* Max
+    /// particles and nothing smaller, which is why no render — preview or
+    /// export — can be quietly drawing half the field. When a governor signal
+    /// reaches an effect kernel, this is the assertion that will have to be
+    /// rewritten to say "except under pressure, and never on export".
+    #[test]
+    fn particulate_renders_through_run_ops_at_its_declared_cap() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (96u32, 96u32);
+        let mut inst =
+            lumit_core::fx::instantiate("particulate").expect("particulate is a built-in");
+        for p in &mut inst.params {
+            let v = match p.id.as_str() {
+                "position_x" | "position_y" => 48.0,
+                "size" => 7.0,
+                "emit_rate" => 400.0,
+                _ => continue,
+            };
+            p.value = lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(v));
+        }
+        let t = 1.0;
+        let ops = lumit_core::fx::resolve_stack(
+            std::slice::from_ref(&inst),
+            t,
+            136.0,
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+        let dt = 1.0 / 24.0;
+        let carriage = lumit_core::fx::points::PointsSchedule {
+            schedule: lumit_core::fx::points::Schedule::scan(
+                dt,
+                (t / dt).floor() as i64,
+                200,
+                &|_| 400.0,
+            ),
+            t,
+        };
+
+        let source = vec![0.0f32; (w * h * 4) as usize];
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+        let out = crate::fxops::run_ops(
+            &fx,
+            &ctx,
+            tex,
+            w,
+            h,
+            &ops,
+            &[],
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            std::slice::from_ref(&carriage),
+            None,
+            None,
+        );
+        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+        let drawn: f32 = got.iter().sum();
+        assert!(
+            drawn > 1.0,
+            "the stack drew no particles ({drawn}) — the schedule did not reach the pass"
+        );
+
+        // The declared cap, unreduced: nothing on this path halves it.
+        use lumit_core::fx::effects::particulate::Particulate as P;
+        let read = P::read(ops.iter().next().expect("one op").params);
+        let packed = read.points();
+        let frames = particulate_frames(&carriage);
+        let mut curves = Vec::new();
+        curves.extend_from_slice(&packed.particle.size_curve);
+        curves.extend_from_slice(&packed.particle.opacity_curve);
+        let op = particulate_op(
+            &packed,
+            read.draw_style(),
+            &carriage,
+            &frames,
+            &curves,
+            &[],
+            0.0,
+            0,
+        );
+        assert_eq!(
+            op.cap,
+            lumit_core::fx::points::CAP_DEFAULT as u32,
+            "the pass asked for a reduced cap — the degradation rung is on a render path"
+        );
+    }
+
+    /// **The cap rule and its degradation rung** (K-475, particulate.md §9
+    /// item 7): over budget, what survives is the newest `cap` by birth index —
+    /// and halving the cap keeps the newest half of *that*, which is the same
+    /// rule applied twice rather than a second rule.
+    #[test]
+    fn particulate_keeps_the_newest_cap_and_halves_deterministically() {
+        let Ok(ctx) = GpuContext::headless() else {
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (64u32, 64u32);
+        let (inst, sched, carriage) = particulate_fixture(0, 20_000);
+        let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+        let full = lumit_core::fx::points::evaluate(
+            &packed,
+            &sched,
+            carriage.t,
+            &lumit_core::mask::MaskPolyline::default(),
+        );
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+
+        for divisor in [1u32, 2, 4] {
+            let cap = (full.len() as u32) / divisor;
+            let mut expected = full.clone();
+            expected.keep_newest(cap as usize);
+            let mut op = particulate_op(&packed, style, &carriage, &frames, &curves, &[], 0.0, 0);
+            op.cap = cap;
+            let (count, words) = fx
+                .particulate_stream(&ctx, &tex, w, h, &op)
+                .expect("the stream reads back");
+            assert_eq!(count, cap, "cap {cap}: drew {count}");
+            let ids: Vec<u64> = (0..count as usize)
+                .map(|i| {
+                    u64::from(words[10 * cap as usize + i * 2])
+                        | (u64::from(words[10 * cap as usize + i * 2 + 1]) << 32)
+                })
+                .collect();
+            assert_eq!(ids, expected.id, "cap {cap}: the wrong particles survived");
+        }
+    }
 
     /// The two registries must agree, and nothing but a test can make them:
     /// they are joined by a string. Every migrated effect with an image
@@ -3529,13 +4165,6 @@ mod tests {
     fn every_migrated_effect_has_a_gpu_entry() {
         for def in BUILTIN_DEFS.iter() {
             let name = def.schema().match_name;
-            if AWAITING_A_GPU_PASS.contains(&name) {
-                assert!(
-                    gpu_effect(name).is_none(),
-                    "{name} has its GPU pass now — take it out of AWAITING_A_GPU_PASS"
-                );
-                continue;
-            }
             if def.is_image_op() {
                 assert!(
                     gpu_effect(name).is_some(),
@@ -3606,12 +4235,6 @@ mod tests {
             // for the same reason `every_migrated_effect_has_a_gpu_entry`
             // excuses it.
             if !def.is_image_op() {
-                continue;
-            }
-            // And so is the effect that has no pass yet at all: Particulate's
-            // Sprite layer is a real auxiliary layer, and PS2 threads it into
-            // the pass it brings with it (see `AWAITING_A_GPU_PASS`).
-            if AWAITING_A_GPU_PASS.contains(&name) {
                 continue;
             }
             let gpu = gpu_effect(name).unwrap_or_else(|| {
@@ -3706,6 +4329,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             None,
             None,
         );
@@ -3790,6 +4414,7 @@ mod tests {
                 ops,
                 &[],
                 None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -3890,6 +4515,7 @@ mod tests {
             None,
             // Slot 0 empty, slot 1 the grade: only the *second* op grades.
             &[None, Some(kill_green)],
+            &[],
             &[],
             &[],
             &[],
@@ -3996,6 +4622,7 @@ mod tests {
                 crate::fxops::LayerInput::Absent,
             ],
             &[],
+            &[],
             None,
             None,
         );
@@ -4062,6 +4689,7 @@ mod tests {
             &ops,
             &neighbours,
             None,
+            &[],
             &[],
             &[],
             &[],
@@ -4163,6 +4791,7 @@ mod tests {
                 &[],
                 mattes,
                 &[],
+                &[],
                 None,
                 None,
             );
@@ -4258,6 +4887,7 @@ mod tests {
                 &[],
                 mattes,
                 &[],
+                &[],
                 None,
                 None,
             );
@@ -4352,6 +4982,7 @@ mod tests {
                 None,
                 &[],
                 layers,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -4451,6 +5082,7 @@ mod tests {
                 &[],
                 &[],
                 &[crate::fxops::LayerInput::Texture(matte_tex.clone())],
+                &[],
                 &[],
                 None,
                 None,
@@ -4552,6 +5184,7 @@ mod tests {
             // Slot 0 absent (the first exposure applies in full), slot 1 black
             // (the second is switched off).
             &[crate::fxops::LayerInput::Absent, off],
+            &[],
             &[],
             None,
             None,

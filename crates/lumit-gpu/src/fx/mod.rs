@@ -19,6 +19,7 @@ mod engine;
 mod generate;
 mod lens_flare;
 mod lighting;
+mod particulate;
 mod split;
 mod stylise;
 mod temporal;
@@ -35,6 +36,7 @@ pub use dof::*;
 pub use generate::*;
 pub use lens_flare::*;
 pub use lighting::*;
+pub use particulate::*;
 pub use split::*;
 pub use stylise::*;
 pub use temporal::*;
@@ -308,6 +310,19 @@ pub struct FxEngine {
     /// pass — its pipelines, layouts and bake cache live in their own
     /// sub-struct rather than six more fields here.
     lens_flare: lens_flare::LazyFlare,
+    /// Particulate (docs/08 §3.86, K-446): the second effect to own a render
+    /// pass, and the first to own a compute pipeline that writes a buffer
+    /// rather than a picture. Its four passes and two layouts are built with
+    /// the rest — there is nothing lazy about it, because a particle system
+    /// that stalls on first use stalls in the middle of a scrub.
+    particulate_layout: wgpu::BindGroupLayout,
+    particulate_draw_layout: wgpu::BindGroupLayout,
+    particulate_empty_layout: wgpu::BindGroupLayout,
+    particulate_alive: wgpu::ComputePipeline,
+    particulate_scan: wgpu::ComputePipeline,
+    particulate_blocks: wgpu::ComputePipeline,
+    particulate_scatter: wgpu::ComputePipeline,
+    particulate_draw: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     /// The adjustment blend's own layout: three sampled inputs (below,
     /// processed, coverage) where every effect kernel takes two.

@@ -433,6 +433,7 @@ pub fn run_ops(
     flare_lens: &[Option<(u64, String)>],
     mattes: &[LayerInput],
     mask_paths: &[lumit_core::mask::MaskPolyline],
+    points_schedules: &[lumit_core::fx::points::PointsSchedule],
     mut timings: Option<&mut Vec<f32>>,
     cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
 ) -> Tex {
@@ -458,6 +459,7 @@ pub fn run_ops(
                 flare_lens,
                 mattes,
                 mask_paths,
+                points_schedules,
             )
         },
     );
@@ -511,11 +513,23 @@ pub fn run_ops(
     // advances on exactly that predicate — `EffectSchema::mask_path`, the one
     // both sides call, so there is no second rule to keep in step.
     let mut path_i = 0usize;
+    // The birth schedule's own counter (points-stream.md §3.3), on the schema's
+    // own points-output predicate — the one `build.rs` fills by. Neither the
+    // layer's clock nor the whole Emit rate track is a number in the bag, so
+    // they ride beside the op the way a polyline does.
+    let mut sched_i = 0usize;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
         let mask_path = if resolved.def.schema().mask_path().is_some() {
             let slot = mask_paths.get(path_i);
             path_i += 1;
+            slot
+        } else {
+            None
+        };
+        let schedule = if lumit_core::fx::points::wants_schedule(resolved.def.signature()) {
+            let slot = points_schedules.get(sched_i);
+            sched_i += 1;
             slot
         } else {
             None
@@ -643,6 +657,7 @@ pub fn run_ops(
                     own_matte,
                     layer_input.and_then(|l| l.texture(&tex)),
                     mask_path,
+                    schedule,
                 ),
             );
             if let (Some((mode, mix, _)), Some(input)) = (blend, blend_input) {
@@ -709,6 +724,7 @@ fn op_keys(
     flare_lens: &[Option<(u64, String)>],
     mattes: &[LayerInput],
     mask_paths: &[lumit_core::mask::MaskPolyline],
+    points_schedules: &[lumit_core::fx::points::PointsSchedule],
 ) -> Vec<Option<u128>> {
     let mut h = blake3::Hasher::new();
     h.update(b"fxcache/1/");
@@ -717,6 +733,7 @@ fn op_keys(
     h.update(&h_px.to_le_bytes());
     h.update(&flare_substitutions.to_le_bytes());
     let (mut lut_i, mut dof_i, mut flare_i, mut matte_i, mut path_i) = (0, 0, 0, 0, 0);
+    let mut sched_i = 0usize;
     let mut broken = false;
     ops.iter()
         .map(|resolved| {
@@ -733,6 +750,23 @@ fn op_keys(
                     }
                 }
                 path_i += 1;
+            }
+            // The schedule names this op's output as surely as its parameters
+            // do: it carries the layer's clock and the whole history of the
+            // Emit rate track, neither of which is in the bag `feed_hash`
+            // walked. Without it a scrub would be answered from the cache with
+            // the previous frame's particles.
+            if lumit_core::fx::points::wants_schedule(resolved.def.signature()) {
+                if let Some(sched) = points_schedules.get(sched_i) {
+                    h.update(&sched.t.to_le_bytes());
+                    h.update(&sched.schedule.dt().to_le_bytes());
+                    h.update(&sched.schedule.first_frame().to_le_bytes());
+                    h.update(&sched.schedule.first_birth().to_le_bytes());
+                    for n in sched.schedule.counts() {
+                        h.update(&n.to_le_bytes());
+                    }
+                }
+                sched_i += 1;
             }
             if schema.matte.param().is_some() {
                 if let Some(LayerInput::Texture(_)) = mattes.get(matte_i) {
@@ -999,6 +1033,7 @@ mod tests {
             &[],
             &[],
             &[],
+            &[],
             None,
             Some((cache, key)),
         );
@@ -1124,6 +1159,7 @@ mod tests {
                 &[],
                 &[LayerInput::Texture(source(&ctx)), LayerInput::Absent],
                 &[],
+                &[],
                 None,
                 Some((&cache, 7)),
             );
@@ -1152,6 +1188,7 @@ mod tests {
                 &[],
                 &[LayerInput::Absent, LayerInput::Texture(source(&ctx))],
                 &[],
+                &[],
                 None,
                 Some((&cache, 7)),
             );
@@ -1175,6 +1212,7 @@ mod tests {
                 &ops,
                 &[(-1, source(&ctx))],
                 None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -1221,6 +1259,7 @@ mod tests {
                 &[],
                 None,
                 &[lut(mtime)],
+                &[],
                 &[],
                 &[],
                 &[],

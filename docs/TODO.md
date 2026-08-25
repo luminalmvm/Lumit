@@ -481,11 +481,11 @@ does not gate the four. Delete each phase here when it lands, as with everything
     Points sample driver (Count and Nearest distance driving parameters), the
     evaluation and carriage contract, the seam, and the ordered work packages:
     ~~PS1~~ (landed: `fx/points.rs`, the `Signature::Image { extra }` split and
-    Particulate's declaration, closed forms and CPU disc reference — the effect
-    is in the catalogue and passes its picture through until PS2's passes
-    arrive, which `AWAITING_A_GPU_PASS` in lumit-render names),
-    PS2 (GPU evaluate,
-    compaction, instanced draw; docs/08 gains Particulate's §3.x entry here),
+    Particulate's declaration, closed forms and CPU disc reference),
+    ~~PS2~~ (landed: the four GPU passes — count, scan, place, instanced draw —
+    the three render modes, the schedule's carriage beside the op, docs/08 §3.86,
+    docs/13's B12–B14, K-507 the rotation-jitter dial and K-508 the stream's
+    real agreement bound; the effect draws),
     PS3 (the points edge and its refusals), PS4 (the Points sample driver),
     PS5 (seam + codegen), PS6 (UI), PS7 (goldens + the K-475 budget gates).
     docs/impl/particulate.md remains the effect's own design. Delete each
@@ -542,14 +542,17 @@ reference OpenColorIO library (the checked-in ones are published external consta
 the reference rows are `#[ignore]`d with what each waits for), and the vendored
 `BuiltinTransform` bakes — until those exist, the ACES output-transform styles refuse
 by name, which also means the OCIO v2 ACES configs do not load end to end yet while the
-legacy 1.0.3/1.2 configs, being pure config data, do. What remains:
+legacy 1.0.3/1.2 configs, being pure config data, do.
 
-- **WP3 - document state, bake wiring, render paths**: `Document::colour` and the
-    per-item tag with their two ops, the degrade ladder, frame-key folding, the decode
-    and display pass variants (mind the Unorm-view double-encode trap), export on the
-    same blit (note §3, §5).
-- **WP4 - the bridge seam**: `colour_summary`, the two set calls, the viewer look
-    call's view field, engine refusal sentences through the K-005 gate (note §6.1).
+**WP3 and WP4 have landed too.** `Document::colour` and the per-item tag carry their two
+ops, `lumit-render::colour` loads and bakes with the degrade ladder and the frame-key
+folding behind it, and the seam is open: `ProjectReference::{colour_summary,
+set_colour_config, can_deliver_colour_space}`, `FootageReference::{colour_space,
+set_colour_space}`, the view field on `set_viewer_look`, and
+`CompositionReference::export_spec_check` (which replaced the free-standing one).
+A refusal crosses as an id plus its facts and `colourProblem` in
+`flutter_ui/lib/l10n/engine_labels.dart` writes the sentence. What remains:
+
 - **WP5 - viewer/export/project UI**: the colour-pipeline picker's display/view
     sections, the export dropdown's config section, the Project settings Colour group,
     the item context-menu submenu, all arb keys (note §6.2–§6.5).

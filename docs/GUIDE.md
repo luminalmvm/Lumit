@@ -7934,6 +7934,24 @@ notices for months. `test/l10n/engine_labels_test.dart` prevents that: it reads
 the Rust source files directly and fails if the engine can say a word the table
 has no entry for.
 
+Whole-word lookup works for a *label*, and not at all for a **sentence with a
+fact in the middle of it**. "This config needs FixedFunctionTransform, which
+Lumit does not support yet" is a different whole text for every transform there
+could ever be, so no table could hold them all. For those the engine sends the
+*pieces* instead: a short unchanging id — `unsupported_transform` — and the
+facts by name — `name: "FixedFunctionTransform"`. The interface writes the
+sentence in the reader's own language from those, which also lets a translator
+put the blanks wherever their grammar wants them. The After Effects import
+report's rows work this way, and so does the reason a colour config is not in
+use.
+
+One rule inside that, worth knowing because it looks like an inconsistency: the
+facts are **not** translated. They are names out of somebody else's file — a
+colour space, a look-up table, a path — and they must come back exactly as they
+arrived. A config that happens to call one of its colour spaces "Alpha" means
+that word as its own name, not as the name of an effect's Alpha parameter, and
+translating it would be renaming the user's work.
+
 ### A tooltip is a name and a shortcut
 
 `docs/07-UI-SPEC.md` §13.2 says a tooltip is the control's **name and its
@@ -9389,6 +9407,61 @@ will not refuse a perfectly ordinary drag because of a wire somewhere else. So i
 the producer below its reader, the wire is quietly dropped as part of that same drag —
 one action, one undo. It is the same thing that happens when you delete the effect a wire
 is plugged into: the wire goes with it, rather than being left pointing at nothing.
+
+**How the card actually draws a hundred thousand of them.** The awkward part of a particle
+system on a graphics card is that nobody knows *how many* particles there are until they
+have all been asked. A card is happiest drawing a fixed number of the same thing; "draw
+however many of these turn out to be alive" is the one shape it finds difficult. Lumit
+does it in four goes, and the order matters more than the speed:
+
+1. **Count.** One tiny program per *candidate* — every particle that was born recently
+   enough that it might still be around — answering one question: alive, yes or no. That
+   costs one dice roll each, so a million of them is nothing.
+2. **Add up.** The yes/no answers are added up running-total fashion, so that each living
+   particle learns its own place in the finished list: "you are the four hundred and
+   sixth". This is done as a *sum*, deliberately, and not by letting the particles grab
+   numbered slots as they finish. Grabbing would be faster to write and would give a
+   different answer every time, because which one finishes first is up to the card's mood
+   — and then a particle's identity would change between two renders of the same frame,
+   which is exactly what the whole design exists to prevent.
+3. **Place.** Each living particle works out its position, speed, size, colour and turn in
+   full, and writes itself into the slot the sum gave it. What comes out is the points
+   stream: one tidy list, in birth order, with no gaps.
+4. **Draw.** One small square per particle, all in a single instruction — the card is
+   told "draw this square N times, and here is the list", and it reads the list itself.
+   The number N comes off the card's own memory, so nothing has to be sent back to the
+   computer and waited for in the middle of a frame.
+
+The three looks — a soft round dot, a picture stamped from another layer, a streak — are
+that same square with something different painted inside it. A streak is the dot smeared
+from where the particle was a moment ago to where it is now, and *where it was a moment
+ago* is worked out with the same formula run at an earlier age, not remembered. Which is
+why a streak costs nothing extra and is exactly a dot when you set its length to zero.
+
+**Two things are handed to the effect from outside**, because they are not numbers anybody
+typed into a box. One is the layer's own clock. The other is the birth schedule — the
+record of how many particles were born on every frame since the layer started, which
+depends on the whole history of the Emit rate slider rather than on its value right now.
+Both are worked out once by the part of Lumit that plans a frame, and travel alongside the
+effect exactly as a mask's traced outline does.
+
+**The same maths, twice, on purpose.** Every formula in this effect exists in two places:
+plain Rust for the processor, and the card's own language for the card. That sounds like
+the kind of duplication one should avoid, and normally it is — but the Rust one is the
+*referee*. A test runs both and compares the answers, particle by particle. They cannot be
+made identical to the last digit: a card's sine and its exponential are its own, accurate
+to about a millionth rather than exactly, and a position is a speed multiplied by a time so
+that millionth travels. So the test asks for agreement to one part in a hundred thousand of
+each quantity's range, which on a 1920-wide composition is two hundredths of a pixel, and
+notes where the answers came out closer than that anyway.
+
+**What happens when you ask for too many.** Max particles is the dial, and it is honestly a
+budget rather than a limit: it is the number Lumit reserves memory for. Ask for more
+particles than the dial allows and the **newest** ones survive — old ones vanish a little
+early, visibly, and in the same way whichever direction you scrubbed from. If the machine
+falls behind while you are working, the same rule runs again at half the number, and half
+again after that. That never happens on an export: a delivery is not allowed to be the
+cheaper picture.
 
 **What comes later** plugs into the same socket: Connect points (lines between nearby
 particles), Clone to points (a layer stamped at every particle), Trail, Scatter, and

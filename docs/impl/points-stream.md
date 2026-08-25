@@ -185,8 +185,10 @@ The stream exists in two forms with one meaning:
 
 ### 3.2 Equality and determinism
 
-- CPU and GPU stream attributes agree to **≤ 2 ULP fp32** (particulate.md §5 — data has
-  no perceptual tolerance); pixels agree to the `moderate` perceptual epsilon.
+- CPU and GPU stream attributes agree to **10⁻⁵ of each attribute's own range**
+  (particulate.md §5 — data has no perceptual tolerance; K-508 corrected the measure from
+  the ≤ 2 ULP this note first asked for, which no GPU can meet against libm); pixels agree
+  to the `moderate` perceptual epsilon.
 - Compaction is a prefix sum in birth-index order, never atomics (particulate.md §5), so
   `id` order is a fact, not a scheduling artefact.
 - The Points sample driver reads the CPU form, so its numbers are bit-identical across
@@ -315,7 +317,7 @@ pools sized by the cap, cancellation between evaluate and draw, the halving degr
 rung (interaction-only, status readout, never on export).
 **Files**: `crates/lumit-gpu` (WGSL + pipeline), `crates/lumit-render` (draw building).
 **Tests**: particulate.md §9 item 8 (CPU/GPU twins — pixels within `moderate` epsilon,
-stream attributes ≤ 2 ULP), item 1's export-equals-preview fixture joining the K-031
+stream attributes within 10⁻⁵ of their range, K-508), item 1's export-equals-preview fixture joining the K-031
 matrix, item 7's degradation-never-on-export render test. **docs/08 gains its §3.x
 Particulate entry in this package** — the effect is whole here — derived from
 particulate.md, and docs/13 §7.3 gains the four budget rows (gated in PS7).
