@@ -19,7 +19,7 @@ import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/fx_section.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
-    show effectLabelOf, EffectParamRowFrb, EffectPointRowFrb;
+    show effectLabelOf, EffectParamRowFrb;
 import 'package:lumit_flutter/icons/lumit_icon.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/angle_dial.dart';
@@ -831,7 +831,8 @@ void main() {
       expect(find.text('Use source colour'), findsNothing);
       expect(find.text('Matte'), findsNothing);
       expect(find.text('Invert'), findsNothing,
-          reason: 'the Invert is part of the Matte-only group, not a stray row');
+          reason:
+              'the Invert is part of the Matte-only group, not a stray row');
     });
 
     // Blend (K-289): the Transparent/Black Background pair became a blend
@@ -938,7 +939,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(picker);
       await tester.pumpAndSettle();
-      await tester.tap(find.text(other.getInfo().name).last);
+      // Numbered by place in the composition since item 6.13, so the entry
+      // is "1. Solid" rather than the bare name.
+      await tester.tap(find.textContaining(other.getInfo().name).last);
       await tester.pumpAndSettle();
 
       expect(
@@ -1033,7 +1036,9 @@ void main() {
       // And the picker binds a layer, which reads back as that layer.
       await tester.tap(picker);
       await tester.pumpAndSettle();
-      await tester.tap(find.text(other.getInfo().name).last);
+      // Numbered by place in the composition since item 6.13, so the entry
+      // is "1. Solid" rather than the bare name.
+      await tester.tap(find.textContaining(other.getInfo().name).last);
       await tester.pumpAndSettle();
       expect(
         p.layer.getEffects().single.getValue(id: 'matte'),
@@ -1985,6 +1990,183 @@ void main() {
         stack[0].name(),
         stack[1].name(),
       ]);
+    });
+
+    // -------------------------------------------------------------------
+    // The panel as a whole: a drag across the switches, the picked run's
+    // twirl, Delete, and what survives a comp being fronted.
+    // -------------------------------------------------------------------
+
+    /// **Click and drag across the switches** (item 6.2). The first switch
+    /// decides what the run becomes; every switch the pointer crosses takes
+    /// that state rather than flipping its own, so a mixed run comes out even
+    /// instead of coming out mixed the other way round.
+    testWidgets('a drag across the enable switches sets them all to the first',
+        (tester) async {
+      final p = withLayer();
+      for (final name in ['blur', 'vignette', 'invert']) {
+        p.layer.addEffect(name: name);
+      }
+      // The middle one already off: the run the drag meets is mixed.
+      final staged = p.layer.getEffects();
+      p.layer.setEffectEnabled(effect: staged[1], enabled: false);
+      await mount(tester, p, transform: false);
+      final stack = p.layer.getEffects();
+      expect([for (final e in stack) e.getInfo().enabled], [true, false, true]);
+
+      Finder hit(int i) =>
+          find.byKey(ValueKey<String>('fx-enabled-hit-${stack[i].id()}'));
+      final drag = await tester.startGesture(tester.getCenter(hit(0)));
+      await tester.pump();
+      await drag.moveTo(tester.getCenter(hit(1)));
+      await tester.pump();
+      await drag.moveTo(tester.getCenter(hit(2)));
+      await tester.pump();
+      await drag.up();
+      await tester.pumpAndSettle();
+
+      expect([for (final e in p.layer.getEffects()) e.getInfo().enabled],
+          [false, false, false],
+          reason: 'the one already off stayed off — the drag never flips '
+              'anything to the opposite of what the first switch became');
+    });
+
+    /// **A selected run twirls together** (item 6.3). Having said that five
+    /// effects are what you are working on, opening them one twirl at a time
+    /// is five clicks to reach a state already asked for.
+    testWidgets('twirling one picked effect twirls every picked effect',
+        (tester) async {
+      final p = withLayer();
+      for (final name in ['blur', 'vignette', 'invert']) {
+        p.layer.addEffect(name: name);
+      }
+      await mount(tester, p, transform: false);
+      final stack = p.layer.getEffects();
+      // The bottom two picked; the top one left out of it, and it is the one
+      // that must not move.
+      p.uiState.setEffectSelection(p.layer, [stack[1].id(), stack[2].id()]);
+      await tester.pump();
+
+      /// Whether that card is drawing rows — which is what open means. By
+      /// card rather than by label: three effects share parameter names.
+      Finder rowsIn(int card) => find.descendant(
+            of: find.byKey(ValueKey<String>('fx-card-$card')),
+            matching: find.byType(EffectParamRowFrb),
+          );
+      expect(rowsIn(0), findsWidgets, reason: 'each arrives open');
+      expect(rowsIn(1), findsWidgets);
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-twirl-${stack[1].id()}')));
+      await tester.pump();
+      expect(rowsIn(1), findsNothing, reason: 'the one that was clicked shut');
+      expect(rowsIn(2), findsNothing,
+          reason: 'and so did the other picked one');
+      expect(rowsIn(0), findsWidgets,
+          reason: 'the unpicked effect kept its rows');
+
+      // Opening again takes the run with it too, from either end of it.
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-twirl-${stack[2].id()}')));
+      await tester.pump();
+      expect(rowsIn(1), findsWidgets);
+      expect(rowsIn(2), findsWidgets);
+    });
+
+    /// **Delete removes the picked effects** (item 6.6) — claimed rather than
+    /// handled on the keyboard, because the shell's own Delete removes the
+    /// *layer* and every hardware-keyboard handler runs on every key. The
+    /// shell asks the claim first; this is that call.
+    testWidgets('Delete removes the picked effects, and nothing else',
+        (tester) async {
+      final p = withLayer();
+      for (final name in ['blur', 'vignette', 'invert']) {
+        p.layer.addEffect(name: name);
+      }
+      await mount(tester, p, transform: false);
+      final stack = p.layer.getEffects();
+      p.uiState.activePanel.value = Panel.effectControls;
+
+      expect(p.uiState.deleteClaim, isNotNull,
+          reason: 'the panel claims Delete while it is mounted');
+      expect(p.uiState.deleteClaim!(), isFalse,
+          reason: 'nothing picked is not this panel’s Delete — the layer '
+              'selection is what the shell falls back to');
+
+      p.uiState.setEffectSelection(p.layer, [stack[0].id(), stack[2].id()]);
+      await tester.pump();
+      expect(p.uiState.deleteClaim!(), isTrue);
+      await tester.pump();
+
+      expect(
+          [for (final e in p.layer.getEffects()) e.name()], [stack[1].name()],
+          reason: 'the picked run went and the unpicked effect stayed');
+      expect(p.uiState.selectedEffects.value, isEmpty,
+          reason: 'nothing is picked once it no longer exists');
+      expect(p.layer.getInfo().name, isNotEmpty,
+          reason: 'the layer itself is untouched');
+    });
+
+    /// **Fronting another comp does not lose your place** (item 6.28). The
+    /// read model rebinds to the new comp's layers, so the layer this panel
+    /// is showing stops being in it while still existing perfectly well in
+    /// the comp it belongs to. Its rows stay up until a layer is selected in
+    /// the new comp; a layer that has genuinely gone is still the placeholder.
+    testWidgets('fronting another comp keeps the stack that was on the panel',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      await mount(tester, p, transform: false);
+      expect(heading('Gaussian blur'), findsOneWidget);
+
+      final other = p.state.project!.newComposition(name: 'Other');
+      p.uiState.setSelectedComp(other);
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(heading('Gaussian blur'), findsOneWidget,
+          reason: 'the layer is in the comp you came from, not gone');
+      expect(find.textContaining('Select a layer'), findsNothing);
+
+      // A layer selected in the new comp is what replaces it.
+      final fresh = other.addSolidLayer();
+      p.uiState.model.refresh();
+      p.uiState.setSelection([fresh]);
+      await tester.pump();
+      expect(heading('Gaussian blur'), findsNothing);
+      expect(find.textContaining('No effects'), findsOneWidget);
+
+      // And a layer deleted out of its own comp is the placeholder, which is
+      // the case this hold must not swallow.
+      fresh.delete();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(find.textContaining('Select a layer'), findsOneWidget);
+    });
+
+    /// **Layer pickers number their entries** (item 6.13): "2. Sky" — the
+    /// layer's own place in the composition, so two layers sharing a name are
+    /// still two entries you can tell apart. The number is data, not a
+    /// phrase, so no string file knows about it.
+    testWidgets('a layer picker lists entries by their place in the comp',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      final comp = p.uiState.selectedComp!;
+      comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      final id = p.layer.getEffects().single.id();
+      await tester.tap(find.byKey(ValueKey<String>('fx-layer-$id-matte')));
+      await tester.pumpAndSettle();
+
+      final names = [for (final e in p.uiState.model.layers) e.info.name];
+      expect(names, hasLength(2));
+      // Entry one is the top layer of the comp, entry two the next — the
+      // layer the effect sits on says so as well (K-288), which is why this
+      // reads the prefix rather than the whole entry.
+      expect(find.textContaining('1. ${names[0]}'), findsOneWidget);
+      expect(find.textContaining('2. ${names[1]}'), findsOneWidget);
     });
 
     // Without the built library there is nothing to test against; the harness

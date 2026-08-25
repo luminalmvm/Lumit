@@ -93,13 +93,50 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// stack you were just editing stays up, because clicking away in the
   /// Timeline is not a request to lose your place. It is replaced the moment
   /// another layer is selected, and falls back to the placeholder only if that
-  /// layer leaves the read model (deleted, or another comp fronted).
+  /// layer is **gone** — deleted out of the composition it was in.
   LayerReference? _lastLayer;
+
+  /// That layer's row of the read model, and the composition it was read
+  /// from — what keeps its stack on the panel when another comp is fronted
+  /// (item 6.28).
+  ///
+  /// Fronting a comp rebinds the model to *its* layers, so the layer this
+  /// panel is showing stops being in it while still existing perfectly well
+  /// in the comp it belongs to. That used to blank the panel: you stepped
+  /// into a pre-comp to look at something and came back to a placeholder,
+  /// having lost the stack you were part way through editing. Held here, the
+  /// rows stay up until a layer is selected in the new comp — and a layer
+  /// missing from the model of its *own* comp is one that has genuinely gone,
+  /// which is still the placeholder. No call crosses the bridge for any of it.
+  BridgeLayerEntry? _heldEntry;
+  UuidValue? _heldComp;
 
   bool _isOpen(String path) => !_shut.contains(path);
   void _toggle(String path) => setState(() {
         if (!_shut.remove(path)) _shut.add(path);
       });
+
+  /// Twirl one effect — and, when it is one of the **picked** run, all of them
+  /// together (item 6.3).
+  ///
+  /// A selection is a set of things you are treating as one: opening five
+  /// stacks one twirl at a time, having just said all five are what you are
+  /// working on, is five clicks to reach a state you already asked for. The
+  /// clicked effect's new state is what the run takes — never a flip apiece,
+  /// which would leave a mixed run mixed the other way round.
+  void _toggleEffect(UuidValue id, List<UuidValue> picked) {
+    if (!picked.contains(id)) return _toggle('fx-$id');
+    final opening = _shut.contains('fx-$id');
+    setState(() {
+      for (final other in picked) {
+        if (opening) {
+          _shut.remove('fx-$other');
+        } else {
+          _shut.add('fx-$other');
+        }
+      }
+    });
+  }
 
   /// The effect whose heading is an inline rename editor, or null (K-321).
   UuidValue? _renamingEffect;
@@ -145,13 +182,73 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // `Ctrl+A` here means every effect on the layer (K-522), not every layer
     // in the composition — the shell routes the chord to the focused panel.
     ui.selectAllRequest.addListener(_onSelectAllRequested);
+    // **Delete means the picked effects while this panel is the focused one**
+    // (item 6.6, K-234's mechanism). Claimed rather than handled on the
+    // keyboard: every hardware-keyboard handler runs on every key, so
+    // answering the chord here would remove the effects *and* let the shell
+    // remove the layer under them. The shell asks the claim first and stands
+    // down when it says yes.
+    //
+    // Chained onto whatever held the claim before — the Timeline, for its
+    // mask rows — because there is one claim and two panels that want it.
+    // Ours answers only while this panel is focused and effects are picked;
+    // anything else falls through to the claim it displaced.
+    if (ui.deleteClaim != _deleteClaim) _priorDeleteClaim = ui.deleteClaim;
+    ui.deleteClaim = _deleteClaim;
     _readDriven();
   }
+
+  /// The claim this panel had to displace to take Delete.
+  bool Function()? _priorDeleteClaim;
 
   void _unbindDriven() {
     _boundUi?.selectedLayer.removeListener(_readDriven);
     _boundUi?.model.removeListener(_readDriven);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
+    if (_boundUi?.deleteClaim == _deleteClaim) {
+      _boundUi!.deleteClaim = _priorDeleteClaim;
+    }
+  }
+
+  bool _deleteClaim() {
+    final ui = _boundUi;
+    if (!mounted ||
+        ui == null ||
+        ui.activePanel.value != Panel.effectControls) {
+      return _priorDeleteClaim?.call() ?? false;
+    }
+    return _deletePickedEffects(ui) || (_priorDeleteClaim?.call() ?? false);
+  }
+
+  /// Remove every picked effect from the layer this panel is showing.
+  ///
+  /// Each removal is one `SetLayerEffects` — the stack written whole, which is
+  /// the only shape an effect edit has — so a run of three comes back in three
+  /// undo steps rather than leaving half a stack behind on the first one. The
+  /// handles are read together and are safe to hold: the seam matches them by
+  /// id, so removing one does not stale the next.
+  ///
+  /// Answers whether it took the key. Nothing picked is not this panel's
+  /// Delete, and the layer selection is what the shell falls back to.
+  bool _deletePickedEffects(LumitUiState ui) {
+    final layer =
+        ui.selectedEffectsLayer ?? ui.selectedLayer.value ?? _lastLayer;
+    final picked = ui.selectedEffects.value.toSet();
+    if (layer == null || picked.isEmpty) return false;
+    try {
+      for (final instance in layer.getEffects()) {
+        if (picked.contains(instance.getInfo().id)) {
+          layer.removeEffect(effect: instance);
+        }
+      }
+    } catch (_) {
+      // The effects went away under the selection; there is nothing here to
+      // report and nothing left to remove.
+    }
+    ui.clearEffectSelection();
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
+    return true;
   }
 
   /// Pick the whole effect stack of the layer this panel is showing.
@@ -379,10 +476,21 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   ) {
     final t = ThemeScope.of(context).theme;
     final ui = Provider.of<LumitUiState>(context, listen: false);
-    final entry = ui.model.byId(layer.internallayerId);
+    var entry = ui.model.byId(layer.internallayerId);
     if (entry == null) {
-      // The layer has gone (deleted, or another comp fronted) — nothing to
-      // draw until the selection catches up.
+      // Not in the fronted comp's model. Another comp has been fronted and
+      // this layer lives in the one before it, so its rows stay up (item
+      // 6.28) — held from the last read, since the model no longer carries
+      // them. Missing from its OWN comp's model is a layer that has gone.
+      entry = _heldComp == comp.internalid ||
+              _heldEntry?.layer.internallayerId != layer.internallayerId
+          ? null
+          : _heldEntry;
+    } else {
+      _heldEntry = entry;
+      _heldComp = comp.internalid;
+    }
+    if (entry == null) {
       return PlaceholderPanel(
         icon: LumitIcon.fx,
         title: l10n.effectControls,
@@ -506,7 +614,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         key: ValueKey<String>('fx-card-$index'),
                         info: info.effects[index],
                         open: _isOpen('fx-${info.effects[index].id}'),
-                        onToggle: () => _toggle('fx-${info.effects[index].id}'),
+                        onToggle: () =>
+                            _toggleEffect(info.effects[index].id, picked),
                         selected: picked.contains(info.effects[index].id),
                         driven: _driven,
                         renaming: _renamingEffect == info.effects[index].id,
@@ -921,25 +1030,12 @@ class _EffectSection extends StatelessWidget {
         // for most, and it was being missed. The whole stopwatch column, for
         // the whole height of the heading, switches the effect — and the mark
         // inside is drawn a step larger so it holds its own beside the
-        // heading's capitals (see `fxEnableHitWidth`).
-        child: GestureDetector(
-          key: ValueKey<String>('fx-enabled-hit-$id'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _setEnabled(context, !info.enabled),
-          child: SizedBox(
-            width: fxEnableHitWidth,
-            height: fxEnableHitHeight,
-            child: Center(
-              child: Transform.scale(
-                scale: fxEnableMarkScale,
-                child: HouseCheckbox(
-                  key: ValueKey<String>('fx-enabled-$id'),
-                  value: info.enabled,
-                  onChanged: (on) => _setEnabled(context, on),
-                ),
-              ),
-            ),
-          ),
+        // heading's capitals (see `fxEnableHitWidth`), and a drag off it sets
+        // every switch it crosses to what this one just became (item 6.2).
+        child: fxEnableSwitch(
+          id: '$id',
+          on: info.enabled,
+          onChanged: (on) => _setEnabled(context, on),
         ),
       ),
       actions: [

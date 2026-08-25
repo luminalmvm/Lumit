@@ -117,6 +117,72 @@ const double fxEnableHitHeight = fxHeadingHeight - 4;
 /// beside a heading's capitals without becoming a different control.
 const double fxEnableMarkScale = 11 / 9;
 
+/// What a click-then-drag across the enable switches is setting them **to**
+/// (item 6.2). Carried as a drag payload rather than in a shared variable so
+/// the switches the pointer passes over are found the way every other
+/// cross-widget gesture in the application finds its target: a [Draggable] on
+/// the switch the drag starts from, a [DragTarget] on each of the others.
+///
+/// Its own type, so the heading's own `Draggable<int>` reorder — which this
+/// gesture sits inside — cannot see it and does not budge.
+@immutable
+class FxEnablePaint {
+  /// The state the FIRST switch took, which every switch the pointer meets
+  /// takes too. Not a flip: a run of mixed switches comes out even, and
+  /// dragging back over one already set does nothing.
+  final bool to;
+  const FxEnablePaint(this.to);
+}
+
+/// One effect's enable switch, with the drag that paints its neighbours
+/// (item 6.2, owner's desk test for the hit area).
+///
+/// The mark keeps K-450's language at [fxEnableMarkScale]; the target is the
+/// whole stopwatch column for the whole height of the heading. A click toggles
+/// this one; a drag off it sets every switch it crosses to whatever this one
+/// just became.
+Widget fxEnableSwitch({
+  required String id,
+  required bool on,
+  required ValueChanged<bool> onChanged,
+}) =>
+    DragTarget<FxEnablePaint>(
+      // Answered on the way in and only on the way in, which is once per
+      // switch the pointer crosses. False either way: nothing is being
+      // dropped here — the crossing IS the act — and a target that accepted
+      // would draw itself as a landing place.
+      onWillAcceptWithDetails: (details) {
+        if (details.data.to != on) onChanged(details.data.to);
+        return false;
+      },
+      builder: (context, _, __) => Draggable<FxEnablePaint>(
+        data: FxEnablePaint(!on),
+        // Nothing rides under the pointer: this drag paints switches, it does
+        // not carry anything to a destination.
+        feedback: const SizedBox.shrink(),
+        onDragStarted: () => onChanged(!on),
+        child: GestureDetector(
+          key: ValueKey<String>('fx-enabled-hit-$id'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(!on),
+          child: SizedBox(
+            width: fxEnableHitWidth,
+            height: fxEnableHitHeight,
+            child: Center(
+              child: Transform.scale(
+                scale: fxEnableMarkScale,
+                child: HouseCheckbox(
+                  key: ValueKey<String>('fx-enabled-$id'),
+                  value: on,
+                  onChanged: onChanged,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
 /// How thick the line is that says where a dragged effect will land. Two
 /// pixels, in the accent — the same weight and colour every other drop in the
 /// application draws its feedback in (the Timeline's and the Project panel's
