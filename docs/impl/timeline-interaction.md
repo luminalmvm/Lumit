@@ -377,8 +377,13 @@ middle of **every** key, same-shape pairs included.
   point shared by two subpaths in one path draws no seam.
 - `keyHalfPath` **stays** as the geometry oracle for tests; a new `keyMarkPath(pair, …)`
   composes the painted path. The regression test rasterises a same-shape pair at 4× and
-  asserts the centre column's alpha equals its neighbours' (no lighter stripe), and the
-  golden covers one mixed pair.
+  asserts the centre column's alpha equals its neighbours' (no lighter stripe).
+  **Corrected in TI-3**: the note asked for a golden over one mixed pair, and the package
+  wrote a walk over **every** pair instead — one contour each (two for hourglass/
+  hourglass, which meet at a point), no tangent running vertically along the centre line,
+  and the union agreeing with `keyHalfPath` at probes either side. A golden pins one
+  picture; the walk pins the rule, for all nine pairs, and needs no image checked in
+  (`timeline_alignment_test.dart`).
 - The same painter serves Layers lanes, Keys mode and the shut layer's summary (K-459's
   one-painter rule).
 
@@ -564,16 +569,16 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 2. **[bug] Every keyframe mark draws a centre seam**, same-shape pairs included: two
    anti-aliased `drawPath` calls per mark in `_LaneKeysPainter.paint`
    (timeline_panel_frb.dart ~9013, geometry at `keyHalfPath` :159). Source: owner finding
-   b; K-457. (§5)
+   b; K-457. (§5) — **landed, TI-3.**
 3. **[bug] Graph handles lag a dragged key**: `_keyDrag` never enters `_shownKeys`
    (graph_editor_frb.dart ~2323), so `_handleEndpointFor`/`_tangentHandles`/
    `_HandlesPainter` read unmoved keys while `_keyPoint` (~1902) moves the glyph. Source:
-   owner finding d. (§6.1)
+   owner finding d. (§6.1) — **landed, TI-5**, and generalised into `_KeyMove` by TI-7.
 4. **[bug] Keys mode's resting sheet takes no selection gesture**: layer bands are
    opaque tap-only (`_KeysLayerLane`, timeline_panel_frb.dart ~8396) and the shared twirl
    set opens shut (`_open`, :620; `keysLayerRows` reads it, :447), so the default sheet
    is all bands — no marquee, no property rows, no keys to click. Source: the Keys
-   drawing; K-455/K-458. (§2.3)
+   drawing; K-455/K-458. (§2.3) — **landed, TI-1.**
 5. **[bug] Marquee and block box misalign below an open Sequence view**: `_keysIn` /
    `_selectedKeyPlaces` step by `rowHeight` and ignore `sequenceExtra`
    (timeline_panel_frb.dart, `_LayerArea`). Source: K-248 heights vs K-458 walk. (§4.4)
@@ -581,7 +586,13 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 6. **[bug] Selection colours off-token**: graph selected key in `t.accent`
    (graph_editor_frb.dart ~2668); marquee box in `t.accent` (`widgets/marquee.dart`);
    handle lines/dots in `t.warning` (~3017, ~3090). Source: K-439/§3.1's closed accent
-   list; the drawings select in `text_primary`. (§6.1, §6.2, §4.4)
+   list; the drawings select in `text_primary`. (§6.1, §6.2, §4.4) — **landed**: the
+   marquee in **TI-2**, the key and the handles in **TI-5**. `warning` no longer appears
+   in `graph_editor_frb.dart` at all. What is left in `accent` on this panel is the
+   **snap capture line** (all four of them, lanes, block, ruler and graph), which is not
+   a selection mark and predates this note; whether a transient time marker belongs on
+   K-439's list is a question for K-439, not for this programme, and nothing here changed
+   it.
 
 ### Missing
 
@@ -591,9 +602,12 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 8. ~~**[missing] Graph mode's outline**~~ — **landed, TI-6**: the filtered colour-ticked
    list, Normalise, the Key readout row with In/Out % wells and the
    Layers-identical-outline setting. Source: K-442, §12A.2, GraphMode drawing. (§3.3)
-9. **[missing] Dashed handle lines, hollow endpoint rings** (drawing). (§6.1)
-10. **[missing] Value hint pill** beside a selected/dragged graph key, and the lane
-    drag's `f · value` badge (drawing; study §3 "live readout"). (§4.2, §6.2)
+9. ~~**[missing] Dashed handle lines, hollow endpoint rings**~~ — **landed, TI-5**
+    (drawing). (§6.1)
+10. ~~**[missing] Value hint pill** beside a selected/dragged graph key, and the lane
+    drag's `f · value` badge~~ — **landed, TI-5**; the block stretch's own
+    `f<first>–f<last>` came with **TI-2** (drawing; study §3 "live readout").
+    (§4.2, §6.2)
 11. ~~**[missing] Tangents Auto / Clamp / Free**~~ — **landed, TI-8**: the strip's three
     chips, the per-side modes, and the round trip through Free that keeps the custom
     ease. The engine seam is a fourth `SideInterp` arm carrying that ease; the maths is
@@ -605,13 +619,15 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     K-505. (§6.2)
 13. ~~**[missing] Numeric entry**~~ — **landed, TI-7**: double-clicking a key opens its
     exact frame, value and In/Out % (docs/07 §5.3). (§6.2)
-14. **[missing] Right-click menu on lane keys** (docs/07 §4.3; `_KeyLane` has no
-    secondary-tap, ~8627). (§2.1)
-15. **[missing] `Ctrl`+click plants a key on a lane** (docs/07 §4.3; graph only today).
-16. **[missing] Additive (`Shift`) marquee in the lanes** — replace-only today
-    (timeline_panel_frb.dart ~3361); the graph honours it (graph_editor_frb.dart :1620).
-17. **[missing] Property-name click selects the property's keys** (K-500; today K-196
-    selects the property only). (§2.1)
+14. ~~**[missing] Right-click menu on lane keys**~~ — **landed, TI-1**; a block's two
+    outermost keys reached theirs through the handle in **TI-2** (docs/07 §4.3). (§2.1)
+15. ~~**[missing] `Ctrl`+click plants a key on a lane**~~ — **landed, TI-1**, on the
+    shared `plantKeyOnChannels` (docs/07 §4.3).
+16. ~~**[missing] Additive (`Shift`) marquee in the lanes**~~ — **landed, TI-1**, by
+    moving the modifier read into `MarqueeSelect`'s own `onPanDown`, which is what put
+    both panes on one answer (§2.1).
+17. ~~**[missing] Property-name click selects the property's keys**~~ — **landed,
+    TI-1**, with its `Ctrl` and `Shift` variants (K-500). (§2.1)
 18. ~~**[missing] Snapping for bar drags, work-area handles, marker drags and the block
     stretch**~~ — the block stretch landed in TI-2; the **bar, work-area, marker and graph
     key drags landed in TI-9**, on one shared gatherer with the capture line on each.
@@ -694,27 +710,31 @@ result rather than merging around it. New user-facing strings (menu rows, keymap
 the badge) land in `app_en.arb` in the same commit, with `engine_labels.dart` entries for
 anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
 
-- **TI-1 — Selection reaches everywhere** (§2; gaps 4, 14–17, and bug 4). Marquee from
+- **TI-1 — Selection reaches everywhere** (§2; gaps 4, 14–17, and bug 4). **Landed.**
+  Marquee from
   any ground (Keys bands pass drags through; bar rows admit the box off the bar),
   additive `Shift`/`Ctrl` marquee in the lanes, Keys mode opening twirled open with its
   own default set, property-name selects its keys (`Ctrl`/`Shift` variants), lane key
   right-click menu, `Ctrl`+click plants a lane key. Files: `timeline_panel_frb.dart`,
   `widgets/marquee.dart`; tests beside the existing timeline widget tests; arb keys for
   the menu.
-- **TI-2 — The block feel** (bugs 1, 5; gaps 18–19 for the stretch; polish 28). The
-  escaped-string fix with its live-travel regression test; the `sequenceExtra` walk fix;
+- **TI-2 — The block feel** (bugs 1, 5; gaps 18–19 for the stretch; polish 28).
+  **Landed.** The escaped-string fix with its live-travel regression test; the `sequenceExtra` walk fix;
   stretch snapping with the capture line; Escape reverting stretch, lane-key and bar
   drags; marquee/block colours to `text_primary`. Files: `timeline_panel_frb.dart`,
   `key_block.dart`, `widgets/marquee.dart`.
-- **TI-3 — The seamless key mark** (§5; bug 2). `keyMarkPath`, the one-`drawPath`
-  painter, the centre-column raster test and mixed-pair golden. Files:
-  `timeline_panel_frb.dart` (painter + `keyHalfPath` oracle), a paint test.
+- **TI-3 — The seamless key mark** (§5; bug 2). **Landed.** `keyMarkPath`, the
+  one-`drawPath` painter, the centre-column raster test, and — instead of the golden the
+  note asked for — a walk over every shape pair asserting one contour and no edge on the
+  centre line (§5). Files: `timeline_panel_frb.dart` (painter + `keyHalfPath` oracle),
+  `test/frb/timeline_alignment_test.dart`. No new strings.
 - **TI-4 — Keys rows to K-499** (§3.2; gap 7). **Landed.** Layer number, stopwatch,
   navigator and value wells on the Keys property rows via the shared row machinery —
   by listing `_FoldRow` itself. Files:
   `timeline_panel_frb.dart` (`_KeysOutline`, `_KeysLayerRow`),
   `keyframe_controls_frb.dart` reuse; widget tests pinning the anatomy.
-- **TI-5 — Graph handles and drag geometry** (§6.1–6.2; bugs 3, 6; gaps 9–10). Dashed
+- **TI-5 — Graph handles and drag geometry** (§6.1–6.2; bugs 3, 6; gaps 9–10).
+  **Landed.** Dashed
   `text_primary` lines, hollow rings, `_keyDrag` folded into `_shownKeys` with the
   handle-travel regression test, selected key in `text_primary` one step larger, the
   value hint pill (graph and lane badge), hover/cursor on keys and rings. Files:
@@ -763,6 +783,25 @@ anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
 
 TI-1/TI-2/TI-3 are the owner's reported symptoms and go first; TI-5 unblocks TI-7/TI-8;
 TI-4 and TI-6 are independent of each other.
+
+### The programme is complete
+
+**All ten packages have landed**, and a verification pass has walked every sentence above
+against the code and the suites (2026-08-25). What it found:
+
+- Each sentence in §2–§7 is either implemented with a test that names it, or is marked
+  here as shipped-before-this-note and still true. Where a package bent a sentence, the
+  bend is recorded in the sentence itself; the statuses in §8 and the package list above
+  were brought up to date in the same pass, having lagged behind the work.
+- **Two sentences had no check and now do**: an armed razor takes the grab off a bar
+  (§4.1's plain-arrow rule, the half `a locked bar takes the plain arrow` did not cover —
+  `timeline_hover_test.dart`), and cancelling the marker label editor leaves the marker
+  (§7 — `timeline_ruler_snap_test.dart`).
+- **Nothing in this programme is deferred except what says so**: the razor's scissors
+  pointer (gap 25), the scrub ladder on the clock (TI-10), smooth edge-follow and its
+  setting with `Shift+=` (gap 23, deferred with docs/07 §4.6), and gap 24's list, which
+  was never in the packages. Deleted from `docs/TODO.md` accordingly; the tests are the
+  record.
 
 ## Open questions
 

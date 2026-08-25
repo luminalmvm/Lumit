@@ -324,6 +324,33 @@ void main() {
           reason: 'what was typed is what the marker says');
     });
 
+    /// §7's last sentence on that gesture: **cancelling the label editor
+    /// leaves the marker.** The double-click is what made it; the dialogue
+    /// only names it, so backing out of the naming is not an undo of the
+    /// making.
+    testWidgets('cancelling the label editor leaves the marker',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      await mount(tester, p);
+
+      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      final at = Offset(ruler.center.dx, ruler.top + ruler.height / 4);
+      await tester.tapAt(at);
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tapAt(at);
+      await tester.pumpAndSettle();
+      expect(markersOf(p.comp), hasLength(1));
+
+      await tester.tap(find.byKey(const ValueKey('marker-edit-cancel')));
+      await tester.pumpAndSettle();
+
+      expect(markersOf(p.comp), hasLength(1),
+          reason: 'the marker outlives the dialogue that would have named it');
+      expect(markersOf(p.comp).single.label, isEmpty,
+          reason: 'and it says nothing, which is what an unnamed one says');
+    });
+
     // -------------------------------------------------------------------
     // §4.6 (gap 23) — the zoom keys, and edge-follow during playback.
     // -------------------------------------------------------------------

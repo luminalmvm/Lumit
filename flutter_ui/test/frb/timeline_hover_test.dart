@@ -19,6 +19,7 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/state/tools.dart';
 
 import 'frb_test_support.dart';
 
@@ -138,6 +139,29 @@ void main() {
 
       expect(cursorOn(tester, barCursor(layer)), SystemMouseCursors.basic,
           reason: 'nothing here can be grabbed, so nothing offers to be');
+    });
+
+    /// The other half of §4.1's plain-arrow sentence, which the package left
+    /// unchecked: an **armed razor** is not a grab either. A press here cuts
+    /// the layer, and a cut is not something the bar is picked up by, so the
+    /// body drops its grab for as long as the tool is armed. (The study's
+    /// scissors pointer stays deferred — gap 25 — so the plain arrow is the
+    /// whole of the answer here.)
+    testWidgets('an armed razor takes the grab off a bar', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      expect(cursorOn(tester, barCursor(layer)), SystemMouseCursors.grab);
+
+      p.uiState.tools.select(ToolMode.razor);
+      await tester.pumpAndSettle();
+      expect(cursorOn(tester, barCursor(layer)), SystemMouseCursors.basic,
+          reason: 'a press would cut, not carry (§4.1)');
+
+      p.uiState.tools.select(ToolMode.select);
+      await tester.pumpAndSettle();
+      expect(cursorOn(tester, barCursor(layer)), SystemMouseCursors.grab,
+          reason: 'and disarming gives the handle back (P1)');
     });
 
     /// Polish 26: a hovered bar firms its leading edge — and puts it straight
