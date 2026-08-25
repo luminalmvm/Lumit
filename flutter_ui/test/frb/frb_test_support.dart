@@ -143,11 +143,19 @@ Widget hostPanel({
               // these above everything; without it `onTapOutside` never fires
               // and a test cannot see an inline editor commit on a click
               // elsewhere (K-243).
-              child: TapRegionSurface(
-                child: _StopsPreviewProgress(
-                  uiState: uiState,
-                  child: Overlay(
-                    initialEntries: [OverlayEntry(builder: (_) => child)],
+              // For the same reason: a MaterialApp puts WidgetsLocalizations
+              // above everything, and the widgets library's own reorderable
+              // list asks for them by name (the export queue's draggable
+              // rows). Without this the panel builds and the list throws.
+              child: Localizations(
+                locale: const Locale('en'),
+                delegates: const [DefaultWidgetsLocalizations.delegate],
+                child: TapRegionSurface(
+                  child: _StopsPreviewProgress(
+                    uiState: uiState,
+                    child: Overlay(
+                      initialEntries: [OverlayEntry(builder: (_) => child)],
+                    ),
                   ),
                 ),
               ),

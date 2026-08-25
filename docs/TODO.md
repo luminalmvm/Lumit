@@ -586,13 +586,10 @@ picks its filter (Fast bilinear, High Lanczos-3), and the colour space is a fami
 built-ins the container is stamped with. What is left:
 
 - ~~The resampler face and the colour-space list do not cross the seam~~ — **landed
-  2026-08-25** (K-503). Every row's engine half now crosses: `resample`, the sound's rate,
-  width and layout, the two Time overrides, *render guide layers* and *use proxies* are
-  fields on `BridgeExportSpec`; `BridgeFormatCaps` carries `audio_24_bit` and the
-  `colour_spaces` list; `export_audio_rates()` answers the three rates. The spaces cross as
-  **stored names**, not labels, so their wording is ordinary `app_en.arb` work for the
-  dialog stage rather than engine strings — as are the two filter names (`exportResampleHigh`
-  exists; *Fast* does not) and the sound row's 44.1/96 kHz, 24 bit and Mono siblings.
+  2026-08-25** (K-503), and the dialog's rows came alive the same day: every face the
+  drawing shows is a live control writing into `BridgeExportSpec`, with the capability row
+  deciding which of them the chosen format may honour. The one control still drawn dead is
+  the OCIO row, which is genuinely not in this build.
 
 - **The *Still* output type is withdrawn** (K-485): a still is an image sequence of one
   frame, which the span already says, so the fourth chip the drawing offered is gone rather
@@ -601,8 +598,9 @@ built-ins the container is stamped with. What is left:
   file naming, not an output type.
 - ~~Reordering the queue~~ (docs/07 §11: "items are reorderable") — **landed 2026-08-25**
   (K-503): `export_queue_move(id, index)`, undo-free like removal because the queue is not
-  in the `.lum`, refusing an item that is running or has already run. The queue window's
-  drag is the interface half and is not drawn yet.
+  in the `.lum`, refusing an item that is running or has already run. The window's drag
+  landed with it: a waiting row is picked up and carried, on Flutter's own reorderable
+  machinery rather than a bare draggable, which loses the gesture to the list it sits in.
 - **A disk-cache policy with something to govern.** The setting exists and defaults to Off,
   which is what happens: the export renderer is a fresh `HeadlessRenderer` with no disk
   tier at all. *Read-only* becomes a real choice the day the export path gains one.
@@ -630,9 +628,6 @@ call below exists and is tested:
   where it would go, `make_proxy()` starts it, `proxy_poll()`/`proxy_cancel()` drive it, and
   the finished file attaches itself. The panel owes the button, the progress row and the
   words for both.
-- **The export dialog's rows** — proxies, guide layers, motion blur, Retime blend, resize
-  and colour — are all backed and all still drawn dead with a reason on hover (K-485). Each
-  is now a field on `BridgeExportSpec`; what they want is the dialog stage.
 - **The Timeline's guide column and its glyph** (K-497). The switch crosses as
   `BridgeLayerSwitch::Guide` and reads back as `get_switches().guide`; docs/07 §4 names the
   cell's home, beside shy.

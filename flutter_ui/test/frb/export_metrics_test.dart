@@ -425,6 +425,39 @@ void main() {
       expect(band(tester, 'export-preset-strip').height, before.height);
     });
 
+    /// 6g. **A saved preset's name row carries four controls, and still fits.**
+    /// *Delete* joins *Save* and *Cancel* the moment the preset in force is
+    /// one of the user's own, and 220 of field plus four buttons is eight
+    /// pixels more than the strip has — an overflow, which is a defect
+    /// (§12A.6). The buttons keep their content width, so the field gives.
+    testWidgets('the name row fits when a preset can also be deleted',
+        (tester) async {
+      await open(tester);
+
+      await tester.tap(find.byKey(const ValueKey('export-preset-save-as')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('export-preset-name')), 'Metrics preset');
+      await tester.tap(find.byKey(const ValueKey('export-preset-save')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('export-preset-edit')));
+      await tester.pumpAndSettle();
+      final strip = band(tester, 'export-preset-strip');
+      final delete = band(tester, 'export-preset-delete');
+      final cancel = band(tester, 'export-preset-cancel');
+      expect(find.byKey(const ValueKey('export-preset-delete')), findsOneWidget,
+          reason: "a preset of one's own can be taken off the list");
+      expect(delete.right, lessThanOrEqualTo(cancel.left));
+      expect(cancel.right, lessThanOrEqualTo(strip.right - dialogPadding),
+          reason: 'and the last of the four is still inside the strip');
+
+      await tester.tap(find.byKey(const ValueKey('export-preset-delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
     /// 7. **The queue window** is the same pattern at its own width: the
     /// dialog's title strip and footer, unchanged (K-444).
     testWidgets('the queue window wears the dialog pattern', (tester) async {

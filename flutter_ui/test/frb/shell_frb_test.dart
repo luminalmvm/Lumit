@@ -13,6 +13,7 @@ import 'package:lumit_flutter/shell/cache_confirm_frb.dart';
 import 'package:lumit_flutter/shell/command_palette_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart' show bootLines;
 import 'package:lumit_flutter/shell/export_dialog_frb.dart';
+import 'package:lumit_flutter/shell/export_queue_frb.dart';
 import 'package:lumit_flutter/shell/recovery_dialog_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
@@ -1102,6 +1103,191 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    /// Every row K-485 drew dead is a setting now (K-493, K-497, K-498, K-501,
+    /// K-502, carried over the seam by K-503). Changing each one and saving the
+    /// result as a preset is the assertion, because a preset is the whole
+    /// settings payload: what comes back out of the store is what the dialog
+    /// put into the spec.
+    testWidgets('the rows that were drawn dead now reach the spec',
+        (tester) async {
+      await open(tester);
+
+      /// Pick an option out of a list by the words on it. The menu is drawn
+      /// over the page, so the last match is the one in the menu rather than
+      /// the closed face of some other row.
+      Future<void> pick(String id, String option) async {
+        await tester.tap(find.byKey(ValueKey<String>(id)));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(option).last);
+        await tester.pumpAndSettle();
+      }
+
+      await pick('export-proxies', 'Use all proxies');
+      await pick('export-guide-layers', 'Current settings');
+      await pick('export-motion-blur', 'Off for all layers');
+      await pick('export-retime-blend', 'Off for all layers');
+      await pick('export-resample', 'High');
+      await pick('export-colour-space', 'Rec. 2020');
+      await pick('export-audio-sample-rate', '44.100 kHz');
+      await pick('export-audio-layout', 'Mono');
+
+      await tester.tap(find.byKey(const ValueKey('export-preset-save-as')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('export-preset-name')), 'Live rows');
+      await tester.tap(find.byKey(const ValueKey('export-preset-save')));
+      await tester.pumpAndSettle();
+
+      final stored = exportPresetGet(name: 'Live rows')!;
+      expect(stored.useProxies, isTrue);
+      expect(stored.renderGuides, isTrue);
+      expect(stored.motionBlur, 2, reason: 'off for all layers is the third');
+      expect(stored.retimeBlend, 1, reason: 'and the second of two');
+      expect(stored.resample, 'high');
+      expect(stored.colourSpace, 'rec2020',
+          reason: 'the space crosses as its stored name, not its label');
+      expect(stored.audioRate, 44100);
+      expect(stored.audioChannels, 1, reason: 'one channel is the fold-down');
+
+      exportPresetDelete(name: 'Live rows');
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The new rows obey the capability row exactly as the old ones do
+    /// (K-479): AAC stores coefficients rather than samples, so an mp4 or an
+    /// m4a offers one sample width and a `.wav` offers both; a sound file has
+    /// no colour to state and no picture to resize.
+    testWidgets('a format that cannot carry a setting says so', (tester) async {
+      await open(tester);
+
+      bool live(String key) =>
+          tester
+              .widget<HouseButton>(find.descendant(
+                of: find.byKey(ValueKey<String>(key)),
+                matching: find.byType(HouseButton),
+              ))
+              .onPressed !=
+          null;
+
+      // An mp4: the rate and the layout are free, the width is not.
+      expect(live('export-audio-sample-rate'), isTrue);
+      expect(live('export-audio-layout'), isTrue);
+      expect(live('export-audio-depth'), isFalse,
+          reason: 'AAC has no sample width to set (K-493)');
+      expect(live('export-colour-space'), isTrue,
+          reason: 'an mp4 states its colour in its own box');
+      expect(live('export-resample'), isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('export-type-audioOnly')));
+      await tester.pumpAndSettle();
+      expect(live('export-colour-space'), isFalse,
+          reason: 'a sound file has no colour to state');
+      expect(live('export-resample'), isFalse,
+          reason: 'and no picture to resize');
+      expect(live('export-audio-depth'), isFalse,
+          reason: 'the m4a leading the sound formats is still AAC');
+
+      await tester.tap(find.byKey(const ValueKey('export-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('WAV (uncompressed)').last);
+      await tester.pumpAndSettle();
+      expect(live('export-audio-depth'), isTrue,
+          reason: 'a .wav takes either width, through pcm_s16le and pcm_s24le');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// The Colour section lists what the *format* can state, and says which of
+    /// the two it is doing (K-498): a still sequence carries no tag, so it is
+    /// offered only the space an untagged file is universally taken to be.
+    testWidgets('the colour list and its reading follow the container',
+        (tester) async {
+      await open(tester);
+
+      await tester.tap(find.byKey(const ValueKey('export-colour-space')));
+      await tester.pumpAndSettle();
+      for (final space in const [
+        'sRGB / Rec.709',
+        'Linear',
+        'Rec. 709',
+        'Rec. 2020',
+        'Display P3',
+      ]) {
+        expect(find.text(space), findsWidgets,
+            reason: 'an mp4 carries the whole built-in family');
+      }
+      await tester.tap(find.text('Display P3').last);
+      await tester.pumpAndSettle();
+      expect(find.text('The file states this space in its own header.'),
+          findsOneWidget,
+          reason: 'and the section says the container will state it');
+
+      await tester.tap(find.byKey(const ValueKey('export-type-imageSequence')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('states no space'), findsOneWidget,
+          reason: 'a still sequence tags nothing, and the reading says so');
+      expect(
+          tester
+              .widget<HouseButton>(find.descendant(
+                of: find.byKey(const ValueKey('export-colour-space')),
+                matching: find.byType(HouseButton),
+              ))
+              .onPressed,
+          isNull,
+          reason: 'one space is not a choice');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
+    /// A setting the format cannot honour is still refused in the footer
+    /// before anything is queued — the new rows reach `ExportSpec::check` the
+    /// same way the depth always has (K-479, K-493).
+    testWidgets('a 24-bit setting an AAC file cannot carry is refused here',
+        (tester) async {
+      final target = '${Directory.systemTemp.path}/refused-24.m4a';
+      await open(tester, picker: () async => target);
+      await tester.tap(find.byKey(const ValueKey('export-type-audioOnly')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('export-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('WAV (uncompressed)').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('export-choose')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('export-audio-depth')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('24 bit').last);
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<HouseButton>(find.byKey(const ValueKey('export-start')))
+              .onPressed,
+          isNotNull,
+          reason: 'a .wav carries twenty-four bits happily');
+
+      await tester.tap(find.byKey(const ValueKey('export-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('M4A (AAC)').last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('24'), findsWidgets,
+          reason:
+              "the engine's own words, in the footer where the summary was");
+      expect(
+          tester
+              .widget<HouseButton>(find.byKey(const ValueKey('export-start')))
+              .onPressed,
+          isNull,
+          reason: 'nothing is queued that the file cannot carry');
+
+      await tester.tap(find.byKey(const ValueKey('export-close')));
+      await tester.pumpAndSettle();
+    });
+
     /// Both footer actions queue the export — the difference is whether the
     /// queue runs — and the queue window opens on top, so nothing is ever
     /// started somewhere the user cannot see it.
@@ -1169,6 +1355,129 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
       await tester.pumpAndSettle();
       File(target).existsSync() ? File(target).deleteSync() : null;
+    });
+  }, skip: !engineAvailable);
+
+  /// The queue's order is the order the exports run in, so it is draggable —
+  /// with the application's own reorder gesture, and only for what is still
+  /// waiting (K-503: the engine refuses a row that is running, has run, or has
+  /// gone). The list and the move are both injected, because what is asserted
+  /// here is the window's gesture rather than the engine's slot.
+  group('Export queue reorder (frb)', () {
+    BridgeExportQueueItem item(int id, String name,
+            {BridgeExportQueueState state =
+                const BridgeExportQueueState.waiting()}) =>
+        BridgeExportQueueItem(
+          id: id,
+          compName: name,
+          path: 'C:/exports/$name.mp4',
+          preset: '',
+          codec: 'h264',
+          rangeStartFrame: -1,
+          rangeEndFrame: -1,
+          state: state,
+        );
+
+    /// Drag one row by [dy], in steps rather than one jump: a lift needs a
+    /// frame between the moves to follow the pointer, and the row is grabbed
+    /// at its own centre — which is bare between the columns, and is the whole
+    /// reason the row is an opaque hit target.
+    Future<void> dragRow(WidgetTester tester, String key, double dy) async {
+      final gesture = await tester
+          .startGesture(tester.getCenter(find.byKey(ValueKey(key))));
+      await tester.pump();
+      for (var step = 0; step < 6; step++) {
+        await gesture.moveBy(Offset(0, dy / 6));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a waiting row is dragged to another place', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final items = [item(1, 'One'), item(2, 'Two'), item(3, 'Three')];
+      final moves = <(int, int)>[];
+      final p = freshProject();
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => HouseButton(
+            key: const ValueKey('open-queue'),
+            onPressed: () => showExportQueueFrb(
+              context: context,
+              list: () => List.of(items),
+              move: ({required int id, required int index}) {
+                moves.add((id, index));
+                final row = items.removeAt(items.indexWhere((i) => i.id == id));
+                items.insert(index.clamp(0, items.length), row);
+              },
+            ),
+            child: const Text('Open'),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1200, 900),
+      ));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('open-queue')));
+      await tester.pumpAndSettle();
+
+      // The last row, dragged up onto the first. In steps, because a drag
+      // reported as one jump is consumed starting the gesture and lands the
+      // avatar back where it began.
+      await dragRow(tester, 'export-queue-item-3', -2 * exportQueueRow);
+
+      expect(moves, [(3, 0)],
+          reason: 'the row that was dragged, and the place it was dropped on');
+      expect(items.map((i) => i.id), [3, 1, 2],
+          reason: 'and the list came back in the new order');
+
+      await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a row that has already run does not move', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final items = [
+        item(1, 'One'),
+        item(2, 'Two', state: const BridgeExportQueueState.done()),
+      ];
+      final moves = <(int, int)>[];
+      final p = freshProject();
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => HouseButton(
+            key: const ValueKey('open-queue'),
+            onPressed: () => showExportQueueFrb(
+              context: context,
+              list: () => List.of(items),
+              move: ({required int id, required int index}) =>
+                  moves.add((id, index)),
+            ),
+            child: const Text('Open'),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1200, 900),
+      ));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('open-queue')));
+      await tester.pumpAndSettle();
+
+      await dragRow(tester, 'export-queue-item-2', -exportQueueRow);
+      expect(moves, isEmpty,
+          reason: 'what has already run has no place left to take');
+
+      await tester.tap(find.byKey(const ValueKey('export-queue-dismiss')));
+      await tester.pumpAndSettle();
     });
   }, skip: !engineAvailable);
 

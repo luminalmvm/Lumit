@@ -8475,6 +8475,58 @@
   "@nodePreviewNoPicture": {
     "description": "Empty-state line in the Node preview panel when the picked box is a driver — a box that produces a number, colour or other value rather than an image — so there is nothing to show a picture of."
   },
+  "exportProxiesAll": "Use all proxies",
+  "@exportProxiesAll": {
+    "description": "Export dialog, Composition section, Proxies row: the option that delivers from the proxy files wherever one is attached, rather than from the original footage. Its opposite is exportProxiesNone."
+  },
+  "exportOffForAllLayers": "Off for all layers",
+  "@exportOffForAllLayers": {
+    "description": "Export dialog, Time section: the Motion blur and Retime blend option that switches the effect off everywhere for this export, whatever the composition and its layers are set to."
+  },
+  "exportResampleFast": "Fast",
+  "@exportResampleFast": {
+    "description": "Export dialog, Picture section, at the end of the Resize row: the quicker of the two resampling filters, and the default. Its opposite is exportResampleHigh."
+  },
+  "exportColourSpaceLinear": "Linear",
+  "@exportColourSpaceLinear": {
+    "description": "Export dialog, Colour section, Colour space list: the space with Rec. 709 primaries and no transfer curve, for a file going back into a compositor. A colour-science term."
+  },
+  "exportColourSpaceRec709": "Rec. 709",
+  "@exportColourSpaceRec709": {
+    "description": "Export dialog, Colour section, Colour space list: the ITU-R BT.709 broadcast space. A standard's number, so it is not translated."
+  },
+  "exportColourSpaceRec2020": "Rec. 2020",
+  "@exportColourSpaceRec2020": {
+    "description": "Export dialog, Colour section, Colour space list: the ITU-R BT.2020 wide-gamut space. A standard's number, so it is not translated."
+  },
+  "exportColourSpaceDisplayP3": "Display P3",
+  "@exportColourSpaceDisplayP3": {
+    "description": "Export dialog, Colour section, Colour space list: the wide-gamut space Apple displays and the wide-gamut web use. A proper name, so it is not translated."
+  },
+  "exportColourStated": "The file states this space in its own header.",
+  "@exportColourStated": {
+    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
+  },
+  "exportColourUntagged": "A still sequence states no space, so only the default is offered.",
+  "@exportColourUntagged": {
+    "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format cannot record which colour space it was written in, which is why the list has one entry. One sentence."
+  },
+  "exportAudio44k": "44.100 kHz",
+  "@exportAudio44k": {
+    "description": "Export dialog, Audio section, sample-rate list: 44100 hertz, the CD rate. A number and its unit; keep the same decimal style as the other two rates."
+  },
+  "exportAudio96k": "96.000 kHz",
+  "@exportAudio96k": {
+    "description": "Export dialog, Audio section, sample-rate list: 96000 hertz, the high-resolution master rate. A number and its unit; keep the same decimal style as the other two rates."
+  },
+  "exportAudio24Bit": "24 bit",
+  "@exportAudio24Bit": {
+    "description": "Export dialog, Audio section, sample-width list: twenty-four bits a sample, offered only by the uncompressed formats. Beside exportAudio16Bit."
+  },
+  "exportAudioMono": "Mono",
+  "@exportAudioMono": {
+    "description": "Export dialog, Audio section, channel-layout list: one channel, the composition's stereo mix folded down. Beside exportAudioStereo."
+  },
   "switchGuide": "Guide",
   "@switchGuide": {
     "description": "Timeline layer switch tooltip, shown when the layer IS a guide layer: it draws in the Viewer and is left out of every exported file. One word."

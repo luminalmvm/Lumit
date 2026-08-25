@@ -33,10 +33,15 @@
 // capability row (K-479), and a control the chosen format cannot honour is
 // drawn **disabled** rather than left out or left live: an mp4 has no alpha
 // channel and no sixteenth bit, a PNG sequence has no sound and no bitrate, a
-// WAV has no picture at all. The two rows the engine cannot back at all —
-// proxies and guide layers, each a document subsystem before it is an export
-// setting — are disabled with a reason for the same reason: the drawing shows
-// them, and honesty is a dead control with a name, not a missing one.
+// WAV has no picture at all, an AAC file has no sample width and a still
+// states no colour space.
+//
+// **Every row the drawing shows is now a real setting.** Proxies, guide
+// layers, motion blur, Retime blend, the resampler, the colour space and the
+// three sound faces were drawn dead while the engine had nowhere to put them
+// (K-485); K-493, K-497, K-498, K-501 and K-502 built the settings and K-503
+// carried them over the seam, so each one writes into the spec now. The one
+// face still drawn dead is OCIO, which is genuinely not in this build.
 //
 // **Nothing here crosses the bridge in `build`.** The capability row, the
 // refusal, the crop and the bitrate are all the engine's answers, and all four
@@ -121,8 +126,7 @@ const double exportAudioDepthWidth = 70;
 const double exportAudioLayoutWidth = 80;
 const double exportAudioBitRateWidth = 90;
 
-/// The resample-quality face at the end of the Resize row, drawn dead in the
-/// mockup itself: the export path has one resampler.
+/// The resample-quality face at the end of the Resize row.
 const double exportResampleWidth = 80;
 
 /// How long a section's box stays lit after its tab is clicked.
@@ -274,6 +278,18 @@ class _ExportDialogState extends State<_ExportDialog> {
   int _rangeEnd = 1;
   bool _audio = true;
   int _audioRate = _audioRates.first;
+
+  /// The three sound settings K-493 made real: the rate the mix is written at,
+  /// the width of one written sample, and how many channels the file carries.
+  /// Their defaults are what every export has always written.
+  int _audioSampleRate = 48000;
+  int _audioDepth = 16;
+  int _audioChannels = 2;
+
+  /// The rates the engine will take — three, and its own list rather than one
+  /// repeated here. Read once, because `build` crosses no bridge.
+  List<int> _sampleRates = const [48000];
+
   String? _path;
   bool _openFolder = false;
   bool _makeANoise = false;
@@ -296,6 +312,30 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _alphaChannel = false;
   bool _straightAlpha = false;
 
+  /// Deliver from the proxies rather than the originals (K-501), and deliver
+  /// the guide layers too (K-497). Both are off by default whatever the
+  /// project is set to: a proxy switched on to work with is not a picture
+  /// anybody meant to ship.
+  bool _useProxies = false;
+  bool _renderGuides = false;
+
+  /// The Time overrides (K-502). Motion blur has three answers — the
+  /// composition's own, on for every checked layer, off for all of them — and
+  /// Retime blend has two, because Lumit has no comp-wide blending master for
+  /// a third to speak to.
+  int _motionBlur = 0;
+  int _retimeBlend = 0;
+
+  /// The filter a resized frame is resampled with (K-498). The empty string is
+  /// *Fast* — bilinear, what every Lumit export has always used — and it stays
+  /// the default, because changing it would silently alter what every stored
+  /// preset writes.
+  String _resample = '';
+
+  /// The colour space the file is written and tagged in, as the engine's own
+  /// stored name (K-498). Empty is sRGB / Rec. 709, which is a pass-through.
+  String _colourSpace = '';
+
   int _cropTop = 0;
   int _cropLeft = 0;
   int _cropBottom = 0;
@@ -316,6 +356,8 @@ class _ExportDialogState extends State<_ExportDialog> {
     bitRate: true,
     audioBitRate: true,
     metadata: true,
+    audio24Bit: false,
+    colourSpaces: const [''],
   );
   String _check = '';
   BridgeCrop? _crop;
@@ -363,6 +405,7 @@ class _ExportDialogState extends State<_ExportDialog> {
       // A comp that cannot be read leaves the placeholder defaults; the export
       // itself will refuse with the engine's own words.
     }
+    _sampleRates = exportAudioRates().map((r) => r.toInt()).toList();
     _presets = exportPresetList();
     // The dialog opens on the first built-in — *Master*, the composition's own
     // frame at a worked-out bitrate — rather than a blank Custom: a fresh
@@ -454,10 +497,18 @@ class _ExportDialogState extends State<_ExportDialog> {
       rangeEndFrame: end,
       includeAudio: _audio,
       audioBitRate: _audioRate,
+      audioRate: _audioSampleRate,
+      audioDepth: _audioDepth,
+      audioChannels: _audioChannels,
       depth: _depth,
       alphaChannel: _alphaChannel,
       straightAlpha: _straightAlpha,
-      colourSpace: '',
+      colourSpace: _colourSpace,
+      resample: _resample,
+      renderGuides: _renderGuides,
+      motionBlur: _motionBlur,
+      retimeBlend: _retimeBlend,
+      useProxies: _useProxies,
       cropTop: _cropTop,
       cropLeft: _cropLeft,
       cropBottom: _cropBottom,
@@ -789,15 +840,24 @@ class _ExportDialogState extends State<_ExportDialog> {
                 t,
                 l10n.exportPresetName,
                 [
-                  SizedBox(
-                    width: exportPresetDropdown,
-                    child: HouseTextField(
-                      key: const ValueKey('export-preset-name'),
-                      controller: _presetName,
+                  // The field is the one control on this line that may give
+                  // ground: a saved preset's row carries a fourth button
+                  // (*Delete*), and 220 of field plus four buttons is eight
+                  // pixels more than the strip has. The buttons keep their
+                  // content width — that was the whole of K-487's fix — so the
+                  // field takes the difference and the list above it stays the
+                  // one the eye measures against.
+                  Flexible(
+                    child: SizedBox(
                       width: exportPresetDropdown,
-                      autofocus: true,
-                      fill: t.surface0,
-                      onSubmitted: (_) => _savePreset(),
+                      child: HouseTextField(
+                        key: const ValueKey('export-preset-name'),
+                        controller: _presetName,
+                        width: exportPresetDropdown,
+                        autofocus: true,
+                        fill: t.surface0,
+                        onSubmitted: (_) => _savePreset(),
+                      ),
                     ),
                   ),
                   _stripButton(t, 'export-preset-save', l10n.save, _savePreset),
@@ -913,21 +973,35 @@ class _ExportDialogState extends State<_ExportDialog> {
               labelColumn: exportLabelColumnPaired,
             ),
           ),
-          // Proxies and guide layers are document subsystems before they are
-          // export settings, and neither exists yet (K-479). The drawing shows
-          // them, so they are drawn — dead, named, and with a reason.
+          // Both default to the delivery answer rather than to the project's
+          // own: an export reads the originals (K-501) and leaves the guide
+          // layers out (K-497), whatever is switched on to work with.
           _columns(
             _row(
               t,
               l10n.exportProxies,
-              _dead(t, 'export-proxies', l10n.exportProxiesNone,
-                  l10n.tipExportNeedsProxies),
+              dialogDropdown<bool>(
+                t,
+                id: 'export-proxies',
+                value: _useProxies,
+                options: const [false, true],
+                label: (on) =>
+                    on ? l10n.exportProxiesAll : l10n.exportProxiesNone,
+                onChanged: (on) => _edit(() => _useProxies = on),
+              ),
             ),
             _row(
               t,
               l10n.exportGuideLayers,
-              _dead(t, 'export-guide-layers', l10n.exportAllOff,
-                  l10n.tipExportNeedsGuideLayers),
+              dialogDropdown<bool>(
+                t,
+                id: 'export-guide-layers',
+                value: _renderGuides,
+                options: const [false, true],
+                label: (on) =>
+                    on ? l10n.exportCurrentSettings : l10n.exportAllOff,
+                onChanged: (on) => _edit(() => _renderGuides = on),
+              ),
               labelColumn: exportLabelColumnPaired,
             ),
           ),
@@ -1038,21 +1112,41 @@ class _ExportDialogState extends State<_ExportDialog> {
             labelColumn: exportLabelColumnPaired,
           ),
         ),
-        // Both are comp-wide settings the export path has no override for: an
-        // export renders what the composition renders. Drawn dead rather than
-        // live, for the same reason proxies are.
+        // Both are overrides on the export's own throwaway snapshot (K-502).
+        // Motion blur has three answers because blur passes two gates — the
+        // composition's master switch and the layer's own check; Retime blend
+        // has two, because a layer's Nearest/Blend/Flow choice *is* its check
+        // and there is no comp-wide master for a third answer to speak to.
         _columns(
           _row(
             t,
             l10n.exportMotionBlur,
-            _dead(t, 'export-motion-blur', l10n.exportOnForCheckedLayers,
-                l10n.tipExportCompSetting),
+            dialogDropdown<int>(
+              t,
+              id: 'export-motion-blur',
+              value: _motionBlur,
+              options: const [0, 1, 2],
+              label: (v) => switch (v) {
+                0 => l10n.exportCurrentSettings,
+                1 => l10n.exportOnForCheckedLayers,
+                _ => l10n.exportOffForAllLayers,
+              },
+              onChanged: (v) => _edit(() => _motionBlur = v),
+            ),
           ),
           _row(
             t,
             l10n.exportRetimeBlend,
-            _dead(t, 'export-retime-blend', l10n.exportOnForCheckedLayers,
-                l10n.tipExportCompSetting),
+            dialogDropdown<int>(
+              t,
+              id: 'export-retime-blend',
+              value: _retimeBlend,
+              options: const [0, 1],
+              label: (v) => v == 0
+                  ? l10n.exportCurrentSettings
+                  : l10n.exportOffForAllLayers,
+              onChanged: (v) => _edit(() => _retimeBlend = v),
+            ),
             labelColumn: exportLabelColumnPaired,
           ),
         ),
@@ -1255,11 +1349,22 @@ class _ExportDialogState extends State<_ExportDialog> {
                   overflow: TextOverflow.ellipsis),
             ),
             const Spacer(),
+            // *Fast* is bilinear and *High* is Lanczos-3 widened by the shrink
+            // factor (K-498). Fast leads because it is what every export has
+            // always written, not because it is better.
             SizedBox(
               width: exportResampleWidth,
               height: dialogControlHeight,
-              child: _dead(t, 'export-resample', l10n.exportResampleHigh,
-                  l10n.tipExportOneResampler),
+              child: BareDropdown<String>(
+                key: const ValueKey('export-resample'),
+                value: _resample,
+                options: const ['', 'high'],
+                label: (v) => v == 'high'
+                    ? l10n.exportResampleHigh
+                    : l10n.exportResampleFast,
+                onChanged:
+                    _caps.video ? (v) => _edit(() => _resample = v) : null,
+              ),
             ),
           ]),
         ),
@@ -1317,10 +1422,13 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  /// Colour: the one transform this build performs, and the honest shape of the
-  /// one it does not. An OCIO output space is modelled all the way through
-  /// (`ColourSpace::Ocio`) and refused before a frame is rendered, so the row
-  /// names it and leaves it dead rather than pretending the choice is there.
+  /// Colour: the five built-in spaces this build transforms to, and the honest
+  /// shape of the one it does not. The list a format offers is the format's
+  /// own (K-498): a container that can state its colour carries all five, and
+  /// a still — which states none — is offered only the space an untagged file
+  /// is universally taken to be. An OCIO output space is modelled all the way
+  /// through (`ColourSpace::Ocio`) and refused before a frame is rendered, so
+  /// the row names it and leaves it dead rather than pretending it is there.
   Widget _colourGroup(LumitTheme t) => _group(
         t,
         ExportSection.colour,
@@ -1332,10 +1440,14 @@ class _ExportDialogState extends State<_ExportDialog> {
             dialogDropdown<String>(
               t,
               id: 'export-colour-space',
-              value: '',
-              options: const [''],
-              label: (_) => l10n.exportColourSpaceSrgb,
-              onChanged: (_) {},
+              value: _colourSpace,
+              options: _caps.colourSpaces.isEmpty
+                  ? [_colourSpace]
+                  : _caps.colourSpaces,
+              label: _colourSpaceLabel,
+              onChanged: _caps.colourSpaces.length > 1
+                  ? (v) => _edit(() => _colourSpace = v)
+                  : null,
             ),
           ),
           _row(
@@ -1344,9 +1456,30 @@ class _ExportDialogState extends State<_ExportDialog> {
             _dead(
                 t, 'export-ocio', l10n.exportColourOcio, l10n.tipExportAfterV1),
           ),
+          // What the container will actually do with the choice, said where
+          // the choice is made: a wide-gamut file carrying no label is read as
+          // sRGB and comes back looking wrong.
+          if (_caps.colourSpaces.length > 1)
+            _reading(t, l10n.exportColourStated,
+                key: const ValueKey('export-colour-tagging'))
+          else if (_caps.colourSpaces.isNotEmpty)
+            _reading(t, l10n.exportColourUntagged,
+                key: const ValueKey('export-colour-tagging')),
           _reading(t, l10n.exportColourNote),
         ],
       );
+
+  /// A stored colour-space name in the words the row shows. An OCIO config's
+  /// space is shown as it arrived — it is the user's own word, like a codec
+  /// name, and needs no table of ours.
+  String _colourSpaceLabel(String stored) => switch (stored) {
+        '' => l10n.exportColourSpaceSrgb,
+        'linear' => l10n.exportColourSpaceLinear,
+        'rec709' => l10n.exportColourSpaceRec709,
+        'rec2020' => l10n.exportColourSpaceRec2020,
+        'display-p3' => l10n.exportColourSpaceDisplayP3,
+        _ => stored,
+      };
 
   Widget _audioGroup(LumitTheme t) => _group(
         t,
@@ -1371,28 +1504,53 @@ class _ExportDialogState extends State<_ExportDialog> {
                 ),
               ),
               const SizedBox(width: 6),
-              // The engine mixes every export at 48 kHz, sixteen bits, stereo
-              // (`EXPORT_AUDIO_RATE`): three readings in the drawing's own
-              // faces, dead because there is nothing to choose.
+              // The three sound settings (K-493). The rate resamples at the
+              // source rather than after the mix; the width means something
+              // only for the uncompressed forms, so AAC offers sixteen alone
+              // rather than accepting a setting it cannot honour; and mono is
+              // the finished stereo mix folded down, once.
               SizedBox(
                 width: exportAudioRateWidth,
                 height: dialogControlHeight,
-                child: _dead(t, 'export-audio-sample-rate', l10n.exportAudio48k,
-                    l10n.tipExportOneMix),
+                child: BareDropdown<int>(
+                  key: const ValueKey('export-audio-sample-rate'),
+                  value: _audioSampleRate,
+                  options: _sampleRates,
+                  label: _sampleRateLabel,
+                  onChanged: _caps.audio && _audio
+                      ? (r) => _edit(() => _audioSampleRate = r)
+                      : null,
+                ),
               ),
               const SizedBox(width: 6),
               SizedBox(
                 width: exportAudioDepthWidth,
                 height: dialogControlHeight,
-                child: _dead(t, 'export-audio-depth', l10n.exportAudio16Bit,
-                    l10n.tipExportOneMix),
+                child: BareDropdown<int>(
+                  key: const ValueKey('export-audio-depth'),
+                  value: _audioDepth,
+                  options: _caps.audio24Bit ? const [16, 24] : const [16],
+                  label: (d) =>
+                      d >= 24 ? l10n.exportAudio24Bit : l10n.exportAudio16Bit,
+                  onChanged: _caps.audio && _caps.audio24Bit && _audio
+                      ? (d) => _edit(() => _audioDepth = d)
+                      : null,
+                ),
               ),
               const SizedBox(width: 6),
               SizedBox(
                 width: exportAudioLayoutWidth,
                 height: dialogControlHeight,
-                child: _dead(t, 'export-audio-layout', l10n.exportAudioStereo,
-                    l10n.tipExportOneMix),
+                child: BareDropdown<int>(
+                  key: const ValueKey('export-audio-layout'),
+                  value: _audioChannels,
+                  options: const [2, 1],
+                  label: (c) =>
+                      c == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
+                  onChanged: _caps.audio && _audio
+                      ? (c) => _edit(() => _audioChannels = c)
+                      : null,
+                ),
               ),
               const Spacer(),
               SizedBox(
@@ -1639,6 +1797,14 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
+  /// A sample rate in the drawing's own face — three fixed readings rather
+  /// than a formatted number, so the list reads as one column of kHz.
+  String _sampleRateLabel(int hz) => switch (hz) {
+        44100 => l10n.exportAudio44k,
+        96000 => l10n.exportAudio96k,
+        _ => l10n.exportAudio48k,
+      };
+
   String _qualityLabel(int divisor) => switch (divisor) {
         1 => l10n.exportQualityFull,
         2 => l10n.exportQualityHalf,
@@ -1691,6 +1857,17 @@ class _ExportDialogState extends State<_ExportDialog> {
       }
       _audio = stored.includeAudio;
       _audioRate = stored.audioBitRate.toInt();
+      // A preset written before these fields existed carries the defaults the
+      // engine fills in, so applying one is never a way to lose a setting.
+      _audioSampleRate = stored.audioRate == 0 ? 48000 : stored.audioRate;
+      _audioDepth = stored.audioDepth >= 24 ? 24 : 16;
+      _audioChannels = stored.audioChannels == 1 ? 1 : 2;
+      _colourSpace = stored.colourSpace;
+      _resample = stored.resample;
+      _renderGuides = stored.renderGuides;
+      _motionBlur = stored.motionBlur;
+      _retimeBlend = stored.retimeBlend;
+      _useProxies = stored.useProxies;
       _depth = stored.depth;
       _alphaChannel = stored.alphaChannel;
       _straightAlpha = stored.straightAlpha;

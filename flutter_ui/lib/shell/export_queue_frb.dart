@@ -14,6 +14,14 @@
 // over; this window asks what is in it a few times a second and draws the
 // answer. The one bridge call in a rebuild path would be that ask, so it is not
 // in one: the timer reads, and `build` draws what was read.
+//
+// **A waiting row is dragged to move it** (K-503). The order of the queue is
+// the order the exports run in, and dragging the row is the gesture the rest
+// of the application already uses to reorder a list — layers in the Timeline,
+// items in the Project panel, effects in a stack. Only what is still waiting
+// can be picked up: the engine refuses a row that is running, has run, or has
+// gone, in its own words, and the refusal is nothing to draw because the next
+// poll shows the list unchanged.
 
 import 'dart:async';
 
@@ -43,12 +51,14 @@ const Duration _pollInterval = Duration(milliseconds: 250);
 Future<void> showExportQueueFrb({
   required BuildContext context,
   List<BridgeExportQueueItem> Function()? list,
+  void Function({required int id, required int index})? move,
 }) =>
     showLumitModal<void>(
       context: context,
       id: 'export-queue',
       builder: (close) => _ExportQueue(
         list: list,
+        move: move,
         onClose: () => close(null),
       ),
     );
@@ -56,9 +66,13 @@ Future<void> showExportQueueFrb({
 class _ExportQueue extends StatefulWidget {
   /// The read seam, injected by tests so no engine has to hold a queue.
   final List<BridgeExportQueueItem> Function()? list;
+
+  /// The reorder seam, injected beside it for the same reason.
+  final void Function({required int id, required int index})? move;
   final VoidCallback onClose;
 
-  const _ExportQueue({required this.list, required this.onClose});
+  const _ExportQueue(
+      {required this.list, required this.move, required this.onClose});
 
   @override
   State<_ExportQueue> createState() => _ExportQueueState();
@@ -120,12 +134,21 @@ class _ExportQueueState extends State<_ExportQueue> {
               : ConstrainedBox(
                   constraints:
                       const BoxConstraints(maxHeight: exportQueueListMax),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [for (final item in _items) _row(t, item)],
-                    ),
+                  child: CustomScrollView(
+                    shrinkWrap: true,
+                    slivers: [
+                      SliverReorderableList(
+                        itemCount: _items.length,
+                        itemBuilder: (context, index) =>
+                            _row(t, _items[index], index),
+                        // `onReorderItem` gives the place the row lands in the
+                        // list without it, which is the index the engine's own
+                        // move takes.
+                        onReorderItem: _move,
+                        proxyDecorator: (child, index, animation) =>
+                            _lifted(t, child),
+                      ),
+                    ],
                   ),
                 ),
         ),
@@ -160,9 +183,57 @@ class _ExportQueueState extends State<_ExportQueue> {
     _refresh();
   }
 
+  /// Move a waiting item to another place in the list. The engine refuses
+  /// anything else — running, run, or gone — and its refusal needs no notice
+  /// here, because the list that comes back is the answer.
+  void _move(int from, int to) {
+    final items = _items;
+    if (from < 0 || from >= items.length) return;
+    try {
+      (widget.move ?? exportQueueMove)(id: items[from].id, index: to);
+    } catch (_) {
+      // The queue turned over under the drag; re-reading is the recovery.
+    }
+    _refresh();
+  }
+
+  /// One item's row, and — while it is waiting — the grip that moves it.
+  ///
+  /// The lift is Flutter's own reorderable machinery rather than a bare
+  /// `Draggable`: a plain draggable inside a scrolling list loses the gesture
+  /// to the list itself, and this is the mechanism that both wins it and
+  /// scrolls the list when the row is carried past its edge. A row that is not
+  /// waiting has no listener at all, so it can be read and dropped past but
+  /// never picked up.
+  Widget _row(LumitTheme t, BridgeExportQueueItem item, int index) {
+    final row = _rowFace(t, item);
+    return KeyedSubtree(
+      key: ValueKey<String>('export-queue-row-${item.id}'),
+      child: item.state is BridgeExportQueueState_Waiting
+          // The row is picked up anywhere along it, not only where there
+          // happens to be a letter: a row of text and gaps hit-tests only on
+          // its text, and half of it would be dead to the grip.
+          ? ReorderableDragStartListener(
+              index: index,
+              child: Listener(behavior: HitTestBehavior.opaque, child: row),
+            )
+          : row,
+    );
+  }
+
+  /// The row while it is being carried: the panel's own surface under an
+  /// accent edge, rather than the Material card the default lift draws.
+  Widget _lifted(LumitTheme t, Widget child) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: t.surface2,
+          border: Border.all(color: t.accent),
+        ),
+        child: child,
+      );
+
   /// One item: what it is, where it goes, how it is getting on, and the mark
   /// that takes it off the list.
-  Widget _row(LumitTheme t, BridgeExportQueueItem item) => SizedBox(
+  Widget _rowFace(LumitTheme t, BridgeExportQueueItem item) => SizedBox(
         height: exportQueueRow,
         child: Row(
           key: ValueKey<String>('export-queue-item-${item.id}'),
