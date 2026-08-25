@@ -1,6 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
 import Wordmark from "../components/Wordmark.astro";
+import HeroField from "../components/HeroField.astro";
 
 // The two screenshot cards under the wide one. Both are real captures of the
 // application, cropped and re-encoded for the web (web/public/shots/).
@@ -134,6 +135,7 @@ const roadmap = [
   {/* Half the window, and never more than the drawing's 520 however tall the
       screen is - the hero is a band, not a page. */}
   <section class="hero relative isolate -mt-16 flex min-h-[clamp(420px,54vh,560px)] flex-col items-center justify-center overflow-hidden px-5 pt-24 pb-16 text-center">
+    <HeroField />
     <div class="grain pointer-events-none absolute inset-0 opacity-90 mix-blend-overlay" aria-hidden="true"></div>
 
     <h1 class="relative mb-0 w-[min(440px,78vw)]">

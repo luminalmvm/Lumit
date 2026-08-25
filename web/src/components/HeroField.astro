@@ -1,0 +1,180 @@
+---
+// The hero's ground, drawn rather than painted.
+//
+// In plain terms: instead of three fixed smears of colour, a small program runs
+// on the graphics card for every pixel of the hero, sixty times a second, and
+// works out that pixel's colour from its position and the clock. Nothing is
+// stored - there is no image and no video - so it never repeats and costs a few
+// kilobytes. The technique is the one Caddis uses on their own hero.
+//
+// The recipe is the standard one for a slow-moving field: value noise, summed
+// at four sizes (fbm), then used twice to bend its own coordinates before the
+// final lookup. That bending is what turns noise into something that looks like
+// it is flowing rather than fizzing.
+//
+// The same three hues as the static wash it replaces, so the page's colour does
+// not change - only its stillness. The CSS gradient stays underneath as the
+// ground for anyone whose browser gives us no WebGL, and the grain layer over
+// the top is unchanged.
+---
+
+<canvas class="field" data-field aria-hidden="true"></canvas>
+
+<style>
+  .field {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* The field is a soft wash; drawing it at half size and letting the browser
+       scale it up costs a quarter of the pixels and looks identical. */
+    image-rendering: auto;
+  }
+</style>
+
+<script>
+  const VERT = `
+    attribute vec2 a;
+    void main() { gl_Position = vec4(a, 0.0, 1.0); }
+  `;
+
+  const FRAG = `
+    precision mediump float;
+    uniform vec2 u_res;
+    uniform float u_t;
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+
+    // Value noise: one random number per lattice corner, smoothly interpolated.
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x),
+        u.y
+      );
+    }
+
+    // Four octaves, each half the size and half the strength of the last.
+    float fbm(vec2 p) {
+      float v = 0.0;
+      float a = 0.5;
+      for (int i = 0; i < 4; i++) {
+        v += a * noise(p);
+        p *= 2.0;
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    void main() {
+      vec2 uv = gl_FragCoord.xy / u_res;
+      vec2 p = vec2(uv.x * (u_res.x / u_res.y), uv.y) * 1.7;
+      float t = u_t * 0.035;
+
+      // Bend the coordinates by the noise twice over before the final lookup.
+      vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t));
+      vec2 r = vec2(
+        fbm(p + 2.0 * q + vec2(1.7, 9.2) + 0.15 * t),
+        fbm(p + 2.0 * q + vec2(8.3, 2.8) - 0.13 * t)
+      );
+      float f = fbm(p + 2.0 * r);
+
+      vec3 ink    = vec3(0.059, 0.078, 0.133);  // #0f1422
+      vec3 indigo = vec3(0.173, 0.247, 0.478);  // #2c3f7a
+      vec3 violet = vec3(0.227, 0.165, 0.420);  // #3a2a6b
+      vec3 wine   = vec3(0.416, 0.184, 0.247);  // #6a2f3f
+
+      vec3 col = ink;
+      col = mix(col, indigo, smoothstep(0.15, 0.85, f) * 0.95);
+      col = mix(col, violet, clamp(length(q) - 0.35, 0.0, 1.0) * 1.1);
+      // The wine only ever appears low, as it does in the wash it replaces.
+      col = mix(col, wine, clamp(r.x - 0.4, 0.0, 1.0) * 1.4 * (1.0 - uv.y));
+
+      // Ease off at the very edges so the band has no seam of its own.
+      float edge = smoothstep(0.0, 0.18, uv.y) * smoothstep(0.0, 0.10, 1.0 - uv.y);
+      col = mix(ink, col, 0.35 + 0.65 * edge);
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  const canvas = document.querySelector<HTMLCanvasElement>("[data-field]");
+  const gl = canvas?.getContext("webgl", { antialias: false, alpha: false });
+
+  // No WebGL, no canvas: the CSS gradient underneath is the whole fallback.
+  if (!canvas || !gl) {
+    canvas?.remove();
+  } else {
+    const compile = (type: number, src: string) => {
+      const s = gl.createShader(type)!;
+      gl.shaderSource(s, src);
+      gl.compileShader(s);
+      return s;
+    };
+    const prog = gl.createProgram()!;
+    gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+    gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+    gl.linkProgram(prog);
+
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      canvas.remove();
+    } else {
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 3, -1, -1, 3]),
+        gl.STATIC_DRAW,
+      );
+      const a = gl.getAttribLocation(prog, "a");
+      gl.enableVertexAttribArray(a);
+      gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+      const uRes = gl.getUniformLocation(prog, "u_res");
+      const uT = gl.getUniformLocation(prog, "u_t");
+
+      const draw = (t: number) => {
+        gl.uniform2f(uRes, canvas.width, canvas.height);
+        gl.uniform1f(uT, t);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      };
+
+      const resize = () => {
+        canvas.width = Math.max(1, Math.round(canvas.clientWidth * 0.5));
+        canvas.height = Math.max(1, Math.round(canvas.clientHeight * 0.5));
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      };
+      new ResizeObserver(() => {
+        resize();
+        draw(0);
+      }).observe(canvas);
+      resize();
+
+      // Reduced motion gets the field, held still - the colour is part of the
+      // page, the movement is the part that is optional.
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        draw(0);
+      } else {
+        // The clock only runs while the hero is on screen; scrolled past, the
+        // page costs nothing. requestAnimationFrame already stops on a hidden
+        // tab, so that case needs no code.
+        let frame = 0;
+        const tick = (ms: number) => {
+          draw(ms / 1000);
+          frame = requestAnimationFrame(tick);
+        };
+        new IntersectionObserver((entries) => {
+          for (const e of entries) {
+            cancelAnimationFrame(frame);
+            if (e.isIntersecting) frame = requestAnimationFrame(tick);
+          }
+        }).observe(canvas);
+      }
+    }
+  }
+</script>
