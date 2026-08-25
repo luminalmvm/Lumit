@@ -116,6 +116,15 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
             ("corner_pin", "lower_left_x") => 0.0,
             ("corner_pin", "lower_left_y" | "lower_right_y") => h * 0.95,
             ("corner_pin", "lower_right_x") => w,
+            // Planar track's quad (docs/08 §3.87, K-579) is the same default
+            // for the same reason, and a rectangle in the middle third rather
+            // than the corner pin's near-full-frame keystone: a fresh quad is
+            // a thing to drag onto a surface, and one starting at the frame's
+            // own edges is harder to grab than one starting inside it.
+            ("planar_track", "upper_left_x" | "lower_left_x") => w * 0.34,
+            ("planar_track", "upper_right_x" | "lower_right_x") => w * 0.66,
+            ("planar_track", "upper_left_y" | "upper_right_y") => h * 0.34,
+            ("planar_track", "lower_left_y" | "lower_right_y") => h * 0.66,
             // Wave 2's Transitions batch (docs/08 §3.71) joins them: an Iris
             // wipe's centre is px@comp for the same reason; its two radii
             // are lengths, not positions, so they need no centring.

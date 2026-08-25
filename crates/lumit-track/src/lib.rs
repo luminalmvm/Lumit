@@ -66,6 +66,7 @@ mod exclude;
 mod geom;
 mod klt;
 mod pairs;
+mod planar;
 mod pyramid;
 mod segment;
 mod solve;
@@ -79,7 +80,13 @@ pub use geom::{
     fundamental_eight_point, fundamental_seven_point, homography_dlt, project, sampson_distance,
     transfer_distance, Mat3,
 };
-pub use pairs::{estimate_pair, select_keyframes, GeometrySettings, PairGeometry, PairVerdict};
+pub use pairs::{
+    estimate_pair, homography_ransac, select_keyframes, GeometrySettings, PairGeometry, PairVerdict,
+};
+pub use planar::{
+    quad_outline, solve_planar, solve_planar_cancellable, PlanarError, PlanarFrame, PlanarSettings,
+    PlanarTrack, Quad,
+};
 pub use segment::{
     detect_zoom, segment_dynamic_tracks, SegmentSettings, Segmentation, TrackSplit, ZoomBoundary,
     ZoomKind, ZoomSettings,

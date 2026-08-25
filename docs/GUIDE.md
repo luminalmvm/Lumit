@@ -10761,3 +10761,103 @@ corrections are ordinary keyframes and were never anything else.
 One thing to expect: the dots of the point cloud are drawn where the *analysis* found those
 features, so a corrected camera's dots will no longer sit exactly on them. That is the cloud
 being honest about what was measured rather than a fault.
+
+## 27. Planar tracking, in plain terms
+
+Camera tracking (§26) answers a big question: where was the camera, in three dimensions, on
+every frame. Planar tracking answers a small one, and answers it much more directly: **where
+is this one flat thing**.
+
+The flat thing is usually a screen. Somebody in the shot is holding a phone and you want your
+own picture on it. Or it is a poster on a wall, a road sign, a laptop lid, a billboard. The
+gesture is always the same: put your layer onto that surface so it looks like it was always
+there, and keep it there while the camera and the surface move.
+
+### Why flatness is such good news
+
+A flat surface filmed by a camera has a property that makes this whole job tractable. However
+the camera moves, and however the surface turns and tilts away, what happens to the *picture*
+of that surface is always the same kind of distortion — the four corners move, and everything
+between them stretches to follow. Nothing else. No bending, no folding.
+
+That distortion is exactly what a **Corner pin** does: drag the four corners of a layer
+anywhere and the picture stretches between them. So a flat surface's whole motion, on any
+frame, is just four points. Not a shape, not a mesh, not a depth map. Four points.
+
+That is the entire idea. The tracker never asks "where did the phone go". It asks "where are
+these four corners, this frame".
+
+### What you do
+
+Drop a **Planar track** onto the footage. It draws nothing — it is a set of buttons and a
+readout, like the Camera track. Put its four points round the flat thing as it appears on the
+clip's **first frame**. Choose which layer the result should land on in the **Pin layer** row.
+Press **Analyse**, and carry on working while it runs.
+
+When it is done, press **Create corner pin**. A Corner pin appears on the layer you named,
+with its four corners keyframed to follow the surface — one keyframe per frame, real ones,
+which the graph editor draws and undo takes back. From that moment it is an ordinary effect
+you own: soften a corner, ease a hit, trim the tail, delete it and start again.
+
+### How it follows the surface
+
+Inside the four points, the tracker does what it always does: picks out hundreds of small
+distinctive specks and follows them from frame to frame. It is told to work only inside your
+quad — which is the same instruction a mask already gives it when you invert one, so there is
+nothing new happening there. Any masks *you* have drawn still apply inside the quad, which is
+how you exclude the hand crossing the phone or the reflection sliding over the sign.
+
+Then, for each frame, it asks: what four-corner distortion explains where *all* of those
+specks ended up? Specks that disagree with the majority — one that crawled onto the hand, one
+that latched onto a reflection — are set aside by the same robust majority-finding the camera
+solve uses. What survives decides the answer, and the four corners are pushed through it.
+
+### The part worth understanding: drift
+
+There is an obvious way to do this and it is subtly wrong. You could work out how frame 1
+became frame 2, then how frame 2 became frame 3, and multiply as you go. It works — for about
+fifty frames. Every step's tiny error gets multiplied into every step after it, and by frame
+three hundred your quad has quietly slid off the phone. Every compositor has seen this happen
+and has re-tracked a shot because of it.
+
+Lumit does not chain. It measures **every frame against the first one** — the frame you drew
+the quad on. Frame three hundred is compared directly with frame one, so its error has nothing
+to do with frame two's. No accumulation, no slide.
+
+There is a catch, and it is handled openly. The specks from the first frame do not last for
+ever: they leave the picture, the surface turns away, someone walks past. When too few of them
+are left to trust the answer, the tracker **re-anchors** — it starts measuring against a recent
+frame instead, and remembers the one distortion that gets from the first frame to that new
+anchor. Error can now creep in, but only once per re-anchor rather than once per frame, which
+over a long shot is the difference between a handful of tiny errors and thousands of them.
+
+The status line tells you how many times that happened. **Zero re-anchors** means every frame
+was measured against the frame you drew on, and there is no accumulated drift anywhere in the
+track. A few re-anchors means the far end may have crept a little, and if the pin looks off at
+the end of the shot, that is where to look first.
+
+### When it says no
+
+Two ways it will refuse, both calmly, both leaving the shot exactly as it was.
+
+**Too little inside the quad to follow** means what it says: you have drawn round a blank wall,
+a patch of sky, a piece of picture with no detail in it. There is nothing there to follow and
+no amount of arithmetic invents it. Make the quad bigger, or pick a surface with texture.
+
+**Not one flat surface** means the quad contains things moving against each other — two objects
+at different depths, a curved surface, a reflection sliding over a real one. The specks
+disagree in a way no single four-corner distortion can explain, and rather than pick one and
+pretend, the tracker says so.
+
+And, as with a camera track, a planar track can cover only **part** of its clip: if the surface
+becomes unfollowable half way through, the run stops there, keeps the half that worked, and the
+thin bar above the status line shows you exactly how far it got. Half a shot honestly measured
+is worth having.
+
+### What it does not do yet
+
+The four points are numbers in the panel; dragging them on the picture itself is not built.
+The quad is read as it stands at the start — you cannot keyframe it, and that is deliberate
+rather than missing: it describes where the surface *is on the reference frame*, and a moving
+starting shape would be asking the tracker to chase a target from a moving chair. And it works
+on footage layers, not on precomps.

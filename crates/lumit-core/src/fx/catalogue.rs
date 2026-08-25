@@ -84,6 +84,7 @@ use super::effects::{
     offset::{Offset, OffsetDef},
     particulate::{Particulate, ParticulateDef},
     photo_filter::{PhotoFilter, PhotoFilterDef},
+    planar_track::{PlanarTrack, PlanarTrackDef},
     point_control::{PointControl, PointControlDef},
     polar_coordinates::{PolarCoordinates, PolarCoordinatesDef},
     posterize::{Posterize, PosterizeDef},
@@ -210,6 +211,12 @@ crate::catalogue![
     // handle for a background analysis rather than an image operation, which is
     // exactly the kind of thing Utility is for.
     CameraTrackDef => CameraTrack,
+    // Planar track (docs/08 §3.87, K-579), beside it: the same substrate asked
+    // a different question — where one flat surface is, rather than where the
+    // camera was — and a handle for a background analysis in exactly the same
+    // way, which is what puts it here rather than in Distortion beside the
+    // Corner pin it writes.
+    PlanarTrackDef => PlanarTrack,
     InvertDef => Invert,
     TintDef => Tint,
     CurvesDef => Curves,

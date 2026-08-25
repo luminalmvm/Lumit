@@ -10350,6 +10350,135 @@
       "matte_role": "none"
     },
     {
+      "slug": "planar-track",
+      "match_name": "planar_track",
+      "label": "Planar track",
+      "version": 1,
+      "category": "Utility",
+      "category_slug": "utility",
+      "params": [
+        {
+          "id": "analyse",
+          "label": "Analyse",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "cancel",
+          "label": "Cancel",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "pin",
+          "label": "Create corner pin",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "upper_left_x",
+          "label": "Upper left x",
+          "kind": "float",
+          "unit": "px",
+          "default": 660.0,
+          "slider_min": -1920.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "upper_left_y",
+          "label": "Upper left y",
+          "kind": "float",
+          "unit": "px",
+          "default": 370.0,
+          "slider_min": -1080.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "upper_right_x",
+          "label": "Upper right x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1260.0,
+          "slider_min": -1920.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "upper_right_y",
+          "label": "Upper right y",
+          "kind": "float",
+          "unit": "px",
+          "default": 370.0,
+          "slider_min": -1080.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "lower_left_x",
+          "label": "Lower left x",
+          "kind": "float",
+          "unit": "px",
+          "default": 660.0,
+          "slider_min": -1920.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "lower_left_y",
+          "label": "Lower left y",
+          "kind": "float",
+          "unit": "px",
+          "default": 710.0,
+          "slider_min": -1080.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "lower_right_x",
+          "label": "Lower right x",
+          "kind": "float",
+          "unit": "px",
+          "default": 1260.0,
+          "slider_min": -1920.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "lower_right_y",
+          "label": "Lower right y",
+          "kind": "float",
+          "unit": "px",
+          "default": 710.0,
+          "slider_min": -1080.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "pin_layer",
+          "label": "Pin layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "density",
+          "label": "Feature density",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Low",
+            "Normal",
+            "High"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "use_masks",
+          "label": "Use masks",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
       "slug": "invert",
       "match_name": "invert",
       "label": "Invert",

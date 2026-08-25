@@ -111,6 +111,7 @@ Core colour
 Core radius
 Corner pin
 Count
+Create corner pin
 Curves
 Custom
 Cut
@@ -426,9 +427,11 @@ Perlin
 Phase
 Phase offset
 Photo filter
+Pin layer
 Pin light
 Pinning
 Placement
+Planar track
 Point
 Point control
 Point x

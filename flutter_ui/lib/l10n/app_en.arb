@@ -284,6 +284,18 @@
   "@fxCornerPin": {
     "description": "Effect name in the Add effect menu — the picture pulled onto four points."
   },
+  "fxCreateCornerPin": "Create corner pin",
+  "@fxCreateCornerPin": {
+    "description": "Effect controls — a button on Planar track: puts a Corner pin effect on the chosen layer, keyframed to the tracked surface."
+  },
+  "fxPinLayer": "Pin layer",
+  "@fxPinLayer": {
+    "description": "Effect controls — a control on Planar track: which layer the Create corner pin button puts its Corner pin on."
+  },
+  "fxPlanarTrack": "Planar track",
+  "@fxPlanarTrack": {
+    "description": "Effect name in the Add effect menu — follows one flat surface through a shot and produces corner-pin data."
+  },
   "fxDirectionX": "Direction x",
   "@fxDirectionX": {
     "description": "Effect controls — a control on Lightning: where the bolt is aimed, horizontally."
@@ -7836,6 +7848,29 @@
   "trackFailedNoSolve": "The shot does not carry a camera move that could be solved",
   "@trackFailedNoSolve": {
     "description": "Camera track status line when the analysis was refused for any other reason."
+  },
+  "trackFailedNotPlanar": "What is inside the shape is not one flat surface",
+  "@trackFailedNotPlanar": {
+    "description": "Planar track status line when the track was refused: the four points enclose something that is not flat, or whose parts move against each other."
+  },
+  "planarSolvingSurface": "Working out the surface",
+  "@planarSolvingSurface": {
+    "description": "Planar track status line in Effect controls: the frames are in and the surface's four corners are being computed."
+  },
+  "planarTracked": "Surface tracked over {frames} frames",
+  "@planarTracked": {
+    "description": "Planar track status line when a whole track is in hand. {frames} is a frame count.",
+    "placeholders": { "frames": { "type": "int" } }
+  },
+  "planarPartial": "Tracked {frames} of {total} frames — the surface could not be followed further",
+  "@planarPartial": {
+    "description": "Planar track status line when the track stopped part-way through the clip: the first {frames} frames carry the surface and the rest of the clip does not. Both numbers are frame counts.",
+    "placeholders": { "frames": { "type": "int" }, "total": { "type": "int" } }
+  },
+  "planarReanchored": "{count, plural, =1{Re-anchored once, so the far end may drift a little} other{Re-anchored {count} times, so the far end may drift a little}}",
+  "@planarReanchored": {
+    "description": "Planar track status line, under the main one, when the measurement had to be re-anchored because the reference frame's features ran out. Each re-anchor adds a little accumulated error towards the end of the shot.",
+    "placeholders": { "count": { "type": "int" } }
   },
   "trackCreateCamera": "Create camera",
   "@trackCreateCamera": {

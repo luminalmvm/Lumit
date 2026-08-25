@@ -61,6 +61,7 @@ import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_panel.dart' show graphNodeKey, graphNoStream;
 import 'camera_track_display_frb.dart';
+import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
@@ -1738,6 +1739,17 @@ Widget? customEffectDisplay(
           onChanged: onChanged,
           pressed: pressed,
           corrected: trackCorrected,
+        ),
+      // Planar track's display is the same kind of thing and not the same
+      // thing (K-579): a status, but about a *surface* rather than a camera,
+      // and filed under this instance rather than under the media — which is
+      // why it is the one custom display that needs its effect's own id.
+      'planar_track' => PlanarTrackDisplayFrb(
+          key: ValueKey<String>('fx-planar-track-display-$effectId'),
+          layer: layer,
+          effectId: effectId,
+          onChanged: onChanged,
+          pressed: pressed,
         ),
       _ => null,
     };

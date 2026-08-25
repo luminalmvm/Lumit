@@ -2,8 +2,8 @@
 
 **Decision:** K-415 (classical, global, zoom-aware; learned trackers are a plugin
 road). **Related:** K-248 (the tracker runs on full, unaltered footage), K-408 (mask
-geometry reaches the engine), docs/08 §7's Tracker and Corner pin rows,
-docs/16-ROADMAP Phase 5. This note pins the algorithms, the crate shape, and the test
+geometry reaches the engine), K-579 (the planar tracker and its Corner pin, §6),
+docs/08 §4's Tracker and Corner pin rows, docs/16-ROADMAP Phase 5. This note pins the algorithms, the crate shape, and the test
 plan so they are not re-derived per phase.
 
 ## In plain terms
@@ -36,6 +36,7 @@ between frames.
 | **2 — two-view** | Normalised 8-point/7-point fundamental, LO-RANSAC, keyframe selection, epipolar-based dynamic-track segmentation, the zoom-burst detector. | **Built** (see §3's "As built") |
 | **3 — solve** | Rotation averaging → global positions → triangulation → sparse-Schur Levenberg–Marquardt bundle adjustment with per-segment focal. | **Built** (see §4's "As built") |
 | **4 — surface** | K-417's shape: the Camera track *effect* (identity render, Analyse/Cancel actions, status), the background analysis job keyed to (media, settings) with the sidecar `track/` cache, the solve-linked dynamic Camera layer reading through the comp→clip→source time chain, Convert to keyframes, the point-cloud overlay with select → Null/Solid, and `ParamKind::Action`. 2D track → keyframed transform / corner-pin export rides the same store. | **Built** (§5a, §5b, §5c) |
+| **4b — planar** | K-579's shape: the Planar track *effect*, a quad followed as a homography per frame against the reference frame, filed under the effect instance in the same store and sidecar, with **Create corner pin** writing the four corner pairs onto another layer as keyframes. | **Built** (§6) |
 
 Phase 1 first and alone: every later phase's quality is decided by track quality.
 
@@ -1092,6 +1093,233 @@ next honest step.
   of the median, so ±60 % would have passed a camera that jumped half a step at
   the cut.
 - Real clips (the flow-quality staging folder) are the eyeball harness, not CI.
+
+## 6. The planar tracker, as built
+
+`crates/lumit-track/src/planar.rs`, with the render-side job in
+`crates/lumit-render/src/track.rs`, the model half in `crates/lumit-core/src/track.rs`
+and the surface in `crates/lumit-bridge/src/api/track.rs` and
+`flutter_ui/lib/panels/planar_track_display_frb.dart` (2026-08-25, K-579). Phases 1–4
+answer *where the camera was*. This answers *where one flat thing is*, which is a smaller
+question with a much shorter route to it — and the route reuses every line of phase 1.
+
+### In plain terms
+
+Somebody in the shot is holding a phone and you want your own picture on its screen. The
+phone is **flat**, and a flat thing filmed by a camera has a very convenient property:
+however the camera moves and however the phone turns, what it does to the *picture* of that
+surface is always the same kind of warp — a homography, the four-corner projective stretch
+a Corner pin already applies. Eight numbers describe it completely.
+
+So the job is never "where did the phone go". It is "which eight numbers, this frame".
+
+### The recipe
+
+1. The user puts the effect's four points round the flat thing on the clip's **first
+   frame** — the *reference frame*, which everything else is measured against.
+2. The ordinary [`Tracker`] follows specks, confined to the quad. Confining it needs no new
+   mechanism: an **inverted** `ExclusionMask` already means "the tracker works only within
+   this shape" (K-408, §2), so the quad is one region prepended to the layer's own masks.
+   Those still apply *inside* it, which is how the hand crossing the phone is excluded.
+3. For each later frame, take `TrackSet::correspondences(anchor, frame)` — every speck
+   present on both — and fit a homography robustly: `homography_ransac`, which is the
+   LO-RANSAC of §3 over four-point DLT samples with symmetric transfer distance, under the
+   same frame-sized conditioning and with the same seed stream `estimate_pair` gives its
+   homography.
+4. Push the four corners through the composed reference→frame homography. Those are the
+   answer.
+
+The surface is `solve_planar(&TrackSet, reference_frame, quad, source_size,
+&PlanarSettings) -> Result<PlanarTrack, PlanarError>`, with
+`solve_planar_cancellable` taking a `&dyn Fn() -> bool` asked **between frames** — the
+crate's own cancellation shape, as `solve_camera_cancellable` is (§5b). `PlanarTrack` is
+`reference_frame`, `reference_quad`, one `PlanarFrame` per followed frame (its corners,
+its inlier count, whether it was re-anchored) and the run's `reanchors` count.
+`PlanarError` is a refusal, never a fault: `TooFewFeatures`, `NotPlanar`, `Cancelled`.
+
+### Drift: re-anchored, not chained
+
+The obvious implementation warps frame 1 onto frame 2, frame 2 onto frame 3, and multiplies
+as it goes. It is also the one that **drifts**: every step's small error is multiplied into
+every step after it, and by frame three hundred the quad has walked off the phone. Measuring
+each frame against the *reference* frame instead makes every frame's error independent —
+frame three hundred is no worse than frame two, because nothing about frame two went into
+it.
+
+That is what shipped, and it is what the tests pin: a clean ten-frame slide comes back with
+`reanchors == 0` and every `PlanarFrame::reanchored` false, which a chained implementation
+could not produce.
+
+The price is real and is paid for explicitly. The reference frame's specks die out — they
+leave the picture, the surface turns away, someone walks in front — so the
+reference-anchored correspondence set thins. When it falls below `reanchor_below` (12
+inliers), the run **re-anchors**: it adopts the *previous* frame as the anchor, keeps the
+composed reference→previous homography it has already paid for, and refits. Error then
+accumulates once per re-anchor rather than once per frame, which over a long shot is the
+difference between a handful of small errors and thousands. The count crosses the bridge
+and the panel says it, because it is the one number that says how much to trust the far
+end of a track.
+
+Six things are decisions under that, rather than transcription:
+
+1. **A re-anchor is tried once per frame and only if it is better.** The retry must clear
+   `min_inliers` *and* beat what the current anchor managed; otherwise the old anchor is
+   kept. A fresh anchor that cannot explain the very next frame either means the surface has
+   gone, and a third attempt would be looking for it in the same place.
+2. **`min_inliers` is six, and it is arithmetic rather than taste.** Four correspondences
+   are the homography's minimal sample, so a fit through exactly four has nothing left over
+   to disagree with it; six is the smallest set that is *verified*, with two observations
+   spare. `reanchor_below` sits above it (12) deliberately: re-anchoring while the fit is
+   still sound costs one composition's error, and doing it after the fit has gone soft costs
+   the frames in between as well.
+3. **A run that stops being followable ends there**, with the span that worked returned as a
+   whole answer about it — §5d's shape, met again. The frames after such a boundary are not
+   a poorer answer, they are no answer. What says the track is partial is the relation
+   between its span and the clip's length, which is `PlanarSolved::is_partial`, one
+   comparison, exactly as `Solved::is_partial` is.
+4. **`quad_outline` reorders the corners, and it has to.** [`Quad`] is in Corner pin's
+   declaration order — upper left, upper right, lower left, lower right — and walking a
+   polygon in that order draws a **bow tie**: a self-crossing outline whose even-odd test
+   excludes the middle of the quad and includes two triangles outside it. One reordering, in
+   one place, rather than a second convention every caller has to remember.
+5. **`warp_quad` refuses a corner that maps to infinity** rather than warping the other
+   three. A quad with one corner on the projection's horizon is not a quad, and half a
+   warped one would be a silent lie about where the surface is.
+6. **The two refusals are told apart by whether there were correspondences at all.** No
+   correspondences over the first pair is a starved patch (`TooFewFeatures`);
+   correspondences that never agreed on a warp is a surface that is not one (`NotPlanar`).
+   Both are refusals; only the second means "you drew the quad round something that moves
+   against itself".
+
+### The job, the store and the sidecar
+
+One branch, taken **after** the frames have been followed. `Job` gained a `JobKind` —
+`Camera`, or `Planar { quad }` — and everything above that branch is untouched: the same
+decode, the same detector, the same per-frame mask flatten, the same
+`MIN_CARRIED` severance check, the same progress readings, the same cancellation flag.
+`analyse` returns an `Answer` (`Camera(CameraSolve)` or `Planar(PlanarTrack)`), which is
+also the sidecar's body.
+
+Four things worth stating:
+
+1. **A planar track is filed under the effect instance, not the media.** A camera solve
+   describes a *file* and two layers cutting the same shot are one analysis; a planar track
+   describes the *quad*, and two Planar tracks on one clip are two answers of which a
+   media-keyed store could hold only one. `Job::media` is therefore documented as "what the
+   answer is filed under" and carries the `EffectInstance` id for a planar job. The store is
+   a second table (`planars()`), read through `lumit_core::track::PlanarTrackStore` —
+   `planar_range` and `planar_corners`, the two-method shape `CameraSolveStore` is.
+2. **The quad rides in `MaskTrack`, which is where it belongs.** It is a region deciding
+   where features may live, so `MaskTrack::within(outline)` carries it, `at(t)` prepends it
+   inverted, and `feed` hashes it into the analysis key with the rest of the geometry —
+   which means a re-drawn quad names a different file and cannot read a stale answer back.
+   Putting it in `AnalysisSettings` would have needed that struct to stop being `Eq`, and
+   would have been a second place for geometry to live.
+3. **`FORMAT_VERSION` went to 3** for the `Answer` enum. Version 2 records are orphaned —
+   one re-analysis each — which is the disposal that constant exists to perform, and is
+   cheaper than a second magic, a second record type and a second reader kept in step.
+4. **The warm pass reads planar tracks too**, one job per effect instance beside the one
+   job per media the camera half asks for. There is nothing to deduplicate on the planar
+   side, because two instances are two answers by construction.
+
+### The Corner pin it writes
+
+`lumit_core::track::corner_pin_from_track(doc, comp, tracked, effect, target, store)`
+builds one `Op::SetLayerEffects` appending a Corner pin to `target`, its eight point
+parameters keyframed one key per composition frame of the target layer's own extent. The
+shape is `bake_solve_link`'s, deliberately: eight tracks filled in one walk of the frames,
+keyframe times in the target layer's own **layer** time, linear both sides because the
+samples are one per frame and there is nothing between two of them to shape.
+
+Which source frame each key reads comes from `tracked_source_time` — the camera link's own
+walk (§5a), now public because two questions ask it and two walks over one time chain would
+be two chances to disagree about which moment is on screen. So a trimmed clip, a speed ramp,
+a reordered Sequence layer and a precomp all come out right for free, and a comp frame past
+the track's span clamps into it, which is the same hold a linked camera performs.
+
+Three decisions there:
+
+1. **Keys, not a link.** A solve-linked camera is a link because a camera solve describes
+   the file and survives every edit to the clips cutting it. A corner pin is a *look* on one
+   layer of one length that the user is going to adjust — soften a corner, ease a hit, trim
+   the tail — and keys are what that wants: real, editable, drawn by the graph editor, taken
+   back by the ordinary undo, with nothing left resolving behind them. K-579 argues it in
+   full.
+2. **Appended, not replacing.** A warp belongs last in a stack, and a layer that already has
+   a Corner pin keeps it — the user asked for a pin, not for a tidy-up.
+3. **`corner_pin_from_track` refuses rather than writing defaults.** Nothing tracked under
+   this instance, no target layer, or no frames to key, and it returns `None`; the bridge
+   turns that into `NoSolve` or `InvalidLayer`. A pin full of the schema's own keystone
+   would be the hardest kind of fault to see.
+
+### The surface
+
+`fire_effect_action` learned the Planar track's three buttons — Analyse, Cancel and **pin**
+— so a press is one crossing whichever effect made it. `planar_status(layer, effect)`
+answers the status row: the stage, the frames done and total, the failure reason, the span
+against the clip, and the re-anchor count. It is a struct of its own rather than
+`BridgeTrackStatus` with two fields ignored, because a planar track has no point cloud and
+no reprojection error and a camera solve has no re-anchor count; one struct carrying both
+would have four rows that mean nothing in half the places they are read.
+`create_corner_pin(tracked, effect)` is the gesture, reading the **Pin layer** row for its
+target. `BridgeTrackFailure` gained `NotPlanar`; the other five reasons are shared, because
+the two effects share a tracker and therefore share its refusals.
+
+The panel is `PlanarTrackDisplayFrb`: the Camera track's polling shape exactly — twice a
+second, only while the reading is moving, never subscribed to — the same `TrackSpanBar`
+above the line, and one extra line when the run re-anchored.
+
+### Stage 6's tests
+
+**Seven in `lumit-track`**, and unlike phases 2 and 3 they *draw*, for phase 1's reason: the
+claim is about pixels reaching corners, so the input has to be pixels. The ground truth is
+the projective warp each frame was rendered under, applied to the quad as drawn — an exact
+formula, not a measurement. In order: a clean translation (median corner error 0.006 px,
+worst 0.09, and **zero re-anchors**); a rotation of eight degrees with a 1.11× scale
+(median 0.032, worst 1.19); a genuine perspective tilt, with a second assertion that the two
+top corners moved by visibly different amounts so the test cannot silently become the
+translation one again; an occluder painted across the middle of the plane with a mask over
+it, where the second claim is the one that bites — that *plenty* was still tracked outside
+the band, since a run that tracked almost nothing would pass the error bound by having
+nothing to be wrong about; a quad over the flat surround refused as `TooFewFeatures`; two
+runs compared with `assert_eq!`; and the cancellation seam, refused part-way with the flag
+provably consulted per frame and bit-identical to `solve_planar` when never raised.
+
+**The accuracy is asserted as a distribution**, median hard and tail loose, which is §2's
+ninth deviation met from the other end and for a sharper reason: the most warped frame's
+corners are the furthest extrapolation from the features that decided them, so the tail is
+legitimately looser than the middle. A single bound tight enough to mean anything about the
+homography would fail on geometry rather than on a defect.
+
+**Three in `lumit-core`**: the pin's eight numbers frame for frame against a written-down
+store, with one undo taking the whole pin back; the same through a half-speed retime into a
+freeze, which is K-248 restated from the planar side; and both refusals, including a store
+holding the right shape of answer under a *different* effect id — the failure a media-keyed
+store would have made silently.
+
+**Two in `lumit-render`**: a real analysis of a rendered sliding plane, checked on the
+corners against the warp each frame was drawn under (worst 0.94 px), on `reanchors == 0`, on
+the inlier crowd, on the answer reaching the store through `PlanarTrackStore`, and on the
+Corner pin written from it landing on the surface — the whole path in one test; and a quad
+over a blank patch refusing and leaving nothing in the store. Its fixture is deliberately
+*not* §5b's `Shot`: that one is two planes at different depths so the camera solve has
+parallax to find, and parallax is exactly what a planar track has no use for.
+
+**One in `lumit-bridge`** (the status crossing, the pin written through the read model, and
+both refusals) and **three in Flutter** (the three Action rows with a press proved to reach
+the engine, the partial sentence leading with its span, and the span bar and re-anchor line
+appearing only when earned — the last through the display's optional `fetch`, which is
+§5c's seam one level up).
+
+### Owed
+
+On-canvas handles for the quad: the four corners are panel rows today, and dragging them on
+the picture is what a compositor expects. A **keyframed** quad, so the reference shape can
+move — refused for now, and the refusal is a real one rather than an omission (§6's opening:
+the quad is the shape the surface has on the reference frame). A Planar track on a **Precomp**
+layer, which K-577 already built the machinery for on the camera side. And the point track →
+keyframed transform half of docs/08 §4's Tracker row, which is the other 2D deliverable that
+row names.
 
 ## Open questions
 

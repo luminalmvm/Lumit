@@ -264,6 +264,74 @@ pub fn estimate_pair(
     })
 }
 
+/// The robust homography between two frames, and the ids that agreed with it.
+///
+/// Half of [`estimate_pair`] — the same LO-RANSAC over four-point DLT samples
+/// under the same frame-sized conditioning, without the fundamental matrix, the
+/// GRIC comparison or the parallax that a *camera* pair needs and a **planar**
+/// track has no use for (docs/impl/tracking.md §6). Sharing the machinery rather
+/// than the entry point is what keeps the planar tracker from paying for a
+/// fundamental fit on every frame of a shot.
+///
+/// The model comes back **in pixels**: conditioning is an implementation detail
+/// of the fit, and a caller composing two of these must not have to know which
+/// space they are in.
+///
+/// `None` when there are too few correspondences to fit at all, when the raster
+/// is degenerate, or when no model was found.
+#[must_use]
+pub fn homography_ransac(
+    pts: &[Correspondence],
+    source_size: (usize, usize),
+    from: i64,
+    to: i64,
+    settings: &GeometrySettings,
+) -> Option<(Mat3, Vec<u32>)> {
+    if pts.len() < 4 {
+        return None;
+    }
+    let raster = Raster::of(source_size)?;
+    let normalised: Vec<Correspondence> = pts
+        .iter()
+        .map(|c| Correspondence {
+            id: c.id,
+            from: raster.apply(c.from),
+            to: raster.apply(c.to),
+        })
+        .collect();
+    let mut scratch: Vec<Mat3> = Vec::with_capacity(1);
+    let fit = lo_ransac(
+        &normalised,
+        &Budget {
+            thr: settings.pixel_threshold * raster.s,
+            max_iterations: settings.max_iterations,
+            confidence: settings.confidence,
+            // The same second stream `estimate_pair` gives its homography, so
+            // the two agree frame for frame where both are run.
+            seed: mix(seed_for(from, to, pts.len()) ^ 0x5DEE_CE66_D2FF_9C41),
+            sample: 4,
+        },
+        |sample, out| {
+            out.clear();
+            if let Some(h) = homography_dlt(sample) {
+                out.push(h);
+            }
+        },
+        homography_dlt,
+        |m, c| transfer_distance(m, c.from, c.to),
+        &mut scratch,
+    )?;
+    let rm = raster.matrix();
+    let homography = geom::mul3(&raster.inverse_matrix(), &geom::mul3(&fit.model, &rm));
+    let mut inliers: Vec<u32> = fit
+        .inliers
+        .iter()
+        .filter_map(|&i| normalised.get(i).map(|c| c.id))
+        .collect();
+    inliers.sort_unstable();
+    Some((homography, inliers))
+}
+
 /// Walk the set's frames and pick the keyframe pairs the solve will stand on
 /// (docs/impl/tracking.md §3).
 ///

@@ -408,7 +408,7 @@ fn tracked_source_at(
         LayerKind::Footage { item } => Some((*item, l.source_time_at(lt))),
         LayerKind::Precomp { comp: nested } => {
             let st = l.source_time_at(lt);
-            if wears_camera_track(l) {
+            if wears_camera_track(l) || wears_planar_track(l) {
                 Some((*nested, st))
             } else {
                 descend(doc, *nested, st, depth)
@@ -585,6 +585,202 @@ fn key(time: Rational, value: f64) -> Keyframe {
         interp_in: SideInterp::Linear,
         interp_out: SideInterp::Linear,
     }
+}
+
+// ---------------------------------------------------------------------------
+// The planar track, and the Corner pin it writes (K-579)
+// ---------------------------------------------------------------------------
+
+/// The match name of the Planar track effect (docs/08 §3.87, K-579). One
+/// spelling, here, for [`CAMERA_TRACK`]'s reason.
+pub const PLANAR_TRACK: &str = "planar_track";
+
+/// The parameter id of the Planar track's **Pin layer** row — which layer the
+/// corner-pin gesture writes to. Spelled once because the effect declares it and
+/// the gesture reads it, and a typo would be a button that quietly refused.
+pub const PIN_LAYER_PARAM: &str = "pin_layer";
+
+/// The eight parameter ids of a Corner pin's four points, in [`Quad`] order:
+/// upper left, upper right, lower left, lower right, each `x` then `y`
+/// (docs/08 §3.48).
+const CORNER_PIN_POINTS: [(&str, &str); 4] = [
+    ("upper_left_x", "upper_left_y"),
+    ("upper_right_x", "upper_right_y"),
+    ("lower_left_x", "lower_left_y"),
+    ("lower_right_x", "lower_right_y"),
+];
+
+/// The four corners of a tracked surface, in the order a Corner pin declares
+/// them: upper left, upper right, lower left, lower right.
+///
+/// The same shape `lumit_track::Quad` is, spelled again here because
+/// `lumit-core` may not depend on the tracker (docs/05: the crate graph runs the
+/// other way) and four pairs of numbers are not worth a shared crate.
+pub type Quad = [[f64; 2]; 4];
+
+/// Where the planar tracks live, as far as the model is concerned — the shape
+/// [`CameraSolveStore`] is, for the same reason and with the same two methods.
+///
+/// **Filed by the effect instance, not by the media.** A camera solve describes
+/// a *file*: two layers cutting the same shot share one, and that is right. A
+/// planar track describes the quad somebody drew, so two Planar tracks on one
+/// clip are two different answers and neither is the other's. The effect
+/// instance is the only thing in the document that names one quad.
+///
+/// **The corners are in composition pixels**, which for the ordinary case — a
+/// comp made from the shot — are the source raster's own, exactly as
+/// docs/impl/tracking.md §5b's second deviation reads a camera solve's world.
+pub trait PlanarTrackStore {
+    /// What has been tracked under `track`, or `None` when nothing has.
+    fn planar_range(&self, track: Uuid) -> Option<SolvedRange>;
+
+    /// The tracked quad at source frame `frame`. `None` outside the range,
+    /// which callers here never ask for: they clamp first, because clamping
+    /// *is* the hold.
+    fn planar_corners(&self, track: Uuid, frame: i64) -> Option<Quad>;
+}
+
+/// Whether `layer` carries an enabled Planar track.
+#[must_use]
+pub fn wears_planar_track(layer: &Layer) -> bool {
+    layer
+        .effects
+        .iter()
+        .any(|e| e.enabled && e.effect.match_name == PLANAR_TRACK)
+}
+
+/// The enabled Planar track instance on `layer`, if it has one — the first, in
+/// stack order, so the answer never depends on the playhead.
+#[must_use]
+pub fn planar_track_effect(layer: &Layer) -> Option<&crate::model::EffectInstance> {
+    layer
+        .effects
+        .iter()
+        .find(|e| e.enabled && e.effect.match_name == PLANAR_TRACK)
+}
+
+/// The source moment a tracked layer shows at comp time `t`, and which source
+/// it is — the camera link's own walk, without a store to ask what was solved.
+///
+/// Public because the planar track needs the same mapping for a different
+/// question, and two walks over the same time chain would be two chances to
+/// disagree about which moment is on screen.
+#[must_use]
+pub fn tracked_source_time(
+    doc: &Document,
+    comp: &Composition,
+    tracked: Uuid,
+    t: f64,
+) -> Option<(Uuid, f64)> {
+    tracked_source_at(doc, comp, tracked, t, 0)
+}
+
+/// **Create corner pin** (K-579): a Corner pin on `target`, its four points
+/// keyframed to the surface `tracked` followed.
+///
+/// One key per composition frame of the target layer's own extent, at the
+/// composition's rate, in px@comp — the same shape [`bake_solve_link`] writes,
+/// and for the same reason: what the tracker measured is one number per frame,
+/// and pretending otherwise would mean inventing an interpolation nobody asked
+/// for. The keys are real, editable, and the graph editor shows them like any
+/// others.
+///
+/// The moment each key reads is found by [`tracked_source_time`], so a trimmed
+/// clip, a speed ramp, a reordered Sequence layer and a precomp all come out
+/// right for free — the track was of the *source*, once (K-248). A comp frame
+/// the track does not reach clamps into its range, which is the same hold a
+/// linked camera performs.
+///
+/// The pin is **appended** to `target`'s stack rather than replacing anything:
+/// a corner pin is a warp and warps belong last, and a layer that already has
+/// one keeps it — the user asked for a pin, not for a tidy-up.
+///
+/// `None` when the target is gone, when nothing has been tracked under
+/// `effect`, or when the target layer has no frames to key.
+#[must_use]
+pub fn corner_pin_from_track(
+    doc: &Document,
+    comp: Uuid,
+    tracked: Uuid,
+    effect: Uuid,
+    target: Uuid,
+    store: &dyn PlanarTrackStore,
+) -> Option<Op> {
+    let c = doc.comp(comp)?;
+    let layer = c.layers.iter().find(|l| l.id == target)?;
+    let range = store.planar_range(effect)?;
+    if !range.fps.is_finite() || range.fps <= 0.0 || range.last_frame < range.first_frame {
+        return None;
+    }
+
+    let rate = c.frame_rate;
+    let first = rate.frame_at(layer.in_point);
+    let last = rate.frame_at(layer.out_point);
+    if last <= first {
+        return None;
+    }
+
+    // Eight tracks filled in one walk of the frames, so the quad is asked for
+    // once per frame rather than eight times.
+    let mut keys: [Vec<Keyframe>; 8] = Default::default();
+    let mut wrote = 0usize;
+    for n in first..last {
+        let Ok(ct) = rate.time_of_frame(n) else {
+            continue;
+        };
+        let t = ct.0.to_f64();
+        let Some((_, st)) = tracked_source_time(doc, c, tracked, t) else {
+            continue;
+        };
+        if !st.is_finite() {
+            continue;
+        }
+        let asked = (st * range.fps).round();
+        #[allow(clippy::cast_possible_truncation)]
+        let asked = asked.clamp(i64::MIN as f64, i64::MAX as f64) as i64;
+        let Some(quad) =
+            store.planar_corners(effect, asked.clamp(range.first_frame, range.last_frame))
+        else {
+            continue;
+        };
+        // Keyframe times are **layer** time — the target layer's, since these
+        // keys live on the target layer's effect — which is what every property
+        // is evaluated at.
+        let Ok(time) = ct.0.checked_sub(layer.start_offset.0) else {
+            continue;
+        };
+        for (slot, value) in keys
+            .iter_mut()
+            .zip(quad.into_iter().flat_map(|corner| [corner[0], corner[1]]))
+        {
+            slot.push(key(time, value));
+        }
+        wrote += 1;
+    }
+    if wrote == 0 {
+        return None;
+    }
+
+    let mut pin = crate::fx::instantiate("corner_pin")?;
+    let mut track = keys.into_iter();
+    for (x, y) in CORNER_PIN_POINTS {
+        for id in [x, y] {
+            let animation = Animation::Keyframed(track.next()?);
+            let param = pin.params.iter_mut().find(|p| p.id == id)?;
+            param.value = crate::model::EffectValue::Float(crate::anim::Property {
+                animation,
+                extra: serde_json::Map::new(),
+            });
+        }
+    }
+
+    let mut effects = layer.effects.clone();
+    effects.push(pin);
+    Some(Op::SetLayerEffects {
+        comp,
+        layer: target,
+        effects,
+    })
 }
 
 #[cfg(test)]
@@ -1350,6 +1546,205 @@ mod tests {
         assert!(
             bake_solve_link(&document(vec![plain]), plain_id, plain_cam, &store).is_none(),
             "there is nothing to bake without a link"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // The planar track's corner pin (K-579)
+    // -----------------------------------------------------------------------
+
+    /// A written-down planar track: sixty frames at 30 fps, the quad a plain
+    /// function of the frame so a test can say what it expects without carrying
+    /// a table, and every corner distinct so landing on the wrong frame or the
+    /// wrong corner cannot accidentally pass.
+    struct SyntheticPlane {
+        track: Uuid,
+    }
+
+    impl SyntheticPlane {
+        const FPS: f64 = 30.0;
+        const FIRST: i64 = 0;
+        const LAST: i64 = 59;
+
+        fn quad(n: i64) -> Quad {
+            let f = n as f64;
+            [
+                [100.0 + f, 200.0 + f * 2.0],
+                [300.0 + f * 3.0, 210.0 + f * 4.0],
+                [110.0 + f * 5.0, 400.0 + f * 6.0],
+                [320.0 + f * 7.0, 410.0 + f * 8.0],
+            ]
+        }
+    }
+
+    impl PlanarTrackStore for SyntheticPlane {
+        fn planar_range(&self, track: Uuid) -> Option<SolvedRange> {
+            (track == self.track).then_some(SolvedRange {
+                fps: Self::FPS,
+                first_frame: Self::FIRST,
+                last_frame: Self::LAST,
+            })
+        }
+
+        fn planar_corners(&self, track: Uuid, frame: i64) -> Option<Quad> {
+            (track == self.track && (Self::FIRST..=Self::LAST).contains(&frame))
+                .then(|| SyntheticPlane::quad(frame))
+        }
+    }
+
+    /// A layer wearing the Planar track effect — the handle, exactly as the
+    /// Camera track is one.
+    fn planar(mut l: Layer) -> Layer {
+        l.effects
+            .push(crate::fx::instantiate(PLANAR_TRACK).expect("the effect is registered"));
+        l
+    }
+
+    /// The keyframed value of one Corner pin parameter, at a layer time.
+    fn pin_value(effects: &[crate::model::EffectInstance], id: &str, t: f64) -> f64 {
+        let pin = effects
+            .iter()
+            .rev()
+            .find(|e| e.effect.match_name == "corner_pin")
+            .expect("a corner pin was added");
+        let param = pin
+            .params
+            .iter()
+            .find(|p| p.id == id)
+            .unwrap_or_else(|| panic!("corner pin has no {id}"));
+        match &param.value {
+            crate::model::EffectValue::Float(p) => p.value_at(t),
+            other => panic!("{id} is {other:?}, not a float"),
+        }
+    }
+
+    /// The plain case: comp frame `n` is source frame `n`, so the pin's eight
+    /// numbers are the tracked quad's eight, frame for frame.
+    #[test]
+    fn a_corner_pin_from_a_track_lands_the_quad_frame_for_frame() {
+        let media = Uuid::now_v7();
+        let shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
+        let effect = shot.effects[0].id;
+        let target = layer("screen", LayerKind::Null, 2);
+        let (tracked_id, target_id) = (shot.id, target.id);
+        let c = comp("main", vec![target, shot]);
+        let comp_id = c.id;
+        let mut doc = document(vec![c]);
+        let store = SyntheticPlane { track: effect };
+
+        let op = corner_pin_from_track(&doc, comp_id, tracked_id, effect, target_id, &store)
+            .expect("a track with an answer in it writes a pin");
+        let inverse = apply(&mut doc, &op).unwrap();
+
+        let effects = &doc
+            .comp(comp_id)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == target_id)
+            .unwrap()
+            .effects;
+        for n in [0i64, 7, 29, 59] {
+            let t = n as f64 / 30.0;
+            let want = SyntheticPlane::quad(n);
+            for (i, (x, y)) in CORNER_PIN_POINTS.into_iter().enumerate() {
+                assert!(
+                    (pin_value(effects, x, t) - want[i][0]).abs() < 1e-6,
+                    "corner {i} x at frame {n}"
+                );
+                assert!(
+                    (pin_value(effects, y, t) - want[i][1]).abs() < 1e-6,
+                    "corner {i} y at frame {n}"
+                );
+            }
+        }
+
+        // One undo step, and it takes the whole pin back — the stack is
+        // committed whole, as every effect edit is.
+        apply(&mut doc, &inverse).unwrap();
+        assert!(doc
+            .comp(comp_id)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == target_id)
+            .unwrap()
+            .effects
+            .is_empty());
+    }
+
+    /// K-248 again, from the planar side: the track is of the *source*, so a
+    /// retimed clip's pin follows the retime rather than the comp's clock. A
+    /// half-speed first second puts source frame 5 under comp frame 10, and the
+    /// freeze after it holds source frame 15 for the rest of the shot.
+    #[test]
+    fn a_corner_pin_follows_the_tracked_layers_retime() {
+        let media = Uuid::now_v7();
+        let mut shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
+        let effect = shot.effects[0].id;
+        shot.retime = Some(retime(&[(0, 0.0), (30, 0.5), (60, 0.5)]));
+        let target = layer("screen", LayerKind::Null, 2);
+        let (tracked_id, target_id) = (shot.id, target.id);
+        let c = comp("main", vec![target, shot]);
+        let comp_id = c.id;
+        let mut doc = document(vec![c]);
+        let store = SyntheticPlane { track: effect };
+
+        let op = corner_pin_from_track(&doc, comp_id, tracked_id, effect, target_id, &store)
+            .expect("a retimed clip still writes a pin");
+        apply(&mut doc, &op).unwrap();
+        let effects = &doc
+            .comp(comp_id)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == target_id)
+            .unwrap()
+            .effects;
+
+        let at_ten = pin_value(effects, "upper_left_x", 10.0 / 30.0);
+        assert!(
+            (at_ten - SyntheticPlane::quad(5)[0][0]).abs() < 1e-6,
+            "comp frame 10 should read source frame 5, got {at_ten}"
+        );
+        for n in [31i64, 40, 59] {
+            let held = pin_value(effects, "upper_left_x", n as f64 / 30.0);
+            assert!(
+                (held - SyntheticPlane::quad(15)[0][0]).abs() < 1e-6,
+                "the freeze should hold source frame 15 at comp frame {n}, got {held}"
+            );
+        }
+    }
+
+    /// Both refusals, and the one that is easiest to get wrong: a store with
+    /// nothing in it under this effect's id must refuse rather than write a pin
+    /// full of the schema's own defaults.
+    #[test]
+    fn a_corner_pin_is_refused_when_there_is_nothing_to_read() {
+        let media = Uuid::now_v7();
+        let shot = planar(layer("shot", LayerKind::Footage { item: media }, 2));
+        let effect = shot.effects[0].id;
+        let target = layer("screen", LayerKind::Null, 2);
+        let (tracked_id, target_id) = (shot.id, target.id);
+        let c = comp("main", vec![target, shot]);
+        let comp_id = c.id;
+        let doc = document(vec![c]);
+
+        // A track filed under a *different* effect: the right shape of answer
+        // about the wrong quad, which is the failure a media-keyed store would
+        // have made silently.
+        let elsewhere = SyntheticPlane {
+            track: Uuid::now_v7(),
+        };
+        assert!(
+            corner_pin_from_track(&doc, comp_id, tracked_id, effect, target_id, &elsewhere)
+                .is_none()
+        );
+        // And a target that is not in the comp at all.
+        let store = SyntheticPlane { track: effect };
+        assert!(
+            corner_pin_from_track(&doc, comp_id, tracked_id, effect, Uuid::now_v7(), &store)
+                .is_none()
         );
     }
 }

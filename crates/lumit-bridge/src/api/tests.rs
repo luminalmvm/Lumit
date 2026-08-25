@@ -9139,3 +9139,165 @@ fn the_project_colour_shelf_reads_writes_and_undoes_over_the_seam() {
     project.undo().expect("undone");
     assert_eq!(project.project_swatches().expect("read"), vec![red, sky]);
 }
+
+/// A comp with a footage layer wearing a Planar track, a second layer to pin,
+/// and a **written-down** planar track published under the effect's own id.
+///
+/// Written down rather than computed for [`a_tracked_layer`]'s reason:
+/// `lumit-render`'s tests drive a real analysis over a rendered plane, and
+/// repeating it here would be measuring the tracker again instead of the seam.
+/// The quad slides ten pixels right per frame, so a reading that lands on the
+/// wrong frame cannot pass by accident.
+fn a_planar_tracked_layer() -> (
+    crate::api::project::ProjectReference,
+    CompositionReference,
+    LayerReference,
+    LayerReference,
+    Uuid,
+) {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project
+        .new_composition(
+            "Scene".into(),
+            Some(BridgeCompSettings {
+                name: "Scene".into(),
+                width: 1920,
+                height: 1080,
+                fps_num: 25,
+                fps_den: 1,
+                duration: BridgeRational { num: 2, den: 1 },
+                background: [0.0, 0.0, 0.0, 1.0],
+                shutter_angle: 180.0,
+                motion_blur_samples: 16,
+            }),
+        )
+        .expect("comp");
+    let footage = project
+        .import_footage("C:/clips/planar.mov".into())
+        .expect("imported");
+    comp.add_footage_layer(&footage, false).expect("placed");
+    comp.add_solid_layer().expect("a layer to pin");
+    let layers = comp.get_layers().expect("layers");
+    // Newest first: the solid was added last, so it is index 0.
+    let (target, shot) = (layers[0], layers[1]);
+    shot.add_effect(lumit_core::track::PLANAR_TRACK.to_owned())
+        .expect("the Planar track is a builtin");
+    let effect = shot.get_effects().expect("the stack")[0].id();
+
+    // Point the Pin layer row at the solid, through the staging path every
+    // other effect parameter is written through.
+    let mut staged = shot.get_effects().expect("the stack");
+    staged[0]
+        .set_value(
+            lumit_core::track::PIN_LAYER_PARAM.to_owned(),
+            crate::api::effect::BridgeEffectValue::Layer(Some(target.layer_id)),
+        )
+        .expect("the Pin layer row takes a layer");
+    shot.set_effects(staged).expect("committed");
+
+    let frames: Vec<lumit_track::PlanarFrame> = (0..50)
+        .map(|frame| {
+            let d = frame as f64 * 10.0;
+            lumit_track::PlanarFrame {
+                frame,
+                corners: [
+                    [100.0 + d, 200.0],
+                    [300.0 + d, 200.0],
+                    [100.0 + d, 400.0],
+                    [300.0 + d, 400.0],
+                ],
+                inliers: 42,
+                reanchored: false,
+            }
+        })
+        .collect();
+    lumit_render::track::publish_planar(
+        effect,
+        25.0,
+        50,
+        lumit_track::PlanarTrack {
+            reference_frame: 0,
+            reference_quad: frames[0].corners,
+            frames,
+            reanchors: 0,
+        },
+    );
+    (project, comp, shot, target, effect)
+}
+
+/// The status row's whole reading, and the gesture the effect exists for.
+#[test]
+fn a_planar_track_reports_its_span_and_writes_a_corner_pin() {
+    use crate::api::track::{create_corner_pin, planar_status, BridgeTrackStage};
+
+    let (_project, _comp, shot, target, effect) = a_planar_tracked_layer();
+
+    let status = planar_status(shot, effect);
+    assert_eq!(status.stage, BridgeTrackStage::Done);
+    assert_eq!((status.frames, status.clip_frames), (50, 50));
+    assert_eq!(status.reanchors, 0, "nothing was re-anchored");
+    assert!(status.failure.is_none());
+
+    // An instance nobody tracked reads Idle rather than borrowing this one's
+    // answer — which is the failure a media-keyed store would have made.
+    assert_eq!(
+        planar_status(shot, Uuid::now_v7()).stage,
+        BridgeTrackStage::Idle
+    );
+
+    create_corner_pin(shot, effect).expect("a track and a pin layer");
+    let pinned = target.get_effects().expect("the target's stack");
+    assert_eq!(pinned.len(), 1, "one Corner pin was appended");
+    let keys = match pinned[0].get_value("upper_left_x".into()).unwrap() {
+        crate::api::effect::BridgeEffectValue::Float(
+            crate::api::effect::BridgeScalar::Keyframed(keys),
+        ) => keys,
+        other => panic!("upper left x is {other:?}, not a keyframed channel"),
+    };
+    assert_eq!(keys.len(), 50, "one key per comp frame of the target layer");
+    assert!(
+        (keys[0].value - 100.0).abs() < 1e-6,
+        "the pin's first key is the track's first corner, got {}",
+        keys[0].value
+    );
+    assert!(
+        (keys[10].value - 200.0).abs() < 1e-6,
+        "frame ten slid a hundred pixels, got {}",
+        keys[10].value
+    );
+
+    // One undo step takes the whole pin back.
+    let project = shot.project().expect("the project");
+    project
+        .read()
+        .expect("read")
+        .store
+        .undo()
+        .expect("the pin is one step");
+    assert!(target.get_effects().expect("the target's stack").is_empty());
+}
+
+/// Both refusals, calmly: nothing tracked, and no layer named.
+#[test]
+fn a_corner_pin_is_refused_with_nothing_to_pin_or_nowhere_to_put_it() {
+    use crate::api::track::create_corner_pin;
+
+    let (_project, _comp, shot, _target, effect) = a_planar_tracked_layer();
+
+    // Clear the Pin layer row: the command has nowhere to put a pin.
+    let mut staged = shot.get_effects().expect("the stack");
+    staged[0]
+        .set_value(
+            lumit_core::track::PIN_LAYER_PARAM.to_owned(),
+            crate::api::effect::BridgeEffectValue::Layer(None),
+        )
+        .expect("the row takes an empty layer");
+    shot.set_effects(staged).expect("committed");
+    assert!(matches!(
+        create_corner_pin(shot, effect),
+        Err(BridgeError::InvalidLayer)
+    ));
+
+    // And an effect id nothing was tracked under.
+    assert!(create_corner_pin(shot, Uuid::now_v7()).is_err());
+}

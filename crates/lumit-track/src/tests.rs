@@ -2413,3 +2413,294 @@ fn the_bundle_converges_from_a_perturbed_start() {
         "trajectory error {rms} over an extent of {extent}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4b — the planar tracker (docs/impl/tracking.md §6)
+// ---------------------------------------------------------------------------
+//
+// These draw, where phases 2 and 3 do not, and for phase 1's reason: the claim
+// is about pixels reaching corners, so the input has to be pixels. The ground
+// truth is the projective warp each frame was rendered under, applied to the
+// four corners of the quad as drawn — an exact formula, not a measurement.
+
+/// A projective motion: a point at `p` on frame 0 sits at [`Warp::fwd`]`(p)`
+/// here. The homography's own inverse is what the renderer walks, because
+/// rendering asks where an output pixel came *from*.
+struct Warp {
+    h: Mat3,
+    back: Mat3,
+}
+
+impl Warp {
+    fn new(h: Mat3) -> Self {
+        Warp {
+            back: crate::geom::invert3(&h).expect("the test's warps are invertible"),
+            h,
+        }
+    }
+
+    /// About the frame's centre, so a rotation or a perspective tilt stays on
+    /// the picture instead of swinging the texture out of frame.
+    fn about_centre(m: Mat3) -> Self {
+        let c = centre();
+        let to = [[1.0, 0.0, -c[0]], [0.0, 1.0, -c[1]], [0.0, 0.0, 1.0]];
+        let fro = [[1.0, 0.0, c[0]], [0.0, 1.0, c[1]], [0.0, 0.0, 1.0]];
+        Warp::new(crate::geom::mul3(&fro, &crate::geom::mul3(&m, &to)))
+    }
+
+    fn fwd(&self, p: [f64; 2]) -> [f64; 2] {
+        project(&self.h, p).expect("the test's warps keep the quad off the horizon")
+    }
+
+    fn inv(&self, p: [f64; 2]) -> [f64; 2] {
+        project(&self.back, p).expect("the test's warps are invertible")
+    }
+}
+
+/// [`render`], under a projective motion rather than an affine one.
+fn render_warp(w: &Warp, occluder: Option<(f64, f64, f64, f64)>) -> Vec<f32> {
+    let mut out = vec![0.35f32; W * H];
+    for y in 0..H {
+        for x in 0..W {
+            let p = w.inv([x as f64, y as f64]);
+            if p[0] >= QUAD.0 && p[0] <= QUAD.2 && p[1] >= QUAD.1 && p[1] <= QUAD.3 {
+                out[y * W + x] = texture(p[0], p[1]);
+            }
+            if let Some((ox0, oy0, ox1, oy1)) = occluder {
+                let (fx, fy) = (x as f64, y as f64);
+                if fx >= ox0 && fx <= ox1 && fy >= oy0 && fy <= oy1 {
+                    out[y * W + x] = 0.15 + 0.5 * texture(fx * 2.0 + 900.0, fy * 2.0 - 700.0);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The quad the planar tests follow: well inside the textured region, so every
+/// corner has picture on all sides of it at every frame of every sequence here.
+/// Corner pin's order — upper left, upper right, lower left, lower right.
+const PLANE: Quad = [[72.0, 48.0], [244.0, 48.0], [72.0, 140.0], [244.0, 140.0]];
+
+/// Render `warps` frame by frame, follow features inside `quad` only, and solve
+/// the plane. `extra` is any further exclusion region — the occluder's, in the
+/// one test that has one.
+fn run_planar(
+    warps: &[Warp],
+    quad: Quad,
+    occluder: Option<(f64, f64, f64, f64)>,
+    extra: Vec<ExclusionMask>,
+) -> Result<PlanarTrack, PlanarError> {
+    // An **inverted** region over the quad is what "the tracker works only
+    // inside this shape" already means (K-408, `ExclusionMask::from_polyline`),
+    // so restricting detection to the plane needs no new mechanism.
+    let mut masks = vec![ExclusionMask::from_points(quad_outline(quad), true)];
+    masks.extend(extra);
+    let mut tracker = Tracker::new(TrackSettings::default()).with_masks(masks);
+    for (i, w) in warps.iter().enumerate() {
+        let frame = render_warp(w, occluder);
+        let plane = FramePlane::new(&frame, W, H).unwrap();
+        tracker.push(i as i64, plane, None).unwrap();
+    }
+    let set = tracker.finish();
+    solve_planar(&set, 0, quad, (W, H), &PlanarSettings::default())
+}
+
+/// Every corner's error, over every frame, against the warp that frame was
+/// rendered under.
+fn corner_errors(track: &PlanarTrack, warps: &[Warp]) -> Vec<f64> {
+    let mut out = Vec::new();
+    for f in &track.frames {
+        let w = &warps[f.frame as usize];
+        for (got, corner) in f.corners.iter().zip(PLANE) {
+            let want = w.fwd(corner);
+            out.push((got[0] - want[0]).hypot(got[1] - want[1]));
+        }
+    }
+    out
+}
+
+/// Pin a corner-error distribution: the median hard, the tail loosely.
+///
+/// One threshold cannot do both jobs here. The median says whether the
+/// homography is right; the worst says whether any single frame jumped, which
+/// is the fault a corner pin actually shows. A single bound tight enough to
+/// mean anything about the first would fail on the second for reasons that are
+/// geometry rather than defects — the most warped frame's corners are the
+/// furthest extrapolation from the features that decided them.
+fn assert_corner_accuracy(errors: &[f64], median_px: f64, worst_px: f64) {
+    let mid = median(errors.to_vec());
+    let worst = quantile(errors.to_vec(), 1.0);
+    assert!(
+        mid < median_px,
+        "median corner error {mid} px, over {} samples",
+        errors.len()
+    );
+    assert!(worst < worst_px, "worst corner error {worst} px");
+}
+
+fn translation_warps(n: usize) -> Vec<Warp> {
+    (0..n)
+        .map(|i| {
+            let d = i as f64;
+            Warp::new([[1.0, 0.0, 1.7 * d], [0.0, 1.0, -0.9 * d], [0.0, 0.0, 1.0]])
+        })
+        .collect()
+}
+
+#[test]
+fn a_translating_plane_keeps_its_corners() {
+    let warps = translation_warps(10);
+    let track = run_planar(&warps, PLANE, None, Vec::new()).expect("a textured plane solves");
+    assert_eq!(
+        track.frames.len(),
+        warps.len(),
+        "every frame of a clean translation should be followed"
+    );
+    // A clean translation is the easiest thing this can be asked, so it is
+    // pinned hardest: measured median 0.006 px, worst 0.09.
+    assert_corner_accuracy(&corner_errors(&track, &warps), 0.05, 0.5);
+    // Nothing thinned, so nothing was re-anchored and no error accumulated at
+    // all. That is the claim that separates this from a frame-chained tracker.
+    assert_eq!(track.reanchors, 0);
+    assert!(track.frames.iter().all(|f| !f.reanchored));
+}
+
+#[test]
+fn a_rotating_and_scaling_plane_keeps_its_corners() {
+    let warps: Vec<Warp> = (0..10)
+        .map(|i| {
+            let d = i as f64;
+            let (a, s) = ((0.9f64 * d).to_radians(), 1.0 + 0.012 * d);
+            let (sin, cos) = (a.sin(), a.cos());
+            Warp::about_centre([
+                [s * cos, -s * sin, 0.0],
+                [s * sin, s * cos, 0.0],
+                [0.0, 0.0, 1.0],
+            ])
+        })
+        .collect();
+    let track = run_planar(&warps, PLANE, None, Vec::new()).expect("a turning plane solves");
+    assert_eq!(track.frames.len(), warps.len());
+    // A distribution, not a single bound (§2's ninth deviation, met again from
+    // the other end): the last frame of this sequence is the most warped one and
+    // its corners are the furthest extrapolation from the features that decided
+    // them, so the tail is legitimately looser than the middle. Measured: median
+    // 0.032 px, p90 0.59, worst 1.19.
+    assert_corner_accuracy(&corner_errors(&track, &warps), 0.15, 2.0);
+}
+
+#[test]
+fn a_plane_seen_in_perspective_keeps_its_corners() {
+    // A genuine projective warp: the third row is what an affine tracker cannot
+    // represent, and it is what a surface turning away from the camera does.
+    let warps: Vec<Warp> = (0..10)
+        .map(|i| {
+            let d = i as f64;
+            Warp::about_centre([
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.00035 * d, 0.00018 * d, 1.0],
+            ])
+        })
+        .collect();
+    let track = run_planar(&warps, PLANE, None, Vec::new()).expect("a tilting plane solves");
+    assert_eq!(track.frames.len(), warps.len());
+    assert_corner_accuracy(&corner_errors(&track, &warps), 0.15, 1.5);
+    // The warp really is projective, or this test is the translation one again:
+    // the two top corners must move by visibly different amounts.
+    let last = track.frames.last().unwrap().corners;
+    let dl = (last[0][0] - PLANE[0][0]).hypot(last[0][1] - PLANE[0][1]);
+    let dr = (last[1][0] - PLANE[1][0]).hypot(last[1][1] - PLANE[1][1]);
+    assert!(
+        (dl - dr).abs() > 2.0,
+        "the corners moved by {dl} and {dr} — that is not a perspective change"
+    );
+}
+
+#[test]
+fn an_occluder_inside_the_quad_is_masked_out_and_the_plane_still_solves() {
+    let warps = translation_warps(10);
+    // A solid band across the middle of the plane, painted in image coordinates
+    // so it does not move with the surface: a hand, a passer-by, a reflection.
+    let band = (150.0, 70.0, 210.0, 120.0);
+    let region = ExclusionMask::from_points(
+        vec![
+            [band.0, band.1],
+            [band.2, band.1],
+            [band.2, band.3],
+            [band.0, band.3],
+        ],
+        false,
+    );
+    let track = run_planar(&warps, PLANE, Some(band), vec![region])
+        .expect("a plane with a hole in it still solves");
+    assert_eq!(track.frames.len(), warps.len());
+    // Measured: median 0.079 px, p90 0.77, worst 1.69 — looser than the clean
+    // translation because the band eats the features nearest the middle of the
+    // plane, and a fit standing on the outside of a surface extrapolates a
+    // little worse into it.
+    assert_corner_accuracy(&corner_errors(&track, &warps), 0.25, 2.5);
+    // The claim that bites: features were still found in quantity outside the
+    // band. A run that tracked almost nothing would pass the error bound above
+    // by having nothing to be wrong about.
+    let thinnest = track
+        .frames
+        .iter()
+        .skip(1)
+        .map(|f| f.inliers)
+        .min()
+        .unwrap();
+    assert!(
+        thinnest > 20,
+        "only {thinnest} correspondences agreed on the thinnest frame"
+    );
+}
+
+#[test]
+fn a_featureless_patch_is_refused_calmly() {
+    let warps = translation_warps(6);
+    // A tall sliver of the flat surround, where the picture is one constant
+    // value and there is nothing whatsoever to follow.
+    let blank: Quad = [[4.0, 6.0], [28.0, 6.0], [4.0, 174.0], [28.0, 174.0]];
+    let outcome = run_planar(&warps, blank, None, Vec::new());
+    assert_eq!(
+        outcome,
+        Err(PlanarError::TooFewFeatures),
+        "a blank patch has to refuse, not invent a quad"
+    );
+}
+
+#[test]
+fn a_planar_track_is_deterministic() {
+    let warps = translation_warps(8);
+    let a = run_planar(&warps, PLANE, None, Vec::new()).unwrap();
+    let b = run_planar(&warps, PLANE, None, Vec::new()).unwrap();
+    assert_eq!(a, b, "two runs over the same frames must agree bit for bit");
+}
+
+#[test]
+fn a_planar_track_stops_between_frames_when_cancelled() {
+    let warps = translation_warps(8);
+    let mut tracker = Tracker::new(TrackSettings::default())
+        .with_masks(vec![ExclusionMask::from_points(quad_outline(PLANE), true)]);
+    for (i, w) in warps.iter().enumerate() {
+        let frame = render_warp(w, None);
+        tracker
+            .push(i as i64, FramePlane::new(&frame, W, H).unwrap(), None)
+            .unwrap();
+    }
+    let set = tracker.finish();
+    let settings = PlanarSettings::default();
+    let asked = std::cell::Cell::new(0u32);
+    let outcome = solve_planar_cancellable(&set, 0, PLANE, (W, H), &settings, &|| {
+        asked.set(asked.get() + 1);
+        asked.get() > 3
+    });
+    assert_eq!(outcome, Err(PlanarError::Cancelled));
+    assert!(asked.get() > 3, "the flag has to be consulted per frame");
+    // Never raised is bit-identical to the plain entry point, so the seam costs
+    // the ordinary path nothing.
+    let never = solve_planar_cancellable(&set, 0, PLANE, (W, H), &settings, &|| false);
+    assert_eq!(never, solve_planar(&set, 0, PLANE, (W, H), &settings));
+}

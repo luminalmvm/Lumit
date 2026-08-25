@@ -509,6 +509,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeParamValue dco_decode_bridge_param_value(dynamic raw);
 
   @protected
+  BridgePlanarStatus dco_decode_bridge_planar_status(dynamic raw);
+
+  @protected
   BridgePlaybackMode dco_decode_bridge_playback_mode(dynamic raw);
 
   @protected
@@ -1464,6 +1467,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeParamValue sse_decode_bridge_param_value(SseDeserializer deserializer);
+
+  @protected
+  BridgePlanarStatus sse_decode_bridge_planar_status(
+      SseDeserializer deserializer);
 
   @protected
   BridgePlaybackMode sse_decode_bridge_playback_mode(
@@ -2539,6 +2546,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_param_value(
       BridgeParamValue self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_planar_status(
+      BridgePlanarStatus self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_playback_mode(

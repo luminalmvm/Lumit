@@ -45,6 +45,14 @@ impl ExclusionMask {
         }
     }
 
+    /// Build from an outline already in **source raster pixels** — what the
+    /// planar tracker's quad is (docs/impl/tracking.md §6), and what a test
+    /// writes down. No conversion, because there is none to make.
+    #[must_use]
+    pub fn from_points(points: Vec<[f64; 2]>, inverted: bool) -> Self {
+        ExclusionMask { points, inverted }
+    }
+
     /// Build from a document mask at comp time `t`, flattening its path at the
     /// standard tolerance and taking its `inverted` flag.
     #[must_use]

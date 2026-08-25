@@ -10514,6 +10514,18 @@ fn every_parameter_declares_a_unit() {
             ("matte_key", "pre_blur"),
             ("matte_key", "shrink_grow"),
             ("matte_key", "softness"),
+            // Planar track's quad (K-579) is four points in px@comp, exactly as
+            // the Corner pin it writes is — and for the extra reason that they
+            // are what the analysis is *given*: a quad measured against the
+            // wrong raster would follow the wrong patch of picture.
+            ("planar_track", "upper_left_x"),
+            ("planar_track", "upper_left_y"),
+            ("planar_track", "upper_right_x"),
+            ("planar_track", "upper_right_y"),
+            ("planar_track", "lower_left_x"),
+            ("planar_track", "lower_left_y"),
+            ("planar_track", "lower_right_x"),
+            ("planar_track", "lower_right_y"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -11384,14 +11396,14 @@ fn every_effect_carries_a_matte_row() {
     for def in BUILTIN_DEFS.iter() {
         let s = def.schema();
         // The Controls family opts out entirely (K-414), the Drivers family with
-        // it (K-471), and so does the Camera track (K-417) — a handle for a
-        // background analysis rather than an image operation. They are the
+        // it (K-471), and so do the two tracking effects (K-417, K-579) —
+        // handles for a background analysis rather than image operations. They are the
         // answer to the question `MatteRole::None` was written for: an effect
         // that touches no pixel cannot be driven by a picture, so a Matte row on
         // one would be a control that could never do anything. Every *image*
         // effect below still has to carry one.
         if matches!(s.category, FxCategory::Controls | FxCategory::Drivers)
-            || s.match_name == "camera_track"
+            || matches!(s.match_name, "camera_track" | "planar_track")
         {
             assert_eq!(
                 s.matte,

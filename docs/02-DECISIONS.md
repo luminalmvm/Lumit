@@ -16628,3 +16628,90 @@ compositor has used lets the result be adjusted afterwards, because a ground pla
 half a degree off is normal and re-solving is not a fix for it. Baking to escape the refusal
 threw away the link, which is the one thing K-417 exists to keep. See
 [impl/tracking.md](impl/tracking.md) §5f.
+
+## K-579 — A planar track is its own effect, and its answer is a Corner pin
+
+**Status: DECIDED (2026-08-25).** Lumit follows one flat surface through a shot — a phone
+screen, a sign, a poster — and hands the result to a Corner pin on another layer. The
+mechanism is a new **Planar track** effect ([08-EFFECTS.md](08-EFFECTS.md) §3.87) standing
+beside the Camera track (K-417) on the same substrate (K-415), with the algorithm and the
+drift handling in [impl/tracking.md](impl/tracking.md) §6.
+
+Five things this decides.
+
+1. **A sibling effect, not a mode on the Camera track.** The brief allowed either, and the
+   two share their first step exactly: the same Shi–Tomasi detection, the same pyramidal
+   affine KLT, the same exclusion masks, the same frame loop, the same cancellation seam,
+   the same progress readings. Everything after that step differs, and it differs in a way
+   that a mode flag cannot paper over.
+
+   A camera solve answers *where the camera was*. That is a property of the **file**: one
+   answer per (media, settings), shared by every clip of the footage in every comp, read by
+   a Camera layer through a link, carrying a point cloud, a focal length and a segment
+   table. A planar track answers *where this surface is*. That is a property of the **quad
+   somebody drew**, and therefore of the effect instance: two Planar tracks on one shot are
+   two different answers, and a store keyed by media would have the second silently
+   overwrite the first. The two answers are consequently filed under different ids, read
+   through different traits, and drawn by different status rows.
+
+   Folded into one effect, every row of both would be conditional on a mode — the quad
+   meaningless in Camera mode, Show points meaningless in Planar mode — and every reading
+   downstream would be a union that has to be unwrapped before it can be drawn. The one
+   thing genuinely shared is the substrate, and that is shared already: the tracker crate,
+   the analysis job, the sidecar and the worker slot are all one piece of machinery with
+   one branch in it, taken *after* the frames have been followed.
+
+   [08-EFFECTS.md](08-EFFECTS.md) §4's Tracker row is what settled it. It has always read
+   "point/planar tracking producing keyframed transforms and corner-pin data" — a row
+   beside the camera solve rather than inside it, describing a 2D deliverable. This builds
+   what that row describes.
+
+2. **The quad is confined by an inverted exclusion mask, and that is not a trick.** K-408's
+   mask carriage already means "the tracker works only within this shape" when a mask is
+   inverted; the quad is exactly that shape. So restricting detection to the surface needs
+   no new mechanism, the layer's own masks still exclude regions *inside* the quad — the
+   hand over the phone — and the quad lands in the analysis cache key with the rest of the
+   geometry for free, so a re-drawn quad cannot read a stale answer back.
+
+3. **Every frame is measured against the reference frame, not against the frame before
+   it.** Chaining homographies frame to frame multiplies each step's error into every step
+   after it, and by frame three hundred the quad has walked off the surface — the classic
+   failure of a planar tracker. Fitting each frame against the frame the quad was drawn on
+   makes every frame's error independent of every other's.
+
+   The price is that the reference frame's features die out, and the answer to that is a
+   **re-anchor**: when too few of them survive to trust the fit, the measurement adopts a
+   recent frame as its anchor and remembers the one homography that reaches it. Error then
+   accumulates once per re-anchor rather than once per frame, and the count is reported —
+   zero re-anchors is a track carrying no accumulated drift at all, which is the one number
+   that says how much to trust its far end.
+
+4. **The output is a Corner pin on a named layer, written as ordinary keyframes.** Not a
+   link, deliberately, and this is where the planar track parts company with K-417. A
+   solve-linked camera is a link because a camera solve describes the file and survives
+   every edit to the clips cutting it; a corner pin is a *look* on a particular layer, of a
+   particular length, that the user is going to adjust — soften a corner, ease a hit, trim
+   the last ten frames. Keys are what that wants, and they are keys the graph editor draws,
+   the ordinary undo takes back and nothing further has to keep resolving. Which layer they
+   land on is a **Pin layer** row on the effect — an ordinary layer reference, the row
+   every other effect uses for the same question — rather than a hidden dependency on the
+   timeline selection.
+
+5. **The sidecar body becomes an enum, at format version 3.** A planar track is cached
+   exactly as a camera solve is, in the same `track/` folder, under the same
+   (fingerprint, settings, geometry) key rule, because it is the same kind of fact: an
+   expensive answer about a file's pixels that is worth not deriving twice. One record
+   shape with an `Answer` enum in it, rather than a second magic and a second reader; the
+   version bump orphans the version 2 records, which is the disposal that constant exists
+   to perform and costs one re-analysis each.
+
+**Known limits, recorded rather than hidden.** The quad is read statically, at layer time
+zero — it is the shape the surface has on the reference frame, and animating it would be
+asking the tracker to follow a moving target from a moving start. The four points are panel
+rows; on-canvas handles are owed. And the effect analyses a footage layer only, where the
+Camera track also analyses a Precomp layer by rendering it (K-577).
+
+**Why.** Every screen replacement, every sign, every phone in a shot is this gesture, and
+[08-EFFECTS.md](08-EFFECTS.md) §3.48 already says so: the Corner pin is "the import
+workhorse of the distort family". Until now Lumit could apply one and could not measure
+one. See [impl/tracking.md](impl/tracking.md) §6.

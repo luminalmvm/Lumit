@@ -5482,6 +5482,72 @@ written down rather than left to be improvised
 
 ---
 
+### 3.87 Planar track — one flat surface, followed onto a Corner pin
+
+**Parameters:** **Analyse** (action), **Cancel** (action), **Create corner pin** (action),
+Upper left / Upper right / Lower left / Lower right (px@comp — the quad, four point rows),
+**Pin layer** (a layer reference), **Feature density** (Low / Normal / High, default
+Normal), **Use masks** (default on).
+
+Applied to a footage layer, this effect **renders identity**, exactly as the Camera track
+above it does and for the same reason: it is a handle holding a job. The four points enclose
+something flat in the shot on its **first frame** — a phone screen, a sign, a poster, a
+laptop lid — and Analyse follows that surface through the clip, frame by frame, as four
+corners. **Create corner pin** then puts a Corner pin (§3.48) on the layer **Pin layer**
+names, with its eight numbers keyframed to those corners: one key per composition frame, in
+px@comp, ordinary keyframes the graph editor draws and the user owns from the moment they
+land. That is the whole screen-replacement gesture, and it is the reason the Corner pin's
+Tier-2 row has always said "export target for the tracker".
+
+**Why a second effect and not a mode on the Camera track** (K-579). The two share their
+first step — the same detector, the same pyramidal KLT, the same exclusion masks — and
+nothing after it. A camera solve answers *where the camera was*: one answer for a whole
+file, shared by every clip of it, read by a Camera layer through a link, carrying a point
+cloud and a focal length. A planar track answers *where this surface is*, which is a
+property of the quad somebody drew rather than of the file: two quads on one shot are two
+different answers, and neither is the other's. §4's Tracker row already frames planar
+tracking as its own thing beside the camera solve, and folding them together would make
+every row of both conditional on a mode and every reading downstream a union that has to be
+unwrapped before it can be drawn.
+
+**A flat surface is eight numbers, and that is the whole idea.** However the camera moves
+and however the surface turns, what it does to the picture of a *plane* is always a
+homography — the same four-corner projective stretch the Corner pin applies. So the analysis
+does not ask where the surface went; it asks which homography this frame is, over every
+feature the quad holds, robustly (LO-RANSAC over four-point DLT, the same machinery the
+camera solve's two-view geometry uses). The maths and the drift handling are
+[impl/tracking.md](impl/tracking.md) §6.
+
+**It is measured from the reference frame, not from the frame before.** Chaining frame to
+frame multiplies every step's small error into every step after it, and a long shot's quad
+walks quietly off the surface. Each frame is fitted against the frame the quad was drawn on
+instead, so no frame's error depends on any other's. When the reference frame's features run
+out — the surface turns away, someone walks in front — the measurement **re-anchors** to a
+recent frame and remembers the one homography that reaches it, so error accumulates once per
+re-anchor rather than once per frame. The status line says how many re-anchors there were,
+because that is the one number that says how much to trust the far end.
+
+**Use masks** is K-408's mask carriage doing a second job here: the quad already says where
+to look, and a mask says what to ignore *inside* it — the hand crossing the phone, the
+reflection sliding over the sign. **Feature density** is the Camera track's own row, meaning
+the same three things to the same detector.
+
+**The status is not a parameter**, for §3.85's reason, and it draws the same way: one calm
+line under the buttons, with the thin span bar above it when the track covers part of its
+clip. A track can stop part-way exactly as a camera solve can, and says so rather than
+inventing the rest. A refusal is a plain sentence — too little inside the quad to follow, or
+contents that are not one flat surface — and nothing about the shot has changed.
+
+**Known limits, stated.** The quad is read **statically**, at layer time zero: it is the
+shape the surface has on the reference frame, and animating it would be asking the tracker
+to follow a moving target from a moving start. The four points are edited as rows in the
+panel rather than dragged on the picture; on-canvas handles are owed
+([TODO.md](TODO.md)). And the effect analyses a **footage** layer only — a Camera track on a
+Precomp layer renders the nested comp to track it (K-577), and the same for a planar track
+is owed rather than pretended.
+
+---
+
 ## 4. Tier 2 — AE parity direction (post-v1)
 
 One-line scope each; specs written when scheduled ([16-ROADMAP.md](16-ROADMAP.md)). Order
@@ -5504,10 +5570,10 @@ roughly by demand.
 | Posterise | Value quantisation (plus posterise-time as a separate temporal utility) |
 | Turbulent displace | Noise-driven UV displacement |
 | Wave warp | Parametric sinusoidal displacement |
-| Corner pin | 4-point perspective pin (export target for the tracker) |
+| ~~Corner pin~~ | **Shipped** as §3.48, and it is the Planar track's export target (§3.87, K-579) |
 | Mesh warp | Grid-based freeform warp |
 | Stabiliser | Flow-engine-backed smoothing of unwanted camera motion (warp-stabiliser class) |
-| Tracker | Point/planar tracking producing keyframed transforms and corner-pin data |
+| Tracker | ~~Planar~~ tracking **shipped** as §3.87 **Planar track** (K-579): a quad followed as four corners, with Create corner pin writing them onto another layer. Still Tier 2: **point** tracking producing a keyframed *transform* — one or two points baked into position, rotation and scale on a layer — and the on-canvas quad handles the panel rows stand in for |
 
 Tier 2 effects follow every rule in §1–2; nothing in Tier 1's architecture may assume the
 suite stays small.

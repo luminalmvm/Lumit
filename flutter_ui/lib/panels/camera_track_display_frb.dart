@@ -46,6 +46,10 @@ String trackFailureSentence(BridgeTrackFailure failure) => switch (failure) {
       BridgeTrackFailure.noFeatures => l10n.trackFailedNoFeatures,
       BridgeTrackFailure.rotationOnly => l10n.trackFailedRotationOnly,
       BridgeTrackFailure.noSolve => l10n.trackFailedNoSolve,
+      // A planar refusal, reached only from the Planar track's own status
+      // (K-579). The two effects share a tracker and so share its refusals;
+      // a second set of words for them would be a second thing to translate.
+      BridgeTrackFailure.notPlanar => l10n.trackFailedNotPlanar,
     };
 
 /// The sentence for one reading of the analysis.

@@ -34,6 +34,8 @@ use crate::api::{layer::LayerReference, state::PROJECTS, BridgeError};
 /// here, because a typo would be silent: the press would simply do nothing.
 const ANALYSE: &str = "analyse";
 const CANCEL: &str = "cancel";
+/// The Planar track's third Action: write the Corner pin (K-579).
+const PIN: &str = "pin";
 
 // ---------------------------------------------------------------------------
 // What the status row reads
@@ -83,6 +85,9 @@ pub enum BridgeTrackFailure {
     RotationOnly,
     /// The shot carries a camera move the solver could not stand behind.
     NoSolve,
+    /// The quad's contents are not one flat surface, or move against
+    /// themselves (K-579).
+    NotPlanar,
 }
 
 /// Everything the Camera track's status row draws, in one crossing.
@@ -232,6 +237,15 @@ fn failure_of(why: &lumit_render::track::AnalysisError) -> BridgeTrackFailure {
         }
         AnalysisError::Solve(SolveError::RotationOnly) => BridgeTrackFailure::RotationOnly,
         AnalysisError::Solve(_) => BridgeTrackFailure::NoSolve,
+        // A planar refusal is about the quad, not the shot: too little inside
+        // it to follow reads as the same "nothing to work with" the camera
+        // half calls `NoFeatures`, and a quad that is not one flat surface has
+        // its own reason.
+        AnalysisError::Planar(lumit_track::PlanarError::TooFewFeatures) => {
+            BridgeTrackFailure::NoFeatures
+        }
+        AnalysisError::Planar(lumit_track::PlanarError::NotPlanar) => BridgeTrackFailure::NotPlanar,
+        AnalysisError::Planar(lumit_track::PlanarError::Cancelled) => BridgeTrackFailure::NoSolve,
     }
 }
 
@@ -352,6 +366,31 @@ pub fn fire_effect_action(
         .iter()
         .find(|e| e.id == effect)
         .ok_or(BridgeError::InvalidEffect)?;
+    // The Planar track's three buttons go the same way as the Camera track's
+    // two: one doorway, so a press is one crossing whichever effect made it.
+    if fx.effect.match_name == lumit_core::track::PLANAR_TRACK {
+        return match param.as_str() {
+            CANCEL => {
+                lumit_render::track::cancel(effect);
+                Ok(())
+            }
+            PIN => create_corner_pin(layer, effect),
+            ANALYSE => {
+                let media = match item.kind {
+                    LayerKind::Footage { item } => item,
+                    _ => return Err(BridgeError::NotFootage),
+                };
+                let (path, fingerprint) = media_source(&layer, media)?;
+                let job = lumit_render::track::planar_job_for(&item, path, &fingerprint, true)
+                    .ok_or(BridgeError::NotFootage)?;
+                match lumit_render::track::request(job) {
+                    lumit_render::track::Requested::Started => Ok(()),
+                    _ => Err(BridgeError::AnalysisBusy),
+                }
+            }
+            _ => Err(BridgeError::InvalidParam),
+        };
+    }
     if fx.effect.match_name != lumit_core::track::CAMERA_TRACK {
         return Err(BridgeError::InvalidParam);
     }
@@ -671,3 +710,141 @@ fn tracked_media(layer: &LayerReference) -> Option<Uuid> {
 // the interface finds the layer whose stack holds an enabled Camera track from
 // data it is already holding. A call here would be one crossing per repaint for
 // an answer that never changes between document revisions.
+
+// ---------------------------------------------------------------------------
+// The planar track (K-579)
+// ---------------------------------------------------------------------------
+
+/// Everything the Planar track's status row draws, in one crossing.
+///
+/// Deliberately not [`BridgeTrackStatus`] with two fields ignored. A planar
+/// track has no point cloud and no reprojection error, and a camera solve has
+/// no re-anchor count; one struct carrying both would have four rows that mean
+/// nothing in half the places it is read, and the panel would have to know
+/// which half it was holding.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgePlanarStatus {
+    pub stage: BridgeTrackStage,
+    /// Frames followed so far, and how many there are. Both zero outside
+    /// [`BridgeTrackStage::Tracking`].
+    pub done: u32,
+    pub total: u32,
+    /// Set only at [`BridgeTrackStage::Failed`].
+    pub failure: Option<BridgeTrackFailure>,
+    /// How many frames of the clip carry the surface, and how many the clip
+    /// has. `frames < clip_frames` is a **partial** track: the surface was lost
+    /// part-way and what was followed is the part before it.
+    pub frames: u32,
+    pub clip_frames: u32,
+    /// How many times the measurement was re-anchored (docs/impl/tracking.md
+    /// §6). Zero is a track measured entirely against its reference frame, and
+    /// so one carrying no accumulated drift at all — which is the one number
+    /// about a planar track that says how much to trust its far end.
+    pub reanchors: u32,
+}
+
+impl BridgePlanarStatus {
+    fn idle() -> Self {
+        BridgePlanarStatus {
+            stage: BridgeTrackStage::Idle,
+            done: 0,
+            total: 0,
+            failure: None,
+            frames: 0,
+            clip_frames: 0,
+            reanchors: 0,
+        }
+    }
+}
+
+/// How the Planar track instance `effect` on `layer` is getting on.
+///
+/// Polled while it is moving and never otherwise, exactly as
+/// [`track_status`] is — the reading is a value in a map, not a subscription.
+/// The answer is filed under the **effect instance**, because what was tracked
+/// is the quad this instance holds (K-579).
+#[frb(sync)]
+#[must_use]
+pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus {
+    let mut status = BridgePlanarStatus::idle();
+    let Ok(item) = layer.item() else {
+        return status;
+    };
+    if !item
+        .effects
+        .iter()
+        .any(|e| e.id == effect && e.effect.match_name == lumit_core::track::PLANAR_TRACK)
+    {
+        return status;
+    }
+    match lumit_render::track::progress(effect) {
+        Some(lumit_render::track::Progress::Queued) => status.stage = BridgeTrackStage::Queued,
+        Some(lumit_render::track::Progress::Tracking { done, total }) => {
+            status.stage = BridgeTrackStage::Tracking;
+            status.done = u32::try_from(done).unwrap_or(u32::MAX);
+            status.total = u32::try_from(total).unwrap_or(u32::MAX);
+        }
+        Some(lumit_render::track::Progress::Solving) => status.stage = BridgeTrackStage::Solving,
+        Some(lumit_render::track::Progress::Done) => status.stage = BridgeTrackStage::Done,
+        Some(lumit_render::track::Progress::Cancelled) => {
+            status.stage = BridgeTrackStage::Cancelled
+        }
+        Some(lumit_render::track::Progress::Failed(why)) => {
+            status.stage = BridgeTrackStage::Failed;
+            status.failure = Some(failure_of(&why));
+        }
+        None => {}
+    }
+    if let Some(tracked) = lumit_render::track::planar(effect) {
+        if status.stage == BridgeTrackStage::Idle {
+            status.stage = BridgeTrackStage::Done;
+        }
+        status.frames = u32::try_from(tracked.track.frames.len()).unwrap_or(u32::MAX);
+        status.clip_frames = u32::try_from(tracked.clip_frames).unwrap_or(u32::MAX);
+        status.reanchors = tracked.track.reanchors;
+    }
+    status
+}
+
+/// **Create corner pin** (K-579): put a Corner pin on the layer the Planar
+/// track's *Pin layer* row names, its four points keyframed to the tracked
+/// surface.
+///
+/// One undoable edit, and one the user can throw away like any other: the pin is
+/// an ordinary effect with ordinary keyframes on it from the moment it lands.
+///
+/// Refused when nothing has been tracked under this instance, or when no pin
+/// layer has been chosen — a button that quietly did nothing would be the
+/// hardest kind of fault to see.
+#[frb(sync)]
+pub fn create_corner_pin(tracked: LayerReference, effect: Uuid) -> Result<(), BridgeError> {
+    let item = tracked.item()?;
+    let fx = item
+        .effects
+        .iter()
+        .find(|e| e.id == effect)
+        .ok_or(BridgeError::InvalidEffect)?;
+    if fx.effect.match_name != lumit_core::track::PLANAR_TRACK {
+        return Err(BridgeError::InvalidParam);
+    }
+    let target = match fx.param(lumit_core::track::PIN_LAYER_PARAM) {
+        Some(lumit_core::model::EffectValue::Layer(Some(id))) => *id,
+        _ => return Err(BridgeError::InvalidLayer),
+    };
+    let doc = {
+        let proj = tracked.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        state.store.snapshot()
+    };
+    let op = lumit_core::track::corner_pin_from_track(
+        &doc,
+        tracked.comp_id,
+        tracked.layer_id,
+        effect,
+        target,
+        &lumit_render::track::Store,
+    )
+    .ok_or(BridgeError::NoSolve)?;
+    tracked.commit(op)
+}

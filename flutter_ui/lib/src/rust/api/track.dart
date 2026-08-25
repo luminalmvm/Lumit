@@ -9,8 +9,8 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `failure_of`, `idle`, `media_source`, `tracked_media`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `failure_of`, `idle`, `idle`, `media_source`, `tracked_media`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// How `layer`'s analysis is getting on.
 ///
@@ -119,6 +119,32 @@ LayerReference addLayerAtPoints(
     BridgeLib.instance.api.crateApiTrackAddLayerAtPoints(
         tracked: tracked, tracks: tracks, frame: frame, solid: solid);
 
+/// How the Planar track instance `effect` on `layer` is getting on.
+///
+/// Polled while it is moving and never otherwise, exactly as
+/// [`track_status`] is — the reading is a value in a map, not a subscription.
+/// The answer is filed under the **effect instance**, because what was tracked
+/// is the quad this instance holds (K-579).
+BridgePlanarStatus planarStatus(
+        {required LayerReference layer, required UuidValue effect}) =>
+    BridgeLib.instance.api
+        .crateApiTrackPlanarStatus(layer: layer, effect: effect);
+
+/// **Create corner pin** (K-579): put a Corner pin on the layer the Planar
+/// track's *Pin layer* row names, its four points keyframed to the tracked
+/// surface.
+///
+/// One undoable edit, and one the user can throw away like any other: the pin is
+/// an ordinary effect with ordinary keyframes on it from the moment it lands.
+///
+/// Refused when nothing has been tracked under this instance, or when no pin
+/// layer has been chosen — a button that quietly did nothing would be the
+/// hardest kind of fault to see.
+void createCornerPin(
+        {required LayerReference tracked, required UuidValue effect}) =>
+    BridgeLib.instance.api
+        .crateApiTrackCreateCornerPin(tracked: tracked, effect: effect);
+
 /// A Camera layer's solve link, as the badge and the Convert command read it.
 class BridgeCameraLink {
   final BridgeLinkState state;
@@ -153,6 +179,70 @@ enum BridgeLinkState {
   ;
 }
 
+/// Everything the Planar track's status row draws, in one crossing.
+///
+/// Deliberately not [`BridgeTrackStatus`] with two fields ignored. A planar
+/// track has no point cloud and no reprojection error, and a camera solve has
+/// no re-anchor count; one struct carrying both would have four rows that mean
+/// nothing in half the places it is read, and the panel would have to know
+/// which half it was holding.
+class BridgePlanarStatus {
+  final BridgeTrackStage stage;
+
+  /// Frames followed so far, and how many there are. Both zero outside
+  /// [`BridgeTrackStage::Tracking`].
+  final int done;
+  final int total;
+
+  /// Set only at [`BridgeTrackStage::Failed`].
+  final BridgeTrackFailure? failure;
+
+  /// How many frames of the clip carry the surface, and how many the clip
+  /// has. `frames < clip_frames` is a **partial** track: the surface was lost
+  /// part-way and what was followed is the part before it.
+  final int frames;
+  final int clipFrames;
+
+  /// How many times the measurement was re-anchored (docs/impl/tracking.md
+  /// §6). Zero is a track measured entirely against its reference frame, and
+  /// so one carrying no accumulated drift at all — which is the one number
+  /// about a planar track that says how much to trust its far end.
+  final int reanchors;
+
+  const BridgePlanarStatus({
+    required this.stage,
+    required this.done,
+    required this.total,
+    this.failure,
+    required this.frames,
+    required this.clipFrames,
+    required this.reanchors,
+  });
+
+  @override
+  int get hashCode =>
+      stage.hashCode ^
+      done.hashCode ^
+      total.hashCode ^
+      failure.hashCode ^
+      frames.hashCode ^
+      clipFrames.hashCode ^
+      reanchors.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePlanarStatus &&
+          runtimeType == other.runtimeType &&
+          stage == other.stage &&
+          done == other.done &&
+          total == other.total &&
+          failure == other.failure &&
+          frames == other.frames &&
+          clipFrames == other.clipFrames &&
+          reanchors == other.reanchors;
+}
+
 /// Why an analysis produced no camera path.
 ///
 /// A **reason, not a sentence** (K-303): the engine's own `AnalysisError`
@@ -178,6 +268,10 @@ enum BridgeTrackFailure {
 
   /// The shot carries a camera move the solver could not stand behind.
   noSolve,
+
+  /// The quad's contents are not one flat surface, or move against
+  /// themselves (K-579).
+  notPlanar,
   ;
 }
 
