@@ -9574,6 +9574,12 @@ class _KeyLane extends StatefulWidget {
 class _KeyLaneState extends State<_KeyLane> {
   int? _dragging;
 
+  /// Which of this lane's keys the pointer is over (§4.2, polish 26). The mark
+  /// brightens halfway to `text_primary` — the pre-selection hint, saying "this
+  /// is the one a click would take" — and says nothing else: the time and the
+  /// value appear only once a drag starts (P1).
+  int? _hovered;
+
   /// Pixels the gesture has moved. The frame offset is always derived from
   /// this running total rather than summed per event, for the same reason the
   /// bar drag does it: per-event rounding reads as mouse acceleration.
@@ -9717,6 +9723,7 @@ class _KeyLaneState extends State<_KeyLane> {
               axis: widget.axis,
               colour: t.animated,
               chosen: t.textPrimary,
+              hovered: _hovered,
               // The same size and the same shapes in both modes (K-457,
               // K-459): a key says its interpolation wherever it is drawn,
               // and says it at the size it is aimed at.
@@ -9746,6 +9753,12 @@ class _KeyLaneState extends State<_KeyLane> {
             height: t.density.laneRow,
             child: MouseRegion(
               cursor: SystemMouseCursors.resizeLeftRight,
+              // The grab slot is the hover target too: what brightens is
+              // exactly what a press would take (P5).
+              onEnter: (_) => setState(() => _hovered = i),
+              onExit: (_) => setState(() {
+                if (_hovered == i) _hovered = null;
+              }),
               child: GestureDetector(
                 key: ValueKey<String>('tl-key-${widget.rowId}#$i'),
                 behavior: HitTestBehavior.opaque,
@@ -10348,6 +10361,12 @@ class _LaneKeysPainter extends CustomPainter {
   /// plain diamond is all a mark that cannot be aimed at has to say.
   final List<(KeyShape, KeyShape)>? shapes;
 
+  /// The key under the pointer, drawn **half way** from [colour] to [chosen]
+  /// (§4.2): far enough to answer the hand, short of the mark a selected key
+  /// carries, so a hovered key is never mistaken for a caught one. Null on a
+  /// summary row, whose marks are a statement rather than a target (K-441).
+  final int? hovered;
+
   const _LaneKeysPainter({
     required this.frames,
     required this.selected,
@@ -10356,6 +10375,7 @@ class _LaneKeysPainter extends CustomPainter {
     required this.chosen,
     this.half = laneKeyHalf,
     this.shapes,
+    this.hovered,
   });
 
   @override
@@ -10363,7 +10383,12 @@ class _LaneKeysPainter extends CustomPainter {
     final mid = size.height / 2;
     for (var i = 0; i < frames.length; i++) {
       final x = axis.xOf(frames[i]);
-      final paint = Paint()..color = selected.contains(i) ? chosen : colour;
+      final paint = Paint()
+        ..color = selected.contains(i)
+            ? chosen
+            : i == hovered
+                ? Color.lerp(colour, chosen, 0.5)!
+                : colour;
       final (into, out) = shapes == null || i >= shapes!.length
           ? (KeyShape.diamond, KeyShape.diamond)
           : shapes![i];
@@ -10380,6 +10405,7 @@ class _LaneKeysPainter extends CustomPainter {
       old.colour != colour ||
       old.chosen != chosen ||
       old.half != half ||
+      old.hovered != hovered ||
       !listEquals(old.shapes, shapes) ||
       old.axis.frames != axis.frames ||
       old.axis.width != axis.width;
@@ -11059,6 +11085,11 @@ class _BarState extends State<_Bar> {
   /// which read a fast edge grab as a grab of the middle.
   double _downDx = 0;
 
+  /// The pointer is over this bar's body (§4.1, polish 26). It lifts the
+  /// leading edge and nothing else — no size change, no second outline — and
+  /// leaves the moment the pointer does (P1).
+  bool _hover = false;
+
   /// What the drag in flight last landed on, so the capture can be drawn — the
   /// same hairline a lane key's drag draws (docs/07 §4.5).
   SnapTarget? _caught;
@@ -11227,212 +11258,242 @@ class _BarState extends State<_Bar> {
             // Selection on the raw DOWN, outside the gesture arena: the
             // bar's tap otherwise waits for the move/trim drag recognisers
             // to concede before the Effect controls learn the layer.
-            child: Listener(
-              onPointerDown: (event) {
-                if (event.buttons != kPrimaryButton) return;
-                widget.onSelect();
-                // A Sequence layer's bar opens its view on a double-click, the
-                // same as its name does (K-248) — counted here rather than
-                // with an `onDoubleTap` below, because a double-tap recogniser
-                // beside the razor's `onTapUp` makes the arena hold every
-                // single tap back, and the razor stops cutting ([DoubleTap]).
-                final open = widget.onOpenSequence;
-                if (open != null && _barTaps.tap()) open();
-              },
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                // Armed razor: a click cuts this layer **where it was clicked**
-                // rather than starting a drag (docs/07 §4.4). At the playhead
-                // is what Cut-at-playhead is for; a razor's whole point is that
-                // the cut lands under the blade. A layer with nothing cuttable
-                // there says so through the engine's calm error, which is
-                // nothing on screen — the cut simply does not happen.
-                onTapUp: widget.razor && !held
-                    ? (details) => widget.onRazor(
-                          widget
-                              .razorFrameAt(left + details.localPosition.dx)
-                              .round(),
-                        )
-                    : null,
-                // Selection already happened on the down; the tap has nothing
-                // left to do, but registering it keeps the click out of any
-                // parent recogniser's hands.
-                onTap: widget.razor && !held ? null : () {},
-                onHorizontalDragDown: widget.razor || held
-                    ? null
-                    : (d) => _downDx = d.localPosition.dx,
-                supportedDevices: dragDevices,
-                onHorizontalDragStart: widget.razor || held
-                    ? null
-                    // No select here: every drag begins with the down, and the
-                    // down already selected.
-                    : (d) {
-                        setState(() {
-                          _delta = 0;
-                          _deltaPx = 0;
-                          _grab = barGrabAt(_downDx, width);
-                        });
-                        _escape.begin(_abandon);
-                      },
-                onHorizontalDragUpdate: widget.razor || held
-                    ? null
-                    // Nothing moves once `Escape` has taken the drag, though
-                    // the pointer carries on: the bar is back where it started
-                    // and stays there until the button comes up.
-                    : (d) {
-                        if (!_escape.running) return;
-                        setState(() {
-                          _deltaPx += d.delta.dx;
-                          // The pointer keeps travelling; the bar does not.
-                          // Held against the source's ends (K-211) and against
-                          // itself, so a trim can neither run past the media
-                          // nor turn the bar inside out — and dragging back
-                          // picks the edge up again from where it stuck.
-                          _delta = clampBarDelta(
-                            grab: _grab ?? BarGrab.move,
-                            delta: _snappedDelta(inFrame, outFrame),
-                            inFrame: inFrame,
-                            outFrame: outFrame,
-                            bounds: widget.bounds,
-                          );
-                          _publishPreview();
-                        });
-                      },
-                onHorizontalDragEnd: widget.razor || held
-                    ? null
-                    : (_) {
-                        if (_escape.end()) _commit(inFrame, outFrame);
-                      },
-                onHorizontalDragCancel: widget.razor || held
-                    ? null
-                    : () {
-                        _escape.end();
-                        _abandon();
-                      },
-                child: Container(
-                  key: ValueKey<String>(
-                      'tl-bar-fill-${widget.entry.layer.internallayerId}'),
-                  decoration: BoxDecoration(
-                    // The layer's label colour (K-188): the same chip the
-                    // outline swatch shows, so recolouring a layer recolours
-                    // its bar — and each kind starts on its own colour.
-                    // **Desaturated** under the redesign (§12A.1): the fill is
-                    // that colour at [clipFillAlpha] over the lane's ground,
-                    // computed from the token rather than picked, so a lane
-                    // full of layers reads organised rather than carnival. The
-                    // solid leading edge below carries the full colour.
-                    // Selected bars brighten that fill rather than growing an
-                    // outline: the hue still says which layer this is, and a
-                    // lighter bar reads at a glance where a 1px box did not.
-                    color: widget.selected
-                        ? Color.lerp(
-                                t.labelColour(info.label), t.textPrimary, 0.35)!
-                            .withValues(alpha: clipFillSelectedAlpha)
-                        : t
-                            .labelColour(info.label)
-                            .withValues(alpha: clipFillAlpha),
-                    // Stadium ends under Round (K-394, §12.1) — the control
-                    // radius is the sentinel that clamps to half the bar's own
-                    // height. **The bar's HIT rect is unchanged and stays
-                    // rectangular**: a BoxDecoration's radius paints, it does
-                    // not hit-test, so [barGrabAt] still reads dx across the
-                    // full width and the trim zones keep exactly the grab area
-                    // they had. That is deliberate — a curved end would take
-                    // pixels off the corner of a target already only 8 px wide.
-                    borderRadius: BorderRadius.circular(
-                        round ? t.tokens.controlRadius : sharpClipRadius),
-                  ),
-                  child: Stack(
-                    children: [
-                      // The leading edge (§12A.1): 2px of the full colour at
-                      // the bar's start, so a desaturated fill still lands with
-                      // a snap and a row of bars reads as a row of beginnings.
-                      Positioned(
-                        key: ValueKey<String>(
-                            'tl-bar-edge-${widget.entry.layer.internallayerId}'),
-                        left: 0,
-                        top: 0,
-                        bottom: 0,
-                        width: clipEdgeWidth,
-                        child: IgnorePointer(
-                          child: ColoredBox(color: t.labelColour(info.label)),
-                        ),
-                      ),
-                      // The layer's name, on its bar (§6.1, §7.1): **Hanken at
-                      // 10**, the mockup's own size (K-451), set clear of the
-                      // leading edge. It was mono at 11 — but a layer's name is
-                      // something the *user* named, and §7.1 sets those in
-                      // sentence-case Hanken; the mono row keeps the axis
-                      // numbers and units, which are numbers.
-                      //
-                      // Full `text_primary`, no alpha: the mockup draws the
-                      // name opaque. Quieting it only made a name over a pale
-                      // label colour harder to read than the bar it sits on.
-                      Positioned(
-                        left: clipEdgeWidth + 4,
-                        right: 2,
-                        top: 0,
-                        bottom: 0,
-                        child: IgnorePointer(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              info.name,
-                              key: ValueKey<String>(
-                                  'tl-bar-name-${widget.entry.layer.internallayerId}'),
-                              style: t.small.copyWith(color: t.textPrimary),
-                              maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              softWrap: false,
+            child: MouseRegion(
+              key: ValueKey<String>(
+                  'tl-bar-cursor-${widget.entry.layer.internallayerId}'),
+              // The bar's body is a handle, and the cursor says so before the
+              // button goes down (P2, §4.1). The two end strips lie over this
+              // one and keep their resize arrows; a **locked** bar, and an
+              // armed razor, take the plain arrow instead — neither is a grab,
+              // and `forbidden` belongs to a refused drop rather than to a
+              // surface at rest (P1).
+              cursor: held || widget.razor
+                  ? SystemMouseCursors.basic
+                  : _grab != null
+                      ? SystemMouseCursors.grabbing
+                      : SystemMouseCursors.grab,
+              onEnter: (_) => setState(() => _hover = true),
+              onExit: (_) => setState(() => _hover = false),
+              child: Listener(
+                onPointerDown: (event) {
+                  if (event.buttons != kPrimaryButton) return;
+                  widget.onSelect();
+                  // A Sequence layer's bar opens its view on a double-click, the
+                  // same as its name does (K-248) — counted here rather than
+                  // with an `onDoubleTap` below, because a double-tap recogniser
+                  // beside the razor's `onTapUp` makes the arena hold every
+                  // single tap back, and the razor stops cutting ([DoubleTap]).
+                  final open = widget.onOpenSequence;
+                  if (open != null && _barTaps.tap()) open();
+                },
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  // Armed razor: a click cuts this layer **where it was clicked**
+                  // rather than starting a drag (docs/07 §4.4). At the playhead
+                  // is what Cut-at-playhead is for; a razor's whole point is that
+                  // the cut lands under the blade. A layer with nothing cuttable
+                  // there says so through the engine's calm error, which is
+                  // nothing on screen — the cut simply does not happen.
+                  onTapUp: widget.razor && !held
+                      ? (details) => widget.onRazor(
+                            widget
+                                .razorFrameAt(left + details.localPosition.dx)
+                                .round(),
+                          )
+                      : null,
+                  // Selection already happened on the down; the tap has nothing
+                  // left to do, but registering it keeps the click out of any
+                  // parent recogniser's hands.
+                  onTap: widget.razor && !held ? null : () {},
+                  onHorizontalDragDown: widget.razor || held
+                      ? null
+                      : (d) => _downDx = d.localPosition.dx,
+                  supportedDevices: dragDevices,
+                  onHorizontalDragStart: widget.razor || held
+                      ? null
+                      // No select here: every drag begins with the down, and the
+                      // down already selected.
+                      : (d) {
+                          setState(() {
+                            _delta = 0;
+                            _deltaPx = 0;
+                            _grab = barGrabAt(_downDx, width);
+                          });
+                          _escape.begin(_abandon);
+                        },
+                  onHorizontalDragUpdate: widget.razor || held
+                      ? null
+                      // Nothing moves once `Escape` has taken the drag, though
+                      // the pointer carries on: the bar is back where it started
+                      // and stays there until the button comes up.
+                      : (d) {
+                          if (!_escape.running) return;
+                          setState(() {
+                            _deltaPx += d.delta.dx;
+                            // The pointer keeps travelling; the bar does not.
+                            // Held against the source's ends (K-211) and against
+                            // itself, so a trim can neither run past the media
+                            // nor turn the bar inside out — and dragging back
+                            // picks the edge up again from where it stuck.
+                            _delta = clampBarDelta(
+                              grab: _grab ?? BarGrab.move,
+                              delta: _snappedDelta(inFrame, outFrame),
+                              inFrame: inFrame,
+                              outFrame: outFrame,
+                              bounds: widget.bounds,
+                            );
+                            _publishPreview();
+                          });
+                        },
+                  onHorizontalDragEnd: widget.razor || held
+                      ? null
+                      : (_) {
+                          if (_escape.end()) _commit(inFrame, outFrame);
+                        },
+                  onHorizontalDragCancel: widget.razor || held
+                      ? null
+                      : () {
+                          _escape.end();
+                          _abandon();
+                        },
+                  child: Container(
+                    key: ValueKey<String>(
+                        'tl-bar-fill-${widget.entry.layer.internallayerId}'),
+                    decoration: BoxDecoration(
+                      // The layer's label colour (K-188): the same chip the
+                      // outline swatch shows, so recolouring a layer recolours
+                      // its bar — and each kind starts on its own colour.
+                      // **Desaturated** under the redesign (§12A.1): the fill is
+                      // that colour at [clipFillAlpha] over the lane's ground,
+                      // computed from the token rather than picked, so a lane
+                      // full of layers reads organised rather than carnival. The
+                      // solid leading edge below carries the full colour.
+                      // Selected bars brighten that fill rather than growing an
+                      // outline: the hue still says which layer this is, and a
+                      // lighter bar reads at a glance where a 1px box did not.
+                      color: widget.selected
+                          ? Color.lerp(t.labelColour(info.label), t.textPrimary,
+                                  0.35)!
+                              .withValues(alpha: clipFillSelectedAlpha)
+                          : t
+                              .labelColour(info.label)
+                              .withValues(alpha: clipFillAlpha),
+                      // Stadium ends under Round (K-394, §12.1) — the control
+                      // radius is the sentinel that clamps to half the bar's own
+                      // height. **The bar's HIT rect is unchanged and stays
+                      // rectangular**: a BoxDecoration's radius paints, it does
+                      // not hit-test, so [barGrabAt] still reads dx across the
+                      // full width and the trim zones keep exactly the grab area
+                      // they had. That is deliberate — a curved end would take
+                      // pixels off the corner of a target already only 8 px wide.
+                      borderRadius: BorderRadius.circular(
+                          round ? t.tokens.controlRadius : sharpClipRadius),
+                    ),
+                    child: Stack(
+                      children: [
+                        // The leading edge (§12A.1): 2px of the full colour at
+                        // the bar's start, so a desaturated fill still lands with
+                        // a snap and a row of bars reads as a row of beginnings.
+                        Positioned(
+                          key: ValueKey<String>(
+                              'tl-bar-edge-${widget.entry.layer.internallayerId}'),
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: clipEdgeWidth,
+                          child: IgnorePointer(
+                            // Hover lifts it a step toward `text_primary`
+                            // (§4.1): the edge already rests at the label's full
+                            // strength, so there is nothing to firm — what a
+                            // hovered bar can do is stand one step nearer the
+                            // colour selection speaks in, under the pointer and
+                            // nowhere else (P1). A selected bar is already
+                            // saying more than that through its fill, and does
+                            // not say it twice.
+                            child: ColoredBox(
+                              color: _hover && !widget.selected
+                                  ? Color.lerp(t.labelColour(info.label),
+                                      t.textPrimary, clipEdgeHoverLift)!
+                                  : t.labelColour(info.label),
                             ),
                           ),
                         ),
-                      ),
-                      // A Sequence layer's bar stays a plain bar: the clips and
-                      // their edit points are the sequence view's to draw, and
-                      // split lines up here only said the same thing twice
-                      // (K-248). What the bar does show is where its clips are
-                      // *not* — the gaps, faint, the way a trimmed footage
-                      // layer shows the source it is not using (K-212).
-                      if (info.kind == BridgeLayerKind.sequence)
-                        Positioned.fill(
+                        // The layer's name, on its bar (§6.1, §7.1): **Hanken at
+                        // 10**, the mockup's own size (K-451), set clear of the
+                        // leading edge. It was mono at 11 — but a layer's name is
+                        // something the *user* named, and §7.1 sets those in
+                        // sentence-case Hanken; the mono row keeps the axis
+                        // numbers and units, which are numbers.
+                        //
+                        // Full `text_primary`, no alpha: the mockup draws the
+                        // name opaque. Quieting it only made a name over a pale
+                        // label colour harder to read than the bar it sits on.
+                        Positioned(
+                          left: clipEdgeWidth + 4,
+                          right: 2,
+                          top: 0,
+                          bottom: 0,
                           child: IgnorePointer(
-                            child: CustomPaint(
-                              painter: SequenceGapsPainter(
-                                clips: info.clips,
-                                axis: widget.axis,
-                                left: left,
-                                ink: t.surface0,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                info.name,
+                                key: ValueKey<String>(
+                                    'tl-bar-name-${widget.entry.layer.internallayerId}'),
+                                style: t.small.copyWith(color: t.textPrimary),
+                                maxLines: 1,
+                                overflow: TextOverflow.clip,
+                                softWrap: false,
                               ),
                             ),
                           ),
                         ),
-                      // The two trim zones say so under the pointer: a bar
-                      // whose ends can be taken hold of should not have to be
-                      // discovered by trial. Inside the gesture detector, not
-                      // over it, so hovering never costs the drag its events.
-                      if (!held && !widget.razor) ...[
-                        _trimCursor(width, left: true),
-                        _trimCursor(width, left: false),
-                      ],
-                      // The corner marks: this bar is as long as its source
-                      // allows in that direction (K-211).
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(
-                            key: ValueKey<String>(
-                                'tl-bar-ends-${widget.entry.layer.internallayerId}'),
-                            painter: BarEndMarksPainter(
-                              atIn: minIn != null && drawIn <= minIn,
-                              atOut: maxOut != null && drawOut >= maxOut,
-                              // The same ink the clip splits use, so the bar
-                              // keeps one vocabulary of marks.
-                              colour: t.surface0,
+                        // A Sequence layer's bar stays a plain bar: the clips and
+                        // their edit points are the sequence view's to draw, and
+                        // split lines up here only said the same thing twice
+                        // (K-248). What the bar does show is where its clips are
+                        // *not* — the gaps, faint, the way a trimmed footage
+                        // layer shows the source it is not using (K-212).
+                        if (info.kind == BridgeLayerKind.sequence)
+                          Positioned.fill(
+                            child: IgnorePointer(
+                              child: CustomPaint(
+                                painter: SequenceGapsPainter(
+                                  clips: info.clips,
+                                  axis: widget.axis,
+                                  left: left,
+                                  ink: t.surface0,
+                                ),
+                              ),
+                            ),
+                          ),
+                        // The two trim zones say so under the pointer: a bar
+                        // whose ends can be taken hold of should not have to be
+                        // discovered by trial. Inside the gesture detector, not
+                        // over it, so hovering never costs the drag its events.
+                        if (!held && !widget.razor) ...[
+                          _trimCursor(width, left: true),
+                          _trimCursor(width, left: false),
+                        ],
+                        // The corner marks: this bar is as long as its source
+                        // allows in that direction (K-211).
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: CustomPaint(
+                              key: ValueKey<String>(
+                                  'tl-bar-ends-${widget.entry.layer.internallayerId}'),
+                              painter: BarEndMarksPainter(
+                                atIn: minIn != null && drawIn <= minIn,
+                                atOut: maxOut != null && drawOut >= maxOut,
+                                // The same ink the clip splits use, so the bar
+                                // keeps one vocabulary of marks.
+                                colour: t.surface0,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

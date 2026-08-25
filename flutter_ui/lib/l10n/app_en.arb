@@ -8807,5 +8807,21 @@
   "tipTangentFree": "Free tangents",
   "@tipTangentFree": {
     "description": "Timeline, Graph mode: the tooltip on the Free tangent button — tangents shaped by hand rather than worked out from the neighbouring keyframes."
+  },
+  "scrubLadderAlt": "ALT ×.01",
+  "@scrubLadderAlt": {
+    "description": "The finest rung of the small floating chip that appears while a number is being dragged sideways to change it. Holding Alt makes the drag a hundredth as fast. ALT is the key's name on the keyboard and stays as it is; the multiplier is the number the drag is scaled by."
+  },
+  "scrubLadderCtrl": "CTRL ×.1",
+  "@scrubLadderCtrl": {
+    "description": "The second rung of the small floating chip shown while a number is being dragged to change it. Holding Ctrl makes the drag a tenth as fast. CTRL is the key's name on the keyboard and stays as it is."
+  },
+  "scrubLadderBase": "BASE",
+  "@scrubLadderBase": {
+    "description": "The middle rung of the small floating chip shown while a number is being dragged to change it: no key held, the drag at its ordinary speed."
+  },
+  "scrubLadderShift": "SHIFT ×10",
+  "@scrubLadderShift": {
+    "description": "The coarsest rung of the small floating chip shown while a number is being dragged to change it. Holding Shift makes the drag ten times as fast. SHIFT is the key's name on the keyboard and stays as it is."
   }
 }

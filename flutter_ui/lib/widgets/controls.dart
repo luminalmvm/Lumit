@@ -2263,16 +2263,101 @@ class _HouseRadioState extends State<HouseRadio> {
   }
 }
 
+/// The **modifier ladder** a value scrub runs on, coarsest first — the study's
+/// four rungs (`Caddis study/notes-editor-ux.md` §3, docs/impl
+/// /timeline-interaction.md polish 27), which are After Effects' own two with
+/// a finer one under them: `Shift` ×10, nothing held ×1, `Ctrl` ×0.1, `Alt`
+/// ×0.01.
+///
+/// Ordered, because the list is both the arithmetic and the chip's drawing:
+/// [ScrubLadder] boxes whichever rung [scrubFactor] is answering.
+const List<double> scrubLadder = [10, 1, 0.1, 0.01];
+
 /// How much a scrub tick is worth right now, from the modifier keys — the
-/// After Effects convention: Shift makes a drag coarse (×10), Ctrl makes it
-/// fine (×0.1), and nothing held is ×1. Sampled inside the drag handler on
-/// every update, so pressing or releasing a modifier mid-drag takes effect at
-/// once.
+/// [scrubLadder]'s four rungs. Sampled inside the drag handler on every
+/// update, so pressing or releasing a modifier mid-drag takes effect at once.
+///
+/// Coarse beats fine where two are held at once: `Shift` first, then `Alt`,
+/// then `Ctrl`. A ladder needs one answer, and the one the hand meant is the
+/// one it pressed on purpose — which, with two held, cannot be told apart, so
+/// the order is fixed here rather than guessed.
 double scrubFactor() => HardwareKeyboard.instance.isShiftPressed
     ? 10
-    : HardwareKeyboard.instance.isControlPressed
-        ? 0.1
-        : 1;
+    : HardwareKeyboard.instance.isAltPressed
+        ? 0.01
+        : HardwareKeyboard.instance.isControlPressed
+            ? 0.1
+            : 1;
+
+/// The floating **sensitivity ladder** shown while a value scrub runs (polish
+/// 27, study §3): all four rungs at once, the one in force boxed, so the
+/// modifier that makes a drag fine is learned by using the field rather than
+/// by reading the manual.
+///
+/// Transient and local (P1): [DragValueField] puts it up on the pointer's way
+/// down and takes it down on release, and the resting panel keeps every pixel
+/// it had.
+class ScrubLadder extends StatelessWidget {
+  /// What [scrubFactor] answers right now — which rung is boxed.
+  final double factor;
+
+  const ScrubLadder({super.key, required this.factor});
+
+  /// A rung's label. Ordered as [scrubLadder] is.
+  static List<String> get labels => [
+        l10n.scrubLadderShift,
+        l10n.scrubLadderBase,
+        l10n.scrubLadderCtrl,
+        l10n.scrubLadderAlt,
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    // The hint pill's own ground and face (§4.2): every readout a gesture
+    // summons in this application is 8px mono on `surface_4`.
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        decoration: BoxDecoration(
+          color: t.surface4,
+          borderRadius: BorderRadius.circular(2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Coarsest on the right, finest on the left: the chip reads the
+            // way the drag does, and the rungs sit in the order the study
+            // draws them (ALT · CTRL · BASE · SHIFT).
+            for (var i = scrubLadder.length - 1; i >= 0; i--)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                decoration: BoxDecoration(
+                  // The box is the whole mark: no fill, no colour beyond the
+                  // one selection speaks in (P4).
+                  border: Border.all(
+                    color: factor == scrubLadder[i]
+                        ? t.textPrimary
+                        : const Color(0x00000000),
+                  ),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  labels[i],
+                  style: t.mono.copyWith(
+                    fontSize: 8,
+                    color:
+                        factor == scrubLadder[i] ? t.textPrimary : t.textMuted,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// A value well's height in a panel: **20** (K-451, docs/15 §12A.6). Fixed
 /// rather than grown from the number inside it, because the mockups' heights
@@ -2418,6 +2503,78 @@ class _DragValueFieldState extends State<DragValueField>
   late TextEditingController _controller;
   late final FocusNode _focus = FocusNode(onKeyEvent: _onEditorKey);
 
+  /// The floating [ScrubLadder], up only while a drag runs (polish 27).
+  ///
+  /// An overlay entry rather than a child of this field: the chip is bigger
+  /// than the well it belongs to and every well in the application sits in a
+  /// row that would either clip it or make room for it, and making room is a
+  /// resting-state change (P1). Placed from the field's rect taken once at the
+  /// down — a field does not move while it is being scrubbed — so a pointer
+  /// move costs the overlay nothing.
+  OverlayEntry? _ladder;
+
+  /// Which rung is boxed, read afresh whenever a modifier goes down or up.
+  /// A notifier rather than `setState`, so a modifier pressed mid-drag
+  /// repaints the chip alone and not the panel behind it.
+  final ValueNotifier<double> _factor = ValueNotifier<double>(1);
+
+  /// Modifiers pressed and released **without the pointer moving** still change
+  /// what the next pixel is worth, so the chip cannot wait for a drag update to
+  /// find out. Never handles the key: it only looks.
+  bool _ladderKey(KeyEvent event) {
+    _factor.value = scrubFactor();
+    return false;
+  }
+
+  void _showLadder() {
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final box = context.findRenderObject();
+    final overlayBox = overlay?.context.findRenderObject();
+    // No overlay above this field (a bare widget-test host) simply means no
+    // chip: the scrub itself is unaffected.
+    if (overlay == null ||
+        box is! RenderBox ||
+        !box.hasSize ||
+        overlayBox is! RenderBox) {
+      return;
+    }
+    final top =
+        box.localToGlobal(Offset(box.size.width / 2, 0), ancestor: overlayBox);
+    final scope = ThemeScope.of(context);
+    _factor.value = scrubFactor();
+    _ladder = OverlayEntry(
+      builder: (_) => Positioned(
+        left: top.dx,
+        top: top.dy - 4,
+        // Centred over the field and sitting just above it, wherever that
+        // leaves it: the chip is placed by its own bottom-centre, so a field
+        // at the left edge of the window does not push it off screen.
+        child: FractionalTranslation(
+          translation: const Offset(-0.5, -1),
+          // The overlay is above this field's own ThemeScope, so the chip is
+          // handed the scope again on its way in.
+          child: ThemeScope(
+            theme: scope.theme,
+            animationLevel: scope.animationLevel,
+            showTooltips: scope.showTooltips,
+            child: ValueListenableBuilder<double>(
+              valueListenable: _factor,
+              builder: (_, factor, __) => ScrubLadder(factor: factor),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_ladder!);
+    HardwareKeyboard.instance.addHandler(_ladderKey);
+  }
+
+  void _hideLadder() {
+    HardwareKeyboard.instance.removeHandler(_ladderKey);
+    _ladder?.remove();
+    _ladder = null;
+  }
+
   /// `Escape` in the open editor: shut it and keep the value the field had
   /// (K-323). Every other way out commits — Enter, Tab, clicking away — so
   /// without this a half-typed number had no way back.
@@ -2462,6 +2619,10 @@ class _DragValueFieldState extends State<DragValueField>
 
   @override
   void dispose() {
+    // The chip lives in the Overlay rather than under this field, so a field
+    // disposed mid-drag would leave it on screen over whatever came next.
+    _hideLadder();
+    _factor.dispose();
     _controller.dispose();
     _focus.dispose();
     _idleFocus.dispose();
@@ -2634,10 +2795,12 @@ class _DragValueFieldState extends State<DragValueField>
           _dragAccum = 0;
           _lastDragValue = null;
           setState(() => _dragging = true);
+          _showLadder();
           widget.onChangeStart?.call();
         },
         onHorizontalDragUpdate: (d) {
           final factor = scrubFactor();
+          _factor.value = factor;
           _dragAccum += d.delta.dx * widget.speed * factor;
           if (_dragAccum.abs() >= widget.speed * factor) {
             // The drag runs from its own last tick, not from `widget.value`:
@@ -2654,6 +2817,7 @@ class _DragValueFieldState extends State<DragValueField>
         onHorizontalDragEnd: (_) {
           final v = _lastDragValue;
           _lastDragValue = null;
+          _hideLadder();
           setState(() => _dragging = false);
           if (v != null) {
             (widget.onChangeEnd ?? widget.onChanged)(v);
@@ -2670,6 +2834,7 @@ class _DragValueFieldState extends State<DragValueField>
         },
         onHorizontalDragCancel: () {
           _lastDragValue = null;
+          _hideLadder();
           setState(() => _dragging = false);
           widget.onDragCancel?.call();
         },

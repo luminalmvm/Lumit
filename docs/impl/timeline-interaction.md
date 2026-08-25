@@ -243,11 +243,19 @@ Built in TI-6. Per K-442, §12A.2 and `GraphMode.dc.html` the Graph outline is:
 Shipped behaviour stands (move/trim with source bounds, ghost extent, corner marks,
 K-208's both-halves slide, selection on the raw down). Additions:
 
-- The bar's **body** shows the move cursor (`grab`, `grabbing` while held); its end strips
-  keep `resizeLeftRight` (shipped, :10025). A locked bar shows the plain arrow —
-  `forbidden` only *during* a refused drop, per P1.
-- A bar hovered (not selected) firms its leading edge to full strength; nothing else
-  changes (P1). Selection keeps brightening the fill (§12A.1).
+- The bar's **body** shows the move cursor — `grab`, `grabbing` while the bar is actually
+  in hand; its end strips keep `resizeLeftRight` (shipped). A locked bar shows the plain
+  arrow — `forbidden` only *during* a refused drop, per P1 — and so does an **armed
+  razor**, which is not a grab either. Built in TI-10, as one `MouseRegion` around the
+  body's own gesture detector: the two trim strips are drawn *inside* it and stand in
+  front, so putting a cursor on the body could not take theirs away.
+- A bar hovered (not selected) lifts its leading edge one step toward `text_primary`;
+  nothing else changes (P1). Selection keeps brightening the fill (§12A.1). **Corrected in
+  TI-10**: the note asked for the edge to be "firmed to full strength", which it already
+  is at rest — §12A.1 gives it the label's full colour precisely so a desaturated fill
+  still lands with a snap — so there was nothing to firm. The step left to take is toward
+  the colour this panel selects in (`clipEdgeHoverLift`), which is a hover mark that
+  cannot be confused with the fill's own selection mark.
 - **Bar drags snap** (TI-9): both ends are sources against the shared target list, nearest
   capture wins, the caught target draws the same capture line a lane key drag draws, `Ctrl`
   suspends. The arithmetic is `timeline_snap.dart`; this was wiring. One thing the wiring
@@ -265,7 +273,11 @@ K-208's both-halves slide, selection on the raw down). Additions:
 - A key drag selects on the down, moves in time, snaps with target indication, commits
   once (all shipped); **Escape reverts** (TI-2, P3 — the shared `DragEscape`).
 - A hovered key brightens to `text_primary` at half strength — the pre-selection hint —
-  and its time/value appear nowhere until the drag starts (P1).
+  and its time/value appear nowhere until the drag starts (P1). Built in TI-10: the
+  **grab slot is the hover target**, so what brightens is exactly what a press would take
+  (P5), and the painter is told which key rather than the key being drawn separately —
+  one painter still serves Layers lanes, Keys mode and the summary row (K-459). Half way
+  is deliberate: a hovered key must not be mistakable for a caught one.
 - **While a key drag or block stretch runs, a badge under the pointer reads
   `f<frame> · <value>`** (frame only for a multi-key stretch: `f<first>–f<last>`), in the
   block badge's own 8px mono on `surface_4`. This is the drawing's value-hint pill and the
@@ -399,8 +411,11 @@ middle of **every** key, same-shape pairs included.
 - Breaking/joining stays `Alt` at drag start (shipped); the joined partner keeps its
   screen length (shipped). `Shift` lays the handle flat (shipped, K-333).
 - Hovering a handle's target ring brightens the ring one step (P1); the cursor over key
-  and handle targets is `move`/`resizeUpDown` respectively — today neither has a
-  `MouseRegion` at all.
+  and handle targets is `move`/`resizeUpDown` respectively. **Both landed with TI-5**, in
+  the same pass that gave the ring its hover state, so TI-10's cursor sweep found the
+  graph already done and touched nothing here. The ring holds its own hover
+  (`_HandleRing`) rather than the pane holding it, so brightening one ring repaints that
+  ring and not the curves under it.
 
 ### 6.2 Keys and selection
 
@@ -522,8 +537,12 @@ right-click menu, one-per-frame replacement. Additions, each spec'd already and 
   **answer `Escape`**, which puts the edge or the flag back and writes nothing (P3, gap 19).
   One `DragEscape` and one `_caught` serve both, since only one of them can be in flight.
 - The ruler ground shows no special cursor; the band's handles keep `resizeLeftRight`
-  (shipped); a marker flag hovers to `click` (shipped). Brightening its pill one step is
-  polish 26 and lands with **TI-10**, which owns the hover ladder for every surface at once.
+  (shipped); a marker flag hovers to `click` (shipped). Brightening its pill one step
+  landed in **TI-10**, which owns the hover ladder for every surface at once — **and the
+  triangle lifts with it**, because an unlabelled marker has no pill and a flag that
+  answered the pointer only when it carried words would be a hover with a hole in it. The
+  lift lives in `MarkerFlag` itself, so the ruler's markers and the ones on a layer's bar
+  answer identically without either caller knowing about hover.
 - `B`/`N` set work-area start/end at the playhead (docs/07 §4.1) — **already shipped**, and
   TI-9's audit was wrong to list them as missing: `workarea.set.start` / `workarea.set.end`
   are bound to `B` and `N` in `lumit-keymap`'s default map, described there, handled in
@@ -627,17 +646,39 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 
 ### Polish
 
-25. **[polish] Cursor vocabulary**: move cursor on a bar's body, `move` on graph keys,
-    `resizeUpDown` on handle rings — today only bar ends, lane keys, block handles and
-    work-area edges set one (study §9: "the cursor shape is doing most of the affordance
-    work"). (§4.1, §6.1)
-26. **[polish] Hover states**: key brightens at half strength, bar firms its leading
-    edge, marker pill and handle ring brighten one step — all P1-transient, nothing at
-    rest (study §11/§12). Rows already wash on hover.
-27. **[polish] Drag-scrub modifier ladder hint** — the floating
-    `CTRL ×0.1 · BASE · SHIFT ×10` chip shown only while a value scrub runs, active level
-    boxed (study §2.2, PLAN A2). Shared with Effect controls; listed here because the
-    fold rows scrub too.
+25. ~~**[polish] Cursor vocabulary**~~ — **landed**: `move`/`resizeUpDown` on the graph's
+    keys and handle rings in **TI-5**, `grab`/`grabbing` on a bar's body in **TI-10**,
+    where a locked bar and an armed razor take the plain arrow (study §9: "the cursor
+    shape is doing most of the affordance work"). One thing is deliberately **not** done:
+    the study's **scissors** while the razor is armed. Flutter's cursor set has no
+    scissors, so it would have to be a drawn pointer over the whole panel — the Viewer's
+    own machinery (K-230), a job of its own rather than a line in a cursor table. Left on
+    the polish list. (§4.1, §6.1)
+26. ~~**[polish] Hover states**~~ — **landed, TI-10**: the lane key brightens half way to
+    `text_primary`, a bar's leading edge leans one step the same way, the marker flag —
+    pill and triangle — lifts, and the graph's handle ring already brightened from TI-5.
+    All P1-transient, nothing at rest (study §11/§12); rows already washed on hover.
+27. ~~**[polish] Drag-scrub modifier ladder hint**~~ — **landed, TI-10**: the floating
+    `ALT ×.01 · CTRL ×.1 · BASE · SHIFT ×10` chip, active level boxed, shown only while a
+    value scrub runs (study §3, PLAN A2). Built into the shared `DragValueField`, so
+    **every** value well in the application gained it at once — the Effect controls, the
+    fold rows, the dialogues — rather than the Timeline gaining a chip of its own. Three
+    things the building settled, binding from here:
+    - **The ladder is four rungs, not three.** The study's own list is `Shift` ×10,
+      `Cmd` ×0.1, `Alt` ×0.01; Lumit had `Shift`/`Ctrl` and no fine rung under them, so
+      `scrubFactor` gained `Alt` ×0.01 and docs/07 §4.2's sentence was corrected in the
+      same commit. Coarse wins when two are held: `Shift`, then `Alt`, then `Ctrl`. The
+      order is fixed rather than guessed, because two modifiers held at once cannot say
+      which was meant.
+    - **The chip is an overlay entry pinned above the field**, not a child of it and not
+      a follower of the pointer: a chip in the tree would either be clipped by the row or
+      make the row taller, and making room is a resting-state change (P1). Its rect is
+      taken once at the down — a field does not move while it is being scrubbed — so a
+      pointer move costs the overlay nothing.
+    - **It watches the keyboard, not the pointer.** A modifier pressed without moving the
+      mouse still changes what the next pixel is worth, so the chip refreshes from
+      `HardwareKeyboard`'s own handler (looking, never handling) as well as on each drag
+      update.
 28. **[polish] Marquee/block visuals to the drawings** — `text_primary` hairline box, the
     12% wash (see bug 6). — **landed, TI-2.**
 
@@ -705,11 +746,20 @@ anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
   touched and the arb is untouched. Files: `timeline_panel_frb.dart`,
   `timeline_extras_frb.dart`, `graph_editor_frb.dart`; tests in
   `test/frb/timeline_ruler_snap_test.dart` and `test/frb/graph_editor_frb_test.dart`.
-- **TI-10 — The hover, cursor and hint pass** (polish 25–27). The cursor table, the
-  hover ladder, the scrub modifier-ladder chip (shared widget, wired here for the
-  timeline's rows; Effect controls adopts it in its own panel work). Files:
-  `timeline_panel_frb.dart`, `widgets/` (the chip), tests asserting the `MouseRegion`
-  cursors. Runs last — it touches every surface the earlier packages settle.
+- **TI-10 — The hover, cursor and hint pass** (polish 25–27). **Landed.** The bar's
+  `grab`/`grabbing` body with the plain arrow on a locked bar and an armed razor; the
+  hover ladder — lane key, bar edge, marker flag — with the graph's ring and cursors found
+  already done from TI-5; the scrub modifier ladder as a four-rung chip inside the shared
+  `DragValueField`, so every value well in the application has it, and `Alt` ×0.01 added
+  to `scrubFactor` with docs/07 §4.2 corrected to match. Files:
+  `widgets/controls.dart` (`scrubFactor`, `ScrubLadder`, the overlay wiring),
+  `timeline_panel_frb.dart` (the bar's cursor and edge, the lane painter's hover),
+  `timeline_extras_frb.dart` (`MarkerFlag`'s own hover, the two lift constants); tests in
+  `test/frb/timeline_hover_test.dart` and `test/scrub_modifiers_test.dart`. Ran last, as
+  planned — it touches every surface the earlier packages settled. **Deferred**: the
+  razor's scissors pointer (gap 25's note), and the ladder on the draggable **clock**,
+  which shares `scrubFactor` and so gained the fourth rung but not the chip — a timecode
+  is not a value well, and a hundredth of a frame is not a rung a clock has any use for.
 
 TI-1/TI-2/TI-3 are the owner's reported symptoms and go first; TI-5 unblocks TI-7/TI-8;
 TI-4 and TI-6 are independent of each other.

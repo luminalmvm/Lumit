@@ -1275,9 +1275,15 @@ measurement — the panel shows the numbers, it does not turn them on.
   (`transform_rows_frb.dart`, `effect_param_row_frb.dart`) rather than a second copy, so a
   parameter behaves the same wherever it is shown. A drag stages the value, previews it through
   the engine's patched clone, and commits once on release: one undo step for the gesture.
-  Every scrub-drag obeys the modifier convention After Effects uses: holding `Shift` is
-  coarse (×10 per pixel), holding `Ctrl` is fine (×0.1), and pressing or releasing the
-  modifier mid-drag takes effect at once. The
+  Every scrub-drag obeys the modifier convention After Effects uses, with the study's
+  fourth rung under it: holding `Shift` is coarse (×10 per pixel), nothing held is ×1,
+  holding `Ctrl` is fine (×0.1) and holding `Alt` finer still (×0.01) — coarse wins where
+  two are held at once — and pressing or releasing a modifier mid-drag takes effect at
+  once. **All four rungs are shown while the drag runs**, in a small floating chip above
+  the field with the one in force boxed (`ScrubLadder`, docs/impl/timeline-interaction.md
+  polish 27): a sensitivity nobody can see is a sensitivity nobody finds. The chip is
+  summoned by the gesture and gone on release, like every other transient hint (K-439's
+  §12A.5 discipline). The
   fold-out is worked out once as a list of rows (`layer_fold_frb.dart`) that *both* halves of
   the table walk — the outline drawing each row, the lane side leaving its height — so bars
   cannot drift away from their names. Each property row leads with its keyframe controls —

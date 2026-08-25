@@ -436,9 +436,7 @@ does not gate the four. Delete each phase here when it lands, as with everything
     rows to K-499 (layer number, stopwatch, navigator, value wells); TI-5 graph handles
     (dashed lines, hollow rings, handles travel with a dragged key, value hint pill);
     TI-6 Graph mode's drawn surface (colour-ticked outline, Normalise, Key readout row,
-    right-hand value gutter);
-    TI-10 the hover, cursor and modifier-ladder-hint pass. Delete each TI line from here
-    as it lands.
+    right-hand value gutter). Delete each TI line from here as it lands.
 - **Phase 3 - the node graph and the Nodes workspace** (K-445): the Graph panel as a
     second view of the effect stack that can also wire effects together, auto-wire
     and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes

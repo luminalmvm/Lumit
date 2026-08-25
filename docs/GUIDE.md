@@ -8491,6 +8491,26 @@ step, like any other change to an effect.
 The engine owns the pairing and the remembering; the proportional dragging itself is the
 panel's, because it only exists while your finger is on the mouse.
 
+### How fast a dragged number moves: the modifier ladder
+
+Every number in Lumit can be changed by dragging sideways across it, and one speed is
+never enough: the same box that wants to travel a hundred units in a swipe also wants to
+be nudged by a hundredth. So a drag has four speeds, chosen by what you are holding down
+— hold **Shift** and each pixel is worth ten, hold nothing and it is worth one, hold
+**Ctrl** and it is a tenth, hold **Alt** and it is a hundredth. You can press and release
+these in the middle of a drag; the next pixel simply counts differently, and the
+travel so far is kept.
+
+The part worth explaining is what appears while you drag. A small chip floats above the
+field showing all four speeds at once, with the one you are currently on drawn in a box.
+It is there so the ladder is learned by using it rather than by reading about it — you
+find the fine speeds because you saw them named while your hand was already on the number.
+It is put up when the drag starts and taken down when you let go, and it changes nothing
+about the panel underneath: like every hint in Lumit, it exists only while a gesture is
+running, appears next to what the gesture is doing, and leaves no trace behind. That is
+also why it floats *above* everything rather than sitting inside the row — a hint that
+made room for itself would push the panel about every time you touched a number.
+
 ## 17. The Timeline's three views, in plain terms
 
 The Timeline shows the same composition three ways, and a row of three words at the top

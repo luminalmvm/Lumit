@@ -1658,7 +1658,7 @@ const double _workHandleWidth = 10;
 /// triangle's left half stands clear of it and its right half is inside: a long
 /// comment then reads as belonging to *this* moment rather than as a bar
 /// starting somewhere to its right.
-class MarkerFlag extends StatelessWidget {
+class MarkerFlag extends StatefulWidget {
   final String label;
 
   /// The triangle — the part that says *which frame*.
@@ -1694,27 +1694,56 @@ class MarkerFlag extends StatelessWidget {
   });
 
   @override
+  State<MarkerFlag> createState() => _MarkerFlagState();
+}
+
+class _MarkerFlagState extends State<MarkerFlag> {
+  /// The pointer is on the flag (§7, polish 26). Held here rather than by the
+  /// ruler above so that brightening one flag repaints that flag, and so that
+  /// a marker on a layer's bar hovers exactly as one on the ruler does — the
+  /// two draw the same widget.
+  bool _hovered = false;
+
+  /// One step nearer the colour this panel selects in — the same move a
+  /// hovered bar's leading edge makes, at a flag's own gentler amount.
+  Color _lift(Color colour, Color toward) =>
+      _hovered ? Color.lerp(colour, toward, markerHoverLift)! : colour;
+
+  @override
   Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final label = widget.label;
     final flag = SizedBox(
-      width: width,
-      height: height,
-      child: CustomPaint(painter: _MarkerFlagPainter(fill: fill)),
+      width: MarkerFlag.width,
+      height: MarkerFlag.height,
+      child: CustomPaint(
+        painter: _MarkerFlagPainter(fill: _lift(widget.fill, t.textPrimary)),
+      ),
     );
-    if (label.isEmpty) return flag;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: label.isEmpty ? flag : _labelled(t, flag),
+    );
+  }
+
+  Widget _labelled(LumitTheme t, Widget flag) {
+    final label = widget.label;
     return LumitTooltip(
       message: label,
       child: Stack(
         alignment: Alignment.bottomLeft,
         children: [
           Padding(
-            padding: const EdgeInsets.only(left: width / 2),
+            padding: const EdgeInsets.only(left: MarkerFlag.width / 2),
             child: Container(
-              height: height,
+              height: MarkerFlag.height,
               // Clear of the triangle's right half, which lies over the pill.
-              padding: const EdgeInsets.only(left: width / 2 + 3, right: 4),
+              padding: const EdgeInsets.only(
+                  left: MarkerFlag.width / 2 + 3, right: 4),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: pill,
+                color: _lift(widget.pill, t.textPrimary),
                 // Square where the triangle meets it, rounded away from it.
                 borderRadius: const BorderRadius.only(
                   topRight: Radius.circular(2),
@@ -1726,7 +1755,7 @@ class MarkerFlag extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: text,
+                style: widget.text,
               ),
             ),
           ),
@@ -2146,6 +2175,20 @@ const double clipFillSelectedAlpha = 0.62;
 /// The solid mark at a bar's or a clip's start, in the label's full colour:
 /// what makes a desaturated fill still land with a snap.
 const double clipEdgeWidth = 2;
+
+/// How far a hovered bar's leading edge leans toward `text_primary`
+/// (docs/impl/timeline-interaction.md §4.1, polish 26).
+///
+/// A lean rather than a brightening: the edge is already the label's colour at
+/// full strength, so the only step left to take is toward the colour the panel
+/// selects in. Enough to be seen on every label colour, not enough to be
+/// mistaken for the selection's own mark, which is the fill.
+const double clipEdgeHoverLift = 0.3;
+
+/// How far a hovered marker's pill and flag lean the same way (§7, polish 26).
+/// Gentler than a bar's: a flag is a small shape on a busy ruler, and a step
+/// that reads on a 2px edge shouts on a 12px pill.
+const double markerHoverLift = 0.15;
 
 /// A ruler label. Seconds and minutes are zero-padded (`00s 02s`, `01:05s`) so
 /// a row of labels keeps one rhythm; hours are not (`1:00:00s`) — the owner's
