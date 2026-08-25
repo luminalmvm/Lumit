@@ -229,15 +229,19 @@
       // opens out of the wordmark rather than appearing as a rectangle.
       float inner = -0.5 * min(u_box.z - u_box.x, u_box.w - u_box.y) - 20.0;
       float front = mix(inner, far, 1.0 - pow(1.0 - u_reveal, 3.0));
-      float vis = 1.0 - smoothstep(front - 18.0, front + 2.0, bdist);
+      float vis = 1.0 - smoothstep(front - 28.0, front + 4.0, bdist);
 
       // Just inside the front the exposure overshoots, and settles again as the
       // front moves on: the overshoot travels with the edge instead of
-      // happening to the whole screen at once. It is faded out over the last
-      // fifth of the reveal, or it would leave a bright corner behind when the
-      // front runs off the canvas.
+      // happening to the whole screen at once. It runs 260 px back from the
+      // front and falls off on an S-curve the whole way, so it has no edge of
+      // its own at either end - it is brightest where the front is and blends
+      // out into the field behind it. It is faded out over the last fifth of
+      // the reveal, or it would leave a bright corner behind when the front
+      // runs off the canvas.
+      float behind = clamp((front - bdist) / 260.0, 0.0, 1.0);
       float ring = vis
-        * smoothstep(front - 130.0, front - 6.0, bdist)
+        * smoothstep(1.0, 0.0, behind)
         * (1.0 - smoothstep(0.8, 1.0, u_reveal));
       col = col * (1.0 + ring * 1.6) + vec3(0.30, 0.28, 0.34) * ring * 0.55;
 
@@ -351,11 +355,15 @@
       const b = wm.getBoundingClientRect();
       const sx = canvas.width / cr.width;
       const sy = canvas.height / cr.height;
+      // Twice the wordmark's box, about its own centre, so the lockup is well
+      // inside the shape the field opens out of rather than sitting on its edge.
+      const gx = b.width / 2;
+      const gy = b.height / 2;
       box = [
-        (b.left - cr.left) * sx,
-        canvas.height - (b.bottom - cr.top) * sy,
-        (b.right - cr.left) * sx,
-        canvas.height - (b.top - cr.top) * sy,
+        (b.left - gx - cr.left) * sx,
+        canvas.height - (b.bottom + gy - cr.top) * sy,
+        (b.right + gx - cr.left) * sx,
+        canvas.height - (b.top - gy - cr.top) * sy,
       ];
     };
 
