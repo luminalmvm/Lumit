@@ -349,12 +349,10 @@ fn reference_fixture(name: &str) -> (LoadedConfig, Vec<Row>) {
     (loaded, read_fixture(&text))
 }
 
-// The two reference-library fixtures. These are ignored, not absent, and each
-// says exactly what it waits for — see fixtures/README.md, which carries the
-// recipe that produces both. Nothing here invents an expected value; an
-// invented golden is worse than a missing one, because it gates nothing while
-// looking as though it does. Dropping the artefacts in means adding the two
-// paths the recipe names and deleting the `#[ignore]` line above the test.
+// The two reference-library fixtures, both real: `fixtures/README.md` carries
+// the recipe that produced them and the provenance is in each file's header.
+// Nothing here invents an expected value; an invented golden is worse than a
+// missing one, because it gates nothing while looking as though it does.
 
 #[test]
 fn the_legacy_aces_config_matches_the_reference() {
@@ -366,6 +364,48 @@ fn the_legacy_aces_config_matches_the_reference() {
 fn the_aces_cg_config_matches_the_reference() {
     let (loaded, rows) = reference_fixture("aces-cg");
     gate_config_rows(&loaded, &rows);
+}
+
+/// "Resolves end to end" said as a test rather than as a claim: **every** space
+/// and **every** view of the ACES CG config answers.
+///
+/// The fixture gates the edges it tabulates, which is not the same thing — a
+/// space nobody tabulates could quietly refuse and every row would still pass.
+/// This is what makes "the ACES 2.x configs load" a fact, and it is what will
+/// notice if a future config release adds a nineteenth builtin style.
+#[test]
+fn the_aces_cg_config_resolves_completely() {
+    let (loaded, _) = reference_fixture("aces-cg");
+    let bad: Vec<String> = lumit_colour::resolve::unresolvable(&loaded)
+        .into_iter()
+        .map(|(what, e)| format!("{what}: {e}"))
+        .collect();
+    assert!(bad.is_empty(), "aces-cg does not fully resolve: {bad:#?}");
+    for (display, view) in lumit_colour::resolve::all_views(&loaded.config) {
+        loaded
+            .display_view(display, &view.name)
+            .unwrap_or_else(|e| panic!("aces-cg, {display} / {}: {e}", view.name));
+    }
+}
+
+/// And the legacy config's weaker but equally load-bearing version: the only
+/// thing that refuses is a LUT that was deliberately not vendored.
+///
+/// Its `luts/` folder is 444 MiB and five files of it are here
+/// (`fixtures/README.md`), so most of that config cannot resolve *by choice*.
+/// This says the choice is the only reason: an unsupported transform, an
+/// unknown builtin or a broken chain hiding among 86 missing-file messages
+/// would fail here instead of being lost in the noise.
+#[test]
+fn the_legacy_config_refuses_only_for_luts_that_were_not_vendored() {
+    let (loaded, _) = reference_fixture("aces-1.2");
+    for (what, error) in lumit_colour::resolve::unresolvable(&loaded) {
+        let message = error.to_string();
+        assert!(
+            message.contains("was not found on this config's search path"),
+            "{what} refused for a reason other than a curated-out LUT: {message}"
+        );
+    }
 }
 
 /// The reader above, proven before the data arrives — which is the only way to
