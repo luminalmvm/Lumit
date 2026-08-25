@@ -1512,4 +1512,185 @@ mod tests {
             "a bypassed producer emits nothing to read"
         );
     }
+
+    // -----------------------------------------------------------------
+    // The clamp (K-510, PS7; the question K-509 left open)
+    // -----------------------------------------------------------------
+
+    /// What `target`'s `socket` actually resolves to once `graph`'s wires have
+    /// been substituted — the number the kernel sees, not the number the driver
+    /// said. The clamp lives in the resolve walk, so a test that read
+    /// [`ResolvedDrivers::param`] would be reading one step too early.
+    fn resolved_param(target: &EffectInstance, socket: &str, graph: &LayerGraph, lt: f64) -> f32 {
+        let context = staged(vec![target.clone()], graph.clone());
+        let drivers = resolve_drivers(graph, lt, context.clone(), None);
+        let (_, bag) = super::super::resolved::resolve_stack_temporal_named(
+            std::slice::from_ref(target),
+            &drivers,
+            lt,
+            lt,
+            0.0,
+            1.0,
+            &MarkerContext::NONE,
+            context,
+        );
+        bag.get(0)
+            .expect("the stack resolved")
+            .params
+            .get(ParamId::new(socket))
+            .expect("the parameter is in the bag")
+            .as_f32()
+    }
+
+    /// A Math driver pinned to one constant, for wiring an arbitrary number
+    /// into a socket.
+    fn constant(v: f64) -> EffectInstance {
+        let mut m = inst("math");
+        set(&mut m, "a", v);
+        set(&mut m, "b", 0.0);
+        // Add: a + 0 is a, whatever a is.
+        set_choice(&mut m, "operation", 0);
+        m
+    }
+
+    /// **An unwired Points sample's `1e9` arrives clamped** (K-509, K-510).
+    ///
+    /// This is the case that raised the question: the driver answers a
+    /// deliberately enormous distance over an empty stream, and before the
+    /// clamp that number went straight into the parameter — a Blur radius sat
+    /// at a billion pixels, past a hard maximum a typed value can never reach.
+    /// The panel's *"no stream"* mark (K-509) still says why; this is what
+    /// stops the picture being nonsense while it does.
+    #[test]
+    fn an_empty_streams_enormous_distance_clamps_to_the_hard_range() {
+        let sampler = inst("points_sample");
+        let target = inst("blur");
+        let graph = LayerGraph {
+            nodes: vec![sampler.clone()],
+            edges: vec![edge(
+                &sampler,
+                points_sample::NEAREST_PORT,
+                NodeRef::Effect(target.id),
+                "radius",
+            )],
+            ..LayerGraph::default()
+        };
+        // The wire itself still carries the honest constant: the driver is not
+        // told what it is plugged into, and the frame key hashes what it said.
+        let raw = resolve_drivers(
+            &graph,
+            1.0,
+            staged(vec![target.clone()], graph.clone()),
+            None,
+        )
+        .param(NodeRef::Effect(target.id), ParamId::new("radius"))
+        .expect("the wire carries something")
+        .as_f32();
+        assert_eq!(raw, points_sample::NOTHING_NEAR);
+        // What the kernel is handed is the parameter's own maximum.
+        assert_eq!(
+            resolved_param(&target, "radius", &graph, 1.0),
+            2000.0,
+            "a driven radius must stop where a typed one stops (K-090)"
+        );
+    }
+
+    /// **A wild driver cannot push past either bound** (K-090's hard range,
+    /// K-510) — and the clamp is in schema space, before the raster scaling,
+    /// so it is the same number at every preview resolution.
+    #[test]
+    fn a_driven_value_is_held_to_both_hard_bounds() {
+        let target = inst("blur");
+        let at = |v: f64| {
+            let driver = constant(v);
+            let graph = LayerGraph {
+                nodes: vec![driver.clone()],
+                edges: vec![edge(&driver, "value", NodeRef::Effect(target.id), "radius")],
+                ..LayerGraph::default()
+            };
+            resolved_param(&target, "radius", &graph, 1.0)
+        };
+        assert_eq!(at(-5_000.0), 0.0, "a blur radius cannot go negative");
+        assert_eq!(at(1e30), 2000.0, "nor past its hard maximum");
+        // In between, the wire's number is untouched: this is a backstop, not
+        // a second opinion about what a driver means.
+        assert_eq!(at(37.5), 37.5);
+    }
+
+    /// **A whole-number parameter is clamped too**, at its own bounds: Sprite
+    /// flare's Ghosts runs 0..=16, and rounds after the clamp rather than
+    /// before it.
+    #[test]
+    fn a_driven_integer_is_held_to_its_own_bounds() {
+        let target = inst("sprite_flare");
+        let at = |v: f64| {
+            let driver = constant(v);
+            let graph = LayerGraph {
+                nodes: vec![driver.clone()],
+                edges: vec![edge(&driver, "value", NodeRef::Effect(target.id), "ghosts")],
+                ..LayerGraph::default()
+            };
+            resolved_param(&target, "ghosts", &graph, 1.0)
+        };
+        assert_eq!(at(-40.0), 0.0);
+        assert_eq!(at(900.0), 16.0);
+        assert_eq!(at(5.0), 5.0);
+    }
+
+    /// **An unbounded-above parameter still takes big values** (K-090's
+    /// one-sided amendment): the clamp is the *declared* range, not a range
+    /// invented for it. Radial blur's Amount clamps at nought below and runs
+    /// free above, and a driver may take it anywhere the user could type it.
+    #[test]
+    fn an_unbounded_parameter_still_takes_a_large_driven_value() {
+        let target = inst("radial_blur");
+        let at = |v: f64| {
+            let driver = constant(v);
+            let graph = LayerGraph {
+                nodes: vec![driver.clone()],
+                edges: vec![edge(&driver, "value", NodeRef::Effect(target.id), "amount")],
+                ..LayerGraph::default()
+            };
+            resolved_param(&target, "amount", &graph, 1.0)
+        };
+        assert_eq!(at(50_000.0), 50_000.0, "nothing bounds it above (K-090)");
+        assert_eq!(at(-1.0), 0.0, "and it still stops at nought below");
+    }
+
+    /// **A driver's own socket is not clamped** (K-510), and this is the case
+    /// that decides it: Remap exists to take a wide number and narrow it. Its
+    /// Value row declares a 0..=1 slider, which is a sensible thing to *type*
+    /// into and a nonsense bound on a **wire** — clamping there would leave the
+    /// one driver written for out-of-range numbers unable to see them, and
+    /// would make Nearest distance (pixels, K-419) unusable through the very
+    /// driver points-stream.md §2.2 names for it.
+    ///
+    /// A hard bound says what a *kernel* was written for. A chain of drivers
+    /// ends at an effect socket, and that is where the clamp is.
+    #[test]
+    fn a_drivers_own_socket_takes_the_number_it_is_handed() {
+        let feed = constant(400.0);
+        let mut remap = inst("remap");
+        set(&mut remap, "in_low", 0.0);
+        set(&mut remap, "in_high", 800.0);
+        set(&mut remap, "out_low", 0.0);
+        set(&mut remap, "out_high", 100.0);
+        let target = inst("blur");
+        let graph = LayerGraph {
+            nodes: vec![feed.clone(), remap.clone()],
+            edges: vec![
+                edge(&feed, "value", NodeRef::Driver(remap.id), "value"),
+                edge(&remap, "value", NodeRef::Effect(target.id), "radius"),
+            ],
+            ..LayerGraph::default()
+        };
+        // 400 of 0..800 is halfway, so 50 of 0..100. Clamped at the Value
+        // row's 0..=1 slider it would have been 100 — the top of the range,
+        // for every input above one.
+        let got = resolved_param(&target, "radius", &graph, 1.0);
+        assert!(
+            (got - 50.0).abs() < 1e-3,
+            "Remap saw a clamped input: {got} rather than 50"
+        );
+    }
 }

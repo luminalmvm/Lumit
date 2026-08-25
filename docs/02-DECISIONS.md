@@ -13995,6 +13995,49 @@ particle in the wrong slot. Colour is exempt too, for the opposite reason — pa
 **The pixels keep their own tolerance**, unchanged: the `moderate` perceptual epsilon of
 docs/08 §1.6, measured at 1.0 × 10⁻³ across all three render modes.
 
+## K-510 — A driven value is held to its parameter's hard range, at the effect's socket
+
+*Status: DECIDED. Answers the question K-509 left open for PS7 and closes the
+points-stream programme's last engine question. See K-090 (hard ranges, and that they may
+be one-sided), K-414 (a Slider's range *is* its hard range), K-471 §2.1 (a driven parameter
+substitutes where the keyframes would have been read), K-031 (preview equals export),
+K-419 (px@comp), and [docs/impl/points-stream.md](impl/points-stream.md) §5's PS7.*
+
+**A wire may now put a parameter only where a typed number could have put it.** The
+substitution in `resolve_into_arena` — the one walk both the preview and the export take,
+which is what makes the two clamp identically without a second argument — clamps a driven
+number to the parameter's declared hard bounds before the unit conversion and before
+anything packs. One-sided bounds stay one-sided: a Radial blur Amount driven to fifty
+thousand is fifty thousand, because K-090 says nothing bounds it above; driven to −1 it is
+nought, because something bounds it below.
+
+**Why it needed answering rather than leaving.** An unwired Points sample answers `1e9` on
+purpose (K-509) — the honest direction for a Remap from nearness — and before this that
+number went straight into whatever it fed. A Blur radius sat at a billion pixels: past a
+hard maximum a *typed* value can never reach, in a kernel written for two thousand, with
+nothing but the panel's new "no stream" mark to say why. The mark stays: it names the
+cause, where this is only the backstop. But a frontend mark cannot be the whole answer,
+because the frontend is not where values are decided (K-174) and an export never opens a
+panel at all.
+
+**The clamp is on an effect's sockets, not a driver's own.** This is the one judgement in
+it. A hard bound is a statement about what a *kernel* was written for; a driver's
+parameters are the arithmetic's inputs, and a driver socket exists precisely to be handed
+numbers from outside its own row's range. Remap is the proof: its Value row declares a
+0..=1 slider, which is a sensible thing to type and a nonsense bound on a wire — clamping
+there would leave the one driver written for out-of-range numbers unable to see them, and
+would make Nearest distance in pixels (K-419) unusable through the very driver
+points-stream.md §2.2 names for it. Nothing escapes by this: every chain of drivers ends at
+an effect socket, and that is where the clamp is, so no kernel is ever handed a number
+outside its declaration.
+
+**What it does not change.** The wire still *carries* what the driver said — the frame key
+hashes the driver's own output, and the graph reports the honest number — so nothing about
+caching, determinism or the read model moves. Typed values are unchanged: they were, and
+remain, held to the hard range at the point of editing. Colour is untouched, because a
+colour declares a per-channel **edit** range rather than a bound, and an Angle is untouched
+because K-090 deliberately leaves it unbounded so it can turn.
+
 ## K-511 — The default accent is spruce `#35785e`, and clay stays one click away
 
 *Status: DECIDED by the project owner, from candidate accents rendered in context.

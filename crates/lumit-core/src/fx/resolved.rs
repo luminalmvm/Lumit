@@ -342,6 +342,25 @@ pub fn resolve_stack_temporal_named(
     (ids, out)
 }
 
+/// A parameter's **hard** range in schema space — the bounds docs/08 §1.2 says
+/// typing may not exceed, either side `None` where the parameter is one-sided
+/// or unbounded (K-090).
+///
+/// The three numeric kinds are the whole of it. A Slider's `range` *is* its
+/// hard range (K-414: there is no picture past a wipe's ends), an Angle is
+/// deliberately unbounded so it can turn, and a Colour declares a per-channel
+/// **edit** range rather than a bound, so none of them is clamped here.
+#[must_use]
+pub(super) fn hard_range(kind: &ParamKind) -> (Option<f64>, Option<f64>) {
+    match kind {
+        ParamKind::Float { hard, .. } => *hard,
+        ParamKind::Slider { range, .. } => (Some(range.0), Some(range.1)),
+        #[allow(clippy::cast_precision_loss)]
+        ParamKind::Int { hard, .. } => (hard.0.map(|v| v as f64), hard.1.map(|v| v as f64)),
+        _ => (None, None),
+    }
+}
+
 /// Evaluate every parameter a migrated effect declares into the stack's arena
 /// (docs/impl/effect-registry.md §3, step 1).
 ///
@@ -381,6 +400,18 @@ pub fn resolve_stack_temporal_named(
 /// travels through the identical `Unit` arm a typed one does, and the kernels
 /// cannot tell the two apart (K-471 §2.1). This is also the one walk drivers
 /// themselves resolve through, `node` naming which of the two they are.
+///
+/// **And a driven number is held to the same hard range a typed one is**
+/// (K-090, K-510): the substitution below is clamped by [`hard_range`] before
+/// anything else touches it. A driver is arithmetic with no idea what it is
+/// wired to — an unwired Points sample answers `1e9` on purpose (K-509) — so
+/// without this a wire could put a parameter somewhere no typed value can go
+/// and no kernel was written for. It is clamped *here* rather than in each
+/// driver because there is one substitution point and seven drivers, and
+/// because this is the walk **both** the preview and the export take, so the
+/// two clamp identically by construction (K-031). On an **effect's** sockets
+/// only — see the comment at the substitution for why a driver's own row is
+/// left alone.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn resolve_into_arena(
     def: &'static dyn EffectDef,
@@ -401,6 +432,29 @@ pub(super) fn resolve_into_arena(
         } else {
             drivers.param(node, ParamId::new(p.id))
         };
+        // The driven *number*, held to the declared hard range (K-510). The
+        // `Value` above stays unclamped for the Colour arm, whose range is a
+        // per-channel edit range rather than a hard bound.
+        //
+        // **An effect's parameters only.** A hard bound is a statement about
+        // what a *kernel* was written for; a driver's own sockets exist to be
+        // fed arbitrary numbers by the wire before them — Remap's whole job is
+        // to take a wide number and narrow it, and a Remap that could not see
+        // past its input slider would be a Remap that cannot remap. Nothing
+        // escapes: a chain of drivers ends at an effect socket, and that is
+        // where the clamp is.
+        let driven_num = driven.map(|v| {
+            let v = f64::from(v.as_f32());
+            if !matches!(node, NodeRef::Effect(_)) {
+                return v;
+            }
+            let (lo, hi) = hard_range(&p.kind);
+            // `max`/`min` rather than `clamp`, which panics on a reversed pair
+            // (14-ENGINEERING-RULES §4: no panics in an engine crate, even for
+            // a schema that could only be wrong by hand).
+            v.max(lo.unwrap_or(f64::NEG_INFINITY))
+                .min(hi.unwrap_or(f64::INFINITY))
+        });
         // A number the instance does not carry reads its declared default: a
         // project saved before the parameter existed simply renders (K-258).
         let spatial = |v: f64| -> f32 {
@@ -427,14 +481,12 @@ pub(super) fn resolve_into_arena(
             ParamKind::Float { default, .. }
             | ParamKind::Slider { default, .. }
             | ParamKind::Angle { default, .. } => Value::Float(spatial(
-                driven
-                    .map(|v| f64::from(v.as_f32()))
+                driven_num
                     .or_else(|| e.float_at_with_context(p.id, lt, context.clone()))
                     .unwrap_or(default),
             )),
             ParamKind::Int { default, .. } => Value::Int(
-                driven
-                    .map(|v| f64::from(v.as_f32()))
+                driven_num
                     .or_else(|| e.float_at_with_context(p.id, lt, context.clone()))
                     .map_or(default as i32, |v| v.round() as i32),
             ),
