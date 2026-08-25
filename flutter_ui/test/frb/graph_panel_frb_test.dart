@@ -466,6 +466,159 @@ void main() {
       expect(p.layer.getGraphDrivers().single.enabled(), isFalse);
     });
 
+    // --- The points wire (K-492, K-494, points-stream.md §4.3) -------------
+    //
+    // The first wire whose *source* is a stack effect. Everything else on this
+    // canvas was already true of it — teal came from `PortColours` in WP1, the
+    // type rule is the one every other drop takes — so what these hold is the
+    // arm that was missing and the two states the wire can be in.
+
+    /// A layer carrying Particulate, with a Points sample driver beside it.
+    ({
+      LumitState state,
+      LumitUiState uiState,
+      LayerReference layer,
+      UuidValue sample
+    }) withPoints() {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp.addSolidLayer();
+      final layer = comp.getLayers().single;
+      layer.addEffect(name: 'particulate');
+      p.uiState.selectedLayer.value = layer;
+      final sample = seedDriver(layer, 'points_sample', const Offset(30, 300));
+      p.uiState.model.refresh();
+      return (state: p.state, uiState: p.uiState, layer: layer, sample: sample);
+    }
+
+    String particulateKey(LayerReference layer) => graphNodeKey(layer
+        .getGraph()
+        .nodes
+        .firstWhere((n) => n.matchName == 'particulate')
+        .node);
+
+    /// **A wire-only socket is always drawn** — there is no row anywhere else
+    /// to reach it from, which is what separates it from a parameter socket
+    /// the `E` badge folds away.
+    testWidgets('the Points sockets are drawn without exposing anything',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+
+      expect(socket(particulateKey(p.layer), 'points'), findsOneWidget,
+          reason: 'the effect declares a data output; it has no row');
+      expect(socket('driver:${p.sample}', 'points'), findsOneWidget);
+      // The driver's two numbers are its whole purpose, so the box shows them
+      // as ports — a driver draws every socket it has.
+      expect(socket('driver:${p.sample}', 'count'), findsOneWidget);
+      expect(socket('driver:${p.sample}', 'nearest_distance'), findsOneWidget);
+      expect(socket(particulateKey(p.layer), 'emit_rate'), findsNothing,
+          reason: 'a parameter socket still waits for the E badge');
+    });
+
+    testWidgets('Particulate\'s Points output wires into the driver, once',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+      final key = particulateKey(p.layer);
+
+      final from = tester.getCenter(socket(key, 'points'));
+      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      final edges = p.layer.getGraph().wiring.edges;
+      expect(edges, hasLength(1));
+      expect(
+        edges.single.from,
+        isA<BridgeOutputRef_EffectData>()
+            .having((e) => e.port, 'port', 'points'),
+        reason: 'the source is the stack effect itself (K-492)',
+      );
+      expect(edges.single.to,
+          isA<BridgeInputRef_Param>().having((e) => e.port, 'port', 'points'));
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, isEmpty,
+          reason: 'one gesture, one undo step');
+    });
+
+    /// The Tab search's filter answers from the catalogue (PS3), so a teal
+    /// wire in hand offers the entries that declare a Points input — which in
+    /// v1 is Points sample and nothing else.
+    testWidgets('the Tab search offers Points sample to a teal wire',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+
+      await tester.dragFrom(
+          tester.getCenter(socket(particulateKey(p.layer), 'points')),
+          const Offset(200, 120));
+      await tester.pump();
+
+      expect(
+          find.byKey(const ValueKey<String>('graph-search')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('graph-search-points_sample')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('graph-search-wiggle')),
+          findsNothing,
+          reason: 'a wiggle has nothing a points stream could land on');
+    });
+
+    /// **The loop is declined before it is committed.** Particulate feeding a
+    /// sample whose Count feeds Particulate's Emit rate is the one genuine
+    /// cycle v1 makes constructible (points-stream.md §1.2). The engine
+    /// refuses it with the `Cycle` sentence and that is the backstop; a
+    /// refusal the panel swallows would look like a gesture that did nothing,
+    /// so the second drop never leaves the panel.
+    testWidgets('a wire that would close a loop is declined here',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+      final key = particulateKey(p.layer);
+
+      final from = tester.getCenter(socket(key, 'points'));
+      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(1));
+
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+      final back = tester.getCenter(socket('driver:${p.sample}', 'count'));
+      final onto = tester.getCenter(socket(key, 'emit_rate'));
+      await tester.dragFrom(back, onto - back);
+      await tester.pump();
+
+      expect(p.layer.getGraph().wiring.edges, hasLength(1),
+          reason: 'the stream would depend on the parameter it feeds');
+    });
+
+    /// **The hazard, made visible** (K-509). A Points sample with nothing
+    /// wired in answers its documented no-op — a distance so large it pins
+    /// whatever it drives at the far end of the range — so the box says so
+    /// until a stream reaches it.
+    testWidgets('a sample with no stream wears the warning mark',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+      final mark =
+          find.byKey(ValueKey<String>('graph-no-stream-driver:${p.sample}'));
+      expect(mark, findsOneWidget);
+
+      final key = particulateKey(p.layer);
+      final from = tester.getCenter(socket(key, 'points'));
+      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      expect(mark, findsNothing, reason: 'the stream arrived');
+      expect(find.byKey(ValueKey<String>('graph-no-stream-$key')), findsNothing,
+          reason: 'the producer reads no stream of its own');
+    });
+
     /// A box's position is document data: it persists, it travels, and a drag
     /// stages it and commits once (K-344).
     testWidgets('dragging a box commits its position once', (tester) async {

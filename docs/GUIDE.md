@@ -9408,6 +9408,19 @@ the producer below its reader, the wire is quietly dropped as part of that same 
 one action, one undo. It is the same thing that happens when you delete the effect a wire
 is plugged into: the wire goes with it, rather than being left pointing at nothing.
 
+**A Points sample with nothing plugged into it says so.** The driver has to answer
+*something* when there are no particles to look at, and what it answers is "nothing is
+anywhere near" — deliberately an enormous distance, because the usual use of the wire is
+"the nearer a particle gets, the more this happens", and answering *nought* would mean
+"a particle is right here" and turn everything on at once. That is the honest answer, but
+it is a startling one to meet by accident: wire the distance into a parameter before you
+have wired the particles in, and the parameter shoots to the far end of its range and
+stays there. So the box wears a small amber `!` while its Points socket is empty, and any
+row that follows it says **no stream** where it would otherwise say *driven*. Neither
+refuses anything — the wire is perfectly legal and is often drawn before the stream is —
+they simply mean the number arriving is a placeholder rather than a measurement, and the
+mark clears the moment a stream reaches the box.
+
 **How the card actually draws a hundred thousand of them.** The awkward part of a particle
 system on a graphics card is that nobody knows *how many* particles there are until they
 have all been asked. A card is happiest drawing a fixed number of the same thing; "draw

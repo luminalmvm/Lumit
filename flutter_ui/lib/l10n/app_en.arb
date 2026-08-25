@@ -8989,5 +8989,9 @@
       "problem": { "type": "String" },
       "space": { "type": "String" }
     }
+  },
+  "graphNoStream": "No stream",
+  "@graphNoStream": {
+    "description": "Graph panel and the driven rows in Effect controls and the Node panel. Names the state of a box that reads a points stream and has nothing wired into its Points socket, and of any parameter such a box is driving — used as the row's word and as the tooltip on the node's warning mark. Two words, per the tooltip rule."
   }
 }

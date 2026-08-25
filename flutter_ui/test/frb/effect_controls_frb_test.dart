@@ -716,6 +716,120 @@ void main() {
 
     // Blend (K-289): the Transparent/Black Background pair became a blend
     // menu, defaulting to Add — the behaviour every flare already had.
+    // --- Particulate's surface (particulate.md §2, points-stream.md §4.3) ---
+    //
+    // PS6 is the *verification* that the effect's controls arrive from the
+    // schema with no new row kind: four kickers, the two over-life curves, the
+    // seed with its reseed, the mask-path reference, the layer reference and
+    // the Mix row. What is asserted here is what would break silently — the
+    // Render group's three modes and the rows each of them owns, and that the
+    // sprite reference actually *binds*, since an unset one draws discs and
+    // says nothing about why.
+
+    testWidgets('Particulate draws its four groups and both over-life curves',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'particulate');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      for (final label in ['Emitter', 'Particle', 'Forces', 'Render']) {
+        expect(heading(label), findsOneWidget, reason: label);
+      }
+      final id = p.layer.getEffects().single.id();
+      // The two over-life curves fold into one editor with a tab each (K-412),
+      // never one plot per row.
+      expect(find.byKey(ValueKey<String>('fx-curves-$id')), findsOneWidget);
+      expect(find.text('Size over life'), findsOneWidget);
+      expect(find.text('Opacity over life'), findsOneWidget);
+      // The seed's reseed, the mask-path reference and the sprite reference.
+      expect(find.byKey(ValueKey<String>('fx-seed-$id-seed')), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('fx-mask-$id-mask_path')),
+          findsOneWidget);
+      expect(find.byKey(ValueKey<String>('fx-layer-$id-sprite_layer')),
+          findsOneWidget);
+      // K-507's dial-turned-slider: the jitter the note left silent about.
+      expect(find.text('Rotation jitter'), findsOneWidget);
+      expect(find.byKey(ValueKey<String>('fx-float-$id-rotation_jitter')),
+          findsOneWidget);
+    });
+
+    /// **Each render mode's own control, live only in that mode.** Three
+    /// `EnabledWhen` rules, and nothing else in the panel knows the mode
+    /// exists — which is what makes them worth pinning.
+    testWidgets('Particulate greys the rows the render mode does not use',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'particulate');
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+
+      Set<String> greyed() => tester
+          .widgetList<EffectParamRowFrb>(find.byType(EffectParamRowFrb))
+          .where((r) => !r.enabled)
+          .map((r) => r.param.id)
+          .toSet();
+
+      // Disc, the default: Feather is its own control; the other two are not.
+      expect(greyed(), isNot(contains('feather')));
+      expect(greyed(), contains('sprite_layer'));
+      expect(greyed(), contains('streak_length'));
+
+      // Move to Sprite and the greying moves with it. The mode is set on the
+      // document rather than through its dropdown: what is under test is the
+      // panel's reading of `EnabledWhen`, and the dropdown is the same control
+      // every other choice row draws.
+      final staged = p.layer.getEffects();
+      staged.single
+          .setValue(id: 'mode', value: const BridgeEffectValue.choice(1));
+      p.layer.setEffects(effects: staged);
+      p.uiState.model.refresh();
+      await tester.pump();
+
+      expect(greyed(), contains('feather'));
+      expect(greyed(), isNot(contains('sprite_layer')));
+      expect(greyed(), contains('streak_length'));
+    });
+
+    /// **The sprite reference binds** — the one thing on this card that fails
+    /// quietly if it does not. An unset Sprite layer resolves to Disc
+    /// host-side, so a picker that looked right and wrote nothing would leave
+    /// the user staring at discs with no explanation.
+    testWidgets('Particulate\'s sprite layer picker reaches the document',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'particulate');
+      final other = p.uiState.selectedComp!.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p, transform: false);
+      final id = p.layer.getEffects().single.id();
+      // Sprite mode, or the row is greyed and deaf by design.
+      final staged = p.layer.getEffects();
+      staged.single
+          .setValue(id: 'mode', value: const BridgeEffectValue.choice(1));
+      p.layer.setEffects(effects: staged);
+      p.uiState.model.refresh();
+      await tester.pump();
+
+      // The Render group is the last of the four, so the row is below the
+      // fold of a 760-tall panel: scroll to it as a user would.
+      final picker = find.byKey(ValueKey<String>('fx-layer-$id-sprite_layer'));
+      await tester.ensureVisible(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(other.getInfo().name).last);
+      await tester.pumpAndSettle();
+
+      expect(
+        p.layer.getEffects().single.getValue(id: 'sprite_layer'),
+        isA<BridgeEffectValue_Layer>()
+            .having((v) => v.field0, 'sprite layer', other.internallayerId),
+        reason: 'the picked layer round-trips through the document; unset '
+            'would have drawn discs and said nothing',
+      );
+    });
+
     testWidgets('the lens flare offers a blend menu, defaulting to Add',
         (tester) async {
       final p = withLayer();

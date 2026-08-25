@@ -486,8 +486,13 @@ does not gate the four. Delete each phase here when it lands, as with everything
     the three render modes, the schedule's carriage beside the op, docs/08 §3.86,
     docs/13's B12–B14, K-507 the rotation-jitter dial and K-508 the stream's
     real agreement bound; the effect draws),
-    PS3 (the points edge and its refusals), PS4 (the Points sample driver),
-    PS5 (seam + codegen), PS6 (UI), PS7 (goldens + the K-475 budget gates).
+    ~~PS3~~ (landed: `OutputRef::EffectData`, the three new refusals, the reorder
+    heal, the seam's half), ~~PS4~~ (landed: the Points sample driver, the walk
+    re-entering itself through the effect stack), ~~PS5~~ (landed with PS3-PS4:
+    the seam crossed with no codegen left owing),
+    ~~PS6~~ (landed: the live teal wire, Points sample's rows, Particulate's
+    surface verified, and K-509's no-stream mark),
+    PS7 (goldens, the K-475 budget gates, and K-509's clamp question).
     docs/impl/particulate.md remains the effect's own design. Delete each
     package from this line as it lands.
 - ~~**Phase 4 - the website**~~ - **landed 2026-08-24** (K-438, K-439, K-476, the

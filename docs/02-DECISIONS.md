@@ -13994,3 +13994,51 @@ particle in the wrong slot. Colour is exempt too, for the opposite reason — pa
 
 **The pixels keep their own tolerance**, unchanged: the `moderate` perceptual epsilon of
 docs/08 §1.6, measured at 1.0 × 10⁻³ across all three render modes.
+
+## K-509 — An empty points stream is marked, not clamped: the panel says "no stream" and the wire still lands
+
+*Status: DECIDED. Answers the hazard PS4 flagged and PS6 had to design a gesture around —
+an unwired Points sample answers a deliberately enormous distance and a driven parameter
+is not clamped to its hard range. Frontend only; the engine-side question of whether a
+driven value should be clamped at all belongs to PS7 and is filed there, not settled here.
+See K-492 and K-494 (the points wire and its first consumer),
+[docs/impl/points-stream.md](impl/points-stream.md) §2.2 (the empty-stream values, pinned
+by test) and §4.2 (no stream introspection in v1), K-183 (no bridge call in a rebuild
+path), K-471 §1.5, docs/15 §12A.7.*
+
+**The hazard is real and it is not a bug.** Nearest distance answers `1e9` over an empty
+stream on purpose: the wire's usual shape is a Remap from nearness to a value, and nought
+would read as "a particle is right here" and fire everything at once. But the same
+honesty makes a wire drawn *before* the stream is a small trap — the parameter it feeds
+shoots past the far end of its declared range and sits there, and nothing on screen says
+why. The obvious answers were both wrong. **Refusing the wire** would refuse a perfectly
+legal gesture that people will make in the natural order (wire the driver up, then feed
+it); **clamping panel-side** would put a second opinion about a parameter's value in the
+frontend, where the K-174 split says none may live.
+
+**So the panel marks the cause rather than treating the symptom, and the mark is
+structural.** A box that declares a Points input and has nothing wired into it wears a
+small `!` in the warning family in its header, tooltipped with what an empty stream
+means; every row that box drives says **no stream** in the warning family in the slot
+where a driven row says *driven* — the word replaced rather than a second mark added,
+because the Node panel is a narrow pane and the row has no spare width. Both clear the
+moment a stream reaches the box.
+
+**What makes this affordable is that it asks for nothing.** "Is anything wired to that
+socket" is already in the read model, and what an empty stream answers is a documented
+constant — so the panel can say the number is a placeholder without ever asking for the
+number. A readout of the *actual* driven value is the thing points-stream.md §4.2 rules
+out for v1: it is a per-frame quantity, it must ride a render response rather than a
+bridge call from a rebuild path, and its home is the Details inspector when that exists.
+Nothing here anticipates that; it states a fact about the wiring, which is the only fact
+the panel holds.
+
+**The wire always lands.** The mark is a warning, never a refusal — the two refusals on
+this canvas stay what they were (a type mismatch and a loop), and both are still declined
+before commit, from the read model, with the engine's sentences as the backstop.
+
+**Left open, for PS7:** whether a *driven* value should be clamped to its parameter's hard
+range engine-side, as a typed value is. Today it is not, which is what makes the empty
+stream visible as a parameter pinned past its own limits rather than at them. That is an
+engine question — it touches every driver, not only this one, and it changes rendered
+output — so it is filed with the conformance package rather than answered by a panel.

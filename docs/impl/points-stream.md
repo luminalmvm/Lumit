@@ -383,9 +383,15 @@ Golden frames for the three render modes at pinned seeds; the four K-475 numbers
 -harness gates on the reference-desktop runner (docs/13 §7.3): default look ≲ 0.2 ms,
 20 000 discs ≤ 1 ms desktop / ≤ 4 ms laptop, the 1 000 000 hard cap ≤ 16 ms with the
 cancellation check, degradation determinism (newest `cap/2`).
+Also **the clamp question K-509 left open**: whether a driven value should be clamped
+to its parameter's hard range engine-side, as a typed value is. It is not today, which is
+what makes an unwired Points sample show up as a parameter pinned *past* its limits
+rather than at them; PS6 marks the cause in the panel and deliberately does not treat the
+symptom. It touches every driver rather than this one, and it changes rendered output, so
+it is answered here — with its own appended entry — or recorded as deliberate.
 **Tests**: particulate.md §9 item 12; the golden suite.
 **Binds**: particulate.md §7, §9; docs/13 §7.3; docs/16's verification-beats-assertion
-standing rule.
+standing rule; K-509.
 
 ## 6. Test plan — the core invariants
 

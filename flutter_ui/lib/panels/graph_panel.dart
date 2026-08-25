@@ -264,11 +264,29 @@ class _Layout {
       ];
 }
 
-/// Sockets the picture's own path owns, always drawn whether wired or not.
+/// Sockets that are always drawn, wired or not: the picture's own path, and
+/// every **wire-only** port beside it.
+///
+/// A wire-only port has no stored value and therefore no panel row anywhere
+/// (points-stream.md §2.2) — a matte's, an audio stream's, a points stream's.
+/// The socket is the only way to reach it, so hiding it behind the `E` badge
+/// would hide the whole port. A *parameter* socket is different: the row is
+/// still there in Effect controls, so the canvas may keep it folded away.
 bool _alwaysDrawn(BridgePortType type) =>
     type == BridgePortType.image ||
     type == BridgePortType.matte ||
-    type == BridgePortType.audio;
+    type == BridgePortType.audio ||
+    type == BridgePortType.points;
+
+/// A box that consumes a points stream with **nothing wired into it**.
+///
+/// Structural, not per-frame: the read model says whether the socket carries a
+/// wire, and the engine's contract says what an empty stream answers — Count
+/// nought and Nearest distance "nothing is anywhere near" (points-stream.md
+/// §2.2). So the panel can say so without asking for a value, which is what
+/// K-509 asks of it and what keeps this off the rebuild path (K-183).
+bool graphNoStream(BridgeGraphNode node) =>
+    node.inputs.any((p) => p.portType == BridgePortType.points && !p.wired);
 
 /// A wire being dragged: where it left, and where the pointer is now.
 class _InFlight {
@@ -498,9 +516,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           ? const BridgeOutputRef.sourceMatte()
           : null;
     }
-    final driver = _driverIdOf(socket.node);
-    if (driver == null) return null;
-    return BridgeOutputRef.driver(node: driver, port: socket.port.id);
+    if (_driverIdOf(socket.node) case final driver?) {
+      return BridgeOutputRef.driver(node: driver, port: socket.port.id);
+    }
+    // A **stack effect's** declared data output — the first wire whose source
+    // is the effect list itself (K-492). The picture's own `output` port never
+    // reaches here: a chain socket takes no drag at all.
+    if (_effectIdOf(socket.node) case final effect?) {
+      return BridgeOutputRef.effectData(effect: effect, port: socket.port.id);
+    }
+    return null;
   }
 
   BridgeInputRef? _inputRef(_Socket socket) {
@@ -528,8 +553,51 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // The Layer out box's Audio socket is drawn, unfilled and honest: audio
     // comes only from a footage layer's own stream in this phase (K-435).
     if (into.node is BridgeNodeRef_Out) return false;
-    return out.port.portType == into.port.portType;
+    if (out.port.portType != into.port.portType) return false;
+    return !_wouldLoop(out.node, into.node);
   }
+
+  /// Whether joining [from] to [into] would close a loop.
+  ///
+  /// v1 makes one constructible for the first time (points-stream.md §1.2):
+  /// Points sample reads Particulate's stream and its Count drives
+  /// Particulate's Emit rate — the stream depending on the parameters and the
+  /// parameters on the stream. The engine refuses it at commit with the
+  /// `Cycle` sentence and that refusal is the backstop, but a refusal the
+  /// panel swallows looks to the user like a gesture that did nothing. So the
+  /// drop is declined *here*, from the edges the panel is already holding, and
+  /// nothing crosses the bridge.
+  ///
+  /// The walk is over the stored wires only, exactly as the engine's is: the
+  /// image chain is the effect list and cannot loop.
+  bool _wouldLoop(BridgeNodeRef from, BridgeNodeRef into) {
+    final target = graphNodeKey(from);
+    final seen = <String>{};
+    final queue = <String>[graphNodeKey(into)];
+    while (queue.isNotEmpty) {
+      final at = queue.removeLast();
+      if (at == target) return true;
+      if (!seen.add(at)) continue;
+      for (final edge in _graph!.wiring.edges) {
+        if (_sourceKey(edge) == at) queue.add(_destKey(edge));
+      }
+    }
+    return false;
+  }
+
+  String _sourceKey(BridgeGraphEdge edge) => switch (edge.from) {
+        BridgeOutputRef_Driver(:final node) =>
+          graphNodeKey(BridgeNodeRef.driver(node)),
+        BridgeOutputRef_SourceMatte() => 'source',
+        BridgeOutputRef_EffectData(:final effect) =>
+          graphNodeKey(BridgeNodeRef.effect(effect)),
+      };
+
+  String _destKey(BridgeGraphEdge edge) => switch (edge.to) {
+        BridgeInputRef_Param(:final node) => graphNodeKey(node),
+        BridgeInputRef_Matte(:final effect) =>
+          graphNodeKey(BridgeNodeRef.effect(effect)),
+      };
 
   // --- Node gestures ------------------------------------------------------
 
@@ -633,19 +701,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   bool _touches(BridgeGraphEdge edge, BridgeNodeRef node) {
     final key = graphNodeKey(node);
-    final from = switch (edge.from) {
-      BridgeOutputRef_Driver(:final node) =>
-        graphNodeKey(BridgeNodeRef.driver(node)),
-      BridgeOutputRef_SourceMatte() => 'source',
-      BridgeOutputRef_EffectData(:final effect) =>
-        graphNodeKey(BridgeNodeRef.effect(effect)),
-    };
-    final to = switch (edge.to) {
-      BridgeInputRef_Param(:final node) => graphNodeKey(node),
-      BridgeInputRef_Matte(:final effect) =>
-        graphNodeKey(BridgeNodeRef.effect(effect)),
-    };
-    return from == key || to == key;
+    return _sourceKey(edge) == key || _destKey(edge) == key;
   }
 
   // --- The Tab search -----------------------------------------------------
@@ -1296,6 +1352,29 @@ class _NodeCard extends StatelessWidget {
               ),
             ],
             const Spacer(),
+            // **Nothing wired in** (K-509). A driver that reads a stream and
+            // has none answers its documented no-op — a distance so large it
+            // pins whatever it drives at the far end of the range — and the
+            // box is the one place that can say so before the wire is drawn.
+            if (graphNoStream(box.node)) ...[
+              LumitTooltip(
+                message: l10n.graphNoStream,
+                child: Container(
+                  key: ValueKey<String>(
+                      'graph-no-stream-${graphNodeKey(box.node.node)}'),
+                  width: graphBadgeSize,
+                  height: graphBadgeSize,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                    border: Border.all(color: t.warning),
+                  ),
+                  child: Text('!',
+                      style: t.mono.copyWith(fontSize: 8, color: t.warning)),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
             if (!_derived) ...[
               _badge(t, 'E', exposed, onExpose, t.textPrimary),
               const SizedBox(width: 4),
