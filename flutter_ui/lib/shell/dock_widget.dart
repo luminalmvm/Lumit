@@ -427,6 +427,17 @@ class _DividerState extends State<_Divider> {
     // The visible gap keeps the token width; the hit area is padded to a
     // comfortable 7 px so a 1 px hairline is still grabbable.
     final hit = widget.gap < 7.0 ? 7.0 : widget.gap;
+    // **The whole seam is painted, not just the hairline in it** (owner, desk
+    // test). The hit padding is layout, so the panes stand `hit` apart whatever
+    // the token says — and only `gap` of that was ever painted, leaving 3 px of
+    // nothing either side of the hairline. Nothing composites onto whatever
+    // happens to be underneath, and under Sharp that is the dock's `surface_0`
+    // — the same value the Graph panel grounds its canvas in, so the seam
+    // between the small Viewer and the Node panel read as a slot with the graph
+    // showing through it. Every split is this one widget, so every seam had it.
+    //
+    // The ground goes edge to edge; the hairline stays [gap] wide inside it, so
+    // hover and drag still light a hairline rather than the whole band.
     return MouseRegion(
       cursor: widget.horizontal
           ? SystemMouseCursors.resizeColumn
@@ -446,9 +457,10 @@ class _DividerState extends State<_Divider> {
               : (widget.horizontal ? parent.width : parent.height);
           widget.onDrag(d.delta, extent);
         },
-        child: SizedBox(
+        child: Container(
           width: widget.horizontal ? hit : null,
           height: widget.horizontal ? null : hit,
+          color: idle,
           child: Center(
             child: Container(
               width: widget.horizontal ? widget.gap : null,

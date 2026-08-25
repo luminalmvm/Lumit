@@ -191,7 +191,7 @@ void main() {
     test('colours are stored as readable hex', () {
       final json = CustomTheme.from('Mine', LumitTheme.dark()).toJson();
       final colours = json['colours'] as Map;
-      expect(colours['accent'], '#35785e');
+      expect(colours['accent'], '#e05a72');
     });
 
     test('a nameless or malformed theme is refused rather than half-loaded',

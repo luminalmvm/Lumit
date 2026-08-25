@@ -34,7 +34,7 @@ change to the household system implies nothing here.
 - **Hairline elevation.** Panels and cards are flat fills separated by 1px hairline borders.
   Shadows are reserved for things that genuinely float: undocked panels being dragged, modal
   dialogs, drop-down menus, drag ghosts. No glassmorphism, no gradients-as-chrome.
-- **Accent discipline.** `accent` (spruce) stays the one saturated accent in chrome, now with a
+- **Accent discipline.** `accent` (clay) stays the one saturated accent in chrome, now with a
   deliberately short job list (§3.1); the only other stateful colour is `animated` (§3.1),
   whose job list is shorter still.
 - **No punishment UI.** Errors and warnings render in `fig` and `kraft`, never a red-alert.
@@ -167,9 +167,9 @@ implies "no shadow" once Round is picked.
 
 | Token | Value | Role in Lumit |
 |---|---|---|
-| `accent` (spruce) | `#35785e` | THE accent (K-511), with a deliberately short job list (K-439): **the single filled button per surface, the playhead, and the active tab tick**. The selection tokens (§6.5) derive from it. Everything else in chrome is grey. It is the **one** value to retune — both stock schemes build their pair from `LumitTheme.defaultAccent` |
+| `accent` (clay) | `#e05a72` | THE accent, with a deliberately short job list (K-439): **the single filled button per surface, the playhead, and the active tab tick**. The selection tokens (§6.5) derive from it. Everything else in chrome is grey |
 | `animated` | `#d8a24a` (placeholder, tunable) | "This is animated or in hand": **keyframe diamonds, stopwatch-on, selected keyframes, selected gizmo handles, the focused value field, the work-area band, and the selected node's border in the Graph panel (K-473)** — a desaturated warm amber, quieter than `accent`. That list is closed: **if a further kind of use appears, it is wrong** |
-| `accent_hover` (spruce-light) | `#478a70` | Hover/active shift of the accent — `accent` ±`0x12` a channel, the same step `with_accent` gives a user-picked one (K-092): lighter in Dark, and `#23664c` (darker) in Light |
+| `accent_hover` (clay-deep) | `#ea7288` | Hover/active shift of the accent (lighter in dark) |
 | `success` (olive) | `#5fcfae` | Success, completed exports, cache-bar family root (§6.3) |
 | `warning` (kraft) | `#dd9a82` | Warnings, overrun hatching, missing-footage placeholders, "close" feedback |
 | `error` (fig) | `#d1729c` | Errors — decode failures, export failures, invalid expressions. Never a harsh red |
@@ -325,7 +325,7 @@ counterpart:
 | `text-ink-soft` | `text_muted` | |
 | `border-line` | `hairline` | |
 | `border-line-strong` | `hairline_strong` | |
-| `clay` / `clay-deep` | `accent` / `accent_hover` | Mapped by **role**, not hue: since K-511 the accent is spruce, and clay survives only as one of the six Settings presets |
+| `clay` / `clay-deep` | `accent` / `accent_hover` | |
 | `olive` | `success` | |
 | `kraft` | `warning` | |
 | `fig` | `error` | |
@@ -724,10 +724,7 @@ and roles (accent/success/warning/error, re-picked at reduced lightness rather t
 inverted — a value as light as the dark-mode accent washes out on white) all follow. The
 household `clay`/`olive`/`kraft`/`fig` light values this section originally pointed at aren't
 available in this checkout; Lumit's light-mode role colours are its own derivations rather
-than a port. **The accent is the exception since K-511**: spruce already clears the same
-contrast floor on white that the clay it replaced only reached after darkening, so Light and
-Dark share one `accent` and differ in the hover alone.
-`with_accent`'s hover-shift direction now depends on mode: brightening reads as
+than a port. `with_accent`'s hover-shift direction now depends on mode: brightening reads as
 "more prominent" on a dark surface, so Dark brightens on hover; Light darkens by the same
 amount instead. The §9 contrast floors are re-run against the light ramp, not assumed to carry
 over from the dark one's numbers.

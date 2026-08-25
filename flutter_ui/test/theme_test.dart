@@ -103,29 +103,6 @@ void main() {
     expect(b(light.accentHover), 0x4e);
   });
 
-  /// K-511: the stock accent pair is *derived* from `defaultAccent`, not typed
-  /// beside it — so re-tuning the spruce is one edit, and the hover cannot
-  /// drift off the ±0x12 step a user-picked accent gets.
-  test('the stock schemes are defaultAccent put through with_accent', () {
-    expect(LumitTheme.defaultAccent, const Color(0xff35785e));
-
-    final dark = LumitTheme.dark();
-    expect(dark.accent, LumitTheme.defaultAccent);
-    expect(dark.accentHover, const Color(0xff478a70));
-    expect(dark.accentHover,
-        LumitTheme.dark().withAccent(LumitTheme.defaultAccent).accentHover);
-
-    final light = LumitTheme.light();
-    expect(light.accent, LumitTheme.defaultAccent);
-    expect(light.accentHover, const Color(0xff23664c));
-    expect(light.accentHover,
-        LumitTheme.light().withAccent(LumitTheme.defaultAccent).accentHover);
-
-    // Clay stays one click away in the Settings swatch row.
-    expect(LumitTheme.accentPresets.first, LumitTheme.defaultAccent);
-    expect(LumitTheme.accentPresets, contains(const Color(0xFFE05A72)));
-  });
-
   test('dark scheme viewer surround is exactly neutral (r == g == b)', () {
     for (final scheme in [
       LumitColorScheme.dark,
@@ -144,10 +121,9 @@ void main() {
     expect(r(dark.surface0), 0x0b);
     expect(g(dark.surface0), 0x0c);
     expect(b(dark.surface0), 0x0e);
-    // Spruce (K-511), the default accent both stock schemes build from.
-    expect(r(dark.accent), 0x35);
-    expect(g(dark.accent), 0x78);
-    expect(b(dark.accent), 0x5e);
+    expect(r(dark.accent), 0xe0);
+    expect(g(dark.accent), 0x5a);
+    expect(b(dark.accent), 0x72);
 
     final mocha = LumitTheme.catppuccinMocha();
     expect(r(mocha.surface1), 0x1e);

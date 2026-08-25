@@ -49,7 +49,7 @@ void main() {
       final json = jsonDecode(text) as Map<String, dynamic>;
       expect(json['format'], themeFileFormat);
       expect(json['version'], themeFileVersion);
-      expect((json['colours'] as Map)['accent'], '#35785e');
+      expect((json['colours'] as Map)['accent'], '#e05a72');
       expect(text.contains('\n  '), isTrue, reason: 'indented, not one line');
       expect(text.endsWith('\n'), isTrue);
     });
