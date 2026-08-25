@@ -14,6 +14,8 @@
 // it; a test that names `_Outline`, `_vOutline`, or "the second scroll view"
 // would only be measuring today's implementation.
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -1032,6 +1034,102 @@ void main() {
           reason: 'and pinched to the centre point the mark is split on');
       expect(hourglass.contains(Offset(x - 1, mid + half - 0.5)), isTrue,
           reason: 'the second triangle stands under the first');
+    });
+
+    /// 10d-sexies. **The mark is painted as one contour, with no edge down its
+    /// own centre** (§5 of docs/impl/timeline-interaction.md). The halves are
+    /// still the geometry oracle above; what the canvas gets is their union,
+    /// because two anti-aliased paths meeting on the centre line let the
+    /// ground through between them and drew a seam down every key.
+    test('a key mark is one contour and never an edge on the centre line', () {
+      const x = 100.0, mid = 10.0, half = laneKeyHalf;
+
+      for (final into in KeyShape.values) {
+        for (final out in KeyShape.values) {
+          final pair = (into, out);
+          final path = keyMarkPath(pair, x, mid, half);
+          final contours = path.computeMetrics().toList();
+
+          // One contour per mark. The hourglass/hourglass pair is the note's
+          // one exception: two triangles that meet at a point, and a point
+          // two subpaths share draws no seam.
+          expect(contours.length,
+              into == out && into == KeyShape.hourglass ? 2 : 1,
+              reason: '$pair is painted in one path with no interior edge');
+
+          // Nothing runs *along* the centre line: the contour may cross it at
+          // top, bottom or an hourglass's pinch, but a vertical edge sitting
+          // on x is exactly the seam this replaced.
+          for (final contour in contours) {
+            for (var d = 0.0; d < contour.length; d += 0.05) {
+              final t = contour.getTangentForOffset(d)!;
+              if ((t.position.dx - x).abs() > 0.01) continue;
+              expect(t.vector.dx.abs(), greaterThan(0.01),
+                  reason: '$pair draws an interior edge down the centre line '
+                      'at ${t.position}');
+            }
+          }
+
+          // And the union is the two halves and nothing else: same box, and
+          // the same answer as its own half at every probe either side.
+          final left = keyHalfPath(into, x, mid, half, left: true);
+          final right = keyHalfPath(out, x, mid, half, left: false);
+          expect(path.getBounds(),
+              left.getBounds().expandToInclude(right.getBounds()),
+              reason: '$pair covers exactly what its two halves cover');
+          for (final side in [true, false]) {
+            final shape = side ? into : out;
+            final w = (side ? -1.0 : 1.0) *
+                (shape == KeyShape.diamond ? half : half * 8 / 11);
+            final oracle = side ? left : right;
+            for (final probe in [
+              Offset(x + w * 0.4, mid - half * 0.5),
+              Offset(x + w * 0.4, mid + half * 0.5),
+              Offset(x + w * 0.9, mid),
+              Offset(x + w * 0.9, mid - half * 0.9),
+              Offset(x + w * 0.1, mid),
+            ]) {
+              expect(path.contains(probe), oracle.contains(probe),
+                  reason: '$pair at $probe disagrees with its own '
+                      '${side ? 'left' : 'right'} half');
+            }
+          }
+        }
+      }
+    });
+
+    /// 10d-septies. The same claim where it was actually reported: on the
+    /// screen. Rasterised at 4×, with the mark's centre line landing halfway
+    /// across a device pixel — which is where two separately anti-aliased
+    /// halves used to compose to 0.75 coverage and let the lane ground show
+    /// through as a hairline.
+    test('a mark rasterises with no lighter stripe down its middle', () async {
+      const scale = 4.0, half = laneKeyHalf;
+      // 5.625 × 4 = 22.5: the centre line halves device column 22.
+      const x = 5.625, mid = 5.5;
+
+      Future<List<int>> alphaRow(KeyShape into, KeyShape out) async {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder)..scale(scale);
+        canvas.drawPath(keyMarkPath((into, out), x, mid, half),
+            Paint()..color = const Color(0xFFFFFFFF));
+        final image = await recorder.endRecording().toImage(48, 48);
+        final bytes = (await image.toByteData())!;
+        // Row 22: a whisker below the centre, where every shape is at full
+        // width, so any dip in the middle is the seam and nothing else.
+        return [
+          for (var c = 0; c < 48; c++) bytes.getUint8((22 * 48 + c) * 4 + 3)
+        ];
+      }
+
+      for (final shape in [KeyShape.diamond, KeyShape.square]) {
+        final row = await alphaRow(shape, shape);
+        expect(row[22], 255,
+            reason: '$shape: the centre column is as solid as the mark, not '
+                'two half-covered edges composed to 0.75');
+        expect(row[22], row[20]);
+        expect(row[22], row[24]);
+      }
     });
 
     /// 10e. **Keys mode is the same table** (K-455): the dope sheet swaps the

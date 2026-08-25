@@ -186,6 +186,93 @@ Path keyHalfPath(KeyShape shape, double x, double mid, double half,
   };
 }
 
+/// Half a key's width, per shape: only the diamond is as wide as it is tall.
+double _keyHalfWidth(KeyShape shape, double half) =>
+    shape == KeyShape.diamond ? half : half * 8 / 11;
+
+/// The outer boundary of [shape]'s half, walked from the mark's **top centre**
+/// down its own side to the mark's **bottom centre**. The two ends are on the
+/// centre line; nothing between them is, save an hourglass's pinch.
+List<Offset> _keyHalfOutline(KeyShape shape, double x, double mid, double half,
+    {required bool left}) {
+  final w = _keyHalfWidth(shape, half) * (left ? -1.0 : 1.0);
+  return switch (shape) {
+    KeyShape.diamond => [
+        Offset(x, mid - half),
+        Offset(x + w, mid),
+        Offset(x, mid + half),
+      ],
+    KeyShape.square => [
+        Offset(x, mid - half),
+        Offset(x + w, mid - half),
+        Offset(x + w, mid + half),
+        Offset(x, mid + half),
+      ],
+    KeyShape.hourglass => [
+        Offset(x, mid - half),
+        Offset(x + w, mid - half),
+        Offset(x, mid),
+        Offset(x + w, mid + half),
+        Offset(x, mid + half),
+      ],
+  };
+}
+
+/// A whole key's mark as **one path with no interior edge on the centre line**
+/// — the thing that is actually painted (§5 of docs/impl/timeline-interaction).
+///
+/// Drawing the two halves as two paths looked right in the geometry and wrong
+/// on the screen: the renderer anti-aliases each path against the ground on its
+/// own, so along the shared centre line two half-covered edges met and the
+/// ground showed through the pair as a hairline seam down the middle of every
+/// mark — including the plain diamonds, where there is no seam to draw at all.
+///
+/// So the pair is composed before it is painted. A **same-shape** pair is
+/// simply the whole shape's own contour. A **mixed** pair is the union of the
+/// two halves as one contour: down the left half's outer boundary from top
+/// centre, back up the right half's, crossing the centre line only at the top
+/// and the bottom (and at an hourglass half's pinch, where the contour turns
+/// through a point rather than drawing along the line).
+///
+/// The **hourglass/hourglass** pair keeps its two triangles: they meet at one
+/// point, and two subpaths of one path that share a point draw no seam.
+/// [keyHalfPath] stays as the geometry oracle — what each half *is* — while
+/// this is what the canvas gets.
+Path keyMarkPath((KeyShape, KeyShape) pair, double x, double mid, double half) {
+  final (into, out) = pair;
+  if (into == out) {
+    final w = _keyHalfWidth(into, half);
+    return switch (into) {
+      KeyShape.diamond => Path()
+        ..moveTo(x, mid - half)
+        ..lineTo(x + w, mid)
+        ..lineTo(x, mid + half)
+        ..lineTo(x - w, mid)
+        ..close(),
+      KeyShape.square => Path()
+        ..addRect(Rect.fromLTRB(x - w, mid - half, x + w, mid + half)),
+      KeyShape.hourglass => Path()
+        ..moveTo(x - w, mid - half)
+        ..lineTo(x + w, mid - half)
+        ..lineTo(x, mid)
+        ..close()
+        ..moveTo(x - w, mid + half)
+        ..lineTo(x + w, mid + half)
+        ..lineTo(x, mid)
+        ..close(),
+    };
+  }
+  final down = _keyHalfOutline(into, x, mid, half, left: true);
+  // Reversed, so it walks bottom centre back up to top centre; its first point
+  // is the left half's last and its last is the moveTo, so both are dropped.
+  final up = _keyHalfOutline(out, x, mid, half, left: false).reversed.toList();
+  final path = Path()..moveTo(down.first.dx, down.first.dy);
+  for (final p in [...down.skip(1), ...up.sublist(1, up.length - 1)]) {
+    path.lineTo(p.dx, p.dy);
+  }
+  return path..close();
+}
+
 /// The same on a **shut layer's** row: smaller than the keys you take hold
 /// of, because these are a summary of everything keyed inside the layer.
 ///
@@ -9027,8 +9114,9 @@ class _LaneKeysPainter extends CustomPainter {
       final (into, out) = shapes == null || i >= shapes!.length
           ? (KeyShape.diamond, KeyShape.diamond)
           : shapes![i];
-      canvas.drawPath(keyHalfPath(into, x, mid, half, left: true), paint);
-      canvas.drawPath(keyHalfPath(out, x, mid, half, left: false), paint);
+      // One path, one call: two anti-aliased halves meeting on the centre line
+      // left a seam down the middle of every mark (§5).
+      canvas.drawPath(keyMarkPath((into, out), x, mid, half), paint);
     }
   }
 

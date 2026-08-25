@@ -8471,6 +8471,15 @@ side, so a key that eases into itself and holds out of itself is half hourglass 
 square. Reading a sheet of them tells you what a composition's motion feels like before you
 play a frame of it.
 
+"Cut down the middle" is how the mark is *described*, not how it is drawn. Drawing it as
+two halves is what a screen punishes: shapes are drawn with soft edges so their slopes do
+not come out as staircases, and where two separately softened edges met on the centre line
+neither quite covered it, so the lane's dark ground showed through as a hairline seam down
+every key — even the plain diamonds, which have no seam to show. So the two halves are
+joined into one outline *before* anything is painted: one shape, one soft edge round the
+outside of it, nothing down the middle. An hourglass is the one shape allowed to keep two
+pieces, because its two triangles meet at a single point and a point has no line to seam.
+
 **Graph** is the curves: the same keyframes again, drawn as the value they carry rather
 than as marks on a line, which is where you shape an ease by hand.
 
