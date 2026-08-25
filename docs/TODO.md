@@ -541,17 +541,6 @@ does not gate the four. Delete each phase here when it lands, as with everything
     windows, and last the satellite tear-off panels - which is where the old
     pop-out-panel-windows rebuild item (K-182) is folded in.
 
-## Now — the Flutter 3.47 upgrade (owner, 2026-08-25; runs ALONE after the in-flight agents land)
-
-Upgrade the Flutter SDK to 3.47 for its text rendering (Impeller's SDF text) — and
-**verify Impeller is actually the active renderer on Windows**, not just present
-(check the runner's enablement and prove it at startup, not by assumption). Fix the
-upgrade's fallout (deprecations, any metrics drift — layout pins should hold since
-SDF changes rasterisation, not geometry; treat any pin that moves as a finding).
-Multi-window arrives experimental in 3.47 and stays UNIMPLEMENTED per K-449's gate —
-but update docs/impl/multi-window.md §1's status line per that note's own
-instruction, since the line asks to be re-checked against each release.
-
 ## Next - colour management: OCIO (K-489, K-490, docs/impl/ocio.md)
 
 The owner has ruled OCIO support in scope; the design step has landed

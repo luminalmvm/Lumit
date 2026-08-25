@@ -23,30 +23,37 @@ same widget tree.
 The catch is simple and decisive: **as of August 2026 none of it has shipped in
 a stable Flutter release.** It exists only on Flutter's *main* (development)
 channel, behind an opt-in flag, and the API is stamped "internal — we will break
-this even in patch versions". Lumit pins stable Flutter (currently 3.44.7). So
+this even in patch versions". Lumit pins stable Flutter (currently 3.47.1). So
 this note is a map for later, plus one cheap spike worth doing early: proving
 the engine's zero-copy Viewer texture can appear in a second window at all,
 because that is the one Lumit-specific risk no release note will ever answer.
 
 ## 1. Status: current vs required Flutter (the hard blocker)
 
-- **Installed / pinned**: Flutter 3.44.7 stable (2026-07-17), Dart 3.12.2.
+- **Installed / pinned**: Flutter 3.47.1 stable (2026-08-19), Dart 3.13.1
+  (re-checked 2026-08-25 on the 3.47 upgrade).
   `flutter_ui/pubspec.yaml` asks for Dart `>=3.6.0 <4.0.0` and pins
   `flutter_rust_bridge: 2.12.0` exactly (the codegen and runtime versions must
   match — see §7).
-- **Multi-window ships in**: no stable release yet. Flutter 3.44 (Google I/O,
+- **Multi-window ships in**: still no stable release. Flutter 3.44 (Google I/O,
   May 2026) says windowing is "only available on the main channel and not yet
-  intended for production use". Flutter 3.47 stable (August 2026) still calls it
-  "experimental multi-window progress". The `examples/multiple_windows` reference
-  app in flutter/flutter requires the **main channel** plus the
-  `--enable-windowing` flag (`flutter config --enable-windowing`).
+  intended for production use", and 3.47 stable (August 2026) only calls it
+  "experimental multi-window progress". This is not a matter of an unset flag:
+  in the installed 3.47.1, `windowingFeature` in
+  `packages/flutter_tools/lib/src/features.dart` declares
+  `master: FeatureChannelSetting(available: true)` and **no stable setting at
+  all**, so `flutter config --enable-windowing` cannot turn it on here. The
+  `examples/multiple_windows` reference app still requires the **main channel**
+  plus that flag.
 - **API stability**: everything in §2 lives in
   `packages/flutter/lib/src/widgets/_window.dart` and is annotated `@internal`
   with the doc warning "Do not use this API in production applications or
   packages published to pub.dev. Flutter will make breaking changes to this API,
-  even in patch versions." They mean it: the 3.47 cycle renamed
-  `preferredSize` → `size` and `RegularWindow` → `Window`, and removed the
-  `decorated` flag.
+  even in patch versions." They mean it: across the 3.47 cycle `preferredSize`
+  became `size` and the `decorated` flag went away — neither name survives in
+  3.47.1. (`RegularWindow` does still exist there, alongside `DialogWindow`,
+  `TooltipWindow`, `PopupWindow` and `SatelliteWindow`; the rename to `Window`
+  this note predicted on 2026-08-23 has not landed.)
 - **What an upgrade drags in**: the main channel means a pre-release Dart SDK
   (fine for our `<4.0.0` constraint) and re-running frb codegen plus a
   `lumit_bridge` dylib rebuild. flutter_rust_bridge tracks the Dart SDK, not the

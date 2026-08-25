@@ -229,7 +229,13 @@ void main() {
       expect(standard.first, ScopeColours.standard.bg.toTriple(),
           reason: 'off, the scope draws on the standard graticule');
 
-      await tester.tap(find.byKey(const ValueKey('settings-themed-scopes')));
+      // Appearance now runs past the 446px the page area gives it, so this row
+      // is laid out below the fold: found, but clipped, and a tap on its centre
+      // would land on the window behind. Scroll it in first.
+      final scopes = find.byKey(const ValueKey('settings-themed-scopes'));
+      await tester.ensureVisible(scopes);
+      await tester.pumpAndSettle();
+      await tester.tap(scopes);
       await tester.pumpAndSettle();
       expect(p.uiState.workspace.themedScopes, isTrue);
 
@@ -255,7 +261,10 @@ void main() {
 
       // A choice of two words now, not a switch (K-465): the drawing gives the
       // surround a dropdown, and its two options are the bool's two values.
-      await tester.tap(find.byKey(const ValueKey('settings-themed-surround')));
+      final surround = find.byKey(const ValueKey('settings-themed-surround'));
+      await tester.ensureVisible(surround);
+      await tester.pumpAndSettle();
+      await tester.tap(surround);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Theme colour').last);
       await tester.pumpAndSettle();
