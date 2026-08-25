@@ -40,6 +40,21 @@ void main() {
     Finder rowText(String name) =>
         find.descendant(of: find.byType(ListView), matching: find.text(name));
 
+    /// A genuine double-click on a row — the gesture that **opens** it
+    /// (K-534).
+    ///
+    /// [kDoubleTapMinTime] between the two, which is Flutter's own floor for
+    /// calling a pair of taps a double tap, and nothing more: the open must
+    /// land on the second click's own release, with none of the 300ms window
+    /// waited out afterwards.
+    Future<void> doubleClick(WidgetTester tester, Finder target) async {
+      final centre = tester.getCenter(target);
+      await tester.tapAt(centre);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tapAt(centre);
+      await tester.pump();
+    }
+
     testWidgets('an empty project shows the quiet hint', (tester) async {
       final p = freshProject();
       await tester.pumpWidget(
@@ -121,12 +136,12 @@ void main() {
       );
     });
 
-    /// A second click on footage opens New composition on it (K-243): footage
-    /// has no window of its own, and the thing wanted from a clip just
+    /// **Double-clicking** footage opens New composition on it (K-243):
+    /// footage has no window of its own, and the thing wanted from a clip just
     /// double-clicked is a comp to put it in, already its size, rate and
     /// length. Renaming footage moved to the row menu with this.
     testWidgets(
-        'clicking footage selects it, and a second click makes a comp of it',
+        'clicking footage selects it, and a double-click makes a comp of it',
         (tester) async {
       final p = freshProject();
       p.state.project!.importFootage(path: 'C:/clips/shot.mov');
@@ -138,9 +153,9 @@ void main() {
       ));
       await tester.pump();
 
-      // First click selects; the second (well outside the double-tap window)
-      // opens the dialogue, after the media has been probed.
-      await tapAgain(tester, rowText('shot.mov'));
+      // The first click selects on its down stroke; the double-click opens the
+      // dialogue, after the media has been probed.
+      await doubleClick(tester, rowText('shot.mov'));
       await settleFrb(
         tester,
         until: () =>
@@ -149,7 +164,7 @@ void main() {
 
       expect(find.text('NEW COMPOSITION'), findsWidgets);
       expect(find.byKey(const ValueKey('rename-field')), findsNothing,
-          reason: 'a second click on footage is not a rename any more');
+          reason: 'a double-click on footage is not a rename any more');
 
       await tester.tap(find.byKey(const ValueKey('comp-apply')));
       await tester.pumpAndSettle();
@@ -158,6 +173,46 @@ void main() {
       expect(comp, isNotNull, reason: 'the new comp is fronted');
       expect(comp!.getLayers(), hasLength(1),
           reason: 'the clip it was made from is in it');
+    });
+
+    /// **Clicking a row that is already selected does nothing** (K-534, owner
+    /// desk test: "if I click a selected item it brings up the new composition
+    /// menu").
+    ///
+    /// Opening used to be decided on the raw pointer-up, which cannot tell the
+    /// second click of a double-click from a click on a row selected a minute
+    /// ago — so every ordinary click on a chosen clip raised New composition.
+    /// It is the double-tap's business now.
+    testWidgets('a click on an already-selected row opens nothing',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      var asked = 0;
+      await tester.pumpWidget(hostPanel(
+        child: ProjectPanelFrb(importPicker: () async {
+          asked++;
+          return [];
+        }),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await tester.tap(rowText('shot.mov'));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(p.uiState.selectedProjectItem.value, isA<ItemReference_Footage>());
+
+      // The click the owner made: the same row again, at any pace at all.
+      await tester.tap(rowText('shot.mov'));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text('NEW COMPOSITION'), findsNothing,
+          reason: 'clicking a chosen row is not a command');
+      expect(find.byKey(const ValueKey('comp-apply')), findsNothing);
+      expect(find.byKey(const ValueKey('rename-field')), findsNothing);
+      expect(asked, 0, reason: 'and it is not an import either');
+      expect(p.uiState.selectedProjectItem.value, isA<ItemReference_Footage>(),
+          reason: 'the row is simply still selected');
     });
 
     testWidgets('a click publishes the picked item for the FX console',
@@ -188,9 +243,9 @@ void main() {
           reason: 'and follows the click');
     });
 
-    /// Opening a folder is showing what is in it, so a second click shuts it
-    /// and a third opens it again (K-243). The Compositions auto-folder is one.
-    testWidgets('a second click on a folder opens and shuts it',
+    /// Opening a folder is showing what is in it, so a double-click shuts it
+    /// and another opens it again (K-243). The Compositions auto-folder is one.
+    testWidgets('a double-click on a folder opens and shuts it',
         (tester) async {
       final p = freshProject();
       p.state.project!.newComposition(name: 'Scene');
@@ -205,13 +260,14 @@ void main() {
       expect(rowText('Scene'), findsOneWidget,
           reason: 'a folder starts open, showing what it holds');
 
-      await tapAgain(tester, rowText('Compositions'));
+      await doubleClick(tester, rowText('Compositions'));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(rowText('Scene'), findsNothing, reason: 'the folder shut');
       expect(find.byKey(const ValueKey('rename-field')), findsNothing,
           reason: 'and it is not a rename any more');
 
-      await tester.tap(rowText('Compositions'));
-      await tester.pump(const Duration(milliseconds: 350));
+      await doubleClick(tester, rowText('Compositions'));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(rowText('Scene'), findsOneWidget, reason: 'and opened again');
     });
 
@@ -228,7 +284,8 @@ void main() {
       ));
       await tester.pump();
 
-      await tapAgain(tester, rowText('Compositions'));
+      await doubleClick(tester, rowText('Compositions'));
+      await tester.pump(const Duration(milliseconds: 400));
       expect(rowText('Scene'), findsNothing);
 
       await tester.enterText(
@@ -365,15 +422,9 @@ void main() {
       ));
       await tester.pump();
 
-      // Two quick clicks — a genuine double-click, with only zero-length
-      // pumps: any reliance on the 300ms arena would fail here.
-      final centre = tester.getCenter(rowText('shot.mov'));
-      for (var i = 0; i < 2; i++) {
-        final g = await tester.startGesture(centre);
-        await tester.pump();
-        await g.up();
-        await tester.pump();
-      }
+      // Two quick clicks, `kDoubleTapMinTime` apart and no more: any reliance
+      // on the 300ms window *after* the second click would fail here.
+      await doubleClick(tester, rowText('shot.mov'));
 
       await settleFrb(
         tester,
@@ -407,13 +458,7 @@ void main() {
       await tester.pump();
       expect(p.uiState.selectedComp, isNull);
 
-      final centre = tester.getCenter(rowText('Scene'));
-      for (var i = 0; i < 2; i++) {
-        final g = await tester.startGesture(centre);
-        await tester.pump();
-        await g.up();
-        await tester.pump();
-      }
+      await doubleClick(tester, rowText('Scene'));
 
       expect(p.uiState.selectedComp?.internalid, comp.internalid,
           reason: 'the second click fronted the comp');
@@ -421,7 +466,8 @@ void main() {
           reason: 'opening a comp is not renaming it');
 
       // The rename it gave up is still reachable from the row menu.
-      await tester.tapAt(centre, buttons: kSecondaryButton);
+      await tester.tapAt(tester.getCenter(rowText('Scene')),
+          buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-menu-rename')));
       await tester.pumpAndSettle();
@@ -430,8 +476,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
     });
 
-    /// The same, starting from an already-selected row: a double-click (or a
-    /// single click) on it opens the item rather than doing nothing.
+    /// The same, starting from an already-selected row: the **double-click**
+    /// still opens it. Being selected already is not what makes a click mean
+    /// something (K-534) — the double-click is.
     testWidgets('double-clicking an already-selected row opens it',
         (tester) async {
       final p = freshProject();
@@ -449,19 +496,14 @@ void main() {
       expect(find.byKey(const ValueKey('comp-apply')), findsNothing,
           reason: 'the first click only selects');
 
-      final centre = tester.getCenter(rowText('shot.mov'));
-      final g = await tester.startGesture(centre);
-      await tester.pump();
-      await g.up();
-      await tester.pump();
-
+      await doubleClick(tester, rowText('shot.mov'));
       await settleFrb(
         tester,
         until: () =>
             find.byKey(const ValueKey('comp-apply')).evaluate().isNotEmpty,
       );
       expect(find.text('NEW COMPOSITION'), findsWidgets,
-          reason: 'a click on the selected row opens it at once');
+          reason: 'a double-click opens it, selected or not');
       await tester.tap(find.byKey(const ValueKey('comp-cancel')));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(milliseconds: 400));

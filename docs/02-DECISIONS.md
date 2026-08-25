@@ -14806,3 +14806,30 @@ because the graph's box and the Effect controls heading are one selection (K-300
 Viewer's *at effect* chip needed nothing: K-528 derived its name from "exactly one effect
 picked", so a pick of several makes the chip go away by itself rather than by anyone
 remembering to turn it off.
+
+## K-534 — A click on a row that is already chosen is not a command
+
+**DECIDED 2026-08-25** (owner desk test: *"if I click a selected item in the project panel,
+it brings up the new composition menu — I thought we had removed this"*).
+
+**They had.** K-191 took click-to-rename off a project row precisely because a slow
+double-click and a deliberate click on a chosen row are the same gesture, and K-243 then
+made the second click *open* the row instead — a composition fronts, footage raises New
+composition, a folder twirls. That decision was implemented on the raw pointer-up, which
+was right about the *speed* (the gesture arena's double-tap window is exactly the lag
+selection-on-the-down-stroke exists to avoid) and wrong about the *event*: a pointer-up
+cannot tell the second click of a double-click from a click on a row that was selected a
+minute ago. So selecting a clip and clicking it again raised the New composition dialogue,
+which is K-191's mistake made a second time under another name.
+
+**Opening is the double-tap, and a click on a chosen row does nothing at all.** The row
+already registered a double-tap recogniser to keep the panel's empty-area import from
+firing on it; that recogniser now carries the open. It fires on the second click's own
+*up* rather than waiting a further window, so "select, then open in one motion" is
+unchanged and the immediacy K-243 asked for holds. What a plain pointer-up still settles is
+the one thing the down stroke could not: a click on one row of a multi-selection collapses
+the selection to that row.
+
+The rule generalises past this panel and is stated once here: **clicking something that is
+already selected re-affirms the selection and nothing else.** Any surface wanting a second
+meaning for a click must take it from a gesture that cannot be produced by accident.

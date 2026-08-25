@@ -2181,49 +2181,53 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
 
   /// The click, resolved on the raw pointer UP rather than through the
   /// gesture arena — the arena waits out the empty-area double-tap window,
-  /// which is exactly the lag being avoided. A second click on the lone
-  /// selected row *opens* it, and what opening means is the item's own answer
-  /// (K-243): a composition fronts in the Timeline, footage raises New
-  /// composition sized and timed to it, a folder renames in place. The second
-  /// click of a double-click, or any later click, both land here. A plain click
-  /// on one row of a multi-selection collapses the selection to it.
+  /// which is exactly the lag being avoided.
+  ///
+  /// All it settles is the one thing the down stroke could not: **a plain
+  /// click on one row of a multi-selection collapses the selection to it**.
+  /// A click on a row that is already the only one selected does nothing at
+  /// all, which is what clicking something already chosen means everywhere
+  /// else in the application (K-534). It used to *open* the row — and because
+  /// this is the raw pointer-up, "the second click of a double-click" and "a
+  /// click on a row selected a minute ago" were the same event: selecting a
+  /// clip and clicking it again raised New composition. That is exactly the
+  /// mistake K-191 took click-to-rename out for, made a second time under
+  /// another name. Opening is [_open], on the double-tap.
   void _handlePointerUp(PointerUpEvent event) {
     if (!_primaryDown) return;
     _primaryDown = false;
     if (_dragged || !_wasSelectedAtDown) return;
     if (_selectModeFromKeyboard() != SelectMode.replace) return;
-    if (widget.selectionCount <= 1 && !widget.renaming) {
-      // Opening a comp is what a double-click means in every editor — so a comp
-      // is renamed from its context menu or its settings dialogue instead,
-      // never by a stray second click on the row.
-      if (item case ItemReference_Composition(:final field0)) {
-        Provider.of<LumitUiState>(context, listen: false)
-            .setSelectedComp(field0);
-        return;
-      }
-      // Footage has no window of its own to open, and the thing people want
-      // from a clip they have just double-clicked is a comp to put it in —
-      // already the size, rate and length of the media, because that dialogue
-      // reads the selection (the longest item wins when there are several).
-      if (item case ItemReference_Footage(:final field0)) {
-        final selected = widget.selectedFootage();
-        widget.onNewComposition(selected.isEmpty ? [field0] : selected);
-        return;
-      }
-      // A folder opens and shuts, which is what opening one means. Renaming it
-      // is on the row menu with the other two kinds'.
-      if (item is ItemReference_Folder) {
-        widget.onToggleFolder();
-        return;
-      }
-      // Nothing for the other kinds: a second click used to rename them in
-      // place (K-191), which meant a slow double-click and a deliberate click
-      // on a selected row were the same gesture and names opened editors
-      // under people's pointers. Renaming is `Enter` on the selection now
-      // (K-321), with the row menu's Rename as the mouse path.
+    if (widget.selectionCount > 1) widget.onSelect(SelectMode.replace);
+  }
+
+  /// **Opening a row**, and what opening means is the item's own answer
+  /// (K-243): a composition fronts in the Timeline, footage raises New
+  /// composition sized and timed to it, a folder opens and shuts.
+  ///
+  /// On the double-tap, which is the gesture it always meant — the row's own
+  /// recogniser, which fires on the second click's *up* rather than waiting a
+  /// further window, so nothing about the speed of it changed. Selection is
+  /// still on the down stroke, so the pair still reads as "select, then open"
+  /// in one motion.
+  void _open() {
+    if (widget.renaming) return;
+    if (item case ItemReference_Composition(:final field0)) {
+      Provider.of<LumitUiState>(context, listen: false).setSelectedComp(field0);
       return;
     }
-    widget.onSelect(SelectMode.replace);
+    // Footage has no window of its own to open, and the thing people want
+    // from a clip they have just double-clicked is a comp to put it in —
+    // already the size, rate and length of the media, because that dialogue
+    // reads the selection (the longest item wins when there are several).
+    if (item case ItemReference_Footage(:final field0)) {
+      final selected = widget.selectedFootage();
+      widget.onNewComposition(selected.isEmpty ? [field0] : selected);
+      return;
+    }
+    if (item is ItemReference_Folder) widget.onToggleFolder();
+    // Nothing for the other kinds. Renaming is `Enter` on the selection
+    // (K-321), with the row menu's Rename as the mouse path.
   }
 
   Future<void> _doRelink(FootageReference footage) async {
@@ -2251,11 +2255,12 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
         onPointerUp: _handlePointerUp,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          // Registered but empty: it claims double-clicks on the row in the
-          // gesture arena, so the panel's empty-area double-tap (import) never
-          // fires for a double-click on an item. The rename those clicks mean
-          // already happened on the raw pointer-up above.
-          onDoubleTap: () {},
+          // **This is where opening a row happens** (K-534). It also claims
+          // double-clicks on the row in the gesture arena, so the panel's
+          // empty-area double-tap (import) never fires for a double-click on
+          // an item — which is why it was registered even while it did
+          // nothing.
+          onDoubleTap: _open,
           onSecondaryTapDown: (d) {
             // A right-click on a row already in the selection keeps it: the menu
             // is about what is picked, and collapsing four rows to one because the
