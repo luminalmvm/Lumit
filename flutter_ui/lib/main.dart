@@ -643,6 +643,23 @@ class LumitUiState extends ChangeNotifier {
     return true;
   }
 
+  /// Bring [panel] to the front of whatever tab group holds it (items 6.28,
+  /// 6.35) — selecting a layer fronts the Effect controls, adopting a project
+  /// fronts the Project panel.
+  ///
+  /// **The tab, not the focus.** [activePanel] is where the keyboard is
+  /// pointed, and moving it here would take Delete and `Ctrl+A` away from the
+  /// panel the user is actually working in the instant they clicked a layer
+  /// in it. Fronting a tab shows something; it does not claim the keys.
+  ///
+  /// Which tab a group fronts is part of the arrangement, and the arrangement
+  /// persists — `touch` both redraws the dock and writes it down.
+  void frontPanel(Panel panel) {
+    if (!panelVisible(split, panel)) return;
+    activatePanelTab(split, panel);
+    workspace.touch();
+  }
+
   /// Bumped when `Ctrl+F` asks the focused panel to put the cursor in its
   /// search box (docs/07 §15).
   ///
@@ -1401,6 +1418,13 @@ class LumitUiState extends ChangeNotifier {
     // Whichever way round the two notifiers were set, the selection has just
     // changed, and it is part of the session (see [rememberSession]).
     rememberSession();
+    // **A selected layer fronts its controls** (item 6.28): what you asked for
+    // by clicking the layer is what the panel behind the tab is showing, and
+    // having to go and find that tab is a step nobody wants to take twice.
+    // Not while a project is being restored — the session's own selection is
+    // put back there, and the Project panel is what an opened project fronts
+    // (item 6.35).
+    if (primary != null && !_restoring) frontPanel(Panel.effectControls);
     if (primary == null) {
       if (selectedLayers.value.isNotEmpty) selectedLayers.value = const [];
       return;
@@ -2257,6 +2281,13 @@ class LumitUiState extends ChangeNotifier {
       }
     } finally {
       _restoring = false;
+      // **A project arriving fronts the Project panel** (item 6.35) — a new
+      // one, an opened one, and the empty one that replaces a closed one.
+      // What is in the document is where work on it starts, and the panels
+      // left fronted belong to the document that has just gone. After the
+      // restore, because the arrangement the session carries is applied
+      // inside it and would otherwise front whatever it was saved with.
+      frontPanel(Panel.project);
       // A project that opens with no composition fronted has no picture to
       // wait for, so the opening card would stand for ever waiting on a frame
       // nobody is going to ask for. In the `finally` because every early

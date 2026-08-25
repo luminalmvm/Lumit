@@ -16237,3 +16237,24 @@ rather than a key in the settings, because the list grows on its own schedule an
 else in the settings file wants rewriting when it does. Names are unique — a second save
 under a taken name lands as "name 2", the rule K-298 already gives custom themes — because
 the name is all there is to tell two shapes apart in a row of words.
+
+## K-569 — What you just asked for is the tab that comes forward
+
+**Status: DECIDED (2026-08-25).** Two shell events front a panel's tab. Selecting a layer
+fronts **Effect controls** in whatever tab group holds it (item 6.28): clicking a layer is
+asking for its controls, and having to go and find the tab behind the Project panel is a
+step nobody wants to take twice. A project being adopted — opened, made new, or the empty
+one that replaces a closed one — fronts the **Project panel** (item 6.35), because what is
+in the document is where work on it starts and the panels left fronted belong to the
+document that has just gone. The project rule runs after the session restore, so the
+arrangement a session carries is applied first and then the tab is fronted over it.
+
+**Fronting a tab is not taking the keyboard.** `activePanel` — which panel answers Delete,
+`Ctrl+A` and the panel commands — is deliberately left where it was, or selecting a layer
+in the Timeline would take Delete away from the Timeline in the same gesture. Showing
+something and claiming the keys are different acts, and only the first is asked for here.
+
+Fronting a composition is neither of those events, and does **not** clear the Effect
+controls panel: the layer it is showing lives on in the comp you came from, so its rows
+stay up until a layer is selected in the new comp. Only a layer missing from its own comp's
+read model has gone, and that alone is the placeholder.
