@@ -441,7 +441,6 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
         (moving && drag.grab != _Grab.start ? shift : 0);
     final left = _xOf(start);
     final width = (_xOf(end) - left).clamp(2.0, double.infinity);
-    final speed = clip.speedPercent;
     _wantPeaks(clip, left, width);
     // The clip's own placed clock at its left edge. Sliding the whole clip
     // moves box and content together, so this does not change and the wave
@@ -547,32 +546,21 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
                       ),
                     ),
                   ),
-                Row(
-                  children: [
-                    // The frame this clip opens on, so a row of cuts can be told
-                    // apart at a glance rather than by their timings (K-248).
-                    if (_thumbs['${clip.id}@${clip.startFrame}@${clip.retimed}']
-                        case final image?)
-                      Padding(
-                        padding: const EdgeInsets.all(1),
-                        child: RawImage(image: image, fit: BoxFit.contain),
-                      ),
-                    Expanded(
-                      child: Center(
-                        child: ClipRect(
-                          child: Text(
-                            // A ramp has no single number to show, and printing one would
-                            // be a lie about a curve — the envelope below reads it.
-                            speed == null ? l10n.clipRamp : '${speed.round()}%',
-                            style: t.small.copyWith(color: t.textPrimary),
-                            overflow: TextOverflow.clip,
-                            softWrap: false,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // The frame this clip opens on, so a row of cuts can be told
+                // apart at a glance rather than by their timings (K-248).
+                //
+                // **And nothing beside it** (§6.27). The thumbnail used to
+                // share its row with the clip's speed, printed as a percentage
+                // or as the word "ramp" — a second reading of the very thing
+                // the envelope draws directly underneath, in the space a
+                // picture of the shot was meant to fill. The envelope is
+                // untouched: it is where a clip's speed is read.
+                if (_thumbs['${clip.id}@${clip.startFrame}@${clip.retimed}']
+                    case final image?)
+                  Padding(
+                    padding: const EdgeInsets.all(1),
+                    child: RawImage(image: image, fit: BoxFit.contain),
+                  ),
               ],
             ),
           ),
