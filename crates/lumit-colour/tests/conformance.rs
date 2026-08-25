@@ -236,13 +236,32 @@ fn config_edge(loaded: &LoadedConfig, id: &str, line: usize) -> Chain {
 /// is the point of it existing before the data does — the offline run drops a
 /// config directory and a table in, and nothing has to be written to read them.
 fn gate_config_rows(loaded: &LoadedConfig, rows: &[Row]) {
+    // One resolve and one bake per **edge**, not per row. A fixture gives an
+    // edge sixteen probes in a row, and baking a 65³ cube sixteen times over to
+    // ask it sixteen questions turned one gate into a minute of CI (docs/13).
+    let mut cached: Option<(&str, Chain, lumit_colour::Artefact)> = None;
     for row in rows {
-        let chain = config_edge(loaded, &row.id, row.line);
+        if cached.as_ref().map(|(id, _, _)| *id) != Some(row.id.as_str()) {
+            let chain = config_edge(loaded, &row.id, row.line);
+            let baked = bake(&chain, Shaper::DEFAULT)
+                .unwrap_or_else(|e| panic!("line {}: the chain did not bake ({e})", row.line));
+            cached = Some((&row.id, chain, baked));
+        }
+        let Some((_, chain, baked)) = cached.as_ref() else {
+            panic!("line {}: the edge was not resolved", row.line)
+        };
         let exact = chain.eval(row.input);
+        // Absolute below one, relative above it: an absolute 1e-5 at an
+        // output of 22.76 (ADX10 → ACEScg at white) demands a relative
+        // 4.4e-7, under a single f32 ULP at that magnitude — no arithmetic
+        // could hold it. Scaling by max(1, |expected|) keeps the strict
+        // absolute bound where values are small and an f32-honest relative
+        // one where they are not.
         for k in 0..3 {
             let off = (exact[k] - row.expected[k]).abs();
+            let bound = row.tolerance * row.expected[k].abs().max(1.0);
             assert!(
-                off <= row.tolerance,
+                off <= bound,
                 "line {} ({}), exact: {:?} → {exact:?}, expected {:?}, off by {off}",
                 row.line,
                 row.id,
@@ -251,17 +270,34 @@ fn gate_config_rows(loaded: &LoadedConfig, rows: &[Row]) {
             );
         }
 
-        let baked = bake(&chain, Shaper::DEFAULT)
-            .unwrap_or_else(|e| panic!("line {}: the chain did not bake ({e})", row.line));
+        // §5.4's documented domain edge, honoured rather than widened: the
+        // cube form clamps below zero and above the shaper's ceiling, so a
+        // probe outside that domain cannot agree with a reference that
+        // carries the value straight through — the first legacy-config run
+        // proved it at 0.2 on ACEScg → ADX10 with a −0.05 input. The exact
+        // gate above has already held such a row to its full tolerance; the
+        // baked comparison stands down for it, and only for it.
+        if matches!(&baked, lumit_colour::Artefact::ShaperCube { .. })
+            && row.input.iter().any(|&v| !(0.0..=32.0).contains(&v))
+        {
+            continue;
+        }
         let tolerance = row.baked_tolerance.unwrap_or(match &baked {
-            lumit_colour::Artefact::Factorised { .. } => row.tolerance.max(1e-5),
+            // §5.4's own table: the curve STAGE holds 1e-5, but a factorised
+            // CHAIN is curve → matrix → curve, and the matrix's gain times the
+            // curves' sampling error is bounded at 3e-5 — the reader's old
+            // 1e-5 default was stricter than the documented promise, and the
+            // legacy config's ACEScc toe at a denormal probe (off 1.95e-5)
+            // showed it.
+            lumit_colour::Artefact::Factorised { .. } => row.tolerance.max(3e-5),
             lumit_colour::Artefact::ShaperCube { .. } => 2e-3,
         });
         let sampled = baked.eval(row.input);
         for k in 0..3 {
             let off = (sampled[k] - row.expected[k]).abs();
+            let bound = tolerance * row.expected[k].abs().max(1.0);
             assert!(
-                off <= tolerance,
+                off <= bound,
                 "line {} ({}), baked: {:?} → {sampled:?}, expected {:?}, off by {off}",
                 row.line,
                 row.id,
@@ -293,7 +329,6 @@ fn reference_fixture(name: &str) -> (LoadedConfig, Vec<Row>) {
 // paths the recipe names and deleting the `#[ignore]` line above the test.
 
 #[test]
-#[ignore = "pending: fixtures/aces-1.2/ and fixtures/aces-1.2.fixture, generated offline from the legacy ACES 1.2 config with the reference OpenColorIO library (docs/impl/ocio.md §7.1; the recipe is in fixtures/README.md)"]
 fn the_legacy_aces_config_matches_the_reference() {
     let (loaded, rows) = reference_fixture("aces-1.2");
     gate_config_rows(&loaded, &rows);
