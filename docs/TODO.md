@@ -44,10 +44,17 @@ numbered workspace.switch.N labels share the numbered-marker translation limit;
 settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
 
 **Owner's test findings after FP2 (2026-08-25) - in flight:**
-- CRASH (investigating): dropper-drag on the Viewer, then a DOF focus-point change on a
-  timeline row of "Comp 2" / "World.avi" in the Set Me Free project froze and crashed
-  the application. Prime suspect: K-565's composite-flow path re-rendering a
-  motion_blur-carrying stack. A dedicated agent is reproducing headlessly.
+- CRASH (fixed, watch for a recurrence): dropper-drag on the Viewer, then a DOF
+  focus-point change on a timeline row of "Comp 2" / "World.avi" froze and crashed the
+  application. The idle measure held the project's read guard across a GPU-fenced
+  composite, so the drag's commit - and every reader behind it - queued behind the
+  render. K-565 was cleared: that path builds neighbours only for adjustment and
+  Precomp layers, and the layer is neither. The stack renders clean headlessly at every
+  prefix cut, every solo and sixty drag ticks (a stand-in clip stood in for the 4K
+  original), so if it recurs the next place to look is the Dart side.
+- The dropper's banked-frame lookup names its frame with `frame_key_presynced` without
+  presyncing (worker_thread.rs, `sample_pixels`) - harmless while the Viewer has just
+  rendered the same comp, a full composite per pointer move when it has not.
 - Work-area end handles: thicker, darker, capped a little below the time labels,
   near-rectangles with a tiny corner radius (owner overrules the drawing here).
 - The Viewer dropper must claim the drag exclusively - picking must not pan the

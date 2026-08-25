@@ -1173,14 +1173,40 @@ fn measure_pending(state: &mut WorkerState) {
     if !crate::profiling::wanted() {
         return;
     }
-    let Ok(document) = state.project.state() else {
+    let Some(document) = measure_document(&state.project) else {
         return;
     };
-    let Ok(document) = document.read() else {
-        return;
-    };
-    let document = document.store.snapshot();
     measure_frame(&mut state.renderer, &document, comp, frame, quality);
+}
+
+/// The document the idle measure renders against — **and the only place that
+/// measure touches the project lock**, so the guard is gone by the time the
+/// card is asked for anything (docs/14 §"no locks across GPU").
+///
+/// # In plain terms
+///
+/// Measuring a frame is the slowest thing the engine does: it gives up
+/// batching and waits for the graphics card at every layer and every effect
+/// (`lumit_render::profile`), which on a heavy composition is seconds. The
+/// project's document sits behind a read/write lock, and this used to hold the
+/// *read* half across the whole of that — the snapshot was bound over the
+/// guard, which shadows it rather than ending it, so the guard lived to the end
+/// of the function.
+///
+/// That is what froze the application. Letting go of a value drag commits on
+/// Dart's own thread and wants the *write* half; it queued behind the measure,
+/// and a Rust `RwLock` with a writer waiting turns every later reader away too
+/// — so every `#[frb(sync)]` question the interface asks while it rebuilds
+/// queued behind that. One idle measure, and nothing moved until the fenced
+/// composite finished. Taking the snapshot and getting out is what
+/// [`idle_fill`] and [`republish_after_bake`] either side of this already do.
+#[frb(ignore)]
+fn measure_document(
+    project: &crate::api::project::ProjectReference,
+) -> Option<std::sync::Arc<lumit_core::Document>> {
+    let state = project.state().ok()?;
+    let held = state.read().ok()?;
+    Some(held.store.snapshot())
 }
 
 /// The measured composite itself — apart from the worker's state so a test
@@ -4154,6 +4180,40 @@ mod tests {
         state.fill_exhausted = true;
         super::set_prefix(&mut state, Some(point));
         assert!(state.fill_exhausted, "an unchanged prefix is not a change");
+    }
+
+    /// **The idle measure lets the document go before it renders** (docs/14
+    /// §"no locks across GPU").
+    ///
+    /// The measured composite waits for the card at every layer and every
+    /// effect, and the project's read guard used to stay alive across all of
+    /// it — the snapshot was bound *over* the guard, which shadows a binding
+    /// rather than ending it. A value drag's mouse-up commits on Dart's own
+    /// thread and wants the write half; it queued behind the measure, and with
+    /// a writer waiting every later reader queued behind that, so the whole
+    /// application stopped until the fenced composite finished. On a heavy
+    /// composition that is seconds, and long enough for the graphics driver's
+    /// own watchdog to take the device away.
+    ///
+    /// [`super::measure_document`] is the one place that measure touches the
+    /// lock, which is what makes the rule checkable here: ask it for the
+    /// document, and the lock must be free the moment it answers.
+    #[test]
+    fn the_idle_measure_does_not_hold_the_document_across_its_render() {
+        let (project, comp) = project_with_solid_of(4);
+        let document = super::measure_document(&project).expect("a snapshot");
+        assert!(
+            document.comp(comp).is_some(),
+            "the snapshot is the document, not an empty one"
+        );
+
+        let state = project.state().expect("state");
+        assert!(
+            state.try_write().is_ok(),
+            "the measure's read guard must be gone before the card is asked \
+             for anything: an edit landing while a measured frame fences the \
+             GPU would queue behind it, and every reader behind the edit"
+        );
     }
 
     /// **A worker builds no renderer for a project that has already gone**
