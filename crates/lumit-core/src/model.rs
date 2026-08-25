@@ -1268,10 +1268,12 @@ pub enum LayerKind {
         /// it is solved, the Camera layer *points at* the tracked layer and
         /// derives its placement per frame — so re-solving, re-trimming or
         /// re-timing that layer moves the camera with it, and nothing has to
-        /// be re-baked. While the link is set the camera's transform and zoom
-        /// are read-only ([`crate::ops::OpError::CameraLinked`]);
+        /// be re-baked. While the link is set the camera's own transform and
+        /// zoom are the **correction lane** (K-578): what they hold over and
+        /// above [`Self::Camera::correction_base`] is added to the solved pose,
+        /// so the shot can be tracked once and nudged afterwards.
         /// **Convert to keyframes** ([`crate::track::bake_solve_link`]) turns
-        /// the derived motion into ordinary keys and severs it.
+        /// the corrected motion into ordinary keys and severs the link.
         ///
         /// The named layer is the one the analysis was run on — or a Precomp
         /// layer that contains it, which is how the owner's precomp workflow
@@ -1279,6 +1281,27 @@ pub enum LayerKind {
         /// the user drives by hand, which is every camera today.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         solve_link: Option<Uuid>,
+        /// The **zero of the correction lane** (K-578): the pose this camera's
+        /// own properties held at the moment the link was made.
+        ///
+        /// **In plain terms.** A linked camera's rows keep showing its own
+        /// numbers, and dragging one is allowed — but a linked camera is not
+        /// *at* those numbers, it is at the solve. So the rows are read as a
+        /// **difference** from where they started, and that difference is added
+        /// to the solved pose. This is where they started.
+        ///
+        /// Without it the same numbers would have to mean an absolute pose (the
+        /// fallback a lost link falls back to) and an offset (the correction) at
+        /// once, which they cannot: a camera created at the comp's centre would
+        /// read as a correction of half a comp. `None` — on a camera with no
+        /// link, or one from a project written before this existed — means
+        /// there is no correction lane, and the solve is followed exactly.
+        ///
+        /// Boxed for the reason [`Self::Light`]'s definition is: seven `f64`
+        /// would make Camera the widest variant, and every layer of every
+        /// composition would carry the width.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        correction_base: Option<Box<CameraPose>>,
     },
     /// A Sequence layer (docs/01-GLOSSARY.md, §5.3): clips cut back-to-back on
     /// one row — Lumit's Vegas-style editing surface. Resolution lives in
@@ -1433,7 +1456,7 @@ pub struct ResolvedLight {
 /// The active camera's evaluated placement at one comp time — what both the
 /// preview and the export pipeline hand to the GPU camera matrix, so the two
 /// can never disagree (K-031).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CameraPose {
     /// Focal distance in comp pixels (the z=0 plane maps 1:1).
     pub zoom: f64,
@@ -1446,10 +1469,20 @@ pub struct CameraPose {
 /// `None` when `layer` is not a Camera.
 #[must_use]
 pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
+    stored_camera_pose_lt(layer, crate::time::layer_time(t, layer.start_offset.0))
+}
+
+/// [`stored_camera_pose`] at a **layer** time, which is the clock every property
+/// is actually evaluated at.
+///
+/// Split out because the correction lane's zero (K-578) is captured at layer
+/// time nought — a fixed moment of the layer's own clock, so moving the layer
+/// along the timeline never moves the correction with it.
+#[must_use]
+pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
     let LayerKind::Camera { zoom, .. } = &layer.kind else {
         return None;
     };
-    let lt = crate::time::layer_time(t, layer.start_offset.0);
     let tr = &layer.transform;
     Some(CameraPose {
         zoom: zoom.value_at(lt),
@@ -3014,6 +3047,7 @@ mod tests {
             LayerKind::Camera {
                 zoom: Property::zero(),
                 solve_link: None,
+                correction_base: None,
             },
             LayerKind::Null,
         ] {
@@ -3049,6 +3083,7 @@ mod tests {
             kind: LayerKind::Camera {
                 zoom: Property::fixed(zoom),
                 solve_link: None,
+                correction_base: None,
             },
             in_point: secs(in_s),
             out_point: secs(out_s),

@@ -439,19 +439,21 @@ fn media_source(
 ///
 /// The link is the whole point: nothing is copied, so re-analysing the shot
 /// moves this camera with it, and every clip of the same footage reads the same
-/// solve through its own time mapping. Its transform is read-only while linked —
-/// the engine refuses the write, so no interface has to remember to.
+/// solve through its own time mapping. Its transform rows are the **correction
+/// lane** (K-578) — dragging one nudges the solved motion rather than replacing
+/// it — and they start at the pose captured here, which is that lane's nought.
 #[frb(sync)]
 pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, BridgeError> {
     use lumit_core::anim::Property;
     use lumit_core::model::TransformGroup;
 
     let comp = tracked.composition()?;
-    let layer = crate::edits::base_layer(
+    let mut layer = crate::edits::base_layer(
         "Camera".into(),
         LayerKind::Camera {
             zoom: Property::fixed(f64::from(comp.width) * 50.0 / 36.0),
             solve_link: Some(tracked.layer_id),
+            correction_base: None,
         },
         comp.duration.0,
         TransformGroup {
@@ -460,6 +462,17 @@ pub fn add_solved_camera(tracked: LayerReference) -> Result<LayerReference, Brid
             ..TransformGroup::default()
         },
     );
+    // The layer arrives already linked, so `Op::SetCameraSolveLink` — which is
+    // where the base is normally captured — is never applied to it. Captured
+    // here instead, off the layer that is about to be added, which is the same
+    // arithmetic on the same properties.
+    let base = lumit_core::model::stored_camera_pose_lt(&layer, 0.0);
+    if let LayerKind::Camera {
+        correction_base, ..
+    } = &mut layer.kind
+    {
+        *correction_base = base.map(Box::new);
+    }
     let id = layer.id;
     tracked.commit(lumit_core::Op::AddLayer {
         comp: tracked.comp_id,
@@ -492,6 +505,24 @@ pub fn convert_camera_to_keyframes(camera: LayerReference) -> Result<(), BridgeE
         &lumit_render::track::Store,
     )
     .ok_or(BridgeError::NotLinked)?;
+    camera.commit(op)
+}
+
+/// **Clear corrections** (K-578): put a linked camera's own properties back to
+/// the pose the link was made at, leaving the link itself alone.
+///
+/// One undo step. Refused when there is no link, or nothing in the lane — a
+/// command that committed an empty batch would put a step on the undo stack
+/// that changed nothing.
+#[frb(sync)]
+pub fn clear_camera_corrections(camera: LayerReference) -> Result<(), BridgeError> {
+    let proj = camera.project()?;
+    let doc = {
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        state.store.snapshot()
+    };
+    let op = lumit_core::track::clear_corrections(&doc, camera.comp_id, camera.layer_id)
+        .ok_or(BridgeError::NotLinked)?;
     camera.commit(op)
 }
 

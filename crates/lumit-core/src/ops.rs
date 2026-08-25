@@ -27,12 +27,6 @@ pub enum OpError {
     InvalidParent,
     #[error("the layer is locked")]
     LayerLocked,
-    /// The camera's placement is derived from a solve link, so it is not the
-    /// document's to edit (K-417). Convert to keyframes
-    /// ([`crate::track::bake_solve_link`]) makes it ordinary again, and clearing
-    /// the link with [`Op::SetCameraSolveLink`] is always allowed.
-    #[error("the camera's transform is derived from its solve link")]
-    CameraLinked,
     /// The driver graph breaks one of §1.5's rules (K-471). Refusal rather than
     /// degradation: none of these states can be reached by deleting some other
     /// entity, so each one is an edit to decline.
@@ -395,10 +389,18 @@ pub enum Op {
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (K-417, docs/03 §5.6).
     ///
-    /// The one edit a linked camera always accepts — everything else about its
-    /// placement is derived and refuses with [`OpError::CameraLinked`], and a
-    /// link that could not be undone would be a trap rather than a link.
-    /// Trivially invertible: the inverse names the previous link.
+    /// Setting a link on a camera that had none also captures the **correction
+    /// base** (K-578) — the pose the camera's own properties hold at layer time
+    /// nought — and clearing the link drops it. That is arithmetic inside
+    /// `apply`, which is unusual and deliberate: the base is a pure function of
+    /// the document at the moment the link is made, so it replays identically,
+    /// and putting it here means every caller and every op yet to be written
+    /// gets it rather than each remembering to. Re-pointing an existing link
+    /// keeps the base, because the nudge is still the user's nudge.
+    ///
+    /// Trivially invertible: the inverse names the previous link, and applying
+    /// it re-derives the base from a document the earlier inverses have already
+    /// put back.
     SetCameraSolveLink {
         comp: Uuid,
         layer: Uuid,
@@ -606,41 +608,6 @@ fn is_locked(doc: &Document, comp: Uuid, layer: Uuid) -> bool {
         .is_some_and(|l| l.switches.locked)
 }
 
-/// The `(comp, layer)` a **solve link** would protect this op from, or `None`
-/// when the link has nothing to say about it (K-417).
-///
-/// A linked camera's placement is derived per frame from the tracked layer, so
-/// the two ops that would write it — the transform and the zoom — refuse. Every
-/// other edit to the layer is untouched: its name, its span, its switches, its
-/// label and its markers are still the user's, and so is the link itself.
-#[must_use]
-fn solve_link_guards(op: &Op) -> Option<(Uuid, Uuid)> {
-    match op {
-        Op::SetTransformProperty { comp, layer, .. } | Op::SetCameraZoom { comp, layer, .. } => {
-            Some((*comp, *layer))
-        }
-        _ => None,
-    }
-}
-
-/// Whether `layer` in `comp` is a Camera carrying a solve link. An unknown comp
-/// or layer is not linked — the op's own arm reports what is actually missing,
-/// which is the better error (the lock's rule, for the same reason).
-#[must_use]
-fn is_solve_linked(doc: &Document, comp: Uuid, layer: Uuid) -> bool {
-    doc.comp(comp)
-        .and_then(|c| c.layers.iter().find(|l| l.id == layer))
-        .is_some_and(|l| {
-            matches!(
-                l.kind,
-                crate::model::LayerKind::Camera {
-                    solve_link: Some(_),
-                    ..
-                }
-            )
-        })
-}
-
 pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
     // **The lock is enforced here, not in the interface** (K-291). The Timeline
     // already refused the *gestures* — the bar, the razor, rename, reorder,
@@ -658,18 +625,10 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             return Err(OpError::LayerLocked);
         }
     }
-    // **A linked camera's placement is not the document's to edit** (K-417).
-    // The same shape of guard as the lock above, and here for the same reason:
-    // the panel already draws the rows read-only and wearing a badge, but a
-    // rule enforced only in the interface is a rule an expression, a preset or
-    // the next caller does not know about. Convert to keyframes
-    // (`track::bake_solve_link`) clears the link inside its own batch before
-    // it writes, which is what lets a bake through this.
-    if let Some((comp, layer)) = solve_link_guards(op) {
-        if is_solve_linked(doc, comp, layer) {
-            return Err(OpError::CameraLinked);
-        }
-    }
+    // A linked camera's transform and zoom **used** to be refused here (K-417).
+    // They are not any more (K-578): writing them is how a solve is corrected,
+    // and the write lands where every other transform write lands. What the
+    // numbers *mean* changed, not who may write them.
     match op {
         Op::AddItem { index, item } => {
             if *index > doc.items.len() {
@@ -1447,13 +1406,29 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
+            // The base is read off the layer *before* the link moves, because
+            // it is the pose the camera's own properties are holding right now
+            // (K-578).
+            let pose = crate::model::stored_camera_pose_lt(l, 0.0);
             let crate::model::LayerKind::Camera {
-                solve_link: slot, ..
+                solve_link: slot,
+                correction_base,
+                ..
             } = &mut l.kind
             else {
                 return Err(OpError::UnknownLayer);
             };
             let previous = std::mem::replace(slot, *solve_link);
+            match (slot.is_some(), correction_base.is_some()) {
+                // A link where there was none: the rows stop meaning a pose and
+                // start meaning a difference, so the pose they hold is that
+                // difference's zero.
+                (true, false) => *correction_base = pose.map(Box::new),
+                // No link, no correction lane.
+                (false, _) => *correction_base = None,
+                // Re-pointed at another tracked layer: the nudge rides on.
+                (true, true) => {}
+            }
             Ok(Op::SetCameraSolveLink {
                 comp: *comp,
                 layer: *layer,

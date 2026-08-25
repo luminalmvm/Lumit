@@ -1816,14 +1816,25 @@ mod tests {
             .push(lumit_core::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
         // The camera outlives the shot on purpose, so the walk past the end of
         // the solve — the hold — has somewhere to happen.
-        let camera = layer(
+        let mut camera = layer(
             "Camera 1",
             LayerKind::Camera {
                 zoom: Property::fixed(999.0),
                 solve_link: Some(footage.id),
+                correction_base: None,
             },
             secs(20, 1),
         );
+        // Built already linked, so the base `Op::SetCameraSolveLink` would have
+        // captured is written here — the same pose, off the same properties
+        // (K-578).
+        let base = lumit_core::model::stored_camera_pose_lt(&camera, 0.0);
+        if let LayerKind::Camera {
+            correction_base, ..
+        } = &mut camera.kind
+        {
+            *correction_base = base.map(Box::new);
+        }
         let comp = Composition {
             id: Uuid::now_v7(),
             name: "main".into(),
@@ -2161,6 +2172,75 @@ mod tests {
             key().expect("still keyable"),
             "the derived camera is not in the frame's name"
         );
+        clear();
+    }
+
+    /// **Track once, then nudge** (K-578), from the render path's side: a
+    /// correction moves the frame's *name* as well as its picture, and a second
+    /// analysis lands under it rather than over it.
+    ///
+    /// The second claim is the one that matters. A correction that was folded
+    /// into the camera's own numbers would be silently replaced by the next
+    /// solve; this asserts that the same nudge is still on top of a solve whose
+    /// every pose is different.
+    #[test]
+    fn a_correction_moves_the_frame_key_and_survives_a_second_solve() {
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+        let media = Uuid::now_v7();
+        let (doc, comp) = linked_document(media);
+
+        // Nudged: fifty pixels along x and three degrees about y, written the
+        // way a drag writes them — straight onto the camera's own properties.
+        let mut nudged = comp.clone();
+        {
+            let cam = nudged
+                .layers
+                .iter_mut()
+                .find(|l| matches!(l.kind, LayerKind::Camera { .. }))
+                .expect("the camera");
+            cam.transform.position_x = Property::fixed(50.0);
+            cam.transform.rotation_y = Property::fixed(3.0);
+        }
+
+        let probed = probes(media);
+        let doc = Arc::new(doc);
+        let key = |c: &Composition| {
+            let stamper =
+                crate::cache::Stamper::new(&doc, &probed, crate::plan::Quality::default());
+            lumit_eval::comp_frame_key(&doc, c, 0.0, lumit_eval::Quality::default(), &stamper)
+        };
+        let pose = |c: &Composition| {
+            linked_pose(&doc, c, 0.5)
+                .expect("the comp has a camera")
+                .pose
+        };
+
+        publish(media, FPS, FRAMES, written_solve());
+        let plain = pose(&comp);
+        let corrected = pose(&nudged);
+        assert!((corrected.position.0 - (plain.position.0 + 50.0)).abs() < 1e-9);
+        assert!((corrected.rotation_deg.1 - (plain.rotation_deg.1 + 3.0)).abs() < 1e-9);
+
+        assert_ne!(
+            key(&comp).expect("a probed comp is keyable"),
+            key(&nudged).expect("still keyable"),
+            "a correction changes the picture, so it must change the frame's name"
+        );
+
+        // Analyse again, to a different answer. The correction is not part of
+        // the solve, so it is still exactly on top of it.
+        let mut again = written_solve();
+        for solved in &mut again.poses {
+            solved.position[1] += 40.0;
+        }
+        publish(media, FPS, FRAMES, again);
+        let fresh = pose(&comp);
+        assert_ne!(fresh, plain, "the second solve is a different answer");
+        let resolved = pose(&nudged);
+        assert!((resolved.position.0 - (fresh.position.0 + 50.0)).abs() < 1e-9);
+        assert!((resolved.rotation_deg.1 - (fresh.rotation_deg.1 + 3.0)).abs() < 1e-9);
         clear();
     }
 

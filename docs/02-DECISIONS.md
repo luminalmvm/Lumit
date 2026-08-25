@@ -16556,3 +16556,75 @@ follow, each of which could have gone another way:
 
 **Why now.** [impl/tracking.md](impl/tracking.md) §5b listed this as owed to stage 3, and the
 bridge refused a Camera track on a Precomp layer with `NotFootage` until it landed. See §5e.
+
+## K-578 — A solve-linked camera is nudged, not frozen: the correction lane
+
+**Status: DECIDED (2026-08-25).** K-417 made a solve-linked Camera layer's transform and zoom
+**read-only**, on the reasoning that a derived placement is not the document's to edit. That is
+reversed here. A linked camera's own transform and zoom rows take edits again, and what they
+hold is a **correction**: the difference between them and the pose they held when the link was
+made is added to the solved pose, channel by channel, on every frame.
+
+`derived = solved + (stored − base)` on each of position x/y/z, rotation x/y/z and zoom.
+
+Six things this decides, each of which could have gone another way:
+
+1. **The correction lives on the layer's own properties.** A nudge is an ordinary
+   `SetTransformProperty` or `SetCameraZoom` — ordinary keyframes, drawn by the graph editor,
+   undone by the ordinary undo, with no new op, no new row and no second editing path. That is
+   the whole reason the lane is worth having: a compositor already knows how to key a camera.
+2. **A new field holds the lane's nought.** `LayerKind::Camera` gains
+   `correction_base: Option<Box<CameraPose>>` ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.6).
+   Reinterpreting the rows as an offset with an implicit nought of zero would have been one
+   field cheaper and is impossible: those same numbers are already the `Unresolved` fallback —
+   the pose a camera keeps when its media goes offline — and `add_solved_camera` puts that at
+   the comp's centre. Read as an offset, a new camera on a 1920-wide comp would nudge itself
+   960 px sideways the moment the link resolved. One set of numbers cannot be a pose and a
+   difference at once.
+3. **The composition is channel-wise addition, and the order is solve first, correction on
+   top.** The alternative was to compose the correction as a transform *in the solved camera's
+   own space*, the way a parent-child rig would. Rejected for two reasons. A row would stop
+   meaning what it says: "position x" would move the camera along the shot's axis rather than
+   the composition's, so a pan would swing a fixed nudge round with it and a correction for a
+   drift would itself drift — the opposite of what it is for. And the rows would stop being the
+   curve the graph editor draws, because a correction keyed in camera space and read back in
+   comp space is not the shape that was dragged. Addition also commutes with itself, so two
+   corrections in either order give the same camera and undo is exact rather than nearly exact.
+   Within a channel the order is therefore moot; between the solve and the correction it is
+   fixed and stated: the solve is the measurement, the correction sits on top of it, and
+   re-measuring leaves the correction where it was.
+4. **Zoom is in the lane.** It could have stayed refused — the focal is what was solved, and
+   changing it detaches the solved point cloud from the picture. It is in, because a solved
+   focal is exactly as capable of being a little wrong as a solved position, and one refused
+   row out of seven is a rule with no shape. The cloud is still drawn from the solve, so a
+   corrected zoom makes the dots and the picture disagree; that is a visible consequence of an
+   edit the user made, and reversible, which is a different thing from a silent one.
+5. **The base is captured inside `ops::apply`.** `Op::SetCameraSolveLink` reads the seven
+   properties off the layer before it moves the link. [impl/tracking.md](impl/tracking.md) §5a's
+   fourth deviation argued against ops that compute, and it was right about ops that need the
+   *store* or anything outside the document; this one is a pure function of the document at that
+   moment, so it replays identically and its inverse re-derives the same numbers from a document
+   the earlier inverses have already restored. In `apply` rather than in the bridge because that
+   is the one place every caller passes through, including **Convert to keyframes** and every op
+   not yet written. Re-pointing a link keeps the base — the nudge is still the user's; clearing
+   a link drops it.
+6. **Edited since track is a dot in the read model.** `BridgeLayerInfo.track_corrected` says a
+   linked camera carries a correction, and on a tracked layer says a camera following it does —
+   one fact from where the user stands, drawn on the two rows that report it: the camera's
+   Transform heading, beside the link badge, and the Camera track effect's status row. Both
+   repaint on every document revision and a correction *is* a revision, so it rides in the read
+   model rather than being a call (K-184). **Clear corrections** sits beside the dot and is
+   offered only when there is something to clear; it puts the seven properties back to the base
+   in one undoable batch and leaves the link alone. Re-running Analyse needs no special case:
+   an Action changes no document, and the correction was never part of the solve.
+
+**What is superseded.** K-417's "read-only while linked" and `OpError::CameraLinked`, which is
+removed. Everything else about the link — the walk, the hold, the unresolved fallback, the
+badge, the bake — stands, and the bake now writes the corrected motion, which is the motion that
+was on screen.
+
+**Why.** The Caddis study: a camera solve is a measurement, and every tracking package a
+compositor has used lets the result be adjusted afterwards, because a ground plane that is
+half a degree off is normal and re-solving is not a fix for it. Baking to escape the refusal
+threw away the link, which is the one thing K-417 exists to keep. See
+[impl/tracking.md](impl/tracking.md) §5f.

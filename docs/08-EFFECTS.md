@@ -5389,9 +5389,10 @@ partial answer is honest, usable and cached like any other.
 What the solve is *for* is the **solve link** on a Camera layer
 ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.6): the camera points at this layer and derives its
 placement per frame, rather than being handed a copy. Create camera makes one; while it is
-linked its transform rows are read-only and its Transform heading wears a calm badge saying
-which of the three link states it is in, with **Convert to keyframes** beside it
-([07-UI-SPEC.md](07-UI-SPEC.md) §2.3.6).
+linked its Transform heading wears a calm badge saying which of the three link states it is in,
+with **Convert to keyframes** beside it ([07-UI-SPEC.md](07-UI-SPEC.md) §2.3.6). Its rows are
+still the user's to drag — what they hold is a correction on top of the solve (K-578) — and
+this effect's status row carries the *edited since track* dot when one has been made.
 
 Like the Controls family above, it declares no image operation, takes no matte and has no
 Mix — for the same reason and by the same mechanism, though it is a Utility rather than a

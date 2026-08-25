@@ -7855,7 +7855,19 @@
   },
   "trackLinkFollowing": "Following the solve",
   "@trackLinkFollowing": {
-    "description": "Badge in the Transform heading of a Camera layer whose motion is derived from a solved shot; its rows are read-only."
+    "description": "Badge in the Transform heading of a Camera layer whose motion is derived from a solved shot."
+  },
+  "trackClearCorrections": "Clear corrections",
+  "@trackClearCorrections": {
+    "description": "Button in the Transform heading of a solve-linked Camera layer that has been nudged: puts its own properties back to where they were when the link was made, leaving the link itself alone."
+  },
+  "tipTrackClearCorrections": "Undo nudges",
+  "@tipTrackClearCorrections": {
+    "description": "Tooltip on the Clear corrections button in a linked Camera layer's Transform heading."
+  },
+  "tipTrackCorrected": "Camera nudged",
+  "@tipTrackCorrected": {
+    "description": "Tooltip on the small dot shown beside a linked Camera layer's badge and on the Camera track effect's status row when a correction has been made."
   },
   "trackLinkHolding": "Holding the last solved frame",
   "@trackLinkHolding": {

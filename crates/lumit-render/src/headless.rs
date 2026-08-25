@@ -5104,6 +5104,7 @@ surfaces:
                     LayerKind::Camera {
                         zoom: Property::fixed(f64::from(h) * 2.0),
                         solve_link: None,
+                        correction_base: None,
                     },
                     w,
                     h,

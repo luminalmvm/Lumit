@@ -1076,6 +1076,15 @@ pub struct BridgeLayerInfo {
     /// carried here so its fold-out row can draw its keyframe diamonds without
     /// a call, exactly as the Retime row's scalar is.
     pub flow_input_rate: BridgeScalar,
+    /// **Edited since track** (K-578): this solve-linked Camera layer carries a
+    /// correction, or — on a tracked layer — a camera that follows it does.
+    ///
+    /// One fact from where the user stands ("the tracked motion has been
+    /// nudged"), read from two sides because it is drawn on two rows: beside
+    /// the camera's link badge, and on the Camera track effect's card. In the
+    /// read model rather than as a call, because both rows are rebuilt on every
+    /// document revision and a call there is exactly the cost K-184 removed.
+    pub track_corrected: bool,
 }
 
 /// One marker on a layer's bar: the marker itself plus where it lands at the
@@ -1202,6 +1211,21 @@ pub(crate) fn read_layer_info(
             },
             layer.start_offset.0,
         ),
+        // The camera's own lane, or — on a tracked layer — any camera in this
+        // comp that follows it. The scan happens only for a layer wearing a
+        // Camera track, which is one layer in a comp at most times and none in
+        // most comps, so the ordinary read model pays a `matches!` and nothing.
+        track_corrected: lumit_core::track::has_correction(layer)
+            || (lumit_core::track::wears_camera_track(layer)
+                && comp.layers.iter().any(|l| {
+                    matches!(
+                        l.kind,
+                        lumit_core::model::LayerKind::Camera {
+                            solve_link: Some(tracked),
+                            ..
+                        } if tracked == layer.id
+                    ) && lumit_core::track::has_correction(l)
+                })),
     }
 }
 

@@ -333,6 +333,16 @@ class BridgeLayerInfo {
   /// a call, exactly as the Retime row's scalar is.
   final BridgeScalar flowInputRate;
 
+  /// **Edited since track** (K-578): this solve-linked Camera layer carries a
+  /// correction, or — on a tracked layer — a camera that follows it does.
+  ///
+  /// One fact from where the user stands ("the tracked motion has been
+  /// nudged"), read from two sides because it is drawn on two rows: beside
+  /// the camera's link badge, and on the Camera track effect's card. In the
+  /// read model rather than as a call, because both rows are rebuilt on every
+  /// document revision and a call there is exactly the cost K-184 removed.
+  final bool trackCorrected;
+
   const BridgeLayerInfo({
     required this.name,
     required this.kind,
@@ -357,6 +367,7 @@ class BridgeLayerInfo {
     required this.markers,
     required this.flow,
     required this.flowInputRate,
+    required this.trackCorrected,
   });
 
   @override
@@ -383,7 +394,8 @@ class BridgeLayerInfo {
       shapeContents.hashCode ^
       markers.hashCode ^
       flow.hashCode ^
-      flowInputRate.hashCode;
+      flowInputRate.hashCode ^
+      trackCorrected.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -412,7 +424,8 @@ class BridgeLayerInfo {
           shapeContents == other.shapeContents &&
           markers == other.markers &&
           flow == other.flow &&
-          flowInputRate == other.flowInputRate;
+          flowInputRate == other.flowInputRate &&
+          trackCorrected == other.trackCorrected;
 }
 
 /// What kind of source a layer has — what the Timeline draws its bar and its

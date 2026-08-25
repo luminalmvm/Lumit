@@ -10733,3 +10733,31 @@ anything in it. So a precomp's solve is **not** written to the `track` folder �
 as long as the project is open, and tracking one again after reopening means analysing it
 again. That is the honest trade: better a few minutes than a saved answer that quietly
 describes a composition you have since edited.
+
+### Track once, then nudge
+
+A camera track is a **measurement**, and measurements come out a little off. The ground plane
+sits half a degree from level; the whole move wants to be a few pixels to the left; the lens
+the solve settled on is not quite the lens that was on the camera. None of that is a reason to
+re-analyse the shot — analysing it again will measure the same thing the same way.
+
+So a camera that is following a solve can still be dragged. Its position, rotation and zoom
+rows are ordinary rows: drag one and the camera moves, key one and it moves over time. What
+you are keying is a **correction**, not a replacement. Lumit remembers where those rows stood
+when the link was made, and adds whatever you have changed them by to the solved motion on
+every frame. Nudge the camera thirty pixels along x and it is thirty pixels along x from
+wherever the shot put it, all the way through, however the shot moves.
+
+Because the nudge was never part of the solve, re-running **Analyse** does not disturb it. A
+better solve lands underneath, and your correction is still sitting on top of it.
+
+Two small things say so and undo it. A **dot** in the accent colour appears beside the camera's
+link badge and on the Camera track's status line the moment a correction exists — *edited since
+track*, so a motion that is no longer purely what was measured never looks like one that is.
+And **Clear corrections**, beside the dot, puts the rows back to where they were when the link
+was made, in one undoable step, without touching the track itself. Ordinary undo works too; the
+corrections are ordinary keyframes and were never anything else.
+
+One thing to expect: the dots of the point cloud are drawn where the *analysis* found those
+features, so a corrected camera's dots will no longer sit exactly on them. That is the cloud
+being honest about what was measured rather than a fault.

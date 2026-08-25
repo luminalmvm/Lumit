@@ -77,6 +77,7 @@ void main() {
         markers: const [],
         flow: false,
         flowInputRate: const BridgeScalar.static_(0),
+        trackCorrected: false,
       ),
     );
   }

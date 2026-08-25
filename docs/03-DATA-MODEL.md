@@ -333,7 +333,7 @@ Invariants:
 | `Precomp { comp: Uuid }` | yes | Another composition | `collapse` switch defers rasterisation. Cycles invalid. **Precomp-level retime is future** — the `retime` field is not on the kind yet; nest through a Sequence clip to retime a comp for now. |
 | `Solid { def: Uuid }` | yes | A SolidDef | |
 | `Text { document: TextDocument }` | yes | §9.1 | v1: one run. |
-| `Camera { zoom: Property, solve_link: Option<Uuid> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link (K-417); `None` — the usual case — is a camera the user drives by hand. |
+| `Camera { zoom: Property, solve_link: Option<Uuid>, correction_base: Option<Box<CameraPose>> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link (K-417); `None` — the usual case — is a camera the user drives by hand. `correction_base` is §5.6's correction lane's nought (K-578), present only while a link is. |
 | `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. What *New adjustment layer* makes. **Any layer can behave this way** — that is the `adjustment` switch in §5.1 — and this kind is simply the one that was born with nothing else to show. Turning the switch off on one hands it a fresh comp-sized white solid and normalises it to `Solid`, because it has no picture to give back. |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only (K-206). |
 | `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art, its repeated copies included | §7.2 (K-237). Flat list, modifiers as fields (§7.2.1); nested groups are future (§9.2). |
@@ -441,12 +441,22 @@ makes an effect the handle — continues the chain. This is the owner's workflow
 camera in the parent comp points at the precomp layer, and the chain resolves through it to
 the footage inside.
 
-**Read-only while linked.** A linked camera's transform and zoom are derived, so they are
-not the document's to edit: `SetTransformProperty` and `SetCameraZoom` on one refuse with
-`OpError::CameraLinked`, and the panel draws the rows greyed and wearing a calm badge. The
-rule is enforced in `ops::apply`, not in the interface, for the reason the lock is (K-291):
-a rule enforced only in a panel is a rule the next caller does not know about.
-`SetCameraSolveLink` is always accepted — a link that could not be undone would be a trap.
+**The correction lane** (K-578). A linked camera's own transform and zoom rows are **not**
+read-only. What they hold over and above `correction_base` — the pose they held at layer time
+nought when the link was made — is added to the solved pose, channel by channel:
+`derived = solved + (stored − base)` on each of position x/y/z, rotation x/y/z and zoom. So a
+drag on a linked camera nudges the tracked motion, the nudge stores as ordinary keyframes on
+ordinary properties, and re-analysing the shot leaves it exactly where it was, because it was
+never part of the solve. `correction_base` is captured by `SetCameraSolveLink` when a link is
+made, kept when one is re-pointed, and dropped when it is cleared; absent, there is no
+correction and the solve is followed exactly. **Clear corrections** (`track::clear_corrections`)
+writes every one of the seven properties back to the base as one undoable batch, leaving the
+link alone; `track::has_correction` is what the *edited since track* dot reads.
+
+The composition is channel-wise addition rather than a transform composed in the solved
+camera's own space, and K-578 argues why: a row keeps meaning what it says, the curve the
+graph editor draws is the curve that was dragged, and the order two corrections are made in
+cannot matter.
 
 **Two honest failures, and neither is silent.** A link that asks for a moment outside what
 was solved **holds** the nearest solved frame — the last derived motion — and reports that
@@ -454,12 +464,13 @@ it is holding. A link that cannot be followed at all (the layer deleted, the med
 nothing solved) falls back to the properties the document itself holds, and reports *that*.
 Never a freeze nobody explained, never a crash.
 
-**Convert to keyframes** severs the link and bakes the derived motion into ordinary
-keyframes: one key per composition frame across the layer's span, linear on both sides, on
-the six transform properties and on the zoom. They are real, editable keyframes and the
-graph editor draws them like any others — the bake is honest about there being a lot of
-them. It is one undoable step: the link is cleared *first* inside the batch (so the
-read-only refusal does not stop the very edit that ends it) and restored *last* on undo.
+**Convert to keyframes** severs the link and bakes the derived motion — correction included
+— into ordinary keyframes: one key per composition frame across the layer's span, linear on
+both sides, on the six transform properties and on the zoom. They are real, editable
+keyframes and the graph editor draws them like any others — the bake is honest about there
+being a lot of them. It is one undoable step: the link is cleared *first* inside the batch
+(so the numbers written after it are read as a pose rather than as a correction, and the
+base goes with it) and restored *last* on undo.
 
 The solves themselves live in the `track/` sidecar ([10-FILE-FORMAT.md](10-FILE-FORMAT.md)
 §3), rebuildable like every sidecar tier; the model reaches them through a store trait, so

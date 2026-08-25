@@ -53,7 +53,8 @@ String trackFailureSentence(BridgeTrackFailure failure) => switch (failure) {
 /// Pulled out of `build` so it can be asserted directly: what a status *says*
 /// is a decision about wording, and testing it through a mounted widget would
 /// be testing the mounting.
-String trackStatusSentence(BridgeTrackStatus? status) => switch (status?.stage) {
+String trackStatusSentence(BridgeTrackStatus? status) =>
+    switch (status?.stage) {
       null || BridgeTrackStage.idle => l10n.trackNotAnalysed,
       BridgeTrackStage.queued => l10n.trackWaiting,
       BridgeTrackStage.tracking =>
@@ -124,6 +125,40 @@ class TrackSpanBar extends StatelessWidget {
   }
 }
 
+/// **Edited since track** (K-578): a small filled dot in the accent.
+///
+/// **In plain terms.** A tracked camera can be nudged — dragged or keyed on top
+/// of the solve — and once it has been, the motion on screen is no longer purely
+/// what the analysis measured. That is worth knowing at a glance and not worth a
+/// sentence, so it is a dot: on the camera's own Transform heading, where the
+/// nudge lives, and on the Camera track's card, where the track it sits on top
+/// of is reported.
+///
+/// A dot rather than a word because it appears beside a badge that is already a
+/// word, and two phrases in one heading read as an argument.
+class TrackCorrectedDot extends StatelessWidget {
+  final String keyName;
+
+  const TrackCorrectedDot({super.key, required this.keyName});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return LumitTooltip(
+      message: l10n.tipTrackCorrected,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Container(
+          key: ValueKey<String>(keyName),
+          width: 5,
+          height: 5,
+          decoration: BoxDecoration(color: t.accent, shape: BoxShape.circle),
+        ),
+      ),
+    );
+  }
+}
+
 /// The line under the Camera track's buttons.
 class CameraTrackDisplayFrb extends StatefulWidget {
   /// The layer the effect sits on — what a press is fired against and what the
@@ -141,11 +176,17 @@ class CameraTrackDisplayFrb extends StatefulWidget {
   /// subscribe to, so the panel says so with a number.
   final int pressed;
 
+  /// A camera following this shot carries a correction (K-578) — read from the
+  /// read model by the panel, never asked for here, because it moves with the
+  /// document and this widget's own sampling stops the moment the analysis does.
+  final bool corrected;
+
   const CameraTrackDisplayFrb({
     super.key,
     required this.layer,
     required this.onChanged,
     required this.pressed,
+    this.corrected = false,
   });
 
   @override
@@ -243,19 +284,23 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb> {
             ),
           Row(
             children: [
-          Expanded(
-            child: Text(
-              line,
-              key: const ValueKey('fx-camera-track-status'),
-              style: t.small.copyWith(color: t.textMuted),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          // The one gesture a finished solve offers here: a Camera layer that
-          // follows it. Nothing is copied — the camera holds a *link*, so
-          // re-analysing the shot moves it too.
-          if (status?.stage == BridgeTrackStage.done)
-            fxTextAction(
+              // Before the line, because it qualifies what the line says: the
+              // numbers are the track's, and the camera is not exactly on them.
+              if (widget.corrected)
+                const TrackCorrectedDot(keyName: 'fx-camera-track-corrected'),
+              Expanded(
+                child: Text(
+                  line,
+                  key: const ValueKey('fx-camera-track-status'),
+                  style: t.small.copyWith(color: t.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // The one gesture a finished solve offers here: a Camera layer that
+              // follows it. Nothing is copied — the camera holds a *link*, so
+              // re-analysing the shot moves it too.
+              if (status?.stage == BridgeTrackStage.done)
+                fxTextAction(
                   context,
                   label: l10n.trackCreateCamera,
                   tip: l10n.tipTrackCreateCamera,
@@ -280,15 +325,19 @@ class _CameraTrackDisplayFrbState extends State<CameraTrackDisplayFrb> {
 /// A Camera layer's solve-link badge, and the one command that ends the link
 /// (K-417).
 ///
-/// **In plain terms.** A camera that follows a tracked shot does not hold its
-/// own numbers: they are worked out per frame from the solve. So its position
-/// and rotation cannot be dragged, and this says so rather than leaving a row
-/// that silently refuses. It also says when the link has run past what was
-/// solved (the motion is being held) and when it cannot be followed at all.
+/// **In plain terms.** A camera that follows a tracked shot works its placement
+/// out per frame from the solve, and this says so: that it is following, that it
+/// has run past what was solved and is holding, or that the link cannot be
+/// followed at all.
 ///
-/// **Convert to keyframes** bakes the derived motion into one key per frame and
-/// severs the link. From then on it is an ordinary camera: the keys are real,
-/// editable, and the graph editor shows them like any others.
+/// The rows below it are still the user's to drag — what they hold is a
+/// **correction** on top of the solve (K-578), and once one has been made the
+/// dot appears and **Clear corrections** takes it back without touching the
+/// track.
+///
+/// **Convert to keyframes** bakes the corrected motion into one key per frame
+/// and severs the link. From then on it is an ordinary camera: the keys are
+/// real, editable, and the graph editor shows them like any others.
 class CameraLinkBadge extends StatefulWidget {
   final LayerReference camera;
 
@@ -297,11 +346,16 @@ class CameraLinkBadge extends StatefulWidget {
   final int playheadFrame;
   final VoidCallback onChanged;
 
+  /// This camera's correction lane holds something (K-578) — from the read
+  /// model, so it moves with the document rather than with the playhead.
+  final bool corrected;
+
   const CameraLinkBadge({
     super.key,
     required this.camera,
     required this.playheadFrame,
     required this.onChanged,
+    this.corrected = false,
   });
 
   @override
@@ -359,11 +413,39 @@ class _CameraLinkBadgeState extends State<CameraLinkBadge> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          text,
-          key: const ValueKey('tf-camera-link-badge'),
-          style: t.small.copyWith(color: colour),
+        // The sentence is the compressible part of this heading: the two
+        // commands beside it are fixed words, and a narrow panel should clip
+        // the description rather than push a button off the edge.
+        Flexible(
+          child: Text(
+            text,
+            key: const ValueKey('tf-camera-link-badge'),
+            style: t.small.copyWith(color: colour),
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
+        if (widget.corrected) ...[
+          const TrackCorrectedDot(keyName: 'tf-camera-link-corrected'),
+          // Only offered when there is something to take back, so the heading
+          // does not carry a command that would refuse.
+          fxTextAction(
+            context,
+            label: l10n.trackClearCorrections,
+            tip: l10n.tipTrackClearCorrections,
+            keyName: 'tf-camera-link-clear',
+            onPressed: () {
+              try {
+                clearCameraCorrections(camera: widget.camera);
+              } catch (_) {
+                // Cleared under us, or the layer went away. The dot goes with
+                // the next read either way.
+              }
+              _read();
+              widget.onChanged();
+            },
+          ),
+        ],
         const SizedBox(width: 6),
         fxTextAction(
           context,

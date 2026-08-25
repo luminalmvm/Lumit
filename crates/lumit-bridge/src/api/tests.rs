@@ -7091,6 +7091,88 @@ fn a_linked_camera_reads_derived_and_converts_to_keyframes() {
     assert!((keys[5].value - 5.0).abs() < 1e-9, "{}", keys[5].value);
 }
 
+/// **Track once, then nudge** (K-578) across the seam: a linked camera takes a
+/// transform edit, the edit reads back as a correction on top of the solve, the
+/// dot lights on both rows that draw it, and Clear corrections puts it back.
+#[test]
+fn a_correction_shows_on_both_rows_and_clears() {
+    use crate::api::layer::BridgeTransformProp;
+    use crate::api::track::{
+        add_solved_camera, camera_link, clear_camera_corrections, BridgeLinkState,
+    };
+
+    let (_project, comp, layer, _media) = a_tracked_layer();
+    let camera = add_solved_camera(layer).expect("a linked camera");
+
+    // The rows the dot is drawn on: the camera's own, and the tracked layer's
+    // Camera track card. Neither says anything yet.
+    let corrected = |of: LayerReference| of.get_info().expect("info").track_corrected;
+    assert!(!corrected(camera), "nobody has nudged it");
+    assert!(!corrected(layer), "and so the effect's row says nothing");
+
+    // Frame five is five units along; the nudge is thirty more.
+    let before = camera
+        .get_transform()
+        .expect("transform")
+        .position_x
+        .clone();
+    let BridgeScalar::Static(base) = before else {
+        panic!("a fresh camera's position is a plain number");
+    };
+    camera
+        .set_transform(
+            BridgeTransformProp::PositionX,
+            BridgeScalar::Static(base + 30.0),
+        )
+        .expect("a linked camera takes a transform edit");
+
+    assert!(corrected(camera), "the camera's own row");
+    assert!(corrected(layer), "and the Camera track's row beside it");
+    assert_eq!(
+        camera_link(camera, 5).state,
+        BridgeLinkState::Derived,
+        "correcting a camera does not stop it following the shot"
+    );
+
+    // What the pose actually came to: the solve, plus the nudge. Read through
+    // the bake, which is the one crossing that hands the derived numbers back.
+    crate::api::track::convert_camera_to_keyframes(camera).expect("baked");
+    let BridgeScalar::Keyframed(keys) = &camera.get_transform().expect("transform").position_x
+    else {
+        panic!("the bake writes a key per frame");
+    };
+    assert!(
+        (keys[5].value - 35.0).abs() < 1e-9,
+        "five from the solve and thirty from the nudge: {}",
+        keys[5].value
+    );
+
+    // A second camera, to clear rather than bake.
+    let camera = add_solved_camera(layer).expect("another linked camera");
+    assert!(
+        matches!(
+            clear_camera_corrections(camera),
+            Err(BridgeError::NotLinked)
+        ),
+        "an untouched camera has nothing to clear"
+    );
+    camera
+        .set_transform(BridgeTransformProp::RotationY, BridgeScalar::Static(4.0))
+        .expect("nudged");
+    assert!(corrected(camera));
+    clear_camera_corrections(camera).expect("cleared");
+    assert!(!corrected(camera), "the dot goes out with the correction");
+    assert_eq!(
+        camera_link(camera, 5).tracked,
+        Some(layer.layer_id),
+        "clearing the nudge must not clear the track"
+    );
+
+    // A layer with no camera on it, and no track, says nothing either way.
+    let solid = comp.add_solid_layer().expect("a solid");
+    assert!(!corrected(solid));
+}
+
 /// The status row's reading, and what a press of each button does.
 #[test]
 fn the_status_reads_the_solve_and_the_buttons_are_refused_honestly() {

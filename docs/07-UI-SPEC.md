@@ -859,9 +859,12 @@ only: no tool gains a gesture on a button it did not already handle.
   MUST be refused rather than putting a layer at the origin.
 - A **solve-linked Camera layer** wears its state as a calm badge in the Transform heading of
   the Effect controls panel — *following the solve*, *holding the last solved frame*, or *the
-  solve could not be found* — with **Convert to keyframes** beside it. The transform rows are
-  read-only while linked, because the engine refuses the write; the badge is what stops that
-  being a surprise.
+  solve could not be found* — with **Convert to keyframes** beside it. The transform rows stay
+  editable: what they hold while linked is a **correction** added to the solved motion (K-578),
+  and the badge is what stops that being a surprise. Once one has been made, a small accent
+  **dot** appears beside the badge and on the Camera track effect's status row — *edited since
+  track* — and **Clear corrections** appears beside the dot, offered only while there is
+  something to clear.
 - Not built: hiding points behind the shot's geometry, a point count or filter, deleting a
   point from the cloud, and setting the ground plane and origin from a selection.
 

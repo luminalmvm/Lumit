@@ -19,6 +19,15 @@
 //! out right for free — the tracker ran on the file, once, exactly as K-248
 //! says it must.
 //!
+//! **Track once, then nudge** (K-578). A solve is a measurement, and a
+//! measurement can be a little wrong — the ground plane tilts, the shot drifts,
+//! the whole move wants to sit half a metre to the left. So a linked camera's
+//! own transform rows are not read-only: they are a **correction lane**. What
+//! they hold over and above the pose they held when the link was made is added,
+//! channel by channel, to the solved pose. Drag the camera and you have keyed a
+//! correction; re-analyse the shot and the correction rides on top of the new
+//! solve, because it was never part of it.
+//!
 //! Two honest failures, and neither is silent (K-417):
 //!
 //! - The link asks for a moment **outside** what was solved (the layer runs on
@@ -27,10 +36,10 @@
 //!   reading says [`LinkState::Held`].
 //! - The link cannot be followed at all: the layer was deleted, its media is
 //!   offline, or nothing has been solved for it. The camera falls back to the
-//!   properties the document itself holds — which, since a linked camera's
-//!   transform is read-only, are the ones it had when the link was made — and
-//!   the reading says [`LinkState::Unresolved`]. Never a freeze nobody
-//!   mentioned, never a crash.
+//!   properties the document itself holds, read as a **pose** rather than as a
+//!   correction — the numbers it had when the link was made, plus whatever has
+//!   been nudged since — and the reading says [`LinkState::Unresolved`]. Never a
+//!   freeze nobody mentioned, never a crash.
 //!
 //! **The store is a trait, not a thing.** What actually holds the solves is the
 //! project's `track/` sidecar, and it arrives in stage 2. Everything here talks
@@ -156,7 +165,12 @@ pub fn camera_pose_of(
     store: &dyn CameraSolveStore,
 ) -> Option<LinkedPose> {
     let stored = stored_camera_pose(layer, t)?;
-    let LayerKind::Camera { solve_link, .. } = &layer.kind else {
+    let LayerKind::Camera {
+        solve_link,
+        correction_base,
+        ..
+    } = &layer.kind
+    else {
         return None;
     };
     let Some(tracked) = *solve_link else {
@@ -166,8 +180,8 @@ pub fn camera_pose_of(
         });
     };
     match derived_pose(doc, comp, tracked, t, store, 0) {
-        Some((pose, held)) => Some(LinkedPose {
-            pose,
+        Some((solved, held)) => Some(LinkedPose {
+            pose: correct(solved, stored, correction_base.as_deref()),
             state: if held {
                 LinkState::Held
             } else {
@@ -179,6 +193,122 @@ pub fn camera_pose_of(
             state: LinkState::Unresolved,
         }),
     }
+}
+
+/// The solved pose with the layer's own correction on it (K-578).
+///
+/// **Channel-wise addition**, and that is the whole composition: each of the
+/// seven numbers is `solved + (stored − base)`. Order does not arise, because
+/// addition on a channel commutes with itself — two corrections in either order
+/// give the same camera, and undo is exact rather than nearly exact.
+///
+/// The alternative was to compose the correction as a transform *in the solved
+/// camera's own space*, which is what a parent-child rig would do. It was
+/// rejected for two reasons. A row would stop meaning what it says — "position
+/// x" would move the camera along the shot's axis rather than the comp's, so a
+/// pan would swing the correction round with it and a fixed nudge would drift
+/// across the shot, which is the opposite of correcting a drift. And the rows
+/// would no longer be the curve the graph editor draws: a correction keyed in
+/// camera space and read back in comp space is not the shape that was dragged.
+///
+/// No base — an unlinked camera, or a project written before the lane existed —
+/// means no correction, so the solve is followed exactly.
+#[must_use]
+fn correct(solved: CameraPose, stored: CameraPose, base: Option<&CameraPose>) -> CameraPose {
+    let Some(base) = base else {
+        return solved;
+    };
+    CameraPose {
+        zoom: solved.zoom + (stored.zoom - base.zoom),
+        position: (
+            solved.position.0 + (stored.position.0 - base.position.0),
+            solved.position.1 + (stored.position.1 - base.position.1),
+            solved.position.2 + (stored.position.2 - base.position.2),
+        ),
+        rotation_deg: (
+            solved.rotation_deg.0 + (stored.rotation_deg.0 - base.rotation_deg.0),
+            solved.rotation_deg.1 + (stored.rotation_deg.1 - base.rotation_deg.1),
+            solved.rotation_deg.2 + (stored.rotation_deg.2 - base.rotation_deg.2),
+        ),
+    }
+}
+
+/// Whether `layer`'s correction lane holds anything — **edited since track**
+/// (K-578), which is what the dot beside the link says.
+///
+/// A property answers yes the moment it stops being exactly the static value it
+/// was linked at: a different number, a keyframe, or an expression. A lane keyed
+/// with every key back on the base reads as corrected, which is honest — the
+/// user put keys there, and Clear corrections is what takes them away.
+#[must_use]
+pub fn has_correction(layer: &Layer) -> bool {
+    let LayerKind::Camera {
+        zoom,
+        solve_link: Some(_),
+        correction_base: Some(base),
+    } = &layer.kind
+    else {
+        return false;
+    };
+    let tr = &layer.transform;
+    [
+        (&tr.position_x.animation, base.position.0),
+        (&tr.position_y.animation, base.position.1),
+        (&tr.position_z.animation, base.position.2),
+        (&tr.rotation_x.animation, base.rotation_deg.0),
+        (&tr.rotation_y.animation, base.rotation_deg.1),
+        (&tr.rotation.animation, base.rotation_deg.2),
+        (&zoom.animation, base.zoom),
+    ]
+    .into_iter()
+    .any(|(animation, nought)| *animation != Animation::Static(nought))
+}
+
+/// **Clear corrections** (K-578): put every property of the correction lane back
+/// to the pose the link was made at, as one undoable step.
+///
+/// The link is untouched — this is the *nudge* being taken back, not the track.
+/// `None` when `camera` is not a linked Camera layer in `comp`, or when there is
+/// nothing in the lane to clear.
+#[must_use]
+pub fn clear_corrections(doc: &Document, comp: Uuid, camera: Uuid) -> Option<Op> {
+    use crate::model::TransformProp;
+
+    let c = doc.comp(comp)?;
+    let layer = c.layers.iter().find(|l| l.id == camera)?;
+    if !has_correction(layer) {
+        return None;
+    }
+    let LayerKind::Camera {
+        correction_base: Some(base),
+        ..
+    } = &layer.kind
+    else {
+        return None;
+    };
+    let props = [
+        (TransformProp::PositionX, base.position.0),
+        (TransformProp::PositionY, base.position.1),
+        (TransformProp::PositionZ, base.position.2),
+        (TransformProp::RotationX, base.rotation_deg.0),
+        (TransformProp::RotationY, base.rotation_deg.1),
+        (TransformProp::Rotation, base.rotation_deg.2),
+    ];
+    let mut ops: Vec<Op> = props
+        .into_iter()
+        .map(|(prop, value)| Op::SetTransformProperty {
+            comp,
+            layer: camera,
+            prop,
+            animation: Animation::Static(value),
+        })
+        .collect();
+    ops.push(Op::SetCameraZoom {
+        comp,
+        layer: camera,
+        animation: Animation::Static(base.zoom),
+    });
+    Some(Op::Batch { ops })
 }
 
 /// Which solved frame of which media the tracked layer `tracked` is showing at
@@ -356,11 +486,12 @@ pub fn tracked_layer(comp: &Composition) -> Option<Uuid> {
 /// editable keyframes the graph editor draws like any others, which is the
 /// bargain the ruling makes for being honest that there are a lot of them.
 ///
-/// **The link is cleared first**, inside the batch, because a linked camera's
-/// transform is read-only ([`crate::ops::OpError::CameraLinked`]) and a batch
-/// is applied in order. Undo reverses the members, so the link is restored last
-/// — after the transforms are back — and the refusal never trips on the way out
-/// either.
+/// **The link is cleared first**, inside the batch, and it still is now that a
+/// linked camera's transform takes edits (K-578): the numbers written after it
+/// are the *corrected* pose, absolute, and they would be read as a correction if
+/// the link were still on. Clearing first also drops the correction base, so
+/// nothing is left over to be added twice. Undo reverses the members — the
+/// transforms go back, then the link, which re-derives the base it had.
 ///
 /// Deterministic: the frames come from the comp's own rate, the poses from the
 /// same [`camera_pose_of`] the render reads, and a frame the link cannot
@@ -465,7 +596,7 @@ mod tests {
         BlendMode, CameraPose, Composition, LinearColour, ProjectItem, Switches, TransformGroup,
         TransformProp,
     };
-    use crate::ops::{apply, OpError};
+    use crate::ops::apply;
     use crate::sequence::Clip;
     use crate::time::{CompTime, Duration, FrameRate};
 
@@ -591,6 +722,7 @@ mod tests {
             LayerKind::Camera {
                 zoom: Property::fixed(777.0),
                 solve_link: link,
+                correction_base: None,
             },
             4,
         )
@@ -847,48 +979,287 @@ mod tests {
         );
     }
 
-    /// While the link is set, the camera's placement is not the document's to
-    /// edit (K-417). The refusal is typed, and it is in `apply` rather than in
-    /// the interface, so a preset or an expression cannot go round it.
+    /// **Track once, then nudge** (K-578): a linked camera takes a transform
+    /// edit, and what it takes is a *correction* — added to the solved pose,
+    /// channel by channel, wherever the link resolves.
     #[test]
-    fn a_linked_cameras_transform_is_read_only() {
+    fn a_correction_rides_on_top_of_the_solve() {
+        let media = Uuid::now_v7();
+        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 4));
+        let c = comp("main", vec![camera(Some(footage.id)), footage]);
+        let (comp_id, cam_id) = (c.id, c.layers[0].id);
+        let mut doc = document(vec![c]);
+        let store = Synthetic::new(media);
+
+        // The camera was built already linked, so the base it would have been
+        // given by `SetCameraSolveLink` is written here the same way the bridge
+        // writes it for a camera that arrives linked.
+        set_base(&mut doc, comp_id, cam_id);
+        let base = base_of(&doc, comp_id, cam_id);
+        assert!(
+            !has_correction(layer_of(&doc, comp_id, cam_id)),
+            "a camera nobody has touched carries no correction"
+        );
+
+        // Uncorrected, the derived pose is the solve exactly.
+        let at = |doc: &Document, n: i64| {
+            let c = doc.comp(comp_id).unwrap();
+            camera_pose_at(doc, c, n as f64 / 30.0, &store).unwrap()
+        };
+        assert_eq!(at(&doc, 10).pose, Synthetic::pose(10));
+
+        // Two nudges, in the two shapes an edit arrives in: a plain drag, and a
+        // keyed one. The zoom is corrected too, because a solved focal is as
+        // capable of being a little wrong as a solved position.
+        for (prop, value) in [
+            (TransformProp::PositionX, base.position.0 + 40.0),
+            (TransformProp::RotationY, base.rotation_deg.1 - 2.5),
+        ] {
+            apply(
+                &mut doc,
+                &Op::SetTransformProperty {
+                    comp: comp_id,
+                    layer: cam_id,
+                    prop,
+                    animation: Animation::Static(value),
+                },
+            )
+            .expect("a linked camera takes a transform edit");
+        }
+        apply(
+            &mut doc,
+            &Op::SetCameraZoom {
+                comp: comp_id,
+                layer: cam_id,
+                animation: Animation::Static(base.zoom + 7.0),
+            },
+        )
+        .expect("and a zoom edit");
+        assert!(has_correction(layer_of(&doc, comp_id, cam_id)));
+
+        // Derived: the solve, plus the difference, and nothing else moved.
+        for n in [0, 10, 59] {
+            let got = at(&doc, n);
+            assert_eq!(got.state, LinkState::Derived, "frame {n}");
+            let want = Synthetic::pose(n);
+            assert_eq!(
+                got.pose,
+                CameraPose {
+                    zoom: want.zoom + 7.0,
+                    position: (want.position.0 + 40.0, want.position.1, want.position.2),
+                    rotation_deg: (
+                        want.rotation_deg.0,
+                        want.rotation_deg.1 - 2.5,
+                        want.rotation_deg.2
+                    ),
+                },
+                "frame {n}"
+            );
+        }
+
+        // Held: past the solved range the correction rides on the held pose,
+        // not on nothing — the last derived motion, corrected.
+        let held = at(&doc, 90);
+        assert_eq!(held.state, LinkState::Held);
+        assert_eq!(held.pose.position.0, Synthetic::pose(59).position.0 + 40.0);
+
+        // Unresolved: nothing is being corrected, so the numbers are read as a
+        // pose. The camera keeps drawing from where it was put.
+        let c = doc.comp(comp_id).unwrap();
+        let lost = camera_pose_at(&doc, c, 0.0, &Empty).unwrap();
+        assert_eq!(lost.state, LinkState::Unresolved);
+        assert_eq!(lost.pose.position.0, base.position.0 + 40.0);
+        assert_eq!(lost.pose.zoom, base.zoom + 7.0);
+    }
+
+    /// A keyed correction is an ordinary keyframed property, and it is added at
+    /// the value it has on each frame — so a correction can ramp in.
+    #[test]
+    fn a_keyed_correction_is_added_frame_by_frame() {
         let media = Uuid::now_v7();
         let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
         let c = comp("main", vec![camera(Some(footage.id)), footage]);
         let (comp_id, cam_id) = (c.id, c.layers[0].id);
         let mut doc = document(vec![c]);
+        set_base(&mut doc, comp_id, cam_id);
+        let base = base_of(&doc, comp_id, cam_id);
+        let store = Synthetic::new(media);
 
-        let moved = Op::SetTransformProperty {
-            comp: comp_id,
-            layer: cam_id,
-            prop: TransformProp::PositionX,
-            animation: Animation::Static(5.0),
-        };
-        assert_eq!(apply(&mut doc, &moved), Err(OpError::CameraLinked));
-        assert_eq!(
-            apply(
-                &mut doc,
-                &Op::SetCameraZoom {
-                    comp: comp_id,
-                    layer: cam_id,
-                    animation: Animation::Static(5.0),
-                }
-            ),
-            Err(OpError::CameraLinked)
-        );
-
-        // Clearing the link is always allowed — a link that could not be undone
-        // would be a trap — and afterwards the camera is ordinary again.
+        // Nought at comp frame 0, thirty at comp frame 30, linear between.
         apply(
             &mut doc,
-            &Op::SetCameraSolveLink {
+            &Op::SetTransformProperty {
                 comp: comp_id,
                 layer: cam_id,
-                solve_link: None,
+                prop: TransformProp::PositionY,
+                animation: Animation::Keyframed(vec![
+                    key(rat(0, 30), base.position.1),
+                    key(rat(30, 30), base.position.1 + 30.0),
+                ]),
             },
         )
-        .expect("clearing a link is never refused");
-        assert!(apply(&mut doc, &moved).is_ok());
+        .expect("a keyed correction is an ordinary edit");
+
+        for n in [0, 10, 30] {
+            let c = doc.comp(comp_id).unwrap();
+            let got = camera_pose_at(&doc, c, f64::from(n) / 30.0, &store).unwrap();
+            assert!(
+                (got.pose.position.1 - (Synthetic::pose(i64::from(n)).position.1 + f64::from(n)))
+                    .abs()
+                    < 1e-9,
+                "frame {n}: {:?}",
+                got.pose.position.1
+            );
+        }
+    }
+
+    /// **Clear corrections** takes the nudge back and leaves the track alone,
+    /// in one undo step — and the dot goes out with it.
+    #[test]
+    fn clearing_corrections_keeps_the_link_and_undoes_in_one_step() {
+        let media = Uuid::now_v7();
+        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
+        let footage_id = footage.id;
+        let c = comp("main", vec![camera(Some(footage_id)), footage]);
+        let (comp_id, cam_id) = (c.id, c.layers[0].id);
+        let mut doc = document(vec![c]);
+        set_base(&mut doc, comp_id, cam_id);
+
+        assert!(
+            clear_corrections(&doc, comp_id, cam_id).is_none(),
+            "there is nothing to clear on a camera nobody has nudged"
+        );
+
+        apply(
+            &mut doc,
+            &Op::SetTransformProperty {
+                comp: comp_id,
+                layer: cam_id,
+                prop: TransformProp::PositionZ,
+                animation: Animation::Static(120.0),
+            },
+        )
+        .expect("nudged");
+        let corrected = layer_of(&doc, comp_id, cam_id).clone();
+        assert!(has_correction(&corrected));
+
+        let clear = clear_corrections(&doc, comp_id, cam_id).expect("there is a lane to clear");
+        let undo = apply(&mut doc, &clear).expect("clearing applies");
+        let after = layer_of(&doc, comp_id, cam_id);
+        assert!(!has_correction(after), "the lane is empty again");
+        assert!(
+            matches!(after.kind, LayerKind::Camera { solve_link: Some(l), .. } if l == footage_id),
+            "clearing a correction must not clear the track"
+        );
+
+        apply(&mut doc, &undo).expect("the undo applies");
+        assert_eq!(
+            layer_of(&doc, comp_id, cam_id),
+            &corrected,
+            "one step puts the nudge back exactly"
+        );
+    }
+
+    /// The base is captured when the link is made, kept when it is re-pointed,
+    /// dropped when it is cleared — and undo puts back the one that was there.
+    #[test]
+    fn the_correction_base_follows_the_link() {
+        let media = Uuid::now_v7();
+        let footage = tracked(layer("shot", LayerKind::Footage { item: media }, 2));
+        let other = tracked(layer("shot 2", LayerKind::Footage { item: media }, 2));
+        let (footage_id, other_id) = (footage.id, other.id);
+        let mut cam = camera(None);
+        cam.transform.position_x = Property::fixed(960.0);
+        let c = comp("main", vec![cam, footage, other]);
+        let (comp_id, cam_id) = (c.id, c.layers[0].id);
+        let mut doc = document(vec![c]);
+
+        assert!(
+            base_opt(&doc, comp_id, cam_id).is_none(),
+            "no link, no lane"
+        );
+
+        let link = |to: Option<Uuid>| Op::SetCameraSolveLink {
+            comp: comp_id,
+            layer: cam_id,
+            solve_link: to,
+        };
+        let undo = apply(&mut doc, &link(Some(footage_id))).expect("linked");
+        let base = base_of(&doc, comp_id, cam_id);
+        assert_eq!(base.position.0, 960.0, "the pose it was linked at");
+        assert!(!has_correction(layer_of(&doc, comp_id, cam_id)));
+
+        // Nudge, then re-point: the nudge is the user's and rides on.
+        apply(
+            &mut doc,
+            &Op::SetTransformProperty {
+                comp: comp_id,
+                layer: cam_id,
+                prop: TransformProp::PositionX,
+                animation: Animation::Static(1000.0),
+            },
+        )
+        .expect("nudged");
+        apply(&mut doc, &link(Some(other_id))).expect("re-pointed");
+        assert_eq!(
+            base_of(&doc, comp_id, cam_id).position.0,
+            960.0,
+            "re-pointing a link must not swallow the correction into the base"
+        );
+        assert!(has_correction(layer_of(&doc, comp_id, cam_id)));
+
+        // Clearing the link ends the lane.
+        apply(&mut doc, &link(None)).expect("unlinked");
+        assert!(base_opt(&doc, comp_id, cam_id).is_none());
+        assert!(!has_correction(layer_of(&doc, comp_id, cam_id)));
+
+        // And undoing the very first link, from the document it was made in,
+        // leaves no lane behind either.
+        let mut fresh = doc.clone();
+        apply(&mut fresh, &link(Some(footage_id))).expect("relinked");
+        apply(&mut fresh, &undo).expect("undone");
+        assert!(base_opt(&fresh, comp_id, cam_id).is_none());
+    }
+
+    fn layer_of(doc: &Document, comp: Uuid, layer: Uuid) -> &Layer {
+        doc.comp(comp)
+            .unwrap()
+            .layers
+            .iter()
+            .find(|l| l.id == layer)
+            .unwrap()
+    }
+
+    fn base_opt(doc: &Document, comp: Uuid, layer: Uuid) -> Option<CameraPose> {
+        match &layer_of(doc, comp, layer).kind {
+            LayerKind::Camera {
+                correction_base, ..
+            } => correction_base.as_deref().copied(),
+            _ => None,
+        }
+    }
+
+    fn base_of(doc: &Document, comp: Uuid, layer: Uuid) -> CameraPose {
+        base_opt(doc, comp, layer).expect("a linked camera has a base")
+    }
+
+    /// What `Op::SetCameraSolveLink` does for a camera that is linked by an
+    /// edit, done by hand for the fixtures that are built linked.
+    fn set_base(doc: &mut Document, comp: Uuid, layer: Uuid) {
+        let l = doc
+            .comp_mut(comp)
+            .unwrap()
+            .layers
+            .iter_mut()
+            .find(|l| l.id == layer)
+            .unwrap();
+        let pose = crate::model::stored_camera_pose_lt(l, 0.0);
+        if let LayerKind::Camera {
+            correction_base, ..
+        } = &mut l.kind
+        {
+            *correction_base = pose.map(Box::new);
+        }
     }
 
     /// **Convert to keyframes**: the baked keys reproduce the derived path
@@ -901,6 +1272,7 @@ mod tests {
         let c = comp("main", vec![camera(Some(footage.id)), footage]);
         let (comp_id, cam_id) = (c.id, c.layers[0].id);
         let mut doc = document(vec![c]);
+        set_base(&mut doc, comp_id, cam_id);
         let store = Synthetic::new(media);
         let before = doc.comp(comp_id).unwrap().layers[0].clone();
 

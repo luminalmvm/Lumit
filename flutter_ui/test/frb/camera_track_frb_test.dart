@@ -468,5 +468,74 @@ void main() {
       expect(camera.getTransform().positionX is BridgeScalar_Keyframed, isTrue,
           reason: 'the bake writes one key per frame');
     });
+
+    // **Track once, then nudge** (K-578). The engine's arithmetic — solve plus
+    // correction — is asserted in Rust; what is asserted here is that both rows
+    // say a nudge has happened, that Clear corrections is only offered when
+    // there is something to clear, and that pressing it puts the dot out.
+    testWidgets('the edited-since-track dot appears, clears, and undoes',
+        (tester) async {
+      final p = withTrackedLayer();
+      final camera = p.uiState.selectedComp!.addCameraLayer();
+      setCameraSolveLink(
+        camera: camera,
+        tracked: p.layer.internallayerId,
+      );
+      p.uiState
+        ..selectedLayer.value = camera
+        ..setSelection([camera]);
+      p.uiState.workspace.interface.transformInEffectControls = true;
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        child: const EffectControlsPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+      await tester.pump();
+
+      const dot = ValueKey('tf-camera-link-corrected');
+      const clear = ValueKey('tf-camera-link-clear');
+      expect(find.byKey(dot), findsNothing,
+          reason: 'nobody has nudged this camera');
+      expect(find.byKey(clear), findsNothing,
+          reason: 'a command that would refuse is not offered');
+
+      // Nudge it the way a drag does: an ordinary write to its own property.
+      camera.setTransform(
+        prop: BridgeTransformProp.positionX,
+        value: const BridgeScalar.static_(1200),
+      );
+      p.uiState.model.refresh();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(dot), findsOneWidget);
+      expect(find.byKey(clear), findsOneWidget);
+      // And the same fact on the tracked layer's own row, which is where the
+      // Camera track effect reports.
+      expect(p.layer.getInfo().trackCorrected, isTrue,
+          reason: 'the effect that was tracked says its camera has been nudged');
+
+      await tester.tap(find.byKey(clear));
+      p.uiState.model.refresh();
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byKey(dot), findsNothing);
+      expect(camera.getInfo().trackCorrected, isFalse);
+      expect(cameraLink(camera: camera, frame: 0).tracked,
+          p.layer.internallayerId,
+          reason: 'clearing the nudge must not clear the track');
+
+      // One undo step brings the nudge back, dot and all.
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      await tester.pump();
+      expect(camera.getInfo().trackCorrected, isTrue);
+      expect(find.byKey(dot), findsOneWidget);
+    });
   }, skip: !engineAvailable);
 }

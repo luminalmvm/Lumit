@@ -1737,6 +1737,7 @@ mod tests {
         camera.kind = LayerKind::Camera {
             zoom: crate::anim::Property::zero(),
             solve_link: None,
+            correction_base: None,
         };
         let camera_id = camera.id;
         store
@@ -1897,6 +1898,7 @@ mod tests {
                     kind: LayerKind::Camera {
                         zoom: crate::anim::Property::fixed(1000.0),
                         solve_link: None,
+                        correction_base: None,
                     },
                     in_point: CompTime(Rational::ZERO),
                     out_point: CompTime(duration),

@@ -63,8 +63,9 @@ void fireEffectAction(
 ///
 /// The link is the whole point: nothing is copied, so re-analysing the shot
 /// moves this camera with it, and every clip of the same footage reads the same
-/// solve through its own time mapping. Its transform is read-only while linked —
-/// the engine refuses the write, so no interface has to remember to.
+/// solve through its own time mapping. Its transform rows are the **correction
+/// lane** (K-578) — dragging one nudges the solved motion rather than replacing
+/// it — and they start at the pose captured here, which is that lane's nought.
 LayerReference addSolvedCamera({required LayerReference tracked}) =>
     BridgeLib.instance.api.crateApiTrackAddSolvedCamera(tracked: tracked);
 
@@ -80,6 +81,15 @@ LayerReference addSolvedCamera({required LayerReference tracked}) =>
 void convertCameraToKeyframes({required LayerReference camera}) =>
     BridgeLib.instance.api
         .crateApiTrackConvertCameraToKeyframes(camera: camera);
+
+/// **Clear corrections** (K-578): put a linked camera's own properties back to
+/// the pose the link was made at, leaving the link itself alone.
+///
+/// One undo step. Refused when there is no link, or nothing in the lane — a
+/// command that committed an empty batch would put a step on the undo stack
+/// that changed nothing.
+void clearCameraCorrections({required LayerReference camera}) =>
+    BridgeLib.instance.api.crateApiTrackClearCameraCorrections(camera: camera);
 
 /// Point `camera` at a tracked layer, or clear the link (K-417).
 ///

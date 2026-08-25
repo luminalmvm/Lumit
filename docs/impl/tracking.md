@@ -391,7 +391,8 @@ through a trait, and every claim below is asserted against it.
 - **`Op::SetCameraSolveLink`** and **`OpError::CameraLinked`** (`ops.rs`). The
   refusal is a `solve_link_guards` function shaped exactly like the existing
   `lock_guards`, checked in `apply` before the match — one guard for every caller
-  and every op yet to be written.
+  and every op yet to be written. *Reversed by K-578: the refusal and the error
+  are gone, and the same two ops now write the correction lane; see §5f.*
 
 Six things are deviations from, or decisions under, K-417's wording:
 
@@ -408,8 +409,9 @@ Six things are deviations from, or decisions under, K-417's wording:
    *is* the hold — the nearest solved frame is the last derived motion — and it is
    stateless, deterministic and free. Where the link resolves nowhere at all there
    is nothing derived to hold, so the fallback is the camera's own stored
-   properties, which (being read-only while linked) are the ones it had when the
-   link was made. The two cases are different `LinkState`s, so the interface can
+   properties, which are the ones it had when the link was made — plus, since
+   K-578, whatever has been nudged since, read as a pose rather than as a
+   correction. The two cases are different `LinkState`s, so the interface can
    say which.
 3. **The tracked layer inside a precomp is found by the effect on it.** K-417 says
    the chain resolves through a Precomp layer to the tracked layer inside but does
@@ -895,6 +897,92 @@ solve to descend. Fractal noise on one oversized solid, panned rigidly, gives
 texture with width, and the same run follows features the whole way. It is the
 same reason §5's synthetic shot is procedurally textured, met from the other
 direction.
+
+## 5f. Track once, then nudge — the correction lane, as built
+
+`crates/lumit-core/src/{model,ops,track}.rs`, with the read in
+`crates/lumit-bridge/src/api/{layer,track}.rs` and the two rows in
+`flutter_ui/lib/panels/{camera_track_display_frb,effect_controls_panel_frb}.dart`
+(2026-08-25, K-578). Until this, a solve-linked camera's transform rows were
+read-only badges: the engine refused `SetTransformProperty` and `SetCameraZoom`
+with `OpError::CameraLinked`, and the only way past a solve that was slightly
+wrong was to bake it and lose the link. This is the half that lets a measurement
+be adjusted without being replaced.
+
+**The arithmetic is `derived = solved + (stored − base)`, per channel.** Seven
+numbers, seven independent additions, and no matrix. `base` is a new
+`correction_base: Option<Box<CameraPose>>` on `LayerKind::Camera`, captured by
+`Op::SetCameraSolveLink` when a link is made on a camera that had none, kept when
+a link is re-pointed, dropped when it is cleared. `lumit_core::track::correct` is
+the whole composition; `has_correction` is the dot's reading;
+`clear_corrections` is the batch that puts the seven properties back.
+
+Five things are decisions rather than transcription:
+
+1. **A separate base, rather than reinterpreting the rows.** The obvious saving
+   is to say the rows *are* the correction and let nought be nought — no new
+   field. It cannot be done: the same numbers are already the
+   [`LinkState::Unresolved`] fallback, the pose a camera falls back to when its
+   media goes offline, and `add_solved_camera` puts that at the comp's centre
+   with a 50 mm zoom. Read as a correction, a camera created at the centre of a
+   1920-wide comp would be nudged 960 px sideways the moment it resolved. One
+   set of numbers cannot be a pose and an offset at once; the base is what makes
+   them both.
+2. **Channel-wise addition, not a composed transform.** The parent-child
+   alternative — the solve as a parent, the correction as its child — is what a
+   rig would do, and it was rejected for two reasons given in full in K-578: a
+   row stops meaning what it says (a "position x" nudge would run along the
+   shot's axis and swing with every pan), and the curve the graph editor draws
+   stops being the curve that was dragged. Addition also commutes with itself,
+   so two corrections in either order are the same camera.
+3. **The base is computed inside `apply`.** §5a's fourth deviation argued that a
+   computing op is a trap, and it is — for an op that would need the *store*, or
+   whose answer depends on anything outside the document. This one reads seven
+   properties off the layer it is about to edit, so it replays identically and
+   its inverse re-derives the same numbers from a document the earlier inverses
+   have already put back. Putting it in `apply` rather than in the bridge means
+   every caller gets it, including the bake and every op yet to be written.
+4. **Zoom is corrected too.** It could have been left refused — the focal is
+   what was solved, and moving it detaches the point cloud from the picture. It
+   is not, because a solved focal is exactly as capable of being a little wrong
+   as a solved position, and because leaving one row of seven refused would be a
+   rule with no shape. The cloud is drawn from the *solve*, so a corrected zoom
+   makes the dots and the picture disagree; that is a visible, reversible
+   consequence of an edit the user made, which is different from a silent one.
+5. **The dot is in the read model, not a call.** `BridgeLayerInfo.track_corrected`
+   answers for a camera ("this one is nudged") and for a tracked layer ("a camera
+   following me is"), which is one fact from where the user stands. Both rows
+   that draw it repaint on every document revision and a correction *is* a
+   document revision, so a call there is the cost K-184 exists to remove. The
+   tracked-layer half scans the comp's cameras, and only for a layer wearing a
+   Camera track — one layer in a comp at most times, none in most comps.
+
+**The surface.** The Transform heading's badge gains the dot and **Clear
+corrections**, offered only when there is something to clear; the Camera track's
+status row gains the same dot ahead of its sentence. The badge's own sentence
+became `Flexible` with an ellipsis and the badge itself is `Expanded` at its call
+site, because a heading's action row lays its children out unbounded and a badge
+carrying a sentence has to be told how much room it has before it can clip it —
+without that the third word pushed the commands off the panel's edge.
+
+**Stage 5f's tests** are four in `lumit-core` (the composition read at derived,
+held and unresolved frames with every channel checked; a *keyed* correction added
+frame by frame, which a static-only implementation passes and a per-frame one has
+to earn; Clear keeping the link and undoing in one step; and the base captured,
+kept through a re-point, dropped on unlink and restored by undo), one in
+`lumit-render` (a correction moving the frame key, and the same nudge sitting on
+top of a *second*, different solve — the claim that corrections survive
+re-analysing, which is the whole point of not folding them into the camera), one
+in `lumit-bridge` (both rows' dots, the corrected pose read back through the bake
+at 5 + 30, Clear refused on an untouched camera and accepted on a nudged one), and
+one in Flutter (the dot and the command appearing and going out, and one undo
+bringing both back).
+
+**Owed.** The Viewer's point cloud is still drawn from the solve alone, so a
+corrected camera's dots no longer sit on the features they were found on. That is
+arguably correct — the cloud is what was *measured* — but it is not said
+anywhere, and a line saying so, or a cloud drawn through the correction, is the
+next honest step.
 
 ## 5. Test plan
 

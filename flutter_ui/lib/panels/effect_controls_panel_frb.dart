@@ -575,6 +575,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       threeD: info.switches.threeD ||
                           info.kind == BridgeLayerKind.camera,
                       isCamera: info.kind == BridgeLayerKind.camera,
+                      corrected: info.trackCorrected,
                       playheadFrame: playhead,
                       onSeek: (frame) => ui.playheadFrame.value = frame,
                       onChanged: ui.model.refresh,
@@ -651,6 +652,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                           order: [for (final e in info.effects) e.id],
                         ),
                         stagedValue: _effects.stagedValue,
+                        trackCorrected: info.trackCorrected,
                         index: index,
                         count: info.effects.length,
                         onStackChanged: ui.model.refresh,
@@ -870,6 +872,11 @@ class _EffectSection extends StatelessWidget {
   final void Function(UuidValue effect, String param) onAction;
   final int pressed;
 
+  /// A camera following this layer's Camera track has been nudged (K-578) —
+  /// drawn as a dot on the status row. From the read model, like everything
+  /// else this card draws.
+  final bool trackCorrected;
+
   /// Settings → "Use theme colours in effect graphs" (owner, desk test). Off
   /// by default, when a channel curve draws in its own R, G or B; on, the
   /// whole graph takes the theme. Read once by the panel and passed down, so a
@@ -908,6 +915,7 @@ class _EffectSection extends StatelessWidget {
     required this.onToggleGroup,
     required this.onAction,
     required this.pressed,
+    this.trackCorrected = false,
     this.themedGraphs = false,
     this.curvePlotSize = curvePlotSizeDefault,
     this.onCurvePlotSize,
@@ -1104,6 +1112,7 @@ class _EffectSection extends StatelessWidget {
           onLive: onLive,
           onChanged: onStackChanged,
           pressed: pressed,
+          trackCorrected: trackCorrected,
         )
             case final display?)
           display,
@@ -1600,6 +1609,10 @@ class _TransformSection extends StatelessWidget {
   /// **derived** rather than held (K-417), and so the one kind whose heading
   /// carries a link badge.
   final bool isCamera;
+
+  /// This camera's solve link carries a correction (K-578) — the dot beside the
+  /// badge, and what makes Clear corrections worth offering.
+  final bool corrected;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
@@ -1614,6 +1627,7 @@ class _TransformSection extends StatelessWidget {
     required this.threeD,
     required this.axisModes,
     required this.isCamera,
+    required this.corrected,
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
@@ -1627,17 +1641,25 @@ class _TransformSection extends StatelessWidget {
         open: open,
         onToggle: onToggle,
         // A solve-linked camera says so where its numbers are, because that is
-        // where the surprise would otherwise be: the rows are read-only and
-        // the engine refuses a write to them (K-417). Convert to keyframes
+        // where the surprise would otherwise be: the rows below are still
+        // editable, but what they hold is a correction on top of the solve
+        // rather than a pose (K-578). Convert to keyframes
         // sits beside the badge — it is the one command that ends the link,
         // and it belongs next to the thing it ends.
         actions: [
+          // Expanded, as the render-time cell beside an effect's Reset is, and
+          // for the same reason: a heading's action row lays its children out
+          // unbounded, so a badge that carries a sentence has to be told how
+          // much room it has before it can clip it.
           if (isCamera)
-            CameraLinkBadge(
-              key: ValueKey<String>('tf-link-${layer.internallayerId}'),
-              camera: layer,
-              playheadFrame: playheadFrame,
-              onChanged: onChanged,
+            Expanded(
+              child: CameraLinkBadge(
+                key: ValueKey<String>('tf-link-${layer.internallayerId}'),
+                camera: layer,
+                playheadFrame: playheadFrame,
+                corrected: corrected,
+                onChanged: onChanged,
+              ),
             ),
         ],
         rows: TransformRowsFrb(
@@ -1695,6 +1717,7 @@ Widget? customEffectDisplay(
   required void Function(UuidValue, String, BridgeEffectValue) onLive,
   required VoidCallback onChanged,
   required int pressed,
+  bool trackCorrected = false,
 }) =>
     switch (matchName) {
       'levels' => LevelsDisplayFrb(
@@ -1714,6 +1737,7 @@ Widget? customEffectDisplay(
           layer: layer,
           onChanged: onChanged,
           pressed: pressed,
+          corrected: trackCorrected,
         ),
       _ => null,
     };
