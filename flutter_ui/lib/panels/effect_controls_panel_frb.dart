@@ -59,7 +59,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import 'effect_param_row_frb.dart';
-import 'graph_panel.dart' show graphNodeKey, graphNoStream;
+import 'graph_panel.dart' show graphNodeKey;
 import 'camera_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'fx_section.dart';
@@ -118,8 +118,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
   /// path is exactly the traffic `bridge_call_budget_test` guards against.
   /// Empty for every layer that has never been wired, which is nearly all of
   /// them, and empty costs one call that answers "no drivers".
-  Map<String, ({String driver, BridgePortType type, bool noStream})> _driven =
-      const {};
+  Map<String, ({String driver, BridgePortType type})> _driven = const {};
   LumitUiState? _boundUi;
 
   @override
@@ -157,8 +156,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       if (_driven.isNotEmpty) setState(() => _driven = const {});
       return;
     }
-    final next =
-        <String, ({String driver, BridgePortType type, bool noStream})>{};
+    final next = <String, ({String driver, BridgePortType type})>{};
     try {
       final graph = layer.getGraph();
       final byRef = {for (final n in graph.nodes) graphNodeKey(n.node): n};
@@ -185,7 +183,6 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           next['${node.field0}/$port'] = (
             driver: source.customName ?? engineLabel(source.label),
             type: socket.first.portType,
-            noStream: graphNoStream(source),
           );
         }
       }
@@ -628,8 +625,7 @@ class _EffectSection extends StatelessWidget {
   /// Which of this layer's parameters a driver is wired to, by
   /// `effectId/paramId` (K-471). Read once by the panel and passed down, so a
   /// card costs no question of its own.
-  final Map<String, ({String driver, BridgePortType type, bool noStream})>
-      driven;
+  final Map<String, ({String driver, BridgePortType type})> driven;
 
   /// The drag in flight's staged value for (effect, param), or null — overlaid
   /// on the model's value so the number under the pointer is the staged one.
@@ -978,48 +974,12 @@ class _EffectSection extends StatelessWidget {
       );
     }
 
-    // **The curve fold** (K-412, docs/08 §3.30). A run of neighbouring Curve
-    // parameters is one editor with a tab each, not one plot per row: five
-    // stacked squares would be five times the height and would still make the
-    // user compare shapes across them. The same folding the `_x`/`_y` point
-    // pair takes, over as many parameters as declare a curve in a row.
-    Widget curveEditor(List<BridgeParamInfo> run) => CurveChannelEditor(
-          key: ValueKey<String>('fx-curves-$id'),
-          keyPrefix: 'fx-curves-$id',
-          labels: [for (final p in run) engineLabel(p.label)],
-          curves: [
-            for (final p in run)
-              switch (stagedValue(id, p.id) ?? values[p.id]) {
-                BridgeEffectValue_Curve(:final field0) => curvePointsOf(field0),
-                _ => curveIdentity,
-              },
-          ],
-          resetLabel: l10n.reset,
-          resetTip: l10n.tipResetCurve,
-          onLive: (c, points) => onLive(id, run[c].id, curveValue(points)),
-          onCommit: (c, points) => onWrite(id, run[c].id, curveValue(points)),
-        );
-
-    // Fold a run of params into rows, pairing x/y neighbours and gathering
-    // curve runs. Both folds live here rather than only in the outer walk,
-    // because a schema is free to put them inside a **group** — Particulate's
-    // two over-life curves sit under the Particle kicker, and before this they
-    // came out as two stacked plots, which is the shape K-412 exists to
-    // prevent.
+    // Fold a run of params into rows, pairing x/y neighbours.
     List<Widget> foldRows(List<BridgeParamInfo> run) {
       final out = <Widget>[];
       var i = 0;
       while (i < run.length) {
         final param = run[i];
-        if (param.kind is BridgeParamKind_Curve) {
-          final curves = <BridgeParamInfo>[];
-          while (i < run.length && run[i].kind is BridgeParamKind_Curve) {
-            curves.add(run[i]);
-            i += 1;
-          }
-          out.add(curveEditor(curves));
-          continue;
-        }
         // Already drawn, beside its picker or slider on the Matte or Mix row.
         if (folded.contains(param.id)) {
           i += 1;
@@ -1071,15 +1031,33 @@ class _EffectSection extends StatelessWidget {
     while (i < params.length) {
       final param = params[i];
 
-      // The curve fold, for a run the schema left ungrouped. A grouped run
-      // takes the same fold inside `foldRows`.
+      // **The curve fold** (K-412, docs/08 §3.30). A run of neighbouring Curve
+      // parameters is one editor with a tab each, not one plot per row: five
+      // stacked squares would be five times the height and would still make the
+      // user compare shapes across them. The same folding the `_x`/`_y` point
+      // pair takes, over as many parameters as declare a curve in a row.
       if (param.kind is BridgeParamKind_Curve) {
         final run = <BridgeParamInfo>[];
         while (i < params.length && params[i].kind is BridgeParamKind_Curve) {
           run.add(params[i]);
           i += 1;
         }
-        rows.add(curveEditor(run));
+        rows.add(CurveChannelEditor(
+          key: ValueKey<String>('fx-curves-$id'),
+          keyPrefix: 'fx-curves-$id',
+          labels: [for (final p in run) engineLabel(p.label)],
+          curves: [
+            for (final p in run)
+              switch (stagedValue(id, p.id) ?? values[p.id]) {
+                BridgeEffectValue_Curve(:final field0) => curvePointsOf(field0),
+                _ => curveIdentity,
+              },
+          ],
+          resetLabel: l10n.reset,
+          resetTip: l10n.tipResetCurve,
+          onLive: (c, points) => onLive(id, run[c].id, curveValue(points)),
+          onCommit: (c, points) => onWrite(id, run[c].id, curveValue(points)),
+        ));
         continue;
       }
 

@@ -202,13 +202,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// longer uses — a spinner you could still drag would be a lie about what is
   /// in charge, the same reasoning `enabled` follows. The stopwatch stays: the
   /// keyframes are still there, waiting under the wire.
-  ///
-  /// `noStream` is the hazard mark (K-509): the box at the other end reads a
-  /// points stream and has none wired into it, so what arrives along this wire
-  /// is the documented empty-stream answer rather than anything the picture
-  /// contains. It is a fact about the *wiring*, not a value — the panel never
-  /// asks for a driven number, which is what keeps this off the rebuild path.
-  final ({String driver, BridgePortType type, bool noStream})? driven;
+  final ({String driver, BridgePortType type})? driven;
 
   const EffectParamRowFrb({
     super.key,
@@ -373,10 +367,7 @@ class EffectParamRowFrb extends StatelessWidget {
   /// a wire, and a filled mark is what a socket uses to say a wire has landed.
   Widget _drivenWell(LumitTheme t, UuidValue id) {
     final it = driven!;
-    // The wire is honest about its type until it is dry: a source with no
-    // stream behind it draws in the warning family, because what this row is
-    // following is a no-op and not a measurement (K-509).
-    final colour = it.noStream ? t.warning : portColour(t, it.type);
+    final colour = portColour(t, it.type);
     return Row(
       key: ValueKey<String>('fx-driven-$id-${param.id}'),
       mainAxisSize: MainAxisSize.min,
@@ -390,35 +381,20 @@ class EffectParamRowFrb extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        // The word is the state. A wire whose source has no stream is not
-        // *driven* by anything — it is following a documented no-op — so the
-        // row says which of the two it is in the slot the word already had,
-        // rather than growing a second mark a narrow panel has no room for.
-        Text(
-          it.noStream ? l10n.graphNoStream : l10n.graphDriven,
-          key: it.noStream
-              ? ValueKey<String>('fx-no-stream-$id-${param.id}')
-              : null,
-          style: t.kicker.copyWith(letterSpacing: 0.54, color: colour),
-        ),
+        Text(l10n.graphDriven,
+            style: t.kicker.copyWith(letterSpacing: 0.54, color: colour)),
         const SizedBox(width: 8),
-        // Flexible, because a box's name is whatever the user called it and
-        // the Node panel is a narrow pane: a long name shortens rather than
-        // running off the end of the row.
-        Flexible(
-          child: Container(
-            height: 16,
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            decoration: BoxDecoration(
-              color: t.surface0,
-              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-              border: Border.all(color: t.hairline),
-            ),
-            child: Text(it.driver,
-                style: t.mono.copyWith(fontSize: 10, color: t.textMuted),
-                overflow: TextOverflow.ellipsis),
+        Container(
+          height: 16,
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          decoration: BoxDecoration(
+            color: t.surface0,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: Border.all(color: t.hairline),
           ),
+          child: Text(it.driver,
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
         ),
       ],
     );

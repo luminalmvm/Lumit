@@ -164,7 +164,7 @@ void main() {
     expect(back.viewerBars, ViewerBars.bottom);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 15);
+    expect(all.toJson().keys.length, 16);
   });
 
   test('the Retime seconds preference round-trips', () {

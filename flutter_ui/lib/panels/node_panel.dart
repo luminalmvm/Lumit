@@ -35,7 +35,7 @@ import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart';
-import 'graph_panel.dart' show graphNodeKey, graphNoStream, graphToolbarHeight;
+import 'graph_panel.dart' show graphNodeKey, graphToolbarHeight;
 import 'placeholder.dart';
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
@@ -69,8 +69,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// id, with the driver's name and what its wire carries — the same shape
   /// Effect controls holds, keyed by parameter alone because there is only
   /// ever one box here.
-  Map<String, ({String driver, BridgePortType type, bool noStream})> _driven =
-      const {};
+  Map<String, ({String driver, BridgePortType type})> _driven = const {};
 
   /// The drag in flight on an effect box: staged, previewed, committed on
   /// release as one op.
@@ -129,8 +128,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       _ => (null, false),
     };
     _Picked? picked;
-    var driven =
-        const <String, ({String driver, BridgePortType type, bool noStream})>{};
+    var driven = const <String, ({String driver, BridgePortType type})>{};
     if (layer != null && id != null) {
       try {
         for (final instance
@@ -157,12 +155,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// Which of [node]'s parameters a wire is feeding, by parameter id. A wire's
   /// colour is its **source** port's type — what the parameter is now
   /// following — which is the same reading Effect controls takes.
-  Map<String, ({String driver, BridgePortType type, bool noStream})> _drivenOf(
+  Map<String, ({String driver, BridgePortType type})> _drivenOf(
     LayerReference layer,
     BridgeNodeRef node,
   ) {
-    final out =
-        <String, ({String driver, BridgePortType type, bool noStream})>{};
+    final out = <String, ({String driver, BridgePortType type})>{};
     final graph = layer.getGraph();
     final byRef = {for (final n in graph.nodes) graphNodeKey(n.node): n};
     final want = graphNodeKey(node);
@@ -188,7 +185,6 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         out[port] = (
           driver: source.customName ?? engineLabel(source.label),
           type: socket.first.portType,
-          noStream: graphNoStream(source),
         );
       }
     }
@@ -340,69 +336,27 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   ) {
     final id = picked.info.id;
     final values = {for (final v in picked.info.values) v.id: v.value};
-    final params = cachedListParameters(picked.info.name);
-
-    // **A point is one row, here as everywhere** (K-443). An `_x`/`_y` pair of
-    // floats folds into a single Position row with one label, one stopwatch
-    // over both channels and — where the pair is declared in pixels — the
-    // dropper that picks the point off the Viewer. Points sample's query point
-    // is the first driver parameter to want it (points-stream.md §2.2), and
-    // wanting it in this panel is what a driver's parameters have always
-    // wanted: the same row Effect controls draws.
-    //
-    // The **chain** between the halves is deliberately absent rather than
-    // dead: tying a pair is a write on the instance's `linkedPairs`, which is
-    // the effect stack's own op, and a driver commits through `setGraph`. A
-    // query point's two channels are a place, not a size — nothing here scales.
-    final rows = <Widget>[];
-    for (var i = 0; i < params.length; i++) {
-      final param = params[i];
-      final next = i + 1 < params.length ? params[i + 1] : null;
-      if (next != null &&
-          param.id.endsWith('_x') &&
-          next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
-          param.kind is BridgeParamKind_Float &&
-          next.kind is BridgeParamKind_Float) {
-        rows.add(EffectPointRowFrb(
-          key: ValueKey<String>('node-row-$id-${param.id}-pair'),
-          effectId: id,
-          xParam: param,
-          yParam: next,
-          xValue: _staged(id, param.id) ?? values[param.id],
-          yValue: _staged(id, next.id) ?? values[next.id],
-          comp: ui.selectedComp!,
-          playheadFrame: playhead,
-          onSeek: (frame) => ui.playheadFrame.value = frame,
-          onWrite: _write,
-          onLive: _live,
-          twoColumn: true,
-        ));
-        i += 1;
-        continue;
-      }
-      rows.add(EffectParamRowFrb(
-        key: ValueKey<String>('node-row-$id-${param.id}'),
-        effectId: id,
-        param: param,
-        value: _staged(id, param.id) ?? values[param.id],
-        comp: ui.selectedComp!,
-        ownerLayerId: layer.internallayerId,
-        ownerLayers: ui.model.layers,
-        playheadFrame: playhead,
-        onSeek: (frame) => ui.playheadFrame.value = frame,
-        onWrite: _write,
-        onLive: _live,
-        twoColumn: true,
-        siblings: values,
-        driven: _driven[param.id],
-      ));
-    }
-    // A **wire-only** input draws no row at all, and needs no code to say so:
-    // it is a signature port, never a schema parameter, so it is not in the
-    // list this walks. Its socket on the box is the whole of its surface.
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      children: rows,
+      children: [
+        for (final param in cachedListParameters(picked.info.name))
+          EffectParamRowFrb(
+            key: ValueKey<String>('node-row-$id-${param.id}'),
+            effectId: id,
+            param: param,
+            value: _staged(id, param.id) ?? values[param.id],
+            comp: ui.selectedComp!,
+            ownerLayerId: layer.internallayerId,
+            ownerLayers: ui.model.layers,
+            playheadFrame: playhead,
+            onSeek: (frame) => ui.playheadFrame.value = frame,
+            onWrite: _write,
+            onLive: _live,
+            twoColumn: true,
+            siblings: values,
+            driven: _driven[param.id],
+          ),
+      ],
     );
   }
 }
