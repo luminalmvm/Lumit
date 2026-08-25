@@ -724,6 +724,69 @@ void main() {
           reason: 'the folder and both clips, back at the root');
     });
 
+    /// **Delete takes the whole selection** (K-523). It read the clicked row
+    /// alone while Move to folder, two entries away in the same menu, already
+    /// took `_targets` — the shape this ruling exists to stamp out.
+    testWidgets('the context menu deletes the whole selection', (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: 'C:/clips/a.mov');
+      p.state.project!.importFootage(path: 'C:/clips/b.mov');
+      p.state.project!.importFootage(path: 'C:/clips/c.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await _clickRow(tester, 'a.mov');
+      await _clickRow(tester, 'b.mov', held: LogicalKeyboardKey.controlLeft);
+
+      await tester.tapAt(
+        tester.getCenter(rowText('b.mov')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('a.mov'), findsNothing);
+      expect(find.text('b.mov'), findsNothing);
+      expect(rowText('c.mov'), findsOneWidget,
+          reason: 'the unpicked row stayed');
+    });
+
+    /// And the other half of the rule: a right-click on a row that is not part
+    /// of the selection is about that row. (The row replaces the selection on
+    /// the way into the menu, which is what makes this true rather than a
+    /// second rule.)
+    testWidgets('the context menu on an unpicked row deletes that row alone',
+        (tester) async {
+      final p = freshProject();
+      p.state.project!.importFootage(path: 'C:/clips/a.mov');
+      p.state.project!.importFootage(path: 'C:/clips/b.mov');
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.pump();
+
+      await _clickRow(tester, 'a.mov');
+      await tester.tapAt(
+        tester.getCenter(rowText('b.mov')),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(rowText('a.mov'), findsOneWidget);
+      expect(find.text('b.mov'), findsNothing);
+    });
+
     /// A folder cannot be filed inside itself: the engine refuses it, so the
     /// menu never offers it — a dead entry is worse than a missing one.
     testWidgets('Move to folder never offers a folder its own subtree',
