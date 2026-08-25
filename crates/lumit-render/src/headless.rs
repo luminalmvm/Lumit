@@ -4786,6 +4786,35 @@ surfaces:
                 l.transform.rotation = Property::fixed(17.0);
                 (doc, comp_id, 0)
             }),
+            // **Particulate** (K-446, K-474): a whole field of particles, drawn
+            // at a frame partway in. The effect keeps nothing between frames
+            // and reads no clock, so preview and export must agree exactly —
+            // and the degradation rung (K-475) is never on this path, because
+            // nothing on it can turn the rung on. A particle system that
+            // disagreed with itself would show here as two pictures.
+            ("particulate draws its particles", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (_, top) = matrix_top(&mut doc, comp_id, blue);
+                let mut fx = lumit_core::fx::instantiate("particulate").unwrap();
+                for p in &mut fx.params {
+                    let v = match p.id.as_str() {
+                        // In the middle of this small comp, and large enough to
+                        // cover ground: an emitter at a 1080p centre would draw
+                        // nothing at all here, and a matrix row that compares
+                        // two empty pictures proves nothing.
+                        "position_x" => f64::from(w) * 0.5,
+                        "position_y" => f64::from(h) * 0.5,
+                        "size" => 6.0,
+                        "emit_rate" => 400.0,
+                        _ => continue,
+                    };
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                }
+                let comp = doc.comp_mut(comp_id).unwrap();
+                let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+                l.effects = vec![fx];
+                (doc, comp_id, 7)
+            }),
             // A **driven parameter** (K-471): the top layer's blur radius comes
             // off a Wiggle rather than off its keyframes, so both walks have to
             // resolve the same driver graph at the same layer time and get the
@@ -4830,6 +4859,22 @@ surfaces:
                 };
                 // A frame partway in, so the wobble is somewhere other than its
                 // starting value.
+                (doc, comp_id, 7)
+            }),
+            // A **points-driven parameter** (K-492, K-494): the blur radius
+            // comes off a Points sample reading Particulate's stream, so both
+            // walks have to evaluate the same particles at the same layer time
+            // — the stream is arithmetic over the document rather than history,
+            // and a walk that got that wrong would show up here as two
+            // different pictures.
+            ("a points-driven exposure", |w, h, red, blue| {
+                let (mut doc, comp_id, _) = matrix_base(w, h, red);
+                let (_, top) = matrix_top(&mut doc, comp_id, blue);
+                let (effects, graph) = points_driven_exposure(w, h);
+                let comp = doc.comp_mut(comp_id).unwrap();
+                let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+                l.effects = effects;
+                l.graph = graph;
                 (doc, comp_id, 7)
             }),
             ("camera over a 3d layer", |w, h, red, blue| {
@@ -5191,6 +5236,177 @@ surfaces:
             extra: serde_json::Map::new(),
         }));
         (doc, comp_id, solid)
+    }
+
+    /// A stack and a graph whose Exposure is **driven by how far the nearest
+    /// particle is** from a chosen point (points-stream.md §2.2).
+    ///
+    /// The particles are pinned: a point emitter at the middle of the frame, no
+    /// initial speed, no turbulence, no jitter — so every one of them sits on
+    /// the emitter and Nearest distance is exactly the distance from the query
+    /// point to it. The Exposure's own stored Stops is nought, so cutting the
+    /// wire is visibly a different picture rather than a slightly different one.
+    fn points_driven_exposure(
+        w: u32,
+        h: u32,
+    ) -> (
+        Vec<lumit_core::model::EffectInstance>,
+        lumit_core::graph::LayerGraph,
+    ) {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+            for p in &mut inst.params {
+                if p.id == id {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                    return;
+                }
+            }
+            panic!("no parameter {id}");
+        };
+
+        let (cx, cy) = (f64::from(w) * 0.5, f64::from(h) * 0.5);
+        let mut producer = lumit_core::fx::instantiate("particulate").unwrap();
+        for (id, v) in [
+            ("position_x", cx),
+            ("position_y", cy),
+            ("width", 0.0),
+            ("height", 0.0),
+            ("emit_rate", 300.0),
+            ("life", 2.0),
+            ("life_jitter", 0.0),
+            ("initial_speed", 0.0),
+            ("speed_jitter", 0.0),
+            ("turbulence_amount", 0.0),
+            ("size", 1.0),
+        ] {
+            set(&mut producer, id, v);
+        }
+        let mut lift = lumit_core::fx::instantiate("exposure").unwrap();
+        set(&mut lift, "stops", 0.0);
+        let lift_id = lift.id;
+        let producer_id = producer.id;
+
+        let mut sampler = lumit_core::fx::instantiate("points_sample").unwrap();
+        set(&mut sampler, "position_x", cx + 5.0);
+        set(&mut sampler, "position_y", cy);
+        let sampler_id = sampler.id;
+
+        let graph = LayerGraph {
+            nodes: vec![sampler],
+            edges: vec![
+                Edge {
+                    from: OutputRef::EffectData {
+                        effect: producer_id,
+                        port: "points".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Driver(sampler_id),
+                        port: "points".into(),
+                    },
+                },
+                Edge {
+                    from: OutputRef::Driver {
+                        node: sampler_id,
+                        port: "nearest_distance".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Effect(lift_id),
+                        port: "stops".into(),
+                    },
+                },
+            ],
+            layout: Vec::new(),
+            exposed: Vec::new(),
+        };
+        (vec![producer, lift], graph)
+    }
+
+    /// **A points wire reaches the picture** (K-492, K-494).
+    ///
+    /// The matrix row above proves the two walks agree about a points-driven
+    /// frame; this proves there is something to agree *about*. The same comp
+    /// twice — once with the sampler's distance wired into Stops, once with
+    /// that one wire cut — and the pictures must differ, because the Exposure's
+    /// own stored Stops is nought and the driven one is five.
+    ///
+    /// It is the *radius* wire that is cut rather than the stream wire, because
+    /// an unwired stream reads as [`NOTHING_NEAR`](lumit_core::fx::drivers::
+    /// points_sample::NOTHING_NEAR) — a deliberately enormous distance — and a
+    /// picture lifted by a billion stops is not one anybody wanted to compare
+    /// against.
+    #[test]
+    fn a_points_driven_exposure_changes_the_picture() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        let build = |wired: bool| {
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let (effects, mut graph) = points_driven_exposure(cw, ch);
+            if !wired {
+                // The Stops wire only: the stream is still sampled, and the
+                // Exposure reads the nought it stores.
+                graph.edges.remove(1);
+            }
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = effects;
+            l.graph = graph;
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+
+        let mut frame_of = |wired: bool| {
+            let (doc, comp_id) = build(wired);
+            r.render_rgba(&doc, comp_id, 7, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        // The wire's own number first, so a failure below says whether the
+        // driver went wrong or the picture did.
+        {
+            let (doc, comp_id) = build(true);
+            let comp = doc.comp(comp_id).unwrap();
+            let layer = comp
+                .layers
+                .iter()
+                .find(|l| !l.graph.edges.is_empty())
+                .unwrap();
+            let context = std::sync::Arc::new(lumit_core::expression::ExpressionContext {
+                document: doc.clone(),
+                comp: Some(comp_id),
+                layer: Some(layer.id),
+                comp_time: 7.0 / 30.0,
+                current_depth: 0,
+            });
+            let lift_id = layer.effects[1].id;
+            let stops = lumit_core::fx::resolve_drivers(&layer.graph, 7.0 / 30.0, context, None)
+                .param(
+                    lumit_core::graph::NodeRef::Effect(lift_id),
+                    lumit_core::fx::ParamId::new("stops"),
+                )
+                .expect("the Nearest distance wire carries a number")
+                .as_f32();
+            assert!(
+                (stops - 5.0).abs() < 1e-3,
+                "the pinned field sits five pixels from the query point, not {stops}"
+            );
+        }
+
+        let driven = frame_of(true);
+        let cut = frame_of(false);
+        assert_ne!(
+            driven, cut,
+            "an exposure driven by Nearest distance must change the picture"
+        );
     }
 
     /// A second, smaller solid item plus a layer of it at the top of the stack.
