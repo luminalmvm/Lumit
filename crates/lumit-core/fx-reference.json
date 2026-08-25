@@ -12363,7 +12363,7 @@
       "slug": "lens-flare",
       "match_name": "lens_flare",
       "label": "Lens flare",
-      "version": 11,
+      "version": 12,
       "category": "Stylise",
       "category_slug": "stylise",
       "params": [
@@ -12953,12 +12953,12 @@
           "id": "ghost_softness",
           "label": "Ghost softness",
           "kind": "float",
-          "unit": "raw",
-          "default": 0.02,
+          "unit": "px",
+          "default": 0.44,
           "slider_min": 0.0,
-          "slider_max": 1.0,
+          "slider_max": 22.0,
           "hard_min": 0.0,
-          "hard_max": 2.0
+          "hard_max": 44.0
         },
         {
           "id": "max_ghosts",

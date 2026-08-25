@@ -255,7 +255,10 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     // asymptotic at each ghost's own (derived, and far higher) Fresnel
     // number, so the rim ringing hugs the rim and the broad interference
     // pattern K-369's mask ladder painted across the frame is gone.
-    version = 11,
+    // 12: Ghost softness crossed from a per cent of the frame diagonal to
+    // px@comp (K-558). `migrate_percent_to_px` converts an older instance on
+    // load, against the comp's own diagonal.
+    version = 12,
     category = Stylise,
     // The one effect that owns a render pass.
     cost = Heavy,
@@ -634,12 +637,19 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub ghost_intensity: f32,
 
-    /// Box-blur radius as % of the frame diagonal (K-261, FlareSim's Ghost Blur):
-    /// a touch of out-of-focus softness. 0.02 by default (owner-set, K-264) —
-    /// with the vertex-smoothed density and the multisampled raster the geometry
-    /// no longer needs hiding, so the default is taste, not cover, and 0 stays a
-    /// usable, clean setting.
-    #[slider(min = 0.0, max = 1.0, default = 0.02, hard_min = 0.0, hard_max = 2.0, unit = Raw)]
+    /// Box-blur radius in px@comp (K-261, FlareSim's Ghost Blur): a touch of
+    /// out-of-focus softness. A blur radius is a distance, so it is pixels and
+    /// not a share of the frame diagonal (K-558, which closes K-419's one
+    /// remaining exception).
+    ///
+    /// The declared default and the two range ends are the old per cents at the
+    /// schema's nominal 1080p frame — 0.02 %, 1 % and a hard 2 % of a 2202.9 px
+    /// diagonal — so the shipped picture is the shipped picture and the dial
+    /// still runs the same distance. 0.44 px rounds to no blur at all, which is
+    /// what K-264 chose: with the vertex-smoothed density and the multisampled
+    /// raster the geometry no longer needs hiding, so the default is taste, not
+    /// cover, and 0 stays a usable, clean setting.
+    #[slider(min = 0.0, max = 22.0, default = 0.44, hard_min = 0.0, hard_max = 44.0, unit = Px)]
     pub ghost_softness: f32,
 
     /// How many of the brightest-ranked ghost pairs render. The cap survives by
@@ -921,7 +931,11 @@ impl LensFlare {
             aperture_softness: self.aperture_softness.clamp(0.0, 1.0),
             coating_elements: self.coating_elements(),
             ghost_intensity: self.ghost_intensity.max(0.0),
-            ghost_softness: self.ghost_softness.clamp(0.0, 2.0),
+            // px@comp since K-558: raster pixels by the time it is here, the
+            // §2.3 preview factor included, and capped where the blur is.
+            ghost_softness: self
+                .ghost_softness
+                .clamp(0.0, lf::MAX_BLUR_RADIUS_PX as f32),
             max_ghosts: self.max_ghosts.clamp(0, 200) as u32,
             dispersion: self.dispersion.max(0.0),
             coating: self.coating.clamp(0.0, 1.0),

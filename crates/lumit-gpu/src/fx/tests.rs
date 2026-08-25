@@ -4191,7 +4191,9 @@ fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
         roundness: 0.15,
         aperture_softness: 0.05,
         ghost_intensity: 1.0,
-        ghost_softness: 0.05,
+        // px@comp since K-558, and half a pixel rounds to the no-blur this
+        // fixture has always rendered.
+        ghost_softness: 0.5,
         max_ghosts: 10,
         dispersion: 1.0,
         coating: 0.75,
@@ -4799,13 +4801,15 @@ fn wgsl_lens_flare_ghost_blur_matches_the_cpu_reference() {
     let (w, h) = (768u32, 432u32);
     let p = lf::LensFlareParams {
         light: [380.0, 130.0],
-        ghost_softness: 2.0,
+        // px@comp since K-558: the old 2 % of this frame's diagonal, which is
+        // the radius in the tens of pixels the tile cache is here to prove.
+        ghost_softness: 18.0,
         max_ghosts: 3,
         ..flare_params()
     };
     let (_, _, div) = lf::quality_ladder(p.quality);
     let (fw, fh) = ((w / div).max(1), (h / div).max(1));
-    let radius = lf::ghost_blur_radius(p.ghost_softness, fw, fh);
+    let radius = lf::ghost_blur_radius(p.ghost_softness, div);
     assert!(
         radius >= 8,
         "the test frame must produce a multi-tile blur radius, got {radius}"

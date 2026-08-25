@@ -76,7 +76,7 @@ pub struct LensFlareOp {
     pub roundness: f32,
     /// 0..1 iris edge softness.
     pub aperture_softness: f32,
-    /// Ghost blur radius as % of the frame diagonal (K-261).
+    /// Ghost blur radius in raster pixels (K-261, px@comp since K-558).
     pub ghost_softness: f32,
     /// Pupil-grid side for this quality.
     pub grid: u32,
@@ -2194,11 +2194,13 @@ impl FxEngine {
             // Mirrors `lumit_core::fx::lens_flare::ghost_blur_radius`,
             // cap included (K-262: an uncapped radius on a 4K frame is a
             // thousand taps per pixel across six passes — a GPU timeout).
-            // Radius from the BASE dims (the look must not change with the
-            // K-267 padding); the passes run over the padded buffer.
+            // Ghost softness is px@comp (K-558) and already raster pixels
+            // here, so the radius is the number itself over the flare
+            // buffer's own divisor — a distance the K-267 padding does not
+            // change; the passes run over the padded buffer.
             let radius = {
-                let diag = ((fw * fw + fh * fh) as f32).sqrt();
-                ((op.ghost_softness.clamp(0.0, 2.0) * 0.01 * diag).round() as u32).min(80)
+                let r = op.ghost_softness.max(0.0) / op.flare_div.max(1) as f32;
+                (r.round() as u32).min(80)
             };
             if radius > 0 {
                 let scratch_tex = work_texture(ctx, fpw, fph, "fx-lens-flare-blur-scratch");

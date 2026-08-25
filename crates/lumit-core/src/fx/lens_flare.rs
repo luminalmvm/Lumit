@@ -57,8 +57,8 @@ pub struct LensFlareParams {
     pub aperture_softness: f32,
     /// Gain on the ghost train alone.
     pub ghost_intensity: f32,
-    /// Softens the rendered ghosts (K-261): a box-blur radius as a
-    /// percentage of the frame diagonal (3 passes approximate a Gaussian).
+    /// Softens the rendered ghosts (K-261): a box-blur radius in raster
+    /// pixels (3 passes approximate a Gaussian), px@comp since K-558.
     /// This is FlareSim's Ghost Blur — a touch of out-of-focus softness
     /// that also hides the point-splat grain at lower qualities.
     pub ghost_softness: f32,
@@ -4107,13 +4107,14 @@ pub fn cpu_flare(
     // The pyramid's levels sum into the flat buffer (K-380) — the WGSL
     // resolve, op for op.
     deposit.resolve(&mut out);
-    // Blur radius from the BASE dims (the look must not change with the
-    // padding), applied over the padded raster.
+    // The radius is a distance the padding does not change (K-267), applied
+    // over the padded raster; the flare buffer's own divisor is what it is
+    // measured in.
     blur_flare(
         &mut out,
         rw,
         rh,
-        ghost_blur_radius(p.ghost_softness, w, h),
+        ghost_blur_radius(p.ghost_softness, quality_ladder(p.quality).2),
         3,
     );
     out
@@ -4168,17 +4169,23 @@ pub(crate) fn blur_flare(buf: &mut [f32], w: u32, h: u32, radius_px: u32, passes
     }
 }
 
-/// The Ghost-softness blur radius in pixels for a buffer size: the dial is
-/// a percentage of the frame diagonal (0.3 ≈ FlareSim's suggested 0.003).
+/// The Ghost-softness blur radius, whole pixels of the flare buffer.
+///
+/// The dial is px@comp since K-558 — a blur radius is a distance, so it is
+/// pixels — and by the time it is here it is already raster pixels, the preview
+/// factor included. `flare_div` is the flare buffer's own divisor (2 on Draft,
+/// else 1): the buffer is that much smaller than the raster, so the radius over
+/// it is that much smaller too, and Draft softens by the same distance as the
+/// tier above it rather than twice as much.
 ///
 /// Capped at [`MAX_BLUR_RADIUS_PX`] (K-262): the box blur is a naive
-/// `2r+1`-tap loop run six times, so an uncapped 2% radius on a 4K frame
-/// submits ~1000 taps per pixel — firmly in GPU-timeout territory. Three
+/// `2r+1`-tap loop run six times, so an uncapped radius of a couple of hundred
+/// pixels submits ~1000 taps per pixel — firmly in GPU-timeout territory. Three
 /// passes of an 80 px box already read as a heavy defocus, so the cap
 /// costs nothing anyone can see.
-pub fn ghost_blur_radius(softness: f32, w: u32, h: u32) -> u32 {
-    let diag = ((w * w + h * h) as f32).sqrt();
-    ((softness.clamp(0.0, 2.0) * 0.01 * diag).round() as u32).min(MAX_BLUR_RADIUS_PX)
+pub fn ghost_blur_radius(softness_px: f32, flare_div: u32) -> u32 {
+    let r = softness_px.max(0.0) / flare_div.max(1) as f32;
+    (r.round() as u32).min(MAX_BLUR_RADIUS_PX)
 }
 
 /// See [`ghost_blur_radius`].

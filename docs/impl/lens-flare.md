@@ -340,8 +340,14 @@ row outward as a smear.
 
 The additive raster (hardware, one-one blend, fp16 buffer; Draft at half resolution) is
 followed by the **Ghost blur**: 3 separable box passes (≈ Gaussian) at a radius of
-`Ghost softness × 0.01 × frame diagonal` — FlareSim's Ghost Blur, a touch of
+`Ghost softness ÷ flare divisor`, rounded — FlareSim's Ghost Blur, a touch of
 out-of-focus softness that also hides the point-splat grain at low qualities.
+Ghost softness is **px@comp** since K-558 (a blur radius is a distance, not a share of
+the diagonal), so it arrives in raster pixels with the §2.3 preview factor already in it;
+the divisor is the flare buffer's own (2 on Draft, else 1), which is what makes Draft
+soften by the same distance as the tier above it rather than twice as much. A project
+saved before the conversion has its per cent scaled by the comp's diagonal on load
+(schema v11 → v12).
 
 The blur radius is capped at 80 px (K-262) and the sum runs through a **workgroup line
 cache** (K-263): a workgroup covers 64 consecutive pixels along the blur axis, so the

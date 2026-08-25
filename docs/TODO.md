@@ -25,10 +25,6 @@ format is the owner's own later; Mix keeps its name (K-563); multi-window stays 
 (K-449).
 
 **FP1 - units and semantics (engine first).**
-- The K-558 sweep: Radial blur centre, Beam length, Vegas segment length, Card wipe
-  transition width, Tile width/height (identity kept via `instantiate_for_raster`),
-  Lens flare `ghost_softness` - all to px@comp, each with its compat read, version
-  bump, before-and-after, and the AE-import conversion-table update in the same commit.
 - Threshold's matte moves the level per pixel (K-559), with its `check_matte_claim` row.
 - Fast motion blur (and Datamosh) on adjustment and Precomp layers: build the
   below-stack at the neighbour time, measure flow between the two composites on the

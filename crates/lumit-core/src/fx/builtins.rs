@@ -378,6 +378,21 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
             }
             e.effect.version = 2;
         }
+        // Lens flare v11 → v12: Ghost softness was a per cent of the frame's
+        // *diagonal* — K-419's one surviving exception, closed by K-558 — so
+        // the diagonal is the basis it converts against.
+        if e.effect.match_name == "lens_flare" && e.effect.version < 12 {
+            let diag = w.hypot(h);
+            for p in &mut e.params {
+                if p.id != "ghost_softness" {
+                    continue;
+                }
+                if let EffectValue::Float(prop) = &mut p.value {
+                    scale_property(prop, diag / 100.0);
+                }
+            }
+            e.effect.version = 12;
+        }
     }
 }
 

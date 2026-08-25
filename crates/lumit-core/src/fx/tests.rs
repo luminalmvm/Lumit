@@ -7174,6 +7174,56 @@ fn tiles_percent_sizes_convert_axis_by_axis() {
     }
 }
 
+// Lens flare's Ghost softness was a per cent of the frame *diagonal* — K-419's
+// one surviving exception, closed by K-558 — so its conversion is the only one
+// in the sweep that reads a diagonal: 1 % of a 1080p frame's 2202.9 px is
+// 22.03 pixels of blur, and the flare that saved is the flare that loads.
+#[test]
+fn lens_flares_percent_softness_converts_against_the_diagonal() {
+    let mut inst = instantiate("lens_flare").unwrap();
+    inst.effect.version = 11;
+    for p in &mut inst.params {
+        if p.id == "ghost_softness" {
+            p.value = EffectValue::Float(Property::fixed(1.0));
+        }
+    }
+    let mut effects = vec![inst];
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    let read = |effects: &[crate::model::EffectInstance]| match effects[0].param("ghost_softness") {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        _ => panic!("ghost_softness must be a float"),
+    };
+    let want = 1920.0f64.hypot(1080.0) / 100.0;
+    assert!((read(&effects) - want).abs() < 1e-9);
+    assert_eq!(effects[0].effect.version, 12);
+    // Read twice, converted once.
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    assert!((read(&effects) - want).abs() < 1e-9, "idempotent");
+}
+
+// And the arithmetic it now feeds: the radius is the number itself, over the
+// flare buffer's own divisor so Draft softens by the same distance as the tier
+// above it, capped where K-262 caps it. The declared default is under half a
+// pixel and rounds to no blur at all, which is the picture K-264 shipped.
+#[test]
+fn the_ghost_blur_radius_is_the_distance_it_is_given() {
+    use crate::fx::lens_flare::{ghost_blur_radius, MAX_BLUR_RADIUS_PX};
+    assert_eq!(ghost_blur_radius(0.44, 1), 0, "the default is no blur");
+    assert_eq!(ghost_blur_radius(0.0, 1), 0);
+    assert_eq!(ghost_blur_radius(22.0, 1), 22);
+    // Draft renders the flare at half size, so the same distance is half the
+    // radius over that buffer.
+    assert_eq!(ghost_blur_radius(22.0, 2), 11);
+    assert_eq!(
+        ghost_blur_radius(1e6, 1),
+        MAX_BLUR_RADIUS_PX,
+        "the cap holds a GPU timeout off"
+    );
+    // A negative number cannot arrive through the schema's hard floor, and
+    // must not turn into a huge radius if it ever did (14 §4: no panics).
+    assert_eq!(ghost_blur_radius(-5.0, 1), 0);
+}
+
 // And the arithmetic those pixels now feed: `packed` divides each size through
 // the raster it is drawn on, so a fresh whole-frame Tile is the identity's
 // 1.0 and a half-frame tile is a 2x2 repeat at any raster.
@@ -7794,7 +7844,10 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
         roundness: 0.15,
         aperture_softness: 0.05,
         ghost_intensity: 1.0,
-        ghost_softness: 0.05,
+        // px@comp since K-558. The old 0.05 % of a 96x54 diagonal was a
+        // twentieth of a pixel and rounded to no blur; half a pixel is the
+        // same picture, said in the unit the dial now speaks.
+        ghost_softness: 0.5,
         max_ghosts: 60,
         dispersion: 1.0,
         coating: 0.75,
@@ -10385,6 +10438,9 @@ fn every_parameter_declares_a_unit() {
             ("lens_flare", "light_y"),
             ("lens_flare", "source_width"),
             ("lens_flare", "source_height"),
+            // K-558: the ghost blur's radius is a distance, and K-419's one
+            // remaining per cent of the diagonal was this one.
+            ("lens_flare", "ghost_softness"),
             ("drop_shadow", "distance"),
             ("drop_shadow", "softness"),
             ("roughen_edges", "border"),
