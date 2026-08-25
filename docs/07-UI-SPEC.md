@@ -920,6 +920,10 @@ touching the file (K-024):
   first-class; common capture rates offered as one-click choices).
 - **Alpha**: ignore / straight / premultiplied (with matte colour), plus a *guess* action.
 - **Colour space tag**: the footage's colour space for conversion into the working space.
+  Until this dialogue exists as drawn, the row's list is carried by a **Colour space** submenu
+  on the item's context menu (K-490, docs/impl/ocio.md §6.5) — the built-in interpretation,
+  then the loaded configuration's own names — and that submenu is replaced when the dialogue
+  lands.
 - **Loop**: loop count for stills/sequences and short loops.
 - **Fields/pulldown**: deliberately out of scope for v1 (gaming footage is progressive);
   the dialogue reserves space for it.
@@ -2400,7 +2404,14 @@ what-it-does, control-on-the-right) in a window of its own, and it exists so tha
   states what is being used instead, in the calm voice; the project keeps the value its author
   chose and nothing is rewritten behind the user's back.
 
-Colour management and export defaults land here when they are built, not in Settings. The disk
+- **Colour** (K-490, docs/impl/ocio.md §6.4) — the project's OCIO configuration: a row holding
+  the path with *Choose…* and *Clear*, a line under it saying what was read ("Loaded: 42 colour
+  spaces, 3 displays") or, in one calm sentence, why the file named is not in force; and a
+  read-only **Working space** row stating the space the compositing arithmetic runs in, which
+  v1 fixes at linear Rec. 709. There is no separate relink: *Choose…* is how a configuration
+  that moved is pointed at again.
+
+Export defaults land here when they are built, not in Settings. The disk
 cache's *Applies to* row stays in Settings ▸ Performance (K-215): choosing between the two
 scopes is that control's whole job, so it is the one that stands in both.
 

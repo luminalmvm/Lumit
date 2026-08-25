@@ -52,8 +52,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -212,18 +214,29 @@ Future<void> showExportDialogFrb({
   // the modal is an overlay, and what is above it in the tree is not what is
   // above the window that opened it.
   List<double>? roi = region;
-  if (roi == null) {
-    try {
-      roi = context.read<LumitUiState>().regionOfInterest;
-    } catch (_) {
-      roi = null;
-    }
+  BridgeColourSummary colour = noColourConfig;
+  ProjectReference? project;
+  try {
+    final ui = context.read<LumitUiState>();
+    roi ??= ui.regionOfInterest;
+    // The project's colour config, off the held summary rather than the file
+    // (K-490) — its space names fill the Colour section's dropdown.
+    colour = ui.colourSummary;
+  } catch (_) {
+    roi = region;
+  }
+  try {
+    project = context.read<LumitState>().project;
+  } catch (_) {
+    project = null;
   }
   return showLumitModal<void>(
     context: context,
     id: 'export',
     builder: (close) => _ExportDialog(
       comp: comp,
+      project: project,
+      colour: colour,
       picker: picker,
       region: roi,
       onClose: () => close(null),
@@ -233,12 +246,22 @@ Future<void> showExportDialogFrb({
 
 class _ExportDialog extends StatefulWidget {
   final CompositionReference comp;
+
+  /// The project, for the one colour question only it can answer: whether a
+  /// named space can actually be delivered right now (K-490). Null where the
+  /// dialog was raised without one, which leaves the config section off.
+  final ProjectReference? project;
+
+  /// The colour config's names as the shell holds them.
+  final BridgeColourSummary colour;
   final Future<String?> Function()? picker;
   final List<double>? region;
   final VoidCallback onClose;
 
   const _ExportDialog({
     required this.comp,
+    required this.project,
+    required this.colour,
     required this.picker,
     required this.region,
     required this.onClose,
@@ -336,6 +359,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// stored name (K-498). Empty is sRGB / Rec. 709, which is a pass-through.
   String _colourSpace = '';
 
+  /// Why each of the config's spaces cannot be delivered, for the ones that
+  /// cannot (K-490, K-485's disabled-not-hidden). Worked out once as the
+  /// dialog opens — the config cannot change while it is up, and asking per
+  /// rebuild would cross the bridge once per name per frame.
+  final Map<String, String> _colourRefused = {};
+
   int _cropTop = 0;
   int _cropLeft = 0;
   int _cropBottom = 0;
@@ -406,6 +435,22 @@ class _ExportDialogState extends State<_ExportDialog> {
       // itself will refuse with the engine's own words.
     }
     _sampleRates = exportAudioRates().map((r) => r.toInt()).toList();
+    // Which of the config's spaces this project can actually deliver. A space
+    // whose chain does not bake — a 3D look-up table asked for backwards, say —
+    // is listed and dead rather than missing, so the reader is not left
+    // hunting for a name they know the config has.
+    final project = widget.project;
+    if (project != null) {
+      for (final space in widget.colour.spaces) {
+        try {
+          if (!project.canDeliverColourSpace(name: space)) {
+            _colourRefused[space] = l10n.tipExportColourSpaceUnavailable;
+          }
+        } catch (_) {
+          _colourRefused[space] = l10n.tipExportColourSpaceUnavailable;
+        }
+      }
+    }
     _presets = exportPresetList();
     // The dialog opens on the first built-in — *Master*, the composition's own
     // frame at a worked-out bitrate — rather than a blank Custom: a fresh
@@ -1424,13 +1469,15 @@ class _ExportDialogState extends State<_ExportDialog> {
     );
   }
 
-  /// Colour: the five built-in spaces this build transforms to, and the honest
-  /// shape of the one it does not. The list a format offers is the format's
-  /// own (K-498): a container that can state its colour carries all five, and
-  /// a still — which states none — is offered only the space an untagged file
-  /// is universally taken to be. An OCIO output space is modelled all the way
-  /// through (`ColourSpace::Ocio`) and refused before a frame is rendered, so
-  /// the row names it and leaves it dead rather than pretending it is there.
+  /// Colour: the five built-in spaces this build transforms to, and — once the
+  /// project names a colour config — every output space that config offers
+  /// (K-490). The list a format offers is the format's own (K-498): a
+  /// container that can state its colour carries all five built-ins, and a
+  /// still — which states none — is offered only the space an untagged file is
+  /// universally taken to be. A config's space rides on top of that list
+  /// whatever the container can state, because an OCIO export is written
+  /// untagged by design (docs/impl/ocio.md §5.2); what refuses it is the
+  /// config, not the format, and `_colourRefused` is where that answer is.
   Widget _colourGroup(LumitTheme t) => _group(
         t,
         ExportSection.colour,
@@ -1443,11 +1490,17 @@ class _ExportDialogState extends State<_ExportDialog> {
               t,
               id: 'export-colour-space',
               value: _colourSpace,
-              options: _caps.colourSpaces.isEmpty
-                  ? [_colourSpace]
-                  : _caps.colourSpaces,
+              options: _colourOptions,
               label: _colourSpaceLabel,
-              onChanged: _caps.colourSpaces.length > 1
+              // The config's names are the user's own words and never go
+              // through the label table (K-303); the heading over them is
+              // ours.
+              group: (v) => widget.colour.spaces.contains(v) &&
+                      !_caps.colourSpaces.contains(v)
+                  ? l10n.colourSpaceFromConfig
+                  : null,
+              disabledReason: (v) => _colourRefused[v],
+              onChanged: _colourOptions.length > 1
                   ? (v) => _edit(() => _colourSpace = v)
                   : null,
             ),
@@ -1456,12 +1509,25 @@ class _ExportDialogState extends State<_ExportDialog> {
             t,
             l10n.exportColourManagement,
             _dead(
-                t, 'export-ocio', l10n.exportColourOcio, l10n.tipExportAfterV1),
+              t,
+              'export-ocio',
+              widget.colour.path.isEmpty
+                  ? l10n.exportColourOcio
+                  : widget.colour.path,
+              l10n.tipExportColourManagedBy,
+            ),
           ),
           // What the container will actually do with the choice, said where
           // the choice is made: a wide-gamut file carrying no label is read as
           // sRGB and comes back looking wrong.
-          if (_caps.colourSpaces.length > 1)
+          // A file written through a config's transform carries no reliable
+          // primaries or transfer to state, so it is written untagged rather
+          // than mis-tagged (docs/impl/ocio.md §5.2) — said here, where the
+          // choice is made.
+          if (_colourFromConfig && _caps.colourSpaces.isNotEmpty)
+            _reading(t, l10n.exportColourConfigUntagged,
+                key: const ValueKey('export-colour-tagging'))
+          else if (_caps.colourSpaces.length > 1)
             _reading(t, l10n.exportColourStated,
                 key: const ValueKey('export-colour-tagging'))
           else if (_caps.colourSpaces.isNotEmpty)
@@ -1470,6 +1536,27 @@ class _ExportDialogState extends State<_ExportDialog> {
           _reading(t, l10n.exportColourNote),
         ],
       );
+
+  /// The dropdown's list: the format's own built-in spaces, then the loaded
+  /// config's, and always the stored value even where neither offers it — a
+  /// preset naming a space this format cannot state must still read back as
+  /// what it says, not as something else.
+  List<String> get _colourOptions => [
+        if (_caps.colourSpaces.isEmpty) _colourSpace,
+        ..._caps.colourSpaces,
+        // Only where the container carries a picture at all: a sound file has
+        // no colour to write, and its empty capability row says so.
+        if (_caps.colourSpaces.isNotEmpty)
+          for (final space in widget.colour.spaces)
+            if (!_caps.colourSpaces.contains(space)) space,
+      ];
+
+  /// Whether the chosen space came out of the project's colour config rather
+  /// than the built-in family — which decides whether the file can be tagged
+  /// at all. A built-in the *format* cannot state is a different matter, and
+  /// the format's own reading says that.
+  bool get _colourFromConfig =>
+      widget.colour.loaded && widget.colour.spaces.contains(_colourSpace);
 
   /// A stored colour-space name in the words the row shows. An OCIO config's
   /// space is shown as it arrived — it is the user's own word, like a codec

@@ -8993,5 +8993,80 @@
   "graphNoStream": "No stream",
   "@graphNoStream": {
     "description": "Graph panel and the driven rows in Effect controls and the Node panel. Names the state of a box that reads a points stream and has nothing wired into its Points socket, and of any parameter such a box is driving — used as the row's word and as the tooltip on the node's warning mark. Two words, per the tooltip rule."
+  },
+  "fileTypeOcioConfig": "OpenColorIO configuration",
+  "@fileTypeOcioConfig": {
+    "description": "The file-picker filter shown when choosing the project's colour configuration in Project settings. OpenColorIO is the name of the industry standard and is never translated."
+  },
+  "viewerColourConfigOff": "Config not in force",
+  "@viewerColourConfigOff": {
+    "description": "The Viewer header's colour-pipeline picker, on its closed face. The project names a colour configuration but it is missing or unusable, so the picture is being shown through the built-in transform instead. Short: it sits on a 22px strip. Config is short for configuration."
+  },
+  "viewerColourViewFace": "{view} — {display}",
+  "@viewerColourViewFace": {
+    "description": "The Viewer header's colour-pipeline picker, on its closed face, naming the view the picture is shown through. Both words come out of the user's own colour configuration file and stay exactly as they are; only the punctuation between them is ours.",
+    "placeholders": {
+      "view": { "type": "String" },
+      "display": { "type": "String" }
+    }
+  },
+  "colourSpace": "Colour space",
+  "@colourSpace": {
+    "description": "The Project panel's item menu: a submenu on a footage row, for saying which colour space that footage arrived in."
+  },
+  "colourSpaceFromFile": "As the file says",
+  "@colourSpaceFromFile": {
+    "description": "A row in the Project panel's Colour space submenu: leave the footage to be interpreted the built-in way, from what the file itself states. The choice every clip starts on."
+  },
+  "colourSpaceFromConfig": "From the configuration",
+  "@colourSpaceFromConfig": {
+    "description": "A heading over the run of names that came out of the project's colour configuration file - in the Project panel's Colour space submenu and in the export dialog's colour-space dropdown. The names under it are the user's own and are never translated."
+  },
+  "settingsGroupColour": "Colour",
+  "@settingsGroupColour": {
+    "description": "A section heading in the Project settings window, over the colour-management rows."
+  },
+  "projectColourConfig": "Configuration",
+  "@projectColourConfig": {
+    "description": "Project settings, Colour group: the row naming the OpenColorIO configuration file this project uses."
+  },
+  "projectColourNoConfig": "No configuration: Lumit's own colour handling is in use.",
+  "@projectColourNoConfig": {
+    "description": "Project settings, Colour group: the line under the configuration row when the project names no configuration file, which is every project until somebody chooses one."
+  },
+  "projectColourLoaded": "Loaded: {spaces} colour spaces, {displays} displays.",
+  "@projectColourLoaded": {
+    "description": "Project settings, Colour group: the line under the configuration row when the file was read and is in use. A display is a monitor the configuration knows how to show pictures on; both blanks are counts.",
+    "placeholders": {
+      "spaces": { "type": "String" },
+      "displays": { "type": "String" }
+    }
+  },
+  "projectColourNotInForce": "Not in force: {reason}. The built-in colour handling is being used instead.",
+  "@projectColourNotInForce": {
+    "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
+    "placeholders": {
+      "reason": { "type": "String" }
+    }
+  },
+  "projectColourWorkingSpace": "Working space",
+  "@projectColourWorkingSpace": {
+    "description": "Project settings, Colour group: the row stating the colour space the compositing arithmetic itself is done in. A reading, not a choice."
+  },
+  "projectColourWorkingSpaceValue": "Linear Rec. 709",
+  "@projectColourWorkingSpaceValue": {
+    "description": "Project settings, Colour group: the value of the working-space row. Rec. 709 is a standard's number and stays as it is; linear describes the arithmetic."
+  },
+  "tipExportColourManagedBy": "Chosen in File ▸ Project settings",
+  "@tipExportColourManagedBy": {
+    "description": "Export dialog, Colour section: the hover reason on the Managed by row, which shows the project's colour configuration but does not change it. File and Project settings are the menu and the window of those names."
+  },
+  "tipExportColourSpaceUnavailable": "This project's colour configuration cannot deliver this space",
+  "@tipExportColourSpaceUnavailable": {
+    "description": "Export dialog, Colour section: the hover reason on a colour-space row that is listed but cannot be chosen, because the configuration cannot work out the transform it would need."
+  },
+  "exportColourConfigUntagged": "A file written through the colour configuration is left untagged rather than mis-tagged.",
+  "@exportColourConfigUntagged": {
+    "description": "Export dialog, Colour section: the line under the rows when the chosen space came out of the project's colour configuration. Such a file has no reliable header to state, so Lumit writes none rather than write a wrong one."
   }
 }

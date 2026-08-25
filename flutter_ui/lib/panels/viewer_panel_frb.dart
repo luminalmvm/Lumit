@@ -44,6 +44,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -2195,15 +2196,22 @@ Widget _menuHeading(LumitTheme t, String text) => Padding(
 /// (docs/07 §2.2 item 8, K-466).
 ///
 /// It always names the display transform the picture is being shown through:
-/// working space to display, which for now is the one built-in pair,
-/// scene-linear to sRGB (docs/06 §3.3 — OCIO slots in here later and this is
-/// the picker it will fill).
+/// working space to display. With no colour config that is the one built-in
+/// pair, scene-linear to sRGB (docs/06 §3.3); with one loaded the menu grows a
+/// section per display the config declares, each of its views a row, and the
+/// face names the view in force (K-490, docs/impl/ocio.md §6.2).
 ///
 /// **And while either preview-only control is engaged, it says so.** Exposure
 /// and the tone map live inside that same display transform (K-314) and change
 /// nothing the export will ever see. The statement that *the picture is not the
 /// export* belongs here, stated calmly rather than warned about (15-DESIGN) —
 /// a reading you can take without leaving the picture.
+///
+/// **A config that is not in force is said, not hidden.** A missing or refused
+/// one leaves the picture on the built-in transform (the calm half of K-490's
+/// asymmetry), so the face says the config is not in force and the menu carries
+/// the reason in one quiet line, in the same words the Project settings row
+/// uses.
 ///
 /// It was a read-only badge at the right-hand end of the bar until the drawing
 /// made it a picker; the tone map came with it, off a bar seat the drawing does
@@ -2223,23 +2231,25 @@ class _ColourDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final ui = Provider.of<LumitUiState>(context);
+    // A held answer, never a bridge call: the summary is fetched when the
+    // document changes and read from Dart here (K-183).
+    final summary = ui.colourSummary;
     final engaged = look.stops != 0 || look.toneMap;
+    final name = _faceName(summary, ui.colourView);
     return LumitTooltip(
       message: engaged ? l10n.tipViewerPreviewView : l10n.tipDisplayTransform,
       child: Builder(
         builder: (context) => dropdownButton(
           t: t,
           dense: true,
-          onPressed: () => _open(context, t),
+          onPressed: () => _open(context, t, ui, summary),
           face: dropdownFace(
             t,
             '',
             face: Flexible(
               child: Text(
-                engaged
-                    ? l10n.viewerDisplayTransformPreview(
-                        l10n.viewerDisplayTransform)
-                    : l10n.viewerDisplayTransform,
+                engaged ? l10n.viewerDisplayTransformPreview(name) : name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(color: engaged ? t.accent : null),
@@ -2251,24 +2261,78 @@ class _ColourDropdown extends StatelessWidget {
     );
   }
 
-  void _open(BuildContext context, LumitTheme t) {
+  /// What the closed face reads: the view in force, the built-in transform, or
+  /// — where a config is named but not usable — that it is not in force.
+  static String _faceName(BridgeColourSummary summary, List<String>? view) {
+    if (view != null && view.length == 2) {
+      return l10n.viewerColourViewFace(view.last, view.first);
+    }
+    if (summary.path.isNotEmpty && !summary.loaded) {
+      return l10n.viewerColourConfigOff;
+    }
+    return l10n.viewerDisplayTransform;
+  }
+
+  void _open(BuildContext context, LumitTheme t, LumitUiState ui,
+      BridgeColourSummary summary) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
+    final view = ui.colourView;
+    final problem = summary.path.isEmpty || summary.loaded
+        ? null
+        : colourProblem(summary.problem, {
+              for (final arg in summary.problemArgs) arg.name: arg.value,
+            }) ??
+            summary.problemEnglish;
     showMenuAt<void>(
       context: context,
       position: box.localToGlobal(Offset(0, box.size.height + 2)),
       rows: (close) => [
-        // The one transform there is. It is ticked because it is in force,
-        // and it is a row rather than a label because the list grows the day
-        // a second one exists.
+        // The built-in transform: the no-config face, and where a view is in
+        // force this is how to come back to it.
         MenuRow(
           key: const ValueKey('viewer-colour-transform'),
-          onPressed: () => close(null),
+          onPressed: () {
+            close(null);
+            ui.setColourView(null);
+          },
           child: Row(children: [
-            menuTick(t, true),
+            menuTick(t, view == null),
             Text(l10n.viewerDisplayTransform),
           ]),
         ),
+        // Why the config is not doing anything, said where the picture is
+        // named rather than left for the user to find in the settings.
+        if (problem != null && problem.isNotEmpty)
+          Padding(
+            key: const ValueKey('viewer-colour-problem'),
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+            child: SizedBox(
+              width: 260,
+              child: Text(problem, style: t.small.copyWith(color: t.textMuted)),
+            ),
+          ),
+        // One section per display, its views the rows — the config's own
+        // words, in the config's own order, never translated (K-303).
+        for (final display in summary.displays) ...[
+          _menuHeading(t, display.name),
+          for (final name in display.views)
+            MenuRow(
+              key: ValueKey<String>('viewer-colour-view-${display.name}-$name'),
+              onPressed: () {
+                close(null);
+                ui.setColourView([display.name, name]);
+              },
+              child: Row(children: [
+                menuTick(
+                    t,
+                    view != null &&
+                        view.first == display.name &&
+                        view.last == name),
+                Text(name),
+              ]),
+            ),
+        ],
         if (showToneMap)
           MenuRow(
             key: const ValueKey('viewer-tone-map'),

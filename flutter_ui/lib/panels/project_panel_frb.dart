@@ -2322,8 +2322,17 @@ Future<void> showProjectMenuFrb({
   final isComp = item is ItemReference_Composition;
   // The comp the sound would land in (K-435). Read once, here, rather than in
   // the row's build: the menu is a gesture, not a rebuild path.
-  final openComp =
-      Provider.of<LumitUiState>(context, listen: false).selectedComp;
+  final ui = Provider.of<LumitUiState>(context, listen: false);
+  final openComp = ui.selectedComp;
+  // The colour config's own space names, off the summary the shell holds, and
+  // what this item is set to now (K-490). Both read here — raising a menu is a
+  // gesture, and `colour_space` is a document read.
+  final colourSpaces =
+      ui.colourSummary.loaded ? ui.colourSummary.spaces : const <String>[];
+  final colourSpace = switch (item) {
+    ItemReference_Footage(:final field0) => field0.colourSpace(),
+    _ => null,
+  };
   // Read here rather than inside the popup's builder: the popup is raised in
   // its own route, so it has no ThemeScope of the panel's above it.
   final menuTheme = ThemeScope.of(context).theme;
@@ -2407,6 +2416,81 @@ Future<void> showProjectMenuFrb({
               ),
             ],
           ],
+          // **What colour space this footage arrived in** (K-490,
+          // docs/impl/ocio.md §6.5). A submenu rather than a row, because the
+          // answer is a name out of the project's colour config and there may
+          // be forty of them. This is the smallest honest surface until
+          // *Interpret footage…* exists as drawn (docs/07 §3.2), and it is
+          // replaced when that dialogue lands.
+          //
+          // The names are the config's own and cross verbatim (K-303). A name
+          // assigned while a config that has since gone was loaded is still
+          // listed, ticked, because it is the user's statement about the file
+          // and the menu must not pretend it was never made.
+          if (item case ItemReference_Footage(:final field0))
+            SubmenuRow(
+              key: const ValueKey('project-menu-colour-space'),
+              closeParent: () => close(null),
+              submenu: (dismiss) => FloatSurface(
+                width: 210,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // The built-in interpretation: what a file says about
+                    // itself, which is where every footage item starts.
+                    MenuRow(
+                      key: const ValueKey('project-menu-colour-space-none'),
+                      onPressed: () {
+                        dismiss();
+                        field0.setColourSpace();
+                        onLocalEdit();
+                      },
+                      child: Row(children: [
+                        SizedBox(
+                            width: 16,
+                            child:
+                                colourSpace == null ? const Text('✓') : null),
+                        Expanded(child: Text(l10n.colourSpaceFromFile)),
+                      ]),
+                    ),
+                    if (colourSpaces.isNotEmpty ||
+                        (colourSpace != null &&
+                            !colourSpaces.contains(colourSpace)))
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+                        child: Text(l10n.colourSpaceFromConfig,
+                            style: menuTheme.small
+                                .copyWith(color: menuTheme.textMuted)),
+                      ),
+                    for (final space in [
+                      if (colourSpace != null &&
+                          !colourSpaces.contains(colourSpace))
+                        colourSpace,
+                      ...colourSpaces,
+                    ])
+                      MenuRow(
+                        key: ValueKey<String>(
+                            'project-menu-colour-space-$space'),
+                        onPressed: () {
+                          dismiss();
+                          field0.setColourSpace(space: space);
+                          onLocalEdit();
+                        },
+                        child: Row(children: [
+                          SizedBox(
+                              width: 16,
+                              child: space == colourSpace
+                                  ? const Text('✓')
+                                  : null),
+                          Expanded(child: Text(space)),
+                        ]),
+                      ),
+                  ],
+                ),
+              ),
+              child: Text(l10n.colourSpace),
+            ),
           // The colour tag, as the strip itself rather than a submenu: the
           // chips ARE the choice, so putting them on the menu row costs one
           // click where a submenu costs two and a hover in between. The same

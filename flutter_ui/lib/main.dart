@@ -34,6 +34,7 @@ import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeNodeRef;
@@ -556,6 +557,19 @@ class LumitNotice {
   final bool error;
   const LumitNotice(this.message, {this.error = false});
 }
+
+/// What [LumitUiState.colourSummary] reads before anything has been asked, and
+/// whenever the project names no OCIO config: the built-in colour family, which
+/// is what every project written before K-490 uses.
+const BridgeColourSummary noColourConfig = BridgeColourSummary(
+  path: '',
+  loaded: false,
+  problem: '',
+  problemArgs: [],
+  problemEnglish: '',
+  spaces: [],
+  displays: [],
+);
 
 class LumitUiState extends ChangeNotifier {
   /// Everything that outlives the session: the panel layout, the appearance,
@@ -1501,6 +1515,11 @@ class LumitUiState extends ChangeNotifier {
     // clear the fronted comp and the selection.
     _sessionProject = _app.project;
     _app.addListener(_adoptProjectSession);
+    // The colour config is a document property, so it can only change when the
+    // document does — which is exactly when this fires. Held from here on, so
+    // no rebuild path ever asks (K-490, docs/impl/ocio.md §6.1).
+    _app.addListener(refreshColourSummary);
+    refreshColourSummary();
     // Where the playhead was left is worth keeping, and it moves far too often
     // to write down each time. So it is captured when the user steps away from
     // the window and when they close it, alongside the deliberate acts below.
@@ -1629,6 +1648,7 @@ class LumitUiState extends ChangeNotifier {
   @override
   void dispose() {
     _app.removeListener(_adoptProjectSession);
+    _app.removeListener(refreshColourSummary);
     _lifecycle.dispose();
     sub?.cancel();
     _changes?.cancel();
@@ -1710,12 +1730,80 @@ class LumitUiState extends ChangeNotifier {
     return (stops: stored.stops, toneMap: false);
   }
 
-  /// The whole look the engine was last told — exposure, tone map and the
-  /// transparency grid — or null when a freshly adopted worker has been told
-  /// nothing yet. One record for the three, because they travel as one
-  /// message ([pushViewerLook]) and a push can be skipped only when *all* of
-  /// it is already in force.
-  ({double stops, bool toneMap, bool grid, String roi})? _pushedView;
+  /// The whole look the engine was last told — exposure, tone map, the
+  /// transparency grid and the colour view — or null when a freshly adopted
+  /// worker has been told nothing yet. One record for the four, because they
+  /// travel as one message ([pushViewerLook]) and a push can be skipped only
+  /// when *all* of it is already in force.
+  ({
+    double stops,
+    bool toneMap,
+    bool grid,
+    String roi,
+    String view
+  })? _pushedView;
+
+  // --- The project's colour config (K-490) ----------------------------------
+
+  /// The project's OCIO config as the interface reads it: its path, whether it
+  /// is in force, why not when it is not, and every name it puts in a picker
+  /// (docs/impl/ocio.md §6.1).
+  ///
+  /// **Held, never asked for in a build.** `colourSummary()` reads the config
+  /// file to see whether it has changed on disk, so a widget that asked for it
+  /// while rebuilding would stat a file per frame. It is fetched when the
+  /// document changes — which is when it can differ — and every surface reads
+  /// this field (K-183, and the bridge-call budget test).
+  BridgeColourSummary colourSummary = noColourConfig;
+
+  /// The `[display, view]` the Viewer is showing through, or null for the
+  /// built-in transform. Session state rather than the document's: choosing
+  /// how to look at a picture is not an edit, and it must never reach an
+  /// export (docs/impl/ocio.md §6.1).
+  List<String>? _colourView;
+  List<String>? get colourView => _colourView;
+
+  /// Show the picture through one of the config's views, or through the
+  /// built-in transform (null). The push and the re-render are
+  /// [pushViewerLook]'s — the view is part of the one look message.
+  void setColourView(List<String>? view) {
+    if (_colourView?.join(' ') == view?.join(' ')) return;
+    _colourView = view == null ? null : List.of(view);
+    notifyListeners();
+    pushViewerLook();
+  }
+
+  /// Ask the engine what the project's colour config is now.
+  ///
+  /// Hung off the app state's own notifications, so it happens once per
+  /// document change and nowhere else. A view naming a display the new config
+  /// has not got is dropped rather than pushed at a renderer that would refuse
+  /// it: the names in a picker belong to the config that is loaded.
+  void refreshColourSummary() {
+    BridgeColourSummary next;
+    try {
+      next = _app.project?.colourSummary() ?? noColourConfig;
+    } catch (_) {
+      // No project, or one that has gone. The built-in family is the honest
+      // answer either way.
+      next = noColourConfig;
+    }
+    if (next == colourSummary) return;
+    colourSummary = next;
+    if (!_viewIsOffered(next)) _colourView = null;
+    notifyListeners();
+    pushViewerLook();
+  }
+
+  bool _viewIsOffered(BridgeColourSummary summary) {
+    final view = _colourView;
+    if (view == null) return true;
+    if (!summary.loaded || view.length != 2) return false;
+    for (final display in summary.displays) {
+      if (display.name == view.first) return display.views.contains(view.last);
+    }
+    return false;
+  }
 
   /// The Viewer's **region of interest** per comp (K-362): the sub-rectangle
   /// the engine composites, as comp fractions `[u0, v0, u1, v1]`. Rides the
@@ -1876,6 +1964,11 @@ class LumitUiState extends ChangeNotifier {
       // Compared as text: a record holding a list compares by identity, so two
       // equal regions would look different and re-push on every fronting.
       roi: roi?.join(',') ?? '',
+      // And the colour view for the same reason. **It rides every call**: the
+      // engine is told the look *whole*, so a message that left the view out
+      // would not leave it alone — it would say "no view" and the picture
+      // would quietly fall back to the built-in transform.
+      view: _colourView?.join(' ') ?? '',
     );
     if (target == _pushedView) return;
     try {
@@ -1884,6 +1977,7 @@ class LumitUiState extends ChangeNotifier {
         toneMap: target.toneMap,
         transparentBackground: target.grid,
         region: roi == null ? null : Float32List.fromList(roi),
+        colourView: _colourView,
       );
     } catch (_) {
       // No worker yet, or a comp that has gone. The next change asks again —
@@ -2000,6 +2094,8 @@ class LumitUiState extends ChangeNotifier {
       playheadFrame.value = 0;
       viewerLooks.clear();
       previewResolutions.clear();
+      // Another project's colour config names another project's views.
+      _colourView = null;
       // A new project is a new worker, and a new worker is born knowing
       // nothing of this session's look — the null record is what makes the
       // first front tell it everything, the grid included.

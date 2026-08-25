@@ -98,6 +98,17 @@ Future<String?> pickPresetSaveLocation(String suggestedName,
   return location?.path;
 }
 
+/// The OCIO configuration type group (K-490): the config file itself, which is
+/// `config.ocio` by convention but need not be named that.
+XTypeGroup _ocioGroup() =>
+    XTypeGroup(label: l10n.fileTypeOcioConfig, extensions: const ['ocio']);
+
+/// Pick a colour config for the project, or null when cancelled.
+Future<String?> pickOcioConfig() async {
+  final file = await openFile(acceptedTypeGroups: [_ocioGroup()]);
+  return file?.path;
+}
+
 /// The keymap type group (docs/07 §15's shareable file, K-199). Plain JSON, so
 /// a `.json` a user has renamed still opens.
 XTypeGroup _keymapGroup() =>

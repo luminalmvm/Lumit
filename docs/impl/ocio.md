@@ -663,6 +663,37 @@ section with disabled-not-hidden refusals (§6.3), the Project settings Colour g
 gesture, the missing-state face); no-hex lint stands; the export dialog refuses an
 unavailable name with the reason in the tooltip.
 
+**Landed.** The config is chosen where §6.4 puts it — **File ▸ Project settings ▸
+Colour**, a path well with *Choose…* and *Clear*, the state line under it, and the
+fixed working space stated as a reading. There is no separate relink: choosing again
+*is* the relink, which is what a missing config's state line points at.
+
+Three shapes the note did not settle, decided in the building:
+
+- **The summary is held on `LumitUiState`, refreshed off the app state's own
+  notification.** It reads the config file, so no `build` may ask for it (K-183); a
+  document change is the only thing that can alter it, and that is exactly when
+  `LumitState` notifies. Every surface reads that one field — the picker directly, the
+  export dialog and the item menu through the context they are raised from — so there
+  is one answer on screen and the bridge-call budget stays where it was. The Project
+  settings window keeps its own copy instead, because it is the one surface that
+  *changes* the config and must show the result of its own edit immediately.
+- **The chosen view rides `_pushedView`.** The look is set whole, so the view joined the
+  record `pushViewerLook` compares and sends, encoded as text beside the region for the
+  same reason the region is. There is exactly one caller of `set_viewer_look`, which is
+  what makes that safe.
+- **A dropdown learned per-option refusal.** `BareDropdown` gained `disabledReason`, so
+  K-485's disabled-not-hidden rule works inside a list and not only on a whole control;
+  the export's colour dropdown asks `can_deliver_colour_space` once per config name as
+  the dialog opens, never per rebuild. A file written through a config's transform is
+  stated as untagged where the choice is made (§5.2).
+
+Two v1 edges worth naming. The **working-space line is the fixed sentence**: the summary
+carries no interchange/legacy flag, so §2.1's second reading ("taken as *scene_linear*")
+waits on a field for it. And the **per-item submenu lists a name the loaded config does
+not have**, ticked, when one was assigned under a config that has since gone — the name
+is the user's statement about the file and a moved path must not silently edit it.
+
 ### WP6 — The conformance suite, completed
 
 The full §7 matrix as CI: reference fixtures for both ACES configs regenerated and

@@ -8852,9 +8852,13 @@ How big is it on screen (Fit, or a percentage)? How good a preview am I being ma
 resolution, or a half or a quarter of it to keep playback moving, with the two playback
 behaviours in the same menu because they are the same question asked a second way? And
 what am I looking at — the *colour pipeline*, which is the recipe the engine uses to turn
-the numbers it works in into something a screen can show. Today there is one recipe,
-scene-linear to sRGB, so the menu lists one thing; the day Lumit reads OCIO profiles it
-lists them here. If the exposure or the tone map is turned on, that same picker adds the
+the numbers it works in into something a screen can show. With no colour configuration
+loaded there is one recipe, scene-linear to sRGB, and the menu lists that one thing; load
+one (§22) and the menu grows a section per display it declares, each of its views a row,
+with the built-in recipe still at the top as the way back. If the project names a
+configuration that is missing or unusable, the picker's face says so and the menu carries
+the reason: the picture is still being made, through the built-in recipe, and saying which
+is the whole job of this control. If the exposure or the tone map is turned on, that same picker adds the
 word "preview" and turns the accent colour: it is the Viewer saying, calmly, that what you
 are seeing is not what an export would write.
 
@@ -9272,15 +9276,25 @@ configs; the ACES ones are the well-known examples. Any program that can load a 
 speaks the same colour language as any other program that loaded it, which is the whole
 point: a Lumit project and a Nuke project can agree about what their pixels mean.
 
-**What loading a config does in Lumit.** Three lists get longer, and that is genuinely
-all. Each footage item's colour-space tag (which today has only built-in choices) offers
-the config's names, so log camera footage can be interpreted correctly on the way in. The
-Viewer's colour picker (the one in the Viewer bar that today lists a single transform)
-offers the config's "displays" and "views" — its named ways of showing linear light on a
-screen. And the export's colour-space setting accepts the config's names, so a delivered
-file can be written in a space the config defines. The config itself is a project setting:
-it travels with the `.lum`, and it is stored the way footage paths are stored, so a config
-that lives beside the project keeps working when the folder moves.
+**Where you choose one, and what choosing does.** The config is a **project** setting, not
+a machine one — it changes what the composition looks like, so it travels with the `.lum`
+and matches on somebody else's machine. It is chosen in **File ▸ Project settings ▸
+Colour**: one row holding the path, a *Choose…* button, and a line underneath saying what
+was read ("Loaded: 42 colour spaces, 3 displays") or, if the file is missing or uses
+something Lumit has not built, why it is not in force. That same *Choose…* is how a config
+that moved is pointed at again. The path is stored the way footage paths are, so a config
+living beside the project keeps working when the folder moves.
+
+Choosing one makes three lists longer, and that is genuinely all. Each footage item's
+colour-space tag — a **Colour space** submenu on its row in the Project panel — offers the
+config's names, so log camera footage can be interpreted correctly on the way in. The
+Viewer's colour picker, the third one in the strip above the picture, grows a section per
+"display" the config declares, with its "views" as the rows: the config's named ways of
+showing linear light on a screen. And the export's colour-space dropdown lists the
+config's names under a heading of their own, so a delivered file can be written in a space
+the config defines. A name in any of those lists is the config author's own word and is
+shown exactly as it was written — translating somebody's colour space would rename their
+work.
 
 **How the maths runs — and why we wrote it ourselves.** The official OCIO software is a
 big C++ library, and it deliberately computes slightly differently on the processor and

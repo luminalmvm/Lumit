@@ -128,12 +128,11 @@ These are v1-scope surfaces it does not yet match.
     upgrade is to photograph the *visible region* instead of the whole picture,
     which keeps full detail and wants the boundary moved rather than a number
     changed.
-- **The colour pipeline offers one transform** (§2.2 item 8, K-466). The header's
-    third picker is built and names the display transform the picture is shown through,
-    turning accent and adding "preview" while the exposure or the tone map is engaged
-    (K-314). Its menu lists the one built-in pair (scene-linear → sRGB) as a constant;
-    when the transform becomes a real choice (docs/06 §3.3's OCIO slot) this is the
-    picker that fills with them, and no chrome has to change to let it.
+- ~~**The colour pipeline offers one transform**~~ (§2.2 item 8, K-466) — **the picker
+    filled 2026-08-25** with the OCIO UI (K-490): the built-in pair is still the row at
+    the top and the no-config face, and a loaded config adds a section per display with
+    its views as rows. No chrome had to change to let it, which was the point of building
+    it as a picker.
 - **Degradation names a tier, not the steps it skipped** (§2.2 item 9). The bar's
     reading says the pixel count a frame was made at, which is the tier; §2.2 also asks
     that the indicator name what was degraded ("glow skipped"), and nothing reports that
@@ -556,14 +555,22 @@ set_colour_config, can_deliver_colour_space}`, `FootageReference::{colour_space,
 set_colour_space}`, the view field on `set_viewer_look`, and
 `CompositionReference::export_spec_check` (which replaced the free-standing one).
 A refusal crosses as an id plus its facts and `colourProblem` in
-`flutter_ui/lib/l10n/engine_labels.dart` writes the sentence. What remains:
+`flutter_ui/lib/l10n/engine_labels.dart` writes the sentence.
 
-- **WP5 - viewer/export/project UI**: the colour-pipeline picker's display/view
-    sections, the export dropdown's config section, the Project settings Colour group,
-    the item context-menu submenu, all arb keys (note §6.2–§6.5).
+**WP5 has landed**: the config is chosen in **File ▸ Project settings ▸ Colour** (path
+well, *Choose…*, *Clear*, the state line, the fixed working-space reading), the Viewer's
+colour picker grows a section per display with its views as rows and says calmly when a
+named config is not in force, the export's colour dropdown lists the config's spaces
+under their own heading with per-name enable off `can_deliver_colour_space`, and a
+footage row's **Colour space** submenu assigns one. What remains:
+
 - **WP6 - the conformance suite completed**: reference fixtures for both ACES configs,
     the CLF suite, out-of-domain bounds, the K-031 parity row in every configuration
     (note §7).
+- **The working-space reading has one sentence, not two** (note §2.1, §6.4): the Project
+    settings row always says "Linear Rec. 709", because `BridgeColourSummary` carries no
+    flag for a legacy config composing through its `scene_linear` role. It wants a field
+    on the summary and a second sentence behind it.
 
 ## Next - engine/bridge follow-ups
 
@@ -596,7 +603,9 @@ built-ins the container is stamped with. What is left:
   2026-08-25** (K-503), and the dialog's rows came alive the same day: every face the
   drawing shows is a live control writing into `BridgeExportSpec`, with the capability row
   deciding which of them the chosen format may honour. The one control still drawn dead is
-  the OCIO row, which is genuinely not in this build.
+  the *Managed by* row — which since the OCIO UI landed reads the project's config path
+  rather than "No OCIO configuration", and stays dead on purpose: colour management is
+  chosen in Project settings, and an export dialog must not edit the project.
 
 - **The *Still* output type is withdrawn** (K-485): a still is an image sequence of one
   frame, which the span already says, so the fourth chip the drawing offered is gone rather
