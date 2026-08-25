@@ -52,6 +52,10 @@ settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
   Precomp layers, and the layer is neither. The stack renders clean headlessly at every
   prefix cut, every solo and sixty drag ticks (a stand-in clip stood in for the 4K
   original), so if it recurs the next place to look is the Dart side.
+- The graph pane's grid step now refuses a non-finite range instead of spinning on it
+  (`gridValues`). The seam that could let an infinity into a value or a tangent speed
+  in the first place is still open: `parseNumberField` accepts "Infinity" and "NaN",
+  and only the callers' clamps stand between that and the document.
 - The dropper's banked-frame lookup names its frame with `frame_key_presynced` without
   presyncing (worker_thread.rs, `sample_pixels`) - harmless while the Viewer has just
   rendered the same comp, a full composite per pointer move when it has not.

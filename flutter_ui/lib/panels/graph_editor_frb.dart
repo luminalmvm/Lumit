@@ -4060,30 +4060,9 @@ class _GraphPainter extends CustomPainter {
     _paintGutter(canvas, size);
   }
 
-  /// The values the grid rules at: a nice step whose lines sit at least ~36 px
-  /// apart. Empty when the range is not a range at all.
-  List<double> _gridValues(Size size) {
-    final (lo, hi) = range;
-    final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
-    final rawStep = span / (size.height / 36).clamp(1, 12);
-    final magnitude = _pow10((rawStep.abs()).clamp(1e-12, double.infinity));
-    var step = magnitude;
-    for (final m in const [1.0, 2.0, 5.0, 10.0]) {
-      if (magnitude * m >= rawStep) {
-        step = magnitude * m;
-        break;
-      }
-    }
-    if (!step.isFinite || step <= 0) return const [];
-    final out = <double>[];
-    for (var v = (lo / step).ceilToDouble() * step; v <= hi; v += step) {
-      out.add(v);
-      // A range and a step that disagree by a rounding error would otherwise
-      // rule a line per pixel for ever.
-      if (out.length > 64) break;
-    }
-    return out;
-  }
+  /// The values the grid rules at ([gridValues]).
+  List<double> _gridValues(Size size) =>
+      gridValues(range.$1, range.$2, size.height);
 
   void _paintGrid(Canvas canvas, Size size) {
     final paint = Paint()
@@ -4124,18 +4103,6 @@ class _GraphPainter extends CustomPainter {
       text.paint(canvas,
           Offset(left + 4, (y - text.height - 1).clamp(0, size.height - 12)));
     }
-  }
-
-  /// The power of ten at or just under `v` (0.03 → 0.01, 30 → 10).
-  static double _pow10(double v) {
-    var p = 1.0;
-    while (p > v) {
-      p /= 10;
-    }
-    while (p * 10 <= v) {
-      p *= 10;
-    }
-    return p;
   }
 
   @override

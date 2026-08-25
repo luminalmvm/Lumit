@@ -867,3 +867,59 @@ List<BridgeKeyframe> setEnvelopeSpeed(
   final pad = (hi - lo) * 0.08;
   return (lo < dlo ? lo - pad : dlo, hi > dhi ? hi + pad : dhi);
 }
+
+// ---------------------------------------------------------------------------
+// Grid ruling.
+// ---------------------------------------------------------------------------
+
+/// The power of ten at or just under [v] (0.03 -> 0.01, 30 -> 10).
+///
+/// **Anything that is not a finite positive number answers 1**, and that
+/// refusal is the whole reason this is a named function rather than four lines
+/// in a painter. The second loop asks `p * 10 <= v`, which never stops being
+/// true once [v] is infinity: `p` climbs to 1e308, becomes infinity itself, and
+/// infinity is not greater than infinity. On the interface's own thread that is
+/// not a wrong number on a grid, it is an application that never draws again.
+double powerOfTenUnder(double v) {
+  if (!v.isFinite || v <= 0) return 1;
+  var p = 1.0;
+  while (p > v) {
+    p /= 10;
+  }
+  while (p * 10 <= v) {
+    p *= 10;
+  }
+  return p;
+}
+
+/// The values a graph pane rules its grid at between [lo] and [hi]: a nice
+/// step whose lines sit at least ~36 px apart down [height].
+///
+/// Empty when the range is not a range at all — **including a range with an
+/// infinity or a NaN at either end**. That bound used to reach
+/// [powerOfTenUnder] through a `clamp(1e-12, double.infinity)` that reads like
+/// a guard and is the opposite of one: Dart's `num.clamp` orders NaN above its
+/// upper limit, so a NaN step came back as exactly the infinity that hangs.
+/// The painter's own `isFinite` check sat below the call and never ran.
+List<double> gridValues(double lo, double hi, double height) {
+  if (!lo.isFinite || !hi.isFinite) return const [];
+  final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
+  final rawStep = span / (height / 36).clamp(1, 12);
+  final magnitude = powerOfTenUnder(rawStep.abs());
+  var step = magnitude;
+  for (final m in const [1.0, 2.0, 5.0, 10.0]) {
+    if (magnitude * m >= rawStep) {
+      step = magnitude * m;
+      break;
+    }
+  }
+  if (!step.isFinite || step <= 0) return const [];
+  final out = <double>[];
+  for (var v = (lo / step).ceilToDouble() * step; v <= hi; v += step) {
+    out.add(v);
+    // A range and a step that disagree by a rounding error would otherwise
+    // rule a line per pixel for ever.
+    if (out.length > 64) break;
+  }
+  return out;
+}

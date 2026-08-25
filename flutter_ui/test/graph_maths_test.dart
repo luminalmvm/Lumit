@@ -294,6 +294,37 @@ void main() {
       expect(parseClipboardText(''), isNull);
     });
   });
+
+  group('gridValues', () {
+    test('rules a plain range at a round step', () {
+      final out = gridValues(0, 10, 360);
+      expect(out.first, 0);
+      expect(out.last, 10);
+      expect(out.length, 11);
+    });
+
+    test('a range that is not a range rules nothing', () {
+      // Every one of these used to spin `powerOfTenUnder` for ever on the
+      // interface's own thread: the application froze where it stood and never
+      // drew another frame. A test that fails by never finishing is the honest
+      // shape for that.
+      expect(
+          gridValues(double.negativeInfinity, double.infinity, 360), isEmpty);
+      expect(gridValues(0, double.infinity, 360), isEmpty);
+      expect(gridValues(double.negativeInfinity, 0, 360), isEmpty);
+      expect(gridValues(double.nan, 1, 360), isEmpty);
+      expect(gridValues(0, double.nan, 360), isEmpty);
+    });
+
+    test('the power of ten walks down, and refuses what it cannot walk', () {
+      expect(powerOfTenUnder(30), 10);
+      expect(powerOfTenUnder(0.03), closeTo(0.01, 1e-12));
+      expect(powerOfTenUnder(double.infinity), 1);
+      expect(powerOfTenUnder(double.negativeInfinity), 1);
+      expect(powerOfTenUnder(double.nan), 1);
+      expect(powerOfTenUnder(0), 1);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
