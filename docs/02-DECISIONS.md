@@ -14758,3 +14758,13 @@ lookup per toggle per hover is exactly the pattern K-184 keeps out of the paint 
 **Everything else in the chrome still speaks words**, and will keep doing so until each
 surface is converted deliberately. This entry opens the trail; it does not iconify the
 application.
+
+## K-531 — Clay returns as the default accent; spruce stands second
+
+**DECIDED 2026-08-25.** The owner's ruling, reversing K-511 after living with it: the
+default accent is clay #e05a72 again — "I hate saying this... I love the spruce colour
+tho" — and spruce #35785E becomes the second preset, one click away. Hover now derives
+(#f26c84) rather than carrying the old hand-tuned #ea7288 in the app, keeping K-511's
+one genuine improvement: `withAccent(defaultAccent)` reproduces the dark pair. Light
+restores its own darkened clay #c23f58 (clay unaided sits under the contrast floor),
+the one scheme the derivation does not cover, said in the code. Both sites follow.

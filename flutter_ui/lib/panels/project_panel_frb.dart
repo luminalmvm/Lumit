@@ -1014,7 +1014,6 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           onLocalEdit: _documentChanged,
           onSetLabel: (picked) => _setLabel(item, picked),
           onMoveToFolder: (folder) => _fileInto(folder, _targets(item)),
-          menuTargets: () => _targets(item),
           folderChoices: () => _folderChoices(item),
           onDropItems: item is ItemReference_Folder
               ? (dropped) => _fileInto(item, dropped)
@@ -2052,12 +2051,6 @@ class _ProjectRowFrb extends StatefulWidget {
   /// A function rather than a list because a menu is a gesture: reading the
   /// tree per rebuild is exactly the chatter the budget test guards against.
   final List<(String, ItemReference)> Function() folderChoices;
-
-  /// What a command from this row's menu acts on (K-523) — the panel's own
-  /// `_targets`, which is the whole selection when this row is in it and this
-  /// row alone when it is not. A function for the same reason
-  /// [folderChoices] is: it is read when the menu is raised, never in build.
-  final List<ItemReference> Function() menuTargets;
   final Future<String?> Function()? relinkPicker;
 
   const _ProjectRowFrb({
@@ -2086,7 +2079,6 @@ class _ProjectRowFrb extends StatefulWidget {
     required this.onLocalEdit,
     required this.onSetLabel,
     required this.onMoveToFolder,
-    required this.menuTargets,
     required this.folderChoices,
     this.onDropItems,
     this.relinkPicker,
@@ -2282,7 +2274,6 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
               // Read here, not in build: raising the menu is a gesture.
               folders: widget.folderChoices(),
               onMoveToFolder: widget.onMoveToFolder,
-              targets: widget.menuTargets(),
             );
           },
           child: Container(
@@ -2613,17 +2604,6 @@ Future<void> showProjectMenuFrb({
   /// File the picked row, and the rest of the selection with it, into that
   /// folder.
   void Function(ItemReference folder)? onMoveToFolder,
-
-  /// **What the commands act on** (K-523): the whole selection when [item] is
-  /// part of it, and [item] alone when it is not — the panel's `_targets`,
-  /// which **Move to folder** already took while Delete, Move to root and the
-  /// two proxy switches beside it read the clicked row alone.
-  ///
-  /// Left off (a menu raised with no row behind it) means [item] alone.
-  /// **Make proxy stays singular** whatever is passed: a transcode is one at a
-  /// time by the engine's own design, and starting four would be refused three
-  /// times over.
-  List<ItemReference>? targets,
 }) async {
   final isFootage = item is ItemReference_Footage;
   final isComp = item is ItemReference_Composition;
@@ -2877,9 +2857,6 @@ Future<void> showProjectMenuFrb({
   if (action == null) return;
 
   if (!context.mounted) return;
-  // Everything the commands below act on (K-523), with a refusal per item so
-  // that one that has gone, or cannot do it, leaves the rest standing.
-  final acts = targets ?? [item];
   switch (action) {
     case _ProjectMenuAction.compSettings:
       if (item case ItemReference_Composition(:final field0)) {
@@ -2911,9 +2888,6 @@ Future<void> showProjectMenuFrb({
         onLocalEdit();
       }
     case _ProjectMenuAction.makeProxy:
-      // **The one command here that stays singular** (K-523): the engine runs
-      // one transcode at a time by design, so starting four would be three
-      // refusals and a notice apiece. The clicked row's, and only that.
       if (item case ItemReference_Footage(:final field0)) {
         // The engine's own refusals — one transcode at a time, and nothing to
         // read from on this machine — reach the status line as its notice,
@@ -2934,45 +2908,21 @@ Future<void> showProjectMenuFrb({
         proxyJobChanged.value++;
       }
     case _ProjectMenuAction.useProxy:
-      // The clicked row's new state, for every picked footage item that has a
-      // proxy to read from; one that has none is passed over rather than
-      // switched on to nothing.
-      final on = !(proxy?.enabled ?? false);
-      for (final target in acts) {
-        if (target case ItemReference_Footage(:final field0)) {
-          if (field0.getProxy() == null) continue;
-          try {
-            field0.setUseProxy(on_: on);
-          } catch (_) {}
-        }
+      if (item case ItemReference_Footage(:final field0)) {
+        field0.setUseProxy(on_: !(proxy?.enabled ?? false));
+        onLocalEdit();
       }
-      onLocalEdit();
     case _ProjectMenuAction.clearProxy:
-      for (final target in acts) {
-        if (target case ItemReference_Footage(:final field0)) {
-          if (field0.getProxy() == null) continue;
-          try {
-            field0.clearProxy();
-          } catch (_) {}
-        }
+      if (item case ItemReference_Footage(:final field0)) {
+        field0.clearProxy();
+        onLocalEdit();
       }
-      onLocalEdit();
     case _ProjectMenuAction.moveToRoot:
-      for (final target in acts) {
-        try {
-          target.moveToRoot();
-        } catch (_) {}
-      }
+      item.moveToRoot();
       onLocalEdit();
     case _ProjectMenuAction.delete:
       // No confirmation: it is one undo step, matching egui.
-      for (final target in acts) {
-        try {
-          target.delete();
-        } catch (_) {
-          // Already gone - a folder deleted with its parent a moment ago.
-        }
-      }
+      item.delete();
       onLocalEdit();
   }
 }

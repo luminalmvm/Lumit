@@ -2918,16 +2918,7 @@ class _DragValueFieldState extends State<DragValueField>
           return null;
         }),
       },
-      onFocusChange: (has) {
-        setState(() => _focused = has);
-        // **Tab arrives ready to type** (§12A.3, K-529). The only way this box
-        // takes focus is keyboard traversal — a click opens the editor
-        // directly — and a value well reached by Tab is one about to be
-        // retyped, so it opens its editor at once. `_beginEdit` is the call
-        // that already selects the whole value, which is the half the owner
-        // read as missing: the hop worked, the first keystroke appended.
-        if (has && !_editing) _beginEdit();
-      },
+      onFocusChange: (has) => setState(() => _focused = has),
       mouseCursor: SystemMouseCursors.resizeLeftRight,
       onShowHoverHighlight: (over) => setState(() => _hover = over),
       child: GestureDetector(

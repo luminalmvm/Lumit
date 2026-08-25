@@ -31,10 +31,10 @@
   --sl-color-gray-6: #26292c; /* hairline */
   --sl-color-hairline: #26292c;
   --sl-color-hairline-light: #3c4145;
-  --sl-color-accent: #35785e; /* spruce */
-  --sl-color-accent-high: #478a70; /* the site's hover spruce, and link text here */
-  --sl-color-accent-low: #162722; /* a quarter of the spruce over surface_0 */
-  --sl-color-text-accent: #478a70;
+  --sl-color-accent: #e05a72; /* spruce */
+  --sl-color-accent-high: #ea7288; /* the site's hover spruce, and link text here */
+  --sl-color-accent-low: #402027; /* a quarter of the spruce over surface_0 */
+  --sl-color-text-accent: #ea7288;
 }
 
 .site-title {

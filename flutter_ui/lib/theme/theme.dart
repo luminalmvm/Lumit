@@ -572,13 +572,13 @@ class LumitTheme {
     return Color.fromARGB(0xff, ch(c.r), ch(c.g), ch(c.b));
   }
 
-  /// **Spruce** — THE default accent (K-511), and the one constant to retune if
+  /// **Clay** — THE default accent again (the spruce interlude is K-511;
   /// the shade is ever re-judged: the stock dark and light schemes both build
   /// their accent pair from it, so a single edit here moves the whole family.
   /// Hover derives by the same ±0x12 step [withAccent] gives a user-picked
   /// accent (K-092), which is what makes `withAccent(defaultAccent)` reproduce
   /// each stock scheme's pair exactly rather than approximately.
-  static const defaultAccent = Color(0xff35785e);
+  static const defaultAccent = Color(0xffe05a72);
 
   /// The layer-label palette (TL2, K-188): bright, clearly distinct chips. A
   /// layer's label colours both its swatch and its bar in the lane area, and
@@ -686,8 +686,10 @@ class LumitTheme {
         textDisabled: _rgb(0x5e, 0x66, 0x6b),
         hairline: _rgb(0x26, 0x29, 0x2c),
         hairlineStrong: _rgb(0x3c, 0x41, 0x45),
-        accent: defaultAccent, // spruce #35785e
-        accentHover: _shift(defaultAccent, 0x12), // #478a70
+        accent: defaultAccent, // clay #e05a72, back by the owner's ruling
+        accentHover: _shift(defaultAccent, 0x12), // #f26c84 (derived; the old
+        // hand-tuned hover was #ea7288 - near-identical, and the derivation
+        // keeps withAccent(defaultAccent) reproducing the pair)
         animated: _rgb(0xd8, 0xa2, 0x4a),
         success: _rgb(0x5f, 0xcf, 0xae),
         warning: _rgb(0xdd, 0x9a, 0x82),
@@ -754,11 +756,12 @@ class LumitTheme {
         textDisabled: _rgb(0xa8, 0xa8, 0xa4),
         hairline: _rgb(0xd8, 0xd6, 0xd2),
         hairlineStrong: _rgb(0xc4, 0xc1, 0xbc),
-        // Spruce holds on white as it is: 5.3:1, where the clay it replaces had
-        // to be darkened to c23f58 to reach the same floor (§9). So Light takes
-        // the same accent as Dark and only the hover direction flips (K-092).
-        accent: defaultAccent, // spruce #35785e
-        accentHover: _shift(defaultAccent, -0x12), // #23664c
+        // Clay on white sits under the contrast floor, so Light keeps its own
+        // darkened clay (§9), exactly as it did before the spruce interlude -
+        // the one scheme whose pair withAccent(defaultAccent) does not
+        // reproduce, said here so nobody expects it to.
+        accent: Color(0xffc23f58), // the darkened clay
+        accentHover: _shift(Color(0xffc23f58), -0x12), // #b02d46
         // Provisional pending the light-mode pass: the dark scheme's amber
         // taken down until it holds against white.
         animated: _rgb(0x9a, 0x6a, 0x1c),
@@ -1052,7 +1055,7 @@ class LumitTheme {
       const [Color(0xFF000000), Color(0xFFFFFFFF)];
 
   /// The six accents the Settings drawing offers as one click each: Lumit's
-  /// own spruce, then the clay it replaced (K-511 — one click back for anyone
+  /// clay back in front, spruce right behind it (one click each way for anyone
   /// who preferred it), then a blue, a mint, an amber and a violet.
   ///
   /// The same six in every scheme, and deliberately: an accent is the one
@@ -1061,8 +1064,8 @@ class LumitTheme {
   /// meaning as the theme does. The full wheel is still a click away in the
   /// theme editor — these are the quick answers, not the whole answer.
   static const List<Color> accentPresets = [
-    defaultAccent, // spruce
-    Color(0xFFE05A72), // clay - the pre-K-511 default
+    defaultAccent, // clay - THE default again, by the owner's ruling
+    Color(0xFF35785E), // spruce - the owner loves it; one click away
     Color(0xFF4AA3E0),
     Color(0xFF46C98E),
     Color(0xFFE0A33C),

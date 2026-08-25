@@ -15,7 +15,7 @@
   --color-fg-3:     #8b9296;  /* text_muted - kickers, hints */
   --color-fg-4:     #5e666b;  /* text_disabled - the dimmest labels only */
   --color-accent:   #35785e;  /* spruce: link hover, focus, the active tab tick */
-  --color-accent-2: #478a70;  /* accent_hover - spruce, +0x12 a channel */
+  --color-accent-2: #ea7288;  /* accent_hover - spruce, +0x12 a channel */
 
   /* K-476: a control's corner is 2. Cards are the drawing's own 4. */
   --radius-ctl:  2px;
