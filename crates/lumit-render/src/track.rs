@@ -132,10 +132,11 @@ impl AnalysisSettings {
 /// the shape it starts on would exclude the wrong part of every frame after the
 /// first.
 ///
-/// **The factor is one**, as it has always been (§5b's seventh deviation): a
-/// mask's vertices are in the layer's own pixel coordinates, and for a footage
-/// layer those *are* the source raster, which is what the tracker works in
-/// (K-248). Nothing converts.
+/// **The factor is usually one** (§5b's seventh deviation): a mask's vertices are
+/// in the layer's own pixel coordinates, and for a footage layer those *are* the
+/// source raster, which is what the tracker works in (K-248), so nothing
+/// converts. A Precomp layer analysed at a reduced raster is the one exception,
+/// and it hands its render scale in as `to_analysis`.
 ///
 /// **The clock is the source's own.** Source frame `n` is read at layer time
 /// `n / fps`, which is exact for the ordinary case and is what the old
@@ -143,22 +144,36 @@ impl AnalysisSettings {
 /// source time is not inverted — the analysis is of the *file*, from its first
 /// frame at its own rate, and one clip is in many layers with many retimes,
 /// only one of which could be honoured.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MaskTrack {
     masks: Vec<lumit_core::mask::Mask>,
+    /// Layer pixels → analysis pixels. One for footage; the render scale for a
+    /// Precomp layer analysed at a reduced raster.
+    to_analysis: f64,
+}
+
+impl Default for MaskTrack {
+    fn default() -> Self {
+        MaskTrack {
+            masks: Vec::new(),
+            to_analysis: 1.0,
+        }
+    }
 }
 
 impl MaskTrack {
     /// The exclusion regions `layer` contributes, or none when the effect's
-    /// *Use masks* is off.
+    /// *Use masks* is off. `to_analysis` scales the layer's own pixels into the
+    /// ones the analysis reads — one for footage.
     #[must_use]
-    pub fn of(layer: &Layer, settings: AnalysisSettings) -> Self {
+    pub fn of(layer: &Layer, settings: AnalysisSettings, to_analysis: f64) -> Self {
         MaskTrack {
             masks: if settings.use_masks {
                 layer.masks.clone()
             } else {
                 Vec::new()
             },
+            to_analysis,
         }
     }
 
@@ -167,7 +182,7 @@ impl MaskTrack {
     pub fn at(&self, t: f64) -> Vec<ExclusionMask> {
         self.masks
             .iter()
-            .map(|m| ExclusionMask::from_mask(m, t, 1.0))
+            .map(|m| ExclusionMask::from_mask(m, t, self.to_analysis))
             .collect()
     }
 
@@ -201,7 +216,10 @@ impl MaskTrack {
                 h.update(&k.time.to_f64().to_le_bytes());
                 feed_side(h, k.interp_in);
                 feed_side(h, k.interp_out);
-                feed_region(h, &ExclusionMask::from_mask(mask, k.time.to_f64(), 1.0));
+                feed_region(
+                    h,
+                    &ExclusionMask::from_mask(mask, k.time.to_f64(), self.to_analysis),
+                );
             }
         }
     }
@@ -280,10 +298,12 @@ impl AnalysisKey {
 
 /// One frame of a clip, as brightness — everything the tracker reads.
 ///
-/// A trait because the analysis must be drivable without a media file: the
-/// engine tests feed it a rendered scene with a camera path they wrote down, and
-/// asking them to encode a video first would be measuring ffmpeg. [`MediaLuma`]
-/// is the real one; it is opened on the analysis thread, never on the caller's.
+/// A trait because a tracked source is not always a file. [`MediaLuma`] decodes
+/// one; [`CompLuma`] *renders* a nested composition, which is what a Camera
+/// track on a Precomp layer needs (K-417); and the engine tests feed a
+/// synthetic scene with a camera path they wrote down, since asking them to
+/// encode a video first would be measuring ffmpeg. Whichever it is, it is opened
+/// on the analysis thread and never on the caller's.
 pub trait LumaFrames {
     /// `(frames, width, height, frames per second)`.
     fn info(&self) -> (usize, u32, u32, f64);
@@ -291,14 +311,26 @@ pub trait LumaFrames {
     /// run early — a clip that stops decoding part-way is tracked as far as it
     /// went, which is more useful than nothing.
     fn luma(&mut self, n: usize) -> Option<Vec<f32>>;
+    /// Analysis pixels per source pixel. One for everything that hands over the
+    /// source at its own size; less than one for a source rendered smaller than
+    /// it really is, whose solve is scaled back up before it is published
+    /// ([`rescale`]). Defaulted, so only [`CompLuma`] says anything.
+    fn analysis_scale(&self) -> f64 {
+        1.0
+    }
 }
 
 /// One analysis, as handed to the worker.
 pub struct Job {
-    /// The footage item the solve is filed under.
+    /// The source the solve is filed under: a footage item, or the nested
+    /// composition a Precomp layer's Camera track names.
     pub media: Uuid,
-    /// What the sidecar calls it.
-    pub key: AnalysisKey,
+    /// What the sidecar calls it, or `None` for a source with no content name
+    /// cheap enough to compute — a nested composition, whose picture is the
+    /// whole document beneath it at every frame (docs/impl/tracking.md §5e).
+    /// Such an analysis is neither read from nor written to the sidecar; it
+    /// lives in the store for the session.
+    pub key: Option<AnalysisKey>,
     pub settings: AnalysisSettings,
     /// Regions no track may be born in or wander into, in source raster pixels
     /// and re-flattened at each frame's own moment.
@@ -963,7 +995,10 @@ fn run(job: Job, cancel: &AtomicBool) {
     let key = job.key;
     let dir = cache_dir();
 
-    if let Some((fps, clip_frames, solve)) = dir.as_deref().and_then(|d| read_sidecar(d, key)) {
+    if let Some((fps, clip_frames, solve)) = key
+        .zip(dir.as_deref())
+        .and_then(|(key, d)| read_sidecar(d, key))
+    {
         publish(media, fps, clip_frames, solve);
         finish(media, Some(Progress::Done));
         return;
@@ -983,8 +1018,9 @@ fn run(job: Job, cancel: &AtomicBool) {
             // makes a stopped run leave no trace. A **partial** solve is
             // cached like any other: it is the honest answer for that file at
             // those settings, and re-deriving it would only take the same
-            // minutes to stop in the same place.
-            if let Some(dir) = dir.as_deref() {
+            // minutes to stop in the same place. A source with no key — a
+            // nested comp — is filed nowhere and lives for the session.
+            if let (Some(key), Some(dir)) = (key, dir.as_deref()) {
                 write_sidecar(dir, key, fps, clip_frames, &solve);
             }
             publish(media, fps, clip_frames, solve);
@@ -1023,19 +1059,62 @@ fn analyse(
     cancel: &AtomicBool,
     report: &dyn Fn(Progress),
 ) -> Result<(f64, usize, CameraSolve), AnalysisError> {
-    let (fps, clip_frames, mut set) = track_frames(job, cancel, report)?;
+    let (fps, clip_frames, mut set, scale) = track_frames(job, cancel, report)?;
 
     report(Progress::Solving);
     let stop = || cancel.load(Ordering::Relaxed);
     let pairs = select_keyframes(&set, &GeometrySettings::default());
     segment_dynamic_tracks(&mut set, &pairs, &SegmentSettings::default());
     let zooms = detect_zoom(&set, &ZoomSettings::default());
-    let solve = solve_camera_cancellable(&set, &pairs, &zooms, &SolveSettings::default(), &stop)
-        .map_err(|e| match e {
-            SolveError::Cancelled => AnalysisError::Cancelled,
-            other => AnalysisError::Solve(other),
-        })?;
+    let mut solve =
+        solve_camera_cancellable(&set, &pairs, &zooms, &SolveSettings::default(), &stop).map_err(
+            |e| match e {
+                SolveError::Cancelled => AnalysisError::Cancelled,
+                other => AnalysisError::Solve(other),
+            },
+        )?;
+    rescale(&mut solve, scale);
     Ok((fps, clip_frames, solve))
+}
+
+/// Put a solve measured at `scale` back into the source's own pixels.
+///
+/// A source rendered smaller than it is — a nested comp at the analysis raster —
+/// gives a solve in *those* pixels: a focal in them, a world in them, an error
+/// in them. Everything downstream reads the store as the source's own pixels
+/// (§5b's second deviation), so the whole answer is multiplied by `1 / scale`
+/// here, at the one place a solve is finished.
+///
+/// **Uniform, so the geometry is untouched.** The projection is
+/// `focal · p.xy / p.z` with `p = R(P − C)`: multiplying the focal, the camera
+/// centres and the world points all by the same number multiplies the projected
+/// pixels by it too and changes nothing else — not a rotation, not a depth
+/// ordering, not a reprojection *ratio*. It is a change of unit, not a fit.
+///
+/// The scaling is done after the solve rather than to the tracks before it,
+/// because the solver's thresholds are in pixels: feeding it inflated
+/// coordinates would silently tighten every one of them.
+fn rescale(solve: &mut CameraSolve, scale: f64) {
+    if !scale.is_finite() || scale <= 0.0 || (scale - 1.0).abs() < 1e-9 {
+        return;
+    }
+    let f = 1.0 / scale;
+    for pose in &mut solve.poses {
+        pose.focal_px *= f;
+        pose.mean_reprojection_px *= f;
+        for v in &mut pose.position {
+            *v *= f;
+        }
+    }
+    for segment in &mut solve.segments {
+        segment.focal_px *= f;
+    }
+    for point in &mut solve.points {
+        for v in &mut point.position {
+            *v *= f;
+        }
+    }
+    solve.mean_reprojection_px *= f;
 }
 
 /// How many tracks must carry across a frame boundary for anything past it to
@@ -1069,7 +1148,7 @@ const MIN_CARRIED: usize = 8;
 ///
 /// **It can stop before the end of the clip**, and the set it hands back then
 /// covers only the span that worked (`(fps, the clip's own frame count, the
-/// tracks)`). Two things end a run early and they are reported the same way,
+/// tracks, the scale they were measured at)`). Two things end a run early and they are reported the same way,
 /// because they mean the same thing to everything downstream: the frames stop
 /// arriving ([`LumaFrames::luma`] answering `None`), or the tracking itself
 /// fails — fewer than [`MIN_CARRIED`] tracks carrying across a frame boundary.
@@ -1080,7 +1159,7 @@ fn track_frames(
     job: Job,
     cancel: &AtomicBool,
     report: &dyn Fn(Progress),
-) -> Result<(f64, usize, lumit_track::TrackSet), AnalysisError> {
+) -> Result<(f64, usize, lumit_track::TrackSet, f64), AnalysisError> {
     let mut frames = (job.open)().ok_or(AnalysisError::Unreadable)?;
     let (total, width, height, fps) = frames.info();
     if total == 0 || width == 0 || height == 0 || fps <= 0.0 || !fps.is_finite() {
@@ -1141,7 +1220,7 @@ fn track_frames(
         // that nothing crossed.
         set.truncate(n - 1);
     }
-    Ok((fps, total, set))
+    Ok((fps, total, set, frames.analysis_scale()))
 }
 
 // ---------------------------------------------------------------------------
@@ -1173,13 +1252,44 @@ pub fn job_for(
         return None;
     };
     let settings = AnalysisSettings::of(camera_track_effect(layer)?);
-    let masks = MaskTrack::of(layer, settings);
+    let masks = MaskTrack::of(layer, settings, 1.0);
     Some(Job {
         media: item,
-        key: AnalysisKey::new(fingerprint, settings, &masks),
+        key: Some(AnalysisKey::new(fingerprint, settings, &masks)),
         settings,
         masks,
         open: Box::new(move || MediaLuma::open(&path).map(|s| Box::new(s) as Box<dyn LumaFrames>)),
+        analyse,
+    })
+}
+
+/// Build the job for a **Precomp** layer wearing a Camera track (K-417): the
+/// nested composition is the tracked source, and its frames are rendered rather
+/// than decoded.
+///
+/// `None` when the layer is not a precomp, names a comp that is gone, or carries
+/// no enabled Camera track. `analyse` is ignored to the extent that a nested
+/// comp has no sidecar entry to warm — see [`Job::key`] — so a job built here
+/// with `analyse: false` does nothing at all, honestly.
+#[must_use]
+pub fn job_for_precomp(doc: &Arc<Document>, layer: &Layer, analyse: bool) -> Option<Job> {
+    let LayerKind::Precomp { comp: nested } = layer.kind else {
+        return None;
+    };
+    let settings = AnalysisSettings::of(camera_track_effect(layer)?);
+    let scale = analysis_scale(doc.comp(nested)?);
+    let doc = Arc::clone(doc);
+    Some(Job {
+        media: nested,
+        key: None,
+        settings,
+        // The masks are in the precomp layer's own pixels, which are the nested
+        // comp's raster — so they need the render scale, the one case where the
+        // factor is not one.
+        masks: MaskTrack::of(layer, settings, scale),
+        open: Box::new(move || {
+            CompLuma::open(doc, nested).map(|s| Box::new(s) as Box<dyn LumaFrames>)
+        }),
         analyse,
     })
 }
@@ -1228,6 +1338,116 @@ impl LumaFrames for MediaLuma {
         // end the tracker's run with a size error; ending here instead says the
         // same thing without turning a readable clip into a failure.
         (frame.width == self.width && frame.height == self.height).then_some(frame.luma)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The rendered frames
+// ---------------------------------------------------------------------------
+
+/// The longest edge an analysis render is allowed.
+///
+/// A nested comp has no "source raster" to be unscaled at (§5b's fifth
+/// deviation, which is about a *file*): its size is whatever the comp is, and a
+/// UHD comp analysed at its own size would render eight million pixels a frame
+/// for hundreds of frames to follow a few hundred specks. 960 keeps a
+/// half-decent feature scale — the tracker's windows are a dozen pixels across,
+/// and a speck a lens can resolve survives a halving — while capping the render
+/// bill at roughly a 720p frame. The solve comes back in analysis pixels and is
+/// scaled to comp pixels before it is published ([`rescale`]), so nothing
+/// downstream can tell what raster it was measured at.
+const ANALYSIS_MAX_EDGE: u32 = 960;
+
+/// The render scale one comp is analysed at: 1 for anything already small
+/// enough, and otherwise whatever brings its long edge to
+/// [`ANALYSIS_MAX_EDGE`].
+fn analysis_scale(comp: &Composition) -> f64 {
+    let long = comp.width.max(comp.height).max(1);
+    f64::from(ANALYSIS_MAX_EDGE) / f64::from(long)
+}
+
+/// [`LumaFrames`] over a **nested composition**, rendered frame by frame through
+/// the same headless walk an export uses (K-031: preview and export are one
+/// walk, so an analysis sees exactly the picture the comp makes).
+///
+/// Its own renderer on its own device, like an export's, so an analysis never
+/// contends with the Viewer's GPU work; and built inside [`Job::open`], so the
+/// device is created on the analysis thread rather than the caller's.
+pub struct CompLuma {
+    renderer: crate::headless::HeadlessRenderer,
+    doc: Arc<Document>,
+    comp: Uuid,
+    frames: usize,
+    /// The analysis raster — the comp's own size reduced by [`Self::scale`].
+    width: u32,
+    height: u32,
+    fps: f64,
+    scale: f32,
+}
+
+impl CompLuma {
+    /// Open `comp` of `doc` for tracking, or `None` when the comp is gone, has
+    /// no frames, or this machine has no graphics adapter to render with.
+    #[must_use]
+    pub fn open(doc: Arc<Document>, comp_id: Uuid) -> Option<Self> {
+        let comp = doc.comp(comp_id)?;
+        let fps = comp.frame_rate.fps();
+        let frames = comp
+            .frame_rate
+            .frame_at(lumit_core::time::CompTime(comp.duration.0));
+        let frames = usize::try_from(frames).ok()?;
+        let scale = analysis_scale(comp);
+        #[allow(clippy::cast_possible_truncation)]
+        let scale = scale.min(1.0) as f32;
+        // The size the renderer will actually hand back, from the renderer's own
+        // rounding rather than a second copy of it.
+        let (width, height) = lumit_gpu::composite::scaled_size(comp.width, comp.height, scale);
+        let renderer = crate::headless::HeadlessRenderer::new().ok()?;
+        Some(CompLuma {
+            renderer,
+            doc,
+            comp: comp_id,
+            frames,
+            width,
+            height,
+            fps,
+            scale,
+        })
+    }
+}
+
+impl LumaFrames for CompLuma {
+    fn info(&self) -> (usize, u32, u32, f64) {
+        (self.frames, self.width, self.height, self.fps)
+    }
+
+    fn luma(&mut self, n: usize) -> Option<Vec<f32>> {
+        let frame = u64::try_from(n).ok()?;
+        let (rgba, w, h) = self
+            .renderer
+            .render_rgba(&self.doc, self.comp, frame, self.scale)
+            .ok()?;
+        if (w, h) != (self.width, self.height) {
+            return None;
+        }
+        // Rec.709 luma off the display-encoded bytes. Which weighting, and
+        // whether the bytes are encoded, does not matter to the tracker: it
+        // verifies patches by normalised correlation, which is blind to gain
+        // and lift, and every frame is converted the same way.
+        Some(
+            rgba.chunks_exact(4)
+                .map(|px| {
+                    (0.2126 * f32::from(px[0])
+                        + 0.7152 * f32::from(px[1])
+                        + 0.0722 * f32::from(px[2]))
+                        / 255.0
+                })
+                .collect(),
+        )
+    }
+
+    fn analysis_scale(&self) -> f64 {
+        f64::from(self.scale)
     }
 }
 
@@ -1463,7 +1683,7 @@ mod tests {
         let settings = AnalysisSettings::default();
         Job {
             media,
-            key: AnalysisKey::new(&fingerprint(tag), settings, &masks),
+            key: Some(AnalysisKey::new(&fingerprint(tag), settings, &masks)),
             settings,
             masks,
             open: Box::new(|| Some(Box::new(Shot::new()) as Box<dyn LumaFrames>)),
@@ -1961,7 +2181,7 @@ mod tests {
         // Raised after a handful of frames, which is where a real Cancel lands.
         let cancel = AtomicBool::new(false);
         let mut first = job(media, "cancel", MaskTrack::default());
-        first.key = key;
+        first.key = Some(key);
         let log = Mutex::new(Vec::new());
         let out = analyse(first, &cancel, &|step| {
             if let Progress::Tracking { done, .. } = step {
@@ -1988,7 +2208,7 @@ mod tests {
         // And the same job, uncancelled, is a whole clean analysis.
         let clean = AtomicBool::new(false);
         let mut again = job(media, "cancel", MaskTrack::default());
-        again.key = key;
+        again.key = Some(key);
         let (out, _) = run_here(again, &clean);
         assert!(out.is_ok(), "the rerun after a cancel found nothing broken");
         clear();
@@ -2011,7 +2231,7 @@ mod tests {
         let cancel = AtomicBool::new(false);
 
         let mut first = job(media, "cache", MaskTrack::default());
-        first.key = key;
+        first.key = Some(key);
         let (fps, clip_frames, solve) = run_here(first, &cancel).0.unwrap();
         write_sidecar(dir.path(), key, fps, clip_frames, &solve);
         let written = std::fs::read(dir.path().join(key.file_name())).unwrap();
@@ -2034,7 +2254,7 @@ mod tests {
         // A second analysis of the same input is the same solve — which is what
         // makes the cache safe to trust at all.
         let mut again = job(media, "cache", MaskTrack::default());
-        again.key = key;
+        again.key = Some(key);
         let (fps_again, clip_again, solve_again) = run_here(again, &cancel).0.unwrap();
         assert_eq!(fps_again, fps);
         assert_eq!(
@@ -2065,7 +2285,7 @@ mod tests {
         std::fs::remove_file(dir.path().join(key.file_name())).unwrap();
         assert!(read_sidecar(dir.path(), key).is_none());
         let mut rebuilt = job(media, "cache", MaskTrack::default());
-        rebuilt.key = key;
+        rebuilt.key = Some(key);
         let (fps_rebuilt, clip_rebuilt, solve_rebuilt) = run_here(rebuilt, &cancel).0.unwrap();
         assert_eq!(
             encode(key, fps_rebuilt, clip_rebuilt, &solve_rebuilt).unwrap(),
@@ -2102,7 +2322,7 @@ mod tests {
             (W / 2) as f64 - 40.0,
             (H / 2) as f64 - 40.0,
         ));
-        let track = MaskTrack::of(&tracked, AnalysisSettings::default());
+        let track = MaskTrack::of(&tracked, AnalysisSettings::default(), 1.0);
         let masks = track.at(0.0);
         assert_eq!(masks.len(), 1);
         assert!(
@@ -2187,7 +2407,8 @@ mod tests {
         let jobs = warm_jobs(&doc);
         assert_eq!(jobs.len(), 1, "one tracked clip, one warm job");
         assert_eq!(
-            jobs[0].key, key,
+            jobs[0].key,
+            Some(key),
             "the warm pass asked for a different analysis from the one on disk"
         );
         assert!(!jobs[0].analyse, "a warm job may never start tracking");
@@ -2274,7 +2495,7 @@ mod tests {
         let cancel = AtomicBool::new(false);
 
         let l = moving_mask_layer(20.0, 240.0);
-        let track = MaskTrack::of(&l, AnalysisSettings::default());
+        let track = MaskTrack::of(&l, AnalysisSettings::default(), 1.0);
         assert!(track.animated(), "the mask is keyed, so it moves");
         let started_at = track.at(0.0);
         let ended_at = track.at((FRAMES as f64 - 1.0) / FPS);
@@ -2340,9 +2561,10 @@ mod tests {
                 l
             },
             settings,
+            1.0,
         );
-        let near = MaskTrack::of(&moving_mask_layer(20.0, 60.0), settings);
-        let far = MaskTrack::of(&moving_mask_layer(20.0, 240.0), settings);
+        let near = MaskTrack::of(&moving_mask_layer(20.0, 60.0), settings, 1.0);
+        let far = MaskTrack::of(&moving_mask_layer(20.0, 240.0), settings, 1.0);
 
         assert_eq!(
             still.at(0.0),
@@ -2354,6 +2576,230 @@ mod tests {
         let key = |m: &MaskTrack| AnalysisKey::new(&fp, settings, m);
         assert_ne!(key(&still), key(&near), "an animation was not named");
         assert_ne!(key(&near), key(&far), "two journeys were named the same");
+    }
+
+    // --- The precomp path ---------------------------------------------------
+
+    /// A nested comp that pans a field of solids past the camera, at a raster
+    /// big enough for the analysis cap to bite, plus a Precomp layer wearing a
+    /// Camera track. `(doc, the nested comp's id, the precomp layer)`.
+    fn nested_pan(frames: usize) -> (Arc<Document>, Uuid, Layer) {
+        use lumit_core::anim::{Animation, Keyframe, SideInterp};
+        use lumit_core::model::SolidDef;
+
+        let mut doc = Document::new();
+        let nested_id = Uuid::now_v7();
+        let (cw, ch) = (1280u32, 720u32);
+
+        // One oversized solid carrying Fractal noise, panned across the comp.
+        // Noise rather than a field of squares: the tracker's step is a
+        // linearisation of the picture around each patch, so it wants texture
+        // with a gradient of some width, and a hard-edged rectangle gives it a
+        // one-pixel cliff and nothing else — sixty corners are detected and not
+        // one of them survives a four-pixel step. This is the same reason the
+        // synthetic shot above is procedurally textured.
+        let def = Uuid::now_v7();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: def,
+            name: "Field".into(),
+            colour: LinearColour([0.5, 0.5, 0.5, 1.0]),
+            width: cw + 400,
+            height: ch + 400,
+            extra: serde_json::Map::new(),
+        }));
+        let mut field = layer(
+            "field",
+            LayerKind::Solid { def },
+            secs(frames as i64, FPS as i64),
+        );
+        field.transform.anchor_x = Property::fixed(f64::from(cw + 400) / 2.0);
+        field.transform.anchor_y = Property::fixed(f64::from(ch + 400) / 2.0);
+        field.transform.position_y = Property::fixed(f64::from(ch) / 2.0);
+        // Moving the layer moves the pattern with it: a generator draws into the
+        // layer's own raster and the transform places that raster, so this is
+        // one rigid pan and nothing else changes between frames.
+        field.transform.position_x = Property {
+            animation: Animation::Keyframed(vec![
+                Keyframe {
+                    time: Rational::new(0, 1).unwrap(),
+                    value: f64::from(cw) / 2.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                },
+                Keyframe {
+                    time: Rational::new(frames as i64, FPS as i64).unwrap(),
+                    value: f64::from(cw) / 2.0 + 60.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                },
+            ]),
+            extra: serde_json::Map::new(),
+        };
+        field
+            .effects
+            .push(lumit_core::fx::instantiate("fractal_noise").expect("the effect is registered"));
+
+        doc.items.push(ProjectItem::Composition(Composition {
+            id: nested_id,
+            name: "nested".into(),
+            width: cw,
+            height: ch,
+            frame_rate: FrameRate::new(FPS as u32, 1).unwrap(),
+            duration: Duration(Rational::new(frames as i64, FPS as i64).unwrap()),
+            background: LinearColour([0.0, 0.0, 0.0, 1.0]),
+            work_area: None,
+            layers: vec![field],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        }));
+
+        let mut precomp = layer(
+            "nested",
+            LayerKind::Precomp { comp: nested_id },
+            secs(frames as i64, FPS as i64),
+        );
+        precomp
+            .effects
+            .push(lumit_core::fx::instantiate(CAMERA_TRACK).expect("the effect is registered"));
+        (Arc::new(doc), nested_id, precomp)
+    }
+
+    /// A Camera track on a Precomp layer names the **nested comp**, and asks for
+    /// no sidecar entry.
+    ///
+    /// Both halves matter. The first is what makes the link resolve — the store
+    /// is asked about the comp, not about whatever footage happens to be inside
+    /// it. The second is the deliberate limit: a nested comp's picture is the
+    /// whole document beneath it at every frame, so there is no content name to
+    /// file a solve under that costs less than the analysis it would save.
+    /// Needs no graphics adapter: building a job renders nothing.
+    #[test]
+    fn a_precomp_job_names_the_nested_comp_and_asks_for_no_cache() {
+        let (doc, nested_id, precomp) = nested_pan(12);
+        let job = job_for_precomp(&doc, &precomp, true).expect("the layer is a tracked precomp");
+        assert_eq!(job.media, nested_id, "the solve is filed under the comp");
+        assert!(
+            job.key.is_none(),
+            "a nested comp must not claim a sidecar name"
+        );
+
+        // And a precomp with no Camera track on it is not this workflow.
+        let plain = layer("nested", LayerKind::Precomp { comp: nested_id }, secs(1, 1));
+        assert!(job_for_precomp(&doc, &plain, true).is_none());
+    }
+
+    /// A solve measured on a reduced raster comes back in the source's own
+    /// pixels.
+    ///
+    /// The unit change must move the focal, the camera centres, the world points
+    /// and the errors together — anything left behind would put the cloud and
+    /// the camera in different worlds. Checked by projecting a point through the
+    /// solve before and after: a change of unit cannot move where a point lands,
+    /// once the landing itself is read at the same scale.
+    #[test]
+    fn a_solve_measured_at_a_reduced_raster_scales_back_to_source_pixels() {
+        let mut half = written_solve();
+        let full = written_solve();
+        rescale(&mut half, 0.5);
+
+        assert!((half.segments[0].focal_px - FOCAL * 2.0).abs() < 1e-9);
+        for (a, b) in half.poses.iter().zip(&full.poses) {
+            assert!((a.focal_px - b.focal_px * 2.0).abs() < 1e-9);
+            for (x, y) in a.position.iter().zip(b.position) {
+                assert!((x - y * 2.0).abs() < 1e-9);
+            }
+            // The projection is unchanged, which is the whole claim: the same
+            // point lands in the same place, twice as many pixels across.
+            let p = [40.0, -25.0, 300.0];
+            let want =
+                project_through_solve(b, p).map(|q| [q[0] * 2.0 - W as f64, q[1] * 2.0 - H as f64]);
+            let got = project_through_solve(a, [p[0] * 2.0, p[1] * 2.0, p[2] * 2.0])
+                .map(|q| [q[0] - W as f64 / 2.0, q[1] - H as f64 / 2.0]);
+            match (want, got) {
+                (Some(want), Some(got)) => {
+                    assert!((want[0] / 2.0 - got[0] / 2.0).abs() < 1e-6);
+                }
+                (None, None) => {}
+                _ => panic!("the point changed sides of the camera"),
+            }
+        }
+        // A scale of one is not a no-op by accident: it must not touch anything.
+        let mut untouched = written_solve();
+        rescale(&mut untouched, 1.0);
+        assert_eq!(untouched, full);
+    }
+
+    /// The analysis reads **rendered** frames of a nested comp, at the analysis
+    /// raster rather than the comp's own, and follows features through them.
+    ///
+    /// The claim is the frame source, not the solve: whether a given shot solves
+    /// is the solver's business and is tested on the synthetic one above. What
+    /// has to be true here is that frames arrive from the compositor at the
+    /// capped size, that they are different frames, and that the tracker carries
+    /// features from one to the next through the same loop a decoded clip goes
+    /// through — cancellation seam included, since it is that same loop.
+    #[test]
+    fn a_precomp_analysis_follows_rendered_frames_at_the_analysis_raster() {
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+        const N: usize = 10;
+        let (doc, nested_id, precomp) = nested_pan(N);
+
+        let mut source = match CompLuma::open(Arc::clone(&doc), nested_id) {
+            Some(s) => s,
+            None => {
+                eprintln!("skipping: no GPU adapter");
+                return;
+            }
+        };
+        // 1280 × 720 capped to a 960 long edge: three quarters.
+        assert_eq!(source.info(), (N, 960, 540, FPS));
+        assert!((source.analysis_scale() - 0.75).abs() < 1e-6);
+        let first = source.luma(0).expect("the compositor rendered a frame");
+        assert_eq!(first.len(), 960 * 540);
+        let later = source.luma(N - 1).expect("and the last one");
+        assert_ne!(
+            first, later,
+            "the source handed back the same picture twice"
+        );
+        drop(source);
+
+        // And through the whole job, which is the seam that matters.
+        let cancel = AtomicBool::new(false);
+        let (fps, total, set, scale) = track_frames(
+            job_for_precomp(&doc, &precomp, true).unwrap(),
+            &cancel,
+            &|_| {},
+        )
+        .expect("the rendered frames were tracked");
+        assert_eq!((fps, total), (FPS, N));
+        assert!((scale - 0.75).abs() < 1e-6);
+        let carried = set
+            .tracks()
+            .iter()
+            .filter(|t| t.points.len() > N / 2)
+            .count();
+        assert!(
+            carried >= MIN_CARRIED,
+            "only {carried} of {} features survived the rendered comp",
+            set.tracks().len()
+        );
+
+        // The cancellation seam is the frame loop, the same one a decoded clip
+        // uses: a raised flag refuses before a frame is rendered.
+        let stopped = AtomicBool::new(true);
+        assert_eq!(
+            track_frames(
+                job_for_precomp(&doc, &precomp, true).unwrap(),
+                &stopped,
+                &|_| {}
+            )
+            .err(),
+            Some(AnalysisError::Cancelled)
+        );
+        clear();
     }
 
     /// The thread path: `request` accepts one analysis, refuses a second while
@@ -2371,7 +2817,7 @@ mod tests {
             &MaskTrack::default(),
         );
         let mut first = job(media, "thread", MaskTrack::default());
-        first.key = key;
+        first.key = Some(key);
 
         assert_eq!(request(first), Requested::Started);
         // One at a time: a second request while the first is in flight is
@@ -2399,7 +2845,7 @@ mod tests {
         clear();
         let warm = Job {
             media,
-            key,
+            key: Some(key),
             settings: AnalysisSettings::default(),
             masks: MaskTrack::default(),
             open: Box::new(|| panic!("a warm pass must never open the media")),
@@ -2423,11 +2869,11 @@ mod tests {
         let cold = Uuid::now_v7();
         let miss = Job {
             media: cold,
-            key: AnalysisKey::new(
+            key: Some(AnalysisKey::new(
                 &fingerprint("cold"),
                 AnalysisSettings::default(),
                 &MaskTrack::default(),
-            ),
+            )),
             settings: AnalysisSettings::default(),
             masks: MaskTrack::default(),
             open: Box::new(|| panic!("a warm pass must never open the media")),

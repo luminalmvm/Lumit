@@ -355,21 +355,35 @@ pub fn fire_effect_action(
     if fx.effect.match_name != lumit_core::track::CAMERA_TRACK {
         return Err(BridgeError::InvalidParam);
     }
-    let LayerKind::Footage { item: media } = item.kind else {
-        // K-417 allows a Camera track on a Precomp layer; analysing one means
-        // rendering a composition rather than decoding a file, which is owed
-        // (docs/TODO.md) and refused honestly until it lands.
-        return Err(BridgeError::NotFootage);
-    };
+    // A Camera track names its source: a footage item, or — on a Precomp layer
+    // (K-417) — the nested composition, whose frames are rendered rather than
+    // decoded.
+    let media = lumit_core::track::tracked_source_id(&item).ok_or(BridgeError::NotFootage)?;
     match param.as_str() {
         CANCEL => {
             lumit_render::track::cancel(media);
             Ok(())
         }
         ANALYSE => {
-            let (path, fingerprint) = media_source(&layer, media)?;
-            let job = lumit_render::track::job_for(&item, path, &fingerprint, true)
-                .ok_or(BridgeError::NotFootage)?;
+            let job = match item.kind {
+                LayerKind::Footage { .. } => {
+                    let (path, fingerprint) = media_source(&layer, media)?;
+                    lumit_render::track::job_for(&item, path, &fingerprint, true)
+                }
+                _ => {
+                    let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
+                    let project = projects
+                        .get(&layer.project_id)
+                        .ok_or(BridgeError::InvalidProject)?
+                        .clone();
+                    drop(projects);
+                    let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
+                    let doc = state.store.snapshot();
+                    drop(state);
+                    lumit_render::track::job_for_precomp(&doc, &item, true)
+                }
+            }
+            .ok_or(BridgeError::NotFootage)?;
             match lumit_render::track::request(job) {
                 lumit_render::track::Requested::Started => Ok(()),
                 _ => Err(BridgeError::AnalysisBusy),
@@ -619,12 +633,7 @@ pub fn add_layer_at_points(
 /// The media item a layer carrying an enabled Camera track reads, or `None` for
 /// any layer that is not one.
 fn tracked_media(layer: &LayerReference) -> Option<Uuid> {
-    let item = layer.item().ok()?;
-    lumit_render::track::camera_track_effect(&item)?;
-    match item.kind {
-        LayerKind::Footage { item } => Some(item),
-        _ => None,
-    }
+    lumit_core::track::tracked_source_id(&layer.item().ok()?)
 }
 // Which layer of a composition is the tracked one is deliberately **not** a
 // call: the read model (K-184) already carries every layer's every effect, so

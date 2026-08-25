@@ -251,6 +251,14 @@ fn derived_pose(
 /// linked camera in the parent comp names the precomp layer, and the chain
 /// finds the footage inside.
 ///
+/// **Unless the Precomp layer wears the effect itself**, in which case the walk
+/// stops there and the nested comp *is* the tracked source. K-417 allows a
+/// Camera track on a Precomp layer, and what that asks to track is the picture
+/// the nested comp makes — a comp of stills panned by a camera move has no
+/// footage inside it to follow, and there is nothing further down to descend to.
+/// The solve is filed under the comp's own id, the store being asked about a
+/// source rather than about a file.
+///
 /// `None` for a layer that has no source to track (a solid, a null, a camera),
 /// a gap in a Sequence layer, a precomp naming a comp that is gone, or a
 /// precomp with no tracked layer in it.
@@ -268,7 +276,14 @@ fn tracked_source_at(
     let lt = crate::time::layer_time(t, l.start_offset.0);
     match &l.kind {
         LayerKind::Footage { item } => Some((*item, l.source_time_at(lt))),
-        LayerKind::Precomp { comp: nested } => descend(doc, *nested, l.source_time_at(lt), depth),
+        LayerKind::Precomp { comp: nested } => {
+            let st = l.source_time_at(lt);
+            if wears_camera_track(l) {
+                Some((*nested, st))
+            } else {
+                descend(doc, *nested, st, depth)
+            }
+        }
         LayerKind::Sequence { clips } => {
             // The clip under the playhead and the moment of its source it
             // shows — trimmed extent and retime included, which is exactly why
@@ -292,6 +307,35 @@ fn descend(doc: &Document, nested: Uuid, t: f64, depth: u32) -> Option<(Uuid, f6
     tracked_source_at(doc, nc, inner, t, depth + 1)
 }
 
+/// Whether `layer` carries an enabled Camera track — K-417's definition that
+/// the effect *is* the handle, spelled once because three questions ask it.
+#[must_use]
+pub fn wears_camera_track(layer: &Layer) -> bool {
+    layer
+        .effects
+        .iter()
+        .any(|e| e.enabled && e.effect.match_name == CAMERA_TRACK)
+}
+
+/// What a tracked layer's solve is filed under: its footage item, or — for a
+/// Precomp layer wearing the effect — the nested composition it shows.
+///
+/// The store is asked about a *source*, not about a file (docs/impl/tracking.md
+/// §5e), and this is the one place that says which uuid a given layer's source
+/// is. `None` for a layer with no Camera track on it, or one whose kind has no
+/// source an analysis could read.
+#[must_use]
+pub fn tracked_source_id(layer: &Layer) -> Option<Uuid> {
+    if !wears_camera_track(layer) {
+        return None;
+    }
+    match layer.kind {
+        LayerKind::Footage { item } => Some(item),
+        LayerKind::Precomp { comp } => Some(comp),
+        _ => None,
+    }
+}
+
 /// The layer in `comp` carrying an enabled Camera track effect — the tracked
 /// layer, by K-417's definition that the effect *is* the handle. The first one,
 /// in stack order, so the answer never depends on the playhead; `None` when the
@@ -300,11 +344,7 @@ fn descend(doc: &Document, nested: Uuid, t: f64, depth: u32) -> Option<(Uuid, f6
 pub fn tracked_layer(comp: &Composition) -> Option<Uuid> {
     comp.layers
         .iter()
-        .find(|l| {
-            l.effects
-                .iter()
-                .any(|e| e.enabled && e.effect.match_name == CAMERA_TRACK)
-        })
+        .find(|l| wears_camera_track(l))
         .map(|l| l.id)
 }
 
@@ -703,6 +743,65 @@ mod tests {
         assert_eq!(
             camera_pose_at(&doc, &outer, 0.0, &store).unwrap().state,
             LinkState::Unresolved
+        );
+    }
+
+    /// A Camera track **on the precomp layer itself** stops the walk there: the
+    /// nested comp is the tracked source, and its solve is filed under the
+    /// comp's own id. That is the case a comp of stills panned by a camera move
+    /// needs — there is no footage inside it to descend to — and it must not be
+    /// confused with the parent-comp workflow above, which is the same document
+    /// shape without the effect on the precomp layer.
+    #[test]
+    fn a_camera_track_on_the_precomp_layer_tracks_the_nested_comp_itself() {
+        let inner_media = Uuid::now_v7();
+        let inner = comp(
+            "inner",
+            vec![tracked(layer(
+                "shot",
+                LayerKind::Footage { item: inner_media },
+                2,
+            ))],
+        );
+        // The store knows the *comp*, and knows nothing of the footage inside
+        // it: a walk that descended would resolve to nothing at all.
+        let store = Synthetic::new(inner.id);
+
+        let nested = tracked(layer("inner", LayerKind::Precomp { comp: inner.id }, 2));
+        assert_eq!(tracked_source_id(&nested), Some(inner.id));
+        let outer = comp("outer", vec![camera(Some(nested.id)), nested]);
+        let doc = document(vec![inner, outer.clone()]);
+
+        let got = camera_pose_at(&doc, &outer, 10.0 / 30.0, &store).unwrap();
+        assert_eq!(got.state, LinkState::Derived);
+        assert_eq!(got.pose, Synthetic::pose(10));
+
+        // And without the effect on it the same document descends, as it always
+        // did — the two workflows are told apart by the effect and nothing else.
+        let inner2 = comp(
+            "inner",
+            vec![tracked(layer(
+                "shot",
+                LayerKind::Footage { item: inner_media },
+                2,
+            ))],
+        );
+        let plain = layer("inner", LayerKind::Precomp { comp: inner2.id }, 2);
+        let outer2 = comp("outer", vec![camera(Some(plain.id)), plain]);
+        let doc2 = document(vec![inner2, outer2.clone()]);
+        assert_eq!(
+            camera_pose_at(&doc2, &outer2, 10.0 / 30.0, &store)
+                .unwrap()
+                .state,
+            LinkState::Unresolved,
+            "the walk stopped at the precomp although nothing asked it to"
+        );
+        assert_eq!(
+            camera_pose_at(&doc2, &outer2, 10.0 / 30.0, &Synthetic::new(inner_media))
+                .unwrap()
+                .pose,
+            Synthetic::pose(10),
+            "without the effect the walk must still reach the footage inside"
         );
     }
 

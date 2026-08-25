@@ -16520,3 +16520,39 @@ arguments, and the mockups' Timeline artboard draws the band but no handles at a
 came from a reference image (K-529), and these four adjustments came from the owner's own word
 after testing. That word is above the drawings, which is the owner's standing instruction and
 the reason this entry exists rather than a note that the mockup was matched.
+
+## K-577 — A Camera track on a Precomp layer tracks the nested comp, rendered and uncached
+
+**Status: DECIDED (2026-08-25).** K-417 allows the Camera track effect on a Precomp layer and
+did not say what that tracks. It tracks **the nested composition itself**, and four things
+follow, each of which could have gone another way:
+
+1. **The walk stops at that layer.** `lumit_core::track::tracked_source_at` normally descends
+   through a Precomp layer to the tracked layer inside — the parent-comp workflow K-417
+   describes. When the precomp layer *itself* wears the effect, the walk stops there and the
+   nested comp is the tracked source. The two workflows are told apart by the effect and by
+   nothing else, so the same document shape does either, depending on where the effect sits.
+2. **The solve is filed under the composition's id.** The store is keyed by a `Uuid` naming a
+   *source*, not a media file; a nested comp has as good a claim to one as a clip does, and
+   inventing a synthetic media item for it would have put a thing in the project that is not in
+   the project.
+3. **The frames are rendered at a capped analysis raster, and the solve is scaled back.** A
+   nested comp has no source raster to be honest about (the reason a decoded clip is never
+   downsampled — [impl/tracking.md](impl/tracking.md) §5b, deviation 5 — is that the file has
+   one true size and a preview tier would change what a solved focal means). A comp's size is
+   whatever it is, and a UHD comp analysed at its own size would render eight million pixels a
+   frame for hundreds of frames to follow a few hundred specks. The long edge is capped at 960
+   and the finished solve is multiplied back into comp pixels — a uniform change of unit over
+   the focal, the camera centres, the world points and the errors, which moves no projection and
+   changes no geometry. Applied after the solve rather than to the tracks before it, because the
+   solver's thresholds are in pixels and inflated coordinates would silently tighten every one.
+4. **Nothing is written to the `track/` sidecar.** The sidecar is named by (media fingerprint,
+   settings, mask geometry): a *file's* content. A nested comp's picture is the whole document
+   beneath it at every frame, so a content name for it is either a per-frame walk of the project
+   — which costs a large fraction of what it would save, and has to be recomputed to be trusted
+   — or a lie the next session reads back. A precomp solve therefore lives in the session's
+   store and is re-analysed after a reopen. That is the honest trade, and the upgrade, if
+   anyone asks for one, is a comp content hash cheap enough to compute, not a weaker key.
+
+**Why now.** [impl/tracking.md](impl/tracking.md) §5b listed this as owed to stage 3, and the
+bridge refused a Camera track on a Precomp layer with `NotFootage` until it landed. See §5e.

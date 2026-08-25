@@ -417,6 +417,8 @@ Six things are deviations from, or decisions under, K-417's wording:
    layer carrying an enabled Camera track is the answer, first in stack order so
    it never depends on the playhead. A precomp with no tracked layer resolves to
    nothing and says `Unresolved` rather than guessing at the first footage it finds.
+   *Amended by K-577: a precomp layer that wears the effect **itself** stops the
+   walk there and is tracked as a nested comp; see §5e.*
 4. **The bake is a `Batch`, built by a function, not an `Op` that computes.** An
    `Op` is serialisable and replayed by `apply(doc, op)`, which has no store to
    read — so a computing op would either need the store in `apply` or would replay
@@ -858,6 +860,41 @@ Four things worth stating:
    old behaviour fails the first assertion too, for the mirror-image reason: the
    features it allowed in the mask's destination are still there when the mask
    arrives.
+
+**A Camera track on a Precomp layer analyses** (2026-08-25, K-577). `LumaFrames`
+gains a second real implementation: `CompLuma` renders the nested comp through
+`HeadlessRenderer` — its own device, built inside `Job::open` on the analysis
+thread, the same walk an export takes — instead of decoding a file. Everything
+above it is unchanged, which is the point: the frame loop, the progress
+readings, the mask exclusion and the cancellation seam are one loop whatever is
+feeding it.
+
+Four things, all of them K-577's:
+
+1. **The walk stops at the precomp layer** when that layer wears the effect, and
+   descends into the comp when it does not. `lumit_core::track::wears_camera_track`
+   is the one predicate, and `tracked_source_id` the one place that says which
+   uuid a tracked layer's source is — a footage item, or the nested comp.
+2. **`analysis_scale` on the trait.** `MediaLuma` answers one and says nothing;
+   `CompLuma` answers its render scale, and `rescale` multiplies the finished
+   solve back into comp pixels. Defaulted on the trait so the file path and the
+   test shot are untouched.
+3. **The masks are the one case where the factor is not one.** A precomp layer's
+   mask vertices are in the nested comp's raster, and the analysis reads a
+   reduced one, so `MaskTrack` carries `to_analysis` and the precomp job passes
+   the render scale.
+4. **No sidecar entry, and `Job::key` is an `Option` to say so.** A `None` key is
+   neither read nor written; a precomp solve lives in the store for the session.
+
+**The test's fixture is noise, not rectangles, and that is worth knowing.** The
+first attempt panned a field of solid squares: sixty corners were detected on the
+first frame and not one survived the step to the second. The tracker's step is a
+linearisation of the picture around each patch, and a hard-edged rectangle offers
+a one-pixel cliff and nothing else — there is no gradient over the window for the
+solve to descend. Fractal noise on one oversized solid, panned rigidly, gives
+texture with width, and the same run follows features the whole way. It is the
+same reason §5's synthetic shot is procedurally textured, met from the other
+direction.
 
 ## 5. Test plan
 
