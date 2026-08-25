@@ -785,6 +785,10 @@
   "@easingHeavy": {
     "description": "Easing preset: slow at both ends, more strongly than Easy ease."
   },
+  "easingNameYours": "Name your easing",
+  "@easingNameYours": {
+    "description": "Easing editor: the placeholder in the field that appears when a drawn shape is being saved, or one of the user's own is being renamed. The field is narrow — keep it to three or four words."
+  },
   "easingNeedsTheValueLens": "Shapes apply in the value lens.",
   "@easingNeedsTheValueLens": {
     "description": "Easing panel: the line under a greyed Apply button, saying why it cannot be pressed. The graph editor is showing its speed lens, and a shape is drawn against value travel. Keep it to one short sentence — it sits in a narrow panel."
@@ -792,6 +796,10 @@
   "easingOvershoot": "Overshoot",
   "@easingOvershoot": {
     "description": "Easing preset: the move goes past its end and settles back."
+  },
+  "easingSaveEllipsis": "Save…",
+  "@easingSaveEllipsis": {
+    "description": "Easing editor: the button that keeps the drawn shape as one of the user's own presets. The ellipsis marks that it asks for a name first."
   },
   "easingSlowFinish": "Slow finish",
   "@easingSlowFinish": {

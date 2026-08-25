@@ -16219,3 +16219,21 @@ Because `0` now reads as *inherit* rather than plainly *untagged*, the row menu'
 chip says which it is: **Inherit from folder** inside a tagged folder, **No colour**
 outside one. Same chip, same one click back — only the word changes, so the strip stays the
 mockup's nine chips rather than gaining a tenth.
+
+## K-568 — Easings you draw are yours, and they follow you rather than the project
+
+**Status: DECIDED (2026-08-25).** The easing editor's **Save…** keeps the drawn curve under
+a name of the user's choosing, and that shape then stands in the preset row beside the seven
+that ship — loaded by a click, applied by exactly the road a shipped preset takes
+(`applyEasingToSelection`), renamed or thrown away from a right-click on it. The shipped
+seven have no such menu: there is nothing in them the user put there.
+
+A saved easing is a working habit, like a favourite effect or a custom theme, so it belongs
+to the **person, not the project**: it lives beside the settings file
+(`%APPDATA%\lumit\easings.json`, `flutter_ui/lib/state/custom_easings.dart`), which means a
+project handed to somebody else never carries the sender's collection of eases into their
+copy, and `Workspace.storeOverride` redirects it in a test for nothing. A file of its own
+rather than a key in the settings, because the list grows on its own schedule and nothing
+else in the settings file wants rewriting when it does. Names are unique — a second save
+under a taken name lands as "name 2", the rule K-298 already gives custom themes — because
+the name is all there is to tell two shapes apart in a row of words.

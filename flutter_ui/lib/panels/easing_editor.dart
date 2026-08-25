@@ -15,10 +15,16 @@
 // own bottom bar and closes when it is done. [EasingEditor] is the body both
 // show, and knows about neither: the only differences are whether there is a
 // Close button and whether Apply has anywhere to send a shape.
+//
+// **Shapes of your own.** Save… keeps the drawn curve under a name, and it then
+// stands in the preset row beside the seven that ship, applying by exactly the
+// same road. Those saved ones belong to the person rather than to the project,
+// so they live beside the settings file — see `state/custom_easings.dart`.
 
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
+import '../state/custom_easings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'easing_curve.dart';
@@ -125,6 +131,41 @@ class _EasingEditorState extends State<EasingEditor> {
   /// Which handle the pointer has hold of: 1, 2, or null between drags.
   int? _dragging;
 
+  /// What the name field is being used for: null for "it is not there", the
+  /// empty string for saving the drawn shape, and a saved shape's name for
+  /// renaming that one. One field rather than two booleans because the field
+  /// itself is one thing, and it is never doing both jobs at once.
+  String? _naming;
+
+  final TextEditingController _nameField = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameField.dispose();
+    super.dispose();
+  }
+
+  /// Put the name field up, filled with whatever the thing is called now.
+  void _startNaming(String forName) => setState(() {
+        _naming = forName;
+        _nameField.text = forName;
+      });
+
+  /// Enter, or a click away: keep what was typed. A blank name keeps nothing —
+  /// [CustomEasings] refuses it — and the field simply closes.
+  void _commitName() {
+    final job = _naming;
+    if (job == null) return;
+    setState(() {
+      if (job.isEmpty) {
+        CustomEasings.add(_nameField.text, _curve);
+      } else {
+        CustomEasings.rename(job, _nameField.text);
+      }
+      _naming = null;
+    });
+  }
+
   /// The box's drawing rect inside this widget's own coordinates.
   Rect get _box => Rect.fromLTWH(_marginX, _marginY, _boxSide, _boxSide);
 
@@ -186,6 +227,19 @@ class _EasingEditorState extends State<EasingEditor> {
           ),
           const SizedBox(height: 8),
           _presetRow(t),
+          if (_naming != null) ...[
+            const SizedBox(height: 6),
+            HouseTextField(
+              key: const ValueKey('easing-name'),
+              controller: _nameField,
+              width: _popupWidth,
+              autofocus: true,
+              hint: l10n.easingNameYours,
+              onSubmitted: (_) => _commitName(),
+              onTapOutside: _commitName,
+              onCancelled: () => setState(() => _naming = null),
+            ),
+          ],
           const SizedBox(height: 8),
           // The four numbers, so a shape can be read off and typed back in
           // elsewhere. Two decimals is the precision the box can be dragged to.
@@ -202,6 +256,15 @@ class _EasingEditorState extends State<EasingEditor> {
             child: Row(
               children: [
                 const Spacer(),
+                // Keeping the drawn shape is not applying it: Apply stays the
+                // one button that touches the document.
+                HouseButton(
+                  key: const ValueKey('easing-save'),
+                  small: true,
+                  onPressed: () => _startNaming(''),
+                  child: Text(l10n.easingSaveEllipsis, style: t.small),
+                ),
+                const SizedBox(width: 6),
                 if (widget.onClose != null) ...[
                   HouseButton(
                     small: true,
@@ -238,9 +301,14 @@ class _EasingEditorState extends State<EasingEditor> {
     );
   }
 
-  /// The shipped shapes, each a button that loads it into the box. Loading
-  /// rather than applying: a preset is a starting point to nudge, and Apply
-  /// stays the one thing that touches the document.
+  /// The shipped shapes and the user's own, each a button that loads it into
+  /// the box. Loading rather than applying: a preset is a starting point to
+  /// nudge, and Apply stays the one thing that touches the document.
+  ///
+  /// The saved ones sit in the same row, after the seven that ship, and behave
+  /// the same in every way but one: they can be renamed and thrown away, from a
+  /// right-click on the shape itself. A shipped preset has no such menu — there
+  /// is nothing there the user put in.
   Widget _presetRow(LumitTheme t) => SizedBox(
         width: _popupWidth,
         child: Wrap(
@@ -248,19 +316,42 @@ class _EasingEditorState extends State<EasingEditor> {
           runSpacing: 4,
           children: [
             for (final preset in easingPresets)
-              HouseButton(
-                small: true,
-                frameless: true,
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                onPressed: () => setState(() => _curve = preset.curve),
-                child: Text(
-                  easingPresetName(preset.id),
-                  style: t.caption.copyWith(
-                    color: _curve == preset.curve ? t.accent : t.textMuted,
+              _shapeButton(t, easingPresetName(preset.id), preset.curve),
+            for (final saved in CustomEasings.all)
+              HouseContextMenu(
+                itemBuilder: (close) => [
+                  MenuRow(
+                    onPressed: () {
+                      close();
+                      _startNaming(saved.name);
+                    },
+                    child: Text(l10n.rename, style: t.small),
                   ),
-                ),
+                  MenuRow(
+                    onPressed: () {
+                      close();
+                      setState(() => CustomEasings.delete(saved.name));
+                    },
+                    child: Text(l10n.delete, style: t.small),
+                  ),
+                ],
+                child: _shapeButton(t, saved.name, saved.curve),
               ),
           ],
+        ),
+      );
+
+  Widget _shapeButton(LumitTheme t, String name, EasingCurve curve) =>
+      HouseButton(
+        small: true,
+        frameless: true,
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        onPressed: () => setState(() => _curve = curve),
+        child: Text(
+          name,
+          style: t.caption.copyWith(
+            color: _curve == curve ? t.accent : t.textMuted,
+          ),
         ),
       );
 }
