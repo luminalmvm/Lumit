@@ -1,24 +1,5 @@
 ---
-// The hero's ground, drawn rather than painted.
-//
-// In plain terms: instead of three fixed smears of colour, a small program runs
-// on the graphics card for every pixel of the hero, sixty times a second, and
-// works out that pixel's colour from its position and the clock. Nothing is
-// stored - there is no image and no video - so it never repeats and costs a few
-// kilobytes. The technique is the one Caddis uses on their own hero.
-//
-// The recipe is the standard one for a slow-moving field: value noise, summed
-// at four sizes (fbm), then used twice to bend its own coordinates before the
-// final lookup. That bending is what turns noise into something that looks like
-// it is flowing rather than fizzing.
-//
-// The same three hues as the static wash it replaces, so the page's colour does
-// not change - only its stillness. The wash itself is still here, under the
-// canvas, as the whole of the fallback for a browser with no WebGL. The grain
-// and the fade into the page below are the shader's work too: a tiled grain
-// repeats and the eye finds the tile, and a plain ramp between two dark
-// colours is exactly where eight bits a channel runs out and the gradient
-// steps into visible arcs.
+// The hero background.
 ---
 
 <div class="field" aria-hidden="true">
@@ -27,17 +8,10 @@
 </div>
 
 <style>
-  /* The field is taller than the band it sits in - it runs 280 px past the
-     bottom and the colour fades out over the last third, so it dies away
-     behind the section below instead of stopping at an edge. The overhang is
-     why it sits on a negative z-index. */
   .field {
     position: absolute;
     inset: 0 0 -280px 0;
     pointer-events: none;
-    /* Behind everything the page draws, but still above the body's own colour:
-       the field overhangs the section below, and must pass under its words
-       rather than over them. */
     z-index: -1;
   }
   .field > * {
@@ -47,12 +21,6 @@
     width: 100%;
     height: 100%;
   }
-  /* Before the field lights there is nothing behind the wordmark but the page's
-     own black, so the hero has one look on the way in rather than a static wash
-     that is then replaced by a moving one. The wash this field replaced is
-     still here for a browser that gives us no WebGL, but only for that browser
-     - and only that path needs a mask to fade out, because the shader fades
-     itself. */
   .ground {
     background: var(--color-ink);
   }
@@ -65,11 +33,6 @@
     -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
     mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
   }
-  /* The canvas is hidden only until it has drawn once - an unpainted WebGL
-     canvas is pure black, which is not quite the page's black. After that it
-     stays visible, painting nothing but the page's own colour until the
-     wordmark lands, so there is no opacity left to animate: the arrival is the
-     shader's, and it happens in the shader. */
   canvas {
     opacity: 0;
   }
@@ -85,8 +48,6 @@
   `;
 
   const FRAG = `
-    // Screen coordinates run past a thousand, which mediump is not required to
-    // represent exactly; every hash here is fed one.
     #ifdef GL_FRAGMENT_PRECISION_HIGH
     precision highp float;
     #else
@@ -94,13 +55,8 @@
     #endif
     uniform vec2 u_res;
     uniform float u_t;
-    // The wordmark's own box, in this canvas's pixels, and how far the reveal
-    // has got out of it: 0 before it starts, 1 once it has covered everything.
     uniform vec4 u_box;
     uniform float u_reveal;
-    // Milliseconds since the reveal began, and how long the two halves of it
-    // last: the front's own travel, and the settle each pixel gets after the
-    // front has passed it.
     uniform float u_ms;
     uniform vec2 u_span;
 
@@ -108,7 +64,6 @@
       return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
     }
 
-    // Value noise: one random number per lattice corner, smoothly interpolated.
     float noise(vec2 p) {
       vec2 i = floor(p);
       vec2 f = fract(p);
@@ -120,33 +75,19 @@
       );
     }
 
-    // A hash that is still random at screen coordinates. The hash above feeds its input straight to sin(), and the
-    // dot of two pixel coordinates comes to a few hundred thousand - a number
-    // whose sine a 32-bit float can no longer tell you anything useful about.
-    // What comes back is not noise but wide, soft bands, which is precisely the
-    // artifacting that appeared across the field whenever the grain was built
-    // on it. The field itself never noticed, because its own coordinates never
-    // leave single figures. This one folds its input down with fract() before
-    // it does anything else, so the size of the input cannot matter.
+    // A hash that is random at screen coordinates. 
     float phash(vec2 p) {
       vec3 q = fract(vec3(p.xyx) * 0.1031);
       q += dot(q, q.yzx + 33.33);
       return fract((q.x + q.y) * q.z);
     }
 
-    // Interleaved gradient noise. Plain random noise clumps - by chance it puts
-    // eight lit pixels in one place and none in the next, which the eye reads
-    // as blotches rather than as an even scatter. This spreads its values out
-    // instead, which is why it is the standard pattern for dithering and for
-    // dissolves, and it costs three instructions.
+    // Interleaved gradient noise. 
     float ign(vec2 p) {
       return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
     }
 
-    // Four octaves, each half the size and half the strength of the last. The
-    // even halving is what keeps the field wispy: the big shapes carry it and
-    // the fine detail only softens their edges. Giving the small octaves more
-    // say makes it turbulent instead, which is not what this hero wants.
+    // Turblent noise complexity
     float fbm(vec2 p) {
       float v = 0.0;
       float a = 0.5;
@@ -163,7 +104,6 @@
       vec2 p = vec2(uv.x * (u_res.x / u_res.y), uv.y) * 1.7;
       float t = u_t * 0.055;
 
-      // Bend the coordinates by the noise twice over before the final lookup.
       vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t));
       vec2 r = vec2(
         fbm(p + 2.0 * q + vec2(1.7, 9.2) + 0.15 * t),
@@ -176,72 +116,26 @@
       vec3 violet = vec3(0.227, 0.165, 0.420);  // #3a2a6b
       vec3 wine   = vec3(0.416, 0.184, 0.247);  // #6a2f3f
 
-      // Each colour arrives over a short span of the noise rather than drifting
-      // across the whole of it. A wide ramp averages the three hues together
-      // everywhere, which reads as one soft mush and hides the fine filaments
-      // the noise already has; a narrow ramp lets those filaments show, and the
-      // filaments are the wisps. Narrow, though, not sharp - the spans still
-      // overlap, so blue meets red through violet rather than against it.
       vec3 col = ink;
       col = mix(col, indigo, smoothstep(0.30, 0.60, f));
       col = mix(col, violet, smoothstep(0.55, 0.82, length(q)) * 0.85);
-      // The wine is weighted low, as it is in the wash this replaces, but it is
-      // no longer confined there: a good part of its strength reaches the top.
       col = mix(col, wine, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
-      // A second, looser pass of the same red, so it reads as a tint through
-      // the whole field rather than a single band of it.
       col = mix(col, wine, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
-      // Grain: one value per rendered pixel, which is as fine as grain can be
-      // drawn. On a screen that has more device pixels than CSS pixels the
-      // canvas is rendered at the higher count, so the grain gets finer with
-      // the screen rather than staying a CSS pixel across. It goes on the
-      // field's own colour, so it thins out with the field and never lands on
-      // the page's black.
       vec2 gp = gl_FragCoord.xy;
       col += (phash(gp) - 0.5) * 0.036;
-
-      // One level of dither underneath it, well below anything the eye reads
-      // as texture, so the smooth parts of the field cannot step either.
       col += (ign(gp) - 0.5) / 255.0;
 
-      // The field dissolves into the page's black rather than ramping into it,
-      // and it dissolves along the same kind of shape it is made of: the matte
-      // is one more sample of the same noise, so the field breaks up into soft
-      // patches on the way down instead of thinning evenly. Jittering the ramp
-      // per pixel was the earlier attempt at this, and per-pixel speckle over a
-      // third of the screen is what read as sand.
-      //
-      // It takes the banding with it either way. The edge between one 8-bit
-      // step and the next can only show when it lies along a straight line, and
-      // here there is no straight line for it to lie along.
       vec3 page = vec3(0.043, 0.047, 0.055);  // #0b0c0e, the page itself
       float fade = smoothstep(0.0, 0.42, uv.y);
       float matte = fbm(p * 1.1 + vec2(3.7, 11.3));
       float alpha = clamp(fade * 1.5 - 0.25 + (matte - 0.5) * 0.9, 0.0, 1.0);
       col = mix(page, col, alpha);
 
-      // The field arrives by expanding out of the wordmark's own box rather
-      // than fading up everywhere at once. bdist is the distance from that box
-      // - zero on its edge, negative inside it - and the front is that distance
-      // travelled out to the furthest corner of the canvas, eased so it leaves
-      // quickly and arrives gently.
       vec2 bd = max(u_box.xy - gl_FragCoord.xy, gl_FragCoord.xy - u_box.zw);
       float bdist = length(max(bd, 0.0)) + min(max(bd.x, bd.y), 0.0);
       float far = length(max(u_box.xy, u_res - u_box.zw)) + 1.0;
-      // The front is not a line but a soft edge, and it is not the same softness
-      // on both sides. Outward - the side that has not arrived yet - it is
-      // tight, because that edge is the shape of the thing expanding and a wide
-      // one loses it. Inward it runs a very long way back - a third of the
-      // hero - so what the front has just passed goes on settling in well after
-      // the front itself has moved on.
-      //
-      // Both ends of the travel are written in terms of those two. It finishes
-      // a trailing feather past the furthest corner, or the last pixels would
-      // be caught half-lit when the reveal ended; it starts a leading feather
-      // inside the box, since a front any later would have part of the box
-      // showing before the reveal had begun - a rectangle appearing rather than
-      // a wordmark opening.
+
       float lead = 7.0;
       float trail = 320.0;
       float inner = -0.5 * min(u_box.z - u_box.x, u_box.w - u_box.y)
@@ -249,35 +143,12 @@
       float front = mix(inner, far + trail, 1.0 - pow(1.0 - u_reveal, 3.0));
       float vis = 1.0 - smoothstep(front - trail, front + lead, bdist);
 
-      // The exposure overshoots where the front is and settles from there, and
-      // the settle is the pixel's own: it starts when the front reaches that
-      // pixel and takes the same length of time wherever it is on the page.
-      //
-      // Which means working out when the front got here. The front's position
-      // is an eased ramp - the same ramp, inverted - so a pixel's distance
-      // gives the moment it arrived, and everything after that moment is this
-      // pixel settling. It falls off on a square, so it is bright briefly and
-      // dim for a while, which is what an exposure does.
-      //
-      // Doing it this way rather than as a band travelling with the front means
-      // the settle outlives the reveal: the last pixels to be reached are still
-      // coming down long after the front has run off the canvas.
       float e = clamp((bdist - inner) / (far + trail - inner), 0.0, 1.0);
       float arrived = (1.0 - pow(1.0 - e, 1.0 / 3.0)) * u_span.x;
-      // The settle is not the same length everywhere. Out at the edge it takes
-      // the full time, which is where the lingering is worth having - that is
-      // the last thing to arrive and the last thing being looked at. In the
-      // middle, where the front went by first and there is still a whole page
-      // arriving around it, it comes down in a little over a third of that and
-      // gets out of the way.
       float span = u_span.y * mix(0.38, 1.0, e);
       float age = clamp((u_ms - arrived) / span, 0.0, 1.0);
       float ring = vis
         * (1.0 - age) * (1.0 - age)
-        // ... and how much field there is at this pixel to overexpose. The
-        // bottom of the band is mostly page by then, and page does not glow:
-        // the exposure falls away down there exactly as the field does, patch
-        // by patch, rather than lighting up the black it dissolves into.
         * alpha;
       col = col * (1.0 + ring * 2.2) + vec3(0.30, 0.28, 0.34) * ring * 0.7;
 
@@ -287,21 +158,9 @@
     }
   `;
 
-  // The reveal takes an eighth of a second and a bit, out of the wordmark's box
-  // and across the whole canvas. It starts when the lockup lands, whatever this
-  // is set to. Each pixel then takes GLOW_MS to come down from the overexposure
-  // the front left it at, which is twice as long again - the front is off the
-  // canvas well before the page has finished settling.
-  const REVEAL_MS = 150;
-  const GLOW_MS = 300;
+  const REVEAL_MS = 450;
+  const GLOW_MS = 1000;
 
-  // Two things have to happen before the field appears: it has to have a frame
-  // in it, and the wordmark has to be home. They are independent, so the cue
-  // records when it came and whichever finishes last starts the reveal.
-  //
-  // The listener is set up here, at the top of the module, and not inside the
-  // deferred start below - the wordmark lands about a second and a third in,
-  // which is very likely before the browser ever calls us idle.
   let cueAt: number | null = matchMedia("(prefers-reduced-motion: reduce)")
     .matches
     ? 0
@@ -312,16 +171,8 @@
     onCue();
   };
   document.addEventListener("wordmark:home", cue, { once: true });
-  // No wordmark on the page, or a wordmark that never got going: the field is
-  // not held hostage to an event that is not coming.
   setTimeout(cue, 2600);
 
-  // Nothing else runs while the page is still loading. Compiling a shader and
-  // drawing the first frame in the middle of a page load is what made the
-  // field stutter as it came up: it was competing with the fonts, the images
-  // and the layout for the same main thread. Waiting for load and then for the
-  // browser to say it is idle costs a few hundred milliseconds of black, which
-  // nobody notices, and buys a first frame that lands cleanly.
   const whenIdle = (fn: () => void) => {
     const idle = (window as any).requestIdleCallback as
       | ((cb: () => void, o?: { timeout: number }) => void)
@@ -334,8 +185,6 @@
     const canvas = document.querySelector<HTMLCanvasElement>("[data-field]");
     const gl = canvas?.getContext("webgl", { antialias: false, alpha: false });
 
-    // No WebGL: the canvas goes, and the ground below it becomes the static
-    // wash rather than staying black.
     const giveUp = () => {
       canvas?.remove();
       document.querySelector(".field")?.classList.add("no-gl");
@@ -378,12 +227,6 @@
     const uMs = gl.getUniformLocation(prog, "u_ms");
     const uSpan = gl.getUniformLocation(prog, "u_span");
 
-    // The wordmark's box, measured rather than assumed, in canvas pixels with
-    // the y axis the way the shader sees it. Measured on resize and once more
-    // when the reveal starts, and never in the draw: reading an element's box
-    // makes the browser work the layout out, which is not a thing to do sixty
-    // times a second. The animation moves paths inside the svg rather than the
-    // svg itself, so the box does not change while it plays.
     let box = [0, 0, 0, 0];
     const measure = () => {
       const wm = document.querySelector(".wm");
@@ -397,8 +240,6 @@
       const b = wm.getBoundingClientRect();
       const sx = canvas.width / cr.width;
       const sy = canvas.height / cr.height;
-      // Twice the wordmark's box, about its own centre, so the lockup is well
-      // inside the shape the field opens out of rather than sitting on its edge.
       const gx = b.width / 2;
       const gy = b.height / 2;
       box = [
@@ -415,20 +256,12 @@
       gl.uniform1f(uT, now / 1000);
       gl.uniform4f(uBox, box[0], box[1], box[2], box[3]);
       gl.uniform2f(uSpan, REVEAL_MS, GLOW_MS);
-      // Before the reveal starts there is no elapsed time to report. Far enough
-      // in the past does for it: nothing is visible yet either way.
       const since = revealAt === null ? -1e6 : now - revealAt;
       gl.uniform1f(uMs, since);
       gl.uniform1f(uReveal, Math.min(1, Math.max(0, since / REVEAL_MS)));
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
-    // One canvas pixel per device pixel, up to two of them per CSS pixel. The
-    // field alone would be happy at half the CSS count and scaled up, but grain
-    // that has been through a bilinear resize is mush, and so is a dissolve;
-    // and the grain is one pixel across by definition, so how fine it looks is
-    // decided here rather than in the shader. The cap is there because the
-    // cost is per pixel and a phone at three would pay it three times over.
     const dpr = Math.min(2, devicePixelRatio || 1);
     const resize = () => {
       canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
@@ -443,18 +276,10 @@
     resize();
     measure();
 
-    // The first frame is drawn here rather than left to the observer above, so
-    // the field is ready even if that callback never comes. It paints nothing
-    // but the page's own black until the reveal starts, and the clock is
-    // already running by then, so the field is caught mid-motion rather than
-    // starting from a standstill.
     const readyAt = performance.now();
     draw(readyAt);
     canvas.classList.add("lit");
 
-    // Whichever came last - the frame or the wordmark - is when the reveal
-    // starts. Measuring once more here rather than trusting the resize keeps
-    // the box right if the fonts settled after the field was set up.
     const begin = () => {
       measure();
       revealAt = Math.max(cueAt ?? 0, readyAt);
@@ -462,18 +287,12 @@
     if (cueAt !== null) begin();
     else onCue = begin;
 
-    // Reduced motion gets the field, held still - the colour is part of the
-    // page, the movement is the part that is optional. The reveal is already
-    // over by the time anything is drawn.
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      revealAt = readyAt - REVEAL_MS - GLOW_MS;
+      revealAt = 0;
       draw(performance.now());
       return;
     }
 
-    // The clock only runs while the hero is on screen; scrolled past, the page
-    // costs nothing. requestAnimationFrame already stops on a hidden tab, so
-    // that case needs no code.
     let frame = 0;
     const tick = (ms: number) => {
       draw(ms);
