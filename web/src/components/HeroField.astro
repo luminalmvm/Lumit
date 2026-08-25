@@ -26,9 +26,9 @@
   }
   .no-gl .ground {
     background:
-      radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
-      radial-gradient(90% 80% at 85% 30%, #23606b 0%, rgba(35, 96, 107, 0) 55%),
-      radial-gradient(100% 90% at 60% 95%, #35785e 0%, rgba(53, 120, 94, 0) 60%),
+      radial-gradient(120% 90% at 20% 20%, #38519c 0%, rgba(56, 81, 156, 0) 55%),
+      radial-gradient(90% 80% at 85% 30%, #2d7b89 0%, rgba(45, 123, 137, 0) 55%),
+      radial-gradient(100% 90% at 60% 95%, #449a78 0%, rgba(68, 154, 120, 0) 60%),
       #0f1422;
     -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
     mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
@@ -118,12 +118,17 @@
       // the wine - it is the accent itself, and it keeps the wine's low
       // weighting, so the brand's green is the bottom of the field.
       //
-      // All three hold the darkness the wash they replace had. That is what the
-      // field's depth was made of, and it survives the hues changing.
+      // All three are the same three hues turned up by a little over a quarter -
+      // every channel scaled by the same amount, which lifts the value and
+      // leaves the hue and the saturation where they were.
+      //
+      // The ink is not touched, and it is the ink that makes the dark swirls:
+      // they are the places where none of the three has much weight, so they
+      // stay exactly as dark as they were while the lit parts come up.
       vec3 ink    = vec3(0.059, 0.078, 0.133);  // #0f1422
-      vec3 indigo = vec3(0.173, 0.247, 0.478);  // #2c3f7a
-      vec3 teal   = vec3(0.137, 0.376, 0.420);  // #23606b
-      vec3 spruce = vec3(0.208, 0.471, 0.369);  // #35785e - the accent
+      vec3 indigo = vec3(0.221, 0.316, 0.612);  // #38519c
+      vec3 teal   = vec3(0.175, 0.481, 0.538);  // #2d7b89
+      vec3 spruce = vec3(0.266, 0.603, 0.472);  // #449a78 - the accent, lifted
 
       vec3 col = ink;
       col = mix(col, indigo, smoothstep(0.30, 0.60, f));
