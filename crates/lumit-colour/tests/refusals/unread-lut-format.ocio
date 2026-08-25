@@ -1,0 +1,7 @@
+# refuses: .3dl
+ocio_profile_version: 1
+search_path: luts
+colorspaces:
+  - !<ColorSpace>
+    name: old_format
+    to_reference: !<FileTransform> {src: look.3dl}

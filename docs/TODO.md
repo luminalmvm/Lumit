@@ -490,7 +490,11 @@ does not gate the four. Delete each phase here when it lands, as with everything
     points connection is a graph edge, the first stack-sourced data wire), the
     Points sample driver (Count and Nearest distance driving parameters), the
     evaluation and carriage contract, the seam, and the ordered work packages:
-    PS1 (stream core + closed-form CPU Particulate), PS2 (GPU evaluate,
+    ~~PS1~~ (landed: `fx/points.rs`, the `Signature::Image { extra }` split and
+    Particulate's declaration, closed forms and CPU disc reference — the effect
+    is in the catalogue and passes its picture through until PS2's passes
+    arrive, which `AWAITING_A_GPU_PASS` in lumit-render names),
+    PS2 (GPU evaluate,
     compaction, instanced draw; docs/08 gains Particulate's §3.x entry here),
     PS3 (the points edge and its refusals), PS4 (the Points sample driver),
     PS5 (seam + codegen), PS6 (UI), PS7 (goldens + the K-475 budget gates).
@@ -537,14 +541,19 @@ The owner has ruled OCIO support in scope; the design step has landed
 (**docs/impl/ocio.md** holds the model, the maths, the traps and the test plans; K-489
 records the native-Rust hosting decision, K-490 the v1 scope). Six work packages, in
 order, each sized for one agent, each landing with its tests; WP6's fixture format is
-WP1's, so fixtures are authored alongside WP1–2 rather than at the end:
+WP1's, so fixtures are authored alongside WP1–2 rather than at the end.
 
-- **WP1 - engine transform core**: the `lumit-colour` crate — the op set with
-    forward/inverse, the tetrahedral and curve samplers, factorisation analysis, the
-    bake to both artefact forms, `.spi1d`/`.spi3d`/CLF parsing (note §4, §5.1).
-- **WP2 - config parser and resolution**: `config.ocio` on `yaml-rust2`, roles,
-    displays/views, `search_path`, the interchange bridge, `BuiltinTransform`'s two
-    tiers, the refusal taxonomy (note §2.1, §4.4).
+**WP1 and WP2 have landed**: `crates/lumit-colour` holds the op set, the samplers, the
+bake, the `.spi1d`/`.spi3d`/CLF readers, the `config.ocio` grammar, resolution, the
+interchange bridge and the refusal taxonomy, with its own test suite and
+`tests/refusals/` as the taxonomy's corpus. Two things they could not finish and WP6
+owns, both recorded rather than approximated: the golden fixtures generated with the
+reference OpenColorIO library (the checked-in ones are published external constants;
+the reference rows are `#[ignore]`d with what each waits for), and the vendored
+`BuiltinTransform` bakes — until those exist, the ACES output-transform styles refuse
+by name, which also means the OCIO v2 ACES configs do not load end to end yet while the
+legacy 1.0.3/1.2 configs, being pure config data, do. What remains:
+
 - **WP3 - document state, bake wiring, render paths**: `Document::colour` and the
     per-item tag with their two ops, the degrade ladder, frame-key folding, the decode
     and display pass variants (mind the Unorm-view double-encode trap), export on the

@@ -96,10 +96,6 @@ pub enum ColourError {
     #[error("{what} could not be read: {reason}")]
     Parse { what: String, reason: String },
 
-    /// A colour space that declares neither direction, so it cannot be resolved.
-    #[error("the colour space {name} declares no transform in either direction")]
-    NoTransform { name: String },
-
     /// A table larger than the budget allows (docs/14 §5).
     #[error(
         "a look-up table in {what} is larger than Lumit allows ({size} points, limit {limit})"

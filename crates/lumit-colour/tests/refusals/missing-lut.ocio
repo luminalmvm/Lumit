@@ -1,0 +1,7 @@
+# refuses: was not found on this config's search path
+ocio_profile_version: 1
+search_path: luts
+colorspaces:
+  - !<ColorSpace>
+    name: absent
+    to_reference: !<FileTransform> {src: nowhere.spi1d}

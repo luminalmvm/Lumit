@@ -47,15 +47,20 @@
 //! across worker threads (docs/14 §1.2).
 
 pub mod bake;
+pub mod builtin;
 pub mod clf;
+pub mod config;
 pub mod error;
 pub mod file;
 pub mod matrix;
 pub mod op;
+pub mod resolve;
 pub mod sample;
 pub mod spi;
 
 pub use bake::{bake, Artefact, Shaper, Stage, VendoredArtefact};
+pub use config::Config;
 pub use error::{ColourError, Result};
 pub use op::{Chain, Direction, Op};
+pub use resolve::{Bridge, LoadedConfig};
 pub use sample::{Cube, Curve};
