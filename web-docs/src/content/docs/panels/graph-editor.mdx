@@ -1,0 +1,39 @@
+---
+title: Graph editor
+description: Customising keyframes.
+sidebar:
+  order: 5
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The graph editor draws a properties value as a line.
+
+<Shot file="graph-editor.png" caption="The graph editor, showing the value graph." eager/>
+
+| Control | Does |
+| --- | --- |
+| **Value graph** | Value against time. |
+| **Speed graph** | Rate of change against time. |
+| **Lens switch** | Swap between the two. |
+| **Auto fit** | Automatically adjusts the vertical zoom to fit the curve on screen. |
+
+On a retimed layer, if the user has enabled **Edit ▸ Settings ▸ Interface ▸ Retime opens to Speed**
+then the graph view for retime displays a custom speed graph instead to make retiming easier.
+
+## Altering keyframe types
+
+When working in the graph-editor you can use the **Linear**, **Bezier**, or **Hold** buttons to
+alter the change between frames. Linear has a constant rate of change between keyframes, and hold
+will hold the last keyframe until it reaches a new one.
+
+Bezier gives a keyframe two handles, which by default move together, but holding `alt` while scrubbing
+allows them to act independantly. These can be used to influence and change the rate of change between
+keyframes.
+
+Altering keyframes in both the value and speed graph will reflect in the other.
+
+## Related
+
+- [The graph editor, in use](/use/graph-editor/)
+- [Retiming and speed](/use/retime/)

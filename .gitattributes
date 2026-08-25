@@ -1,0 +1,39 @@
+# Line endings, normalised once so they stop being noise.
+#
+# Without this, every `git add` on Windows prints "LF will be replaced by CRLF"
+# for each file, and a file can show as modified in `git status` while `git diff`
+# reports no change at all. That made reviewing the flutter_rust_bridge output
+# genuinely hard: a generated file could look edited when nothing about it had
+# changed. Text is stored LF in the repository and checked out however the
+# platform prefers.
+* text=auto eol=lf
+
+# Windows-only scripts and project files that tooling expects CRLF for.
+*.ps1     text eol=crlf
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+*.sln     text eol=crlf
+*.vcxproj text eol=crlf
+
+# Genuinely binary, so never touched.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.ttf  binary
+*.otf  binary
+*.lum  binary
+*.mp4  binary
+*.mov  binary
+*.wav  binary
+
+# flutter_rust_bridge output. Marked generated so review tools collapse it by
+# default and it does not dominate a diff — these files are never edited by hand,
+# only rewritten by `flutter_rust_bridge_codegen generate` (see
+# docs/GUIDE.md §9). Note the whole set is rewritten on every run, so a module
+# nobody touched can still change: the output embeds comments derived from
+# `cargo expand`, which shift with the Rust toolchain.
+crates/lumit-bridge/src/frb_generated.rs  linguist-generated=true
+flutter_ui/lib/src/rust/**                linguist-generated=true
+
+# Vendored third-party build tooling, not ours to review.
+flutter_ui/rust_builder/cargokit/**  linguist-vendored=true

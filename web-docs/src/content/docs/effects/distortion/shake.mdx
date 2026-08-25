@@ -1,0 +1,83 @@
+---
+title: "Shake"
+description: "Seeded camera wobble."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Shake is a [Distortion](/effects/#distortion) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Shake" category="distortion" slug="shake" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Wobbles the layer as though the camera were handheld.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amplitude** | Slider | 0 to 400; up to 2000 | 30 | Pixels at composition size |
+| **Frequency** | Slider | 0.1 to 30; down to 0 and higher | 8 | - |
+| **Rotation amount** | Slider | 0 to 45; up to 360 | 1 | Degrees |
+| **X amount** | Slider | 0 to 2; higher | 1 | - |
+| **X frequency** | Slider | 0 to 4; higher | 1 | - |
+| **Y amount** | Slider | 0 to 2; higher | 1 | - |
+| **Y frequency** | Slider | 0 to 4; higher | 1 | - |
+| **Z amount** | Slider | 0 to 20; up to 100 | 0 | Per cent |
+| **Z frequency** | Slider | 0 to 4; higher | 1 | - |
+| **Motion blur** | Checkbox | On or off | Off | - |
+| **Shutter** | Slider | 0 to 1 | 0.5 | - |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Mirror | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Per-axis wobble** groups **X amount**, **X frequency**, **Y amount**, **Y frequency**, **Z amount**, **Z frequency**, and starts closed.
+- **Motion blur** groups **Motion blur**, **Shutter**, and starts closed.
+- **Matte** scales the shake's displacement per pixel, read where the pixel lands: white moves it the full Amplitude and Rotation amount, grey less, black leaves it still, so a soft matte turns the shove into a warp. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amplitude**: the overall scaler for the intensity of the shake.
+- **Frequency**: how fast wobbles happen, in cycles per second.
+- **Rotation amount**: how much the frame rotates as it moves.
+- **Edges**: what fills the border. Mirror reflects the
+  picture back. Repeat holds the edge pixel. Transparent leaves it clear.
+- **Seed**: generates which random shake occurs.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+The **Per-axis wobble** group biases the movement rather than adding to it:
+
+- **X amount** / **Y amount**: multipliers on the amplitude for each axis.
+- **X frequency** / **Y frequency**: multipliers on the frequency per axis.
+- **Z amount** and **Z frequency**: depth shake.
+
+The **Motion blur** group adds the shake's own smear:
+
+- **Motion blur**: samples the wobble several times across the shutter and
+  averages the results.
+- **Shutter**: how far across the shutter window those samples spread.
+
+## Related
+
+- [Transform](/effects/utility/transform/)
+- [Motion blur](/effects/temporal/motion-blur/)
+- [Block glitch](/effects/distortion/block-glitch/)
+- [Layers](/use/layers/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

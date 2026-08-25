@@ -1,0 +1,75 @@
+---
+title: Add grain
+description: "Lays film grain over the picture."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Add grain is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Add grain" category="generate" slug="add-grain" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Add film grain onto a layer.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Intensity** | Slider | 0 to 200; higher | 50 | Per cent |
+| **Size** | Slider | 0.5 to 20; down to 0.1 and higher | 2 | Pixels at composition size |
+| **Softness** | Slider | 0 to 100 | 50 | Per cent |
+| **Red** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Green** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Blue** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Monochrome** | Checkbox | On or off | Off | - |
+| **Shadows** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Midtones** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Highlights** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Animate** | Checkbox | On or off | On | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Intensity per pixel: white grains at the full Intensity, grey          more finely, black not at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Intensity**: how strong the grain is.
+- **Size**: how big a grain is.
+- **Softness**: 0 gives hard-edged square cells.
+- **Red**, **Green** and **Blue**: how much grain each channel gets, as a percentage of
+  Intensity.
+- **Monochrome**: if enabled the grain is monochrome.
+- **Shadows**, **Midtones** and **Highlights**: how much grain each part of the tone range
+  gets. 
+- **Animate**: changes the grain pattern each frame automatically if enabled.
+- **Seed**: which random grain pattern to use.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+[Noise](/effects/generate/noise/) does a greyscale version, but lacks some controls that 
+Add grain has.
+
+## Related
+
+- [Noise](/effects/generate/noise/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

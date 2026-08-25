@@ -1,0 +1,52 @@
+---
+title: "Exposure"
+description: "Adjust exposure."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Exposure is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Exposure" category="colour" slug="exposure" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Exposure multiplies lightness light rather than being additive, so blacks remain black.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Stops** | Slider | -5 to 5; any value by typing | 0 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Stops toward 0 per pixel: white applies the full Stops, grey a fraction of them, black none. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Stops** is the amount to increase or decrease exposure by. This is equivalent to doublings and halvings.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Contrast](/effects/colour/contrast/)
+- [Gamma](/effects/colour/gamma/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

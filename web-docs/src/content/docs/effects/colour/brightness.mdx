@@ -1,0 +1,62 @@
+---
+title: Brightness
+description: "Brighten or darken the image."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Brightness is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Brightness" category="colour" slug="brightness" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Adds or subtracts light to every pixel.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Brightness** | Slider | -100 to 100; any value by typing | 0 | Per cent |
+| **Contrast** | Slider | -100 to 100; higher | 0 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** pulls Brightness toward 0 and Contrast toward 0 per pixel: white applies both in full, black neither. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Brightness** is the light added to every channel. At full deflection either
+  way it is a whole unit of scene-linear light, which is a lot; small numbers
+  are the usual ones.
+- **Contrast** is the spread about mid-grey. Zero passes the picture through and
+  −100 flattens the frame to grey. At +100 the spread doubles, and there is no
+  ceiling above.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the brightness amount from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+Brightness is addition, so it lifts the shadows as much as highlights. That makes 
+it flatter than [Exposure](/effects/colour/exposure/), which multiplies instead. 
+
+## Related
+
+- [Contrast](/effects/colour/contrast/)
+- [Exposure](/effects/colour/exposure/)
+- [Levels](/effects/colour/levels/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

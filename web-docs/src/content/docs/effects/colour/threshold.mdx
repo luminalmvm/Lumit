@@ -1,0 +1,63 @@
+---
+title: Threshold
+description: "Values above threshold white, otherwise black."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Threshold is a **Colour** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Threshold" category="colour" slug="threshold" />
+
+{/* END GENERATED */}
+
+## What it does
+
+If a pixel is brighter than the threshold value it becomes white, otherwise it becomes black.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Level** | Slider | 0 to 100 | 50 | Per cent |
+| **Softness** | Slider | 0 to 100; higher | 0 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Level** — the cutoff point.
+- **Softness** — how wide the crossing between black and white is. **0** is a
+  hard cut. Greater than this creates a gradient either side of the level value. 
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+**Transparency is not affected.** The alpha channel is not included in the threshold
+
+**For a colour version of the same idea**, use
+[Posterize](/effects/colour/posterize/) at a low Levels count, or
+[Tritone](/effects/colour/tritone/) to map the two tones onto colours of your
+choosing.
+
+## Related
+
+- [Posterize](/effects/colour/posterize/)
+- [Tritone](/effects/colour/tritone/)
+- [Matte key](/effects/utility/matte-key/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

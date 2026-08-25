@@ -1,0 +1,32 @@
+---
+// The default page title, plus a "Last updated" line right below it, so a stale
+// page is visible where you are actually reading. The date comes from git via
+// Starlight's lastUpdated option; a page with no commit yet shows no line.
+import Default from "@astrojs/starlight/components/PageTitle.astro";
+
+const { lastUpdated } = Astro.locals.starlightRoute;
+---
+
+<Default><slot /></Default>
+{
+  lastUpdated && (
+    <p class="page-updated">
+      Last updated{" "}
+      <time datetime={lastUpdated.toISOString()}>
+        {lastUpdated.toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })}
+      </time>
+    </p>
+  )
+}
+
+<style>
+  .page-updated {
+    margin-top: 0.4rem;
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+</style>

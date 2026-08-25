@@ -1,0 +1,72 @@
+---
+title: "Fast motion blur"
+description: "Smear each pixel along motion in footage."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Fast motion blur is a [Temporal](/effects/#temporal) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Fast motion blur" category="temporal" slug="fast-motion-blur" />
+
+{/* END GENERATED */}
+
+## What it does
+
+This effect measures where every pixel moved between one frame and the next, and
+smears each one along its own path. 
+
+:::caution[One flow measurement per layer]
+Measuring motion is expensive. A layer computes it once per frame and shares it,
+so where a layer carries both this and
+[Datamosh](/effects/distortion/datamosh/), whichever comes first in the stack
+gets the measurement and the other does nothing. Put them on separate layers if
+you need both.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Shutter angle** | Slider | 0 to 720 | 180 | Degrees |
+| **Samples** | Slider | 8 to 32; down to 2 and up to 64 | 16 | - |
+| **Quality** | Dropdown | Normal · High | Normal | - |
+| **Motion vectors** | Layer | Any layer in the composition | None | - |
+| **Vector scale** | Slider | 0 to 200; up to 4000 | 32 | Pixels at composition size |
+| **View** | Dropdown | Rendered · Motion vectors · Confidence · Dominant motion | Rendered | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Vector scale** is editable while **Motion vectors** names a layer.
+- **Matte** scales Shutter angle per pixel: the streak is genuinely shorter where the matte is dark, gathering from nearer along the motion, rather than a long streak faded back over a sharp picture. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Shutter angle** sets how long the imaginary shutter is open.
+- **Samples** is a *maximum* on the number of samples the blur combines.
+- **Quality**: increasing gives higher quality blur, for increased render time.
+- **View** is a diagnostic display. Motion vectors show measured movement
+  as colour. Confidence shows where the measurement is likely correct in white, and
+  Dominant motion shows the neighbourhood motion an uncertain pixel borrows.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Motion blur](/effects/temporal/motion-blur/)
+- [Echo](/effects/temporal/echo/)
+- [Directional blur](/effects/blur-sharpen/directional-blur/)
+- [Retime](/use/retime/)
+- [Temporal](/effects/#temporal)
+- [Effects](/use/effects/)

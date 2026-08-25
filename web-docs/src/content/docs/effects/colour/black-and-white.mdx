@@ -1,0 +1,67 @@
+---
+title: Black and white
+description: "Converts to greyscale."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Black and white is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Black and white" category="colour" slug="black-and-white" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Converts the layer to black and white, with additional controls for the brightness of
+different colors.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Reds** | Slider | -200 to 300; higher | 40 | Per cent |
+| **Yellows** | Slider | -200 to 300; higher | 60 | Per cent |
+| **Greens** | Slider | -200 to 300; higher | 40 | Per cent |
+| **Cyans** | Slider | -200 to 300; higher | 60 | Per cent |
+| **Blues** | Slider | -200 to 300; higher | 20 | Per cent |
+| **Magentas** | Slider | -200 to 300; higher | 80 | Per cent |
+| **Tint** | Checkbox | On or off | Off | - |
+| **Tint colour** | Colour | Each channel 0 to 4, scene-linear | 0.62, 0.44, 0.26, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Tint colour** is editable while **Tint** is on.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Reds**, **Yellows**, **Greens**, **Cyans**, **Blues** and **Magentas** set
+  how bright each colour becomes.
+- **Tint** and **Tint colour** tint the greyscale output.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the greyscale amount from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+**For a plain desaturation**, [Saturation](/effects/colour/saturation/) at
+&minus;100 is simpler.
+
+## Related
+
+- [Saturation](/effects/colour/saturation/)
+- [Tritone](/effects/colour/tritone/)
+- [Photo filter](/effects/colour/photo-filter/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

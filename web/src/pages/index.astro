@@ -1,0 +1,469 @@
+---
+import Base from "../layouts/Base.astro";
+import Wordmark from "../components/Wordmark.astro";
+
+// The two screenshot cards under the wide one. Both are real captures of the
+// application, cropped and re-encoded for the web (web/public/shots/).
+const shots = [
+  {
+    src: "/shots/timeline.webp",
+    alt: "Lumit's timeline: four layers with their modes, mattes, blends and keyframes",
+    h: "Familiar by design.",
+    p: "Layers stack. Keyframes interpolate. The timeline works the way you already know, and the viewer answers as fast as you can move.",
+  },
+  {
+    src: "/shots/welcome.webp",
+    alt: "Lumit's welcome window, listing recent projects on disk",
+    h: "Yours to keep.",
+    p: "A native Rust engine and a real desktop application, released under the GPL. Your projects, your plug-ins, your machine.",
+  },
+];
+
+// Three hover-play slots. The clips are not recorded yet: each slot is a real
+// <video> whose source will appear under /clips/, and until it does the poster
+// - a crop of the matching screenshot - is what the visitor sees. Nothing here
+// pretends to move. The slots are listed as content debt in docs/TODO.md.
+const clips = [
+  {
+    src: "/clips/retime.webm",
+    poster: "/shots/poster-retime.webp",
+    alt: "The timeline's keyframes and graph column",
+    h: "Retime with a curve.",
+  },
+  {
+    src: "/clips/flare.webm",
+    poster: "/shots/poster-flare.webp",
+    alt: "The Viewer showing a composited frame",
+    h: "Physical lens flares.",
+  },
+  {
+    src: "/clips/camera.webm",
+    poster: "/shots/poster-camera.webp",
+    alt: "The Viewer beside the effects and presets list",
+    h: "Camera solve.",
+  },
+];
+
+const features = [
+  {
+    h: "Playback is the product",
+    p: "Rendering runs on the GPU. Lumit reuses cached work and lowers preview quality when it needs to, so the interface stays responsive - even during export.",
+  },
+  {
+    h: "One retime, two choices",
+    p: "Retime has two views of the same data. Use the value graph if you work like After Effects, or the speed graph and Sequence layers if you cut like Vegas. Switch whenever you need.",
+  },
+  {
+    h: "Cut like an NLE, inside a layer",
+    p: "Sequence layers hold a run of clips cut back-to-back on one row - cutting and per-clip retiming, living inside the composition's layer stack.",
+  },
+  {
+    h: "A graph editor worth living in",
+    p: "Value and speed views of the same curves, AE-compatible bezier maths, and easing built to be judged by feel.",
+  },
+  {
+    h: "The effects you actually use",
+    p: "Eighty-five of them ship, built in and GPU-rendered: glow, motion blur, camera shake, RGB split, smooth zoom, and a grading suite with a LUT loader. Every one has a page in the manual showing what it does. OFX hosting is on the roadmap.",
+  },
+  {
+    h: "Bring your After Effects projects",
+    p: "A free panel runs inside After Effects and writes a bundle Lumit opens. Keyframes carry across value for value, and an import report says what was adjusted on the way and what could not come at all.",
+  },
+  {
+    h: "Your work survives the crash",
+    p: "Every edit goes through an operation journal, and the project autosaves beside it. Kill Lumit mid-edit and it offers the recovered project on the next launch.",
+  },
+  {
+    h: "Open source, GPLv3",
+    p: "The whole engine and interface, in the open. No subscription, no per-seat licence, and no plugin tax on the basics.",
+  },
+];
+
+// Three numbered stages. The stage after 1.0 gets a dashed rail: past the
+// release, the order is a guess and the site should say so.
+const roadmap = [
+  {
+    label: "Currently in-progress",
+    items: [
+      "After Effects import",
+      "Expressions",
+      "Optical-flow retiming",
+      "Beat detection and snapping",
+      "Motion paths in the Viewer",
+      "Shape modifiers and path editing",
+      "The macOS pass",
+    ],
+  },
+  {
+    label: "Before 1.0",
+    items: [
+      "Export queue",
+      "Tone mapping",
+      "GPU scopes",
+      "Proxy generation",
+      "First-run setup",
+      "Signed installers",
+    ],
+  },
+  {
+    label: "After 1.0",
+    dashed: true,
+    items: [
+      "OFX plugin hosting",
+      "3D lights and camera depth of field",
+      "Tracker and stabiliser",
+      "Rotoscoping",
+      "Variable-width mask feather",
+      "Particles",
+      "Text animators",
+      "Audio panel and level meters",
+      "Composer audio workspace",
+      "Node view",
+      "Scripting",
+      "Colour management",
+    ],
+  },
+];
+---
+
+<Base
+  title="Lumit"
+  description="A native compositing and motion-graphics editor. GPU-first, open source, and built to stay responsive with thousands of layers."
+>
+  {/* ---------- hero: half height, the wordmark animation, one download ---------- */}
+  {/* Half the window, and never more than the drawing's 520 however tall the
+      screen is - the hero is a band, not a page. */}
+  <section class="hero relative isolate -mt-16 flex min-h-[clamp(420px,54vh,560px)] flex-col items-center justify-center overflow-hidden px-5 pt-24 pb-16 text-center">
+    <div class="grain pointer-events-none absolute inset-0 opacity-90 mix-blend-overlay" aria-hidden="true"></div>
+
+    <a class="pill relative" href="/releases">
+      <b class="font-mono font-normal text-fg" data-ver>v0.2.0</b> · public beta
+    </a>
+
+    <h1 class="relative mt-7 mb-0 w-[min(440px,78vw)]">
+      <Wordmark />
+      <span class="sr-only">Lumit - compositing, your way.</span>
+    </h1>
+
+    <p class="relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80">
+      Compositing, your way. A native motion-graphics editor built for editors:
+      GPU-first, open source, and responsive in projects with thousands of layers.
+    </p>
+
+    <div class="relative mt-7 flex flex-wrap items-center justify-center gap-3">
+      <a class="btn" href="/download" data-dl>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
+        </svg>
+        <span data-dl-label>Download</span>
+      </a>
+      <a class="text-[13px] text-fg-2 no-underline hover:text-accent-2" href="/download" data-alt>
+        All download options
+      </a>
+    </div>
+
+    <p class="relative mt-6 text-[14px] text-fg-2">
+      Free and open source, GPLv3. No account, no trial, no card.
+    </p>
+  </section>
+
+  {/* ---------- the product, in pictures ---------- */}
+  <section id="features" class="wrap flex flex-col gap-10 pt-24 pb-20 sm:pt-[120px]">
+    <div class="flex flex-col gap-3.5">
+      <p class="kicker">Introducing Lumit</p>
+      <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
+        Everything you know, <span class="text-fg">on an engine that keeps up.</span>
+      </h2>
+    </div>
+
+    <img
+      class="w-full rounded-card border border-line bg-ink-2"
+      src="/shots/workspace.webp"
+      width="1704"
+      height="961"
+      alt="The Lumit workspace: project panel, viewer, effects list and timeline"
+    />
+
+    <div class="grid gap-10 md:grid-cols-2">
+      {
+        shots.map((s) => (
+          <figure class="m-0 flex flex-col gap-2.5">
+            <img
+              class="aspect-[580/260] w-full rounded-card border border-line bg-ink-2 object-cover"
+              src={s.src}
+              width="1160"
+              height="520"
+              loading="lazy"
+              alt={s.alt}
+            />
+            <figcaption class="flex flex-col gap-2.5">
+              <span class="font-mono text-[18px] tracking-[-0.01em] text-fg">{s.h}</span>
+              <span class="text-[15px] leading-[1.35] text-fg-3">{s.p}</span>
+            </figcaption>
+          </figure>
+        ))
+      }
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-3">
+      {
+        clips.map((c) => (
+          <figure class="clip m-0 flex flex-col gap-2">
+            <div class="relative overflow-hidden rounded-card border border-line bg-ink-2">
+              <video
+                class="block aspect-[384/182] w-full object-cover"
+                src={c.src}
+                poster={c.poster}
+                aria-label={c.alt}
+                muted
+                loop
+                playsinline
+                preload="none"
+              />
+              <span
+                class="pointer-events-none absolute bottom-2 left-2 rounded-ctl bg-ink/70 px-1.5 py-1 font-mono text-[11px] leading-none tracking-[0.08em] uppercase text-fg-3 transition-opacity"
+                data-hint
+              >
+                Video · plays on hover
+              </span>
+            </div>
+            <figcaption class="font-mono text-[15px] text-fg">{c.h}</figcaption>
+          </figure>
+        ))
+      }
+    </div>
+  </section>
+
+  {/* ---------- why it exists ---------- */}
+  <section class="border-t border-line py-20 sm:py-24">
+    <div class="wrap">
+      <p class="kicker">Why Lumit exists</p>
+      <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">
+        Editing should not be a chore.
+      </h2>
+      <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
+        Preview lag, interfaces that stop responding, and large external plugin suites
+        that slow down your device. Lumit replaces all of this in a single application,
+        with support for OFX plugins should you still require them.
+      </p>
+
+      <div
+        class="mt-12 grid gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-2"
+      >
+        {
+          features.map((f) => (
+            <div class="bg-ink-2 p-7">
+              <h3 class="font-mono text-[15px] text-fg">{f.h}</h3>
+              <p class="mt-2.5 text-[15px] leading-[1.35] text-fg-3">{f.p}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- roadmap ---------- */}
+  <section id="roadmap" class="border-t border-line bg-ink-2 py-20 sm:py-24">
+    <div class="wrap">
+      <p class="kicker">Roadmap</p>
+      <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">What we are building.</h2>
+      <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
+        Lumit is in public beta. Here are the current in-progress features, and a
+        preview of what's to come.
+      </p>
+
+      <div class="roadmap mt-14">
+        {
+          roadmap.map((stage, i) => (
+            <div class:list={["stage", stage.dashed && "stage-open"]}>
+              <span class="marker" aria-hidden="true">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <div class="head">
+                <h3 class="kicker">{stage.label}</h3>
+              </div>
+              <ul class="items">
+                {stage.items.map((item) => (
+                  <li>{item}</li>
+                ))}
+              </ul>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  {/* ---------- close ---------- */}
+  <section class="border-t border-line py-20 text-center sm:py-24">
+    <div class="wrap">
+      <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Free, forever.</h2>
+      <p class="mx-auto mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
+        Open source under GPLv3, and yours to keep. Windows, Linux and macOS builds are
+        all ready now - no account, no licence key.
+      </p>
+      <div class="mt-9 flex flex-wrap justify-center gap-3">
+        <a class="btn" href="/download">Download Lumit</a>
+        <a class="btn btn-ghost" href="https://docs.lumitlab.com">Read the docs</a>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  /* The hero's ground: three washes over surface_0's near-black, and a fine grain
+     over the lot so the gradient never bands on a wide screen. Both are the
+     drawing's own values. */
+  .hero {
+    background:
+      radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
+      radial-gradient(90% 80% at 85% 30%, #3a2a6b 0%, rgba(58, 42, 107, 0) 55%),
+      radial-gradient(100% 90% at 60% 95%, #6a2f3f 0%, rgba(106, 47, 63, 0) 60%),
+      #0f1422;
+  }
+  .grain {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.10 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+  }
+
+  /* Numbered stages against a rail. Each stage carries its own rail segment so
+     the last one can go dashed: past 1.0 the order is a guess, and the line
+     should look like one. */
+  .stage {
+    position: relative;
+    display: grid;
+    gap: 20px;
+    padding: 0 0 44px 44px;
+    border-left: 1px solid var(--color-line-2);
+  }
+  .stage-open {
+    border-left-style: dashed;
+  }
+  .stage:last-child {
+    padding-bottom: 0;
+  }
+  .marker {
+    position: absolute;
+    left: 0;
+    top: -2px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    margin-left: -14px;
+    border-radius: var(--radius-ctl);
+    border: 1px solid var(--color-line-2);
+    background: var(--color-ink-2);
+    color: var(--color-fg-3);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+  }
+  /* Each item is its own cell. A shared grid with hairline gaps left the empty
+     cells of a partial last row showing as a grey block, and no item count fixes
+     that while the columns are responsive. */
+  .items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .items li {
+    padding: 8px 14px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-ctl);
+    background: var(--color-ink);
+    color: var(--color-fg-2);
+    font-size: 14px;
+    line-height: 1.35;
+    transition:
+      color 0.15s,
+      border-color 0.15s;
+  }
+  .items li:hover {
+    color: var(--color-fg);
+    border-color: var(--color-line-2);
+  }
+  @media (min-width: 768px) {
+    .stage {
+      grid-template-columns: minmax(0, 210px) minmax(0, 1fr);
+      gap: 40px;
+      padding-bottom: 52px;
+    }
+  }
+</style>
+
+<script>
+  // Name the visitor's OS on the hero button and point it straight at that
+  // platform's installer, and let the version pill say whatever the latest
+  // GitHub release says. Pure enhancement: the button ships pointing at
+  // /download and the pill ships with the version current at deploy time,
+  // and every failure here leaves them be.
+  //
+  // No platform is "coming": release.yml builds a Windows .exe, a macOS .dmg
+  // and a Linux .flatpak on every tag and every job gates the release (K-304),
+  // so all three exist whenever any of them does.
+  const ASSET: Record<string, RegExp> = {
+    Windows: /windows.*\.exe$/i,
+    Linux: /linux.*\.flatpak$/i,
+    macOS: /\.dmg$/i,
+  };
+  const OTHERS: Record<string, string> = {
+    Windows: "Also for macOS and Linux",
+    macOS: "Also for Windows and Linux",
+    Linux: "Also for Windows and macOS",
+  };
+
+  const ua = navigator.userAgent;
+  const os = /Win/.test(ua)
+    ? "Windows"
+    : /Mac/.test(ua)
+      ? "macOS"
+      : /Linux|X11/.test(ua)
+        ? "Linux"
+        : null;
+
+  const btn = document.querySelector<HTMLAnchorElement>("[data-dl]");
+  const label = document.querySelector("[data-dl-label]");
+  const ver = document.querySelector("[data-ver]");
+  const alt = document.querySelector("[data-alt]");
+
+  if (os && label) label.textContent = `Download for ${os}`;
+  if (os && alt) alt.textContent = OTHERS[os];
+
+  type Asset = { name: string; browser_download_url: string };
+  fetch("https://api.github.com/repos/luminalmvm/Lumit/releases/latest")
+    .then((r) => {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json() as Promise<{ tag_name: string; assets: Asset[] }>;
+    })
+    .then((rel) => {
+      if (ver && rel.tag_name) ver.textContent = rel.tag_name;
+      if (os && btn) {
+        const asset = rel.assets.find((a) => ASSET[os].test(a.name));
+        if (asset) btn.href = asset.browser_download_url;
+      }
+    })
+    .catch(() => {
+      /* the shipped pill and /download link stand */
+    });
+
+  // The three slots play on hover. A slot whose clip does not exist yet keeps
+  // its poster and drops the "plays on hover" label rather than removing
+  // itself: the picture is a real screenshot and is worth showing on its own.
+  for (const slot of document.querySelectorAll<HTMLElement>(".clip")) {
+    const video = slot.querySelector("video");
+    if (!video) continue;
+    const hint = slot.querySelector("[data-hint]");
+    const missing = () => hint?.remove();
+    video.addEventListener("error", missing);
+    slot.addEventListener("mouseenter", () => {
+      video.play().then(() => hint?.classList.add("opacity-0"), missing);
+    });
+    slot.addEventListener("mouseleave", () => {
+      video.pause();
+      hint?.classList.remove("opacity-0");
+    });
+  }
+</script>

@@ -1,0 +1,31 @@
+---
+title: Effect Controls
+description: The selected layer's effect parameters.
+sidebar:
+  order: 6
+---
+
+import Shot from "../../../components/Shot.astro";
+
+Effect Controls lists every effect on the selected layer in the order they are composited.
+
+<Shot file="effect-controls.png" caption="Effect Controls, with two effects on one layer." eager/>
+
+| Item | What it does |
+| --- | --- |
+| **Parameter widgets** | Sliders, dials, colour pickers, dropdowns, point controls. |
+| **Stopwatch** | Start animating and keyframing a parameter. |
+| **Drag to reorder** | Move an effect up or down the stack. |
+| **Preset save/load** | Store a configured effect(s) and apply it again later. |
+
+Order matters: the stack runs top to bottom. See [Effects](/use/effects/).
+
+## Render times
+
+Switch the Timeline's render-time stopwatch on and the effect render times will appear in
+the effect's name row, similar to how they appear in the timeline per effect. See [the Timeline](/panels/timeline/).
+
+## Related
+
+- [Effects](/use/effects/)
+- [Effects & Presets](/panels/effects-presets/)

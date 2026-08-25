@@ -1,0 +1,59 @@
+---
+title: Wave warp
+description: "Runs a wave across the frame."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Wave warp is a **Distortion** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Wave warp" category="distortion" slug="wave-warp" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Creates a rippling warp across the entire layer.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Wave type** | Dropdown | Sine · Square · Triangle · Sawtooth · Circle | Sine | - |
+| **Wave height** | Slider | -500 to 500; any value by typing | 15 | Pixels at composition size |
+| **Wave width** | Slider | 1 to 2000; higher | 120 | Pixels at composition size |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 90° | Degrees |
+| **Phase** | Dial | Any angle; snaps every 45° while a modifier is held | 0° | Degrees |
+| **Pinning** | Dropdown | None · All edges · Left and right · Top and bottom · Left edge · Right edge · Top edge · Bottom edge | None | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Wave height per pixel: white slides the full height, grey less, black not at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Wave type**: the shape of the wave.
+- **Wave height**: how far the picture displaces at a crest.
+- **Direction**: the direction the wave travels.
+- **Pinning**: which edges of the frame are unaffected.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Ripple](/effects/distortion/ripple/)
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Warp](/effects/distortion/warp/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

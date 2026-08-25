@@ -1,0 +1,764 @@
+# CI: every push re-proves every promise (docs/14-ENGINEERING-RULES.md §tests).
+name: ci
+
+# Every job below installs "stable" and then lets rust-toolchain.toml decide
+# which version that actually is (docs/14 §9): rustup reads the file and fetches
+# exactly the pinned toolchain, so a compiler released mid-week cannot turn a
+# new warning into a red build on a commit that changed nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Run it by hand from the Actions tab. GitHub occasionally does not deliver
+  # the `pull_request` event for a push — a branch sits at "pending" with no run
+  # against its head and nothing to re-run, since re-running needs a run to
+  # exist. This is the way out of that, and the way to re-run a job that failed
+  # on something outside the tree (a runner hiccup, a registry timeout).
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: fmt + clippy + tests (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # ffmpeg@7 is keg-only, so pkg-config cannot find it on its default search
+      # path; the build is pointed at the keg explicitly. This lives here, not in
+      # .cargo/config.toml, because Cargo's [env] has no per-target form and the
+      # macOS path injected on Linux made rusty_ffmpeg's build script panic (K-204).
+      - name: Install FFmpeg (keg-only) and point pkg-config at it
+        run: |
+          brew install ffmpeg@7
+          echo "FFMPEG_PKG_CONFIG_PATH=$(brew --prefix ffmpeg@7)/lib/pkgconfig" >> "$GITHUB_ENV"
+      - name: FFmpeg version for the cache key (Cellar paths are versioned;
+              a cached rusty_ffmpeg build script must not outlive its keg)
+        id: ffver
+        run: echo "v=$(brew list --versions ffmpeg@7 | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ffmpeg-${{ steps.ffver.outputs.v }}
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      # Release-mode compile check: some deps expose fields/APIs only under
+      # `#[cfg(debug_assertions)]` (egui's `Style::debug` is one), so code that
+      # touches them builds in the debug jobs above but breaks the release
+      # build the owner actually runs. A cheap `cargo check --release` catches
+      # that class of bug without a full optimised build.
+      - name: Release-mode compile check (owner runs --release)
+        run: cargo check --workspace --release
+
+  windows:
+    name: tests (Windows — the shipping target, with media)
+    runs-on: windows-latest
+    env:
+      # BtbN "shared, GPL" build: GPL matches Lumit's licence, shared gives the
+      # import libs + DLLs rsmpeg links against, n7.1 matches the macOS keg ffmpeg@7.
+      # Pinned to a dated autobuild, not the rolling "latest" tag: latest rotated
+      # its n7.1 assets out on 2026-08-17 and every job 404'd. A dated tag's
+      # assets are immutable; moving to FFmpeg 8 is a crate-feature migration,
+      # not a URL edit.
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-win64-gpl-shared-7.1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # FFmpeg 7.1 dev libs for lumit-media. rusty_ffmpeg links the import libs in
+      # FFMPEG_LIBS_DIR and reads headers from FFMPEG_INCLUDE_DIR (it ignores
+      # pkg-config on Windows); the DLLs and the ffmpeg CLI (test fixtures) go on
+      # PATH. See docs/impl/phase-0-kickoff.md slice 4 and docs/GUIDE.md.
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/$env:FFMPEG_ASSET.zip"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\ffmpeg.zip"
+          Expand-Archive "$env:RUNNER_TEMP\ffmpeg.zip" -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
+          $root = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Directory | Select-Object -First 1).FullName
+          "FFMPEG_LIBS_DIR=$root\lib"        >> $env:GITHUB_ENV
+          "FFMPEG_INCLUDE_DIR=$root\include" >> $env:GITHUB_ENV
+          "$root\bin"                        >> $env:GITHUB_PATH
+      # bindgen (via rusty_ffmpeg) needs libclang. Pin LLVM 18: bindgen 0.71 emits
+      # broken opaque structs against very new libclang (20+). Installed to a temp
+      # dir so it never clashes with any LLVM preinstalled on the runner.
+      - name: Install LLVM 18 (libclang for bindgen)
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "18.1.8"
+          directory: ${{ runner.temp }}/llvm
+      - name: Point bindgen at libclang
+        shell: pwsh
+        run: |
+          "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
+      - uses: Swatinem/rust-cache@v2
+      # The shipping target runs the full gate, media included — this is the parity
+      # the desktop-dev setup unlocked (previously Windows built --no-default-features).
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --exclude lumit-gpu
+      # The GPU oracles single-threaded, exactly as the Linux job runs them and
+      # for the same reason: this runner has no graphics card, so the pinned
+      # DX12 backend enumerates WARP — a software rasteriser — and a dozen
+      # kernel tests hammering one at once thrashes it. That is not a
+      # hypothetical: it took the whole test process down (`exit code: 2173`,
+      # no output, no test reported as failed), which reads as a mystery
+      # crash rather than as the contention it is.
+      #
+      # `--nocapture` because the failure this job has actually had was the
+      # process dying rather than a test failing, and the harness throws
+      # captured output away when that happens — so the one thing that would
+      # have explained it never reached the log. Serial output is readable,
+      # and `LUMIT_GPU_DEBUG` names the adapter, which is the first question
+      # anyone asks about a GPU failure on a runner with no graphics card.
+      - name: GPU oracle tests (WARP software DX12)
+        env:
+          RUST_BACKTRACE: 1
+          LUMIT_GPU_DEBUG: 1
+        run: cargo test -p lumit-gpu -- --test-threads=1 --nocapture
+
+  linux:
+    name: tests (Linux, with media)
+    runs-on: ubuntu-latest
+    env:
+      # The same BtbN "shared, GPL" n7.1 build the Windows job takes, so all
+      # three platforms link an identical FFmpeg. The distro's own is 6.x,
+      # which the crate's `ffmpeg7_1` feature does not match.
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      # This runner installs Mesa's lavapipe below, so every GPU test MUST run
+      # here: a missing adapter is a broken runner, not a machine without a
+      # graphics card, and `lumit_gpu::no_adapter` turns the polite skip into a
+      # failure when this is set. Without it a job that lost its Vulkan driver
+      # would skip ~90 kernel oracles and still report green — which is exactly
+      # what the suite looked like before this line existed. The macOS and
+      # Windows jobs deliberately do NOT set it yet: nobody has confirmed those
+      # runners enumerate an adapter, and a gate is only worth having where it
+      # has been verified. Flip it on there the day a run proves they do.
+      LUMIT_REQUIRE_GPU: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # The desktop stack's system libraries: ALSA (cpal), GL/EGL (eframe's
+      # glow backend), X11 / Wayland / xkb (winit), and Mesa's lavapipe so
+      # wgpu finds a software Vulkan adapter for the GPU oracles. Plus
+      # libclang for bindgen — the distro's own clang 18, which is exactly the
+      # pin Windows downloads. (The upstream LLVM tarball is the wrong tool
+      # here: it links libtinfo.so.5, an ncurses ABI Ubuntu 24.04 dropped, so
+      # bindgen cannot dlopen it.)
+      - name: Install desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev mesa-vulkan-drivers libclang-18-dev
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          # The tarball's .pc files carry the build machine's prefix, so
+          # pkg-config would emit -L/-I paths that do not exist here. Point
+          # them at where we actually unpacked.
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          # PKG_CONFIG_PATH, *not* FFMPEG_PKG_CONFIG_PATH (K-204). Setting the
+          # latter takes rusty_ffmpeg's explicit-override branch, which is the one
+          # macOS and Windows need and which no Linux contributor uses: a distro
+          # install puts the .pc files on pkg-config's ordinary search path and
+          # leaves the variable unset. Exporting the override here was masking
+          # exactly that — it is how a broken .cargo/config.toml passed CI while
+          # every fresh Linux clone failed. Adding to PKG_CONFIG_PATH exercises
+          # the contributor's code path with a pinned FFmpeg 7.1 (the runner's
+          # own distro still ships FFmpeg 6, so the tarball stays).
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      # bindgen wants LLVM 18 exactly (newer libclang makes it emit opaque FFI
+      # structs and rsmpeg stops compiling) — installed above from the distro.
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --exclude lumit-gpu
+      # The GPU oracles single-threaded (the project convention), so a software
+      # rasteriser neither races nor thrashes. With LUMIT_REQUIRE_GPU set (see
+      # the job env) they can no longer skip themselves here: on this runner a
+      # missing lavapipe adapter fails the job instead of quietly proving
+      # nothing about the kernels.
+      - name: GPU oracle tests (lavapipe software Vulkan)
+        run: cargo test -p lumit-gpu -- --test-threads=1
+      # The `media` feature turned off (K-273): the bridge's own decode paths
+      # compile out and its tests still pass. Deliberately NOT advertised as a
+      # build without FFmpeg — `lumit-render` and `lumit-audio` depend on
+      # `lumit-media` unconditionally and the bridge depends on both, so FFmpeg
+      # is still linked. What this guards is the feature gates inside the
+      # bridge, which had rotted until nothing built at all; making the whole
+      # dependency tree media-optional is a separate piece of work
+      # (docs/TODO.md). It rides in this job rather than its own because this
+      # runner already has FFmpeg, libclang and a warm cache.
+      - name: The bridge with its media feature off
+        run: |
+          cargo clippy -p lumit_bridge --no-default-features --all-targets -- -D warnings
+          cargo test -p lumit_bridge --no-default-features
+      - name: Release-mode compile check
+        run: cargo check --workspace --release
+
+  # The headless performance harness (crates/lumit-bench, K-389). It builds
+  # docs/13-PERFORMANCE-RULES.md §1's reference comp over ffmpeg-generated media
+  # and times six budgets — B3, B4, B5, B6, B7, B11.
+  #
+  # It does NOT assert docs/13 §2's absolute numbers. Those belong to the
+  # reference desktop; this is a shared virtual machine whose "graphics card" is
+  # Mesa's lavapipe, and "50 ms" here would fail for reasons that have nothing to
+  # do with Lumit. Instead the run is compared with a baseline recorded earlier on
+  # this same runner class, and fails only past 1.6x worse. The absolute budgets
+  # are asserted only where LUMIT_REFERENCE_HW=1 is set, which no runner sets.
+  #
+  # Setup is the `linux` job's, minus the pieces a headless engine benchmark does
+  # not touch (no GTK, no Flutter): FFmpeg 7.1 for lumit-media *and* for the `ffmpeg`
+  # CLI the harness generates its clips with, libclang 18 for bindgen, and
+  # mesa-vulkan-drivers for the Vulkan adapter.
+  performance:
+    name: performance gates (ratio vs baseline)
+    runs-on: ubuntu-latest
+    # Lavapipe is a software rasteriser, so the span-scaled scenarios measure a
+    # tenth of the work area (BENCH_SPAN_FRACTION below): the first full-span
+    # run burned the entire two-hour limit on B11's 1200 frames alone. A
+    # fraction is honest where a bigger timeout is not — the ratio gate only
+    # ever compares this runner against a baseline measured at the same
+    # fraction, and the harness refuses a mismatch outright.
+    timeout-minutes: 60
+    env:
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+      BENCH_SPAN_FRACTION: "10"
+      # A missing adapter is a broken runner here, exactly as in the `linux` job:
+      # a benchmark that measured nothing must not report green.
+      LUMIT_REQUIRE_GPU: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev mesa-vulkan-drivers libclang-18-dev
+      # Identical to the `linux` job's — see there for why the .pc prefixes are
+      # rewritten and why this exports PKG_CONFIG_PATH rather than the override.
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+      # Released, always: the harness's own loop is only comparable with itself
+      # when the whole thing is optimised, and a debug number means nothing.
+      #
+      # With a baseline present the binary gates itself (it reads BENCH_BASELINE,
+      # compares, and exits non-zero past the factor). With none — which is every
+      # run until the first set of numbers is committed — the gate cannot run, and
+      # a gate that cannot run says so rather than passing quietly: the numbers are
+      # printed with the one command that turns them into a baseline, and the job
+      # goes yellow.
+      - name: Run the harness (gated against this runner's baseline)
+        env:
+          BENCH_OUT: bench-results.json
+        run: |
+          base=crates/lumit-bench/baselines/linux.json
+          if [ -f "$base" ]; then
+            BENCH_BASELINE="$base" cargo run --release -p lumit-bench
+          else
+            cargo run --release -p lumit-bench
+            echo "::warning::No performance baseline for linux: the harness measured, nothing gated it. Commit $base to turn this job into a gate."
+            {
+              echo "### No baseline for this runner"
+              echo
+              echo 'Copy the numbers below into `'"$base"'` and commit them (they are'
+              echo 'regenerated exactly like `crates/lumit-core/fx-labels.txt` — run the'
+              echo 'harness, replace the file, commit on purpose). From then on this job'
+              echo 'fails when a budget is 1.6x worse than what is committed.'
+              echo
+              echo '```json'
+              cat bench-results.json
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      # Kept whatever the verdict: a failing run's numbers are the whole point of
+      # looking at it, and a passing run's are what the next baseline is made from.
+      - name: Keep the numbers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-linux
+          path: bench-results.json
+          if-no-files-found: warn
+
+  flutter-linux:
+    name: flutter frontend (Linux build + analyze + test)
+    runs-on: ubuntu-latest
+    env:
+      # The same BtbN "shared, GPL" n7.1 build the other jobs take, so the
+      # bridge .so links the identical FFmpeg lumit-media expects.
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      # `cargo build -p lumit_bridge` (default features) pulls lumit-media
+      # (FFmpeg) and, through `render`, lumit-render (wgpu/GL). The Flutter Linux
+      # runner additionally needs GTK 3 + clang/cmake/ninja. This is the
+      # existing `linux` job's apt list PLUS the GTK + toolchain packages
+      # `flutter build linux` requires.
+      - name: Install desktop + Flutter build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev libgles-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev mesa-vulkan-drivers libclang-18-dev \
+            clang cmake ninja-build libgtk-3-dev
+          # libgles-dev provides GLES2/gl2*.h + glesv2.pc; libegl-dev provides
+          # EGL/egl*.h + egl.pc. The Linux zero-copy Viewer plugin
+          # (linux/runner/viewer_texture_bridge.cc, K-177) imports engine DMA-BUF
+          # frames into GL external textures, so it links EGL + GLESv2.
+      # Same FFmpeg 7.1 install the `linux` job uses (its .pc prefix rewrite +
+      # env exports), so the bridge's `media` feature links here identically.
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          # The tarball's .pc files carry the build machine's prefix; point them
+          # at where we unpacked (mirrors the `linux` job).
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          # PKG_CONFIG_PATH, not FFMPEG_PKG_CONFIG_PATH — the contributor's path
+          # (K-204); see the `linux` job for why.
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+      # Flutter stable pinned to the SAME version the desktop dev box runs
+      # (3.44.7), so CI and the owner's machine agree. `cache: true` caches the
+      # SDK; the pub cache is cached separately below.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.7
+          channel: stable
+          cache: true
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('flutter_ui/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+      - name: flutter pub get
+        working-directory: flutter_ui
+        run: flutter pub get
+      - name: flutter analyze
+        working-directory: flutter_ui
+        run: flutter analyze
+      # Build the bridge cdylib on Linux: proves nothing Windows-only leaks
+      # outside the shared-texture cfg gates. Default features (media + render)
+      # are the shipped Linux build; the Windows-only D3D path lives behind
+      # `--features shared-texture`, off here.
+      #
+      # This runs BEFORE `flutter test`, not after: frb binds by content hash, so
+      # the `test/frb/` suites load `target/debug/liblumit_bridge.so` and drive
+      # the real engine (K-179). With the build after them, every one of those
+      # suites failed on a library that had not been built yet.
+      #
+      # The package is `lumit_bridge` (underscore, so the cdylib is named for the
+      # Dart import); `-p lumit-bridge` matches nothing and errors.
+      - name: Build the bridge (liblumit_bridge.so)
+        run: cargo build -p lumit_bridge
+      # One test process at a time. The frb suites share a single engine per
+      # process and Flutter's default fans test files out across cores, so a
+      # parallel run had them contending for it — a different one or two failing
+      # per run, each passing alone (docs/TODO.md). Serial is a few minutes
+      # slower and it is the difference between a gate and a coin toss.
+      #
+      # `LUMIT_NO_ZERO_COPY_VIEWER` declares this runner transportless. It has
+      # no GPU: wgpu lands on Mesa's lavapipe, whose `vkAllocateMemory` refuses
+      # the exportable allocation the DMA-BUF path needs, so every Viewer frame
+      # is dropped at the publish step and none reaches Dart. Zero-copy is the
+      # only transport (K-183), so the six tests that wait for a frame skip
+      # here — see `test/frb/frb_test_support.dart`.
+      #
+      # --concurrency=1 was the mitigation while every test process leaked one
+      # engine worker and GPU device per test: parallel processes together
+      # exhausted the runner. ProjectReference::close() ended the pile-up
+      # (70017d2b), and four frb files run green in parallel on a real machine
+      # — this branch is the Linux proof.
+      - name: flutter test
+        working-directory: flutter_ui
+        env:
+          LUMIT_NO_ZERO_COPY_VIEWER: "1"
+        run: flutter test
+      # Lint the Linux DMA-BUF zero-copy Viewer path (K-177): the Vulkan/ash
+      # export code in `lumit-gpu/src/shared_linux.rs` lives behind
+      # `shared-texture-linux` and cfg(target_os = "linux"), so it is only ever
+      # compiled here (the authoring box is Windows).
+      #
+      # It is named explicitly, with the feature spelled out, on purpose. The
+      # `linux` job's `cargo clippy --workspace` does reach this file today —
+      # the bridge has `shared-texture-linux` on by default and resolver 3
+      # unifies that down to lumit-gpu — but that is coverage by side effect: a
+      # future default-feature change or a `--no-default-features` run would drop
+      # it silently and nobody would notice until a Linux user did. This step
+      # says what it covers, so it cannot stop covering it by accident.
+      #
+      # `-D warnings` matches the rest of CI. The runtime verification (does a
+      # picture actually appear) is not CI-testable on a GPU-less runner and
+      # stays the collaborator's (docs/GUIDE §9).
+      - name: Lint the Linux DMA-BUF path (shared-texture-linux)
+        run: cargo clippy -p lumit-gpu --all-targets --features shared-texture-linux -- -D warnings
+      # The real gate: the Flutter Linux runner (linux/, GTK, the multi-window
+      # plugin's Linux side) compiles and links. That includes
+      # `linux/runner/viewer_texture_bridge.cc` — it is listed unconditionally in
+      # `linux/runner/CMakeLists.txt` and is not behind any feature or define, so
+      # this step is the compile gate for the C++ half of the zero-copy Viewer,
+      # the same way the clippy step above is for the Rust half.
+      - name: flutter build linux --release
+        working-directory: flutter_ui
+        run: flutter build linux --release
+
+  flutter-macos:
+    name: flutter frontend (macOS runner build)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      # Same keg-only FFmpeg the macOS Rust jobs install. The build_pod.sh phase
+      # inside the Xcode build compiles the bridge crate, so rusty_ffmpeg needs
+      # the same formula here, and the podspec's -L flags need the keg present.
+      # The keg is not on pkg-config's default search path, so point the build at
+      # it explicitly, exactly as the `check` and `coverage` jobs do (K-204).
+      # Xcode's build environment inherits this from $GITHUB_ENV; it is not
+      # supplied by .cargo/config.toml, which deliberately sets no [env] block.
+      - name: Install FFmpeg (keg-only) and point pkg-config at it
+        run: |
+          brew install ffmpeg@7
+          echo "FFMPEG_PKG_CONFIG_PATH=$(brew --prefix ffmpeg@7)/lib/pkgconfig" >> "$GITHUB_ENV"
+      - name: FFmpeg version for the cache key
+        id: ffver
+        run: echo "v=$(brew list --versions ffmpeg@7 | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ffmpeg-${{ steps.ffver.outputs.v }}
+      # The same pinned Flutter the Linux job takes, so the two agree.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.7
+          channel: stable
+          cache: true
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('flutter_ui/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+      - name: flutter pub get
+        working-directory: flutter_ui
+        run: flutter pub get
+      # The gate. `flutter build macos` runs CocoaPods for macos/Runner, so it
+      # resolves rust_builder/macos/lumit_bridge.podspec by the plugin's pubspec
+      # name — a podspec named anything else fails here — then compiles the Swift
+      # runner (MainFlutterWindow, the K-195 IOSurface ViewerTextureBridge) and
+      # links the bridge static library with the podspec's OTHER_LDFLAGS.
+      #
+      # analyze and test are not repeated: the Linux job already runs both, and
+      # neither is platform-specific. This job exists for the parts only a mac
+      # can compile.
+      # Host architecture only. A release build otherwise goes universal
+      # (x86_64 + arm64), and on an arm64 runner the x86_64 slice counts as
+      # cross-compilation, which pkg-config-rs refuses outright ("has not been
+      # configured to support cross-compilation"). Forcing it with
+      # PKG_CONFIG_ALLOW_CROSS would be the wrong answer: Homebrew's ffmpeg@7 keg
+      # holds one architecture, so it would hand arm64 link flags to an x86_64
+      # link. A universal build needs both kegs present and is out of scope for
+      # this gate, which exists to compile the Swift runner and resolve the
+      # podspec — both of which the host slice does.
+      # The app icon is an Icon Composer document (K-309), and only actool from
+      # Xcode 26 or newer compiles one. Runner images carry several Xcodes and
+      # the default is not always the newest, so pick the newest explicitly and
+      # say so plainly if it is still too old — an unreadable actool error at
+      # the end of a ten-minute build is not a diagnosis.
+      - name: Select the newest Xcode (26+ for the .icon)
+        run: |
+          latest="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$latest"
+          ver="$(xcodebuild -version | head -1 | awk '{print $2}')"
+          echo "Using Xcode $ver ($latest)"
+          [ "${ver%%.*}" -ge 26 ] || {
+            echo "::error::Xcode $ver cannot compile assets/brand/lumit-icon.icon (needs 26+)"
+            exit 1
+          }
+      - name: flutter build macos --release
+        working-directory: flutter_ui
+        env:
+          FLUTTER_XCODE_ARCHS: arm64
+          FLUTTER_XCODE_ONLY_ACTIVE_ARCH: "YES"
+        run: flutter build macos --release
+
+  # The bridge's Dart and Rust glue is generated from crates/lumit-bridge/src/api
+  # (docs/17-BRIDGE-CONTRACT.md), and generated files are never edited by hand —
+  # so the only thing that keeps them honest is regenerating and checking nothing
+  # moved. Without this job a reworded doc comment, a renamed method or a new API
+  # function could sit in `api/**` with stale output checked in beside it, and the
+  # frontend would be reading a description of an engine that no longer exists.
+  # That is not hypothetical: it is how the K-206 Null layer arrived.
+  #
+  # Linux. Generating compiles lumit-bridge, so this job installs the same
+  # native dependencies the `linux` job does.
+  codegen-fresh:
+    name: bridge codegen is fresh (generate produces no diff)
+    runs-on: ubuntu-latest
+    env:
+      FFMPEG_ASSET: ffmpeg-n7.1.1-6-g48c0f071d4-linux64-gpl-shared-7.1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      # The generator formats its Dart output, so it needs the SDK — pinned to
+      # the same version the other Flutter job takes.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.7
+          channel: stable
+          cache: true
+      # Generating compiles lumit-bridge, so this job needs the same native
+      # dependencies the `linux` job installs — FFmpeg for rusty_ffmpeg and
+      # libclang 18 for bindgen. Without them `generate` fails while building
+      # rusty_ffmpeg, which looks like a codegen fault and is not one.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev mesa-vulkan-drivers libclang-18-dev
+      - name: Install FFmpeg 7.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-04-30-13-13/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          # PKG_CONFIG_PATH, not FFMPEG_PKG_CONFIG_PATH — the contributor's path
+          # (K-204); see the `linux` job for why.
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+      # The version is pinned once, on the runtime crate the generated glue links
+      # against (`flutter_rust_bridge = { version = "=2.12.0", … }`). Read it from
+      # there rather than restating it here: a generator that drifts from its
+      # runtime rewrites the whole tree, and this job would become the noisiest
+      # thing in CI while proving nothing.
+      - name: Read the pinned flutter_rust_bridge version
+        id: frb
+        run: |
+          v=$(sed -n 's/^flutter_rust_bridge = { version = "=\([0-9.]*\)".*/\1/p' \
+                crates/lumit-bridge/Cargo.toml)
+          test -n "$v" || { echo "no pinned version found in Cargo.toml"; exit 1; }
+          echo "pinned flutter_rust_bridge: $v"
+          echo "v=$v" >> "$GITHUB_OUTPUT"
+      - name: Install flutter_rust_bridge_codegen at the pinned version
+        run: cargo install flutter_rust_bridge_codegen --version "${{ steps.frb.outputs.v }}" --locked
+      - name: flutter pub get
+        working-directory: flutter_ui
+        run: flutter pub get
+      - name: Regenerate the bridge
+        working-directory: flutter_ui
+        run: flutter_rust_bridge_codegen generate
+      # If this fails, the fix is never to edit the generated file: run the same
+      # command from flutter_ui/ and commit what it writes.
+      #
+      # One known way to see a diff that is not a stale commit: part of the
+      # generated output quotes names from the Rust compiler's own derive
+      # expansion, so regenerating on a different `stable` than the one that last
+      # wrote the tree can shift a comment line. The cure is the same — regenerate
+      # on current stable and commit — but it is worth knowing before hunting for
+      # an API change that is not there.
+      - name: The checked-in generated tree must match
+        run: |
+          if ! git diff --exit-code; then
+            echo
+            echo "Generated bridge code is stale (docs/17-BRIDGE-CONTRACT.md)."
+            echo "Run 'flutter_rust_bridge_codegen generate' from flutter_ui/"
+            echo "and commit the result. Never edit generated files by hand."
+            exit 1
+          fi
+
+  coverage:
+    name: engine-crate coverage gate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      # Keg-only, as in the `check` job above: point pkg-config at the keg here
+      # rather than in .cargo/config.toml (K-204).
+      - name: Install FFmpeg (keg-only) and point pkg-config at it
+        run: |
+          brew install ffmpeg@7
+          echo "FFMPEG_PKG_CONFIG_PATH=$(brew --prefix ffmpeg@7)/lib/pkgconfig" >> "$GITHUB_ENV"
+      - name: FFmpeg version for the cache key
+        id: ffver
+        run: echo "v=$(brew list --versions ffmpeg@7 | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ffmpeg-${{ steps.ffver.outputs.v }}
+      # Engine crates must hold the line; the threshold may rise, never fall.
+      # The FFmpeg-free engine crates are all gated (measured 87–99% locally).
+      # lumit-gpu is held out while its kernel tests skip on adapterless runners.
+      - run: >
+          cargo llvm-cov
+          -p lumit-core -p lumit-project -p lumit-eval
+          -p lumit-cache -p lumit-flow -p lumit-text -p lumit-colour
+          --fail-under-lines 80
+
+  no-hex-outside-theme:
+    name: design-token lint (no hex literals outside the theme module)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # All colours live in the Flutter theme (flutter_ui/lib/theme/); no Rust
+      # crate may carry one.
+      - run: |
+          hits=$(grep -rnE 'Color32::from_rgb|#[0-9a-fA-F]{6}' crates --include='*.rs' || true)
+          if [ -n "$hits" ]; then
+            echo "Colour values outside the theme (docs/15-DESIGN.md):"
+            echo "$hits"
+            exit 1
+          fi
+      # The Rust grep above guarded a frontend that no longer exists (K-182):
+      # every widget now lives in Dart, so that is where a stray hex actually
+      # gets written. flutter_ui/lib/theme/ is the one place colours may be
+      # spelled out (its own header says so); everywhere else must read a token
+      # off LumitTheme, or the seven colour schemes and any custom theme simply
+      # do not reach that pixel.
+      #
+      # Three shapes are caught: a hex Color(0x...) literal, Material's Colors.*
+      # palette (a named hex by another route), and a Color.fromARGB/fromRGBO
+      # built entirely from number literals. A fromARGB whose channels come from
+      # variables is how a *stored* colour is rebuilt — that is data, not a
+      # design decision, so it passes. Fully transparent (0x00000000) passes
+      # too: it is the absence of a colour, not a choice of one.
+      - name: Dart-side design-token lint (flutter_ui/lib outside theme/)
+        run: |
+          hits=$(
+            grep -rnP "Color\(0x(?!00000000)[0-9a-fA-F]{8}\)|\bColors\.[a-zA-Z]|Color\.from(ARGB|RGBO)\( *[0-9][^,]*, *[0-9][^,]*, *[0-9]" \
+              flutter_ui/lib --include='*.dart' \
+            | grep -v '^flutter_ui/lib/theme/' || true
+          )
+          if [ -n "$hits" ]; then
+            echo "Colour values outside flutter_ui/lib/theme/ (docs/15-DESIGN.md §4.1):"
+            echo "$hits"
+            echo
+            echo "Read the colour off LumitTheme instead; add a token if none fits."
+            exit 1
+          fi
+
+      # Two keys Icon Composer 26 writes into the .icon that actool then cannot
+      # compile — the script says which and why. Run here, on Linux, in about a
+      # second: without it the same mistake surfaces five minutes into the macOS
+      # build job and reads as a corrupt icon file (K-312).
+      - name: Icon Composer keys actool cannot compile
+        run: python3 scripts/check-icon.py
+
+  # clippy cannot enforce the no-panic rule (docs/14 §4) on the bridge's frb
+  # API. `#[frb(...)]` is a proc-macro attribute, and clippy's restriction lints
+  # (unwrap_used, expect_used, panic, todo, unimplemented) skip code that comes
+  # out of a macro expansion — so every function annotated with it is invisible
+  # to the crate's own `deny`. Verified by removing the attribute from one
+  # function: the lints fire immediately, and are silent again once it is back.
+  #
+  # That exempts exactly the wrong code. crates/lumit-bridge/src/api is the
+  # surface Dart calls, where an `unwrap` is an unguarded panic unwinding across
+  # the FFI boundary. This grep covers the blind spot until the lints see
+  # through the macro; every call there must return Result<_, BridgeError> or
+  # degrade deliberately.
+  # Dependency hygiene (docs/14-ENGINEERING-RULES.md §9). Four questions, all
+  # of them about code nobody here wrote: is a dependency's licence one a GPLv3
+  # program may carry, does any of them have a published advisory, is anything
+  # pinned by a wildcard, and does any of it come from somewhere other than
+  # crates.io. The rules and the reasoning live in deny.toml — including the
+  # three unmaintained-crate advisories that are deliberately ignored, each with
+  # what it would take to leave it.
+  #
+  # No FFmpeg or desktop libraries are installed here on purpose: cargo-deny
+  # reads Cargo.lock and the crate manifests, never the C libraries a build
+  # would link, so this job stays a fast one.
+  cargo-deny:
+    name: dependency hygiene (licences, advisories, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # The upstream action rather than `cargo install cargo-deny`: it ships the
+      # binary and caches the advisory database, so this job is seconds rather
+      # than a three-minute build of a tool that checks a lock file.
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  no-panics-in-frb-api:
+    name: bridge lint (no panic paths in the frb API surface)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          # Only the *shipping* half of each file is linted: everything from a
+          # `#[cfg(test)]` onward is test code, which may legitimately `expect`
+          # and is on no path Dart calls. This used to exclude src/api/tests.rs
+          # by name, on the reasoning that excluding one known file beat
+          # teaching a grep where a test module begins — which held right up
+          # until a second file grew an inline one (worker_thread.rs), and the
+          # job started failing on code that was never on the API surface.
+          # src/api/tests.rs is still named here: it is test code end to end
+          # and carries no `#[cfg(test)]` of its own to stop at.
+          hits=$(
+            find crates/lumit-bridge/src/api crates/lumit-bridge/src/api.rs \
+              -name '*.rs' -type f \
+              ! -path 'crates/lumit-bridge/src/api/tests.rs' \
+            | while read -r file; do
+                awk -v f="$file" \
+                  '/^#\[cfg\(test\)\]/ { exit } { print f ":" NR ":" $0 }' "$file"
+              done \
+            | grep -E '\.unwrap\(\)|\.expect\(|\btodo!\(|\bunimplemented!\(|\bpanic!\(' \
+            || true)
+          if [ -n "$hits" ]; then
+            echo "Panic paths in the frb API surface, which clippy cannot see"
+            echo "(docs/14-ENGINEERING-RULES.md §4). Return Result<_, BridgeError>:"
+            echo "$hits"
+            exit 1
+          fi

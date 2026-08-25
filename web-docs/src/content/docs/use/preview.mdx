@@ -1,0 +1,61 @@
+---
+title: Preview and playback
+description: Play the composition back, and understand the cache.
+sidebar:
+  order: 17
+---
+
+import Shot from "../../../components/Shot.astro";
+
+**Preview** is playback inside Lumit.
+
+<Shot file="cache-bar.png" caption="The cache bar filling above the Timeline." eager/>
+
+## Play
+
+Press play, or `space` by default. The playhead will begin moving and the Viewer will update.
+
+## The cache
+
+The cache has three tiers: VRAM, RAM and disk. You can alter the memory allocated to each of 
+these individually under **Edit ▸ Settings ▸ Performance**.
+
+Lumit stores rendered frames to help speedup plaback. Frames that are cached are shown by 
+the **cache bar** under the time ruler, VRAM and Ram display as a green line, frames stored
+on the disk are blue.
+
+## Preview resolution
+
+Lower the preview resolution to render previews faster: full, half, third, quarter, or auto. 
+Changing the preview resolution has no impact when exporting.
+
+Lumit also has two preview resolution options in the viewer bar. **Every frame** will render
+each frame in the composition, pausing audio if playback isn't realtime. **Adaptive res** will
+instead dynamically alter the resolution to try and maintain realtime playback. Sometimes in very 
+intensive compositions even at quater resolution this won't be enough, at which point adaptive res
+will only display frames it manages to render in time.
+
+Personally I'd normally recommend **Every Frame** as the default option to use.
+
+## The progress bar
+
+Depending on what you're working on frames can take a while to render. While waiting, a 
+progress bar appears in the bar at the bottom of the viewer, and fills as the frame passes through
+decoding, building, and compositing.
+
+## Adaptive degradation
+
+Under load, Lumit reduces quality on its own to keep responding. It may drop resolution while scrubbing
+effect values as you change them to try and give you an idea of what the value you change will look like.
+
+## If playback is slow
+
+1. Lower the preview resolution.
+2. Let the cache fill on a first pass, then play again.
+3. Turn off heavy effects while you block out timing.
+4. Precompose a finished section so it caches as one unit.
+
+## Related
+
+- [Exporting](/use/export/)
+- [How Lumit stays fast](/engine/performance/)

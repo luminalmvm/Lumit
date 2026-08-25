@@ -1,0 +1,80 @@
+---
+title: Lightning
+description: "Draws a bolt of lightning between two points."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Lightning is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Lightning" category="generate" slug="lightning" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Draws a bolt of lightning which can be animated, and allows for customisation around forking and turbulence.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Origin x** | Slider | 0 to 3840; any value by typing | 300 | Pixels at composition size |
+| **Origin y** | Slider | 0 to 2160; any value by typing | 900 | Pixels at composition size |
+| **Direction x** | Slider | 0 to 3840; any value by typing | 1620 | Pixels at composition size |
+| **Direction y** | Slider | 0 to 2160; any value by typing | 200 | Pixels at composition size |
+| **Type** | Dropdown | Direction · Strike · Omni · Two-way strike | Direction | - |
+| **Conductivity state** | Slider | 0 to 100; any value by typing | 0 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Amplitude** | Slider | 0 to 100 | 12 | Per cent |
+| **Forking** | Slider | 0 to 100 | 45 | Per cent |
+| **Decay** | Slider | 0 to 100 | 30 | Per cent |
+| **Core radius** | Slider | 0 to 40; higher | 3 | Pixels at composition size |
+| **Core colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Glow radius** | Slider | 0 to 200; higher | 22 | Pixels at composition size |
+| **Glow colour** | Colour | Each channel 0 to 4, scene-linear | 0.25, 0.45, 1, 1 | - |
+| **Glow opacity** | Slider | 0 to 100 | 70 | Per cent |
+| **Composite on original** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales the bolt's opacity per pixel: white draws the core and glow in          full, grey faintly, black nothing at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Origin x** and **Origin y**: start position.
+- **Direction x** and **Direction y**: end position.
+- **Type**: **Direction** lets the far end wander. **Strike** pins both ends. 
+  **Omni** sends five bolts out in all directions from the origin.
+  **Two-way strike** sends one from each point, meeting in the middle.
+- **Conductivity state**: changes the bolts shape, similar to evolution in other effects.
+- **Seed**: randomises the bolt generated.
+- **Amplitude**: how far the bolt wanders off a straight line.
+- **Forking**: how many branches leave the main bolt.
+- **Decay**: how much dimmer the far end is than the root.
+- **Core radius**: how thick the centre filament is.
+- **Core colour**: the filament's colour.
+- **Glow radius**: how far the halo reaches.
+- **Glow colour**: the halo's colour. 
+- **Glow opacity**: how strong the halo is.
+- **Composite on original**: on, the layer Lightning is applied to appears under the bolt.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Beam](/effects/generate/beam/)
+- [Glow](/effects/stylise/glow/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

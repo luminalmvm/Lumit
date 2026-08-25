@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Lumit
+Comment=Motion graphics and compositing
+Exec=lumit_flutter %f
+Icon=lumit
+Terminal=false
+Categories=AudioVideo;Video;Graphics;
+MimeType=application/x-lumit-project;application/x-lumit-preset;
+StartupWMClass=lumit_flutter

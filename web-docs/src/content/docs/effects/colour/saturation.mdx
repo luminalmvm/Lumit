@@ -1,0 +1,64 @@
+---
+title: "Saturation"
+description: "Scale how colourful the picture is, evenly."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Saturation is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Saturation" category="colour" slug="saturation" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Adjust how colourful the output is. At zero it's greyscale.
+
+
+Every pixel's colourfulness is multiplied by the same amount, regardless of it's
+input saturation.
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Saturation** | Slider | 0 to 400; higher | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** pulls Saturation toward 100 per pixel: white applies the full Saturation, black leaves the colour as it was. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Saturation** — the multiplier on colourfulness, as a percentage. Zero is
+  greyscale and the neutral point passes through untouched. There is no real
+  ceiling: the slider reaches a heavy lift and typing goes further, because the
+  mix between grey and colour keeps extrapolating past it, which is a legitimate
+  if aggressive look.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+For when a picture already has saturated areas, [Vibrancy](/effects/colour/vibrancy/) is the better tool.
+It preserves already saturated areas while boosting less colourful areas.
+
+## Related
+
+- [Vibrancy](/effects/colour/vibrancy/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Hue shift](/effects/colour/hue-shift/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

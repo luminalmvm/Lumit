@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- The Lumit mark (docs/15-DESIGN.md, brand; K-251): two keyframes overlapping,
+       the overlap additive white. Bare form: Windows/Linux, any background. -->
+  <defs>
+    <linearGradient id="key-a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#86e2ff"/><stop offset="1" stop-color="#2f6fe0"/>
+    </linearGradient>
+    <linearGradient id="key-b" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a70ff"/><stop offset="1" stop-color="#ff4f9e"/>
+    </linearGradient>
+    <radialGradient id="key-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.75" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eaf4ff"/>
+    </radialGradient>
+    <radialGradient id="key-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="key-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="7" stdDeviation="11" flood-color="#04060b" flood-opacity="0.4"/>
+    </filter></defs>
+  <g filter="url(#key-shadow)">
+    <g transform="rotate(45 180 256)"><rect x="77.5" y="153.5" width="205" height="205" rx="36"
+       fill="url(#key-a)" stroke="#0c0e14" stroke-opacity="0.25" stroke-width="8"/></g>
+    <g transform="rotate(45 332 256)"><rect x="229.5" y="153.5" width="205" height="205" rx="36"
+       fill="url(#key-b)" stroke="#0c0e14" stroke-opacity="0.25" stroke-width="8"/></g>
+  </g>
+  <circle cx="256" cy="256" r="130" fill="url(#key-glow)"/>
+  <path d="M256 181 L331 256 L256 331 L181 256 Z" fill="url(#key-core)"
+        stroke="url(#key-core)" stroke-width="16" stroke-linejoin="round"/>
+</svg>

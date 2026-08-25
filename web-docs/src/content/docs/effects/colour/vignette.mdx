@@ -1,0 +1,60 @@
+---
+title: "Vignette"
+description: "Darken toward the edges."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Vignette is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Vignette" category="colour" slug="vignette" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Darkens the frame away from the centre.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 1 | 0.5 | - |
+| **Radius** | Slider | 0 to 1 | 0.75 | - |
+| **Softness** | Slider | 0 to 2; higher | 0.5 | - |
+| **Roundness** | Slider | 0 to 1 | 1 | - |
+| **Ramp** | Slider | 0.2 to 4; down to 0.05 and higher | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** — how intense the vignette is.
+- **Radius** — how far from the middle the darkening begins.
+- **Softness** — the width of the fade between transparent and full black.
+- **Roundness** — At zero it's an ellipse that reaches every edge equally. 
+  One is a circle.
+- **Ramp** — the shape of the falloff curve.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Exposure](/effects/colour/exposure/)
+- [Glow](/effects/stylise/glow/)
+- [Masks](/use/masks/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

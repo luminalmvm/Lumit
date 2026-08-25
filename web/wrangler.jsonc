@@ -1,0 +1,11 @@
+{
+  // lumitlab.com - a static Worker: no server code, just the built site served
+  // from Cloudflare's edge. `npm run build` writes ./dist, this uploads it.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lumit",
+  "compatibility_date": "2026-08-04",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

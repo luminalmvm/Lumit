@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" fill="none">
+  <!-- Right keyframe, on its own as an Icon Composer layer (docs/15-DESIGN.md,
+       brand; K-251). The whole mark is lumit-mark.svg; this is one of its three
+       shapes, on the same 512 canvas so the layers stack in register.
+
+       No drop shadow, no glow and no outline: Icon Composer applies its own
+       depth and edge treatment, and artwork carrying its own fights them. The
+       composed lumit-mark.svg keeps the dark outline, since it renders as a
+       finished image wherever it is used.
+
+       The three tips of the original diamond keep their radius of 36 - the
+       rx the rounded rect used to carry. The two shoulders and the notch
+       apex are new, and are rounded lightly (10 and 8) so the cut edge does
+       not read as a slice. -->
+  <defs>
+    <linearGradient id="key-b" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a70ff"/><stop offset="1" stop-color="#ff4f9e"/>
+    </linearGradient>
+  </defs>
+  <path d="M451.54 230.54 L357.46 136.46 A36 36 0 0 0 306.54 136.46
+           L266.07 176.93 A10 10 0 0 0 266.07 191.07
+           L325.34 250.34 A8 8 0 0 1 325.34 261.66
+           L266.07 320.93 A10 10 0 0 0 266.07 335.07
+           L306.54 375.54 A36 36 0 0 0 357.46 375.54
+           L451.54 281.46 A36 36 0 0 0 451.54 230.54 Z"
+        fill="url(#key-b)"/>
+</svg>

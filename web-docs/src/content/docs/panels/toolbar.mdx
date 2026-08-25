@@ -1,0 +1,49 @@
+---
+title: The toolbar
+description: Every tool, its shortcut, and whether it works yet.
+sidebar:
+  order: 1
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The toolbar displays all available tools. Tools with several options open a flyout, and
+pressing the shortcut again steps through them.
+
+<Shot file="toolbar.png" caption="The toolbar. One tool is active at a time; groups open a flyout." eager/>
+
+Shortcuts below are the defaults, rebindable in **Settings ▸ Keymap**.
+
+| Tool | Shortcut | Does |
+| --- | --- | --- |
+| **Selection** | `V` | Select and move layers. |
+| **Hand** | `H` | Pan the Viewer. |
+| **Zoom** | `Z` | Zoom the Viewer. |
+| **Rotation** | `W` | Rotate the selected layer. |
+| **Anchor point** | `Y` | Move the anchor point without moving the layer. |
+| **Razor** | `C` | Split a layer or a clip within a [Sequence layer](/use/sequence-layers/). |
+| **Shape** | `Q` | Rectangle, Rounded rectangle, Ellipse, Polygon, Star. Creates a mask or shape layer |
+| **Pen** | `G` | Draw a bezier path. Creates a mask or shape layer |
+| **Type** | `Ctrl+T` | Add [text](/use/text/). |
+| **Paint** | `Ctrl+B` | Brush, Clone stamp, Eraser. |
+| **Camera** | `Shift+C` | Orbit, Pan, Dolly the [camera](/use/camera/). |
+
+## Shape and Pen: layer or mask?
+
+<Shot file="toolbar-flyout.png" caption="A shape group's flyout, with the five shape tools." />
+
+With a **layer selected**, these draw a [mask](/use/masks/) on the layer. With **nothing
+selected**, they create a [shape layer](/use/shapes/) at the top of the composition.
+
+:::note[Not yet built]
+These appear in the toolbar, but currently haven't been implemented:
+- Vertical text
+- The Pen's alternative options: Add vertex, Delete vertex, Convert vertex, Mask feather
+- Rotoscope brush and Refine edge
+- The Puppet tool
+:::
+
+## Tool options
+
+If a tool has additional customisation, such as fill color or stroke width, then these options appear to the 
+right-hand side of the tools when available.

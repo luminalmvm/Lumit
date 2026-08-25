@@ -1,0 +1,25 @@
+[package]
+name = "lumit-colour"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# The `.cube` grammar already lives there; this crate reads it rather than
+# parsing the format a second time (docs/impl/ocio.md §4).
+lumit-core = { path = "../lumit-core" }
+thiserror = "2"
+# OCIO configs are YAML 1.2 with custom tags (`!<ColorSpace>`). `serde_yaml` is
+# archived and hides tags; `yaml-rust2` is pure Rust, maintained, and exposes
+# the tag on every node — the pinned choice in docs/impl/ocio.md §4.4.
+yaml-rust2 = "0.12"
+# CLF/CTF are XML. A hand-rolled scanner would be more code than this and worse
+# on entities, CDATA and attribute quoting — and this is a file-parsing trust
+# boundary. quick-xml is MIT, zero-dependency, and pull-based (docs/14 §9).
+quick-xml = "0.38"
+
+[lints]
+workspace = true

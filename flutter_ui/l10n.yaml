@@ -1,0 +1,16 @@
+# How lib/l10n/*.arb becomes Dart. Flutter's own generator runs this on
+# `flutter pub get` and on every build, because pubspec.yaml sets `generate: true`.
+#
+# The source of truth is app_en.arb, in British English (K-005). Every other
+# file in lib/l10n/ arrives from Crowdin (K-298) and is never hand-edited —
+# a fix to a translation is made on Crowdin, not here.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: Strings
+output-dir: lib/l10n/gen
+# A string a translator has not reached yet falls back to the English one rather
+# than showing a blank or throwing. Untranslated keys are listed in the file below
+# so the gap is visible without reading every .arb.
+untranslated-messages-file: lib/l10n/untranslated.json
+nullable-getter: false

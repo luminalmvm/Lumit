@@ -1,0 +1,86 @@
+---
+title: "Sprite flare"
+description: "The cheap lens flare."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Sprite flare is a [Stylise](/effects/#stylise) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Sprite flare" category="stylise" slug="sprite-flare" />
+
+{/* END GENERATED */}
+
+## What it does
+
+A very simple lens flare effect. Generally recommended to use the physically based lens flare for high quality flares.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Light x** | Slider | 0 to 3840; any value by typing | 640 | Pixels at composition size |
+| **Light y** | Slider | 0 to 2160; any value by typing | 360 | Pixels at composition size |
+| **Intensity** | Slider | 0 to 4; higher | 1 | - |
+| **Tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Glow size** | Slider | 0 to 800; higher | 120 | Pixels at composition size |
+| **Glow intensity** | Slider | 0 to 4; higher | 1 | - |
+| **Ghosts** | Slider, whole numbers | 0 to 16 | 6 | - |
+| **Ghost spacing** | Slider | 0 to 1.5; higher | 0.35 | - |
+| **Ghost size** | Slider | 0 to 400; higher | 60 | Pixels at composition size |
+| **Ghost intensity** | Slider | 0 to 2; higher | 0.35 | - |
+| **Streak length** | Slider | 0 to 2000; higher | 300 | Pixels at composition size |
+| **Streak intensity** | Slider | 0 to 2; higher | 0.5 | - |
+| **Streak angle** | Slider | -180 to 180; any value by typing | 0 | Degrees |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Glow** groups **Glow size**, **Glow intensity**.
+- **Ghosts** groups **Ghosts**, **Ghost spacing**, **Ghost size**, **Ghost intensity**.
+- **Streak** groups **Streak length**, **Streak intensity**, **Streak angle**.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Light x** and **Light y**: where the light is positioned.
+- **Intensity**: the gain on the lens flare.
+- **Tint**: the colour of the flare.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+The **Glow** group:
+
+- **Glow size**: its radius, in pixels.
+- **Glow intensity**: its gain.
+
+The **Ghosts** group:
+
+- **Ghosts**: how many discs march along the axis.
+- **Ghost spacing**: how far apart they sit.
+- **Ghost size**: their base radius.
+- **Ghost intensity**: their gain. 
+
+The **Streak** group:
+
+- **Streak length**: how far it reaches from the light.
+- **Streak intensity**: its gain.
+- **Streak angle**: direction it runs in.
+
+## Related
+
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Glow](/effects/stylise/glow/)
+- [Transform](/effects/utility/transform/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

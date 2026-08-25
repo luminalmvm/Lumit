@@ -1,0 +1,47 @@
+---
+title: Masks
+description: Cut a layer down to a shape you draw.
+sidebar:
+  order: 10
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **mask** is a bezier path on a layer that gates the layer's alpha. Use one to show
+part of a layer and hide the rest.
+
+## Draw a mask
+
+<Shot file="mask.png" caption="A mask on a layer, gating its alpha." eager/>
+
+1. Select the layer.
+2. Pick a shape tool or the pen tool.
+3. Draw in the Viewer.
+
+With no layer selected, the same tools make a [shape layer](/use/shapes/).
+
+## Mask properties
+
+| Property | What it does |
+| --- | --- |
+| **Path** | The bezier path. Drag its points in the Viewer, and keyframe it to animate the shape. |
+| **Feather** | Softens the edge, half the width either side of the path. |
+| **Expansion** | Grows or shrinks the mask from its path. |
+| **Opacity** | Adjusts similar to a layers opacity property. |
+| **Mode** | How this mask interacts with the layer and other masks. |
+| **Inverted** | Swaps inside for outside. |
+
+A layer can carry several masks, and they combine top to bottom by their mode. **Add**
+is the default. **Subtract** cuts this shape out of what the masks above it built,
+**Intersect** keeps where both overlap, and **Difference** keeps area's only one covers. 
+Setting a mask to **None** leaves the path drawn and editable while affecting nothing.
+
+:::note[Not built yet]
+Feather currently is uniform and doesn't support variable wdith along the path. 
+After Effects' Lighten and Darken mask modes also have no equivalent yet either.
+:::
+
+## Related
+
+- [Mattes](/use/mattes/) - gate a layer using another layer.
+- [Shapes](/use/shapes/)

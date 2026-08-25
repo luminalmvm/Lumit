@@ -1,0 +1,56 @@
+---
+title: Emboss
+description: "Treats the picture as a surface with height, and lights from one side."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Emboss is a **Stylise** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Emboss" category="stylise" slug="emboss" />
+
+{/* END GENERATED */}
+
+## What it does
+
+The picture is treated as a surface with height and lit from one direction.
+Resulting in a stamped-metal look.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | 45° | Degrees |
+| **Relief** | Slider | 0 to 20; higher | 2 | Pixels at composition size |
+| **Contrast** | Slider | 0 to 200; higher | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Relief per pixel: white raises the full relief, grey a shallower          one, black leaves the sheet flat. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Direction**: Direction light applied from.
+- **Relief**: distance between neighbours pixels compare again.
+- **Contrast**: the gain on the relief.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Find edges](/effects/stylise/find-edges/)
+- [Texturize](/effects/stylise/texturize/)
+- [Drop shadow](/effects/stylise/drop-shadow/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

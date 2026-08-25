@@ -1,0 +1,62 @@
+---
+title: Curves
+description: "Adjust the tone curve."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Curves is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Curves" category="colour" slug="curves" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Adjust the brightness against brightness values. You can view this as inputting 
+brightness into a function which outputs a different brigtness based on the curve
+you set.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Master** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Red** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Green** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Blue** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Alpha** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+- The interface can be used to directly alter the curve.
+- **Black**, **Shadows**, **Midtones**, **Highlights** and **White** are the
+  channel's curve outputs at inputs 0, 0.25, 0.5, 0.75 and 1.
+- **Master** applies to all three channels, while **Red**, **Green** and
+  **Blue** apply to individual channels.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Levels](/effects/colour/levels/)
+- [Contrast](/effects/colour/contrast/)
+- [Gamma](/effects/colour/gamma/)
+- [Colour balance](/effects/colour/colour-balance/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

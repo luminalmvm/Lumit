@@ -1,0 +1,63 @@
+---
+title: Broadcast safe
+description: "Measures and displays illegal pixels."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Broadcast safe is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Broadcast safe" category="utility" slug="broadcast-safe" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Analogue television carried brightness and colour along a single wire, and a 
+transmitter distorts or refuses a signal where the total peak is too great.
+
+This effect measures the peak for every pixel. It can then pull pixels back
+to legal values, or display which pixels aren't legal.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Standard** | Dropdown | NTSC · PAL | NTSC | - |
+| **How to treat** | Dropdown | Reduce brightness · Reduce saturation · Key out unsafe · Key out safe | Reduce brightness | - |
+| **Maximum signal** | Slider | 90 to 120 | 110 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Standard**: which television system's signal is being measured.
+- **How to treat**: what happens to a pixel that is over the limit.
+  - **Reduce brightness** darkens until it fits, keeping colour.
+  - **Reduce saturation** drains colour until it fits, keeping brightness.
+  - **Key out unsafe** removes illegal pixels and leaves transparent holes.
+  - **Key out safe** removes legal ones, leaving *only* illegal pixels.
+- **Maximum signal**: the largest total allowed, in IRE.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Levels](/effects/colour/levels/)
+- [Saturation](/effects/colour/saturation/)
+- [Set matte](/effects/utility/set-matte/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

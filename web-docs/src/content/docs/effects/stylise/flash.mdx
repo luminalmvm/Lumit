@@ -1,0 +1,70 @@
+---
+title: "Flash"
+description: "A strobe on a beat."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Flash is a [Stylise](/effects/#stylise) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Flash" category="stylise" slug="flash" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Puts a burst of colour over the picture and clears it again. Can be automated based
+on beat markers.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Dropdown | Manual · Trigger · Strobe | Manual | - |
+| **Trigger** | Slider | 0 to 1 | 0 | - |
+| **Duration** | Slider | 0 to 12; higher | 2 | Frames |
+| **Shape** | Dropdown | Hard · Fade | Hard | - |
+| **Every Nth beat** | Slider | 1 to 8; higher | 1 | - |
+| **Phase offset** | Slider | -8 to 8; any value by typing | 0 | Frames |
+| **Intensity** | Slider | 0 to 100; up to 400 | 100 | Per cent |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Decay** | Slider | 10 to 1000; down to 0 and up to 10000 | 120 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mode**: Manual for keyframed hits, Trigger for one flash per beat marker,
+  Strobe for one every so many beats.
+- **Trigger**: Manual mode's hits. 
+- **Duration**: how long a beat-driven flash lasts.
+- **Shape**: change how the flash should or shouldn't fade.
+- **Every Nth beat**: in Strobe mode, how many beats to skip between flashes.
+- **Phase offset**: shifts beat-driven flashes earlier or later.
+- **Intensity**: scales the intensity of the flash.
+- **Colour**: what colour the flash is. 
+- **Decay**: how quickly a Manual hit fades.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Glow](/effects/stylise/glow/)
+- [Markers](/use/markers/)
+- [Audio](/use/audio/)
+- [Invert](/effects/colour/invert/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

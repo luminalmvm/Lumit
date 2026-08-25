@@ -1,0 +1,65 @@
+ADBE Angle Control
+ADBE BEZMESH
+ADBE Black&White
+ADBE Brightness & Contrast 2
+ADBE Broadcast Colors
+ADBE Channel Blur
+ADBE Checkbox Control
+ADBE Color Control
+ADBE Corner Pin
+ADBE CurvesCustom
+ADBE Displacement Map
+ADBE Drop Shadow
+ADBE Easy Levels2
+ADBE Echo
+ADBE Emboss
+ADBE Fill
+ADBE Find Edges
+ADBE Fractal Noise
+ADBE Gaussian Blur 2
+ADBE Geometry2
+ADBE Glo2
+ADBE HUE SATURATION
+ADBE IRIS_WIPE
+ADBE Laser
+ADBE Lightning 2
+ADBE Linear Wipe
+ADBE Median
+ADBE Mirror
+ADBE Mosaic
+ADBE Motion Blur
+ADBE Noise
+ADBE Offset
+ADBE Optics Compensation
+ADBE Photo Filter
+ADBE Point Control
+ADBE Polar Coordinates
+ADBE Posterize
+ADBE Posterize Time
+ADBE Radial Blur
+ADBE Radial Wipe
+ADBE Ramp
+ADBE Ripple
+ADBE Roughen Edges
+ADBE Scribble Fill
+ADBE Set Matte3
+ADBE ShadowHighlight
+ADBE Slider Control
+ADBE Spherize
+ADBE Stroke
+ADBE Texturize
+ADBE Threshold
+ADBE Tile
+ADBE Timewarp
+ADBE Tint
+ADBE Tritone
+ADBE Turbulent Displace
+ADBE Twirl
+ADBE Venetian Blinds
+ADBE WRPMESH
+ADBE Wave Warp
+APC CardWipeCam
+APC Radio Waves
+APC Vegas
+VISINF Grain Implant
+VISINF Grain Removal

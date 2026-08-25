@@ -1,0 +1,68 @@
+---
+title: Card wipe
+description: "Turns the frame away as a grid of cards."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Card wipe is a **Transition** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Card wipe" category="transition" slug="card-wipe" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Transitions the layer as a grid of cards, each one turning and
+disappearing. This works as a wave across the frame.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Completion** | slider | - | - | Per cent |
+| **Transition width** | Slider | 1 to 100 | 50 | Per cent |
+| **Rows** | Slider, whole numbers | 1 to 64; up to 256 | 6 | - |
+| **Columns** | Slider, whole numbers | 1 to 64; up to 256 | 8 | - |
+| **Flip axis** | Dropdown | Horizontal axis · Vertical axis · Random | Horizontal axis | - |
+| **Flip direction** | Dropdown | Forwards · Backwards · Random | Forwards | - |
+| **Flip order** | Dropdown | Left to right · Right to left · Top to bottom · Bottom to top | Left to right | - |
+| **Randomness** | Slider | 0 to 100 | 0 | Per cent |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Completion per pixel: the cards have turned further where the matte is bright, and it is asked per pixel, so a card can be half flipped and half standing. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Completion** is how far from beginning to end the wipe is.
+- **Transition width** sets how much of the whole wipe one card's own flip
+  takes.
+- **Rows** and **Columns** set how many cards there are.
+- **Flip axis** chooses which line each card turns about. 
+- **Flip direction** chooses which way each card turns. 
+- **Flip order** sets which side the wave starts from.
+- **Randomness** sets how far each card's turn is shuffled away from Flip order.
+- **Seed** randomises the shuffle.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Venetian blinds](/effects/transition/venetian-blinds/)
+- [Iris wipe](/effects/transition/iris-wipe/)
+- [Mosaic](/effects/stylise/mosaic/)
+- [Transition](/effects/#transition)
+- [Effects](/use/effects/)

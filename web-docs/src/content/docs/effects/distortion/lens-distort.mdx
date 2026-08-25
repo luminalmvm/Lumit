@@ -1,0 +1,63 @@
+---
+title: Lens distort
+description: "Bends the edges of a layer."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Lens distort is a **Distortion** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Lens distort" category="distortion" slug="lens-distort" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Bends the edges of a layer, supporting both concave and convex warping.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Field of view** | Slider | 0 to 160; up to 179 | 40 | Degrees |
+| **Reverse** | Checkbox | On or off | Off | - |
+| **Orientation** | Dropdown | Horizontal · Vertical · Diagonal | Horizontal | - |
+| **Centre X** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Centre Y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Transparent | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales the distortion per pixel, read where the pixel lands: white bends at the full Field of view, grey less, black not at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Field of view** changes how wide the lens is.
+- **Reverse**, when off, adds the bow. On, it removes the bow
+  instead, giving a pincushion effect.
+- **Orientation** picks which side of the frame the angle spans.
+- **Centre X** and **Centre Y** place the optical centre to bend around.
+- **Edges** adjusts what to fill resulting transparent pixels with. 
+  **Transparent** is the default. **Repeat** smears the border pixel outward. 
+  **Mirror** folds the picture back on itself.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Chromatic aberration](/effects/distortion/chromatic-aberration/)
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

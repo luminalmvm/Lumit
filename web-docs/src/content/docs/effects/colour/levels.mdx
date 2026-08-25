@@ -1,0 +1,84 @@
+---
+title: Levels
+description: "Adjust black point, white point and gamma."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Levels is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Levels" category="colour" slug="levels" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Levels lets you adjust the black/white point and gamma through a ui, or adjust values directly.
+You can adjust these values per channel, including alpha.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Master › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Master › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Master › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher | 1 | - |
+| **Master › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Master › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Red › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Red › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Red › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher | 1 | - |
+| **Red › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Red › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Green › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Green › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Green › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher | 1 | - |
+| **Green › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Green › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Blue › Input black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Blue › Input white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Blue › Gamma** | Slider | 0.1 to 4; down to 0.01 and higher | 1 | - |
+| **Blue › Output black** | Slider | 0 to 1; any value by typing | 0 | - |
+| **Blue › Output white** | Slider | 0 to 1; any value by typing | 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Master** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**.
+- **Red** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**, and starts closed.
+- **Green** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**, and starts closed.
+- **Blue** groups **Input black**, **Input white**, **Gamma**, **Output black**, **Output white**, and starts closed.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Input black** — the input value that comes out as Output black. Raise it to
+  crush blacks.
+- **Input white** — the input value that comes out as Output white. Lower it to
+  blow out highlights.
+- **Gamma** — same as [Gamma](/effects/colour/gamma/).
+- **Output black** and **Output white**. Raising Output black raises the black level, 
+  Lowering Output white reduces the back brightness.
+- **Master** applies to all three channels, while **Red**, **Green** and **Blue**
+  apply to individual channels.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Curves](/effects/colour/curves/)
+- [Gamma](/effects/colour/gamma/)
+- [Exposure](/effects/colour/exposure/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

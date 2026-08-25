@@ -1,0 +1,64 @@
+# Crowdin, file-based project (K-303).
+#
+# One file goes up — flutter_ui/lib/l10n/app_en.arb, British English, the only
+# copy of Lumit's user-facing text that a person writes by hand. Everything else
+# in lib/l10n/ comes back down from Crowdin and is never edited in this repo: a
+# wrong translation is fixed on Crowdin, or the next sync overwrites the fix.
+#
+# The two credentials are read from the environment rather than written here,
+# because this repo is public:
+#
+#   CROWDIN_PROJECT_ID       the numeric project id, from Tools -> API on Crowdin
+#   CROWDIN_PERSONAL_TOKEN   a personal access token with "Projects" scope
+#
+# Upload the source after changing app_en.arb:   crowdin push sources
+# Pull finished translations back down:          crowdin pull translations
+#
+# Target languages are chosen in the Crowdin project's own settings; the mapping
+# below only says what each one is called on disk, because Crowdin's locale names
+# (zh-CN) and Flutter's (zh) disagree.
+#
+# Two things the mapping cannot do, so they are settings on Crowdin itself:
+#
+#   - Crowdin writes its own code into the `@@locale` key inside each file, and
+#     Flutter refuses to generate when that value and the file name disagree —
+#     `zh-CN` in a file called app_zh.arb takes `flutter pub get` down, and with
+#     it every Flutter job in CI. The mapping below does NOT fix this: it names
+#     the file, and the key inside comes from somewhere it does not reach. The
+#     project's per-language "custom language code" was tried and every sync
+#     since has still written `zh-CN`. So the sync branch is mended where it
+#     lands, by `.github/workflows/translation-locale.yml`, and
+#     `test/l10n/arb_test.dart` still fails loudly on any branch where the two
+#     disagree.
+#   - British English is the source and there is no en-US (K-303). Enabling
+#     en-US as a target lands an app_en_US.arb that is a copy of the source; if
+#     one appears, it was turned on by mistake on Crowdin — turn it off there
+#     rather than deleting the file here.
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+
+# One source file, so there is no folder tree worth mirroring: translators see
+# app_en.arb at the top of the project rather than four levels of Flutter layout.
+preserve_hierarchy: false
+
+files:
+  - source: /flutter_ui/lib/l10n/app_en.arb
+    translation: /flutter_ui/lib/l10n/app_%locale_with_underscore%.arb
+    # ARB carries its own notes: every key has an "@key" entry beside it whose
+    # "description" says where the string appears and what constrains it. Crowdin
+    # shows those to the translator as context, which is the whole reason the
+    # descriptions are written the way they are.
+    languages_mapping:
+      locale_with_underscore:
+        # Crowdin id -> the name Flutter's generator expects. Simplified Chinese
+        # lands as plain `zh` rather than `zh_Hans`: Flutter requires a
+        # script-less base file to fall back to, and `zh` is that base — the
+        # Traditional file below is a script variant of it, which is why it is
+        # `zh_Hant` and not `zh_TW`. A country in that name would come back as
+        # a countryCode, and `localeTag` in lib/l10n/strings.dart writes the
+        # script, so `zh_TW` and `zh` would both save as "zh".
+        zh-CN: zh
+        zh-TW: zh_Hant
+        kk: kk
+        de: de
+        uk: uk

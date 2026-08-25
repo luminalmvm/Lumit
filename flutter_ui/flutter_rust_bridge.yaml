@@ -1,0 +1,4 @@
+rust_input: crate::api
+rust_root: ../crates/lumit-bridge/
+dart_output: lib/src/rust
+dart_entrypoint_class_name: BridgeLib

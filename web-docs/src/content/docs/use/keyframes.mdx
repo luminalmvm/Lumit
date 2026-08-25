@@ -1,0 +1,52 @@
+---
+title: Keyframes
+description: Animate a property, and control how it moves between values.
+sidebar:
+  order: 5
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **keyframe** anchors a value to a time. Lumit works out the values in between.
+
+<Shot file="keyframes-lane.png" caption="Keyframes on a property lane." eager/>
+
+## Animate a property
+
+1. Move the playhead to where the animation starts.
+2. Turn on the stopwatch beside the property.
+3. Move the playhead to where you'd like a new keyframe.
+4. Change the value.
+
+Whenever a keyframed propert's value is altered by you, it creates a new keyframe
+at the current playhead position. When editing a frame that currently has a keyframe
+it will update that keyframes value instead.
+
+Turn the stopwatch off to remove every keyframe on that property.
+
+## Move and delete
+
+- Drag a keyframe along the layer's row to move it in time.
+- Select several and drag them together.
+- Press delete to remove the selected keyframes.
+
+## Interpolation
+
+Each side of a keyframe has its own interpolation:
+
+| Type | Result |
+| --- | --- |
+| **Hold** | The value does not change until the next keyframe. |
+| **Linear** | A straight line to the next value. |
+| **Bezier** | A curve you can alter. |
+
+A bezier keyframe carries **speed** and **influence**. Speed is the rate of change in
+units per second. Influence is how far the handle reaches, as a percentage.
+
+Lumit matches After Effects' keyframe maths, so imported animations keep their shape.
+
+## Related
+
+- [The graph editor](/use/graph-editor/)
+- [Retiming and speed](/use/retime/)
+- [Expressions](/use/expressions/)

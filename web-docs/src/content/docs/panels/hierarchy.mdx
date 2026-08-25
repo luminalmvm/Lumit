@@ -1,0 +1,38 @@
+---
+title: The Hierarchy panel
+description: The active composition as a foldable tree of layers and nested comps.
+sidebar:
+  order: 9
+---
+
+import Shot from "../../../components/Shot.astro";
+
+The **Hierarchy** panel draws the active composition as an indented tree of its layers,
+top to bottom. Use it to see what a comp contains without opening anything.
+
+<Shot file="hierarchy.png" caption="The Hierarchy panel, with a precomp twirled open." eager/>
+
+## Precomps expand
+
+A [Precomp layer](/use/compositions/) can be opened to view the layers of the composition
+nested within.
+
+## What clicking does
+
+| Gesture | Result |
+| --- | --- |
+| Click a row | Select that layer. |
+| `Ctrl`+click | Add or remove it from the selection. |
+| Double-click a precomp row | Open that composition in the Viewer and Timeline. |
+
+Selection is shared with the Timeline, so a layer selected in the heirarchy panel is selected in 
+the timeline.
+
+## Read-only
+
+The panel is for navigation. Renaming, reordering and deleting stay in the [Timeline](/panels/timeline/).
+
+## Related
+
+- [The Timeline](/panels/timeline/)
+- [Compositions](/use/compositions/)

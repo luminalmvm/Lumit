@@ -1,0 +1,69 @@
+---
+title: Effects console
+description: The Ctrl+Space menu, a radial menu around your pointer with an effect search bar above it.
+sidebar:
+  order: 9.25
+---
+
+Press **Ctrl+Space** anywhere, and the effects console opens on your mouse: a **ring 
+of choices** centred around the cursor, with a **search bar** floating above it.
+
+## The ring
+
+Every choice in the ring stays in a fixed **direction** from the centre.
+
+- **Flick, or click.** Press and drag in a direction and release: the option in
+  that direction runs, however far you dragged. Clicking a option directly works
+  too.
+- **The middle cancels.** Release with the pointer still in the centre and nothing
+  happens.
+- **Escape closes it**.
+
+Some options open submenus. Choose one to **expand the ring in place** replacing the existing radial menu. 
+Clicking the centre steps back to the previous menu; Escape steps back to, one level at a time.
+
+## What is in the ring
+
+The ring displays options relevant to the item you currently have focused:
+
+| You have | The ring offers |
+| --- | --- |
+| A Project panel item picked | **Add to comp** - places it as dropping it on the Timeline would |
+| An effect picked | Enable or disable it, copy it, remove it, add another |
+| A layer selected | Duplicate, add effect, pre-compose, delete - plus **New ▸** and **Keyframe ▸** |
+| A composition, nothing selected | The new-layer menu: solid, text, camera, adjustment, null, import |
+| Nothing open | New composition, import footage |
+
+**New ▸** expands into the same entries as the Layer ▸ New menu, in the same order.
+
+## The Keyframe slice
+
+With a layer selected, **Keyframe ▸** expands into an option per transform
+row: Anchor point, Position, Scale, Rotation, Opacity. Choosing one adds a 
+keyframe at the playhead holding the value the property currently has.
+
+A row driven by an expression is dimmed, because writing keyframess over an expression 
+would erase it. See [Keyframes](/use/keyframes/).
+
+## The search bar
+
+Type, and a dropdown appears under the bar with everything that matches:
+
+- **Effects first, compositions after a divider.**
+- Matching is loose: type `gau` and Gaussian blur is the top row. The letters
+  only have to appear in order, so `db` finds Directional blur.
+- **Enter applies the top match to every selected layer.**
+- The arrow keys move the selected option; Escape clears the search first and
+  closes second.
+
+## The snapshot button
+
+The camera button beside the search field saves the frame you are looking at
+as a PNG. One press, and no export dialogue. Snapshots land in a `Snapshots`
+folder beside your saved project, or in your Pictures folder if the project has
+never been saved.
+
+## Not the command palette
+
+**Ctrl+Shift+P** opens the command palette. The palette is *every command by name*; 
+the console is largely effects and context relevant options.

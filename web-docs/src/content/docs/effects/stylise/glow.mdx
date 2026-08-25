@@ -1,0 +1,60 @@
+---
+title: "Glow"
+description: "Bloom the picture's bright areas."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Glow is a [Stylise](/effects/#stylise) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Glow" category="stylise" slug="glow" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Parts of the image brighter than the threshold emit a glow.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Threshold** | Slider | 0 to 4; higher | 0.8 | - |
+| **Softness** | Slider | 0 to 1 | 0.5 | - |
+| **Radius** | Slider | 0 to 200; higher | 24 | Pixels at composition size |
+| **Intensity** | Slider | 0 to 10; higher | 1 | - |
+| **Tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** gates which pixels may seed the halo, before the bright pass: light only escapes from where the matte is bright, but it still spills outward across dark matte — which fading the finished glow cannot do. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Threshold**: how bright a pixel must be before it blooms.
+- **Softness**: how abruptly a pixel starts to bloom as it crosses the threshold.
+- **Radius**: how far the bloom spreads.
+- **Intensity**: how intense the bloom is.
+- **Tint**: the colour of the bloom. Neutral keeps each highlight's own colour.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Light wrap](/effects/stylise/light-wrap/)
+- [Exposure](/effects/colour/exposure/)
+- [Layers](/use/layers/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

@@ -1,0 +1,27 @@
+---
+const links = [
+  { href: "/download", label: "Download" },
+  { href: "/releases", label: "Releases" },
+  { href: "https://docs.lumitlab.com", label: "Docs" },
+  { href: "https://github.com/luminalmvm/Lumit", label: "GitHub" },
+  { href: "https://discord.gg/dc3p3XC7mM", label: "Discord" },
+  { href: "https://github.com/luminalmvm/Lumit/blob/main/LICENSE", label: "GPLv3" },
+];
+---
+
+<footer class="border-t border-line py-11 text-sm text-fg-3">
+  <div class="mx-auto flex w-full max-w-[1080px] flex-wrap items-center gap-x-8 gap-y-4 px-5 sm:px-10">
+    <a href="/" class="flex items-center gap-2.5 no-underline">
+      <img src="/lumit-mark.svg" alt="" width="22" height="22" class="block" />
+      <span class="font-semibold tracking-[-0.035em] text-fg">Lumit</span>
+    </a>
+    <span class="ml-auto"></span>
+    {
+      links.map((l) => (
+        <a href={l.href} class="text-fg-2 no-underline transition-colors hover:text-fg">
+          {l.label}
+        </a>
+      ))
+    }
+  </div>
+</footer>

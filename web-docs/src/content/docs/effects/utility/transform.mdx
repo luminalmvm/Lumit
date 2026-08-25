@@ -1,0 +1,69 @@
+---
+title: "Transform"
+description: "The transform properties as an effect."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Transform is a [Utility](/effects/#utility) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Transform" category="utility" slug="transform" />
+
+{/* END GENERATED */}
+
+## What it does
+
+The layer transform group (anchor, position, scale, rotation and opacity) as an
+effect. 
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Anchor x** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Anchor y** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Position x** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Position y** | Slider | -1000 to 1000; any value by typing | 0 | Pixels at composition size |
+| **Scale x %** | Slider | 0 to 400; any value by typing | 100 | Per cent |
+| **Scale y %** | Slider | 0 to 400; any value by typing | 100 | Per cent |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Opacity %** | Slider | 0 to 100 | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Anchor x** and **Anchor y**: the point everything else happens around.
+- **Position x** and **Position y**: slides the frame left/right and up/down.
+- **Scale x %** and **Scale y %**: scale size as a percentage.
+- **Rotation**: turn a set number of degrees.
+- **Opacity %**: how much of the transformed picture there is.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Notes
+
+For the layer's own transform properties, see
+[Transform](/use/transform/).
+
+## Related
+
+- [Transform](/use/transform/)
+- [Layers](/use/layers/)
+- [Radial blur](/effects/blur-sharpen/radial-blur/)
+- [Shake](/effects/distortion/shake/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

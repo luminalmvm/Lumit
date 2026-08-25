@@ -1,0 +1,16 @@
+# Deliberately no [env] block here — do not add one for FFmpeg (K-204).
+#
+# This file used to set FFMPEG_PKG_CONFIG_PATH to the macOS Homebrew keg path. Cargo's
+# [env] has no per-target form, so that path was injected on Linux too, and rusty_ffmpeg's
+# build script *panics* when FFMPEG_PKG_CONFIG_PATH names a directory that does not exist
+# ("which does not exist") rather than falling back to pkg-config's default search. Every
+# Linux contributor therefore had to delete this line, or export the variable over it,
+# before a fresh clone would build. Two of them did.
+#
+# The arrangement now: each platform points the build at FFmpeg from outside this file.
+# macOS exports FFMPEG_PKG_CONFIG_PATH at the keg-only ffmpeg@7 (CI does it per job,
+# developers per shell — docs/GUIDE.md §8). Linux needs nothing: the distro's FFmpeg 7
+# development packages sit on pkg-config's default search path, which is exactly what
+# rusty_ffmpeg probes when the variable is unset. Windows uses FFMPEG_LIBS_DIR /
+# FFMPEG_INCLUDE_DIR (rusty_ffmpeg's pkg-config branch is cfg(not(windows)), so it never
+# reads this variable there) — see scripts/win-dev-env.ps1.

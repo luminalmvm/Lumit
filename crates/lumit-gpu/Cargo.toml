@@ -1,0 +1,101 @@
+[package]
+name = "lumit-gpu"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+glam = "0.29"
+half = "2"
+pollster = "0.4"
+thiserror = "2"
+# `counters` turns on wgpu's live-object tallies — how many textures and
+# buffers the driver is holding right now, which is what says whether a frame
+# the engine dropped was actually destroyed (K-294). Every backend keeps them;
+# unlike the allocator report, which is Vulkan and D3D12 only and answers
+# nothing at all on Metal, where the memory question was asked.
+wgpu = { version = "24", features = ["counters"] }
+
+# The Windows-only, zero-copy Viewer path (K-177). Off by default so every
+# existing build is byte-for-byte unchanged; the bridge turns it on to build the
+# shipped `.dll`. It pulls the `windows` crate (pinned to 0.58 so its
+# `ID3D12Device`/`ID3D12Resource` types unify with the ones wgpu-hal's D3D12
+# backend already uses — a mismatched major would be a *different* type and the
+# hal hand-off would not compile). The actual D3D code is additionally
+# `cfg(windows)`-gated, so enabling the feature on a non-Windows target is inert.
+#
+# `shared-texture-linux` (K-177-linux) is the Vulkan/DMA-BUF sibling for the
+# owner's Linux collaborator. Off by default; the bridge turns it on to build the
+# shipped Linux `.so`. It pulls `ash` (pinned to 0.38 so its `vk::*` handle types
+# unify with the ones wgpu-hal's Vulkan backend already uses — the same
+# major-version-must-match reasoning the `windows` pin documents). The Vulkan
+# interop is additionally `cfg(target_os = "linux")`-gated, so enabling the
+# feature off Linux is inert.
+#
+# `shared-texture-macos` (K-195) is the Metal/IOSurface sibling. Off by default;
+# the bridge turns it on to build the shipped `.dylib`. It pulls `metal` (pinned
+# to 0.31, the version wgpu-hal 24's Metal backend already links, so `MTLTexture`
+# and `MTLDevice` unify with the ones the hal hands us — the same
+# major-must-match reasoning as the two pins above), plus `objc` for the one
+# selector metal-rs does not wrap and `core-foundation` for the IOSurface
+# property dictionary. The Metal interop is additionally
+# `cfg(target_os = "macos")`-gated, so enabling the feature off macOS is inert.
+[features]
+shared-texture = ["dep:windows"]
+shared-texture-linux = ["dep:ash"]
+shared-texture-macos = ["dep:metal", "dep:objc", "dep:core-foundation"]
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.58"
+optional = true
+default-features = false
+features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+]
+
+# ash for the Linux DMA-BUF path only. Pinned to 0.38 to match the version
+# wgpu-hal 24 already links, so `vk::Image`/`vk::DeviceMemory` and the Vulkan
+# loaders unify with wgpu-hal's Vulkan backend (a different major would be a
+# distinct, incompatible type set). Linux-only and optional, so no other target
+# or build pulls it.
+[target.'cfg(target_os = "linux")'.dependencies.ash]
+version = "0.38"
+optional = true
+default-features = false
+
+# The macOS IOSurface path only. `metal` is pinned to 0.31 to match wgpu-hal 24;
+# `objc` sends the one message metal-rs does not wrap
+# (`newTextureWithDescriptor:iosurface:plane:`); `core-foundation` builds the
+# surface's property dictionary. macOS-only and optional, so no other target
+# pulls them.
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = { version = "0.31", optional = true }
+objc = { version = "0.2", optional = true }
+core-foundation = { version = "0.9", optional = true }
+
+[dev-dependencies]
+# The CPU oracle the WGSL kernels are held to (docs/08 §1.6).
+lumit-core = { path = "../lumit-core" }
+# The shader front end wgpu itself is built on, used by tests/wgsl_validates.rs
+# to parse and validate every kernel WITHOUT a graphics card (K-263) — until
+# that test existed, a broken shader could only be caught by a machine with a
+# GPU, at pipeline-creation time. Pinned to wgpu 24's own naga so the two agree
+# about what is valid.
+naga = { version = "24", features = ["wgsl-in"] }
+# The walking-skeleton proof that the eval executor drives these kernels
+# through the 05 §1.1 trait seams (tests/exec_skeleton.rs). Dev-only: the
+# production dependency direction stays eval-independent-of-gpu.
+lumit-eval = { path = "../lumit-eval" }
+uuid = { version = "1", features = ["v7"] }
+
+[lints]
+workspace = true

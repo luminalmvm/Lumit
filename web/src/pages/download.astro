@@ -1,0 +1,145 @@
+---
+import Base from "../layouts/Base.astro";
+
+const RELEASES = "https://github.com/luminalmvm/Lumit/releases";
+
+const platforms = [
+  { key: "win", name: "Windows", meta: "10 / 11, 64-bit · installer", cta: "Download .exe", soft: false },
+  { key: "lin", name: "Linux", meta: "x86-64 · Flatpak", cta: "Download .flatpak", soft: false },
+  { key: "mac", name: "macOS", meta: "Apple silicon · signed dmg", cta: "Download .dmg", soft: false },
+];
+
+const notes = [
+  {
+    th: "Graphics",
+    td: "A GPU with Vulkan, Direct3D 12 or Metal. Lumit is GPU-first; there is no software-rendering fallback.",
+  },
+  {
+    th: "Windows",
+    td: "Run the installer. SmartScreen will warn on first run - the build is not code-signed.",
+  },
+  {
+    th: "Linux",
+    td: 'Distributions with Flatpak supported. Install via "flatpak install lumit-*.flatpak", then launch from your applications menu. FFmpeg ships inside the bundle.',
+  },
+  {
+    th: "macOS",
+    td: "macOS supports Apple silicon only.",
+  },
+  {
+    th: "Building it yourself",
+    td: "Clone the repository and follow the README. The engine is Rust, the interface is Flutter; CI builds these same artefacts on every tagged release.",
+  },
+];
+---
+
+<Base
+  title="Download Lumit"
+  description="Download Lumit for Windows, Linux and macOS. Free and open source under GPLv3."
+>
+  <section class="py-16 sm:py-24">
+    <div class="wrap">
+      <p class="kicker">Download</p>
+      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Install Lumit.</h2>
+      <p class="mt-4 max-w-[620px]">
+        Free and open source under GPLv3. No account, no licence key. Latest release
+        <span class="font-mono tabular-nums text-fg" data-tag>-</span>, published
+        <span data-date>-</span>.
+      </p>
+
+      <div class="mt-11 grid gap-4.5 lg:grid-cols-3">
+        {
+          platforms.map((p) => (
+            <div class="card flex flex-col gap-1.5" data-plat={p.key}>
+              <h3 class="text-[18px] tracking-[-0.02em]">{p.name}</h3>
+              <p class="mb-4 text-[13px] text-fg-3">
+                {p.meta} · <span class="font-mono tabular-nums" data-size={p.key}>-</span>
+              </p>
+              <a
+                class:list={["btn mt-auto", p.soft && "btn-ghost"]}
+                href={RELEASES + "/latest"}
+                data-link={p.key}
+              >
+                {p.cta}
+              </a>
+            </div>
+          ))
+        }
+      </div>
+
+      <p class="mt-6 text-[13.5px] text-fg-3">
+        All builds can be found on the
+        <a href={RELEASES} class="text-fg-2 underline underline-offset-2 hover:text-fg">
+          GitHub releases page</a
+        >, where you can also find checksums, release notes, and older builds.
+      </p>
+    </div>
+  </section>
+
+  <section class="border-t border-line bg-ink-2 py-16 sm:py-24">
+    <div class="wrap">
+      <p class="kicker">Before you install</p>
+      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Notes and requirements.</h2>
+      <dl class="mt-7 max-w-[820px]">
+        {
+          notes.map((n) => (
+            <div class="grid gap-1 border-b border-line py-3.5 sm:grid-cols-[190px_1fr] sm:gap-4">
+              <dt class="text-fg">{n.th}</dt>
+              <dd class="m-0 text-[14.5px]">{n.td}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+  </section>
+</Base>
+
+<script>
+  // Point the three buttons at the newest release's assets. Each href already falls
+  // back to /releases/latest, so a failed or rate-limited fetch simply leaves those.
+  const MATCH: Record<string, RegExp> = {
+    win: /windows.*\.exe$/i,
+    lin: /linux.*\.flatpak$/i,
+    mac: /\.dmg$/i,
+  };
+
+  type Asset = { name: string; size: number; browser_download_url: string };
+  type Release = { tag_name: string; published_at: string; assets: Asset[] };
+
+  const set = (sel: string, text: string) => {
+    const el = document.querySelector(sel);
+    if (el) el.textContent = text;
+  };
+
+  fetch("https://api.github.com/repos/luminalmvm/Lumit/releases/latest")
+    .then((r) => {
+      if (!r.ok) throw new Error(String(r.status));
+      return r.json() as Promise<Release>;
+    })
+    .then((rel) => {
+      set("[data-tag]", rel.tag_name);
+      set(
+        "[data-date]",
+        new Date(rel.published_at).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }),
+      );
+
+      for (const [key, re] of Object.entries(MATCH)) {
+        const asset = rel.assets.find((a) => re.test(a.name));
+        if (!asset) continue;
+        const link = document.querySelector<HTMLAnchorElement>(`[data-link="${key}"]`);
+        if (link) link.href = asset.browser_download_url;
+        set(`[data-size="${key}"]`, `${Math.round(asset.size / 1048576)} MB`);
+      }
+
+      const ua = navigator.userAgent;
+      const mine = /Win/.test(ua) ? "win" : /Mac/.test(ua) ? "mac" : /Linux|X11/.test(ua) ? "lin" : null;
+      if (mine) document.querySelector(`[data-plat="${mine}"]`)?.classList.add("border-line-2");
+    })
+    .catch(() => {
+      /* the releases-page fallback in each href stands */
+    });
+</script>

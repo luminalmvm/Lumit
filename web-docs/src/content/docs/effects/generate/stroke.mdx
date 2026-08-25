@@ -1,0 +1,67 @@
+---
+title: Stroke
+description: "Draws a stroke along a mask ."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Stroke is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Stroke" category="generate" slug="stroke" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Stroke draws a round stroke along a mask's path.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mask** | Masks | This layer's masks | First mask | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Brush size** | Slider | 0.5 to 100; down to 0.1 and higher | 8 | Pixels at composition size |
+| **Brush hardness** | Slider | 0 to 100 | 75 | Per cent |
+| **Spacing** | Slider | 1 to 500; higher | 15 | Per cent |
+| **Start** | Slider | 0 to 100 | 0 | Per cent |
+| **End** | Slider | 0 to 100 | 100 | Per cent |
+| **Paint style** | Dropdown | On original · On transparent · Reveal original | On original | - |
+| **Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Opacity per pixel: white lays the brush down in full, grey          faintly, black not at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mask**: which of the layer's masks to draw.
+- **Colour**: the brush's colour. 
+- **Brush size**: how wide the brush stroke is.
+- **Brush hardness**: how crisp its edge is.
+- **Spacing**: how far apart brush stamps are.
+- **Start** and **End**: beginning and end points for the brush stroke.
+- **Paint style**: what the stroke lands on. **On original** paints over the layer; 
+  **On transparent** keeps the stroke and makes the rest of the layer transparent; 
+  **Reveal original** keeps the picture *only* where the brush appears and hides the rest.
+- **Opacity**: how strong the brush is.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Scribble](/effects/generate/scribble/)
+- [Vegas](/effects/generate/vegas/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

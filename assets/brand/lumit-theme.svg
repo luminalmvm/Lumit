@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- File-type icon, .lumtheme (docs/15-DESIGN.md, brand; K-251, K-298).
+       The page and its folded corner are the family's; the glyph is three
+       overlapping swatches rather than the keyframe mark, because what this
+       file carries is colours.
+
+       **The three are equal.** Their centres sit on an equilateral triangle
+       whose circumradius is the swatch radius itself, so each circle passes
+       through the one point at the centre of the glyph and no further: the three
+       meet there and share no area at all. That is what keeps them equally
+       visible — every swatch gives up the same small lens to each neighbour, and
+       none is left a crescent behind the other two. Move one centre and the
+       arrangement stops being equal in both senses at once, so treat the six
+       numbers as one figure rather than three positions.
+
+       **They overlap in a ring, not a stack**: blue over white, violet over
+       blue, white over violet. No painting order can produce a cycle, so one
+       swatch is drawn with a bite taken out of it instead — the violet one is
+       clipped to outside the white circle, which is the same thing as the white
+       being in front of it.
+
+       **Nothing is painted where something else will cover it**, which is what
+       keeps the joins clean: a shape hidden under another still shows its own
+       softened edge pixels through the join as a hairline, and two rims at a
+       quarter opacity stacking turns a crossing into a dark blot. So each swatch
+       carries its rim inside its own circle, drawn immediately after its fill,
+       and the white swatch's rim comes last and in one piece — clipped to where
+       it is not behind the blue one, rather than drawn as two arcs whose
+       softened ends would meet in a seam. -->
+  <defs>
+    <linearGradient id="key-a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#86e2ff"/><stop offset="1" stop-color="#2f6fe0"/>
+    </linearGradient>
+    <linearGradient id="key-b" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a70ff"/><stop offset="1" stop-color="#ff4f9e"/>
+    </linearGradient>
+    <linearGradient id="key-c" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c8dcf2"/>
+    </linearGradient>
+    <filter id="key-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="7" stdDeviation="11" flood-color="#04060b" flood-opacity="0.4"/>
+    </filter>
+    <clipPath id="sw-blue"><circle cx="212.7" cy="207" r="50"/></clipPath>
+    <clipPath id="sw-violet"><circle cx="299.3" cy="207" r="50"/></clipPath>
+    <clipPath id="sw-white"><circle cx="256" cy="282" r="50"/></clipPath>
+    <!-- Everything but the white swatch: where the violet one is in front of
+         it, which is everywhere else. -->
+    <clipPath id="sw-outside-white">
+      <path d="M0 0 H512 V512 H0 Z M206 282 a50 50 0 1 0 100 0 a50 50 0 1 0 -100 0 Z"
+            clip-rule="evenodd"/>
+    </clipPath>
+    <!-- And everything but the blue swatch: where the white one is in front,
+         and so where its rim belongs. -->
+    <clipPath id="sw-outside-blue">
+      <path d="M0 0 H512 V512 H0 Z M162.7 207 a50 50 0 1 0 100 0 a50 50 0 1 0 -100 0 Z"
+            clip-rule="evenodd"/>
+    </clipPath>
+    <linearGradient id="doc-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#181b21"/><stop offset="1" stop-color="#101217"/>
+    </linearGradient>
+  </defs>
+  <path d="M116 92 Q116 64 144 64 L318 64 L396 142 L396 420 Q396 448 368 448 L144 448 Q116 448 116 420 Z"
+        fill="url(#doc-bg)" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+  <path d="M318 64 L396 142 L332 142 Q318 142 318 128 Z" fill="#272b34"/>
+  <g filter="url(#key-shadow)">
+    <!-- White. Its rim comes last, once the two in front of it are down. -->
+    <circle cx="256" cy="282" r="50" fill="url(#key-c)"/>
+    <!-- Blue, over white. -->
+    <g clip-path="url(#sw-blue)">
+      <circle cx="212.7" cy="207" r="50" fill="url(#key-a)"/>
+      <circle cx="212.7" cy="207" r="50" fill="none"
+              stroke="#0c0e14" stroke-opacity="0.25" stroke-width="9"/>
+    </g>
+    <!-- Violet, over blue and under white: the ring closes. -->
+    <g clip-path="url(#sw-outside-white)">
+      <g clip-path="url(#sw-violet)">
+        <circle cx="299.3" cy="207" r="50" fill="url(#key-b)"/>
+        <circle cx="299.3" cy="207" r="50" fill="none"
+                stroke="#0c0e14" stroke-opacity="0.25" stroke-width="9"/>
+      </g>
+    </g>
+    <!-- The white swatch's rim, wherever it is not behind the blue one. -->
+    <g clip-path="url(#sw-white)">
+      <g clip-path="url(#sw-outside-blue)">
+        <circle cx="256" cy="282" r="50" fill="none"
+                stroke="#0c0e14" stroke-opacity="0.25" stroke-width="9"/>
+      </g>
+    </g>
+  </g>
+  <text x="256" y="408" font-family="JetBrains Mono, Consolas, monospace" font-size="58"
+        font-weight="700" letter-spacing="6" fill="#aab6c6" text-anchor="middle">THEME</text>
+</svg>

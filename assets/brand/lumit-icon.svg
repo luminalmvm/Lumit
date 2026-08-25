@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- App icon, macOS tile form (docs/15-DESIGN.md, brand; K-251): the mark on
+       the dark rounded tile. -->
+  <defs>
+    <linearGradient id="key-a" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#86e2ff"/><stop offset="1" stop-color="#2f6fe0"/>
+    </linearGradient>
+    <linearGradient id="key-b" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8a70ff"/><stop offset="1" stop-color="#ff4f9e"/>
+    </linearGradient>
+    <radialGradient id="key-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.75" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eaf4ff"/>
+    </radialGradient>
+    <radialGradient id="key-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="key-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="7" stdDeviation="11" flood-color="#04060b" flood-opacity="0.4"/>
+    </filter>
+    <linearGradient id="tile-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16181d"/><stop offset="1" stop-color="#0d0f13"/>
+    </linearGradient>
+    <radialGradient id="tile-bloom" cx="0.5" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#b7c6e2" stop-opacity="0.18"/>
+      <stop offset="0.6" stop-color="#b7c6e2" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#b7c6e2" stop-opacity="0"/>
+    </radialGradient></defs>
+  <rect width="512" height="512" rx="115" fill="url(#tile-bg)"/>
+  <circle cx="256" cy="256" r="250" fill="url(#tile-bloom)"/>
+  <g transform="translate(256 256) scale(0.82) translate(-256 -256)">
+  <!-- Each keyframe is a chevron rather than a whole diamond: the diamond with
+       the core's near half cut out of it, so the two shapes meet the core edge
+       to edge and never overlap each other. That is what lets the core be made
+       transparent - with whole diamonds, key-b sat on top of key-a and a
+       transparent core exposed the square edge underneath.
+
+       The cut follows the core outline exactly, so the three shapes tile the
+       original silhouette with no seam and no double-covered pixel. Left
+       chevron: outer tip (35,256), diamond corners at (180,111)/(180,401),
+       notch apex on the core's left vertex (181,256), and the two notch
+       shoulders where the diamond's inner edges cross the core's - (253,184)
+       and (253,328). The right chevron is its mirror about x=256. -->
+  <g filter="url(#key-shadow)">
+    <path d="M60.46 230.54 L154.54 136.46 A36 36 0 0 1 205.46 136.46
+             L245.93 176.93 A10 10 0 0 1 245.93 191.07
+             L186.66 250.34 A8 8 0 0 0 186.66 261.66
+             L245.93 320.93 A10 10 0 0 1 245.93 335.07
+             L205.46 375.54 A36 36 0 0 1 154.54 375.54
+             L60.46 281.46 A36 36 0 0 1 60.46 230.54 Z"
+       fill="url(#key-a)" stroke="#0c0e14" stroke-opacity="0.25" stroke-width="8"/>
+    <path d="M451.54 230.54 L357.46 136.46 A36 36 0 0 0 306.54 136.46
+             L266.07 176.93 A10 10 0 0 0 266.07 191.07
+             L325.34 250.34 A8 8 0 0 1 325.34 261.66
+             L266.07 320.93 A10 10 0 0 0 266.07 335.07
+             L306.54 375.54 A36 36 0 0 0 357.46 375.54
+             L451.54 281.46 A36 36 0 0 0 451.54 230.54 Z"
+       fill="url(#key-b)" stroke="#0c0e14" stroke-opacity="0.25" stroke-width="8"/>
+  </g>
+  <circle cx="256" cy="256" r="130" fill="url(#key-glow)"/>
+  <path d="M256 181 L331 256 L256 331 L181 256 Z" fill="url(#key-core)"
+        stroke="url(#key-core)" stroke-width="16" stroke-linejoin="round"/></g>
+</svg>

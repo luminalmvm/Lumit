@@ -1,0 +1,324 @@
+{
+  "_note": "The awkward half of an After Effects project: the things that have no Lumit counterpart, the things a capture can get wrong, and the layer kinds the fidelity matrix grades below lossless. Its sibling synthetic.lum-bundle is the ordinary half. Nothing here may abort an import.",
+
+  "project": {
+    "bits_per_channel": 8,
+    "working_space": "",
+    "linear_blending": false,
+    "linearize_working_space": false,
+    "expression_engine": "javascript-1.0"
+  },
+
+  "items": [
+    { "id": 1, "name": "Footage", "parent_id": 0, "kind": "folder" },
+
+    { "id": 2, "name": "missing.mov", "parent_id": 1, "kind": "footage",
+      "path": "/media/gone/missing.mov",
+      "width": 1920, "height": 1080, "fps": 23.976023976023978,
+      "duration": 6.0, "alpha": "STRAIGHT",
+      "is_still": false, "is_placeholder": true, "is_missing": true },
+
+    { "id": 3, "name": "Ghost", "parent_id": 0, "kind": "comp" },
+
+    { "id": 4, "name": "Edges", "parent_id": 0, "kind": "comp" },
+
+    { "id": 5, "name": "Unreadable item" },
+
+    { "id": 6, "name": "Red Solid 1", "parent_id": 1, "kind": "solid",
+      "colour": [1.0, 0.0, 0.0], "width": 1920, "height": 1080 },
+
+    { "id": 7, "name": "Vague", "parent_id": 0, "kind": "comp" }
+  ],
+
+  "comps": [
+    {
+      "_note": "A comp the walk described only in part: no frame rate and no duration arrived, so both are guessed and reported. Its one layer is an audio layer, which Lumit carries as an ordinary footage layer.",
+      "id": 7,
+      "width": 640, "height": 360, "par": 1.0,
+      "bg_colour": [0.0, 0.0, 0.0],
+      "layers": [
+        {
+          "index": 1, "name": "Voiceover", "kind": "audio", "source_id": 2,
+          "in_point": 0.0, "out_point": 3.0, "start_time": 0.0, "stretch": 100.0,
+          "switches": { "enabled": true, "audio": true, "quality": "BEST" },
+          "properties": []
+        }
+      ]
+    },
+
+    {
+      "id": 4,
+      "width": 1920, "height": 1080, "par": 1.4142, "fps": 23.976023976023978,
+      "duration": 4.0, "start": 3.0, "bg_colour": [1.0, 1.0, 1.0],
+      "motion_blur": { "enabled": false },
+      "renderer": "ADBE Ernst",
+      "preserve_nested_fps": true,
+      "preserve_nested_resolution": false,
+      "markers": [
+        { "t": 1.0, "comment": "chapter one", "duration": 0.0, "chapter": "One", "label": 2 }
+      ],
+
+      "layers": [
+        {
+          "index": 1, "name": "Dissolve", "kind": "solid", "source_id": 6,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "DISSOLVE", "label": 0, "preserve_transparency": false,
+          "matte": { "type": "NO_TRACK_MATTE", "is_track_matte": false },
+          "switches": { "enabled": true, "quality": "BEST", "frame_blending": "NO_FRAME_BLEND" },
+          "properties": []
+        },
+
+        {
+          "index": 2, "name": "Classic", "kind": "solid", "source_id": 6,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "CLASSIC_COLOR_BURN", "label": 0, "preserve_transparency": true,
+          "switches": { "enabled": true, "quality": "DRAFT", "frame_blending": "FRAME_MIX" },
+          "properties": []
+        },
+
+        {
+          "index": 3, "name": "Reversed", "kind": "footage", "source_id": 2,
+          "in_point": 0.0, "out_point": 2.0, "start_time": 2.0, "stretch": -100.0,
+          "blend": "NORMAL", "label": 5, "preserve_transparency": false,
+          "switches": { "enabled": true, "quality": "BEST", "frame_blending": "PIXEL_MOTION" },
+          "properties": []
+        },
+
+        {
+          "index": 4, "name": "Legacy matte user", "kind": "solid", "source_id": 6,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "NORMAL",
+          "matte": { "type": "LUMA", "is_track_matte": false },
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": []
+        },
+
+        {
+          "index": 5, "name": "Off frame", "kind": "null",
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "NORMAL",
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": [
+            {
+              "match_name": "ADBE Transform Group", "name": "Transform", "enabled": true,
+              "group": [
+                {
+                  "match_name": "ADBE Position", "name": "Position", "value_type": "point3",
+                  "keyframes": [
+                    { "t": 0.0, "v": [0.0, 0.0, 0.0],
+                      "in_interp": "LINEAR", "out_interp": "LINEAR" },
+                    { "t": 0.5213541666666667, "v": [100.0, 0.0, 0.0],
+                      "in_interp": "LINEAR", "out_interp": "LINEAR" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+
+        {
+          "index": 6, "name": "Shifted", "kind": "null",
+          "in_point": 2.0, "out_point": 4.0, "start_time": 2.0, "stretch": 100.0,
+          "blend": "NORMAL",
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": [
+            {
+              "match_name": "ADBE Transform Group", "name": "Transform", "enabled": true,
+              "group": [
+                {
+                  "match_name": "ADBE Rotate Z", "name": "Rotation", "value_type": "float",
+                  "keyframes": [
+                    { "t": 2.0, "v": 0.0, "in_interp": "LINEAR", "out_interp": "LINEAR" },
+                    { "t": 3.0, "v": 90.0, "in_interp": "LINEAR", "out_interp": "LINEAR" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+
+        {
+          "index": 7, "name": "Guide", "kind": "solid", "source_id": 6,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "NORMAL",
+          "switches": { "enabled": true, "quality": "WIREFRAME", "guide": true, "shy": true,
+                        "lock": true, "solo": true, "three_d": true, "collapse": true,
+                        "motion_blur": true, "effects_active": false, "audio": false },
+          "properties": []
+        },
+
+        {
+          "index": 8, "name": "Adjust", "kind": "adjustment",
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "NORMAL",
+          "switches": { "enabled": true, "adjustment": true, "quality": "BEST" },
+          "properties": []
+        },
+
+        {
+          "index": 9, "name": "Cam", "kind": "camera",
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "auto_orient": "CAMERA_OR_POINT_OF_INTEREST",
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": [
+            { "match_name": "ADBE Camera Options Group", "name": "Camera Options", "enabled": true,
+              "group": [
+                { "match_name": "ADBE Camera Zoom", "name": "Zoom",
+                  "value_type": "float", "value": 1800.0 }
+              ]
+            }
+          ]
+        },
+
+        {
+          "index": 10, "name": "Key light", "kind": "light", "light_type": "AMBIENT",
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": [
+            { "match_name": "ADBE Light Options Group", "name": "Light Options", "enabled": true,
+              "group": [
+                { "match_name": "ADBE Light Intensity", "name": "Intensity",
+                  "value_type": "float", "value": 50.0 },
+                { "match_name": "ADBE Light Color", "name": "Color",
+                  "value_type": "colour", "value": [1.0, 1.0, 1.0] },
+                { "match_name": "ADBE Light Cone Angle", "name": "Cone Angle",
+                  "value_type": "float", "value": 90.0 }
+              ]
+            }
+          ]
+        },
+
+        {
+          "index": 11, "name": "Words", "kind": "text",
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": [
+            { "match_name": "ADBE Text Properties", "name": "Text", "enabled": true,
+              "group": [
+                { "match_name": "ADBE Text Document", "name": "Source Text",
+                  "value_type": "text",
+                  "value": { "text": "Roll credits", "fontSize": 48.0,
+                             "fillColor": [1.0, 1.0, 1.0], "font": "Helvetica",
+                             "tracking": 12.0 } }
+              ]
+            }
+          ]
+        },
+
+        {
+          "index": 12, "name": "Shapes", "kind": "shape",
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": []
+        },
+
+        {
+          "index": 13, "name": "Lighten mask", "kind": "solid", "source_id": 6,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "NORMAL",
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": [
+            {
+              "match_name": "ADBE Mask Parade", "name": "Masks", "enabled": true,
+              "group": [
+                {
+                  "match_name": "ADBE Mask Atom", "name": "Mask 1", "enabled": true,
+                  "mask": { "mode": "LIGHTEN", "inverted": false, "roto_bezier": true,
+                            "locked": false, "colour": [1.0, 1.0, 0.0] },
+                  "group": [
+                    {
+                      "match_name": "ADBE Mask Shape", "name": "Mask Path", "value_type": "shape",
+                      "keyframes": [
+                        { "t": 0.0,
+                          "v": { "vertices": [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]],
+                                 "in_tangents": [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                                 "out_tangents": [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                                 "closed": true },
+                          "in_interp": "LINEAR", "out_interp": "HOLD" },
+                        { "t": 2.0,
+                          "v": { "vertices": [[0.0, 0.0], [50.0, 0.0], [50.0, 50.0]],
+                                 "in_tangents": [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                                 "out_tangents": [[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                                 "closed": true },
+                          "in_interp": "BEZIER", "out_interp": "BEZIER" }
+                      ]
+                    },
+                    { "match_name": "ADBE Mask Feather", "name": "Mask Feather",
+                      "value_type": "point", "value": [10.0, 4.0] },
+                    { "match_name": "ADBE Mask Opacity", "name": "Mask Opacity",
+                      "value_type": "float", "value": 60.0 },
+                    { "match_name": "ADBE Mask Offset", "name": "Mask Expansion",
+                      "value_type": "float", "value": -3.0 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+
+        {
+          "index": 14, "name": "Orphan", "kind": "footage", "source_id": 99,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "parent_index": 99,
+          "matte": { "type": "ALPHA", "layer_index": 99 },
+          "blend": "MADE_UP_MODE",
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": []
+        },
+
+        {
+          "index": 15, "name": "Weird", "kind": "sorcery",
+          "in_point": 2.0, "out_point": 2.0, "start_time": 0.0, "stretch": 100.0,
+          "switches": { "enabled": true, "quality": "BEST" },
+          "properties": []
+        },
+
+        {
+          "index": 16, "name": "Third party", "kind": "solid", "source_id": 6,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0, "stretch": 100.0,
+          "blend": "NORMAL",
+          "switches": { "enabled": true, "quality": "BEST" },
+          "markers": [
+            { "t": 0.5, "comment": "hit", "duration": 0.25, "chapter": "", "label": 1 }
+          ],
+          "properties": [
+            {
+              "match_name": "ADBE Effect Parade", "name": "Effects", "enabled": true,
+              "group": [
+                {
+                  "match_name": "RE:Vision Twixtor", "name": "Twixtor Pro", "enabled": false,
+                  "group": [
+                    { "match_name": "RE:Vision Twixtor-0001", "name": "Speed",
+                      "value_type": "float",
+                      "keyframes": [
+                        { "t": 0.0, "v": 100.0,
+                          "in_interp": "LINEAR", "out_interp": "BEZIER",
+                          "out_ease": [ { "speed": 0.0, "influence": 75.0 } ] },
+                        { "t": 2.0, "v": 25.0,
+                          "in_interp": "BEZIER", "out_interp": "LINEAR",
+                          "in_ease": [ { "speed": 0.0, "influence": 75.0 } ] }
+                      ] },
+                    { "match_name": "RE:Vision Twixtor-0002", "name": "Warping Tint",
+                      "value_type": "colour", "value": [0.5, 0.25, 0.125, 1.0] },
+                    { "match_name": "RE:Vision Twixtor-0003", "name": "Motion Vectors",
+                      "value_type": "custom_blob",
+                      "unreadable": "Error: CUSTOM_VALUE data is not readable from the scripting DOM" },
+                    { "match_name": "RE:Vision Twixtor-0004", "name": "Source Layer",
+                      "value_type": "layer", "value": 3 }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+
+        {
+          "name": "No index at all", "kind": "solid", "source_id": 6,
+          "in_point": 0.0, "out_point": 4.0, "start_time": 0.0,
+          "switches": { "enabled": true },
+          "properties": []
+        }
+      ]
+    }
+  ]
+}

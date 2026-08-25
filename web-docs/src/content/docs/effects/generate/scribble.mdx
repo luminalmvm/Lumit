@@ -1,0 +1,75 @@
+---
+title: Scribble
+description: "Fills a mask with pencil strokes."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Scribble is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Scribble" category="generate" slug="scribble" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Scribble fills a mask with parallel pencil strokes at whatever angle you choose.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mask** | Masks | This layer's masks | First mask | - |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 0.85, 0.16, 0.12, 1 | - |
+| **Angle** | Dial | Any angle; snaps every 15° while a modifier is held | 30° | Degrees |
+| **Stroke width** | Slider | 0.1 to 20; higher | 2 | Pixels at composition size |
+| **Spacing** | Slider | 1 to 200; down to 0.5 and higher | 8 | Pixels at composition size |
+| **Path overlap** | Slider | -50 to 50; any value by typing | 4 | Pixels at composition size |
+| **Start** | Slider | 0 to 100 | 0 | Per cent |
+| **End** | Slider | 0 to 100 | 100 | Per cent |
+| **Wiggle type** | Dropdown | Static · Jagged · Wiggly | Static | - |
+| **Wiggles per second** | Slider | 0 to 30; higher | 8 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Composite on original** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Wiggles per second** is editable while **Wiggle type** is anything but Static.
+- **Matte** scales Opacity per pixel: white draws the scribble in full, grey          faintly, black nothing at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mask**: which of the layer's masks to fill.
+- **Colour**: the pencil's colour. 
+- **Angle**: direction strokes run.
+- **Stroke width**: how thick a stroke is.
+- **Spacing**: how far apart strokes are laid.
+- **Path overlap**: how far each stroke runs over the mask's edge.
+- **Start** and **End**: where the pen begins and stops.
+- **Wiggle type**: how the stroke wobbles.
+- **Wiggles per second**: how frequency of wiggles. Disabled while the type is Static.
+- **Seed**: randomises the wiggles.
+- **Opacity**: how strong the pencil is.
+- **Composite on original**: on, the layer the effect on draws under the scribble. 
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Stroke](/effects/generate/stroke/)
+- [Vegas](/effects/generate/vegas/)
+- [Fill](/effects/generate/fill/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

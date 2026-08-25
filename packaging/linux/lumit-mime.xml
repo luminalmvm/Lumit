@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- MIME declarations for Lumit's documents (K-252): .lum projects
+     (docs/10-FILE-FORMAT.md §1), .lumfx presets (§5) and .lumtheme colour
+     themes (§6, K-298). -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-lumit-project">
+    <comment>Lumit project</comment>
+    <glob pattern="*.lum"/>
+    <icon name="application-x-lumit-project"/>
+  </mime-type>
+  <mime-type type="application/x-lumit-preset">
+    <comment>Lumit preset</comment>
+    <glob pattern="*.lumfx"/>
+    <icon name="application-x-lumit-preset"/>
+  </mime-type>
+  <mime-type type="application/x-lumit-theme">
+    <comment>Lumit theme</comment>
+    <glob pattern="*.lumtheme"/>
+    <icon name="application-x-lumit-theme"/>
+  </mime-type>
+</mime-info>

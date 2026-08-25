@@ -1,0 +1,62 @@
+# Put the locale name back after a Crowdin sync (K-303, K-311).
+#
+# **What goes wrong.** Crowdin writes its own language code into each .arb's
+# `@@locale` key — `zh-CN` in the file crowdin.yml asks it to call app_zh.arb.
+# Flutter's generator refuses to run when a file's name and that key disagree,
+# and it runs on `flutter pub get`, so a sync lands on main and every Flutter
+# job dies before a single test is reached. It has happened twice.
+#
+# **Why this is not fixed on Crowdin.** The project's language mapping renames
+# the *file* — that part works, which is why the file is called app_zh.arb at
+# all — but the value written *inside* it comes from the ARB exporter and the
+# mapping does not reach it. Nobody has found a Crowdin setting that does.
+#
+# So the sync branch is repaired where it lands, before anyone opens a pull
+# request from it: this rewrites `@@locale` to whatever the filename says and
+# pushes the result back. `flutter_ui/test/l10n/arb_test.dart` still checks the
+# same thing on every branch — that test is the gate, this is the mending.
+#
+# Only `@@locale` is touched. A translation is Crowdin's and is never edited
+# here (K-303); a locale name is bookkeeping, and this is the one place the
+# repo writes it.
+name: translation locale
+
+on:
+  push:
+    branches: [translation/main]
+
+permissions:
+  contents: write
+
+jobs:
+  name-the-locales:
+    name: an .arb names the locale its filename says
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: translation/main
+      - name: Rewrite @@locale to match each filename
+        run: python3 .github/scripts/name_arb_locales.py
+      - name: Commit anything that changed
+        run: |
+          git diff --quiet && { echo "every .arb already names its own locale"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Name each .arb's locale after its filename
+
+          Crowdin writes its own code into @@locale, which Flutter's generator
+          refuses when it disagrees with the filename. Put back automatically;
+          see .github/workflows/translation-locale.yml."
+          # Crowdin pushes several commits to this branch in quick succession,
+          # so the branch can move between this job's checkout and its push.
+          # Rebase onto whatever landed and try again; each retry re-runs the
+          # rewrite so a freshly-synced file is mended too. The last push is
+          # allowed to fail loudly - a real error should stay red.
+          for attempt in 1 2 3; do
+            git push && exit 0
+            git pull --rebase
+            python3 .github/scripts/name_arb_locales.py
+            git diff --quiet || git commit -am "Name each .arb's locale after its filename (retry $attempt)"
+          done
+          git push

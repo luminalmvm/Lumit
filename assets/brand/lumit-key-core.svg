@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" fill="none">
+  <!-- The bright core, on its own as an Icon Composer layer (docs/15-DESIGN.md,
+       brand; K-251). The whole mark is lumit-mark.svg; this is one of its three
+       shapes, on the same 512 canvas so the layers stack in register.
+
+       The stroke is self-coloured rather than an outline: it rounds the
+       corners and grows the diamond by 8px, which is what the mark has always
+       drawn and what laps it over the two chevrons cut to its unstroked
+       outline. Leave this layer out entirely for a transparent core - the
+       chevrons need no adjusting, and the hole is the unstroked diamond. -->
+  <defs>
+    <radialGradient id="key-core" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="0.75" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#eaf4ff"/>
+    </radialGradient>
+  </defs>
+  <path d="M256 181 L331 256 L256 331 L181 256 Z" fill="url(#key-core)"
+        stroke="url(#key-core)" stroke-width="16" stroke-linejoin="round"/>
+</svg>

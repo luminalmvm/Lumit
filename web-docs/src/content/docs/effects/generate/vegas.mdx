@@ -1,0 +1,76 @@
+---
+title: Vegas
+description: "Runs a dashed stroke along contours it finds in the picture."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Vegas is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Vegas" category="generate" slug="vegas" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Vegas finds a contour where the picture's brightness or transparency crosses a level,
+and draws a stroke along it.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Source** | Dropdown | Luminance · Alpha · Mask/Path | Luminance | - |
+| **Mask** | Masks | This layer's masks | First mask | - |
+| **Threshold** | Slider | 0 to 100 | 50 | Per cent |
+| **Width** | Slider | 0 to 50; higher | 3 | Pixels at composition size |
+| **Hardness** | Slider | 0 to 100 | 50 | Per cent |
+| **Segment length** | Slider | 1 to 1000; higher | 80 | Pixels at composition size |
+| **Length** | Slider | 0 to 100 | 55 | Per cent |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 0.8, 0.25, 1 | - |
+| **Opacity** | Slider | 0 to 100 | 100 | Per cent |
+| **Composite on original** | Checkbox | On or off | On | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Mask** is editable while **Source** is set to Mask/Path.
+- **Threshold** is editable while **Source** is anything but Mask/Path.
+- **Matte** scales Opacity per pixel: white draws the stroke in full, grey faintly,          black nothing at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Source**: **Luminance** finds the contour from brightness. **Alpha** finds
+  it based on alpha, and **Mask/Path** draws the stroke round one of the layer's masks.
+- **Mask**: which mask, while Source is Mask/Path.
+- **Threshold**: thresholds what counts as a contour. 
+- **Width**: how thick the stroke is.
+- **Hardness**: how crisp edges are.
+- **Segment length**: the length of one dash and gap.
+- **Length**: how much of one segment is lit, as a percentage.
+- **Rotation**: offsets the dashes along the contour.
+- **Colour**: the stroke's colour. 
+- **Opacity**: how strong the stroke is.
+- **Composite on original**: on, the layer the effect is on draws under the stroke.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).pe.
+
+## Related
+
+- [Stroke](/effects/generate/stroke/)
+- [Scribble](/effects/generate/scribble/)
+- [Radio waves](/effects/generate/radio-waves/)
+- [Find edges](/effects/stylise/find-edges/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

@@ -1,0 +1,62 @@
+---
+title: "Chromatic aberration"
+description: "Radial colour fringing."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Chromatic aberration is a [Distortion](/effects/#distortion) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Chromatic aberration" category="distortion" slug="chromatic-aberration" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Splits the colour channels based on their distance from the centre of the image.
+
+Can be split by simple rgb, or calculate split amount based on a colours physical wavelength.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 20; higher | 4 | Pixels at composition size |
+| **Colour 1** | Colour | Each channel 0 to 1, scene-linear | 1, 0, 0, 1 | - |
+| **Colour 2** | Colour | Each channel 0 to 1, scene-linear | 0, 1, 0, 1 | - |
+| **Colour 3** | Colour | Each channel 0 to 1, scene-linear | 0, 0, 1, 1 | - |
+| **Wavelength** | Checkbox | On or off | Off | - |
+| **Samples** | Slider | 3 to 64 | 16 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Amount per pixel: white fringes at the full Amount, grey less, black not at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** is the amount to scale the offset at the frame's edge.
+- **Colour 1**, **Colour 2** and **Colour 3** tint the inward, centred and
+  outward taps.
+- **Wavelength** changes the rgb stepped aberration for a smooth wavelength-based dispersion.
+- **Samples** is how many taps fill the offset while Wavelength is on. 
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [RGB split](/effects/distortion/rgb-split/)
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Depth of field](/effects/blur-sharpen/depth-of-field/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

@@ -1,0 +1,65 @@
+---
+title: "Colour balance"
+description: "Lift, gamma, and gain, for shadows, mid-tones and highlights."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Colour balance is a [Colour](/effects/#colour) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Colour balance" category="colour" slug="colour-balance" />
+
+{/* END GENERATED */}
+
+## What it does
+
+**Lift** adjusts shadows.
+
+**Gamma** adjusts mid-tones.
+
+**Gain** adjusts highlights.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Lift** | Colour | Each channel -1 to 1, scene-linear | 0, 0, 0, 1 | - |
+| **Gamma** | Colour | Each channel 0.1 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Gain** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** pulls Lift toward 0 and Gamma and Gain toward 1 per pixel: white applies the full grade, black none. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Lift** adjusts the tint and brightness of shadows.
+- **Gamma** adjusts the tint and brightness of mid-tones.
+- **Gain** adjusts the tint and brightness of highlights.
+- **Mix**: how much of the result replaces the original.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness; see [Effects](/use/effects/).
+
+Each of the three opens the colour picker, and the picker carries a screen
+dropper, so a cast can be sampled straight off the picture with no guesswork.
+See [Effect Controls](/panels/effect-controls/).
+
+## Related
+
+- [Temperature](/effects/colour/temperature/)
+- [Exposure](/effects/colour/exposure/)
+- [Saturation](/effects/colour/saturation/)
+- [LUT](/effects/colour/lut/)
+- [Scopes](/panels/scopes/)
+- [Colour](/effects/#colour)
+- [Effects](/use/effects/)

@@ -1,0 +1,59 @@
+---
+title: "Radial blur"
+description: "A spin or a zoom about a centre point."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Radial blur is a [Blur & sharpen](/effects/#blur--sharpen) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Radial blur" category="blur-sharpen" slug="radial-blur" />
+
+{/* END GENERATED */}
+
+## What it does
+
+A blur that extends around a centre point, or blurs directed outwards from the 
+centre point.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Amount** | Slider | 0 to 2000; higher | 150 | Pixels at composition size |
+| **Centre X** | Slider | 0 to 100; any value by typing | 50 | Per cent |
+| **Centre Y** | Slider | 0 to 100; any value by typing | 50 | Per cent |
+| **Type** | Dropdown | Spin · Zoom | Spin | - |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** scales Amount per pixel: white sweeps the full Amount, grey a shorter one, black not at all. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Amount** is the peak blur. Pixels nearer the centre get proportionally less.
+- **Centre X** and **Centre Y** place where the spin or zoom originates.
+- **Type**: Spin revolves the centre. Zoom extends out from the centre point.
+- **Edges**. Similar to Repeat edge pixels from other effects with one more option.
+  Mirror reflects the picture at the edges to blur with.
+- **Mix**: how much of the result replaces the original.
+
+## Related
+
+- [Gaussian blur](/effects/blur-sharpen/gaussian-blur/)
+- [Directional blur](/effects/blur-sharpen/directional-blur/)
+- [Transform](/effects/utility/transform/)
+- [Blur & sharpen](/effects/#blur--sharpen)
+- [Effects](/use/effects/)

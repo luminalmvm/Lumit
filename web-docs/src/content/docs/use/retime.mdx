@@ -1,0 +1,73 @@
+---
+title: Retiming and speed
+description: Speed ramps, freezes, reverse, and how Lumit fills in frames.
+sidebar:
+  order: 7
+---
+
+import Shot from "../../../components/Shot.astro";
+
+**Retime** maps a layer's time (or clip time, inside a Sequence layer). Use it
+to ramp speed or hold a frame. It can also run footage backwards.
+
+## What can be retimed
+
+- **Footage layers** have their own Retime.
+- **Precomp layers** have their own Retime.
+- Inside a [**Sequence layer**](/use/sequence-layers/), each cut clip has its Retime.
+
+## Speed
+
+**Speed** is the rate the retime map runs at:
+
+| Speed | Result |
+| --- | --- |
+| 100% | Normal. |
+| 0% | A **freeze**. The frame holds. |
+| −100% | Reverse. |
+
+Speed is usually only useful if you edit with the Velocty style graph instead of the
+Value graph.
+
+## Make a speed ramp
+
+<Shot file="speed-ramp.png" caption="A speed ramp in the graph editor, seen through the Speed lens."/>
+
+1. Turn on Retime for the layer.
+2. Add a keyframe where the ramp starts.
+3. Add another where it ends.
+4. Shape the curve between them in [the graph editor](/use/graph-editor/).
+
+## Overrun
+
+**Overrunning** is when the map asks for source time past the end of the media, or before its
+start. Lumit clamps the boundary frames and marks the region in the timeline.
+
+Overrun never moves layer boundaries or edit points.
+
+## Frame interpolation
+
+When a retime lands between two source frames, it will act as if it's holding the last frame.
+However Lumit can synthesise one when the flow switch is toggled:
+
+| Mode | How |
+| --- | --- |
+| **Nearest** | Repeat the closer frame. Sharp, but it stutters. |
+| **Blend** | Crossfade the two frames. Smooth, but it ghosts. |
+| **Flow** | Synthesise a new frame from optical flow. |
+
+Flow interpolation is a render setting. It does not change the retime map.
+
+:::note[Partly built]
+Flow interpolation is not finished. Nearest and blend work now.
+:::
+
+## Stretch
+
+**Stretch** is a uniform rate multiplier on the whole layer. Unlike Retime, stretch
+rescales the layer's keyframes with it.
+
+## Related
+
+- [The graph editor](/use/graph-editor/)
+- [Sequence layers](/use/sequence-layers/)

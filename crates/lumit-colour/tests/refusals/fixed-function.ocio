@@ -1,0 +1,6 @@
+# refuses: FixedFunctionTransform
+ocio_profile_version: 2
+colorspaces:
+  - !<ColorSpace>
+    name: fancy
+    to_scene_reference: !<FixedFunctionTransform> {style: ACES_RedMod03}

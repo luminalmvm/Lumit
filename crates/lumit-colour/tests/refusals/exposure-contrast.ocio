@@ -1,0 +1,6 @@
+# refuses: ExposureContrastTransform
+ocio_profile_version: 2
+colorspaces:
+  - !<ColorSpace>
+    name: exposed
+    to_scene_reference: !<ExposureContrastTransform> {style: linear, exposure: 1.0}

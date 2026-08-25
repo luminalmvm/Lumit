@@ -1,0 +1,46 @@
+[workspace]
+resolver = "3"
+members = ["crates/lumit-*"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "GPL-3.0-only"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+# 14-ENGINEERING-RULES §4: an unfinished branch must not ship. (The broader
+# indexing_slicing / arithmetic_side_effects denies from §4 are not on yet —
+# they need a sweep of the existing hot paths first.)
+todo = "deny"
+unimplemented = "deny"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# The engine's maths crates run fully optimised even in a dev build. The
+# Flutter debug app builds the Rust side under the dev profile (cargokit maps
+# Flutter debug to cargo dev), and at opt-level 1 the Lens flare's CPU bake
+# measured ~16x slower — a one-second lens change became twenty-three. These
+# four crates are where every hot loop lives; the compile-time cost is theirs
+# alone, and stepping through engine internals in a debugger is not how this
+# project is worked on (the tests are).
+[profile.dev.package.lumit-core]
+opt-level = 3
+
+[profile.dev.package.lumit-eval]
+opt-level = 3
+
+[profile.dev.package.lumit-gpu]
+opt-level = 3
+
+[profile.dev.package.lumit-render]
+opt-level = 3

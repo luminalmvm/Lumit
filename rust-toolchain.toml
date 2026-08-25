@@ -1,0 +1,23 @@
+# The one Rust version this repository is built and tested with
+# (docs/14-ENGINEERING-RULES.md §9: "MSRV bumps are deliberate, logged in the
+# changelog, never incidental").
+#
+# In plain terms: without this file, "stable" means whatever version each
+# machine happens to have — so a warning that is an error under
+# `-D warnings` can appear in CI on a Tuesday because a new compiler shipped,
+# on a commit that changed nothing. rustup reads this file and uses exactly the
+# version named here, on every machine, including CI.
+#
+# Raising it is a deliberate act: bump the version, run the full suite, and say
+# so in the changelog. The CI workflows install stable and then let this file
+# govern, so there is one place to change.
+#
+# It must name the version the repository is ALREADY on, not merely one that
+# works: pinning below it is a downgrade in disguise, and the first attempt here
+# did exactly that. On the older compiler an `objc` macro tripped
+# `unexpected_cfgs` in the macOS-only Metal path, and the bridge's generated
+# code came out naming a different derive-expansion helper, so two jobs failed
+# for reasons that had nothing to do with what was being pinned.
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]

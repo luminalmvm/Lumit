@@ -1,0 +1,60 @@
+---
+title: Displacement map
+description: "Warps a layer's pixels using a brightness map."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Displacement map is a **Distortion** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Displacement map" category="distortion" slug="displacement-map" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Warping/displacement of one layer scaled with the contents of another. 
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Horizontal channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Red | - |
+| **Horizontal amount** | Slider | -500 to 500; any value by typing | 60 | Pixels at composition size |
+| **Vertical channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Green | - |
+| **Vertical amount** | Slider | -500 to 500; any value by typing | 60 | Pixels at composition size |
+| **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+
+In the Effect Controls panel:
+
+- **Matte** is the displacement map: the chosen channels of the matte layer say which way and how far each pixel is pushed, mid-grey meaning no push at all — the effect's subject rather than a strength applied to one. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Matte** is the map, and is required for the effect to change anything.
+- **Horizontal channel** and **Vertical channel** choose the channel used to
+  scale each direction.
+- **Horizontal amount** and **Vertical amount** adjust the scaling multiplier.
+- **Edges** adjusts what resulting transparent pixels are filled with. **Repeat** 
+  smears the border pixel and keeps the frame full. **Transparent** fills with 
+  nothing. **Mirror** reflects the picture back.
+- **Mix**: how much of the result replaces the original.
+- **Invert** reads the map the other way round.
+
+## Related
+
+- [Turbulent displace](/effects/distortion/turbulent-displace/)
+- [Fractal noise](/effects/generate/fractal-noise/)
+- [Set matte](/effects/utility/set-matte/)
+- [Distortion](/effects/#distortion)
+- [Effects](/use/effects/)

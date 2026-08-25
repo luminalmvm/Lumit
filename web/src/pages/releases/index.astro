@@ -1,0 +1,56 @@
+---
+import { getCollection, render } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import ReleaseEntry from "../../components/ReleaseEntry.astro";
+
+const releases = (await getCollection("releases")).sort(
+  (a, b) => +b.data.date - +a.data.date,
+);
+const rendered = await Promise.all(
+  releases.map(async (release) => ({ release, Content: (await render(release)).Content })),
+);
+---
+
+<Base
+  title="Releases - Lumit"
+  description="Lumit changelog"
+>
+  <section class="pt-16 pb-24 sm:pt-24 sm:pb-32">
+    <div class="wrap">
+      <p class="kicker">Releases</p>
+      <h1 class="mt-4 text-[clamp(30px,3.8vw,42px)] leading-[1.05]">
+        Changelog.
+      </h1>
+      <p class="mt-4 max-w-[58ch]">
+        Every release of Lumit. 
+        For the newest release update Lumit or download from <a class="link" href="/download">download page</a>.
+      </p>
+
+      {
+        rendered.length === 0 ? (
+          <div class="card mt-12 max-w-[58ch]">
+            <h2 class="text-[19px]">Nothing here yet</h2>
+            <p class="mt-3">
+              Notes for the first release are still being written. Until they land, the
+              tags and their assets are on
+              <a class="link" href="https://github.com/luminalmvm/Lumit/releases">GitHub releases</a>.
+            </p>
+          </div>
+        ) : (
+          <div class="mt-10">
+            {rendered.map(({ release, Content }, i) => (
+              <ReleaseEntry
+                id={release.id}
+                versionNumber={release.data.versionNumber}
+                date={release.data.date}
+                last={i === rendered.length - 1}
+              >
+                <Content />
+              </ReleaseEntry>
+            ))}
+          </div>
+        )
+      }
+    </div>
+  </section>
+</Base>

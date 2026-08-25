@@ -1,0 +1,53 @@
+---
+title: Blend modes
+description: How a layer combines with the composite beneath it.
+sidebar:
+  order: 10.5
+---
+
+import Shot from "../../../components/Shot.astro";
+
+A **blend mode** is an operator that combines a layer with the composite below it. 
+You set it in the Timeline, in the row's matte and blend-mode column. Every layer starts on Normal.
+
+<Shot file="blend-modes.png" caption="The blend-mode dropdown in the Timeline." eager/>
+
+## The modes
+
+| Mode | Note |
+| --- | --- |
+| Normal | This mode ignores the underlying colour, unless opacity is less than 100%. |
+| Add | The resulting pixel is the sum of the source and underlying pixels colour. |
+| Subtract | The resulting pixel subtracts the source from the underlying pixels colour. |
+| Multiply | For each colour channel it multiplies the source with the underlying pixels colour then divides by the maximum value for the colour depth of the project. |
+| Darken | For each colour channel the result is the darker of the source and underlying pixels. |
+| Lighten | For each colour channel the result is the lighter of the source and underlying pixels. |
+| Screen | Multiplies the compliments of the channel values, then returns the complement of the result. Complement is (MaxColourValue - ChannelValue). |
+| Overlay | Multiples or screens the input colour depending if the underlying colour lighter or darker than 0.5 (50% gray). |
+| Soft light | Darkens or lightens each colour channel depending if the source channel is greater than 0.5. |
+| Hard light | Multiplies or screens each colour channel value depending if the source channel is greater than 0.5. |
+| Linear light | Burns or dodges colours by altering brightness, depending on if the underlying pixels colour is greater than 0.5. |
+| Vivid light | Burns or dodges  colours by altering contrast, depending on if the underlying pixels colour is greater than 0.5. |
+| Pin light | Replaces colour, depending on if the underlying pixel colour is greater than 0.5. |
+| Hard mix | Increases contrast of underlying pixels. |
+| Colour dodge | The resulting pixel is the lightening of the source altered by the underlying pixels by decreasing contrast. |
+| Colour burn | The resulting pixel is the darkening of the source altered by the underlying pixels by increasing contrast. |
+| Linear burn | The resulting pixel colour is the darkening of the source to reflect the underlying pixel colour. |
+| Darker colour | Similar to Darken, but operates on the overall colour rather than the individual colour channels. |
+| Lighter colour | Similar to Lighten, but operates on the overall colour rather than the individual colour channels. |
+| Difference | For each colour channel it subtracts the darker of the inputs from the lighter. |
+| Exclusion | Similar to difference, but but reduced contrast. |
+| Divide | For each pixel, it divides the underlying pixel by the source. |
+| Hue | The resulting pixel is the underlying pixels luminosity and saturation, with the source pixels hue. |
+| Saturation | The resulting pixel is the underlying pixels hue and luminosity, with the source pixels saturation. |
+| Luminosity | The resulting pixel has the underlying pixels hue and saturation, with the source pixels luminosity. |
+| Colour | The resulting pixel has the underlying pixels luminosity, with the source pixels hue and saturation. |
+
+:::note[Not built yet]
+Currently there is no dissolve option or alpha operators, such as Stencil, Silhouette, Alpha add, and Luminescent premultiply.
+:::
+
+## Related
+
+- [Layers](/use/layers/)
+- [Mattes](/use/mattes/)

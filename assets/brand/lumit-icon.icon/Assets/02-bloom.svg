@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" fill="none">
+  <!-- Layer 2: cool bloom behind the mark. -->
+  <defs>
+    <radialGradient id="tile-bloom" cx="0.5" cy="0.5" r="0.55">
+      <stop offset="0" stop-color="#b7c6e2" stop-opacity="0.18"/>
+      <stop offset="0.6" stop-color="#b7c6e2" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#b7c6e2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="256" cy="256" r="250" fill="url(#tile-bloom)"/>
+</svg>
