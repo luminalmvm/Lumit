@@ -470,11 +470,42 @@ pub fn build_comp_draws_at(
                 // A flat colour is normally an 8×8 tile stretched to size —
                 // but a mask gates *pixels* and a stroke paints them, so both
                 // want the solid at its real size to work on (K-227).
-                let (tw, th) = if layer.masks.is_empty() && layer.paint.is_empty() {
-                    (8, 8)
-                } else {
-                    (sd.width, sd.height)
-                };
+                //
+                // **And so does an effect stack.** The tile is a promise that
+                // nothing between here and the compositor cares *where* a pixel
+                // is, and an effect breaks that promise the moment it draws
+                // rather than grades: the layer's whole stack runs at the
+                // texture's raster, so on a tile it runs at 8×8 with a
+                // `px_scale` of 1/240 and is stretched back up afterwards. A
+                // low-frequency effect survives that as a soft smear; anything
+                // with real detail does not. Particulate's default 4 px motes
+                // land at 0.017 px and vanish altogether — the effect appeared
+                // to do nothing at all, which is how this was found.
+                //
+                // The predicate is "any enabled effect", not "any effect that
+                // happens to be positional", because nothing in the registry
+                // declares the difference. `Roi` is about the *input*
+                // neighbourhood a pixel reads, not about whether the output
+                // depends on the coordinate — Gradient, Vignette, Lightning and
+                // Scribble are all `Roi::Exact` and all positional — so reading
+                // it here would keep the tile for exactly the effects it
+                // destroys. A colour plate with nothing on it still gets the
+                // tile, which is the case the optimisation was written for.
+                //
+                // **What this costs**, named so nobody has to measure it twice:
+                // a solid carrying any effect now builds and uploads its real
+                // raster every frame — about eight megabytes at 1080p — where
+                // it used to build 256 bytes. That is the same order as one
+                // working texture of the stack that is about to run, so it is
+                // not the dominant cost of an effected solid, but it is not
+                // free either. If it ever shows up in a budget, the fix is to
+                // keep the small upload and stretch it on the card before the
+                // stack runs, rather than to make this predicate cleverer —
+                // a cleverer predicate is how the bug happened.
+                let plain = layer.masks.is_empty()
+                    && layer.paint.is_empty()
+                    && !layer.effects.iter().any(|e| e.enabled);
+                let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
                     px_tile(&px, tw, th),
                     tw,

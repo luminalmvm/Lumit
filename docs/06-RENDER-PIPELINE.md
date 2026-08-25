@@ -72,8 +72,25 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
    eraser strokes take alpha away, clone strokes copy from the raster **as it was before any
    stroke in the pass** was stamped. Paint happens before masks, so a mask gates the painted
    picture and effects see it. A layer with paint on it is rasterised at its real size (a flat
-   solid is otherwise an 8×8 tile), and paint on a Precomp layer forces the nested intermediate
-   exactly as a mask does. Stamping is on the CPU today; a GPU path changes nothing above it.
+   solid is otherwise an 8×8 tile — see §2.6), and paint on a Precomp layer forces the nested
+   intermediate exactly as a mask does. Stamping is on the CPU today; a GPU path changes
+   nothing above it.
+
+2.6. **The flat-solid tile, and what cancels it.** A Solid layer of one colour is uploaded as
+   an 8×8 tile and stretched to size: every pixel is the same, so at 1920×1080 the other
+   2 073 536 of them are a copy nobody reads. The tile is only honest while nothing between
+   the upload and the
+   compositor cares *where* a pixel is, so three things cancel it and the layer is rasterised
+   at its real size instead — **a mask** (it gates pixels), **paint** (it marks them, K-227),
+   and **any enabled effect**. The last is the one that is easy to forget: a layer's whole
+   effect stack runs at the texture's own raster, so on a tile it runs at 8×8 with a `px_scale`
+   of 1/240 and is stretched back up afterwards. A low-frequency effect survives that as a soft
+   smear; anything with real detail does not, and Particulate's default 4 px motes land at
+   0.017 px and disappear entirely. The predicate is "any enabled effect" rather than "any
+   effect that happens to be positional", because nothing in the registry declares the
+   difference — `Roi` (docs/08 §1.3) is about the *input* neighbourhood a pixel reads, not
+   about whether the output depends on the coordinate, and Gradient, Vignette, Lightning and
+   Scribble are all `Roi::Exact` and all positional.
 3. **Masks** — bezier paths combined top-to-bottom by mode (none, add, subtract, intersect,
    difference; lighten and darken are not built yet), each with feather, expansion, opacity,
    inversion — applied to a mask in that order, before it folds into the stack
