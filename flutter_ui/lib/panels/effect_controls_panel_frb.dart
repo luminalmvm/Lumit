@@ -794,21 +794,41 @@ class _EffectSection extends StatelessWidget {
     this.themedGraphs = false,
   });
 
-  /// Run [op] on a freshly read handle for this card's effect.
-  void _withHandle(void Function(BridgeEffectInstance) op) {
-    for (final candidate in layer.getEffects()) {
-      if (candidate.getInfo().id == info.id) {
-        op(candidate);
-        return;
-      }
+  /// Freshly read handles for **everything a command on this card acts on**
+  /// (K-523): the picked run when this effect is part of one, and this effect
+  /// alone when it is not.
+  ///
+  /// Which is exactly the question `effectsToCopy` already answers for Copy —
+  /// so the card's other commands ask it too, rather than each holding a
+  /// handle to its own row. Returned in stack order, and the handles are safe
+  /// to hold together: the seam matches them by id, so removing one does not
+  /// stale the next.
+  List<BridgeEffectInstance> _handles(BuildContext context) {
+    final ids = Provider.of<LumitUiState>(context, listen: false)
+        .effectsToCopy(layer, info.id)
+        .toSet();
+    return [
+      for (final candidate in layer.getEffects())
+        if (ids.contains(candidate.getInfo().id)) candidate,
+    ];
+  }
+
+  /// Run [op] on each of them, in stack order.
+  void _withHandle(BuildContext context, void Function(BridgeEffectInstance) op,
+      {bool reversed = false}) {
+    final handles = _handles(context);
+    for (final handle in reversed ? handles.reversed : handles) {
+      op(handle);
     }
   }
 
   /// Switch this effect on or off. One implementation, because the heading's
   /// enlarged hit area and the checkbox mark inside it are two ways at the same
   /// switch and must not drift into two.
-  void _setEnabled(bool on) {
-    _withHandle((e) => layer.setEffectEnabled(effect: e, enabled: on));
+  void _setEnabled(BuildContext context, bool on) {
+    // All of them take *this* card's new state rather than each flipping its
+    // own, so a run of mixed ticks comes out even.
+    _withHandle(context, (e) => layer.setEffectEnabled(effect: e, enabled: on));
     onStackChanged();
   }
 
@@ -896,7 +916,7 @@ class _EffectSection extends StatelessWidget {
         child: GestureDetector(
           key: ValueKey<String>('fx-enabled-hit-$id'),
           behavior: HitTestBehavior.opaque,
-          onTap: () => _setEnabled(!info.enabled),
+          onTap: () => _setEnabled(context, !info.enabled),
           child: SizedBox(
             width: fxEnableHitWidth,
             height: fxEnableHitHeight,
@@ -906,7 +926,7 @@ class _EffectSection extends StatelessWidget {
                 child: HouseCheckbox(
                   key: ValueKey<String>('fx-enabled-$id'),
                   value: info.enabled,
-                  onChanged: _setEnabled,
+                  onChanged: (on) => _setEnabled(context, on),
                 ),
               ),
             ),
@@ -958,7 +978,7 @@ class _EffectSection extends StatelessWidget {
         enabled: true,
         key: 'fx-remove-$id',
         onPressed: () {
-          _withHandle((e) => layer.removeEffect(effect: e));
+          _withHandle(context, (e) => layer.removeEffect(effect: e));
           onStackChanged();
         },
       ),
@@ -1276,7 +1296,13 @@ class _EffectSection extends StatelessWidget {
   void _stackMenu(BuildContext context, Offset at) {
     final id = info.id;
     void move(int to) {
-      _withHandle((e) => layer.reorderEffect(effect: e, newIndex: to));
+      // **The order several picked effects land in** (K-523). Each one is
+      // taken out of the stack and put back *at* `to`, so the last one moved
+      // ends up in front of the others: an upward move therefore takes the
+      // bottom-most first and a downward one the topmost, and either way the
+      // run arrives together with its own order intact.
+      _withHandle(context, (e) => layer.reorderEffect(effect: e, newIndex: to),
+          reversed: to <= index);
       onStackChanged();
     }
 
@@ -1364,7 +1390,7 @@ class _EffectSection extends StatelessWidget {
               key: ValueKey<String>('fx-menu-remove-$id'),
               onPressed: () {
                 close(null);
-                _withHandle((e) => layer.removeEffect(effect: e));
+                _withHandle(context, (e) => layer.removeEffect(effect: e));
                 onStackChanged();
               },
               child: Text(l10n.removeEffect),

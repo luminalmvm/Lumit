@@ -7064,6 +7064,28 @@ class _OutlineRowState extends State<_OutlineRow> {
   int get index => widget.index;
   int get count => widget.count;
 
+  /// What a command invoked on this row acts on (K-523): **the whole selection
+  /// when this row is part of it, and this row alone when it is not**.
+  ///
+  /// The same rule the Project panel's `_targets` states — a right-click on an
+  /// unpicked row is about that row, and everything else is about what is
+  /// picked. Returned in stack order, from the panel's own layer list, so a
+  /// reorder can count on the order it reads.
+  ///
+  /// Read from the shell rather than passed down, and only ever from a
+  /// handler: a row's build must not ask what is selected beyond the `selected`
+  /// flag it is already given (K-184).
+  List<BridgeLayerEntry> _menuTargets() {
+    final picked =
+        Provider.of<LumitUiState>(context, listen: false).selectedLayerIds;
+    if (!picked.contains(layer.internallayerId)) return [widget.entry];
+    final targets = [
+      for (final e in widget.layers)
+        if (picked.contains(e.layer.internallayerId)) e,
+    ];
+    return targets.isEmpty ? [widget.entry] : targets;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -7602,7 +7624,13 @@ class _OutlineRowState extends State<_OutlineRow> {
           ),
         );
         if (picked == null) return;
-        layer.setLabel(label: picked);
+        // Every selected layer (K-523), the Project panel's `_setLabel` being
+        // the reference: one call each, because one call is what the engine's
+        // op is. A label is one of the three writes a locked layer still
+        // takes, so nothing is skipped.
+        for (final target in _menuTargets()) {
+          target.layer.setLabel(label: picked);
+        }
         widget.onChanged();
       },
       child: SizedBox(
@@ -7685,7 +7713,25 @@ class _OutlineRowState extends State<_OutlineRow> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap ??
           () {
-            layer.setSwitch(switch_: which!, on_: !on);
+            // **Every selected layer, not only this row** (K-523) — this is
+            // the one choke point all six switches pass through, so it is the
+            // one place the rule has to be written. They all take *this*
+            // row's new state rather than each flipping its own, so a column
+            // of mixed eyes comes out even.
+            //
+            // The clicked row keeps its unguarded call: a locked layer refuses
+            // every switch but its own lock and shy, and what that refusal
+            // should look like is the outline's own open question. A locked
+            // *sibling* only refuses its share of the batch.
+            for (final target in _menuTargets()) {
+              if (target.layer.internallayerId == layer.internallayerId) {
+                target.layer.setSwitch(switch_: which!, on_: !on);
+              } else {
+                try {
+                  target.layer.setSwitch(switch_: which!, on_: !on);
+                } catch (_) {}
+              }
+            }
             widget.onChanged();
           },
       child: SizedBox(
@@ -7799,30 +7845,88 @@ class _OutlineRowState extends State<_OutlineRow> {
               child: Text(l10n.deleteAllMarkers)),
       ],
     );
+    // Every command below this line runs on the whole picked set (K-523), and
+    // every one of them keeps its own `try`/`catch` so that one layer's
+    // refusal - a lock, a kind that cannot do it, a row of several clips -
+    // leaves the rest of the batch standing.
+    final targets = _menuTargets();
     switch (picked) {
       case 'duplicate':
-        layer.duplicate();
-      case 'up':
-        layer.reorder(newIndex: BigInt.from(index - 1));
-      case 'down':
-        layer.reorder(newIndex: BigInt.from(index + 1));
+        // Offered on a locked layer too: copying is not editing.
+        for (final target in targets) {
+          try {
+            target.layer.duplicate();
+          } catch (_) {}
+        }
+      case 'up' || 'down':
+        final delta = picked == 'up' ? -1 : 1;
+        final ids = {
+          for (final target in targets) target.layer.internallayerId,
+        };
+        final moving = [
+          for (var i = 0; i < widget.layers.length; i++)
+            if (ids.contains(widget.layers[i].layer.internallayerId) &&
+                !widget.layers[i].info.switches.locked)
+              i,
+        ];
+        // Forward from the top, backward from the bottom: a layer moving one
+        // place swaps with its neighbour and leaves every index past it alone,
+        // so taken in this order the original indices stay true for the whole
+        // batch and a block of layers keeps its shape.
+        for (final i in delta < 0 ? moving : moving.reversed) {
+          final to = i + delta;
+          if (to < 0 || to >= widget.layers.length) continue;
+          try {
+            widget.layers[i].layer.reorder(newIndex: BigInt.from(to));
+          } catch (_) {}
+        }
       case 'delete':
-        layer.delete();
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.delete();
+          } catch (_) {}
+        }
       case 'clear-markers':
-        layer.setMarkers(markers: const []);
+        for (final target in targets) {
+          // Only where there is something to clear: an empty write is still an
+          // undo step.
+          if (target.info.switches.locked || target.info.markers.isEmpty) {
+            continue;
+          }
+          try {
+            target.layer.setMarkers(markers: const []);
+          } catch (_) {}
+        }
       case 'accepts-lights':
-        layer.setSwitch(switch_: BridgeLayerSwitch.acceptsLights, on_: !lit);
+        // This row's new state, for all of them, so a mixed set comes out even.
+        for (final target in targets) {
+          try {
+            target.layer
+                .setSwitch(switch_: BridgeLayerSwitch.acceptsLights, on_: !lit);
+          } catch (_) {}
+        }
       case 'to-sequence':
-        layer.convertToSequenced();
+        for (final target in targets) {
+          if (target.info.kind != BridgeLayerKind.footage) continue;
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.convertToSequenced();
+          } catch (_) {}
+        }
       case 'from-sequence':
         // A row of several clips refuses: which one the layer would become is
         // the user's decision, not the command's, and the engine says so.
-        try {
-          layer.convertFromSequenced();
-        } catch (_) {
-          return;
+        for (final target in targets) {
+          if (target.info.kind != BridgeLayerKind.sequence) continue;
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.convertFromSequenced();
+          } catch (_) {}
         }
       case 'copy-shape':
+        // Singular by nature: a clipboard holds one shape, and copying four
+        // would mean choosing which one survives.
         try {
           sequenceShapeClipboard = layer.copySequenceShape();
         } catch (_) {}
@@ -7830,10 +7934,12 @@ class _OutlineRowState extends State<_OutlineRow> {
       case 'paste-shape':
         final shape = sequenceShapeClipboard;
         if (shape == null) return;
-        try {
-          layer.pasteSequenceShape(text: shape);
-        } catch (_) {
-          return;
+        for (final target in targets) {
+          if (target.info.kind != BridgeLayerKind.sequence) continue;
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.pasteSequenceShape(text: shape);
+          } catch (_) {}
         }
       case _:
         return;

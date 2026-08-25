@@ -1851,6 +1851,112 @@ void main() {
           findsNothing);
     });
 
+    // -------------------------------------------------------------------
+    // A command on a picked run acts on the whole run (K-523).
+    //
+    // `_withHandle` matched one effect id and returned after the first hit, so
+    // the enable switch, the × and the menu's Remove and Move commands were
+    // all singular while Copy - two rows away in the same menu - already took
+    // the picked run. They ask the same question now: `effectsToCopy`.
+    // -------------------------------------------------------------------
+
+    testWidgets('the enable switch bypasses every picked effect',
+        (tester) async {
+      final p = withLayer();
+      for (final name in ['blur', 'vignette']) {
+        p.layer.addEffect(name: name);
+      }
+      await mount(tester, p);
+      final stack = p.layer.getEffects();
+      p.uiState.setEffectSelection(p.layer, [for (final e in stack) e.id()]);
+      await tester.pump();
+
+      await tester.tap(
+          find.byKey(ValueKey<String>('fx-enabled-hit-${stack.first.id()}')));
+      await tester.pump();
+
+      expect([
+        for (final e in p.layer.getEffects()) e.getInfo().enabled
+      ], [
+        false,
+        false
+      ], reason: 'both took the clicked card\'s new state (K-523)');
+    });
+
+    testWidgets('the × removes every picked effect', (tester) async {
+      final p = withLayer();
+      for (final name in ['blur', 'vignette', 'invert']) {
+        p.layer.addEffect(name: name);
+      }
+      await mount(tester, p);
+      final stack = p.layer.getEffects();
+      p.uiState.setEffectSelection(p.layer, [stack[0].id(), stack[1].id()]);
+      await tester.pump();
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-remove-${stack[0].id()}')));
+      await tester.pump();
+
+      expect(
+          [for (final e in p.layer.getEffects()) e.name()], [stack[2].name()],
+          reason: 'the two picked went; the unpicked one stayed');
+    });
+
+    /// The other half of the rule: a card that is **not** in the picked run is
+    /// about itself, exactly as Copy already treated it.
+    testWidgets('a command on an unpicked card acts on that card alone',
+        (tester) async {
+      final p = withLayer();
+      for (final name in ['blur', 'vignette']) {
+        p.layer.addEffect(name: name);
+      }
+      await mount(tester, p);
+      final stack = p.layer.getEffects();
+      p.uiState.setEffectSelection(p.layer, [stack[0].id()]);
+      await tester.pump();
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-remove-${stack[1].id()}')));
+      await tester.pump();
+
+      expect(
+          [for (final e in p.layer.getEffects()) e.name()], [stack[0].name()]);
+    });
+
+    /// **Where a picked run lands when it is moved** (K-523). Each effect is
+    /// taken out and put back at the target index, so the run has to be walked
+    /// from the far end - otherwise it arrives inside out.
+    testWidgets('Move to top takes the picked run, in its own order',
+        (tester) async {
+      final p = withLayer();
+      for (final name in ['blur', 'vignette', 'invert', 'tint']) {
+        p.layer.addEffect(name: name);
+      }
+      await mount(tester, p);
+      final stack = p.layer.getEffects();
+      // The bottom two, moved to the top together.
+      p.uiState.setEffectSelection(p.layer, [stack[2].id(), stack[3].id()]);
+      await tester.pump();
+
+      await tester.tapAt(
+        tester.getCenter(heading(effectLabelOf(stack[2].name()))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(ValueKey<String>('fx-menu-top-${stack[2].id()}')));
+      await tester.pumpAndSettle();
+
+      expect([
+        for (final e in p.layer.getEffects()) e.name()
+      ], [
+        stack[2].name(),
+        stack[3].name(),
+        stack[0].name(),
+        stack[1].name(),
+      ]);
+    });
+
     // Without the built library there is nothing to test against; the harness
     // throws with the command to run.
   }, skip: !engineAvailable);

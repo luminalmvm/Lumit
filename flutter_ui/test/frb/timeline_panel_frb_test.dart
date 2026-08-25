@@ -6347,6 +6347,104 @@ void main() {
           reason: 'the chord falls through to the layer copy below it');
       expect(graphKeyClipboard, isEmpty);
     });
+
+    // ---------------------------------------------------------------------
+    // An action on a multi-selection applies to every selected layer (K-523).
+    //
+    // Every one of these was the same typo in a different cell: the row widget
+    // holds a handle to *its* layer and calls the document with it, never
+    // asking the shell what is picked. They route through `_menuTargets()`
+    // now, which is the Project panel's `_targets` rule - the whole selection
+    // when this row is in it, this row alone when it is not.
+    // ---------------------------------------------------------------------
+
+    /// Open a row's context menu.
+    Future<void> openRowMenu(WidgetTester tester, LayerReference l) async {
+      await tester.tapAt(
+        tester.getCenter(
+            find.byKey(ValueKey<String>('tl-row-${l.internallayerId}'))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the label swatch recolours every selected layer',
+        (tester) async {
+      final p = withComp();
+      final upper = p.comp.addSolidLayer();
+      final lower = p.comp.addSolidLayer();
+      p.uiState.setSelection([upper, lower]);
+      await mount(tester, p);
+
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-label-${upper.internallayerId}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tl-label-chip-5')));
+      await tester.pumpAndSettle();
+
+      expect(upper.getInfo().label, 5);
+      expect(lower.getInfo().label, 5,
+          reason: 'the other picked layer took the colour too (K-523)');
+    });
+
+    testWidgets('a switch cell flips every selected layer', (tester) async {
+      final p = withComp();
+      final upper = p.comp.addSolidLayer();
+      final lower = p.comp.addSolidLayer();
+      p.uiState.setSelection([upper, lower]);
+      await mount(tester, p);
+
+      expect(upper.getSwitches().visible, isTrue);
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-visible-${upper.internallayerId}')));
+      await tester.pumpAndSettle();
+
+      expect(upper.getSwitches().visible, isFalse);
+      expect(lower.getSwitches().visible, isFalse,
+          reason: 'the six switches share one choke point, so all six do this');
+    });
+
+    testWidgets('the row menu\'s Delete takes the whole selection',
+        (tester) async {
+      final p = withComp();
+      final upper = p.comp.addSolidLayer();
+      final lower = p.comp.addSolidLayer();
+      final spare = p.comp.addSolidLayer();
+      p.uiState.setSelection([upper, lower]);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      await openRowMenu(tester, upper);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      final left = [
+        for (final e in p.comp.getLayers()) e.internallayerId,
+      ];
+      expect(left, [spare.internallayerId],
+          reason: 'both picked layers went, and the unpicked one stayed');
+    });
+
+    /// The other half of the rule, and the half that keeps a right-click
+    /// honest: a menu opened on a row that is *not* picked is about that row.
+    testWidgets('a row menu on an unpicked row acts on that row alone',
+        (tester) async {
+      final p = withComp();
+      final picked = p.comp.addSolidLayer();
+      final clicked = p.comp.addSolidLayer();
+      p.uiState.setSelection([picked]);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      await openRowMenu(tester, clicked);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      final left = [
+        for (final e in p.comp.getLayers()) e.internallayerId,
+      ];
+      expect(left, [picked.internallayerId]);
+    });
   }, skip: !engineAvailable);
 }
 
