@@ -140,11 +140,18 @@ the tracker ever needs to be faster, before any of this moves to WGSL.
   networks.
 - **Zoom-burst detector:** per adjacent-frame pair, the median over tracks of
   `log(scale)` recovered from the affine KLT A-matrices (and, as a cross-check, the
-  scale of a similarity fit to the track displacements about their centroid). A
-  burst above threshold for one pair, with rotation/translation residual small under
-  a scale-only model, is a **zoom cut**: a segment boundary where pose is continuous
-  and focal is free. A sustained non-zero value is a zoom ramp (smooth focal within
-  the segment).
+  scale of a similarity fit to the track displacements about their centroid). A pair
+  is never judged against zero (that reading lost the train POV — the resolved Open
+  question below): each hot pair is first classified by the
+  **radial-flow-versus-parallax signature** — a zoom is a scale about one centre and
+  leaves only noise behind a scale-only fit, while travel moves near things more than
+  far ones and leaves a residual that is a roughly constant *fraction* of the flow —
+  and the pairs the signature reads as travel form a windowed-median **baseline** the
+  others are measured as an excess above. An isolated pair of excess above the cut
+  threshold, still passing the scale-only cross-check, is a **zoom cut**: a segment
+  boundary where pose is continuous and focal is free. A run of excess is a zoom ramp
+  (smooth focal within the segment, solved as knots — §4). A dolly-like burst is
+  *no boundary at all*: it is camera motion, which is phase 3's subject.
 
 ### Phase 2, as built
 
@@ -210,15 +217,31 @@ Nine things are deviations from, or decisions under, the wording above:
    can be below the parallax floor. Dropping it would hand phase 3 a stretch of
    shot with no geometry at all, which is worse; the pair carries its own
    `parallax` and phase 3 can weigh it.
-9. **The zoom detector has two thresholds and a cross-check, not one
-   threshold.** `ramp_threshold` (0.004) is the floor above which the lens is
-   moving at all; `cut_threshold` (0.05) is what an isolated pair must clear to
-   be a cut rather than a one-frame ramp; and a cut must additionally be
-   explained by a scale about a single centre (`scale_only_px`, and the fitted
-   log-scale agreeing with the affine matrices' median within `cross_check`).
-   That last is what stops a hard forward dolly reading as a scope-in — near
-   things grow more than far ones, and a scale-only fit says so. It has its own
-   test.
+9. **The zoom detector judges a pair against its neighbours, not against
+   zero** (redesigned 2026-08-26 after the train-POV failure; K-580 has the
+   design in full). Three mechanisms, in order. *The signature:* a hot pair's
+   scale-only fit leaves a residual, and that residual as a fraction of the
+   radial displacement the scale accounts for separates lens from travel — a
+   zoom leaves noise, travel leaves parallax, and parallax is a constant
+   fraction of the flow however slow the travel (`parallax_fraction`, 0.15;
+   measured ≈0.03–0.06 on synthetic zooms against ≈0.2–0.4 on dollies). A pair
+   too slow to judge alone is pooled with up to `signature_window` (6)
+   neighbours either side until the scale displacement reaches `signature_px`
+   (4.0) — parallax accumulates coherently with travel while tracker noise
+   does not, which is what makes a slow dolly and a slow zoom separable at
+   all. *The baseline:* the pairs the signature reads as travel (or that are
+   cold) form a windowed median (`baseline_window`, 12 either side) — the
+   shot's own growth. *The excess:* a boundary is lens-like growth above the
+   baseline; `ramp_threshold` (0.004) is the floor on the excess,
+   `cut_threshold` (0.05) is what an isolated pair's excess must clear to be a
+   cut, and a cut must still be explained by a scale about a single centre
+   (`scale_only_px`, and the fitted log-scale agreeing with the affine
+   matrices' median within `cross_check`). A boundary's `log_scale` is the
+   median excess — during travel that is the focal ratio itself, with the
+   shot's own growth subtracted. A purely still or purely zooming shot has a
+   baseline of zero everywhere, so every pre-redesign behaviour is unchanged
+   there; a dolly-like burst, which used to come back as a one-pair `Ramp`,
+   now raises no boundary at all. Each mechanism has its own test.
 
 ## 4. Phase 3 — the solve (pinned choices)
 
@@ -309,13 +332,26 @@ of them was forced by measuring the version that followed the note literally:
    contain. The rotations *are* recoverable from the homographies, and a nodal
    solve — a Camera layer that only turns — is a real product; it is phase 4+
    work and is in TODO, not smuggled in here.
-7. **A per-segment focal ramp is owed.** The note allows one focal per segment
-   for phase 3 with the ramp case recorded, and that is what shipped: a segment
-   containing a detected zoom ramp is flagged `ramp: true` and reported as
-   `SolveNote::ZoomRamp`, and its focal is one number over the whole run rather
-   than the note's spline knots. The bundle's parameter layout already carries
-   one focal per segment as an independent unknown, so knots are additional
-   columns in the same reduced system rather than a rewrite.
+7. **A ramp segment's focal is spline knots** (closed 2026-08-26; it shipped
+   as one averaged number first, and the debt was recorded here). A segment
+   flagged `ramp: true` lays sparse knots over its detected ramp runs — one
+   per `knot_spacing_frames` (25, about a second), capped at
+   `max_knots_per_segment` (8) — and each knot is an additional column of the
+   same reduced camera system, exactly as predicted: a camera inside a ramp
+   reads a *linear blend* of its two bracketing knots, so its observations
+   contribute to two focal columns with weights `1 − t` and `t`, and a
+   constant segment still reads one. The knots are piecewise-linear rather
+   than cubic — over the dozen frames a rack spans, the chord of an
+   exponential ramp is within about a per cent of the curve, and the bundle
+   fits the knot values freely anyway. Knot initialisation compounds the
+   detector's own measured per-pair rate along the run, so the whole shot
+   still hangs off one base focal for self-calibration (deviation 2's tie,
+   extended along ramps). `SolveNote::ZoomRamp` keeps reporting where the lens
+   moved; the per-frame values ride out on `SolvedPose::focal_px`, which the
+   export already reads, so nothing downstream changed shape. Measured: the
+   forward-travel-then-rack fixture recovers the 1.4× ramp's end-to-end ratio
+   as 1.404 (0.3%), with the knot Jacobian pinned separately to a noiseless
+   floor of ~1e-5 px of focal.
 8. **Resection is a trim, not a random sample.** The note says "RANSAC-lite";
    what earns its place is a normalised DLT over the frame's tracks, two rounds
    of dropping whatever disagrees and refitting, then a six-parameter
@@ -354,7 +390,18 @@ orbit, the cloud is exactly the hundred and twenty still tracks and the ATE is
 unchanged at 0.042 %. Phase 2 marks fifteen of the thirty movers as `Moving`;
 the other fifteen are refused later, by cheirality and by the post-bundle
 reprojection gate — both halves of that are asserted, so neither can quietly
-stop working.
+stop working. The train-POV fixtures (2026-08-26): a 48-frame forward travel
+along a gently curving track with a 300→420 px rack over twelve mid-shot pairs
+finds one `Ramp` boundary on exactly those pairs (rate 0.0274 against a true
+0.0280 once the travel baseline is subtracted) and solves it to a focal *curve*
+whose end-to-end ratio is 1.404 against a true 1.4; the same travel with a
+single-pair scope-in returns one `Cut` on the right frame with `log_scale`
+within 0.01 of ln 1.4; the travel alone returns nothing. The absolute focal on
+the travelling shot sits a uniform 3.5 % low and the ATE at 1.3 % of the extent
+— an order looser than the sideways shots, because a shot dominated by forward
+motion is the classical near-critical configuration for self-calibration; the
+ramp's *shape* is what the knots recover, and they recover it to a third of a
+per cent.
 
 ## 5a. Phase 4, stage 1 — the model half, as built
 
@@ -1030,7 +1077,11 @@ next honest step.
   split at the change with both halves' points rejoining to the original exactly;
   a refused split leaving the store byte-identical; the zoom cut, the ramp, a
   still lens, and a forward dolly that bursts like a scope-in and must not be
-  called one; the whole pipeline run twice and compared with `assert_eq!`.
+  called one (since the 2026-08-26 redesign it raises no boundary at all); the
+  train-POV trio — forward travel alone raising nothing, travel keeping its
+  scope-in as a cut with the travel subtracted out of its `log_scale`, and a
+  mid-travel rack spanning its own pairs at the lens's own rate; the whole
+  pipeline run twice and compared with `assert_eq!`.
 - **The phase-2 thresholds are mutation-checked, not eyeballed.** Flipping one
   sign in the Sampson numerator fails eight tests; one sign in the DLT row fails
   two; one coefficient in the cubic fails one; removing the rank-2 enforcement
@@ -1058,10 +1109,16 @@ next honest step.
   `SolveError::RotationOnly`; a dead straight dolly reporting
   `SolveNote::ColinearBaselines` while an arced one over the same ground does
   not; the boundary refusing an empty set and a set with no pairs; the whole
-  solve run twice and compared with `assert_eq!`; and the bundle driven
+  solve run twice and compared with `assert_eq!`; the bundle driven
   directly, from a start knocked off by a fifth of a unit in position, three
   quarters of a degree in rotation, a twentieth of a unit per point and four per
-  cent in focal, required to come back to a millionth of a pixel.
+  cent in focal, required to come back to a millionth of a pixel; the same
+  drive over a lens riding a straight 300→420 px line — exactly what two knots
+  describe, so the true minimum is exactly zero — with both knots knocked off
+  by different amounts and required back to a ten-thousandth (measured floor
+  ≈1e-5 px of focal: two knots are more correlated than one, since every camera
+  between them reads a blend); and the forward-travel-then-rack shot solved end
+  to end against the true per-frame focal curve.
 - **The phase-3 thresholds are mutation-checked too.** Flipping the sign of the
   rotation Jacobian's `−[v]×` term in `bundle.rs` — one `-` — fails five of the
   eight, including the three that only look at the pipeline's output; flipping
@@ -1331,40 +1388,17 @@ row names.
 - Object rigid-pose solve (track group → 6-DoF against the solved camera) is phase
   4+ and needs its own note section when reached; 2D export ships first.
 - Lens distortion beyond k1/k2 (anamorphic) — revisit against real footage.
-- **A zoom inside a shot that is also moving forward is not detected at all, and
-  a zoom that takes more than one frame pair can never be a cut.** Measured on
-  `detect_zoom` (2026-08-24), from a real failure: a train POV of 7135 frames
-  that solved acceptably until the shot scoped in and was wrong from there on.
-  Two mechanisms, both in the run-merging at the top of the detector, and each
-  sufficient on its own:
-  - **A cut must be an isolated hot pair** (`end == frame`). A real lens rack
-    takes a handful of frames, so its pairs are hot in a row and the whole run
-    is classified `Ramp`. Measured: a 1.4× scope-in spread over four pairs comes
-    back as one `Ramp` and no cut.
-  - **Forward motion makes every pair hot**, because everything in the frame
-    grows as the camera closes on it. A creep of 0.006 log-scale per pair — a
-    slow dolly — is above `ramp_threshold` (0.004) on every pair of the shot, so
-    the `while` loop swallows the *entire clip* into one boundary. Measured: the
-    same creep with a genuine 1.4× single-pair scope-in planted in the middle
-    returns one whole-shot `Ramp` whose median log-scale (0.0058) is
-    indistinguishable from the creep alone (0.0058) — the scope-in is one sample
-    in a median of thousands and disappears.
-  The consequence is the one the owner saw. With no boundary there is one
-  segment, and §4's deviation 2 gives the whole shot **one focal**; a shot
-  carrying two lens settings is then fitted to a focal right for neither, and
-  §4's deviation 3 already records that a focal well out bends every relative
-  rotation with it. The solve does not refuse — it returns a camera path that is
-  wrong from the rack onwards, with `SolveNote::ZoomRamp` set and nothing
-  surfacing it.
-  **This is not a small fix and should not be attempted as one.** Detecting the
-  cut inside a run means judging a pair against its neighbours rather than
-  against zero, and the `scale_only` cross-check that stops a lunge reading as a
-  scope-in has to keep working while it does; and even with the boundary found,
-  a *multi-frame* rack is a ramp, and a ramp still gets one averaged focal until
-  the focal knots this note already owes (§4's deviation 7) exist in the bundle.
-  The honest order is: solve the ramp's focal as a curve, then make the detector
-  able to find a change of lens inside a moving shot. Until then the tracker's
-  own reading of a shot like this should at least be *said* — `SolveNote` does
-  not cross the bridge, and a line saying "the lens moved during this shot and
-  the solve gave it one focal" is a day's work that would have answered this
-  question without anyone reading this file.
+- ~~A zoom inside a shot that is also moving forward is not detected at all~~ —
+  **resolved 2026-08-26** (K-580): the detector now judges a pair against its
+  neighbours (§3's deviation 9 — the radial-flow-versus-parallax signature and
+  the travel baseline), and a ramp's focal is solved as knots in the bundle
+  (§4's deviation 7). The failing-first fixtures reproduced the 2026-08-24
+  measurements — the creep-with-scope-in came back as one whole-shot `Ramp`
+  whose median (0.00554) was indistinguishable from the creep alone (0.00551),
+  and the end-to-end solve's worst per-frame focal error was 105 % — and the
+  same fixtures now recover the cut, the ramp's span and the focal curve (the
+  measured numbers are in §4 and §5). Two ends remain open: `SolveNote` still
+  does not cross the bridge, so the panel cannot yet say "the lens moved during
+  this shot"; and the *absolute* focal of a forward-dominated shot is weakly
+  observable (measured 3.5 % low on the synthetic) — a focal hint from the user
+  is the honest lever if it matters in practice.

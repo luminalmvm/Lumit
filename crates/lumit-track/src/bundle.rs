@@ -168,15 +168,52 @@ pub(crate) fn invert_sym3(m: &[[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
 
 // --- The problem ------------------------------------------------------------
 
-/// One camera in the bundle: pose plus which focal segment it reads.
+/// Which focal parameters a camera reads, and how: the value is
+/// `(1 − t)·focals[a] + t·focals[b]` — one knot for a camera inside a
+/// constant-focal segment (`a == b`), a linear blend of the two bracketing
+/// knots for a camera inside a zoom ramp (docs/impl/tracking.md §4). Each
+/// observation therefore contributes to at most two focal columns of the
+/// reduced camera system, weighted `1 − t` and `t`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct FocalRef {
+    pub(crate) a: usize,
+    pub(crate) b: usize,
+    /// `0.0..=1.0` between knot `a` and knot `b`; `0.0` when `a == b`.
+    pub(crate) t: f64,
+}
+
+impl FocalRef {
+    /// A camera reading exactly one focal parameter.
+    pub(crate) fn fixed(index: usize) -> FocalRef {
+        FocalRef {
+            a: index,
+            b: index,
+            t: 0.0,
+        }
+    }
+
+    /// The focal this reference reads out of `focals`, or `None` where a knot
+    /// index is out of range — the caller's signal to skip the observation, as
+    /// a missing segment focal always was.
+    pub(crate) fn value(&self, focals: &[f64]) -> Option<f64> {
+        let fa = focals.get(self.a).copied()?;
+        if self.a == self.b || self.t <= 0.0 {
+            return Some(fa);
+        }
+        let fb = focals.get(self.b).copied()?;
+        Some((1.0 - self.t) * fa + self.t * fb)
+    }
+}
+
+/// One camera in the bundle: pose plus which focal parameters it reads.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct BundleCamera {
     /// World → camera rotation.
     pub(crate) rot: Mat3,
     /// Camera centre in world coordinates.
     pub(crate) pos: [f64; 3],
-    /// Index into the focal vector.
-    pub(crate) segment: usize,
+    /// The focal knot or pair of knots this camera's frame reads.
+    pub(crate) focal: FocalRef,
 }
 
 /// One observation: point `point` seen by camera `cam` at `image`, in source
@@ -255,7 +292,7 @@ fn evaluate(
         let (Some(cam), Some(x)) = (cams.get(o.cam), points.get(o.point)) else {
             continue;
         };
-        let Some(focal) = focals.get(cam.segment).copied() else {
+        let Some(focal) = cam.focal.value(focals) else {
             continue;
         };
         let Some((p, _)) = project_point(cam, focal, centre, x) else {
@@ -318,17 +355,20 @@ fn camera_base(index: usize) -> Option<usize> {
     index.checked_sub(1).map(|i| i * 6)
 }
 
-fn layout_width(cameras: usize, segments: usize) -> usize {
-    cameras.saturating_sub(1) * 6 + segments
+fn layout_width(cameras: usize, focal_params: usize) -> usize {
+    cameras.saturating_sub(1) * 6 + focal_params
 }
 
 /// Columns of the Jacobian for one observation: `(parameter index, ∂r/∂p)`.
-/// At most seven — six pose, one focal — and the pose six are absent for the
-/// gauge camera.
+/// At most eight — six pose, one or two focal knots — and the pose six are
+/// absent for the gauge camera. `∂r/∂f = (v_x/v_z, v_y/v_z)`; a blended focal
+/// splits that across its two knots by the blend weights, which is the chain
+/// rule for `f = (1 − t)·f_a + t·f_b`.
 fn columns(
     out: &mut Vec<(usize, [f64; 2])>,
     cam_index: usize,
-    segment_param: usize,
+    focal_base: usize,
+    focal: FocalRef,
     rot: &Mat3,
     v: [f64; 3],
     jv: &[[f64; 3]; 2],
@@ -347,7 +387,14 @@ fn columns(
             out.push((base + 3 + a, [-x, -y]));
         }
     }
-    out.push((segment_param, [v[0] / v[2], v[1] / v[2]]));
+    let g = [v[0] / v[2], v[1] / v[2]];
+    if focal.a == focal.b || focal.t <= 0.0 {
+        out.push((focal_base.saturating_add(focal.a), g));
+    } else {
+        let (wa, wb) = (1.0 - focal.t, focal.t);
+        out.push((focal_base.saturating_add(focal.a), [wa * g[0], wa * g[1]]));
+        out.push((focal_base.saturating_add(focal.b), [wb * g[0], wb * g[1]]));
+    }
 }
 
 /// `∂r/∂X`, 2×3: the same chain rule as the position column, without the sign.
@@ -380,8 +427,10 @@ impl PointBlock {
     }
 }
 
-/// Levenberg–Marquardt over poses, per-segment focals and points, with the
-/// points marginalised by a Schur complement.
+/// Levenberg–Marquardt over poses, focal knots and points, with the points
+/// marginalised by a Schur complement. `focals` is the knot vector: one entry
+/// for a constant-focal segment, a sparse row of them for a zoom ramp, each an
+/// independent column of the reduced system (docs/impl/tracking.md §4).
 ///
 /// `cams[0]` is the gauge and never moves; the overall scale is left free and
 /// held by the damping, which is what LM's diagonal term is for.
@@ -425,7 +474,7 @@ pub(crate) fn bundle_adjust(
     });
 
     let mut lambda = 1e-4f64;
-    let mut cols: Vec<(usize, [f64; 2])> = Vec::with_capacity(7);
+    let mut cols: Vec<(usize, [f64; 2])> = Vec::with_capacity(8);
     let mut blocks: Vec<PointBlock> = Vec::new();
 
     for _ in 0..max_iterations {
@@ -449,7 +498,7 @@ pub(crate) fn bundle_adjust(
             let (Some(cam), Some(x)) = (cams.get(o.cam), points.get(o.point)) else {
                 continue;
             };
-            let Some(focal) = focals.get(cam.segment).copied() else {
+            let Some(focal) = cam.focal.value(focals) else {
                 continue;
             };
             let Some((p, v)) = project_point(cam, focal, centre, x) else {
@@ -458,7 +507,7 @@ pub(crate) fn bundle_adjust(
             let r = [p[0] - o.image[0], p[1] - o.image[1]];
             let (w, _) = huber(r[0].hypot(r[1]), huber_px);
             let jv = dproject(focal, v);
-            columns(&mut cols, o.cam, focal_base + cam.segment, &cam.rot, v, &jv);
+            columns(&mut cols, o.cam, focal_base, cam.focal, &cam.rot, v, &jv);
             let jp = point_jacobian(&cam.rot, &jv);
             let Some(block) = blocks.get_mut(o.point) else {
                 continue;
@@ -626,7 +675,7 @@ pub(crate) fn refine_pose(
     huber_px: f64,
     iterations: usize,
 ) {
-    let mut cols: Vec<(usize, [f64; 2])> = Vec::with_capacity(7);
+    let mut cols: Vec<(usize, [f64; 2])> = Vec::with_capacity(8);
     for _ in 0..iterations {
         let mut a = Dense::zero(6);
         let mut b = vec![0.0f64; 6];
@@ -638,8 +687,17 @@ pub(crate) fn refine_pose(
             let r = [p[0] - obs[0], p[1] - obs[1]];
             let (w, _) = huber(r[0].hypot(r[1]), huber_px);
             let jv = dproject(focal, v);
-            // Camera index 1 so the pose columns exist and start at zero.
-            columns(&mut cols, 1, usize::MAX, &cam.rot, v, &jv);
+            // Camera index 1 so the pose columns exist and start at zero; the
+            // focal column lands out of range and is ignored by every add.
+            columns(
+                &mut cols,
+                1,
+                0,
+                FocalRef::fixed(usize::MAX),
+                &cam.rot,
+                v,
+                &jv,
+            );
             used += 1;
             for (i, ci) in cols.iter().take(6) {
                 for (j, cj) in cols.iter().take(6) {

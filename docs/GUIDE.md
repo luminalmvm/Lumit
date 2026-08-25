@@ -6743,6 +6743,53 @@ out whatever ruined the shot and analyse again, try a higher feature density, or
 cut the shot where the track stops and treat the two halves as two shots, which
 is what they are.
 
+### Telling a zoom from travel, and a lens that ramps (K-580)
+
+Zooming in and driving forward look alike: in both, everything in the frame
+grows. The camera tracker has to tell them apart, because a zoom is the lens
+changing (the camera stayed put) and travel is the camera moving (the lens
+stayed put), and mixing them up poisons the whole solve. The original detector
+judged each pair of neighbouring frames on its own, against zero: "did things
+grow here?" On a shot filmed from the front of a moving train the answer is
+yes on *every* pair, so the whole clip melted into one long "the lens is
+moving" reading — and when the operator genuinely zoomed in mid-shot, that real
+lens change was one sample among thousands and simply vanished. The solve then
+gave the shot one focal length that was right for neither half, and the camera
+path was wrong from the zoom onwards.
+
+Two ideas fix it, and both are about looking at the neighbours instead of at
+zero.
+
+First, zoom and travel grow the picture *differently*. A zoom scales
+everything about one centre by the same amount — near lamp-post and far
+mountain alike — so once you account for that one scale, almost nothing is
+left over. Travel grows near things more than far things (the lamp-post rushes
+past while the mountain barely moves), so after the best single scale there is
+always a leftover, and that leftover is a steady *fraction* of the motion
+however slow the travel is. Measuring the leftover as a fraction is what makes
+the test work at any speed; for pairs too slow to measure alone, a few
+neighbouring pairs are pooled, because the travel leftover adds up across
+frames while measurement noise does not.
+
+Second, the pairs that read as travel become a **baseline** — the shot's own
+growth, measured a few dozen frames either side — and a lens event now has to
+stand *above* that baseline rather than above zero. A zoom during travel
+sticks out of the baseline exactly as a zoom during a locked-off shot sticks
+out of nothing, and the amount it sticks out by is the lens's own change with
+the travel already subtracted.
+
+The other half of the fix is what the solve does with a smooth zoom — a ramp,
+the operator turning the ring over a second rather than a cut between two
+frames. The solve used to give the whole stretch one averaged focal length,
+which is wrong at both ends. Now a ramp gets a handful of **knots**: extra
+unknowns spaced about a second apart, each one "the focal length at this
+moment", with straight lines in between. They join the same big adjustment
+that already refines every camera position and every 3D point, so the pictures
+themselves pull each knot to the right value, and every frame reads its focal
+off the resulting curve. A handful is enough — a lens rack is smooth, and a
+curve through a few well-placed points follows it to within a fraction of a
+per cent.
+
 ### Why the picture goes soft while you drag a value (K-383)
 
 Some effects are expensive in a very particular way. Depth of field and Lens

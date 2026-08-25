@@ -161,12 +161,12 @@ pub fn segment_dynamic_tracks(
 /// The knobs the zoom detector takes (docs/impl/tracking.md §3).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ZoomSettings {
-    /// `|log scale|` per frame pair above which the lens is considered to be
-    /// moving at all. Below this is tracker noise.
+    /// `|log scale|` per frame pair above which the pair's growth is worth
+    /// judging at all. Below this is tracker noise.
     pub ramp_threshold: f64,
-    /// `|log scale|` a single isolated pair must exceed before it can be a cut
-    /// rather than a one-frame ramp. A scope-in is an enormous number here; an
-    /// operator's hand is not.
+    /// Excess `|log scale|` over the travel baseline a single isolated pair
+    /// must exceed before it can be a cut rather than a one-frame ramp. A
+    /// scope-in is an enormous number here; an operator's hand is not.
     pub cut_threshold: f64,
     /// Residual, in source pixels, that a scale-only fit to the pair's
     /// displacements must stay under for the pair to be a cut. This is what
@@ -176,6 +176,30 @@ pub struct ZoomSettings {
     /// of the tracker's affine matrices before the two are not describing the
     /// same event. The note's cross-check, made a number.
     pub cross_check: f64,
+    /// The fraction of a pair's radial-scale displacement its scale-only
+    /// residual may reach before the growth is read as travel rather than
+    /// lens. A zoom is a scale about one centre and leaves only noise behind;
+    /// a dolly moves near things more than far ones, and that parallax is a
+    /// roughly constant *fraction* of the flow however slow the travel is —
+    /// which is what makes the fraction, unlike an absolute threshold,
+    /// speed-independent.
+    pub parallax_fraction: f64,
+    /// The radial-scale displacement, in source pixels, the classification
+    /// needs before the parallax fraction means anything. A pair too slow to
+    /// reach it on its own is judged over a widening window of its neighbours
+    /// instead — parallax accumulates coherently with travel while tracker
+    /// noise does not, so pooling the pairs is what makes a slow dolly and a
+    /// slow zoom distinguishable at all.
+    pub signature_px: f64,
+    /// How many pairs either side the classification window may grow to. A
+    /// pair still too slow to judge at this width contributes to the travel
+    /// baseline rather than to any boundary.
+    pub signature_window: i64,
+    /// Pairs either side over which the travel baseline is taken — the median
+    /// `log scale` of the pairs the signature read as camera motion. A lens
+    /// event is an excess above this, so a cut inside a forward-moving shot is
+    /// judged against its neighbours rather than against zero.
+    pub baseline_window: i64,
 }
 
 impl Default for ZoomSettings {
@@ -185,6 +209,10 @@ impl Default for ZoomSettings {
             cut_threshold: 0.05,
             scale_only_px: 1.5,
             cross_check: 0.05,
+            parallax_fraction: 0.15,
+            signature_px: 4.0,
+            signature_window: 6,
+            baseline_window: 12,
         }
     }
 }
@@ -216,6 +244,18 @@ pub struct ZoomBoundary {
 
 /// Find the focal-change boundaries in a track set (docs/impl/tracking.md §3).
 ///
+/// A pair is never judged against zero: each hot pair is first classified by
+/// the radial-flow-versus-parallax signature — a zoom is a scale about one
+/// centre and leaves only noise behind its scale-only fit, while travel moves
+/// near things more than far ones and leaves a residual that is a roughly
+/// constant fraction of the flow. Pairs too slow to carry the signature on
+/// their own are judged over a widening window of their neighbours, because
+/// parallax accumulates coherently with travel and tracker noise does not.
+/// The pairs the signature reads as travel form a per-pair **baseline** (a
+/// windowed median), and a boundary is an *excess* of lens-like growth above
+/// it — which is what lets a scope-in survive inside a forward-moving shot
+/// instead of disappearing into the shot's own growth.
+///
 /// Returned in frame order.
 #[must_use]
 pub fn detect_zoom(set: &TrackSet, settings: &ZoomSettings) -> Vec<ZoomBoundary> {
@@ -223,44 +263,131 @@ pub fn detect_zoom(set: &TrackSet, settings: &ZoomSettings) -> Vec<ZoomBoundary>
     let Some((first, last)) = set.frame_range() else {
         return out;
     };
-    let hot = |f: i64| {
-        set.median_log_scale(f)
-            .filter(|v| v.abs() > settings.ramp_threshold)
-    };
+    if last <= first {
+        return out;
+    }
+    let pairs = usize::try_from(last - first).unwrap_or(0);
 
-    let mut frame = first;
-    while frame < last {
-        let Some(head) = hot(frame) else {
-            frame += 1;
+    // 1. Every pair's growth, once.
+    let m: Vec<Option<f64>> = (0..pairs)
+        .map(|i| set.median_log_scale(first + i as i64))
+        .collect();
+
+    // 2. The signature: is this hot pair's growth lens or travel? `None` is a
+    //    cold pair (or one with no data), which is neither.
+    let lens: Vec<Option<bool>> = m
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let v = (*v)?;
+            if v.abs() <= settings.ramp_threshold {
+                return None;
+            }
+            Some(lens_signature(set, first + i as i64, first, last, settings))
+        })
+        .collect();
+
+    // 3. The travel baseline: per pair, the median growth of the pairs around
+    //    it that the signature did *not* read as lens — the shot's own motion,
+    //    which a lens event has to stand above. Zero where nothing nearby says
+    //    otherwise, which keeps a still or purely zooming shot exactly where
+    //    the old thresholds put it.
+    let window = usize::try_from(settings.baseline_window.max(0)).unwrap_or(0);
+    let mut scratch: Vec<f64> = Vec::with_capacity(2 * window + 1);
+    let baseline: Vec<f64> = (0..pairs)
+        .map(|i| {
+            scratch.clear();
+            let lo = i.saturating_sub(window);
+            let hi = (i + window).min(pairs.saturating_sub(1));
+            for j in lo..=hi {
+                if lens.get(j).copied().flatten() != Some(true) {
+                    if let Some(Some(v)) = m.get(j) {
+                        scratch.push(*v);
+                    }
+                }
+            }
+            geom::median(&mut scratch).unwrap_or(0.0)
+        })
+        .collect();
+
+    // 4. Runs of lens-like excess. A pair enters a run only when the signature
+    //    called it lens *and* its excess over the baseline clears the ramp
+    //    threshold — travel pairs bound the runs instead of joining them.
+    let excess = |i: usize| -> Option<f64> {
+        if lens.get(i).copied().flatten() != Some(true) {
+            return None;
+        }
+        let e = (*m.get(i)?)? - baseline.get(i).copied().unwrap_or(0.0);
+        (e.abs() > settings.ramp_threshold).then_some(e)
+    };
+    let mut i = 0usize;
+    while i < pairs {
+        let Some(head) = excess(i) else {
+            i += 1;
             continue;
         };
         let mut run = vec![head];
-        let mut end = frame;
-        while end + 1 < last {
-            let Some(v) = hot(end + 1) else {
+        let mut end = i;
+        while end + 1 < pairs {
+            let Some(e) = excess(end + 1) else {
                 break;
             };
-            run.push(v);
+            run.push(e);
             end += 1;
         }
+        let frame = first + i as i64;
         let log_scale = geom::median(&mut run).unwrap_or(head);
-        let kind = if end == frame
+        let kind = if end == i
             && head.abs() > settings.cut_threshold
-            && scale_only(set, frame, head, settings)
-        {
+            && scale_only(
+                set,
+                frame,
+                m.get(i).copied().flatten().unwrap_or(head),
+                settings,
+            ) {
             ZoomKind::Cut
         } else {
             ZoomKind::Ramp
         };
         out.push(ZoomBoundary {
             frame,
-            end_frame: end,
+            end_frame: first + end as i64,
             kind,
             log_scale,
         });
-        frame = end + 1;
+        i = end + 1;
     }
     out
+}
+
+/// Whether the growth on the pair `frame → frame + 1` is a lens event rather
+/// than travel, read from the radial-flow-versus-parallax signature: the
+/// scale-only fit's residual as a fraction of the radial displacement the
+/// scale itself accounts for. The pair is pooled with up to
+/// [`ZoomSettings::signature_window`] neighbours either side until the
+/// displacement reaches [`ZoomSettings::signature_px`]; a pair still too slow
+/// to judge at full width is travel's to keep — it can always join the
+/// baseline, but a boundary needs evidence.
+fn lens_signature(
+    set: &TrackSet,
+    frame: i64,
+    first: i64,
+    last: i64,
+    settings: &ZoomSettings,
+) -> bool {
+    for w in 0..=settings.signature_window.max(0) {
+        let a = (frame - w).max(first);
+        let b = (frame + 1 + w).min(last);
+        let pts = set.correspondences(a, b);
+        let Some(fit) = scale_only_fit(&pts) else {
+            continue;
+        };
+        if fit.spread < settings.signature_px {
+            continue;
+        }
+        return fit.residual <= settings.parallax_fraction * fit.spread;
+    }
+    false
 }
 
 /// Whether the pair `frame → frame + 1` is explained by a scale about one
@@ -268,20 +395,33 @@ pub fn detect_zoom(set: &TrackSet, settings: &ZoomSettings) -> Vec<ZoomBoundary>
 /// affine matrices said.
 fn scale_only(set: &TrackSet, frame: i64, log_scale: f64, settings: &ZoomSettings) -> bool {
     let pts = set.correspondences(frame, frame + 1);
-    let Some((fitted, residual)) = scale_only_fit(&pts) else {
+    let Some(fit) = scale_only_fit(&pts) else {
         return false;
     };
-    residual <= settings.scale_only_px && (fitted - log_scale).abs() <= settings.cross_check
+    fit.residual <= settings.scale_only_px
+        && (fit.log_scale - log_scale).abs() <= settings.cross_check
+}
+
+/// What [`scale_only_fit`] measured.
+struct ScaleFit {
+    /// `ln s` of the fitted uniform scale.
+    log_scale: f64,
+    /// Median residual, in source pixels — what the scale could not explain.
+    residual: f64,
+    /// Median radial displacement the scale itself accounts for, in source
+    /// pixels: `|s − 1|` times the points' median distance from their centroid.
+    /// The yardstick the residual is a fraction of.
+    spread: f64,
 }
 
 /// Least-squares fit of `q = s·p + t` — a uniform scale about a free centre,
-/// with no rotation and no shear. Returns `(log s, median residual)`.
+/// with no rotation and no shear.
 ///
 /// Closed form: with both point sets centred, `s` is the ratio of the
 /// cross-moment to the source's second moment, and `t` follows. `None` for a
 /// degenerate spread or a fit that came out mirrored, neither of which is a
 /// zoom.
-fn scale_only_fit(pts: &[Correspondence]) -> Option<(f64, f64)> {
+fn scale_only_fit(pts: &[Correspondence]) -> Option<ScaleFit> {
     if pts.len() < 3 {
         return None;
     }
@@ -316,7 +456,15 @@ fn scale_only_fit(pts: &[Correspondence]) -> Option<(f64, f64)> {
         .iter()
         .map(|c| (s * c.from[0] + tx - c.to[0]).hypot(s * c.from[1] + ty - c.to[1]))
         .collect();
-    Some((s.ln(), geom::median(&mut residuals)?))
+    let mut radii: Vec<f64> = pts
+        .iter()
+        .map(|c| (c.from[0] - px).hypot(c.from[1] - py))
+        .collect();
+    Some(ScaleFit {
+        log_scale: s.ln(),
+        residual: geom::median(&mut residuals)?,
+        spread: (s - 1.0).abs() * geom::median(&mut radii)?,
+    })
 }
 
 /// Set one track's state to [`TrackState::Moving`]. Lives here rather than on

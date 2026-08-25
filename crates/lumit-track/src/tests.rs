@@ -1675,11 +1675,9 @@ fn a_forward_lunge_is_not_read_as_a_zoom_cut() {
         "the burst {burst} has to be big enough to tempt the detector"
     );
     let found = detect_zoom(&set, &ZoomSettings::default());
-    assert_eq!(found.len(), 1);
-    assert_eq!(
-        found[0].kind,
-        ZoomKind::Ramp,
-        "a dolly must not be called a lens cut"
+    assert!(
+        found.is_empty(),
+        "a dolly is camera motion, not a lens event at all — got {found:?}"
     );
 }
 
@@ -1750,7 +1748,7 @@ fn the_two_view_boundary_refuses_what_it_cannot_use() {
 // 1 again, and would fail for reasons that have nothing to do with the solve.
 // ===========================================================================
 
-use crate::bundle::{bundle_adjust, BundleCamera, BundleObs};
+use crate::bundle::{bundle_adjust, BundleCamera, BundleObs, FocalRef};
 use crate::solve::closest_rotation;
 
 /// A cloud spread about the world origin — what an orbiting camera circles.
@@ -2134,6 +2132,207 @@ fn a_dolly_through_a_zoom_cut_recovers_both_focals() {
     }
 }
 
+// --- The train POV: forward travel and the lens ---------------------------------
+//
+// The failure K-540 recorded and left open: a shot moving forward makes every
+// patch in the frame grow on every pair, so a detector that judges each pair
+// against zero swallows the whole clip into one run — and a genuine lens change
+// inside it disappears into a median of thousands. These fixtures pin the
+// repaired detector: travel is a *baseline* read from the pairs the radial-flow
+// signature says are camera motion, and a lens event is an excess above it.
+
+/// A camera travelling forward — the train POV — with a gentle sideways sway so
+/// the baselines are not all one direction, and the lens moving log-linearly
+/// from `before` to `after` over the pairs `ramp_start..=ramp_end`, holding
+/// either side. `ramp_start == ramp_end` is the owner's single-pair scope-in,
+/// in [`dolly_cameras`]'s convention: `before` up to and including that frame,
+/// `after` from the next.
+fn travel_cameras(
+    frames: usize,
+    before: f64,
+    after: f64,
+    ramp_start: usize,
+    ramp_end: usize,
+) -> Vec<Camera> {
+    (0..frames)
+        .map(|i| {
+            let t = i as f64;
+            // A gently curving track — the heading drifts as the camera
+            // advances, the way a real line does — plus a small vertical sway,
+            // so the shot is dominated by forward travel but still carries the
+            // sideways baseline a focal needs to be observable at all.
+            let th = 0.007 * t;
+            let mut c = Camera::new(
+                [
+                    10.0 * (1.0 - th.cos()),
+                    0.12 * (0.11 * t).sin(),
+                    10.0 * th.sin(),
+                ],
+                th,
+                0.0,
+            );
+            let a = if i <= ramp_start {
+                0.0
+            } else if i > ramp_end {
+                1.0
+            } else {
+                (i - ramp_start) as f64 / (ramp_end + 1 - ramp_start) as f64
+            };
+            c.f = before * (after / before).powf(a);
+            c
+        })
+        .collect()
+}
+
+#[test]
+fn a_forward_dolly_alone_raises_no_boundary() {
+    // Every pair of this shot is hot — the creep is above the ramp threshold on
+    // purpose, which is exactly the trap the train POV fell into — but all of
+    // the growth is travel, and travel is phase 3's job, not a lens event.
+    let cams = travel_cameras(40, 300.0, 300.0, 39, 39);
+    let set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let creep = set.median_log_scale(20).expect("the creep is measurable");
+    assert!(
+        creep > ZoomSettings::default().ramp_threshold,
+        "the creep {creep} has to be hot enough to tempt the detector"
+    );
+    let found = detect_zoom(&set, &ZoomSettings::default());
+    assert!(
+        found.is_empty(),
+        "forward travel is not a lens event, got {found:?}"
+    );
+}
+
+#[test]
+fn a_forward_travelling_shot_keeps_its_scope_in() {
+    // The owner's train POV: a slow forward creep with a genuine 1.4× scope-in
+    // planted in the middle. The old detector merged every hot pair into one
+    // whole-shot run and the scope-in vanished into its median; the cut must
+    // come back as a cut, judged against its neighbours rather than against
+    // zero.
+    let cut = 19usize;
+    let cams = travel_cameras(40, 300.0, 420.0, cut, cut);
+    let set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let found = detect_zoom(&set, &ZoomSettings::default());
+    let cuts: Vec<&ZoomBoundary> = found.iter().filter(|z| z.kind == ZoomKind::Cut).collect();
+    assert_eq!(cuts.len(), 1, "one lens cut, got {found:?}");
+    let b = cuts.first().copied().copied().unwrap_or(ZoomBoundary {
+        frame: -1,
+        end_frame: -1,
+        kind: ZoomKind::Cut,
+        log_scale: 0.0,
+    });
+    assert_eq!(b.frame, cut as i64, "the cut sits on the pair {cut}");
+    // The boundary's log scale is the *excess* over the travel baseline, which
+    // is the focal ratio itself — the creep's own growth must not be in it.
+    assert!(
+        (b.log_scale - 1.4f64.ln()).abs() < 0.01,
+        "log scale {} against ln 1.4 = {}",
+        b.log_scale,
+        1.4f64.ln()
+    );
+    assert!(
+        found.iter().all(|z| z.kind != ZoomKind::Ramp),
+        "the travel must not come back as a whole-shot ramp, got {found:?}"
+    );
+}
+
+#[test]
+fn a_lens_ramp_during_forward_travel_spans_its_own_pairs() {
+    // A real lens rack takes a handful of frames. During forward travel every
+    // pair is hot, so the run has to be bounded by the excess over the travel
+    // baseline, not by hotness — otherwise the ramp is the whole clip.
+    let (start, end) = (18usize, 29usize);
+    let cams = travel_cameras(48, 300.0, 420.0, start, end);
+    let set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let found = detect_zoom(&set, &ZoomSettings::default());
+    assert_eq!(found.len(), 1, "one boundary, got {found:?}");
+    let b = found[0];
+    assert_eq!(b.kind, ZoomKind::Ramp);
+    assert!(
+        (b.frame - start as i64).abs() <= 1 && (b.end_frame - end as i64).abs() <= 1,
+        "the ramp spans its own pairs, got {}..={} against {start}..={end}",
+        b.frame,
+        b.end_frame
+    );
+    // The rate is the lens's own: ln(1.4) spread over twelve pairs, with the
+    // travel's creep subtracted out by the baseline.
+    let rate = 1.4f64.ln() / 12.0;
+    assert!(
+        (b.log_scale - rate).abs() < 0.2 * rate,
+        "ramp log scale {} against a true lens rate {rate}",
+        b.log_scale
+    );
+}
+
+#[test]
+fn a_forward_travelling_shot_that_zooms_solves_to_a_focal_curve() {
+    // The end-to-end claim: forward travel, then a smooth 300→420 px rack over
+    // twelve pairs, then travel again — one segment, no cut, and the solve
+    // recovers the *curve*, not one averaged focal. Before the focal knots a
+    // ramp segment carried a single focal and both ends of this shot were wrong
+    // by double-digit per cent.
+    let (start, end) = (18usize, 29usize);
+    let cams = travel_cameras(48, 300.0, 420.0, start, end);
+    let mut set = solve_shot(&cams, &dolly_cloud(250), usize::MAX, [0.0; 3], 0.3);
+    let (_, zooms, solved) = run_solve(&mut set);
+    assert!(
+        zooms.iter().all(|z| z.kind != ZoomKind::Cut),
+        "a smooth rack is not a cut, got {zooms:?}"
+    );
+    let solved = solved.expect("forward travel carries parallax");
+    assert_eq!(solved.segments.len(), 1, "no cut means one segment");
+    assert!(
+        solved.segments.first().is_some_and(|s| s.ramp),
+        "the segment knows its lens moved"
+    );
+    assert!(
+        solved
+            .notes
+            .iter()
+            .any(|n| matches!(n, SolveNote::ZoomRamp { .. })),
+        "the ramp keeps being reported, got {:?}",
+        solved.notes
+    );
+    // Every frame's focal against the lens that actually filmed it. Two
+    // claims, deliberately separate. The *ramp* — what this fixture exists to
+    // pin — comes back to a third of a per cent: the solved end-to-end focal
+    // ratio is measured at 1.404 against a true 1.4. The *absolute* focal is
+    // weaker, and honestly so: a shot dominated by forward travel is the
+    // classical near-critical configuration for self-calibration, and the
+    // whole curve sits a measured 3.5% below truth as one uniform scale. The
+    // worst-frame bound is set from that measurement, not from a house number.
+    let (first_f, last_f) = (
+        solved.poses.first().map_or(0.0, |p| p.focal_px),
+        solved.poses.last().map_or(0.0, |p| p.focal_px),
+    );
+    assert!(
+        (last_f / first_f.max(1e-9) - 1.4).abs() < 0.02,
+        "the focal ramp's ratio {} against a true 1.4",
+        last_f / first_f.max(1e-9)
+    );
+    let mut worst = 0.0f64;
+    for pose in &solved.poses {
+        let truth = cams.get(pose.frame as usize).map_or(0.0, |c: &Camera| c.f);
+        worst = worst.max((pose.focal_px - truth).abs() / truth);
+    }
+    assert!(
+        worst < 0.06,
+        "worst per-frame focal error {:.4} against the true curve",
+        worst
+    );
+    let positions: Vec<[f64; 3]> = solved.poses.iter().map(|p| p.position).collect();
+    let (rms, extent) = ate(&positions, &truth_positions(&cams));
+    // Measured at 1.3% of the extent — an order looser than the sideways
+    // shots, and for the same reason as the focal: forward travel trades
+    // focal against depth, and the trade bends the path slightly. The bound
+    // is 2.2× the measurement.
+    assert!(
+        rms / extent < 0.03,
+        "trajectory error {rms} over an extent of {extent}"
+    );
+}
+
 // --- Moving objects ------------------------------------------------------------
 
 #[test]
@@ -2328,7 +2527,7 @@ fn the_bundle_converges_from_a_perturbed_start() {
         .map(|c| BundleCamera {
             rot: c.r,
             pos: c.c,
-            segment: 0,
+            focal: FocalRef::fixed(0),
         })
         .collect();
     let mut obs: Vec<BundleObs> = Vec::new();
@@ -2411,6 +2610,112 @@ fn the_bundle_converges_from_a_perturbed_start() {
     assert!(
         rms / extent < 1e-6,
         "trajectory error {rms} over an extent of {extent}"
+    );
+}
+
+#[test]
+fn the_bundle_recovers_a_focal_ramp_from_perturbed_knots() {
+    // The knot Jacobian pinned directly, the way the single-focal one is
+    // above: each frame of this orbit reads a linear blend of two knots, so
+    // the true lens is exactly representable, the true minimum is exactly
+    // zero, and the noiseless-threshold rule applies. A wrong blend weight in
+    // the focal columns cannot come back to machine precision.
+    let mut cams = orbit_cameras(9, 4.0, 6.0, 300.0);
+    for (i, c) in cams.iter_mut().enumerate() {
+        // The lens rides a straight line from 300 to 420 px over the shot —
+        // which is precisely what two knots at the ends describe.
+        c.f = 300.0 + 120.0 * (i as f64 / 8.0);
+    }
+    let cloud = orbit_cloud(60);
+    let centre = [W as f64 / 2.0, H as f64 / 2.0];
+
+    let mut solved: Vec<BundleCamera> = cams
+        .iter()
+        .enumerate()
+        .map(|(i, c)| BundleCamera {
+            rot: c.r,
+            pos: c.c,
+            focal: FocalRef {
+                a: 0,
+                b: 1,
+                t: i as f64 / 8.0,
+            },
+        })
+        .collect();
+    let mut obs: Vec<BundleObs> = Vec::new();
+    let mut points: Vec<[f64; 3]> = Vec::new();
+    for (pi, p) in cloud.iter().enumerate() {
+        let mut seen = 0usize;
+        for (ci, cam) in cams.iter().enumerate() {
+            if let Some(u) = cam.project(*p) {
+                obs.push(BundleObs {
+                    cam: ci,
+                    point: pi,
+                    image: u,
+                });
+                seen += 1;
+            }
+        }
+        assert!(seen >= 2, "point {pi} is barely seen");
+        points.push(*p);
+    }
+
+    // The same knocks as the single-focal test, plus both knots off by
+    // different amounts so a solver that only moved one of them cannot pass.
+    let mut focals = vec![312.0f64, 401.0];
+    for (i, cam) in solved.iter_mut().enumerate().skip(1) {
+        let k = i as i64;
+        for (a, axis) in cam.pos.iter_mut().enumerate() {
+            *axis += 0.2 * (hash2(k, 11 + a as i64) - 0.5);
+        }
+        let w = [
+            0.026 * (hash2(k, 31) - 0.5),
+            0.026 * (hash2(k, 37) - 0.5),
+            0.026 * (hash2(k, 41) - 0.5),
+        ];
+        cam.rot = crate::geom::mul3(&crate::bundle::so3_exp(w), &cam.rot);
+    }
+    for (i, p) in points.iter_mut().enumerate() {
+        let k = i as i64;
+        for (a, axis) in p.iter_mut().enumerate() {
+            *axis += 0.05 * (hash2(k, 71 + a as i64) - 0.5);
+        }
+    }
+
+    let report = bundle_adjust(
+        &mut solved,
+        &mut focals,
+        &mut points,
+        &obs,
+        centre,
+        2.0,
+        60,
+        &|| false,
+    );
+    assert!(
+        report.initial_mean_px > 3.0,
+        "the perturbation has to be visible: {} px",
+        report.initial_mean_px
+    );
+    assert!(
+        report.mean_px < 1e-6,
+        "converged to {} px from {} px in {} steps",
+        report.mean_px,
+        report.initial_mean_px,
+        report.iterations
+    );
+    let (a, b) = (
+        focals.first().copied().unwrap_or(0.0),
+        focals.get(1).copied().unwrap_or(0.0),
+    );
+    // Measured: 9.1e-6 and 1.3e-5 px of focal — the two knots are more
+    // correlated than a single focal is (every camera between them reads a
+    // blend), so the noiseless floor sits an order above the single-focal
+    // test's. 1e-4 is still an order above that and six below the
+    // perturbation, and a wrong blend weight misses by whole pixels.
+    assert!(
+        (a - 300.0).abs() < 1e-4 && (b - 420.0).abs() < 1e-4,
+        "knots came back as {a} and {b} from 312 and 401"
     );
 }
 

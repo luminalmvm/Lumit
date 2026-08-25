@@ -97,6 +97,15 @@ pub struct SolveSettings {
     /// the focal the first pass's bundle settled on, which is the difference
     /// between a solve that stands on a guessed lens and one that does not.
     pub passes: usize,
+    /// Frames between focal knots inside a detected zoom ramp — about one knot
+    /// per second at common rates. The knots are deliberately sparse: each one
+    /// is a column of the reduced camera system, and a lens ramp is a smooth
+    /// curve that a handful of knots describes.
+    pub knot_spacing_frames: i64,
+    /// The most focal knots one segment may carry, however long its ramps run.
+    /// Keeps the reduced system's growth bounded (the dense factorisation in
+    /// [`crate::bundle`] is cubic in its width).
+    pub max_knots_per_segment: usize,
 }
 
 impl Default for SolveSettings {
@@ -114,6 +123,8 @@ impl Default for SolveSettings {
             min_resection_points: 8,
             colinear_ratio: 1e-3,
             passes: 2,
+            knot_spacing_frames: 25,
+            max_knots_per_segment: 8,
         }
     }
 }
@@ -171,8 +182,12 @@ pub enum SolveNote {
     /// or a solved ramp would reintroduce, and callers should not have to change
     /// shape when it does.
     FocalGuessed { segment: usize },
-    /// A smooth zoom was detected inside this segment, but phase 3 solves one
-    /// focal per segment. The focal over this run is an average, not a curve.
+    /// A smooth zoom was detected inside this segment, and its focal was
+    /// solved as a curve — sparse knots in the bundle, linearly interpolated
+    /// between, read per frame through [`SolvedPose::focal_px`]. The note
+    /// keeps reporting where the lens moved, because a ramp is still the
+    /// weaker case: the pose–focal trade is better conditioned across a cut
+    /// than inside a smooth ramp.
     ZoomRamp { first_frame: i64, last_frame: i64 },
     /// This many frames could not be resectioned against the cloud and were
     /// interpolated from their neighbours ([`PoseSource::Interpolated`]).
@@ -188,7 +203,10 @@ pub enum SolveNote {
 pub struct SolveSegment {
     pub first_frame: i64,
     pub last_frame: i64,
-    /// The solved focal length in source raster pixels.
+    /// The solved focal length in source raster pixels — the knot's value for
+    /// a constant segment, the mean over the segment's frames where a ramp
+    /// bent the focal into a curve (the per-frame values are on
+    /// [`SolvedPose::focal_px`]).
     pub focal_px: f64,
     /// Whether a smooth zoom was detected inside this segment. See
     /// [`SolveNote::ZoomRamp`].
@@ -218,8 +236,9 @@ pub struct SolvedPose {
     pub position: [f64; 3],
     /// Index into [`CameraSolve::segments`].
     pub segment: usize,
-    /// The segment's focal, repeated here so a per-frame export never has to
-    /// walk the segment table.
+    /// This frame's own focal in source pixels — the segment's constant where
+    /// the lens held still, a point on the solved knot curve where it ramped —
+    /// so a per-frame export never has to walk the segment table.
     pub focal_px: f64,
     /// Mean reprojection error over the solved points visible on this frame, in
     /// source pixels. `0.0` where no solved point is visible.
@@ -326,24 +345,19 @@ pub fn solve_camera_cancellable(
     );
     // The lens ratio across a cut is not a thing to re-estimate: the zoom
     // detector already measured it from every track in the frame, and a
-    // scope-in from 300 px to 420 px *is* a median log scale of ln 1.4. So the
-    // segments are tied to one another by those ratios and the whole shot has
-    // one focal unknown to search for, which every pair in it votes on.
-    let scales = segment_scales(&segments, zooms);
+    // scope-in from 300 px to 420 px *is* a median excess log scale of ln 1.4.
+    // So the focal knots are tied to one another by those measured ratios —
+    // across cuts and along ramps alike — and the whole shot has one base
+    // focal unknown to search for, which every pair in it votes on.
+    let mut curve = FocalCurve::build(&segments, zooms, settings);
     let voters: Vec<(&PairGeometry, f64, f64)> = usable
         .iter()
         .filter(|g| g.verdict == PairVerdict::Translating)
         .map(|g| {
             (
                 *g,
-                scales
-                    .get(segment_index(&segments, g.from))
-                    .copied()
-                    .unwrap_or(1.0),
-                scales
-                    .get(segment_index(&segments, g.to))
-                    .copied()
-                    .unwrap_or(1.0),
+                curve.value_at(&segments, g.from),
+                curve.value_at(&segments, g.to),
             )
         })
         .collect();
@@ -354,9 +368,10 @@ pub fn solve_camera_cancellable(
             settings.default_focal_factor * long_edge
         }
     };
-    for (seg, scale) in segments.iter_mut().zip(scales.iter()) {
-        seg.focal_px = (base * scale).clamp(range.0, range.1);
+    for v in &mut curve.values {
+        *v = (*v * base).clamp(range.0, range.1);
     }
+    sync_segment_focals(&mut segments, &curve);
 
     // --- 2..6. Two passes over the geometry ---------------------------------
     //
@@ -373,10 +388,9 @@ pub fn solve_camera_cancellable(
         if cancel() {
             return Err(SolveError::Cancelled);
         }
-        let pass = one_pass(set, &usable, &segments, centre, settings, cancel)?;
-        for (seg, f) in segments.iter_mut().zip(pass.focals.iter()) {
-            seg.focal_px = *f;
-        }
+        let pass = one_pass(set, &usable, &segments, &curve, centre, settings, cancel)?;
+        curve.values.clone_from(&pass.focals);
+        sync_segment_focals(&mut segments, &curve);
         outcome = Some(pass);
     }
     let Some(pass) = outcome else {
@@ -396,7 +410,7 @@ pub fn solve_camera_cancellable(
     let mut lookup: Vec<(u32, usize)> = tracks.iter().enumerate().map(|(i, id)| (*id, i)).collect();
     lookup.sort_unstable();
     let mut poses = fill_frames(
-        set, first, last, &keyframes, &cams, &segments, &points, &lookup, centre, settings,
+        set, first, last, &keyframes, &cams, &segments, &curve, &points, &lookup, centre, settings,
     );
     let interpolated = poses
         .iter()
@@ -431,6 +445,7 @@ pub fn solve_camera_cancellable(
 struct Pass {
     keyframes: Vec<i64>,
     cams: Vec<BundleCamera>,
+    /// The adjusted focal knot values, in [`FocalCurve::values`]'s order.
     focals: Vec<f64>,
     points: Vec<[f64; 3]>,
     tracks: Vec<u32>,
@@ -439,11 +454,12 @@ struct Pass {
 }
 
 /// Relative poses → rotation averaging → global positions → triangulation →
-/// bundle adjustment, from the focals `segments` currently carries.
+/// bundle adjustment, from the focal knots `curve` currently carries.
 fn one_pass(
     set: &TrackSet,
     usable: &[&PairGeometry],
     segments: &[SolveSegment],
+    curve: &FocalCurve,
     centre: [f64; 2],
     settings: &SolveSettings,
     cancel: &dyn Fn() -> bool,
@@ -464,8 +480,8 @@ fn one_pass(
         let (Ok(i), Ok(j)) = (frames.binary_search(&g.from), frames.binary_search(&g.to)) else {
             continue;
         };
-        let fi = focal_at(segments, g.from);
-        let fj = focal_at(segments, g.to);
+        let fi = curve.value_at(segments, g.from);
+        let fj = curve.value_at(segments, g.to);
         if g.verdict == PairVerdict::Translating {
             let pts: Vec<Correspondence> = set
                 .correspondences(g.from, g.to)
@@ -563,10 +579,10 @@ fn one_pass(
         cams.push(BundleCamera {
             rot: rotations.get(k).copied().unwrap_or(IDENTITY),
             pos: positions.get(k).copied().unwrap_or([0.0; 3]),
-            segment: segment_index(segments, *frame),
+            focal: curve.ref_at(segments, *frame),
         });
     }
-    let mut focals: Vec<f64> = segments.iter().map(|s| s.focal_px).collect();
+    let mut focals: Vec<f64> = curve.values.clone();
     let (mut points, tracks, obs) =
         triangulate_tracks(set, &keyframes, &cams, &focals, centre, settings);
     if points.is_empty() {
@@ -690,39 +706,177 @@ fn segment_index(segments: &[SolveSegment], frame: i64) -> usize {
         .unwrap_or(0)
 }
 
-fn focal_at(segments: &[SolveSegment], frame: i64) -> f64 {
-    segments
-        .get(segment_index(segments, frame))
-        .map_or(1.0, |s| s.focal_px)
+// --- The focal curve -----------------------------------------------------------
+
+/// The focal curve the solve works on: one knot for a constant-focal segment,
+/// a sparse ascending row of knots for a segment with a detected zoom ramp,
+/// every knot an independent column of the bundle (docs/impl/tracking.md §4).
+/// A frame before its segment's first knot reads that knot, one past the last
+/// reads the last, and one between two knots reads a linear blend — a
+/// piecewise-linear spline, which over the handful of frames a lens rack spans
+/// is within a per-cent of any smoother one.
+struct FocalCurve {
+    /// Per segment: `(frame, knot index)`, ascending by frame, never empty.
+    knots: Vec<Vec<(i64, usize)>>,
+    /// One value per knot — relative scales until the base focal is known,
+    /// source pixels afterwards.
+    values: Vec<f64>,
 }
 
-// --- Self-calibration ---------------------------------------------------------
-
-/// Each segment's focal as a multiple of the first segment's, read off the zoom
-/// cuts between them.
-///
-/// A cut's `log_scale` is the median of how much every patch in the frame grew
-/// between the two frames it sits between. With pose continuous across a cut —
-/// which is what a cut is — that growth is the focal ratio and nothing else,
-/// and it was measured over hundreds of tracks rather than estimated from two
-/// views. It is the strongest number in this whole file.
-fn segment_scales(segments: &[SolveSegment], zooms: &[ZoomBoundary]) -> Vec<f64> {
-    let mut out = Vec::with_capacity(segments.len());
-    let mut scale = 1.0f64;
-    for (index, seg) in segments.iter().enumerate() {
-        if index > 0 {
-            let boundary = seg.first_frame - 1;
+impl FocalCurve {
+    /// Lay the knots out and give each its initial *relative* scale.
+    ///
+    /// A cut's `log_scale` is the median of how much every patch in the frame
+    /// grew between the two frames it sits between, in excess of the shot's
+    /// own travel. With pose continuous across a cut — which is what a cut is
+    /// — that growth is the focal ratio and nothing else, and it was measured
+    /// over hundreds of tracks rather than estimated from two views. A ramp's
+    /// is the same number per pair, so its knots compound the measured rate
+    /// along the run. The whole shot therefore hangs off **one** base focal
+    /// for the self-calibration to find, exactly as before, and every knot
+    /// starts on the detector's own measurement of where the lens went.
+    fn build(
+        segments: &[SolveSegment],
+        zooms: &[ZoomBoundary],
+        settings: &SolveSettings,
+    ) -> FocalCurve {
+        let spacing = settings.knot_spacing_frames.max(1);
+        let cap = settings.max_knots_per_segment.max(2);
+        let mut knots: Vec<Vec<(i64, usize)>> = Vec::with_capacity(segments.len());
+        let mut values: Vec<f64> = Vec::new();
+        // Relative scale at the segment's first frame, compounded across the
+        // cuts between segments and the ramps inside them.
+        let mut entry = 1.0f64;
+        for seg in segments {
+            let ramps: Vec<&ZoomBoundary> = zooms
+                .iter()
+                .filter(|z| {
+                    z.kind == ZoomKind::Ramp
+                        && z.frame.max(seg.first_frame) < (z.end_frame + 1).min(seg.last_frame)
+                })
+                .collect();
+            let mut frames: Vec<i64> = vec![seg.first_frame];
+            if seg.ramp {
+                for z in &ramps {
+                    let start = z.frame.max(seg.first_frame);
+                    let end = (z.end_frame + 1).min(seg.last_frame);
+                    let mut f = start;
+                    while f < end {
+                        frames.push(f);
+                        f += spacing;
+                    }
+                    frames.push(end);
+                }
+            }
+            frames.sort_unstable();
+            frames.dedup();
+            if frames.len() > cap {
+                // Thin evenly, keeping the first and last knot.
+                let n = frames.len();
+                let thinned: Vec<i64> = (0..cap)
+                    .filter_map(|k| frames.get((k * (n - 1)) / (cap - 1)).copied())
+                    .collect();
+                frames = thinned;
+                frames.dedup();
+            }
+            // The measured lens motion up to `frame`, in log scale, summed
+            // over the ramps' pairs before it.
+            let cumulative = |frame: i64| -> f64 {
+                ramps
+                    .iter()
+                    .map(|z| {
+                        let start = z.frame.max(seg.first_frame);
+                        let end = (z.end_frame + 1).min(seg.last_frame);
+                        z.log_scale * (frame.min(end) - start).max(0) as f64
+                    })
+                    .sum()
+            };
+            let total = cumulative(seg.last_frame);
+            let mut list = Vec::with_capacity(frames.len());
+            for f in frames {
+                list.push((f, values.len()));
+                let scale = entry * cumulative(f).exp();
+                values.push(if scale.is_finite() { scale } else { entry });
+            }
+            knots.push(list);
+            if total.is_finite() {
+                entry *= total.exp();
+            }
             let step = zooms
                 .iter()
-                .find(|z| z.kind == ZoomKind::Cut && z.frame == boundary)
+                .find(|z| z.kind == ZoomKind::Cut && z.frame == seg.last_frame)
                 .map_or(0.0, |z| z.log_scale);
             if step.is_finite() {
-                scale *= step.exp();
+                entry *= step.exp();
             }
         }
-        out.push(scale);
+        FocalCurve { knots, values }
     }
-    out
+
+    /// Which knot or pair of knots the frame reads, and the blend between them.
+    fn ref_at(&self, segments: &[SolveSegment], frame: i64) -> bundle::FocalRef {
+        let Some(list) = self.knots.get(segment_index(segments, frame)) else {
+            return bundle::FocalRef::fixed(0);
+        };
+        let Some(&(first_frame, first_index)) = list.first() else {
+            return bundle::FocalRef::fixed(0);
+        };
+        if frame <= first_frame {
+            return bundle::FocalRef::fixed(first_index);
+        }
+        for pair in list.windows(2) {
+            let [(fa, a), (fb, b)] = pair else { continue };
+            if frame <= *fb {
+                let span = (fb - fa).max(1) as f64;
+                return bundle::FocalRef {
+                    a: *a,
+                    b: *b,
+                    t: ((frame - fa) as f64 / span).clamp(0.0, 1.0),
+                };
+            }
+        }
+        list.last()
+            .map_or(bundle::FocalRef::fixed(first_index), |&(_, i)| {
+                bundle::FocalRef::fixed(i)
+            })
+    }
+
+    /// The focal the frame reads, in whatever units [`FocalCurve::values`] is
+    /// currently in.
+    fn value_at(&self, segments: &[SolveSegment], frame: i64) -> f64 {
+        self.ref_at(segments, frame)
+            .value(&self.values)
+            .unwrap_or(1.0)
+    }
+}
+
+/// Write the curve back onto the segment table's reporting field: the knot's
+/// value where the segment is constant, the mean over its frames where a ramp
+/// bent the focal (the per-frame values are on the poses).
+fn sync_segment_focals(segments: &mut [SolveSegment], curve: &FocalCurve) {
+    for i in 0..segments.len() {
+        let Some(seg) = segments.get(i).copied() else {
+            continue;
+        };
+        let focal = match curve.knots.get(i) {
+            Some(list) if list.len() == 1 => list
+                .first()
+                .and_then(|&(_, k)| curve.values.get(k))
+                .copied()
+                .unwrap_or(seg.focal_px),
+            _ => {
+                let frames = (seg.last_frame - seg.first_frame + 1).max(1);
+                let mut sum = 0.0f64;
+                for f in seg.first_frame..=seg.last_frame {
+                    sum += curve.value_at(segments, f);
+                }
+                sum / frames as f64
+            }
+        };
+        if let Some(seg) = segments.get_mut(i) {
+            seg.focal_px = focal;
+        }
+    }
 }
 
 /// How far a candidate pair of focals is from making `f` an essential matrix.
@@ -1394,14 +1548,7 @@ fn triangulate_tracks(
 ) -> (Vec<[f64; 3]>, Vec<u32>, Vec<BundleObs>) {
     let projections: Vec<Proj> = cams
         .iter()
-        .map(|c| {
-            projection(
-                &c.rot,
-                c.pos,
-                focals.get(c.segment).copied().unwrap_or(1.0),
-                centre,
-            )
-        })
+        .map(|c| projection(&c.rot, c.pos, c.focal.value(focals).unwrap_or(1.0), centre))
         .collect();
     let min_cos = (settings.min_parallax_deg.to_radians()).cos();
     let mut points = Vec::new();
@@ -1441,7 +1588,7 @@ fn triangulate_tracks(
                 ok = false;
                 break;
             };
-            let focal = focals.get(cam.segment).copied().unwrap_or(1.0);
+            let focal = cam.focal.value(focals).unwrap_or(1.0);
             if bundle::project_point(cam, focal, centre, &x).is_none() {
                 ok = false;
                 break;
@@ -1499,7 +1646,7 @@ fn keep_explained(
         let (Some(cam), Some(x)) = (cams.get(o.cam), points.get(o.point)) else {
             continue;
         };
-        let focal = focals.get(cam.segment).copied().unwrap_or(1.0);
+        let focal = cam.focal.value(focals).unwrap_or(1.0);
         let d = match bundle::project_point(cam, focal, centre, x) {
             Some((q, _)) => (q[0] - o.image[0]).hypot(q[1] - o.image[1]),
             None => f64::INFINITY,
@@ -1554,6 +1701,7 @@ fn fill_frames(
     keyframes: &[i64],
     cams: &[BundleCamera],
     segments: &[SolveSegment],
+    curve: &FocalCurve,
     points: &[[f64; 3]],
     lookup: &[(u32, usize)],
     centre: [f64; 2],
@@ -1564,7 +1712,7 @@ fn fill_frames(
     let mut image: Vec<[f64; 2]> = Vec::new();
     for frame in first..=last {
         let seg = segment_index(segments, frame);
-        let focal = segments.get(seg).map_or(1.0, |s| s.focal_px);
+        let focal = curve.value_at(segments, frame);
         let cam = match keyframes.binary_search(&frame) {
             Ok(k) => cams.get(k).copied(),
             Err(_) => {
@@ -1586,7 +1734,14 @@ fn fill_frames(
                     world.push(*x);
                     image.push([p.x, p.y]);
                 }
-                resect(&world, &image, focal, centre, seg, settings)
+                resect(
+                    &world,
+                    &image,
+                    focal,
+                    centre,
+                    curve.ref_at(segments, frame),
+                    settings,
+                )
             }
         };
         let source = match keyframes.binary_search(&frame) {
@@ -1715,7 +1870,7 @@ fn resect(
     image: &[[f64; 2]],
     focal: f64,
     centre: [f64; 2],
-    segment: usize,
+    focal_ref: bundle::FocalRef,
     settings: &SolveSettings,
 ) -> Option<BundleCamera> {
     if world.len() < settings.min_resection_points || focal <= 0.0 {
@@ -1731,7 +1886,7 @@ fn resect(
         if sample_world.len() < settings.min_resection_points {
             break;
         }
-        let Some(c) = resect_dlt(&sample_world, &sample_image, focal, centre, segment) else {
+        let Some(c) = resect_dlt(&sample_world, &sample_image, focal, centre, focal_ref) else {
             break;
         };
         cam = Some(c);
@@ -1790,7 +1945,7 @@ fn resect_dlt(
     image: &[[f64; 2]],
     focal: f64,
     centre: [f64; 2],
-    segment: usize,
+    focal_ref: bundle::FocalRef,
 ) -> Option<BundleCamera> {
     let n = world.len();
     if n < 6 || image.len() < n {
@@ -1903,7 +2058,11 @@ fn resect_dlt(
     if pos.iter().any(|c| !c.is_finite()) {
         return None;
     }
-    Some(BundleCamera { rot, pos, segment })
+    Some(BundleCamera {
+        rot,
+        pos,
+        focal: focal_ref,
+    })
 }
 
 // --- Small vector arithmetic ---------------------------------------------------

@@ -16715,3 +16715,73 @@ Camera track also analyses a Precomp layer by rendering it (K-577).
 [08-EFFECTS.md](08-EFFECTS.md) §3.48 already says so: the Corner pin is "the import
 workhorse of the distort family". Until now Lumit could apply one and could not measure
 one. See [impl/tracking.md](impl/tracking.md) §6.
+
+## K-580 — A zoom is judged against its neighbours, and a ramp's focal is knots
+
+**DECIDED 2026-08-26.** The train-POV failure K-540 recorded and deliberately left open: a
+7135-frame forward-travelling shot lost its scope-in entirely, because the zoom-burst
+detector judged each frame pair against zero — and forward motion grows everything on every
+pair, so the whole clip merged into one run whose median swallowed the real lens change —
+and because a segment with a detected zoom ramp carried one averaged focal where
+[impl/tracking.md](impl/tracking.md) §4 had always intended spline knots. Both halves were
+demonstrated by failing tests before either fix (the fixtures reproduced the recorded
+numbers: a whole-shot `Ramp` at 0.00554 median against a creep alone of 0.00551, and a
+worst per-frame focal error of 105 %), then fixed together, because each is what makes the
+other worth having.
+
+**The detector: signature, baseline, excess.** A hot pair is first classified by the
+radial-flow-versus-parallax signature. A zoom is a scale about one centre and leaves only
+noise behind a scale-only fit; travel moves near things more than far ones and leaves a
+parallax residual that is a roughly constant *fraction* of the flow however slow the
+travel — so the discriminant is the residual as a fraction of the radial displacement the
+scale accounts for (`parallax_fraction`, 0.15; measured ≈0.03–0.06 for zooms against
+≈0.2–0.4 for dollies on the synthetic fixtures). A pair too slow to judge alone is pooled
+with up to six neighbours either side until the displacement reaches `signature_px` —
+parallax accumulates coherently with travel while tracker noise does not, which is the
+consensus that makes a slow dolly and a slow zoom separable at all. The pairs the
+signature reads as travel (or that are cold) then form a windowed-median **baseline** — the
+shot's own growth — and a boundary is lens-like growth in *excess* of it: the old
+`ramp_threshold` and `cut_threshold` now gate the excess, the scale-only cross-check for a
+cut stands unchanged, and a boundary's `log_scale` is the median excess, which during
+travel is the focal ratio itself with the shot's own growth subtracted. A purely still or
+purely zooming shot has a baseline of zero everywhere, so every earlier behaviour is
+unchanged there. One reading did change: a dolly-like burst — a lunge — used to come back
+as a one-pair `Ramp` boundary and now raises no boundary at all, because camera motion is
+phase 3's subject, not a lens event.
+
+**The ramp: sparse piecewise-linear knots in the same bundle.** A segment flagged `ramp`
+lays knots over its detected runs — one per `knot_spacing_frames` (25, about a second),
+capped per segment — and each knot is one more column of the reduced camera system, as §4's
+deviation 7 predicted: a camera inside a ramp reads a linear blend of its two bracketing
+knots, so its observations weight two focal columns by `1 − t` and `t`; a constant segment
+still reads one. Knots are initialised by compounding the detector's measured per-pair
+rate, so the whole shot still hangs off one base focal for self-calibration — the cut-ratio tie
+of [impl/tracking.md](impl/tracking.md) §4's deviation 2, extended along ramps. Piecewise-linear rather than cubic
+because over the dozen frames a rack spans the chord sits within about a per cent of the
+curve and the bundle fits the knot values freely anyway; the knots are few, so
+`bundle.rs`'s recorded cubic-in-width cost stands untouched. Per-frame focals ride out on
+`SolvedPose::focal_px`, which the export already read, so no store, sidecar or bridge shape
+changed; `SolveSegment::focal_px` reports the mean over a ramp segment's frames, and
+`SolveNote::ZoomRamp` keeps reporting where the lens moved.
+
+**Measured, end to end.** A 48-frame forward travel along a gently curving track with a
+300→420 px rack over twelve mid-shot pairs: the detector finds one `Ramp` on exactly those
+pairs at the lens's own rate (0.0274 against a true 0.0280), and the solve recovers the
+focal *curve* — end-to-end ratio 1.404 against a true 1.4. The same travel with a
+single-pair scope-in returns one `Cut` on the right frame within 0.01 of ln 1.4; the
+travel alone returns nothing. The absolute focal of the travelling shot sits a uniform
+3.5 % low with ATE at 1.3 % of the extent — forward-dominated motion is the classical
+near-critical configuration for self-calibration, and that limit is recorded in the note's
+Open questions (a user focal hint is the honest lever), while the ramp's *shape*, which is
+what this decision buys, comes back to a third of a per cent. The knot Jacobian is pinned
+separately: the bundle driven directly over a linear lens with both knots perturbed
+returns them to a measured floor of ≈1e-5 px.
+
+**Still owed** (unchanged from K-540's list): `SolveNote` does not cross the bridge, so
+the panel cannot yet say "the lens moved during this shot".
+
+Regression tests: forward travel raising no boundary, the scope-in kept during travel with
+the travel subtracted from its `log_scale`, the rack spanning its own pairs, the
+end-to-end focal curve, and the two-knot bundle drive (`lumit-track`); the pre-existing
+cut, ramp, still-lens, lunge, dolly-with-cut and determinism tests all pinned against the
+redesign in the same file.
