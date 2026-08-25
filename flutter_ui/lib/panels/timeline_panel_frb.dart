@@ -592,6 +592,14 @@ int layerDropSlot(List<double> heights, double y) {
   return heights.length;
 }
 
+/// The rows one twirl opens or shuts (§6.4).
+///
+/// [path] alone, unless it is itself one of [selected] — in which case the
+/// whole selection travels with it, every row taking the clicked row's new
+/// state. Pure, so the rule is checked without a widget tree.
+Set<String> rowsTwirledWith(String path, Set<String> selected) =>
+    selected.contains(path) ? {path, ...selected} : {path};
+
 /// One layer's block, slid out of a dragged layer's way.
 ///
 /// A transform, not a layout change: the rows keep their places, so a drag
@@ -969,11 +977,29 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// (K-203): a selected property that is no longer on screen is a highlight
   /// with nowhere to sit, and it came back as soon as the fold reopened — on a
   /// layer the user had since stopped working on.
+  ///
+  /// **A twirl on a selected row moves every selected row with it** (§6.4, the
+  /// rule the Effect controls' twirls follow): five layers picked out and one
+  /// of their twirls clicked opens all five, and they all take the clicked
+  /// row's new state, so a mixed set comes out even rather than inverted row
+  /// by row. A twirl on a row that is *not* in the selection is still about
+  /// that row alone — clicking something unselected has never meant "and the
+  /// selection too".
   void _toggle(String path) => setState(() {
-        final shutting = _isOpen(path);
-        _setOpen(path, !shutting);
-        if (shutting) _dropSelectionUnder(path);
+        final opening = !_isOpen(path);
+        for (final row in rowsTwirledWith(path, _twirlSelection())) {
+          _setOpen(row, opening);
+          if (!opening) _dropSelectionUnder(row);
+        }
       });
+
+  /// Every row a twirl could act on: the selected layers and the selected
+  /// properties, as the paths [_open] is keyed by.
+  Set<String> _twirlSelection() => {
+        for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
+          id.toString(),
+        ..._selectedProperties,
+      };
 
   /// Forget any selected property at or below [path], and any keyframes of
   /// theirs the marquee had caught.
