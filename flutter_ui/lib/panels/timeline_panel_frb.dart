@@ -6303,6 +6303,16 @@ BarDragPreview barDragPreview(String layerId, BarGrab grab, int delta) =>
       BarGrab.trimOut => BarDragPreview(layerId, 0, delta, 0),
     };
 
+/// How far a bar drag in flight moves [layerId]'s keyframes, in frames
+/// (§6.26).
+///
+/// The **start offset's** travel, not an edge's: a keyframe's time is the
+/// layer's own, carried onto the comp's clock by that offset (K-213), so a
+/// move slides every key with the bar and a trim slides none. Zero for a drag
+/// on some other layer, and zero between gestures.
+int keyShiftOf(BarDragPreview? preview, String layerId) =>
+    preview != null && preview.layerId == layerId ? preview.offsetShift : 0;
+
 /// How far a layer's ends may be dragged, in comp frames (K-211).
 ///
 /// **In plain terms:** a Footage, audio or Precomp layer can only show what its
@@ -9514,23 +9524,33 @@ class _LayerArea extends StatelessWidget {
     final rowKeys = laneKeysOf(row);
     if (rowKeys.isEmpty) return null;
     final rowId = foldRowPath(id, row);
-    return _KeyLane(
-      key: ValueKey<String>('tl-keys-$rowId'),
-      entry: entry,
-      row: row,
-      rowId: rowId,
-      keys: rowKeys,
-      axis: axis,
-      fps: fps,
-      fpsNum: fpsNum,
-      fpsDen: fpsDen,
-      magnet: magnet,
-      snapTargets: snapTargets,
-      selectedKeys: selectedKeys,
-      stretch: stretch,
-      onKeyMenu: (index, position) => onKeyMenu('$rowId#$index', position),
-      onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
-      onChanged: onChanged,
+    // The diamonds travel with a bar being moved, live (§6.26) — the same
+    // reading the waveform above already takes from the same preview, and for
+    // the same reason: a key that jumps only on release was never seen to
+    // move. A trim leaves them where they are, which is what the release
+    // writes too, since keys cross on the comp's clock by way of the layer's
+    // start offset (K-213) and only a move carries that offset with it.
+    return ValueListenableBuilder<BarDragPreview?>(
+      valueListenable: dragPreview,
+      builder: (context, preview, _) => _KeyLane(
+        key: ValueKey<String>('tl-keys-$rowId'),
+        entry: entry,
+        row: row,
+        rowId: rowId,
+        keys: rowKeys,
+        axis: axis,
+        fps: fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        magnet: magnet,
+        barShift: keyShiftOf(preview, id),
+        snapTargets: snapTargets,
+        selectedKeys: selectedKeys,
+        stretch: stretch,
+        onKeyMenu: (index, position) => onKeyMenu('$rowId#$index', position),
+        onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
+        onChanged: onChanged,
+      ),
     );
   }
 }
@@ -9553,6 +9573,10 @@ class _KeyLane extends StatefulWidget {
   final int fpsNum;
   final int fpsDen;
   final bool magnet;
+
+  /// How far this layer's bar has been moved by a drag in flight, in frames
+  /// (§6.26) — [keyShiftOf]. Zero except while its own bar is being moved.
+  final int barShift;
 
   /// Everything on the Timeline this lane's keys may land on (docs/07 §4.5),
   /// gathered once for the panel and handed down — the list is the same for
@@ -9587,6 +9611,7 @@ class _KeyLane extends StatefulWidget {
     required this.fpsNum,
     required this.fpsDen,
     required this.magnet,
+    required this.barShift,
     required this.snapTargets,
     required this.selectedKeys,
     required this.stretch,
@@ -9632,7 +9657,13 @@ class _KeyLaneState extends State<_KeyLane> {
   /// Where key [i] draws — its own time, plus whichever gesture has hold of
   /// it: this lane's own drag, or the block stretch running across every lane.
   double _frameOf(int i) {
-    final base = laneKeyFrame(widget.keys[i], widget.fps);
+    // The bar's own travel first (§6.26): while its layer is being moved every
+    // key on it draws that far along, which is where the release will leave
+    // them. Nothing else here can be in flight at the same time — one pointer,
+    // one gesture — so the shift simply moves the ground under all three
+    // branches below.
+    final base =
+        laneKeyFrame(widget.keys[i], widget.fps) + widget.barShift.toDouble();
     // A block stretch and a single key's drag cannot both be in flight — the
     // handle and the diamond are two gestures on one pointer — so the stretch
     // is answered first and answered whole.

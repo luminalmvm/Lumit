@@ -71,4 +71,20 @@ void main() {
       expect(wholePixelInset(switchCellWidth, iconSize), 3);
     });
   });
+
+  group('Lane keys travel with a bar being moved (§6.26)', () {
+    test('a move carries them, an edge trim does not', () {
+      expect(keyShiftOf(barDragPreview('a', BarGrab.move, 12), 'a'), 12);
+      expect(keyShiftOf(barDragPreview('a', BarGrab.trimIn, 12), 'a'), 0);
+      expect(keyShiftOf(barDragPreview('a', BarGrab.trimOut, 12), 'a'), 0);
+    });
+
+    test('another layer\'s drag leaves this lane alone', () {
+      expect(keyShiftOf(barDragPreview('b', BarGrab.move, 12), 'a'), 0);
+    });
+
+    test('nothing in flight is no shift', () {
+      expect(keyShiftOf(null, 'a'), 0);
+    });
+  });
 }
