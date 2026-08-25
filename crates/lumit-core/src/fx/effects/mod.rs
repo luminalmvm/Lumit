@@ -67,6 +67,7 @@ pub mod mosaic;
 pub mod motion_blur;
 pub mod noise;
 pub mod offset;
+pub mod particulate;
 pub mod photo_filter;
 pub mod point_control;
 pub mod polar_coordinates;

@@ -4,6 +4,7 @@
 A
 Add
 Add grain
+Align to motion
 All edges
 Alpha
 Alpha bias
@@ -138,6 +139,7 @@ Direction
 Direction x
 Direction y
 Directional blur
+Disc
 Dispersion
 Displacement
 Displacement map
@@ -148,6 +150,7 @@ Distribution
 Divide
 Dominant motion
 Draft
+Drag
 Drivers
 Drop shadow
 Duration
@@ -177,7 +180,11 @@ Element 6
 Element 7
 Element 8
 Element 9
+Ellipse
 Emboss
+Emit rate
+Emitter
+Emitter angle
 End
 End colour
 End thickness
@@ -218,6 +225,7 @@ Focus point x
 Focus point y
 Focus range
 Force on all layers
+Forces
 Forking
 Forwards
 Fractal influence
@@ -242,6 +250,7 @@ Glow opacity
 Glow radius
 Glow size
 Gradient
+Gravity
 Green
 Green blur
 Greens
@@ -250,6 +259,7 @@ Hard colour
 Hard light
 Hard mix
 Hardness
+Height
 High
 Highlight amount
 Highlight exposure
@@ -272,6 +282,7 @@ In front
 In high
 In low
 Inflate
+Initial speed
 Inner radius
 Input
 Input black
@@ -308,6 +319,8 @@ Lens flare
 Lens options
 Level
 Levels
+Life
+Life jitter
 Lifespan
 Lift
 Light direction
@@ -320,6 +333,7 @@ Lighter colour
 Lightness
 Lightning
 Lights
+Line
 Line period
 Linear
 Linear burn
@@ -340,12 +354,14 @@ Manual light
 Map black to
 Map white to
 Mask
+Mask path
 Mask/Path
 Master
 Math
 Matte
 Matte key
 Max ghosts
+Max particles
 Maximum
 Maximum signal
 Median
@@ -376,6 +392,7 @@ On original
 On transparent
 Opacity
 Opacity %
+Opacity over life
 Operate on alpha
 Operation
 Orange
@@ -394,6 +411,8 @@ Outside colour
 Overlay
 PAL
 Paint style
+Particle
+Particulate
 Path overlap
 Per-axis wobble
 Perlin
@@ -403,9 +422,11 @@ Photo filter
 Pin light
 Pinning
 Placement
+Point
 Point control
 Point x
 Point y
+Points
 Polar coordinates
 Polar to rectangular
 Position x
@@ -428,6 +449,7 @@ Ramp
 Random
 Randomness
 Rate
+Rectangle
 Rectangular to polar
 Red
 Red blur
@@ -438,6 +460,7 @@ Relief
 Remainder
 Remap
 Remove edge leak
+Render
 Rendered
 Repeat
 Repeat edge pixels
@@ -503,6 +526,8 @@ Sides
 Sine
 Single layer, straw
 Size
+Size jitter
+Size over life
 Slice repeat
 Slider
 Slider control
@@ -514,10 +539,14 @@ Source
 Source height
 Source width
 Spacing
+Speed jitter
 Spherize
 Spiky
 Spin
+Spread
+Sprite
 Sprite flare
+Sprite layer
 Square
 Squeeze
 Standard
@@ -578,6 +607,9 @@ Transparent
 Triangle
 Trigger
 Tritone
+Turbulence amount
+Turbulence scale
+Turbulence speed
 Turbulent
 Turbulent displace
 Twirl
@@ -630,6 +662,8 @@ Wiggle
 Wiggle type
 Wiggles per second
 Wiggly
+Wind x
+Wind y
 Window
 Wipe
 Wipe angle

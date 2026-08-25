@@ -189,10 +189,12 @@ pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
         // and a row that followed the first mask only until the masks were
         // reordered would be the worse of the two behaviours anyway.
         ParamKind::MaskPath { .. } => EffectValue::MaskPath(None),
-        // A fresh curve is the identity diagonal (K-412) — the grade family's
-        // sanctioned exception to the "no no-op default" rule, exactly as the
-        // five fixed knots it replaces were.
-        ParamKind::Curve => EffectValue::Curve(super::params::CURVE_IDENTITY.to_vec()),
+        // A fresh curve is the shape its declaration asked for (K-412) — the
+        // identity diagonal for the grade family, the grade family's
+        // sanctioned exception to the "no no-op default" rule, and its own
+        // shape for an over-life curve, which is a *look* rather than a no-op
+        // (particulate.md §2).
+        ParamKind::Curve { default } => EffectValue::Curve(default.to_vec()),
         // A button holds nothing (K-417) — see the doc comment above.
         ParamKind::Action => return None,
     })

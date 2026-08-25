@@ -703,14 +703,18 @@ fn parse_param(field: &syn::Field, name: &syn::Ident) -> syn::Result<Param> {
                 quote! { p.mask_named(#idc) },
             )
         }
-        // A tone curve, as its own control points (K-412). No arguments but a
-        // label: the default is the identity diagonal for every one of them,
-        // and there is no range to declare — the points live in the unit
-        // square by definition.
-        "curve" => (
-            quote! { ::lumit_core::fx::ParamKind::Curve },
-            quote! { p.curve(#idc) },
-        ),
+        // A tone curve, as its own control points (K-412). There is no range to
+        // declare — the points live in the unit square by definition — and the
+        // default is the identity diagonal unless the declaration gives a shape
+        // of its own, which only an over-life curve does (particulate.md §2).
+        "curve" => {
+            let default =
+                get("default").unwrap_or_else(|| quote! { ::lumit_core::fx::CURVE_IDENTITY });
+            (
+                quote! { ::lumit_core::fx::ParamKind::Curve { default: &#default } },
+                quote! { p.curve(#idc) },
+            )
+        }
         // A button (K-417). It carries no value, so the field it declares is
         // the unit type and `read` fills it with `()`: there is nothing in the
         // bag to read back, and there never will be — an Action crosses the

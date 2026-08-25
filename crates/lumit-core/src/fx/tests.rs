@@ -9927,6 +9927,30 @@ fn every_parameter_declares_a_unit() {
             ("scribble", "spacing"),
             ("scribble", "path_overlap"),
             ("stroke", "brush_size"),
+            // Particulate (K-419 through a particle system): eleven, all
+            // px@comp, and every one of them has to follow the raster or a
+            // half-resolution preview would show a different picture from the
+            // export. The **emitter's** position and extents place the births;
+            // **Initial speed**, **Gravity** and the two **Wind** components
+            // are lengths per second and per second² — a speed that did not
+            // scale would fling particles twice as far across a preview — and
+            // **Size** is the disc's own diameter. **Turbulence amount** is a
+            // displacement and **Turbulence scale** the wavelength it is
+            // measured against, so the pair travels together or the noise
+            // changes shape rather than size. Emit rate, the jitters, Drag and
+            // Turbulence speed are counts, per cents and rates: no length in
+            // any of them, and none is here.
+            ("particulate", "position_x"),
+            ("particulate", "position_y"),
+            ("particulate", "width"),
+            ("particulate", "height"),
+            ("particulate", "initial_speed"),
+            ("particulate", "size"),
+            ("particulate", "gravity"),
+            ("particulate", "wind_x"),
+            ("particulate", "wind_y"),
+            ("particulate", "turbulence_amount"),
+            ("particulate", "turbulence_scale"),
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement (K-429).
             ("motion_blur", "vector_scale"),
@@ -11532,7 +11556,10 @@ fn a_mask_path_row_declares_itself_and_defaults_to_the_first_mask() {
         .filter(|s| s.mask_path().is_some())
         .map(|s| s.match_name)
         .collect();
-    assert_eq!(consumers, vec!["vegas", "scribble", "stroke"]);
+    assert_eq!(
+        consumers,
+        vec!["vegas", "scribble", "stroke", "particulate"]
+    );
 }
 
 /// A fresh instance's mask-path row is **unset**, which is the "First mask"
@@ -12702,4 +12729,567 @@ fn linking_a_pair_is_one_undoable_op() {
     assert!(!linked(&store), "and one undo opened it again");
     store.redo().expect("one redo");
     assert!(linked(&store), "and redo closes it");
+}
+
+// ---------------------------------------------------------------------------
+// Particulate and the points stream (K-474, K-475, K-495;
+// docs/impl/particulate.md §9 items 1-7 and 9-11, on the CPU path).
+// ---------------------------------------------------------------------------
+
+use crate::fx::effects::particulate::Particulate;
+use crate::fx::points::{self, EmitterShape, PointsStream, Schedule};
+use crate::mask::MaskPolyline;
+
+/// A Particulate instance with its declared defaults, and `edits` applied —
+/// the shape every test below starts from.
+fn particulate(edits: &[(&str, EffectValue)]) -> EffectInstance {
+    let mut e = instantiate("particulate").expect("Particulate is declared");
+    for (id, value) in edits {
+        let p = e
+            .params
+            .iter_mut()
+            .find(|p| p.id == *id)
+            .unwrap_or_else(|| panic!("particulate has no {id}"));
+        p.value = value.clone();
+    }
+    e
+}
+
+fn fixed(v: f64) -> EffectValue {
+    EffectValue::Float(Property::fixed(v))
+}
+
+/// Everything the closed forms read, from an instance's declared controls.
+fn particulate_params(e: &EffectInstance) -> points::PointsParams {
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        0.0,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    Particulate::read(Params::new(&bag)).points()
+}
+
+/// The stream one instance draws at layer time `t`, at 60 fps.
+fn particulate_stream(e: &EffectInstance, t: f64) -> PointsStream {
+    let dt = 1.0 / 60.0;
+    let bag = resolve_bag(
+        std::slice::from_ref(e),
+        t,
+        1000.0,
+        1.0,
+        &MarkerContext::NONE,
+    );
+    let p = Particulate::read(Params::new(&bag));
+    // The rate is read at each frame the scan walks, keyframes and expressions
+    // applied — which is what makes a keyframed Emit rate an ordinary control.
+    let rate_at = |lt: f64| {
+        e.float_at_with_context("emit_rate", lt, Arc::new(ExpressionContext::detached()))
+            .unwrap_or(0.0)
+    };
+    let sched = Schedule::scan(dt, (t / dt).floor() as i64, p.window_frames(dt), &rate_at);
+    points::evaluate(&p.points(), &sched, t, &MaskPolyline::default())
+}
+
+/// **Determinism** (§9 item 1): one comp, two evaluations of the same frame —
+/// the stream identical, and the pixels identical with it. There is no state to
+/// carry and no clock to read, so this is a property of the design rather than
+/// of the run; it is here because a regression would betray it silently.
+#[test]
+fn a_particulate_frame_evaluates_the_same_twice() {
+    let e = particulate(&[]);
+    let a = particulate_stream(&e, 2.5);
+    let b = particulate_stream(&e, 2.5);
+    assert!(!a.is_empty(), "the default look draws particles");
+    assert_eq!(a, b, "two evaluations of one frame differ");
+
+    let draw = |s: &PointsStream| {
+        let mut rgba = vec![0.0f32; 64 * 64 * 4];
+        points::draw_discs(&mut rgba, 64, 64, s, 1.0);
+        rgba.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+    };
+    assert_eq!(draw(&a), draw(&b), "two draws of one stream differ");
+}
+
+/// **Random access** (§9 item 2): frames evaluated out of order equal the same
+/// frames evaluated in order. The scrub-safety property, as a test — and the
+/// whole reason the closed form was chosen over a simulation (K-474).
+#[test]
+fn particulate_scrubs_in_any_order() {
+    let e = particulate(&[]);
+    let dt = 1.0 / 60.0;
+    let ascending: Vec<PointsStream> = [3, 250, 500]
+        .iter()
+        .map(|f| particulate_stream(&e, f64::from(*f) * dt))
+        .collect();
+    // {500, 3, 250, 3} — the note's own order, the last one a repeat.
+    let jumped: Vec<PointsStream> = [500, 3, 250, 3]
+        .iter()
+        .map(|f| particulate_stream(&e, f64::from(*f) * dt))
+        .collect();
+    assert_eq!(jumped[0], ascending[2]);
+    assert_eq!(jumped[1], ascending[0]);
+    assert_eq!(jumped[2], ascending[1]);
+    assert_eq!(jumped[3], ascending[0]);
+    assert!(!ascending[2].is_empty(), "frame 500 has particles");
+}
+
+/// **The birth schedule** (§9 item 3), three ways: a constant rate against the
+/// closed-form count, a keyframed ramp against a hand-computed table, and a
+/// cache hit against the cold scan.
+#[test]
+fn the_birth_schedule_is_the_rate_curves_integral() {
+    let dt = 1.0 / 60.0;
+    // A constant 150 per second: after `n` frames, `floor(150 · n · Δt)` have
+    // been born, give or take the carry the frame is holding.
+    for frames in [1i64, 7, 60, 601] {
+        let s = Schedule::scan(dt, frames - 1, frames, &|_| 150.0);
+        let want = (150.0 * frames as f64 * dt).floor() as u64;
+        assert!(
+            s.total().abs_diff(want) <= 1,
+            "{frames} frames at 150/s: {} births, expected about {want}",
+            s.total()
+        );
+    }
+
+    // A keyframed ramp, hand-computed: 0 → 120 per second over the first
+    // second, sampled at each frame start. The carry after `n` frames is
+    // `Σ rate(f)·Δt` over f < n, and the count is its floor.
+    let ramp = |lt: f64| (lt.clamp(0.0, 1.0) * 120.0).floor();
+    let mut carry = 0.0f64;
+    let mut want = 0u64;
+    for f in 0..60i64 {
+        carry += ramp(f as f64 * dt) * dt;
+        let n = carry.floor();
+        carry -= n;
+        want += n as u64;
+    }
+    let s = Schedule::scan(dt, 59, 60, &ramp);
+    assert_eq!(s.total(), want, "the ramp's schedule is its own integral");
+
+    // The cache: a hit is the cold scan, and a changed key scans again.
+    let mut cache = points::ScheduleCache::default();
+    let cold = Schedule::scan(dt, 59, 60, &|_| 150.0);
+    let mut scans = 0;
+    let hit = cache
+        .get_or_scan(1, || {
+            scans += 1;
+            Schedule::scan(dt, 59, 60, &|_| 150.0)
+        })
+        .clone();
+    assert_eq!(hit, cold, "a cold scan and a cached one must agree");
+    let again = cache
+        .get_or_scan(1, || {
+            scans += 1;
+            Schedule::default()
+        })
+        .clone();
+    assert_eq!(again, cold, "the same key is served from the cache");
+    assert_eq!(scans, 1, "one key, one scan");
+    cache.get_or_scan(2, || {
+        scans += 1;
+        Schedule::default()
+    });
+    assert_eq!(scans, 2, "a changed key scans again");
+}
+
+/// **The closed forms** (§9 item 4): position and speed against the analytic
+/// solutions at no drag, at `k = 0.5`, and either side of the series guard —
+/// and wind with no drag as exactly motionless wind, which is the documented
+/// behaviour rather than an accident of the algebra.
+#[test]
+fn the_closed_forms_match_the_analytic_solutions() {
+    let base = points::Forces {
+        gravity: 0.0,
+        wind: [0.0, 0.0],
+        drag: 0.0,
+        turbulence: 0.0,
+        turbulence_scale: 200.0,
+        turbulence_speed: 0.0,
+    };
+    let p0 = [100.0f32, 50.0];
+    let v0 = [30.0f32, -80.0];
+
+    // k = 0: p = p0 + v0·t + ½g·t², v = v0 + g·t. Written out here so the
+    // test is the textbook and not the implementation.
+    let f = points::Forces {
+        gravity: 400.0,
+        ..base
+    };
+    for age in [0.0f32, 0.25, 1.0, 3.0] {
+        let (pos, vel) = points::integrate(p0, v0, &f, age);
+        let want = [
+            p0[0] + v0[0] * age,
+            p0[1] + v0[1] * age + 0.5 * 400.0 * age * age,
+        ];
+        assert!((pos[0] - want[0]).abs() < 1e-3, "x at {age}");
+        assert!((pos[1] - want[1]).abs() < 1e-2, "y at {age}: {pos:?}");
+        assert!((vel[1] - (v0[1] + 400.0 * age)).abs() < 1e-2, "vy at {age}");
+    }
+
+    // k = 0.5, with wind and gravity: the published form, `g/k` and all,
+    // against the rearrangement the implementation uses.
+    let f = points::Forces {
+        gravity: 400.0,
+        wind: [120.0, 0.0],
+        drag: 0.5,
+        ..base
+    };
+    for age in [0.1f32, 1.0, 4.0] {
+        let k = 0.5f32;
+        let (pos, vel) = points::integrate(p0, v0, &f, age);
+        for i in 0..2 {
+            let g = if i == 1 { 400.0f32 } else { 0.0 };
+            let w = f.wind[i];
+            let term = v0[i] - w - g / k;
+            let want_p = p0[i] + (w + g / k) * age + term * (1.0 - (-k * age).exp()) / k;
+            let want_v = w + g / k + term * (-k * age).exp();
+            assert!(
+                (pos[i] - want_p).abs() < 1e-2,
+                "axis {i} position at {age}: {} vs {want_p}",
+                pos[i]
+            );
+            assert!((vel[i] - want_v).abs() < 1e-2, "axis {i} speed at {age}");
+        }
+    }
+
+    // Across the guard: `k·age = 0.1` is where the series takes over, and the
+    // two branches have to *meet* there rather than step — which is the whole
+    // reason the guard is not at particulate.md's 1e−4, where `1 − e^(−x)` has
+    // already lost three of f32's seven digits (see `drag_terms`).
+    let f = points::Forces {
+        gravity: 400.0,
+        wind: [120.0, 0.0],
+        drag: 0.1,
+        ..base
+    };
+    let below = points::integrate(p0, v0, &f, 0.999).0;
+    let above = points::integrate(p0, v0, &f, 1.001).0;
+    let at = points::integrate(p0, v0, &f, 1.0).0;
+    for i in 0..2 {
+        assert!(
+            (at[i] - (below[i] + above[i]) * 0.5).abs() < 1e-3,
+            "the guard steps at axis {i}: {} against {} and {}",
+            at[i],
+            below[i],
+            above[i]
+        );
+    }
+
+    // Wind acts *through* drag: with no drag, wind does nothing at all.
+    let windy = points::Forces {
+        wind: [500.0, -500.0],
+        ..base
+    };
+    let (still, _) = points::integrate(p0, v0, &base, 2.0);
+    let (blown, _) = points::integrate(p0, v0, &windy, 2.0);
+    assert_eq!(still, blown, "wind with no drag moved a particle");
+}
+
+/// **Turbulence rides the shared lattice** (§9 item 5): the displacement is
+/// the value-noise core Wiggle and Fractal noise use, pinned here by golden
+/// numbers so nobody can swap the noise family without this failing.
+#[test]
+fn turbulence_reads_the_shared_noise_core() {
+    // The two channels Particulate displaces along, at three pinned points,
+    // through `fx::noise::value3` — the *same* function, which is the whole
+    // assertion: a second lattice would not produce these numbers.
+    let goldens: [(f32, f32, f32, u32, f32); 4] = [
+        (0.0, 0.0, 0.0, 64, -0.622_338_65),
+        (1.25, -3.5, 0.75, 64, 0.413_118_24),
+        (1.25, -3.5, 0.75, 65, -0.093_730_03),
+        (12.0, 7.5, 2.0, 64, 0.271_409_87),
+    ];
+    for (x, y, z, channel, want) in goldens {
+        let got = crate::fx::noise::value3(7, channel, x, y, z, 0);
+        assert!(
+            (got - want).abs() < 1e-6,
+            "the turbulence lattice moved at {x},{y},{z} channel {channel}: {got}"
+        );
+    }
+
+    // And the effect really does displace by it: turn the amount up and the
+    // drawn position leaves the closed form, by no more than the amount.
+    let rough_e = particulate(&[
+        ("turbulence_amount", fixed(40.0)),
+        ("emit_rate", fixed(60.0)),
+        ("initial_speed", fixed(0.0)),
+        ("speed_jitter", fixed(0.0)),
+        ("drag", fixed(0.0)),
+    ]);
+    let calm_e = particulate(&[
+        ("turbulence_amount", fixed(0.0)),
+        ("emit_rate", fixed(60.0)),
+        ("initial_speed", fixed(0.0)),
+        ("speed_jitter", fixed(0.0)),
+        ("drag", fixed(0.0)),
+    ]);
+    let rough = particulate_stream(&rough_e, 1.0);
+    let smooth = particulate_stream(&calm_e, 1.0);
+    assert_eq!(rough.id, smooth.id, "turbulence changed who is alive");
+    let mut moved = 0;
+    for i in 0..rough.len() {
+        let dx = rough.position[i][0] - smooth.position[i][0];
+        let dy = rough.position[i][1] - smooth.position[i][1];
+        assert!(dx.abs() <= 40.0 && dy.abs() <= 40.0, "past the amount");
+        if dx.abs() > 1e-3 {
+            moved += 1;
+        }
+    }
+    assert!(moved > 0, "turbulence displaced nothing");
+}
+
+/// **Id stability** (§9 item 6): a particle's id is its birth index, so it is
+/// the same number at every frame of its life — which is what makes a trail
+/// possible without anything being remembered. And the compacted stream is in
+/// strictly increasing id order, the prefix-sum determinism the GPU twin has to
+/// reproduce (particulate.md §5).
+#[test]
+fn a_particles_id_is_its_birth_index_and_holds_still() {
+    let e = particulate(&[("life", fixed(3.0)), ("life_jitter", fixed(0.0))]);
+    let dt = 1.0 / 60.0;
+    let first = particulate_stream(&e, 60.0 * dt);
+    let id = *first.id.first().expect("a particle at frame 60");
+    let age0 = first.age[0];
+    for later in [90i64, 120] {
+        let s = particulate_stream(&e, later as f64 * dt);
+        let at =
+            s.id.iter()
+                .position(|i| *i == id)
+                .expect("the same particle is still alive");
+        let grown = s.age[at] - age0;
+        let want = (later - 60) as f32 * dt as f32;
+        assert!(
+            (grown - want).abs() < 1e-3,
+            "the age did not follow the time"
+        );
+    }
+    assert!(
+        first.id.windows(2).all(|w| w[0] < w[1]),
+        "the stream is not in birth-index order"
+    );
+}
+
+/// **The cap rule** (§9 item 7): over budget, the live set is exactly the
+/// newest `cap` by birth index — and the degradation rung is the same rule
+/// again at half the number. Old particles vanish early under overload:
+/// visible, deterministic, and the same from any scrub direction.
+#[test]
+fn the_cap_keeps_the_newest_particles() {
+    let over = particulate(&[
+        ("emit_rate", fixed(600.0)),
+        ("life", fixed(4.0)),
+        ("life_jitter", fixed(0.0)),
+        ("max_particles", fixed(100.0)),
+    ]);
+    let s = particulate_stream(&over, 3.0);
+    assert_eq!(s.len(), 100, "the cap is the live count");
+
+    // The same frame with room to spare: the capped set is the *tail* of it.
+    let roomy = particulate(&[
+        ("emit_rate", fixed(600.0)),
+        ("life", fixed(4.0)),
+        ("life_jitter", fixed(0.0)),
+        ("max_particles", fixed(20000.0)),
+    ]);
+    let all = particulate_stream(&roomy, 3.0);
+    assert!(all.len() > 100, "the fixture is not over budget");
+    assert_eq!(
+        s.id,
+        all.id[all.len() - 100..],
+        "the cap kept something other than the newest hundred"
+    );
+
+    // The degradation rung (K-475): the newest half, by the same rule.
+    let half = all.len() / 2;
+    let mut halved = all.clone();
+    halved.keep_newest(half);
+    assert_eq!(halved.len(), half);
+    assert_eq!(halved.id, all.id[all.len() - half..]);
+    assert_eq!(halved.position, all.position[all.len() - half..]);
+}
+
+/// **The mask-path emitter's no-op** (§9 item 9): nothing to walk means no
+/// particles at all, and the effect passes its input through — degrade, never
+/// fault (14-ENGINEERING-RULES §4).
+#[test]
+fn a_mask_path_emitter_with_no_path_emits_nothing() {
+    let e = particulate(&[("shape", EffectValue::Choice(4))]);
+    let p = particulate_params(&e);
+    assert_eq!(p.emitter.shape, EmitterShape::MaskPath);
+    let s = particulate_stream(&e, 2.0);
+    assert!(s.is_empty(), "an empty polyline emitted {} points", s.len());
+
+    let mut rgba = vec![0.25f32; 16 * 16 * 4];
+    let before = rgba.clone();
+    points::draw_discs(&mut rgba, 16, 16, &s, 1.0);
+    assert_eq!(rgba, before, "the input did not pass through untouched");
+
+    // A path to walk, and the same emitter emits again.
+    let path = MaskPolyline {
+        points: vec![[0.0, 0.0], [100.0, 0.0]],
+        arc: vec![0.0, 100.0],
+        closed: false,
+    };
+    let dt = 1.0 / 60.0;
+    let sched = Schedule::scan(dt, 120, 600, &|_| 150.0);
+    // Nothing to carry them off the line, so where they are is where they were
+    // born — which is what the assertion below is really about.
+    let mut still = p.clone();
+    still.emitter.speed = 0.0;
+    still.forces.turbulence = 0.0;
+    let walked = points::evaluate(&still, &sched, 2.0, &path);
+    assert!(!walked.is_empty(), "a path with length emitted nothing");
+    for at in &walked.position {
+        assert!(
+            (0.0..=100.0).contains(&at[0]),
+            "a particle was born off the path at {at:?}"
+        );
+    }
+}
+
+/// **Frame-key sensitivity** (§9 item 11): the seed changes the key, an edit to
+/// a control changes it, and nothing else does. No new terms — the standard
+/// formula, which is the whole claim (particulate.md §5).
+#[test]
+fn particulates_frame_key_follows_its_seed_and_its_controls() {
+    let key = |e: &EffectInstance, lt: f64| {
+        let stack = super::resolve_stack(
+            std::slice::from_ref(e),
+            lt,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        let mut bytes: Vec<u8> = Vec::new();
+        stack.feed_hash(&mut |b| bytes.extend_from_slice(b));
+        bytes
+    };
+    let e = particulate(&[]);
+    let mut reseeded = e.clone();
+    for p in &mut reseeded.params {
+        if p.id == "seed" {
+            p.value = EffectValue::Seed(1234);
+        }
+    }
+    assert_ne!(key(&e, 1.0), key(&reseeded, 1.0), "the seed is in the key");
+    assert_eq!(key(&e, 1.0), key(&e, 1.0), "the key is not stable");
+    // Scrubbing changes the picture, and what carries that into the key is the
+    // `seeded` trait folding the layer's local time in — outside this hash, by
+    // the standard rule. What the parameters must do is stay put while nothing
+    // about them has changed, so that the fold is the only reason two frames
+    // differ.
+    assert_eq!(
+        key(&e, 1.0),
+        key(&e, 2.0),
+        "no parameter animates by default"
+    );
+    assert!(
+        BUILTIN_DEFS
+            .get("particulate")
+            .expect("declared")
+            .schema()
+            .traits
+            .seeded,
+        "Particulate must declare itself seeded, or its frames would share a key"
+    );
+    let mut nudged = e.clone();
+    for p in &mut nudged.params {
+        if p.id == "emit_rate" {
+            p.value = fixed(200.0);
+        }
+    }
+    assert_ne!(key(&e, 1.0), key(&nudged, 1.0), "the rate is in the key");
+}
+
+/// **Particulate declares a Points output, and nothing else grew one**
+/// (K-472, K-492, points-stream.md §4.1): the signature split leaves every
+/// other declaration exactly as it was, which is the property that made
+/// `Image { extra }` the shape rather than a third signature kind.
+#[test]
+fn only_particulate_declares_a_data_output_beside_its_picture() {
+    let with_extras: Vec<(&str, Vec<&str>)> = BUILTIN_DEFS
+        .iter()
+        .filter(|d| matches!(d.signature(), Signature::Image { extra } if !extra.is_empty()))
+        .map(|d| {
+            (
+                d.schema().match_name,
+                d.signature().outputs().iter().map(|p| p.id).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(with_extras, vec![("particulate", vec!["points"])]);
+    let port = BUILTIN_DEFS
+        .get("particulate")
+        .expect("declared")
+        .signature()
+        .output("points");
+    assert_eq!(
+        port,
+        Some(PortType::Points),
+        "the socket is teal, or it is nothing"
+    );
+}
+
+/// **An over-life curve starts on the shape it declared** (K-412 with
+/// particulate.md §2): a fresh Opacity over life is `1 → 0`, not the identity
+/// diagonal, or every particle would be born invisible.
+#[test]
+fn an_over_life_curve_is_born_on_its_declared_shape() {
+    let e = particulate(&[]);
+    let curve = |id: &str| match e.param(id) {
+        Some(EffectValue::Curve(points)) => points.clone(),
+        other => panic!("{id} is {other:?}, not a curve"),
+    };
+    assert_eq!(curve("opacity_over_life"), vec![[0.0, 1.0], [1.0, 0.0]]);
+    assert_eq!(curve("size_over_life"), vec![[0.0, 1.0], [1.0, 1.0]]);
+    // And the grade family is untouched: no declaration, the diagonal.
+    let curves = instantiate("curves").expect("Curves is declared");
+    assert_eq!(
+        curves.param("master"),
+        Some(&EffectValue::Curve(CURVE_IDENTITY.to_vec()))
+    );
+}
+
+/// **The default look plays** (K-475's first number): the default parameter
+/// set is a few hundred particles, and evaluating and drawing them is noise
+/// against a frame's budget.
+///
+/// K-475's ≲ 0.2 ms is a **GPU** number, gated on the reference desktop in PS7.
+/// This is its CPU reference, which is allowed to be slower and is not allowed
+/// to be a different *kind* of work: the bound is loose on purpose — a test
+/// that fails because a laptop was busy teaches nobody anything — and what it
+/// catches is the regression that turns a per-particle dab into a per-pixel
+/// pass.
+#[test]
+fn the_default_particulate_look_is_a_few_hundred_particles() {
+    let e = particulate(&[]);
+    let s = particulate_stream(&e, 4.0);
+    assert!(
+        (150..600).contains(&s.len()),
+        "the default look draws {} particles, not the ~300 K-475 budgeted for",
+        s.len()
+    );
+    let mut rgba = vec![0.0f32; 1920 * 1080 * 4];
+    let started = std::time::Instant::now();
+    for _ in 0..10 {
+        let s = particulate_stream(&e, 4.0);
+        points::draw_discs(&mut rgba, 1920, 1080, &s, 1.0);
+    }
+    let each = started.elapsed().as_secs_f64() / 10.0;
+    // Printed, not only asserted: the number is the point, and `--nocapture`
+    // is how the next person checks it against K-475 rather than against this
+    // machine's mood.
+    println!(
+        "the default look: {} particles, {:.3} ms an evaluation and draw at 1920x1080",
+        s.len(),
+        each * 1000.0
+    );
+    assert!(
+        each < 0.010,
+        "the default look costs {:.3} ms an evaluation on the CPU reference",
+        each * 1000.0
+    );
 }

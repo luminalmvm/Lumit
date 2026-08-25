@@ -68,7 +68,17 @@ pub struct ResolveCx<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signature {
     /// A picture operation — every effect until now, and the default.
-    Image,
+    Image {
+        /// The **data** outputs this picture operation declares beside its
+        /// picture (K-472, K-492, points-stream.md §4.1).
+        ///
+        /// Empty for every effect but Particulate, which draws its particles
+        /// for the chain *and* hands them out as a points stream. Declaring
+        /// them here rather than inventing a third signature kind is what lets
+        /// the bridge, the label walk and the graph validator read one method
+        /// whichever kind an entry is.
+        extra: &'static [super::schema::Port],
+    },
     /// A driver: no image kernel, and these named output ports.
     Data {
         /// The output ports, in the order the node draws them.
@@ -84,11 +94,16 @@ impl Signature {
         self.outputs().iter().find(|p| p.id == port).map(|p| p.ty)
     }
 
-    /// This signature's output ports, empty for an image operation.
+    /// This signature's **data** output ports: a driver's declared outputs, or
+    /// a picture operation's declared extras — empty for all but Particulate.
+    ///
+    /// The image output itself is not here: every picture operation has one,
+    /// it is drawn from `OUTPUT_PORT` at the seam, and a list that repeated it
+    /// ninety times would be a second place for it to be wrong.
     #[must_use]
     pub fn outputs(self) -> &'static [super::schema::Port] {
         match self {
-            Signature::Image => &[],
+            Signature::Image { extra } => extra,
             Signature::Data { outputs } => outputs,
         }
     }
@@ -172,9 +187,10 @@ pub trait EffectDef: Sync + Send + 'static {
     }
 
     /// What this entry produces (K-471 §1.3). Every effect is
-    /// [`Signature::Image`]; a driver declares its output ports.
+    /// [`Signature::Image`] with no extras; a driver declares its output
+    /// ports, and Particulate declares its Points output beside its picture.
     fn signature(&self) -> Signature {
-        Signature::Image
+        Signature::Image { extra: &[] }
     }
 
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it

@@ -8715,6 +8715,544 @@
       "matte_role": "own"
     },
     {
+      "slug": "particulate",
+      "match_name": "particulate",
+      "label": "Particulate",
+      "version": 1,
+      "category": "Generate",
+      "category_slug": "generate",
+      "params": [
+        {
+          "id": "shape",
+          "label": "Shape",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Point",
+            "Line",
+            "Ellipse",
+            "Rectangle",
+            "Mask path"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "position_x",
+          "label": "Position x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "position_y",
+          "label": "Position y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "width",
+          "label": "Width",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "height",
+          "label": "Height",
+          "kind": "float",
+          "unit": "px",
+          "default": 400.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "emitter_angle",
+          "label": "Emitter angle",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "mask_path",
+          "label": "Mask path",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "emit_rate",
+          "label": "Emit rate",
+          "kind": "float",
+          "unit": "raw",
+          "default": 150.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "direction",
+          "label": "Direction",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": -90.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "spread",
+          "label": "Spread",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 360.0,
+          "slider_min": 0.0,
+          "slider_max": 360.0,
+          "hard_min": 0.0,
+          "hard_max": 360.0
+        },
+        {
+          "id": "initial_speed",
+          "label": "Initial speed",
+          "kind": "float",
+          "unit": "px",
+          "default": 90.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "speed_jitter",
+          "label": "Speed jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "life",
+          "label": "Life",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 2.0,
+          "slider_min": 0.1,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "life_jitter",
+          "label": "Life jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 30.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "size",
+          "label": "Size",
+          "kind": "float",
+          "unit": "px",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "size_jitter",
+          "label": "Size jitter",
+          "kind": "float",
+          "unit": "percent",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "size_over_life",
+          "label": "Size over life",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "opacity_over_life",
+          "label": "Opacity over life",
+          "kind": "curve",
+          "unit": "raw",
+          "default": [
+            [
+              0.0,
+              1.0
+            ],
+            [
+              1.0,
+              0.0
+            ]
+          ]
+        },
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "end_colour",
+          "label": "End colour",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "rotation",
+          "label": "Rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "spin",
+          "label": "Spin",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": -720.0,
+          "slider_max": 720.0
+        },
+        {
+          "id": "align_to_motion",
+          "label": "Align to motion",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "gravity",
+          "label": "Gravity",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "wind_x",
+          "label": "Wind x",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "wind_y",
+          "label": "Wind y",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -2000.0,
+          "slider_max": 2000.0
+        },
+        {
+          "id": "drag",
+          "label": "Drag",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 10.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "turbulence_amount",
+          "label": "Turbulence amount",
+          "kind": "float",
+          "unit": "px",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "turbulence_scale",
+          "label": "Turbulence scale",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 10.0,
+          "slider_max": 1000.0,
+          "hard_min": 10.0
+        },
+        {
+          "id": "turbulence_speed",
+          "label": "Turbulence speed",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.3,
+          "slider_min": 0.0,
+          "slider_max": 5.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "mode",
+          "label": "Mode",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Disc",
+            "Sprite",
+            "Streak"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "feather",
+          "label": "Feather",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "sprite_layer",
+          "label": "Sprite layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "streak_length",
+          "label": "Streak length",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.02,
+          "slider_min": 0.0,
+          "slider_max": 0.1,
+          "hard_min": 0.0
+        },
+        {
+          "id": "max_particles",
+          "label": "Max particles",
+          "kind": "int",
+          "unit": "raw",
+          "default": 20000,
+          "slider_min": 1.0,
+          "slider_max": 200000.0,
+          "hard_min": 1.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Emitter",
+          "params": [
+            "shape",
+            "position_x",
+            "position_y",
+            "width",
+            "height",
+            "emitter_angle",
+            "mask_path",
+            "emit_rate",
+            "direction",
+            "spread",
+            "initial_speed",
+            "speed_jitter"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Particle",
+          "params": [
+            "life",
+            "life_jitter",
+            "size",
+            "size_jitter",
+            "size_over_life",
+            "opacity_over_life",
+            "colour",
+            "end_colour",
+            "rotation",
+            "spin",
+            "align_to_motion"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Forces",
+          "params": [
+            "gravity",
+            "wind_x",
+            "wind_y",
+            "drag",
+            "turbulence_amount",
+            "turbulence_scale",
+            "turbulence_speed"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Render",
+          "params": [
+            "mode",
+            "feather",
+            "sprite_layer",
+            "streak_length",
+            "max_particles",
+            "seed"
+          ],
+          "collapsed": false
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "feather",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "sprite_layer",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "streak_length",
+          "on": "mode",
+          "cond": "choice_is",
+          "value": 2
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "echo",
       "match_name": "echo",
       "label": "Echo",

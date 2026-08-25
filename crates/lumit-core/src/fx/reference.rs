@@ -304,10 +304,10 @@ fn param(schema: &'static super::schema::ParamSchema) -> Param {
         // A curve's default is its shape, so it prints as the point list
         // itself (K-412) — the identity diagonal, for every built-in that
         // declares one.
-        ParamKind::Curve => {
+        ParamKind::Curve { default } => {
             p.kind = "curve";
             p.default = Some(serde_json::Value::Array(
-                crate::fx::params::CURVE_IDENTITY
+                default
                     .iter()
                     .map(|xy| {
                         serde_json::Value::Array(

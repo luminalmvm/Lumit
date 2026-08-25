@@ -3505,6 +3505,22 @@ mod tests {
     use super::*;
     use lumit_core::fx::BUILTIN_DEFS;
 
+    /// The one effect that is declared but does not draw yet.
+    ///
+    /// Particulate lands in two packages (points-stream.md §5): **PS1** brings
+    /// its controls, its closed forms and its CPU disc reference, and **PS2**
+    /// brings the evaluate/compaction/instanced-draw passes and the sprite
+    /// layer's texture with them. Between the two it is an effect the menu
+    /// offers, the panel draws and the picture passes straight through — which
+    /// is what an op with no table entry already does, deliberately and
+    /// without a fault (`fxops::run_ops`).
+    ///
+    /// **PS2 deletes this constant**, and the two tests below then hold it to
+    /// the same rule as everything else: the moment a `particulate` pass
+    /// exists, `every_migrated_effect_has_a_gpu_entry` fails until the name is
+    /// gone from here.
+    const AWAITING_A_GPU_PASS: &[&str] = &["particulate"];
+
     /// The two registries must agree, and nothing but a test can make them:
     /// they are joined by a string. Every migrated effect with an image
     /// operation needs exactly one GPU pass, and every GPU pass must name an
@@ -3513,6 +3529,13 @@ mod tests {
     fn every_migrated_effect_has_a_gpu_entry() {
         for def in BUILTIN_DEFS.iter() {
             let name = def.schema().match_name;
+            if AWAITING_A_GPU_PASS.contains(&name) {
+                assert!(
+                    gpu_effect(name).is_none(),
+                    "{name} has its GPU pass now — take it out of AWAITING_A_GPU_PASS"
+                );
+                continue;
+            }
             if def.is_image_op() {
                 assert!(
                     gpu_effect(name).is_some(),
@@ -3583,6 +3606,12 @@ mod tests {
             // for the same reason `every_migrated_effect_has_a_gpu_entry`
             // excuses it.
             if !def.is_image_op() {
+                continue;
+            }
+            // And so is the effect that has no pass yet at all: Particulate's
+            // Sprite layer is a real auxiliary layer, and PS2 threads it into
+            // the pass it brings with it (see `AWAITING_A_GPU_PASS`).
+            if AWAITING_A_GPU_PASS.contains(&name) {
                 continue;
             }
             let gpu = gpu_effect(name).unwrap_or_else(|| {

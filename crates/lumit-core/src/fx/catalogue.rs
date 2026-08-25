@@ -81,6 +81,7 @@ use super::effects::{
     motion_blur::{MotionBlur, MotionBlurDef},
     noise::{Noise, NoiseDef},
     offset::{Offset, OffsetDef},
+    particulate::{Particulate, ParticulateDef},
     photo_filter::{PhotoFilter, PhotoFilterDef},
     point_control::{PointControl, PointControlDef},
     polar_coordinates::{PolarCoordinates, PolarCoordinatesDef},
@@ -189,6 +190,11 @@ crate::catalogue![
     // effects that draw a mask's own line rather than one found in the picture.
     ScribbleDef => Scribble,
     StrokeDef => Stroke,
+    // Particulate (K-446, K-491), at the Generate family's end: it makes its
+    // own pixels rather than changing the ones that arrived, which is what
+    // K-398 opened this category for, and it is the first entry to declare a
+    // data output beside its picture (K-472).
+    ParticulateDef => Particulate,
     EchoDef => Echo,
     PosterizeTimeDef => PosterizeTime,
     AccumulationMbDef => AccumulationMb,

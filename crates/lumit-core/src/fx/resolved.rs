@@ -479,9 +479,13 @@ pub(super) fn resolve_into_arena(
             // unlike the three above it needs no slot beside the op. It does
             // not animate, so there is nothing to evaluate at `lt` — only the
             // straightening every read applies.
-            ParamKind::Curve => Value::Curve(match e.param(p.id) {
+            ParamKind::Curve { default } => Value::Curve(match e.param(p.id) {
                 Some(EffectValue::Curve(points)) => CurvePoints::sanitised(points),
-                _ => CurvePoints::IDENTITY,
+                // A project saved before the row existed has no entry, and the
+                // declared shape is what it would have been given (K-258) —
+                // never the diagonal, which for an over-life curve is a
+                // different picture.
+                _ => CurvePoints::sanitised(default),
             }),
         };
         bags.push(ParamId::new(p.id), value);

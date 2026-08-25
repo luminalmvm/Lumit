@@ -530,7 +530,11 @@ pub fn list_parameters(effect: String) -> Vec<BridgeParamInfo> {
                 // entry, and what an unset row comes to is the render's answer,
                 // not a control the panel draws differently.
                 ParamKind::MaskPath { .. } => BridgeParamKind::MaskPath,
-                ParamKind::Curve => BridgeParamKind::Curve,
+                // The declared default is not sent: a fresh instance is born
+                // with it written into the document (`default_param_value`),
+                // so the panel draws the curve it stores, never one the seam
+                // had to describe.
+                ParamKind::Curve { .. } => BridgeParamKind::Curve,
                 // A button (K-417). The row crosses so the panel can draw one;
                 // the *value* never does, because there is none — the press
                 // goes back as an event on the owning layer

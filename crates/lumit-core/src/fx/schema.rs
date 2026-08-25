@@ -355,7 +355,19 @@ pub enum ParamKind {
     /// [`ParamKind::MaskPath`] on that side of the seam: a list that grows and
     /// shrinks has no interpolation between two keyframes, which is exactly
     /// why After Effects' own curve blob only ever *steps*.
-    Curve,
+    Curve {
+        /// The shape a fresh instance starts with, in the unit square.
+        ///
+        /// The grade family's five curves all start on the identity diagonal
+        /// ([`CURVE_IDENTITY`](super::params::CURVE_IDENTITY)), which is what
+        /// the derive uses when a declaration says nothing. An **over-life**
+        /// curve is the reason this is declared rather than assumed:
+        /// Particulate's Opacity over life is born solid and dies faded
+        /// (`[[0, 1], [1, 0]]`) and its Size over life is flat
+        /// (`[[0, 1], [1, 1]]`), and a diagonal would mean particles that
+        /// start invisible and grow from nothing (particulate.md §2).
+        default: &'static [[f32; 2]],
+    },
     /// A **button**, not a value (K-417): a row the panel draws as a push
     /// button, which asks the engine to *do* something rather than describing
     /// what a picture should look like.
@@ -409,7 +421,7 @@ impl ParamKind {
             | ParamKind::File { .. }
             | ParamKind::Layer { .. }
             | ParamKind::MaskPath { .. }
-            | ParamKind::Curve
+            | ParamKind::Curve { .. }
             | ParamKind::Action => None,
         }
     }
