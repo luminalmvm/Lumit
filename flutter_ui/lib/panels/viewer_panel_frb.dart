@@ -1353,7 +1353,7 @@ class _Stage extends StatelessWidget {
             // whatever is being drawn underneath, including a held snapshot.
             _ViewerTag(uiState: uiState),
             // And what is being *looked at*, when that is not the finished
-            // composition (K-524). Its own file, so this is one line: the chip
+            // composition (K-528). Its own file, so this is one line: the chip
             // is the Viewer's, but it follows the effect selection rather than
             // anything this panel knows.
             ViewerPrefixChip(uiState: uiState),
@@ -2040,26 +2040,58 @@ class _ViewerHeader extends StatelessWidget {
       height: viewerStripHeight,
       decoration: _stripDecoration(t, detached),
       padding: const EdgeInsets.symmetric(horizontal: viewerStripPadding),
-      child: Row(
-        children: [
+      // The header strip narrows exactly as the bottom bar does (§12A.6's
+      // ladder): the panel's name ellipsises first, and below the width the
+      // three pickers themselves need, the strip slides sideways rather than
+      // painting over its own edge. Before this it was a plain `Row` with a
+      // `Spacer`, and a Viewer docked narrower than the pickers — which is
+      // most of a 1080p sidebar — overflowed on every frame.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
           // The panel's name, a kicker like every other container label
           // (§7.1), and lit because this is the container rather than one of
           // several tabs in it.
-          Text(l10n.panelViewer.toUpperCase(), style: t.kickerOn),
-          const Spacer(),
-          ...viewerPickers(
+          final title = Text(l10n.panelViewer.toUpperCase(),
+              style: t.kickerOn, maxLines: 1, overflow: TextOverflow.ellipsis);
+          final pickers = viewerPickers(
             zoom: zoom,
             shownScale: shownScale,
             look: look,
             showToneMap: showToneMap,
             onToneMap: onToneMap,
             onZoom: onZoom,
-          ),
-        ],
+          );
+          if (constraints.maxWidth >= _headerMinimum) {
+            // The title is not flexible here: it and the `Spacer` would then
+            // share the free space between them, and the pickers would stop
+            // at the strip's right-hand *padding*. Above the minimum there is
+            // room for the whole word anyway — below it, the strip slides.
+            return Row(children: [title, const Spacer(), ...pickers]);
+          }
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                title,
+                const SizedBox(width: _headerGatheredGap),
+                ...pickers,
+              ],
+            ),
+          );
+        },
       ),
     );
   }
 }
+
+/// Below this the header strip stops spreading and starts scrolling: the three
+/// pickers at their own widths, the panel's name, and air between them.
+const double _headerMinimum = 360;
+
+/// What stands between the name and the pickers once the strip is sliding and
+/// there is no free space left to hold them apart.
+const double _headerGatheredGap = 24;
 
 /// The three pickers the drawing puts at the header's right-hand end, 6 apart.
 ///
@@ -2460,7 +2492,12 @@ class _ViewerBar extends StatelessWidget {
       // (§12A.6's ladder, step 5).
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final loose = constraints.maxWidth >= _barMinimum;
+          final width = constraints.maxWidth;
+          final loose = width >= _barMinimum;
+          // The rungs, in the order the owner ruled them (see [_barMinimum]).
+          final keepsReading = width >= _barKeepsReading;
+          final keepsLooking = width >= _barKeepsLooking;
+          final keepsClock = width >= _barKeepsClock;
           final reading = _Readout(
             comp: comp,
             settings: settings,
@@ -2486,11 +2523,21 @@ class _ViewerBar extends StatelessWidget {
               Row(mainAxisSize: MainAxisSize.min, children: [
                 ...leading,
                 if (leading.isNotEmpty) viewerBarGapBox(viewerBarGap),
-                ..._looking(context, t),
+                if (keepsLooking)
+                  ..._looking(context, t)
+                else
+                  // **Step 4 of the ladder**: a run of buttons that no longer
+                  // fits collapses into one overflow mark at the end of its
+                  // run rather than shrinking or clipping. The very same
+                  // widgets stand inside it, so nothing here has a second
+                  // implementation that can drift from the first.
+                  _LookingOverflow(marks: () => _looking(context, t)),
               ]),
               if (!loose) const SizedBox(width: 24),
-              Row(mainAxisSize: MainAxisSize.min, children: _transport(t)),
-              if (!loose) const SizedBox(width: 24),
+              Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _transport(t, clock: keepsClock)),
+              if (!loose && keepsReading) const SizedBox(width: 24),
               // The reading takes the room the two gaps are not using, and
               // sheds parts of itself before it elides — the ladder is in
               // [_Readout]. Flexible only where the bar is spread; where it
@@ -2508,7 +2555,7 @@ class _ViewerBar extends StatelessWidget {
                     ),
                   ]),
                 )
-              else ...[
+              else if (keepsReading) ...[
                 reading,
                 ViewerProgressBar(
                   tracker: Provider.of<LumitUiState>(context, listen: false)
@@ -2616,7 +2663,10 @@ class _ViewerBar extends StatelessWidget {
   ///
   /// Round gathers them into a pill (K-394, §12.1); Sharp is handed the very
   /// same widgets with nothing wrapped round them.
-  List<Widget> _transport(LumitTheme t) {
+  ///
+  /// [clock] is the ladder's last step but one: on the narrowest bar the five
+  /// buttons stand alone (see [_barMinimum]).
+  List<Widget> _transport(LumitTheme t, {bool clock = true}) {
     final buttons = <Widget>[
       viewerBarMark(
         key: const ValueKey('viewer-home'),
@@ -2675,31 +2725,115 @@ class _ViewerBar extends StatelessWidget {
         ...buttons,
       // One edge to allow for rather than two: the clock is text, and text
       // carries no button edge of its own.
-      SizedBox(width: viewerTransportGap - viewerMarkEdge),
+      if (clock) SizedBox(width: viewerTransportGap - viewerMarkEdge),
       // The clock, in a slot wide enough for the longest time this comp can
       // show, and clickable to type one (docs/07 §2.2 item 11). A time past
       // either end of the composition lands on that end.
-      TimeReadout(
-        key: const ValueKey('viewer-timecode'),
-        frame: frame,
-        format: (f) => timecodeOf(f, settings),
-        widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
-        style:
-            t.mono.copyWith(fontSize: viewerTimecodeSize, color: t.textPrimary),
-        parse: (text) =>
-            framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
-        onCommit: onSeek,
-        minFrame: 0,
-        maxFrame: _lastFrameOf(settings),
-        tooltip: l10n.tipFrameOnScreen,
-      ),
+      if (clock)
+        TimeReadout(
+          key: const ValueKey('viewer-timecode'),
+          frame: frame,
+          format: (f) => timecodeOf(f, settings),
+          widthChars: timecodeChars(settings.fpsNum, settings.fpsDen),
+          style: t.mono
+              .copyWith(fontSize: viewerTimecodeSize, color: t.textPrimary),
+          parse: (text) =>
+              framesOfTimecode(text, settings.fpsNum, settings.fpsDen),
+          onCommit: onSeek,
+          minFrame: 0,
+          maxFrame: _lastFrameOf(settings),
+          tooltip: l10n.tipFrameOnScreen,
+        ),
     ];
   }
 }
 
-/// Below this the bar stops spreading and starts scrolling: the two clusters
-/// the drawing gives fixed places, plus room for a reading between them.
+/// **The bar's shedding ladder, and what is left at the end of it** (§12A.6,
+/// K-451, and the owner's ruling on the order).
+///
+/// In plain terms: the bar cannot hold everything on a Viewer docked into a
+/// sidebar, so things leave. **The transport is the last to go** — a person
+/// who has narrowed the Viewer is still watching something, and a panel that
+/// keeps the exposure field and loses Play has kept the wrong half. The clock
+/// stands with it until the very end, because a picture with no time on it is
+/// a picture you cannot say anything about.
+///
+/// Narrowing, in order:
+///
+/// 1. **the two gaps close** and the bar stops spreading ([_barMinimum]) — the
+///    reading and the transport come together rather than a word being cut;
+/// 2. **the reading sheds its own statements**, arrowed preview size then
+///    composition name, which is the ladder inside [viewerReadoutLadder];
+/// 3. **the reading goes entirely** ([_barKeepsReading]) — every one of its
+///    facts is said again in the header, the tabs or the clock;
+/// 4. **the ways of looking fold into one overflow mark**
+///    ([_barKeepsLooking]), which is §12A.6's step 4 exactly: a toolbar
+///    collapses into a menu rather than shrinking or clipping;
+/// 5. **the clock goes** ([_barKeepsClock]);
+/// 6. **the five transport buttons stand alone**, and only if the bar is
+///    narrower than *those* does it finally slide sideways (step 5).
+///
+/// The numbers are the widths at which the pieces below them stop fitting,
+/// rounded outward, and `viewer_metrics_test` walks the whole ladder.
 const double _barMinimum = 560;
+
+/// Below this the bar drops the reading and keeps the controls.
+const double _barKeepsReading = 460;
+
+/// Below this the ways of looking fold into the overflow mark.
+const double _barKeepsLooking = 400;
+
+/// Below this the clock goes and the transport stands alone.
+const double _barKeepsClock = 280;
+
+/// The one mark the ways of looking fold into on a narrow bar.
+///
+/// It opens the **same widgets** in a floating strip — not a menu written out
+/// a second time, which is the version that goes stale. A control that works
+/// on the bar works here, including the ones that are themselves menus.
+class _LookingOverflow extends StatelessWidget {
+  final List<Widget> Function() marks;
+  const _LookingOverflow({required this.marks});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return LumitTooltip(
+      message: l10n.tipViewerMoreControls,
+      child: Builder(
+        builder: (menuContext) => HouseButton(
+          key: const ValueKey('viewer-overflow'),
+          frameless: true,
+          padding: EdgeInsets.zero,
+          onPressed: () => _open(menuContext),
+          child: SizedBox(
+            width: viewerBarIconSize,
+            height: viewerStripHeight - 2 * viewerMarkEdge,
+            child: Center(child: Text('⋯', style: t.small)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _open(BuildContext context) {
+    final box = context.findRenderObject();
+    if (box is! RenderBox) return;
+    // Above the mark: the bar is at the bottom of the panel, so a strip hung
+    // under it would be off the window.
+    final over = box.localToGlobal(Offset(0, -viewerStripHeight - 6));
+    showLumitPopup<void>(
+      context: context,
+      position: over,
+      builder: (close) => FloatSurface(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Row(mainAxisSize: MainAxisSize.min, children: marks()),
+        ),
+      ),
+    );
+  }
+}
 
 /// **What is on screen, in one line** (K-466): the composition, the time, the
 /// pixels the engine actually made, and the magnification they are drawn at.

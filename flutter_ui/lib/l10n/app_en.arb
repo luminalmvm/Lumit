@@ -9097,5 +9097,9 @@
   "tipViewerAtEffect": "Picture at this effect",
   "@tipViewerAtEffect": {
     "description": "Tooltip on the Viewer's 'at effect' chip: clicking it shows the composition with that layer's effects stopping there, and clicking again returns the finished picture. Under five words."
+  },
+  "tipViewerMoreControls": "More viewer controls",
+  "@tipViewerMoreControls": {
+    "description": "Hover text on the overflow mark at the left of the Viewer's bottom bar. It appears only when the Viewer is docked too narrow for the bar to hold the transparency grid, guides, channel, exposure and snapshot controls, and opens all of them in a small floating strip."
   }
 }
