@@ -1466,6 +1466,32 @@ impl FlowEngine {
         flow_pair_with(a, b, set)
     }
 
+    /// Both flow directions between two **GPU pictures**, at the settings'
+    /// working resolution (docs/08 §3.2, K-565).
+    ///
+    /// This is how a picture that only exists on the card gets measured: an
+    /// adjustment layer's composite of everything below it, or a Precomp's own
+    /// render. `None` — no GPU backend, a size mismatch, a device fault — means
+    /// the caller has no field and its flow-consuming effect degrades to a
+    /// passthrough, which is the same answer it got before any of this existed.
+    /// There is deliberately no CPU fallback: the oracle cannot see a texture
+    /// without the readback this exists to avoid.
+    pub fn flow_pair_textures(
+        &mut self,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        set: &FlowSettings,
+    ) -> Option<(FlowField, FlowField)> {
+        let g = self.gpu.as_mut()?;
+        match g.flow_pair_textures(a, b, set) {
+            Ok(pair) => Some(pair),
+            Err(_) => {
+                self.gpu = None; // degrade to CPU-only from here on
+                None
+            }
+        }
+    }
+
     /// The flow-interpolated frame at `phi` under explicit settings.
     pub fn interpolate_at(
         &mut self,
@@ -2362,18 +2388,137 @@ mod tests {
 
     // ---- The WGSL backend against the CPU oracle (impl note §6.5) ----
 
-    fn gpu_flow() -> Option<gpu::GpuFlow> {
-        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
-            lumit_gpu::no_adapter();
-            return None;
-        };
-        match gpu::GpuFlow::new(&ctx) {
+    fn gpu_flow_on(ctx: &lumit_gpu::GpuContext) -> Option<gpu::GpuFlow> {
+        match gpu::GpuFlow::new(ctx) {
             Ok(g) => Some(g),
             Err(e) => {
                 eprintln!("skipping: flow pipelines failed: {e}");
                 None
             }
         }
+    }
+
+    fn gpu_flow() -> Option<gpu::GpuFlow> {
+        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return None;
+        };
+        gpu_flow_on(&ctx)
+    }
+
+    /// The texture entry point must measure exactly what the CPU-grey entry
+    /// point measures (K-565, docs/08 §3.2).
+    ///
+    /// It is the same solver either way — the only difference is where the
+    /// level-0 luma comes from — so the two must agree to float noise. The
+    /// scene is handed over twice: once as the `Gray` the decode path builds,
+    /// and once as the scene-linear RGBA texture a composite actually is, which
+    /// `luma.wgsl` puts back through the sRGB transfer before taking BT.709
+    /// luma. If that transfer were dropped, the correlation would run on linear
+    /// numbers and the fields would visibly part company.
+    #[test]
+    fn gpu_texture_entry_matches_the_gray_entry() {
+        let Ok(ctx) = lumit_gpu::GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let Some(mut g) = gpu_flow_on(&ctx) else {
+            return;
+        };
+        let (w, h) = (192, 160);
+        let a = render(w, h, |x, y| perlin(x, y, 1));
+        let b = render(w, h, |x, y| perlin(x - 7.3, y - 3.9, 1));
+
+        // sRGB-encoded grey → the scene-linear RGBA a composite carries.
+        let decode = |v: f32| {
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let upload = |g: &Gray| {
+            let tex = ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("flow-entry-test"),
+                size: wgpu::Extent3d {
+                    width: g.w as u32,
+                    height: g.h as u32,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let mut px = vec![0f32; g.w * g.h * 4];
+            for (i, &v) in g.data.iter().enumerate() {
+                let lin = decode(v);
+                px[i * 4] = lin;
+                px[i * 4 + 1] = lin;
+                px[i * 4 + 2] = lin;
+                px[i * 4 + 3] = 1.0;
+            }
+            ctx.queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &tex,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                bytemuck::cast_slice(&px),
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(g.w as u32 * 16),
+                    rows_per_image: Some(g.h as u32),
+                },
+                wgpu::Extent3d {
+                    width: g.w as u32,
+                    height: g.h as u32,
+                    depth_or_array_layers: 1,
+                },
+            );
+            tex
+        };
+        let (ta, tb) = (upload(&a), upload(&b));
+
+        let set = FlowSettings::default();
+        let (grey_fwd, _) = g.flow_pair_with(&a, &b, &set).expect("grey entry");
+        let (tex_fwd, _) = g.flow_pair_textures(&ta, &tb, &set).expect("texture entry");
+        assert_eq!(
+            (tex_fwd.w, tex_fwd.h),
+            (w, h),
+            "measured at the working size"
+        );
+        // A looser bound than the 1e-3 the two *backends* are held to (§6.5),
+        // and for a reason that is not slack: those two are given identical
+        // numbers, where these two are given the same picture through a
+        // decode-and-re-encode round trip whose `pow` is the shader's own
+        // approximation. A hundredth of a pixel on a seven-pixel displacement
+        // is that round trip; a dropped transfer, a wrong luma weight or a
+        // transposed axis lands orders of magnitude past it.
+        let diff = mean_abs_diff(&grey_fwd, &tex_fwd);
+        assert!(
+            diff < 0.01,
+            "the texture entry point must measure what the grey one does; \
+             mean absolute difference {diff}"
+        );
+
+        // And it is deterministic — a second measurement of the same pair is
+        // the same field, which is what the render path's two runs rest on.
+        let (again, _) = g.flow_pair_textures(&ta, &tb, &set).expect("texture entry");
+        assert_eq!(tex_fwd.u, again.u, "the same pair measures the same way");
+        assert_eq!(tex_fwd.v, again.v);
+
+        // Half resolution measures at half the size — the working-size rule the
+        // decode path's effect settings use, expressed by the same divisor.
+        let half = FlowSettings {
+            divisor: 2,
+            ..FlowSettings::default()
+        };
+        let (small, _) = g.flow_pair_textures(&ta, &tb, &half).expect("half res");
+        assert_eq!((small.w, small.h), (w / 2, h / 2));
     }
 
     /// Mean absolute difference between two fields, per component.

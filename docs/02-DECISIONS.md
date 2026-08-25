@@ -16140,3 +16140,51 @@ each as its own work package on the wire K-492 built, now over K-561's 3D stream
 **shape operators** beyond the four that landed with K-551..K-554: boolean combines and
 path morphing, plus **text as data** — per-glyph animation, text on a path, text to
 shapes and to points. Design decisions inside each package land as their own entries.
+
+## K-565 — The composite measures its own motion, on the card
+
+**Status: DECIDED (2026-08-25).** docs/08 §3.2 has always said Fast motion blur is
+"applied per layer or, **most commonly, on an adjustment layer over the whole montage**",
+and that commonest placement was the one place it did nothing at all — a Precomp layer
+likewise. The reason was structural rather than an oversight: the decode worker is the only
+thing that measures flow, and it only ever sees decoded source frames. An adjustment layer's
+picture is the composite of everything beneath it and a Precomp's is a comp render; neither
+has a decoded frame anywhere.
+
+**Both kinds do have a picture that can be built again at another moment**, and that is the
+measurement's second half. `CompLayerDraw::flow_below` carries the layer's own stack rebuilt
+at each neighbour time — for an adjustment, the below-stack through the same `below_draws_at`
+Posterize Time and accumulation motion blur already drive (K-133, K-134), so preview and
+export build the identical pair (K-031); for a Precomp, the nested comp at the neighbour
+layer time. `Realiser::measure_below_flow` renders each neighbour beside the frame-time
+picture and measures between the two. The offset steps by the **comp's own frame** — that is
+the shutter the effect smears over — and the working resolution is the half-res the decode
+worker already measures an effect's motion at, so a composite is measured the way footage is
+rather than by a second rule nobody wrote down.
+
+**The measurement stays on the card.** `GpuFlow` took a CPU `Gray` and nothing else, so the
+obvious route was to read both composites back and grey them — which would cost several
+times what the flow itself does. Instead the flow engine gains a texture entry point
+(`flow_pair_textures`) whose one new kernel, `luma.wgsl`, writes the level-0 luma the pyramid
+starts from straight from an RGBA texture: BT.709 luma of *encoded* values exactly as
+`to_gray` computes it, with the sRGB transfer applied first because the working space is
+scene-linear, and a `d × d` box average when the settings ask for a reduced working size.
+Everything after the luma is the same solver, held to it by a parity test. There is no CPU
+fallback for this door and there should not be — the oracle cannot see a texture without the
+readback the door exists to avoid — so a device with no GPU flow leaves the consumer with no
+field, which is its documented passthrough.
+
+**K-544 is untouched.** The builder emits one neighbour render per offset the stack asked
+for (`stack_flow_neighbours`), so Fast motion blur's `+1` and Datamosh's `-1` are separate
+measurements on an adjustment layer exactly as they are on a footage layer, and neither
+consumer can take the other's field. Datamosh reads both halves — the field and the previous
+picture it drags along it — and both arrive from the one helper.
+
+**Two boundaries, both deliberate.** The work is **on demand**: a layer carrying neither
+effect builds no neighbour and never reaches the flow engine, and a neighbour render strips
+its own temporal inputs, which is what stops a stack of adjustments multiplying a frame's
+cost by two to the depth. And **footage beneath is held** — a re-render re-decodes nothing
+(docs/impl/temporal-rerender.md) — so what is measured is comp-driven motion, not the
+sub-frame motion of footage playing back beneath the adjustment. Closing that is the FX-1
+shape one level up (the decode planner snapping each covered layer's neighbour frames) and
+is logged in docs/TODO.md rather than folded in here.

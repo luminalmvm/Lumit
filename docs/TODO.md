@@ -830,22 +830,23 @@ every clip of that footage, and why deleting the folder is always safe). Owed
 rather than written because GUIDE.md was another session's file when stages 1 and
 2 landed.
 
-**Fast motion blur only works on footage layers.** docs/08 §3.2 says the effect
-is "applied per layer or, **most commonly, on an adjustment layer over the whole
-montage**", and that case is a silent passthrough — as is a Precomp layer. Only
-Footage layers are given a `flow_field` at all, because the decode worker is the
-only thing that measures flow and it only ever sees decoded source frames. An
-adjustment layer's "source" is the composite of everything beneath it, which
-exists as a GPU texture and never as decoded frames.
+**A held re-render cannot see footage move** (the remainder of K-565). Fast
+motion blur and Datamosh now measure the composite an adjustment layer or a
+Precomp layer actually shows, by building it again at the neighbour time and
+measuring between the two textures. What that neighbour composite cannot show is
+**footage motion**: a re-render re-decodes nothing (docs/impl/temporal-rerender.md
+Traps), so every footage layer beneath the adjustment carries the *same* decoded
+frame in both pictures and contributes zero flow. Comp-driven motion — transforms,
+effects, cameras, nested animation — measures correctly; an adjustment over
+plain playing footage measures nothing, and the effect has to go on the footage
+layer instead.
 
-The shape it needs: build the below-stack at the neighbour time the way
-`temporal_below` already does for Posterize and `accumulation_below` for §3.26
-(docs/impl/temporal-rerender.md), render both to textures in `realise`, and
-measure between them. That last part wants a texture entry point on the flow
-engine — `GpuFlow` takes a CPU `Gray` today, so it needs one small kernel
-converting an RGBA texture to the luma buffer the pyramid starts from, after
-which the whole measurement stays on the card. Doing it by reading the two
-composites back to the CPU would work and would cost more than the flow does.
+Closing it is the FX-1 shape one level up: `posterize_sample_times` already makes
+the decode planner snap *which source frame each covered layer decodes* for a held
+re-render, and this wants the sibling — the layers beneath a flow-consuming
+adjustment decoding their `±1` neighbours too, and `below_draws_at` handed that
+second set of pixels. Planner, decode worker and builder all move, which is why it
+was not folded into K-565.
 
 **Flow's remaining K-331 work.** The engine, the GPU port, the cache and the
 controls have landed. What is left:

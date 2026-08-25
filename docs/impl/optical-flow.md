@@ -35,6 +35,24 @@ DISOpticalFlow documents the algorithm; the paper is Kroeger et al., ECCV 2016.
 All passes on grayscale (BT.709 luma of the linear frame, then **gamma-encode before
 correlating** — flow works better on perceptual values; this matches OpenCV practice).
 
+**Two ways in (K-565).** The luma the pyramid starts from usually arrives from the CPU:
+`flow_grays` greys a decoded RGBA frame and `GpuFlow::flow_pair_with` uploads it. A
+**composite** never can — an adjustment layer's picture is the composite of everything below
+it and a Precomp's is a comp render, both textures on the render device, and reading two
+1080p composites back to grey them costs several times what the measurement does. So
+`GpuFlow::flow_pair_textures` takes the two pictures as textures and makes the level-0 luma
+where they already are, in one compute pass (`luma.wgsl`): scene-linear RGBA in, one f32 out
+per texel, box-averaging a `d × d` block when the settings ask for a reduced working size.
+It computes exactly what `to_gray` does — BT.709 luma of **encoded** values — with the one
+step a texture needs, putting each channel back through the sRGB transfer first; the
+alternative, correlating linear numbers, is a different and worse measurement. Everything
+after the luma is the same solver, which is what the parity test holds it to
+(`gpu_texture_entry_matches_the_gray_entry`: the same scene handed over both ways agrees to
+a hundredth of a pixel, the round trip's own `pow` error). There is deliberately no CPU
+fallback for this door — the oracle cannot see a texture without the readback it exists to
+avoid — so a device with no GPU flow leaves the consumer with no field, which is its
+documented passthrough.
+
 **Pyramid build**: `L0` = luma at working res (default **half** comp res; `FlowQuality`
 selects), then box-downsample ×2 per level to ~24 px min dimension (≈ 5 levels at 1080p
 half res). Any deeper and the 8×8 patches are frame-scale: every patch straddles every

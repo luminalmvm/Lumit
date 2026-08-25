@@ -46,6 +46,20 @@ struct Params {
     pad1: u32,
 }
 
+/// One RGBA-texture-to-luma conversion (matches `LumaParams` in luma.wgsl).
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct LumaParams {
+    w: u32,
+    h: u32,
+    sw: u32,
+    sh: u32,
+    d: u32,
+    pad0: u32,
+    pad1: u32,
+    pad2: u32,
+}
+
 struct Pipelines {
     downsample: wgpu::ComputePipeline,
     sobel: wgpu::ComputePipeline,
@@ -134,6 +148,13 @@ pub struct GpuFlow {
     /// storage use is exclusive within a dispatch.
     dummy_ro: wgpu::Buffer,
     dummy_rw: wgpu::Buffer,
+    /// The texture entry point (docs/08 §3.2): its own layout, because a
+    /// texture binding is not a buffer binding and the solver's shared layout
+    /// is all buffers. One uniform block serves both pictures of a pair —
+    /// they are the same size, so they take the same parameters.
+    luma_layout: wgpu::BindGroupLayout,
+    luma: wgpu::ComputePipeline,
+    luma_params: wgpu::Buffer,
     plan: Option<Plan>,
 }
 
@@ -226,6 +247,62 @@ impl GpuFlow {
         };
         let dummy_ro = mk_dummy("dis-dummy-ro");
         let dummy_rw = mk_dummy("dis-dummy-rw");
+        // The texture entry point's own pipeline (docs/08 §3.2).
+        let luma_shader = ctx
+            .device
+            .create_shader_module(wgpu::include_wgsl!("luma.wgsl"));
+        let luma_layout = ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("dis-luma"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            // `textureLoad` only, and non-filterable accepts
+                            // every float format a caller might hand over.
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    storage_entry(2, false),
+                ],
+            });
+        let luma =
+            ctx.device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("dis-luma"),
+                    layout: Some(&ctx.device.create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("dis-luma"),
+                            bind_group_layouts: &[&luma_layout],
+                            push_constant_ranges: &[],
+                        },
+                    )),
+                    module: &luma_shader,
+                    entry_point: Some("to_luma"),
+                    compilation_options: Default::default(),
+                    cache: None,
+                });
+        let luma_params = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("dis-luma-params"),
+            size: std::mem::size_of::<LumaParams>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         if let Some(e) = pollster::block_on(ctx.device.pop_error_scope()) {
             return Err(FlowError::Pipeline(e.to_string()));
         }
@@ -235,6 +312,9 @@ impl GpuFlow {
             pipelines,
             dummy_ro,
             dummy_rw,
+            luma_layout,
+            luma,
+            luma_params,
             plan: None,
         })
     }
@@ -268,13 +348,7 @@ impl GpuFlow {
         if a.w < PATCH || a.h < PATCH {
             return Ok((FlowField::zeroed(a.w, a.h), FlowField::zeroed(b.w, b.h)));
         }
-        if self
-            .plan
-            .as_ref()
-            .is_none_or(|p| p.w != a.w || p.h != a.h || p.set != *set)
-        {
-            self.plan = Some(self.build_plan(a.w, a.h, set)?);
-        }
+        self.ensure_plan(a.w, a.h, set)?;
         let Some(plan) = self.plan.as_ref() else {
             return Err(FlowError::Pipeline("plan missing".into()));
         };
@@ -286,7 +360,133 @@ impl GpuFlow {
         self.ctx
             .queue
             .write_buffer(&plan.levels[0].luma_b, 0, bytemuck::cast_slice(&b.data));
+        self.solve()
+    }
 
+    /// Both flow directions between two **GPU pictures** — the texture entry
+    /// point (docs/08 §3.2, K-565).
+    ///
+    /// The pair a composite consumer measures never exists on the CPU: an
+    /// adjustment layer's picture is the composite of everything beneath it and
+    /// a Precomp's is a comp render, both textures on this device. The only
+    /// step the buffer entry point has that this one lacks is the upload, so
+    /// this converts each picture to the level-0 luma with one compute pass
+    /// (`luma.wgsl`) and then runs the identical solver. Reading the two
+    /// composites back to make CPU greys would cost several times what the
+    /// measurement does.
+    ///
+    /// `set.divisor` shapes the working size exactly as [`crate::flow_grays`]
+    /// does for decoded frames, and the field comes back at that working size —
+    /// the caller scales it up ([`crate::field_to_size`]) as the decode path
+    /// does. Both pictures must be the same size; anything else is an `Err`,
+    /// and every `Err` is a degrade for the caller, never a fault.
+    pub fn flow_pair_textures(
+        &mut self,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        set: &crate::FlowSettings,
+    ) -> Result<(FlowField, FlowField), FlowError> {
+        if a.width() != b.width() || a.height() != b.height() {
+            return Err(FlowError::DimensionMismatch);
+        }
+        let (w, h) = (a.width() as usize, a.height() as usize);
+        let (ww, wh) = set.working_size(w, h);
+        if ww < PATCH || wh < PATCH {
+            return Ok((FlowField::zeroed(ww, wh), FlowField::zeroed(ww, wh)));
+        }
+        // The box factor the working size implies: `working_size` divides, so
+        // this is the divisor it actually applied (1 when it declined to).
+        let d = (w / ww.max(1)).max(1) as u32;
+        self.ensure_plan(ww, wh, set)?;
+        let Some(plan) = self.plan.as_ref() else {
+            return Err(FlowError::Pipeline("plan missing".into()));
+        };
+        let bind = |tex: &wgpu::Texture, out: &wgpu::Buffer| {
+            let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+            self.ctx
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("dis-luma"),
+                    layout: &self.luma_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: self.luma_params.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: out.as_entire_binding(),
+                        },
+                    ],
+                })
+        };
+        self.ctx.queue.write_buffer(
+            &self.luma_params,
+            0,
+            bytemuck::bytes_of(&LumaParams {
+                w: ww as u32,
+                h: wh as u32,
+                sw: a.width(),
+                sh: a.height(),
+                d,
+                pad0: 0,
+                pad1: 0,
+                pad2: 0,
+            }),
+        );
+        let groups = [
+            bind(a, &plan.levels[0].luma_a),
+            bind(b, &plan.levels[0].luma_b),
+        ];
+        let mut encoder = self
+            .ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("dis-luma"),
+            });
+        {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("dis-luma"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&self.luma);
+            for g in &groups {
+                pass.set_bind_group(0, g, &[]);
+                pass.dispatch_workgroups(ww.div_ceil(8) as u32, wh.div_ceil(8) as u32, 1);
+            }
+        }
+        self.ctx.queue.submit([encoder.finish()]);
+        self.solve()
+    }
+
+    /// Build (or rebuild) the plan for this working size and these settings.
+    fn ensure_plan(
+        &mut self,
+        w: usize,
+        h: usize,
+        set: &crate::FlowSettings,
+    ) -> Result<(), FlowError> {
+        if self
+            .plan
+            .as_ref()
+            .is_none_or(|p| p.w != w || p.h != h || p.set != *set)
+        {
+            self.plan = Some(self.build_plan(w, h, set)?);
+        }
+        Ok(())
+    }
+
+    /// The solve itself, from level-0 lumas already in place to the two fields
+    /// read back — shared by both entry points, so a composite is measured by
+    /// the same algorithm a decoded frame is.
+    fn solve(&self) -> Result<(FlowField, FlowField), FlowError> {
+        let Some(plan) = self.plan.as_ref() else {
+            return Err(FlowError::Pipeline("plan missing".into()));
+        };
         let levels = plan.levels.len();
         let mut encoder = self
             .ctx

@@ -742,13 +742,41 @@ vector × (shutter ÷ 360); the gather alternates between the pixel's own direct
 neighbourhood's dominant one, McGuire-weighted (cone + cone + cylinder), edges clamped so a
 full-frame smear never darkens the border. Pinned simplifications, each stable when the rest of
 §3.2 lands: **Vector source is Flow only** (Auto's transform-derivative path and the
-engine-motion-blur double-blur guard follow), **Amount** (the post-shutter vector scale) is
-deferred, and it blurs
-**footage layers only** — adjustment-layer and Sequence-clip temporal effects are deferred
-exactly as they are for Echo. Without a depth buffer the reconstruction cannot tell a fast
+engine-motion-blur double-blur guard follow) and **Amount** (the post-shutter vector scale) is
+deferred. Without a depth buffer the reconstruction cannot tell a fast
 foreground from a fast background, so a *small* static object entirely surrounded by fast
 motion receives its neighbours' smear (large static regions do not — the reach is a tile or
 two plus the streak); the fix, if ever wanted, is a depth input rather than a constant.
+
+**On an adjustment layer and on a Precomp, the picture measures itself** (K-565). The
+sentence above — *most commonly, on an adjustment layer over the whole montage* — was for a
+long time the one placement where the effect did nothing at all, and a Precomp layer was the
+same: the decode worker measures between decoded source frames, and neither of those kinds
+has any. Both do have a picture that can be **built again at another moment**, which is what
+they now do. An adjustment's below-stack is rebuilt at `t + offset·dt` through the same
+`below_draws_at` Posterize Time (§3.25) and accumulation motion blur (§3.26) drive; a
+Precomp's nested comp is rebuilt at the neighbour layer time. The realiser renders the
+neighbour beside the frame-time picture and measures between the two **on the card** — the
+flow engine takes an RGBA texture directly, converting it to the luma its pyramid starts
+from in one compute pass ([impl/optical-flow.md](impl/optical-flow.md) §1), because reading
+two composites back to make CPU greys costs several times what the measurement does. The
+offset steps by the **comp's own frame**, which is the shutter the effect smears over, and
+the working resolution is the half-res the decode worker measures an effect's motion at, so
+a composite is measured the way footage is rather than by a second rule. Datamosh (§3.12)
+goes through the identical machinery for its own `-1` measurement; K-544's contract holds
+unchanged, because the builder emits **one neighbour render per offset the stack asked for**
+and neither consumer can take the other's field.
+
+Two boundaries, both inherited and both deliberate. **Cost**: each measurement is a second
+render of the below-stack (or of the nested comp) plus one flow pair, taken on demand — a
+layer with neither effect builds nothing and never reaches the flow engine — and the whole
+of it degrades to the old passthrough when the device has no GPU flow. **Footage beneath is
+held**: a re-render re-decodes nothing (the temporal-re-render trap,
+[impl/temporal-rerender.md](impl/temporal-rerender.md)), so the neighbour composite carries
+the *same* decoded frames as this one. What is measured is therefore comp-driven motion —
+transforms, effects, cameras, nested animation — and not the sub-frame motion inside footage
+playing back beneath the adjustment, which is measured by putting the effect on the footage
+layer itself. Sequence-clip temporal effects remain deferred exactly as they are for Echo.
 
 **Its matte scales Shutter angle per pixel** (K-429, §2.6), read at the destination pixel
 and spent everywhere the shutter is spent — this pixel's own vector, the neighbourhood's
@@ -1286,8 +1314,11 @@ controls:
 frame for a punchier tear (`mix()` does not clamp in either the CPU or GPU path); 0 stays the
 bit-exact passthrough regardless of the other parameters (pinned by test).
 
-Footage-only: with no -1 neighbour or flow field (a non-footage layer, or a dropped decode) it
-degrades to a no-op, never a fault. Temporal window `{-1, 0}` — static, exactly the shape
+With no -1 neighbour or flow field (a dropped decode, a layer nothing can measure) it
+degrades to a no-op, never a fault. On an **adjustment layer** and on a **Precomp** the pair
+is now measured from the picture itself, exactly as §3.2's is and through the same machinery
+(K-565) — this effect needs both halves of it, since it drags the previous picture along the
+field. Temporal window `{-1, 0}` — static, exactly the shape
 Motion blur's own `{0, +1}` has, so `effect_flow_neighbour` reads the match name the same
 static way. **A layer measures one flow field per consuming effect (K-543's successor K-544,
 superseding K-104's one-per-layer rule):** Motion blur wants the forward measurement to `+1`

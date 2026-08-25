@@ -385,4 +385,34 @@ pub struct CompLayerDraw {
     /// below-composite. Takes precedence over `temporal_below` when both are set
     /// (one temporal re-render per adjustment in v1). None on every ordinary draw.
     pub accumulation_below: Option<AccumulationBelow>,
+    /// **The picture a flow-consuming effect on a layer with no footage
+    /// measures against** (docs/08 §3.2, K-565): this layer's own stack rebuilt
+    /// at each neighbour time, as `(offset, draws, camera)` in ascending offset
+    /// order.
+    ///
+    /// Fast motion blur and Datamosh want per-pixel motion, and the decode
+    /// worker can only measure it between decoded source frames — which an
+    /// **adjustment layer** (whose picture is the composite of everything
+    /// below it) and a **Precomp layer** (whose picture is a comp render) do
+    /// not have. Both do have a picture that can be built again at another
+    /// moment, which is what this is: for an adjustment, the below-stack at
+    /// `t + offset·dt` through the same `below_draws_at` Posterize and
+    /// accumulation motion blur use; for a Precomp, the nested comp's own draw
+    /// list at the neighbour layer time.
+    ///
+    /// `realise` renders each at the raster the layer's own picture is at,
+    /// measures the motion between the two on the card, and hands the field to
+    /// the effect exactly as a footage layer's decoded field is handed over. One
+    /// entry per offset the stack asked for (`stack_flow_neighbours`), so a
+    /// stack holding both consumers gets both measurements and neither silently
+    /// takes the other's (K-544).
+    ///
+    /// Empty on every layer whose motion the decode worker can measure and on
+    /// every layer that asks for none, which is almost all of them.
+    #[allow(clippy::type_complexity)]
+    pub flow_below: Vec<(
+        i32,
+        Vec<CompLayerDraw>,
+        Option<lumit_core::model::CameraPose>,
+    )>,
 }

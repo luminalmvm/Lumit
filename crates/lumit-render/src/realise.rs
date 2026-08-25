@@ -76,6 +76,29 @@ pub struct Realiser<'a> {
     /// carry the space name on `LayerInputDraw` as it is carried on
     /// `DrawSource::Pixels`.
     pub colour_inputs: Option<&'a crate::colour::InputTransforms>,
+    /// The flow backend a composite measurement runs on (docs/08 §3.2, K-565),
+    /// held by the render's owner beside the caches above and for the same
+    /// reason: the solver's plan is worth keeping between frames. `None` — a
+    /// caller that never asks for one, and every builder in the tests that has
+    /// no use for it — means a Fast motion blur or Datamosh on an adjustment or
+    /// Precomp layer degrades to the passthrough it was before this existed,
+    /// which is exactly what an unavailable GPU flow does too.
+    pub flow: Option<&'a std::cell::RefCell<CompositeFlow>>,
+}
+
+/// The flow backend for measuring a **composite's** motion (docs/08 §3.2,
+/// K-565), built on the render's own device the first time a layer actually
+/// asks for one.
+///
+/// # In plain terms
+///
+/// Measuring motion means comparing two pictures, and building the flow solver
+/// compiles a dozen shaders. A project with no Fast motion blur and no Datamosh
+/// on an adjustment or Precomp layer never asks, so it never pays: this starts
+/// empty and fills itself in on the first question.
+#[derive(Default)]
+pub struct CompositeFlow {
+    engine: Option<lumit_flow::FlowEngine>,
 }
 
 impl Realiser<'_> {
@@ -483,6 +506,15 @@ impl Realiser<'_> {
             } else {
                 below.clone()
             };
+            // **The motion of the composite below** (docs/08 §3.2, K-565). An
+            // adjustment layer has no decoded frames, so its Fast motion blur
+            // and Datamosh used to bind nothing and pass through — on exactly
+            // the layer §3.2 calls the commonest place to put the effect. The
+            // below-stack was built again at each neighbour time; realise it
+            // and measure between the two here, where both are textures.
+            // Empty unless one of those effects is live.
+            let (flow_neighbours, flow) =
+                self.measure_below_flow(l, &fx_input, width, height, background);
             // The adjustment's own stack, coverage and blend all run on the
             // ACTUAL raster: `adjust_blend` reads its three inputs texel by
             // texel, so they must agree on their size.
@@ -493,8 +525,8 @@ impl Realiser<'_> {
                 tw,
                 th,
                 &fx_ops,
-                &[],
-                &[],
+                &flow_neighbours,
+                &flow,
                 &luts,
                 &layer_inputs,
                 &flare_lens,
@@ -612,6 +644,94 @@ impl Realiser<'_> {
                 &[(below, 1.0 - ab.mix), (&average, ab.mix)],
             )
         }
+    }
+
+    /// **Motion measured between two composites** (docs/08 §3.2, K-565): the
+    /// picture this layer's effects run on, and the same picture built again at
+    /// each neighbour time ([`CompLayerDraw::flow_below`]).
+    ///
+    /// Returns the neighbour pictures and the fields measured against them, in
+    /// the same shape a footage layer's decoded neighbours and fields arrive in
+    /// — so nothing downstream knows where they came from. Both halves matter:
+    /// Fast motion blur reads only the field, Datamosh also drags the `-1`
+    /// picture along it, and K-544's contract that each consumer gets the
+    /// measurement it asked for holds here because the builder emitted one
+    /// entry per offset the stack wanted.
+    ///
+    /// Empty in, empty out — and empty is the common case, so an ordinary
+    /// frame does not reach the flow engine at all.
+    #[allow(clippy::type_complexity)]
+    fn measure_below_flow(
+        &self,
+        l: &CompLayerDraw,
+        now: &wgpu::Texture,
+        width: u32,
+        height: u32,
+        background: [f64; 4],
+    ) -> (Vec<(i32, wgpu::Texture)>, Vec<(i32, wgpu::Texture)>) {
+        let mut neighbours = Vec::with_capacity(l.flow_below.len());
+        let mut fields = Vec::with_capacity(l.flow_below.len());
+        for (offset, draws, camera) in &l.flow_below {
+            let then = self.realise(*camera, width, height, background, draws);
+            if let Some(field) = self.measure_flow(now, &then) {
+                fields.push((*offset, field));
+            }
+            neighbours.push((*offset, then));
+        }
+        (neighbours, fields)
+    }
+
+    /// One measurement, entirely on the card: two pictures in, the `rgba32float`
+    /// field the kernels read out (docs/08 §3.2, K-565).
+    ///
+    /// The flow engine's texture entry point converts each picture to the luma
+    /// its pyramid starts from with one compute pass, so neither composite is
+    /// ever read back — a readback of two 1080p frames costs several times what
+    /// the measurement does.
+    ///
+    /// `None` is always a degrade and never a fault: no backend was given, the
+    /// device has no GPU flow, or the solver faulted (in which case the engine
+    /// has already given up on the GPU for good). The caller then binds no
+    /// field, and an effect with no field is its documented passthrough.
+    ///
+    /// ponytail: measured per realise, not cached across them. The decode
+    /// worker's flow cache keys by *content* — the source item and the two
+    /// frames — and a composite has no such name (`fx_input_key` is `None` for
+    /// exactly this reason, K-421), so filing one under the layer and the time
+    /// would go stale the moment somebody edited a layer below. Caching would
+    /// also save the smaller half: the neighbour composite is a whole extra comp
+    /// render and the flow is ~8 ms on top of it. The upgrade is to name the
+    /// below-composite the way K-422 named a nested comp's frame, and then both
+    /// halves can be cached under the one name.
+    fn measure_flow(&self, a: &wgpu::Texture, b: &wgpu::Texture) -> Option<wgpu::Texture> {
+        let cell = self.flow?;
+        // The solver reads these two pictures on an encoder of its own, and a
+        // command that has not been submitted has not run.
+        self.ctx.flush();
+        let mut held = cell.borrow_mut();
+        let engine = held
+            .engine
+            .get_or_insert_with(|| lumit_flow::FlowEngine::with_context(&self.ctx));
+        // Half resolution, the same working size the decode worker measures an
+        // effect's motion at and for its reasons (docs/impl/optical-flow.md §1):
+        // a wider patch relative to repeating detail, at a quarter of the cost.
+        // Sharing that setting is also what keeps a composite measured the way
+        // footage is, rather than by a second rule nobody wrote down.
+        let set = lumit_flow::FlowSettings {
+            divisor: 2,
+            ..lumit_flow::FlowSettings::default()
+        };
+        let (fwd, bwd) = engine.flow_pair_textures(a, b, &set)?;
+        // The forward–backward confidence the streak is steered by (FX-19), and
+        // the field brought up to the raster the effect runs on — the same two
+        // deterministic functions the decode path applies to a measured pair, so
+        // a composite's field and a footage layer's are the same kind of thing.
+        let conf = lumit_flow::confidence(&fwd, &bwd);
+        let (w, h) = (a.width(), a.height());
+        let (u, v, c) = lumit_flow::field_to_size(&fwd, &conf, w as usize, h as usize);
+        Some(lumit_gpu::fx::upload_flow_field(
+            &self.ctx, &u, &v, &c, w, h,
+        ))
     }
 
     /// The adjustment layer's comp-space coverage (docs/06 §1.5): its mask
@@ -751,29 +871,49 @@ impl Realiser<'_> {
                 let (w, h) = (tex.width(), tex.height());
                 // Neighbour source frames a temporal effect (echo) reads;
                 // empty for a plain stack, so this uploads nothing then.
-                let neighbours: Vec<(i32, wgpu::Texture)> = l
-                    .neighbours
-                    .iter()
-                    .map(|(offset, rgba, nw, nh)| {
-                        let src = self.engine.upload_srgb8(&self.ctx, rgba, *nw, *nh);
-                        (*offset, self.engine.linearise(&self.ctx, &src))
-                    })
-                    .collect();
-                // The dense motion fields, one per offset a flow-consuming
-                // effect asked for (K-544), each uploaded as its own texture
-                // (only when it matches the layer's raster). The confidence
-                // rides in the .z channel (FX-19).
-                let flow: Vec<(i32, wgpu::Texture)> = l
-                    .flow_fields
-                    .iter()
-                    .filter(|(_, _, _, _, fw, fh)| *fw == w && *fh == h)
-                    .map(|(offset, u, v, conf, _, _)| {
-                        (
-                            *offset,
-                            lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h),
-                        )
-                    })
-                    .collect();
+                // **A Precomp measures its own motion** (docs/08 §3.2, K-565).
+                // A comp has no decoded frames either, so a Fast motion blur or
+                // Datamosh on a Precomp layer bound nothing and passed through;
+                // the nested picture was built again at each neighbour time, and
+                // the pair is compared here. Every other kind takes the decoded
+                // route below, unchanged.
+                let (neighbours, flow) = match &l.source {
+                    DrawSource::Nested {
+                        width,
+                        height,
+                        background,
+                        ..
+                    } if !l.flow_below.is_empty() => {
+                        self.measure_below_flow(l, &tex, *width, *height, *background)
+                    }
+                    _ => {
+                        let neighbours: Vec<(i32, wgpu::Texture)> = l
+                            .neighbours
+                            .iter()
+                            .map(|(offset, rgba, nw, nh)| {
+                                let src = self.engine.upload_srgb8(&self.ctx, rgba, *nw, *nh);
+                                (*offset, self.engine.linearise(&self.ctx, &src))
+                            })
+                            .collect();
+                        // The dense motion fields, one per offset a
+                        // flow-consuming effect asked for (K-544), each uploaded
+                        // as its own texture (only when it matches the layer's
+                        // raster). The confidence rides in the .z channel
+                        // (FX-19).
+                        let flow: Vec<(i32, wgpu::Texture)> = l
+                            .flow_fields
+                            .iter()
+                            .filter(|(_, _, _, _, fw, fh)| *fw == w && *fh == h)
+                            .map(|(offset, u, v, conf, _, _)| {
+                                (
+                                    *offset,
+                                    lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h),
+                                )
+                            })
+                            .collect();
+                        (neighbours, flow)
+                    }
+                };
                 // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
                 // `lut` ops (§3.11); the same load export uses (K-031).
                 let luts = self.load_luts(&l.lut_files);

@@ -133,6 +133,25 @@ Each step is a K-decision + docs/08 section + oracle/parity test where one appli
 no per-pixel oracle; the test is a still-scene identity + a moving-scene coverage check, as
 per-layer MB used).
 
+## 8. A third consumer: measuring the composite's motion (K-565)
+`below_draws_at` turned out to have one more customer. Fast motion blur (docs/08 §3.2) and
+Datamosh (§3.12) want per-pixel motion, which the decode worker can only measure between
+decoded source frames — so on an **adjustment layer**, the placement §3.2 calls the commonest
+of all, they bound nothing and passed through. The below-stack at `t ± dt` is exactly the
+second picture such a measurement needs, so `CompLayerDraw::flow_below` carries one
+`below_draws_at` per offset the stack asked for (a **Precomp** layer carries its nested comp
+rebuilt at the neighbour layer time instead — same shape, different source of the picture),
+and `Realiser::measure_below_flow` realises each beside the frame-time one and measures
+between the two on the card. One entry per offset, so K-544's rule that each consumer gets
+its own measurement survives.
+
+Two things follow from reusing this machinery rather than inventing another. The neighbour
+render **strips temporal inputs like any other**, which is what bounds the cost: without it an
+adjustment inside a neighbour render would build neighbours of its own. And the **footage is
+held** (the trap below), so what gets measured is comp-driven motion — transforms, effects,
+cameras, nested animation — not the sub-frame motion of footage playing back beneath the
+adjustment, which is measured by putting the effect on the footage layer.
+
 ## Traps
 - Re-rendering re-decodes nothing — pass the SAME `pixels_by_layer`; re-resolving at `τ` must
   not re-request media (that would thrash the decode planner).

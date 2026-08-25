@@ -997,6 +997,12 @@ pub fn build_comp_draws_at(
             layer.start_offset.0,
         );
         let tr = &layer.transform;
+        // The neighbour pictures a flow-consuming effect on this layer measures
+        // against (docs/08 §3.2, K-565). Filled in by the two kinds whose
+        // picture the decode worker cannot measure — a Precomp here, an
+        // adjustment in its own arm — and left empty by every other, which is
+        // every layer that already carries a decoded field.
+        let mut flow_below = Vec::new();
 
         let (source, natural) = match &layer.kind {
             // Guarded so a Precomp acting as an adjustment (K-537) falls
@@ -1080,6 +1086,11 @@ pub fn build_comp_draws_at(
                         // for the same sizing reason.
                         d.temporal_below = None;
                         d.accumulation_below = None;
+                        // And the flow neighbours (§3.2, K-565), for the same
+                        // sizing reason: they were built at the nested comp's
+                        // raster, so splicing them into the parent would
+                        // measure motion against a mis-sized picture.
+                        d.flow_below = Vec::new();
                     }
                     draws.extend(inner);
                     continue;
@@ -1095,6 +1106,39 @@ pub fn build_comp_draws_at(
                     keys,
                     false,
                 );
+                // The nested picture again at each neighbour time (docs/08
+                // §3.2, K-565), for a Fast motion blur or Datamosh on the
+                // Precomp layer itself: a comp has no decoded frames for the
+                // worker to measure between, but it can be built again at
+                // another moment. The offset steps by the *parent* comp's
+                // frame, because that is the shutter the effect smears over.
+                // No frame keyer and the temporal inputs stripped, exactly as
+                // `below_draws_at` does and for the same reason: with the
+                // decode held, this is not the picture that name would claim.
+                // Empty unless one of those effects is live.
+                let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+                flow_below =
+                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx)
+                        .into_iter()
+                        .map(|offset| {
+                            let nt = lumit_core::time::layer_time(
+                                t_comp + f64::from(offset) * dt,
+                                layer.start_offset.0,
+                            );
+                            let mut inner = build_comp_draws_at(
+                                doc,
+                                nested,
+                                nt,
+                                frame_lt,
+                                pixels_by_layer,
+                                visited,
+                                None,
+                                false,
+                            );
+                            strip_temporal_inputs(&mut inner);
+                            (offset, inner, crate::track::camera_pose(doc, nested, nt))
+                        })
+                        .collect();
                 visited.pop();
                 (
                     DrawSource::Nested {
@@ -1292,6 +1336,21 @@ pub fn build_comp_draws_at(
                     lights: Vec::new(),
                     temporal_below,
                     accumulation_below,
+                    // The composite this layer's Fast motion blur or Datamosh
+                    // measures its motion against (docs/08 §3.2, K-565): the
+                    // below-stack again at each neighbour time. Empty unless
+                    // one of those effects is live, which is the whole cost
+                    // gate — nothing else on an adjustment layer builds it.
+                    flow_below: adjustment_flow_below(
+                        doc,
+                        comp,
+                        layer,
+                        idx,
+                        t_comp,
+                        frame_t,
+                        pixels_by_layer,
+                        visited,
+                    ),
                 });
                 continue;
             }
@@ -1570,6 +1629,7 @@ pub fn build_comp_draws_at(
             // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
             temporal_below: None,
             accumulation_below: None,
+            flow_below,
         });
     }
     draws
@@ -1863,6 +1923,60 @@ pub fn accumulation_mb_below(
     })
 }
 
+/// The neighbour below-stacks a flow-consuming effect on an **adjustment**
+/// layer measures its motion against (docs/08 §3.2, K-565), or None when the
+/// layer carries no such effect.
+///
+/// An adjustment layer's picture is the composite of everything below it, which
+/// the decode worker never sees — so Fast motion blur and Datamosh on one were
+/// a silent passthrough, on exactly the layer docs/08 §3.2 calls the most common
+/// place to put the effect. The answer is the one the temporal re-renders
+/// already use: build the below-stack again at the neighbour time through the
+/// shared `below_draws_at`, so preview and export measure the identical pair
+/// (K-031). `idx` is the layer's document index, so the below-set is
+/// `comp.layers[idx + 1..]`.
+///
+/// One entry per offset the stack asked for, in ascending order — Fast motion
+/// blur's `+1` and Datamosh's `-1` are different measurements, and each consumer
+/// gets its own (K-544).
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn adjustment_flow_below(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    idx: usize,
+    t_comp: f64,
+    frame_t: f64,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+    visited: &mut Vec<uuid::Uuid>,
+) -> Vec<(
+    i32,
+    Vec<CompLayerDraw>,
+    Option<lumit_core::model::CameraPose>,
+)> {
+    let offsets = lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
+    // The comp's own frame interval: the shutter this effect smears over is a
+    // frame of the render, not a frame of some source nobody here has.
+    let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    let below = &comp.layers[idx + 1..];
+    offsets
+        .iter()
+        .map(|&offset| {
+            let (draws, camera) = below_draws_at(
+                doc,
+                comp,
+                below,
+                t_comp + f64::from(offset) * dt,
+                frame_t,
+                None,
+                pixels_by_layer,
+                visited,
+            );
+            (offset, draws, camera)
+        })
+        .collect()
+}
+
 /// Drop the neighbour frames and flow field a temporal effect reads, recursing
 /// into nested-comp draws — so a held/sub-frame re-render treats echo, flow
 /// motion blur and datamosh as stills and the preview matches export, which
@@ -1873,6 +1987,11 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     for d in draws.iter_mut() {
         d.neighbours = Vec::new();
         d.flow_fields = Vec::new();
+        // The composite measurement (§3.2, K-565) is temporal too, and dropping
+        // it here is what bounds the work: without this, an adjustment inside a
+        // neighbour render would build its own neighbours, and a stack of them
+        // would multiply a frame's cost by two to the depth.
+        d.flow_below = Vec::new();
         if let DrawSource::Nested { draws: inner, .. } = &mut d.source {
             strip_temporal_inputs(inner);
         }
@@ -2167,6 +2286,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            flow: None,
         };
         // A softbox in front of the comp, big enough to rake across it.
         let mut light = text_layer(160.0);
@@ -2269,6 +2389,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            flow: None,
         };
         let comp = Composition {
             id: Uuid::now_v7(),
@@ -2380,6 +2501,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            flow: None,
         };
         let comp = Composition {
             id: Uuid::now_v7(),
@@ -2743,6 +2865,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            flow: None,
         };
         let comp = posterize_comp();
         let doc = Document::new();
@@ -2923,6 +3046,7 @@ mod render_below_at_tests {
             samples: 1,
             profiler: None,
             colour_inputs: None,
+            flow: None,
         };
         let doc = Document::new();
         let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
@@ -3000,6 +3124,303 @@ mod render_below_at_tests {
             "the smear must widen the covered columns: plain {}, smeared {}",
             text_cols(&plain),
             text_cols(&smeared)
+        );
+    }
+
+    // An adjustment layer carrying the named built-in effects at their
+    // defaults — Fast motion blur (docs/08 §3.2) and Datamosh (§3.12) are the
+    // two that want measured motion.
+    fn flow_adjustment(names: &[&str]) -> Layer {
+        let mut l = accumulation_adjustment(4.0);
+        l.name = "flow".into();
+        l.effects = names
+            .iter()
+            .map(|n| lumit_core::fx::instantiate(n).unwrap())
+            .collect();
+        l
+    }
+
+    // A text layer sweeping x at `per_second` px/s from the origin.
+    fn sweeping_text(per_second: f64) -> Layer {
+        let mut text = text_layer(0.0);
+        text.transform.position_x = ramp(0.0, per_second);
+        text
+    }
+
+    // docs/08 §3.2 + K-544, K-565: an adjustment layer's picture is the
+    // composite below it, which nothing decodes — so the below-stack is built
+    // again at each neighbour time the effects asked for. The two consumers want
+    // opposite measurements, and each must get its own: one below-stack per
+    // offset, never one field the first effect in stack order takes.
+    // GPU-free structural check.
+    #[test]
+    fn an_adjustment_builds_one_below_stack_per_flow_consumer() {
+        let text = sweeping_text(200.0);
+        let doc = std::sync::Arc::new(Document::new());
+        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+        // 10 fps, so a neighbour is 0.1 s and 20 px away at t = 0.5 (x = 100).
+        let build = |names: &[&str]| {
+            let comp = comp_with(10, vec![flow_adjustment(names), text.clone()]);
+            let mut v = vec![comp.id];
+            build_comp_draws(&doc, &comp, 0.5, &pixels, &mut v)
+        };
+        let offsets = |names: &[&str]| -> Vec<i32> {
+            build(names)
+                .iter()
+                .find(|d| matches!(d.source, DrawSource::Adjust))
+                .expect("the adjustment emits a staging draw")
+                .flow_below
+                .iter()
+                .map(|(o, _, _)| *o)
+                .collect()
+        };
+        assert_eq!(
+            offsets(&["motion_blur"]),
+            vec![1],
+            "Fast motion blur measures forward, to the next frame"
+        );
+        assert_eq!(
+            offsets(&["datamosh"]),
+            vec![-1],
+            "Datamosh measures back, to the previous one"
+        );
+        assert_eq!(
+            offsets(&["motion_blur", "datamosh"]),
+            vec![-1, 1],
+            "both consumers, both measurements (K-544)"
+        );
+        assert!(
+            offsets(&["blur"]).is_empty(),
+            "a stack that wants no motion builds no neighbour at all"
+        );
+
+        // And a neighbour really is the below-stack at another moment: the text
+        // has moved one frame's worth between the two.
+        let draws = build(&["motion_blur"]);
+        let here = draws
+            .iter()
+            .find(|d| !matches!(d.source, DrawSource::Adjust))
+            .expect("the text draws")
+            .position
+            .0;
+        let adj = draws
+            .iter()
+            .find(|d| matches!(d.source, DrawSource::Adjust))
+            .expect("the adjustment draws");
+        let there = adj.flow_below[0].1[0].position.0;
+        assert!(
+            (there - here - 20.0).abs() < 0.01,
+            "the +1 below-stack is one frame ahead (x = {here} → {there})"
+        );
+    }
+
+    // The two GPU engines plus the flow backend a composite measurement needs,
+    // as the headless renderer's owner holds them.
+    struct FlowRig {
+        ctx: lumit_gpu::GpuContext,
+        engine: lumit_gpu::ColourEngine,
+        compositor: lumit_gpu::Compositor,
+        fx: lumit_gpu::fx::FxEngine,
+        lut_cache: std::cell::RefCell<crate::fxops::LutCache>,
+        fx_cache: std::cell::RefCell<crate::fxops::FxCache>,
+        flow: std::cell::RefCell<crate::realise::CompositeFlow>,
+    }
+
+    impl FlowRig {
+        fn new() -> Option<Self> {
+            let ctx = lumit_gpu::GpuContext::headless().ok()?;
+            Some(FlowRig {
+                engine: lumit_gpu::ColourEngine::new(&ctx),
+                compositor: lumit_gpu::Compositor::new(&ctx),
+                fx: lumit_gpu::fx::FxEngine::new(&ctx),
+                lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
+                fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
+                flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
+                ctx,
+            })
+        }
+
+        fn realiser(&self) -> Realiser<'_> {
+            Realiser {
+                ctx: self.ctx.clone_handle(),
+                engine: &self.engine,
+                compositor: &self.compositor,
+                fx: &self.fx,
+                lut_cache: &self.lut_cache,
+                fx_cache: &self.fx_cache,
+                render_scale: 1.0,
+                samples: 1,
+                profiler: None,
+                colour_inputs: None,
+                flow: Some(&self.flow),
+            }
+        }
+
+        fn render(&self, doc: &Document, comp: &Composition, t: f64) -> Vec<u8> {
+            let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+            let mut v = vec![comp.id];
+            let draws =
+                build_comp_draws(&std::sync::Arc::new(doc.clone()), comp, t, &pixels, &mut v);
+            let tex = self.realiser().realise(
+                comp.camera_pose(t),
+                comp.width,
+                comp.height,
+                comp.background.0.map(f64::from),
+                &draws,
+            );
+            self.engine
+                .readback8(
+                    &self.ctx,
+                    &self
+                        .engine
+                        .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL),
+                )
+                .unwrap()
+        }
+    }
+
+    // How many columns carry something brighter than the comp's background —
+    // the frame's horizontal extent, which a smear widens.
+    fn lit_columns(px: &[u8], w: usize, h: usize) -> usize {
+        // Top-left is background in every scene here.
+        let floor = px[0].saturating_add(15);
+        (0..w)
+            .filter(|&x| (0..h).any(|y| px[(y * w + x) * 4] > floor))
+            .count()
+    }
+
+    // docs/08 §3.2 + K-565: **the headline case**. Fast motion blur on an
+    // adjustment layer over a moving scene must actually smear it — the effect's
+    // commonest placement, and a silent passthrough until the composite below
+    // could be measured. Deterministic across two runs, as every render is.
+    #[test]
+    fn an_adjustment_fast_motion_blur_smears_the_composite_below() {
+        let Some(rig) = FlowRig::new() else {
+            return; // no GPU here — skip, as the gpu crate's own tests do
+        };
+        let doc = Document::new();
+        let text = sweeping_text(400.0); // 40 px a frame at 10 fps
+        let plain = comp_with(10, vec![text.clone()]);
+        let blurred = comp_with(10, vec![flow_adjustment(&["motion_blur"]), text]);
+
+        let a = rig.render(&doc, &plain, 0.5);
+        let b = rig.render(&doc, &blurred, 0.5);
+        assert_ne!(
+            a, b,
+            "Fast motion blur on an adjustment layer must smear the composite \
+             below it, not pass it through"
+        );
+        assert_eq!(
+            b,
+            rig.render(&doc, &blurred, 0.5),
+            "and the measurement is deterministic: two runs, one picture"
+        );
+        let (w, h) = (320usize, 180usize);
+        assert!(
+            lit_columns(&b, w, h) > lit_columns(&a, w, h),
+            "the streak must widen what the frame covers: plain {}, smeared {}",
+            lit_columns(&a, w, h),
+            lit_columns(&b, w, h)
+        );
+    }
+
+    // docs/08 §3.12 + K-544, K-565: Datamosh on an adjustment layer wants the
+    // *other* measurement — back to the previous frame — and it drags that
+    // previous picture along the field, so both halves of the composite
+    // measurement have to arrive. Before this it could have neither, and passed
+    // through. Sharing the machinery with Fast motion blur must not mean sharing
+    // the field: a stack holding both is checked structurally above.
+    #[test]
+    fn an_adjustment_datamosh_drags_the_previous_composite() {
+        let Some(rig) = FlowRig::new() else {
+            return;
+        };
+        let doc = Document::new();
+        let text = sweeping_text(400.0);
+        let plain = comp_with(10, vec![text.clone()]);
+        let moshed = comp_with(10, vec![flow_adjustment(&["datamosh"]), text]);
+
+        let a = rig.render(&doc, &plain, 0.5);
+        let b = rig.render(&doc, &moshed, 0.5);
+        assert_ne!(
+            a, b,
+            "Datamosh on an adjustment layer must mosh the composite below it"
+        );
+        assert_eq!(
+            b,
+            rig.render(&doc, &moshed, 0.5),
+            "and it is deterministic across two runs"
+        );
+    }
+
+    // docs/08 §3.2 + K-565: the same for a **Precomp** layer, whose picture is a
+    // comp render rather than a composite of the layers below — the other kind
+    // with no decoded frames of its own. The motion is inside the nested comp;
+    // the effect sits on the Precomp layer in the parent.
+    #[test]
+    fn a_precomp_fast_motion_blur_measures_its_own_picture() {
+        use lumit_core::model::ProjectItem;
+        let Some(rig) = FlowRig::new() else {
+            return;
+        };
+        let nested = comp_with(10, vec![sweeping_text(400.0)]);
+        let nested_id = nested.id;
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(nested));
+
+        let precomp_layer = |effects: Vec<&str>| {
+            let mut l = text_layer(160.0);
+            l.kind = LayerKind::Precomp { comp: nested_id };
+            // Square on the parent frame: the nested comp is the same size, so
+            // its whole picture (and all of the motion in it) is visible.
+            l.transform.position_x = Property::fixed(0.0);
+            l.transform.position_y = Property::fixed(0.0);
+            l.effects = effects
+                .iter()
+                .map(|n| lumit_core::fx::instantiate(n).unwrap())
+                .collect();
+            l
+        };
+        let plain = comp_with(10, vec![precomp_layer(Vec::new())]);
+        let blurred = comp_with(10, vec![precomp_layer(vec!["motion_blur"])]);
+
+        // The Precomp draw carries the nested comp again at the +1 neighbour
+        // time, and the two really are a frame apart.
+        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+        let mut v = vec![blurred.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &blurred,
+            0.5,
+            &pixels,
+            &mut v,
+        );
+        let d = draws.first().expect("the Precomp draws");
+        assert_eq!(
+            d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
+            vec![1],
+            "the Precomp carries the +1 neighbour Fast motion blur asked for"
+        );
+        let here = match &d.source {
+            DrawSource::Nested { draws, .. } => draws[0].position.0,
+            _ => panic!("a Precomp layer draws a nested comp"),
+        };
+        let there = d.flow_below[0].1[0].position.0;
+        assert!(
+            (there - here - 40.0).abs() < 0.01,
+            "the neighbour comp is one frame ahead (x = {here} → {there})"
+        );
+
+        let a = rig.render(&doc, &plain, 0.5);
+        let b = rig.render(&doc, &blurred, 0.5);
+        assert_ne!(
+            a, b,
+            "Fast motion blur on a Precomp layer must smear the comp inside it"
+        );
+        assert_eq!(
+            b,
+            rig.render(&doc, &blurred, 0.5),
+            "and it is deterministic across two runs"
         );
     }
 }

@@ -52,6 +52,11 @@ struct Parts {
     /// rather than beside `frame_textures` because its entries are textures
     /// the effect engine made, and they go with it.
     fx_cache: std::cell::RefCell<crate::fxops::FxCache>,
+    /// The flow backend a composite measurement runs on (docs/08 §3.2, K-565).
+    /// Here for the caches' reason — the solver's plan and its dozen compiled
+    /// shaders are worth keeping between frames — and empty until the first
+    /// adjustment or Precomp layer actually asks for motion.
+    flow: std::cell::RefCell<crate::realise::CompositeFlow>,
 }
 
 /// One footage item's probe result, cached so a scrub does not re-probe. Slate
@@ -527,6 +532,7 @@ impl HeadlessRenderer {
             fx: lumit_gpu::fx::FxEngine::new(&gpu),
             lut_cache: std::cell::RefCell::new(crate::fxops::LutCache::default()),
             fx_cache: std::cell::RefCell::new(crate::fxops::FxCache::default()),
+            flow: std::cell::RefCell::new(crate::realise::CompositeFlow::default()),
         };
         let scope = lumit_gpu::scope::ScopeEngine::new(&gpu);
         // Flow runs on this same device rather than opening one of its own
@@ -1157,6 +1163,7 @@ impl HeadlessRenderer {
                 samples: self.gpu.sample_count(doc.anti_aliasing.samples()),
                 profiler: watcher.as_ref(),
                 colour_inputs: inputs.as_ref(),
+                flow: Some(&parts.flow),
             };
             let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
                 .pixels

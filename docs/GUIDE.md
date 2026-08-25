@@ -324,6 +324,38 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   none — and makes each one, and every effect is handed the map it asked for rather than
   whichever one happened to be lying about. A layer with only one of the two effects costs
   precisely what it always did.
+
+  **Arrows for a picture that was never a video file (K-565).** Both these effects are
+  usually described as going on an adjustment layer over the whole montage, and for a long
+  time that was the one place they did nothing whatsoever. The reason is worth understanding,
+  because it explains the fix. Measuring motion means comparing two pictures a frame apart,
+  and the only part of Lumit that had two such pictures was the bit that opens video files
+  and decodes frames out of them. An adjustment layer has no video file: its "picture" is
+  simply everything painted beneath it, which exists as an image on the graphics card and
+  nowhere else. A precomp layer has the same problem — its picture is a whole other
+  composition, rendered on demand.
+
+  What they *do* have is a recipe. Nothing stops Lumit following that recipe a second time
+  with the clock moved on by one frame — it is exactly what Posterize time and the
+  whole-scene Motion blur already do — and once it has, there are two pictures a frame apart
+  again, and the motion arrows can be measured between them. That is the whole change: build
+  the scene twice, once for now and once for the neighbouring moment, and compare.
+
+  The comparison happens on the graphics card rather than by fetching the two images back
+  into ordinary memory. That distinction sounds like plumbing and is actually the difference
+  between "free" and "slow": copying two full-size images back off the card takes several
+  times longer than measuring the motion does. So the motion engine learned to read a picture
+  where it already sits, converting it to the plain grey version it works from with one small
+  program that runs on the card itself.
+
+  Two honest limits come with it. The second render is real work, so it only ever happens for
+  a layer that actually carries one of these two effects — everything else builds nothing.
+  And rebuilding the scene at another moment does *not* re-open the video files underneath;
+  they hand over the frame they already decoded. So an adjustment layer measures the motion
+  of things Lumit itself is animating — moving layers, animated effects, camera moves,
+  precomps with animation inside — and not the motion happening inside footage that is simply
+  playing. For that, the effect goes on the footage layer, where the decoder was measuring
+  all along.
 - **Posterize time — the stop-motion "on twos" look, and a new kind of effect entirely.**
   Every effect so far takes a finished picture and paints on it. **Posterize time** does
   something different: it changes *what moment in time* the layers render at. Drop it on a
