@@ -951,7 +951,7 @@ mod tests {
                     extra: serde_json::Map::new(),
                 },
                 extra: serde_json::Map::new(),
-            colour_space: None,
+                colour_space: None,
             }));
             let solid = Uuid::now_v7();
             doc.items.push(ProjectItem::Solid(SolidDef {
@@ -1077,7 +1077,7 @@ mod tests {
                 extra: serde_json::Map::new(),
             },
             extra: serde_json::Map::new(),
-        colour_space: None,
+            colour_space: None,
         }));
         let inner = comp(vec![layer(LayerKind::Footage { item })]);
         let inner_id = inner.id;

@@ -63,7 +63,7 @@ fn project_with_folder() -> (
             extra: serde_json::Map::new(),
         },
         extra: serde_json::Map::new(),
-    colour_space: None,
+        colour_space: None,
     };
     let folder = Folder {
         id: Uuid::now_v7(),
@@ -7448,7 +7448,7 @@ fn the_proxy_path_is_named_beside_the_original() {
                         extra: serde_json::Map::new(),
                     },
                     extra: serde_json::Map::new(),
-                colour_space: None,
+                    colour_space: None,
                 })),
             })
             .expect("seeded");

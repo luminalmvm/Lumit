@@ -1016,8 +1016,18 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - The outline is the **filtered animated list** (Animated, the default, or All — there is no
   Selected), each row carrying a **tick in its curve's colour**. A setting restores an
   outline identical to Layers mode for those who want one shape everywhere.
+- The filter row also carries **Normalise** at its far right: every shown curve scaled to
+  its own min–max, so unlike units share the pane. A view setting, never data — a drag
+  under it writes what it would write without it. **Shipped:** as a range per curve rather
+  than a scaling of values, which is what keeps that promise; the shared scale then reads
+  0–100 per cent, there being no single value axis left to label.
+- A **Key readout row** sits at the foot of the outline while exactly one key is selected:
+  the frame, the value with its unit, and the two influences in editable per-cent wells
+  that write the same ease a tangent handle drags. Two or more keys are a block, whose
+  badge is the readout, and the row stands down.
 - **Curves run flat to both edges of the visible area**; value labels live in a **fixed
-  right-hand gutter**, never on the curve.
+  right-hand gutter**, never on the curve — pinned to the visible area's right edge rather
+  than to the pane, which is as wide as the composition.
 - The **thin horizontal scrollbar and the Value / Speed tool strip** (tangent mode, ease
   presets, Fit, zoom) run along the bottom of the **graph side only** — neither ever appears
   in the outline.
