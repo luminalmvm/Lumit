@@ -77,10 +77,13 @@ void main() {
           scale: 1.0,
           mode: BridgePlaybackMode.everyFrame,
         );
+        // Wait for *this* ask's profile - `isNotEmpty` was already true on
+        // the second pass, so the loop never waited for the cache hit's
+        // profile and the count assertion below raced it.
         await tester.runAsync(() async {
-          for (var i = 0; i < 100; i++) {
+          for (var round = 0; round < 100; round++) {
             await Future<void>.delayed(const Duration(milliseconds: 100));
-            if (profiles.isNotEmpty) return;
+            if (profiles.length > i) return;
           }
         });
         await settleFrb(tester, minRounds: 4, maxRounds: 30);
