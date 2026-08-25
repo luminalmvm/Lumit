@@ -1157,10 +1157,9 @@ void main() {
       await mount(tester, p, density: DensityTokens.compact);
       const d = DensityTokens.compact;
 
+      // Keys mode opens with every layer twirled down (K-500 §2.3), so the
+      // property rows are on screen the moment the mode is.
       await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
-      await tester.pumpAndSettle();
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-keys-twirl-${idOf(layer)}')));
       await tester.pumpAndSettle();
 
       final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));

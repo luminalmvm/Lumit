@@ -211,8 +211,7 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
     });
   }
 
-  void _marquee(Rect box) {
-    final adding = HardwareKeyboard.instance.isShiftPressed;
+  void _marquee(Rect box, bool adding) {
     setState(() {
       if (!adding) _picked.clear();
       for (final p in _points) {
