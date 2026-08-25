@@ -63,8 +63,9 @@ fails in a second rather than in an eight-hundred-row table.
 ## The bounds, and why each one is what it is
 
 A tolerance in these tables is a **stated fact about the baked form**, to be
-tightened and never widened. There are five, and `generate.py` writes each with
-its derivation beside it:
+tightened and never widened. `generate.py` writes each one with its derivation
+beside it, and that file is the only place those derivations live in executable
+form:
 
 | Where | Bound | Measured | Why |
 |---|---|---|---|
