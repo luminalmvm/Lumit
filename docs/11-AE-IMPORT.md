@@ -196,6 +196,10 @@ with full interpretation settings intact, listed in the import report; relinking
 the standard relink flow from [10-FILE-FORMAT.md](10-FILE-FORMAT.md). Import never blocks
 on missing media.
 
+The `.aep` route reads that absolute path out of the item's alias record
+(`LIST Als2 ▸ alas`, JSON, `fullpath` — K-536); the Bridge route gets it from the DOM.
+An item with no path at all is a placeholder or a solid, not a lost file.
+
 **Today only the second step runs** (docs/TODO.md). There is no collected `footage/` to
 check, so a file is found where After Effects recorded it and nowhere else: the capture
 carries an absolute path, and an absolute path re-rooted against the folder the bundle or
@@ -440,7 +444,9 @@ routes share one mapping, one effect table, one report.
 Chunk shapes are publicly known; many field semantics are not, and Adobe changes details
 across versions without documentation. Lumit builds on the community reverse-engineering
 work — `forticheprod/aep_parser` (the most complete public description, MIT, licence
-checked 2026-08-21) and `boltframe/aftereffects-aep-parser` (Go, MIT, explicitly partial) —
+checked 2026-08-21), its Python successor `forticheprod/py-aep` (MIT, licence checked
+2026-08-25, which documents the footage records) and `boltframe/aftereffects-aep-parser`
+(Go, MIT, explicitly partial) —
 **read as documentation and reimplemented in Rust** inside `lumit-import`, with attribution
 in the impl note. Nothing is vendored (K-418).
 
@@ -457,7 +463,10 @@ Policy:
   could not recover MUST be a row in it (K-418 retires the blanket "structure only"
   label in favour of per-item honesty — the measured recovery earned the front door).
 - Anything ambiguous imports as a placeholder or as a static value with a report entry —
-  the parser MUST NOT guess silently.
+  the parser MUST NOT guess silently. **One exception, K-536**: inside an effect that is
+  already a placeholder row, a *topic heading* and a slot the plug-in declared as empty are
+  not rows — there was never a value in them, and a plug-in-heavy project produces them in
+  their thousands. The undecoded data blobs beside them still get a row each.
 - A parse failure on one chunk skips that chunk and continues; the report lists skipped
   chunks. **Built**: those skips arrive as `Reason::ChunkUnreadable` rows on the same
   summary the mapping's own rows ride, and only on this route — a property the *Bridge*

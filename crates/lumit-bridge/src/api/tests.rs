@@ -7978,3 +7978,99 @@ fn a_view_choice_is_two_names_or_it_is_the_built_in_transform() {
         None
     );
 }
+
+/// **Relinking one clip relinks the ones that moved with it, subfolders and
+/// all** (docs/10 §2).
+///
+/// The flat sweep beside the picked file was never enough for a real project:
+/// footage lives in a tree — `Clips/Scene 1/`, `Clips/Scene 2/` — so a folder
+/// that moved put every sibling somewhere the flat look would never find, and
+/// the user was left relinking forty clips by hand. The move the picked file
+/// describes is the move they all made.
+#[test]
+fn relinking_one_clip_follows_the_move_for_its_siblings_in_other_folders() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    let old = root.path().join("old");
+    let new = root.path().join("new");
+    for base in [&old, &new] {
+        std::fs::create_dir_all(base.join("scene 1")).expect("dirs");
+        std::fs::create_dir_all(base.join("scene 2")).expect("dirs");
+    }
+    // The files exist only at the new place: the project remembers the old.
+    std::fs::write(new.join("scene 1").join("a.mov"), b"a").expect("file");
+    std::fs::write(new.join("scene 2").join("b.mov"), b"b").expect("file");
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let picked_item = project
+        .import_footage(old.join("scene 1").join("a.mov").to_string_lossy().into())
+        .expect("imported");
+    let sibling = project
+        .import_footage(old.join("scene 2").join("b.mov").to_string_lossy().into())
+        .expect("imported");
+
+    picked_item
+        .relink(
+            new.join("scene 1")
+                .join("a.mov")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("the picked file relinks");
+
+    let path_of = |item: &FootageReference| {
+        let proj = item.project().expect("project");
+        let p = proj.read().expect("read");
+        let doc = p.store.snapshot();
+        match doc.item(item.id()) {
+            Some(ProjectItem::Footage(f)) => f.media.absolute_path.clone(),
+            other => panic!("expected footage, got {other:?}"),
+        }
+    };
+    assert_eq!(
+        std::path::PathBuf::from(path_of(&picked_item)),
+        new.join("scene 1").join("a.mov")
+    );
+    assert_eq!(
+        std::path::PathBuf::from(path_of(&sibling)),
+        new.join("scene 2").join("b.mov"),
+        "a sibling in another folder follows the same move"
+    );
+}
+
+/// The sweep still refuses to touch a healthy item: a file that is where the
+/// project says it is stays put, whatever the picked file's move implies.
+#[test]
+fn relinking_leaves_an_item_whose_file_is_still_there_alone() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    let old = root.path().join("old");
+    let new = root.path().join("new");
+    std::fs::create_dir_all(&old).expect("dirs");
+    std::fs::create_dir_all(&new).expect("dirs");
+    std::fs::write(old.join("healthy.mov"), b"here").expect("file");
+    std::fs::write(new.join("healthy.mov"), b"decoy").expect("file");
+    std::fs::write(new.join("moved.mov"), b"moved").expect("file");
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let moved = project
+        .import_footage(old.join("moved.mov").to_string_lossy().into())
+        .expect("imported");
+    let healthy = project
+        .import_footage(old.join("healthy.mov").to_string_lossy().into())
+        .expect("imported");
+
+    moved
+        .relink(new.join("moved.mov").to_string_lossy().into_owned())
+        .expect("relinked");
+
+    let proj = healthy.project().expect("project");
+    let p = proj.read().expect("read");
+    let doc = p.store.snapshot();
+    let Some(ProjectItem::Footage(f)) = doc.item(healthy.id()) else {
+        panic!("expected footage");
+    };
+    assert_eq!(
+        std::path::PathBuf::from(&f.media.absolute_path),
+        old.join("healthy.mov"),
+        "an item that resolves is never repointed"
+    );
+}

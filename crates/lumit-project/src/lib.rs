@@ -744,14 +744,33 @@ pub fn resolve_all_media(
 /// used to relink siblings that moved the same way (docs/10 §2). Defined only
 /// for a pure relocation — same file name, different directory; None for a
 /// rename (a changed name cannot generalise to siblings) or a non-move.
+///
+/// **The pair is the shallowest one the move proves.** Media does not live in
+/// one flat folder: `Clips/scene 1/a.mov` moving to `Backup/scene 1/a.mov`
+/// says that `Clips` became `Backup`, and mapping only the immediate parents
+/// would leave every sibling in `scene 2` unfound — which is what made
+/// relinking a real project a forty-clip job. So the shared trailing
+/// components are peeled off both sides. Over-reaching costs nothing: a
+/// mapping only ever *suggests* where to look, and the caller repoints an item
+/// only when a file is actually there.
 #[must_use]
 pub fn path_mapping(old: &Path, new: &Path) -> Option<(PathBuf, PathBuf)> {
     if old.file_name()? != new.file_name()? {
         return None;
     }
-    let (old_dir, new_dir) = (old.parent()?, new.parent()?);
+    let (mut old_dir, mut new_dir) = (old.parent()?, new.parent()?);
     if old_dir == new_dir {
         return None;
+    }
+    while old_dir.file_name().is_some() && old_dir.file_name() == new_dir.file_name() {
+        let (Some(up_old), Some(up_new)) = (old_dir.parent(), new_dir.parent()) else {
+            break;
+        };
+        if up_old == up_new {
+            // The two agree from here up: the move is the pair below.
+            break;
+        }
+        (old_dir, new_dir) = (up_old, up_new);
     }
     Some((old_dir.to_path_buf(), new_dir.to_path_buf()))
 }
@@ -1356,6 +1375,37 @@ mod tests {
             path_mapping(Path::new("/a/b/clip.mp4"), Path::new("/a/b/clip.mp4")),
             None
         );
+    }
+
+    /// **A whole media tree that moved is one mapping, not one per folder.**
+    ///
+    /// The regression: footage sits in `Clips/scene 1`, `Clips/scene 2`, and
+    /// relinking a clip out of the first folder used to say only that
+    /// `old/Clips/scene 1` had become `new/Clips/scene 1` — leaving every
+    /// sibling in `scene 2` for the user to find by hand. The shared tail is
+    /// the part that did *not* move, so it is peeled off.
+    #[test]
+    fn a_mapping_reaches_the_folder_that_actually_moved() {
+        let mapping = path_mapping(
+            Path::new("/old/Clips/scene 1/a.mov"),
+            Path::new("/new/Clips/scene 1/a.mov"),
+        )
+        .expect("a pure move maps");
+        assert_eq!(mapping, (PathBuf::from("/old"), PathBuf::from("/new")));
+        assert_eq!(
+            apply_mapping(&mapping, Path::new("/old/Clips/scene 2/b.mov")),
+            Some(PathBuf::from("/new/Clips/scene 2/b.mov")),
+            "a sibling in the folder next door relinks under the same move"
+        );
+
+        // The peel stops where the two paths meet: a folder moved *within* one
+        // tree maps that folder, not the tree it is still inside.
+        let inside = path_mapping(
+            Path::new("/proj/a/scene/clip.mov"),
+            Path::new("/proj/b/scene/clip.mov"),
+        )
+        .expect("a pure move maps");
+        assert_eq!(inside, (PathBuf::from("/proj/a"), PathBuf::from("/proj/b")));
     }
 
     fn footage_item(name: &str, rel: &str, abs: &str) -> lumit_core::model::ProjectItem {

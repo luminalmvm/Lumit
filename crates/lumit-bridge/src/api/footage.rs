@@ -112,6 +112,23 @@ impl FootageReference {
         }
     }
 
+    /// Where this footage was **last known** to be, whether or not anything is
+    /// there now — which is exactly what [`Self::resolve_path`] cannot say,
+    /// because it answers `None` for a file that has moved and moved files are
+    /// the whole subject of a relink. The relative path is resolved against the
+    /// project's folder without touching the disk (a missing file cannot be
+    /// canonicalised).
+    fn stored_path(p: &LumitBridgeState, f: &FootageItem) -> Option<PathBuf> {
+        if !f.media.absolute_path.is_empty() {
+            return Some(PathBuf::from(&f.media.absolute_path));
+        }
+        if f.media.relative_path.is_empty() {
+            return None;
+        }
+        let dir = p.path.as_deref()?.parent()?;
+        Some(dir.join(&f.media.relative_path))
+    }
+
     /// Point this footage item at `path`, and fix every *other* missing item
     /// whose file name turns up in the same folder — one undo step for the lot.
     ///
@@ -120,6 +137,17 @@ impl FootageReference {
     /// by hand should not mean relinking forty. A sibling is only touched when it
     /// currently fails to resolve *and* a file of its name exists beside the
     /// picked one, so a healthy item is never repointed.
+    ///
+    /// It sweeps **two** ways, because footage is not usually one flat folder.
+    /// A clip that moved from `old/a/b/clip.mov` to `new/a/b/clip.mov` says
+    /// where the whole tree went — that is
+    /// [`lumit_project::path_mapping`], docs/10 §2's "relinking one file
+    /// automatically relinks siblings that resolve under the same path
+    /// mapping" — so every sibling under the old root is looked for at the same
+    /// place under the new one, subfolders and all. A sibling the mapping does
+    /// not cover (or a rename, which cannot generalise) falls back to the flat
+    /// look beside the picked file. Either way the file has to actually be
+    /// there.
     #[frb(sync)]
     pub fn relink(&self, path: String) -> Result<(), BridgeError> {
         if path.trim().is_empty() {
@@ -147,6 +175,17 @@ impl FootageReference {
             let folder = picked.parent().map(std::path::Path::to_path_buf);
             let project_dir = p.path.as_deref().and_then(|p| p.parent());
 
+            // Where the picked file used to be, and so where everything else
+            // moved to. Read before the sweep because it is a fact about the
+            // *target*, and the sweep visits the items in project order.
+            let mapping = match doc.item(self.id) {
+                Some(lumit_core::model::ProjectItem::Footage(target)) => {
+                    Self::stored_path(&p, target)
+                        .and_then(|old| lumit_project::path_mapping(&old, &picked))
+                }
+                _ => None,
+            };
+
             let mut ops = Vec::new();
             for item in &doc.items {
                 let lumit_core::model::ProjectItem::Footage(other) = item else {
@@ -162,15 +201,26 @@ impl FootageReference {
                     if Self::resolve_path(&p, other).is_some_and(|p| p.is_file()) {
                         continue;
                     }
-                    let Some(folder) = &folder else { continue };
-                    let name = std::path::Path::new(&other.media.relative_path)
-                        .file_name()
-                        .map(std::ffi::OsString::from)
-                        .unwrap_or_else(|| std::ffi::OsString::from(&other.name));
-                    let candidate = folder.join(name);
-                    if !candidate.is_file() {
+                    // Where the same move would have put this one, then simply
+                    // beside the picked file.
+                    let moved = mapping
+                        .as_ref()
+                        .zip(Self::stored_path(&p, other))
+                        .and_then(|(mapping, old)| lumit_project::apply_mapping(mapping, &old));
+                    let beside = folder.as_ref().map(|folder| {
+                        let name = std::path::Path::new(&other.media.relative_path)
+                            .file_name()
+                            .map(std::ffi::OsString::from)
+                            .unwrap_or_else(|| std::ffi::OsString::from(&other.name));
+                        folder.join(name)
+                    });
+                    let Some(candidate) = moved
+                        .into_iter()
+                        .chain(beside)
+                        .find(|candidate| candidate.is_file())
+                    else {
                         continue;
-                    }
+                    };
                     candidate
                 };
 

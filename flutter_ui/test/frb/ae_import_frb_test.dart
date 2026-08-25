@@ -163,7 +163,7 @@ void main() {
 
       // The report is up, with docs/11 §9's summary line over its rows.
       expect(find.text(l10n.aeReportTitle), findsOneWidget);
-      expect(find.text(l10n.aeSummary(16, 13, 1, 1)), findsOneWidget,
+      expect(find.text(l10n.aeSummary(16, 12, 1, 1)), findsOneWidget,
           reason: 'the four counts of the synthetic bundle. A change here is a '
               'change in what the mapping does, not in what the panel shows');
 
@@ -235,7 +235,7 @@ void main() {
       expect(itemNames(p.state),
           containsAll(<String>['Fixture', 'Fixture inner', 'Solids']));
 
-      expect(find.text(l10n.aeSummary(62, 55, 2, 1)), findsOneWidget,
+      expect(find.text(l10n.aeSummary(62, 52, 2, 1)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
 
       await tester.tap(find.text(l10n.close));

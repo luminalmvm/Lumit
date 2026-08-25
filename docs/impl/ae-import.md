@@ -347,9 +347,12 @@ comp, none of them a layer.
 | | 16 (u32) | item id — the id `Comp.id` and `Layer.source_id` point at |
 | | 0x3B (u8) | label colour |
 | `sspc` (222+) | 32 (u16), 36 (u16) | width, height |
-| `opti` | 0..4 | asset type; `Soli` marks a solid |
+| | 115 (u8) | **missing at save** — a placeholder sets it too, so it is only read as *missing* for an item that is not one (K-536) |
+| `LIST Als2` ▸ `alas` | JSON body | **the file's path**, as `fullpath`. The only place it is written; without it a footage item has nothing to point at and nothing for a relink to match a sibling by (K-536) |
+| `opti` | 0..4 | asset type; `Soli` marks a solid, four NUL bytes with a type number of 2 at offset 4 mark a **placeholder** |
 | | 14/18/22 (f32) | solid colour R/G/B |
 | | 26 (strz, 256) | **the solid's name** — a solid's own `Utf8` chunk is empty |
+| | 10 (strz, 256) | **the placeholder's name** — its record has no colour in front of it |
 | `cdta` (204) | 44/48 | duration (rational: s32 dividend / u32 divisor) |
 | | 52,53,54 (u8) | background colour |
 | | 139 (u8) | comp flags: bit 7 preserve nested resolution, bit 5 preserve nested frame rate, bit 3 motion blur, bit 0 hide shy |
@@ -400,11 +403,20 @@ project that opens and is wrong:
 - **"Is somebody's matte" is a fact about the other layer.** `is_track_matte` is
   filled in after the whole stack is read, from who points at whom.
 
-**Owed, and honest about it.** (1) The **footage interpretation** fields — path,
-frame rate, alpha, fields, pulldown, loop, missing — are not read at all: the
-golden project is solids and comps with no file footage in it, so not one offset
-could be checked against AE, and an unchecked offset is the silently-wrong
-import this route exists to avoid. A fixture with real footage is owed.
+**Owed, and honest about it.** (1) The **footage interpretation** fields —
+frame rate, alpha, fields, pulldown, loop — are not read: Lumit has no field for
+any of them (they would ride in the `ae` namespace and nothing downstream would
+read them), and the golden project is solids and comps with no file footage in
+it, so not one of those offsets could be checked against AE. A fixture with real
+footage is owed for them. What an item cannot do without — its **name**, its
+**path**, whether it is a **placeholder** and whether it was **missing at save** —
+is read (K-536), measured against a real production project and the layouts
+`forticheprod/py-aep` documents; an item whose name the user never changed has an
+empty name chunk, so its file's name is its name.
+
+An **image sequence** points at its folder rather than at a file (the alias record
+says `target_is_folder`), so it imports named after the folder and reports as
+media that could not be found — Lumit has no sequence item yet (docs/03 §2).
 (2) A **reflected layer's** ends land 1/3000 s further out in AE's arithmetic
 than in the file's (`−0.000333` / `−10.000333` rather than `−0` / `−10`), as if
 AE reflects inclusive indices on an internal grid — one sample is not enough to
@@ -618,8 +630,9 @@ with the project still standing.
 **Owed** (docs/TODO.md): the Curves `CUSTOM_VALUE` blob decode — the bytes are in hand
 (§7.2), the sixteen-point target is not yet reached; the text document (`btds`) and the
 gradient (`GCst`) encodings, and shape-layer contents, which arrive named and marked
-rather than decoded; a fixture with real file footage, without which the footage
-interpretation offsets stay unread by choice; and corpus testing against real projects
+rather than decoded; a fixture with real file footage, without which the remaining
+footage *interpretation* offsets (rate, alpha, fields, pulldown, loop) stay unread by
+choice — the name, path, placeholder and missing flags are read and measured (K-536); and corpus testing against real projects
 from more than one After Effects version — one fixture proves the offsets it contains
 and nothing about the ones it does not. Also still owed from §7's policy: the
 whole-file fallback to "footage references only", which today is the calm refusal

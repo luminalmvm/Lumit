@@ -149,7 +149,7 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
     for item in &capture.items {
         let Some(kind) = item_kind(item) else {
             report.row(
-                ItemPath::item(item.name.as_deref().unwrap_or("(unnamed)")),
+                ItemPath::item(&item_name(item)),
                 Outcome::Skipped,
                 Reason::ItemUnreadable,
             );
@@ -157,7 +157,7 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
         };
         let Some(ae_id) = item.id else {
             report.row(
-                ItemPath::item(item.name.as_deref().unwrap_or("(unnamed)")),
+                ItemPath::item(&item_name(item)),
                 Outcome::Skipped,
                 Reason::ItemUnreadable,
             );
@@ -176,7 +176,7 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
         .filter_map(|c| c.id.map(|id| (id, c)))
         .collect();
     for (item, uuid, kind) in &order {
-        let name = item.name.clone().unwrap_or_else(|| "(unnamed)".to_string());
+        let name = item_name(item);
         let built = match kind {
             ItemKind::Folder => ProjectItem::Folder(Folder {
                 id: *uuid,
@@ -275,6 +275,22 @@ fn project_extra(
             serde_json::json!(project.expression_engine),
         ),
     ])
+}
+
+/// What the Project panel calls this item.
+///
+/// An **empty** name is no name rather than a name that happens to be blank:
+/// After Effects stores nothing for an item the user never renamed, and the
+/// `.aep` reader has already put the file's own name back where it can. A row
+/// with a blank label in the Project panel is unusable and unfindable, so
+/// anything still nameless here says so out loud.
+fn item_name(item: &Item) -> String {
+    item.name
+        .as_deref()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("(unnamed)")
+        .to_string()
 }
 
 fn item_kind(item: &Item) -> Option<ItemKind> {

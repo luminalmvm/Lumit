@@ -14906,3 +14906,39 @@ it is what the regression test walks.
 numbers, animates. Which kinds those are is decided in one helper on the row, and a kind
 that has a working control but no entry there is a bug of exactly this shape — silent,
 because nothing is drawn to be wrong.
+
+## K-536 — An imported footage item carries the name and the path After Effects gave it
+
+**DECIDED 2026-08-25** (owner desk test: *"with the After Effects import, all imported media
+is lacking a name, so relinking can't find any of the other files"*, and then *"it's just as
+bad as before even after linking media"*).
+
+**Three faults, one symptom.** Reading an `.aep` directly (K-418) recovered every item, comp
+and layer and then lost the one fact that makes a footage item usable. After Effects stores
+an **empty** name for an item nobody renamed — it displays the file's own name instead — and
+it does not store the path in the item at all: the path lives in the alias record
+`LIST Als2 ▸ alas`, whose body is JSON with a `fullpath`. The parser read neither, so every
+clip arrived as a blank row pointing at nothing; every footage *layer* named after its source
+went blank with it; nothing resolved on disk; and the relink sweep, which matches a sibling by
+its file name, had no file name to match. On the owner's own project that was 83 of 85 items.
+
+**So the reader takes the file's identity from the file.** An item's own name wins when there
+is one; otherwise the last component of `fullpath` is the name, which is the name After
+Effects itself was showing. A **placeholder** — the row left where a source was deleted — is
+an `opti` whose asset type is blank and whose type number is 2, and it is named from that
+record and reported as a placeholder rather than *also* as missing, whose flag it shares
+(`sspc` byte 115). The other interpretation fields stay unread by choice: Lumit has no field
+for them, and an unchecked offset is the silently-wrong import this route exists to avoid.
+
+**Relinking follows the move, not the folder.** docs/10 §2's sibling sweep now maps the
+shallowest directory pair the move proves — `old/Clips/scene 1/a.mov` → `new/Clips/scene 1/a.mov`
+says `old` became `new` — so siblings in *other* subfolders relink too, which is how footage
+actually moves. Over-reaching is free: a mapping only says where to look, and an item is
+repointed only when a file is really there, and never when its own file still resolves.
+
+**And a placeholder effect's parameters are not reported one by one.** docs/11 §7 says
+anything the parser could not recover must be a row; the exception this states is that an
+effect's **topic headings and declared-empty slots are not things a person lost** — there was
+never a value in them. One real project produced 1,907 such rows against 509 rows worth
+reading, and a report nobody can scroll through says nothing at all. The undecoded *data*
+blobs are still named, one row each, and the placeholder itself always names the effect.

@@ -1223,13 +1223,21 @@ field; §7.1 and §7.2 are the proved layout maps.
    differential exempts it rather than curve-fitting. Nothing downstream reads a
    linear side's speed. A fixture with an animated path over a different duration
    settles it.
- - **Footage interpretation is not read at all, and needs a fixture that has some.**
-   `fixture.aep` is solids and comps with no file footage in it, so path, frame rate,
-   alpha, fields, pulldown, loop and missing-ness could not be checked against AE -
-   and an unchecked offset is exactly the silently-wrong import this route exists to
-   avoid. One more sitting with real footage in the project unblocks the whole group,
-   and the differential test asserts the fixture still has none so the exemption
-   cannot rot.
+ - **The rest of footage interpretation is not read, and needs a fixture that has
+   some.** A footage item's **name**, **path**, **placeholder-ness** and
+   **missing-at-save** flag are read as of K-536 - measured against a real production
+   project and against the layouts `forticheprod/py-aep` documents, with synthetic
+   byte fixtures in `aep/mod.rs`'s tests as the regression. Frame rate, alpha, fields,
+   pulldown and loop are still unread: Lumit has no field for any of them, and
+   `fixture.aep` is solids and comps with no file footage in it, so not one of those
+   offsets could be checked against AE. One more sitting with real footage in the
+   project unblocks the group, and the differential test asserts the fixture still has
+   none so the exemption cannot rot.
+ - **An image sequence imports as its folder, and reports as media not found.** The
+   alias record says `target_is_folder`; Lumit has no `SequenceItem` yet (docs/03
+   §2), so the item arrives named after the folder and the report says the media
+   could not be found. A reason of its own ("this is an image sequence") is owed with
+   the sequence item, not before it.
  - **A reflected layer's ends are one frame loose.** At −100% stretch AE reports its
    two ends 1/3000 s further out than the file's arithmetic gives, as if it reflects
    inclusive indices on an internal grid; with one sample the grid cannot be proved,

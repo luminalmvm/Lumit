@@ -39,8 +39,10 @@
 //! property.
 //!
 //! Reimplemented in Rust from `forticheprod/aep_parser` (MIT, licence checked
-//! 2026-08-21) and `boltframe/aftereffects-aep-parser` (Go, MIT), both read as
-//! documentation. No code is vendored from either.
+//! 2026-08-21), its Python successor `forticheprod/py-aep` (MIT, licence checked
+//! 2026-08-25 — the footage records here are read against its documented
+//! layouts) and `boltframe/aftereffects-aep-parser` (Go, MIT), all read as
+//! documentation. No code is vendored from any of them.
 
 pub mod enums;
 mod props;
@@ -263,10 +265,15 @@ fn read_folder<'a>(
         ) else {
             continue;
         };
+        // An item After Effects displays under its file's name stores an
+        // *empty* name chunk, so an empty one is no name rather than a name
+        // that happens to be blank. Saying so here is what lets a footage item
+        // fall back to its file name below, and everything else to `(unnamed)`.
         let name = inside
             .iter()
             .find(|chunk| chunk.id == *b"Utf8")
-            .map(|chunk| chunk.text());
+            .map(|chunk| chunk.text())
+            .filter(|name| !name.is_empty());
 
         match kind_code {
             enums::ITEM_FOLDER => {
@@ -314,42 +321,91 @@ fn read_folder<'a>(
 /// first four bytes are `Soli`; a solid's colour and its *name* both live in
 /// there, which is why a solid's own `Utf8` chunk is empty.
 ///
-/// The interpretation fields (path, frame rate, alpha handling, fields,
-/// pulldown, loop) are deliberately absent: the golden fixture is a
-/// solids-and-comps project with no file footage in it, so nothing here could
-/// be checked against what After Effects said, and an unchecked offset is
-/// exactly the silently-wrong import this route exists to avoid. They are owed
-/// a fixture with real footage (docs/TODO.md).
+/// **The file's path is the item's identity**, and it is not in the item at
+/// all: it lives in the alias record `LIST Als2` ▸ `alas`, whose body is JSON
+/// with a `fullpath`. Without it a footage item imports with nothing to point
+/// at, which is what made the whole Project panel arrive blank and relinking
+/// find nothing — a relink matches siblings by their file names, and an item
+/// with no path has no file name.
+///
+/// The **name** follows from it: an item the user never renamed has an empty
+/// `Utf8` chunk, because After Effects displays such an item under its file's
+/// own name. So an absent name falls back to the last component of the path,
+/// which is the name After Effects itself was showing.
+///
+/// A **placeholder** — the row After Effects leaves when a source is deleted —
+/// is an `opti` whose asset type is blank and whose type number is 2, and its
+/// name sits in the same place a solid's does. `sspc`'s byte 115 is the
+/// missing-at-save flag; a placeholder sets it too, so it is only read as
+/// *missing* for an item that is not one, and the report says one thing rather
+/// than two about the same row.
+///
+/// The remaining interpretation fields (frame rate, alpha handling, fields,
+/// pulldown, loop) stay unread: Lumit has no field for any of them — they would
+/// ride in the `ae` namespace and nothing downstream would read them — and an
+/// unchecked offset is exactly the silently-wrong import this route exists to
+/// avoid.
 fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'_>]) -> Item {
     let pin = inside.iter().find(|chunk| chunk.is_list(b"Pin "));
     let within: Vec<Chunk<'_>> = pin.map(|p| p.children().ok().collect()).unwrap_or_default();
     let settings = within.iter().find(|chunk| chunk.id == *b"sspc");
     let asset = within.iter().find(|chunk| chunk.id == *b"opti");
+    let path = alias_path(&within);
 
     let solid = asset.filter(|chunk| chunk.body.get(..4) == Some(b"Soli"));
-    let (kind, name, colour) = match solid {
-        Some(chunk) => (
+    // A placeholder's asset type is four NUL bytes and its type number is 2.
+    let placeholder = asset.filter(|chunk| {
+        chunk.body.get(..4) == Some(&[0, 0, 0, 0]) && u16_at(chunk.body, 4) == Some(2)
+    });
+    let named_after = |chunk: &Chunk<'_>| {
+        chunk
+            .body
+            .get(26..)
+            .map(text_of)
+            .filter(|stored| !stored.is_empty())
+    };
+    let (kind, name, colour) = match (solid, placeholder) {
+        (Some(chunk), _) => (
             "solid",
-            chunk
-                .body
-                .get(26..)
-                .map(text_of)
-                .filter(|solid_name| !solid_name.is_empty())
-                .or(name),
+            named_after(chunk).or(name),
             Some(vec![
                 f64::from(f32_at(chunk.body, 14).unwrap_or_default()),
                 f64::from(f32_at(chunk.body, 18).unwrap_or_default()),
                 f64::from(f32_at(chunk.body, 22).unwrap_or_default()),
             ]),
         ),
-        None => ("footage", name, None),
+        // The placeholder's own name sits at 10 rather than at 26 — its record
+        // has no colour in front of it.
+        (None, Some(chunk)) => (
+            "footage",
+            name.or_else(|| {
+                chunk
+                    .body
+                    .get(10..)
+                    .map(text_of)
+                    .filter(|stored| !stored.is_empty())
+            }),
+            None,
+        ),
+        (None, None) => (
+            "footage",
+            name.or_else(|| path.as_deref().map(file_name).map(str::to_string)),
+            None,
+        ),
     };
+
+    let missing = settings
+        .and_then(|chunk| u8_at(chunk.body, 115))
+        .is_some_and(|flag| flag != 0);
 
     Item {
         id: Some(id),
         name,
         parent_id: Some(parent_id),
         kind: Some(kind.to_string()),
+        path,
+        is_placeholder: placeholder.map(|_| true),
+        is_missing: (kind == "footage" && placeholder.is_none()).then_some(missing),
         colour,
         width: settings
             .and_then(|chunk| u16_at(chunk.body, 32))
@@ -359,6 +415,33 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
             .map(u32::from),
         ..Item::default()
     }
+}
+
+/// The absolute path inside a footage item's alias record, or `None` when the
+/// item has none (a solid, a placeholder, or a record this build cannot read).
+///
+/// The record is JSON rather than a Mac alias blob on both platforms, so it is
+/// read as JSON: anything else in there — the ascend counts, the server name —
+/// is After Effects' own relative-path bookkeeping and Lumit does its own.
+fn alias_path(within: &[Chunk<'_>]) -> Option<String> {
+    let alias = within
+        .iter()
+        .find(|chunk| chunk.is_list(b"Als2"))?
+        .children()
+        .ok()
+        .find(|chunk| chunk.id == *b"alas")?
+        .text();
+    let json: serde_json::Value = serde_json::from_str(&alias).ok()?;
+    let path = json.get("fullpath")?.as_str()?;
+    (!path.is_empty()).then(|| path.to_string())
+}
+
+/// The last component of a path written on **either** platform's separator —
+/// `std::path` cannot be used, because a Windows path read on macOS has no
+/// separator at all as far as it is concerned, and the whole path would become
+/// the name.
+fn file_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
 }
 
 /// A composition's settings and its layer stack.
@@ -801,6 +884,120 @@ mod tests {
         body.splice(0..2, kind.to_be_bytes());
         body.splice(16..20, id.to_be_bytes());
         chunk(b"idta", &body)
+    }
+
+    /// A footage item: an empty name chunk (the file's name is the name), a
+    /// `Pin ` holding the source settings, the alias record with the path, and
+    /// whatever asset record the caller wants.
+    fn footage_item(id: u32, path: &str, missing: u8, asset: &[u8]) -> Vec<u8> {
+        let mut sspc = vec![0_u8; 222];
+        sspc.splice(32..34, 1920_u16.to_be_bytes());
+        sspc.splice(36..38, 1080_u16.to_be_bytes());
+        sspc[115] = missing;
+
+        let alias = format!(
+            r#"{{"ascendcount_base":1,"fullpath":{},"platform":1,"target_is_folder":false}}"#,
+            serde_json::Value::String(path.to_string())
+        );
+
+        let mut pin = chunk(b"sspc", &sspc);
+        pin.extend(chunk(b"Utf8", b""));
+        pin.extend(list(b"Als2", &chunk(b"alas", alias.as_bytes())));
+        pin.extend(asset.to_vec());
+
+        let mut item = idta(enums::ITEM_FOOTAGE, id);
+        item.extend(chunk(b"Utf8", b""));
+        item.extend(list(b"Pin ", &pin));
+        item
+    }
+
+    /// **A footage item arrives with its file's name and its file's path.**
+    ///
+    /// The bug this pins: After Effects stores *nothing* for the name of an
+    /// item nobody renamed — it shows the file's name instead — and the path
+    /// is not in the item at all but in the alias record beside it. Reading
+    /// neither gave every imported clip a blank row in the Project panel and
+    /// no file to point at, which also left relinking with nothing to match a
+    /// sibling by.
+    #[test]
+    fn a_footage_item_takes_its_name_and_its_path_from_the_file() {
+        let path = r"C:\Shoot\Day 1\clip.mov";
+        let bytes = file(&list(
+            b"Fold",
+            &list(
+                b"Item",
+                &footage_item(3, path, 0, &chunk(b"opti", b"MOoV\0\0")),
+            ),
+        ));
+
+        let parsed = parse_capture(&bytes).expect("the walk survives");
+        let item = &parsed.capture.items[0];
+        assert_eq!(item.kind.as_deref(), Some("footage"));
+        assert_eq!(item.name.as_deref(), Some("clip.mov"));
+        assert_eq!(item.path.as_deref(), Some(path));
+        assert_eq!(item.is_missing, Some(false));
+        assert_eq!(item.is_placeholder, None);
+        assert_eq!((item.width, item.height), (Some(1920), Some(1080)));
+    }
+
+    /// **A name the user did type wins over the file's own.**
+    #[test]
+    fn a_renamed_footage_item_keeps_the_name_the_user_gave_it() {
+        // The same item as above, but with a name chunk the user filled in.
+        let mut item = idta(enums::ITEM_FOOTAGE, 4);
+        item.extend(chunk(b"Utf8", b"hero shot"));
+        let mut pin = chunk(b"sspc", &vec![0_u8; 222]);
+        pin.extend(list(
+            b"Als2",
+            &chunk(b"alas", br#"{"fullpath":"/media/clip.mov"}"#),
+        ));
+        item.extend(list(b"Pin ", &pin));
+
+        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
+        let parsed = parse_capture(&bytes).expect("the walk survives");
+        assert_eq!(parsed.capture.items[0].name.as_deref(), Some("hero shot"));
+        assert_eq!(
+            parsed.capture.items[0].path.as_deref(),
+            Some("/media/clip.mov")
+        );
+    }
+
+    /// **A placeholder is a placeholder, not a missing file.**
+    ///
+    /// After Effects leaves one of these where a source was deleted. It has a
+    /// name of its own and no path at all, and the same missing flag a lost
+    /// file sets — so calling it missing as well would put two rows in the
+    /// report about the one thing.
+    #[test]
+    fn a_placeholder_arrives_named_and_is_not_also_called_missing() {
+        let mut opti = vec![0_u8; 10];
+        opti.splice(4..6, 2_u16.to_be_bytes());
+        opti.extend_from_slice(b"Original Source Deleted\0");
+        let bytes = file(&list(
+            b"Fold",
+            &list(b"Item", &footage_item(5, "", 1, &chunk(b"opti", &opti))),
+        ));
+
+        let parsed = parse_capture(&bytes).expect("the walk survives");
+        let item = &parsed.capture.items[0];
+        assert_eq!(item.name.as_deref(), Some("Original Source Deleted"));
+        assert_eq!(item.is_placeholder, Some(true));
+        assert_eq!(item.is_missing, None);
+        assert_eq!(item.path, None);
+    }
+
+    /// **A file that was gone when the project was saved says so.**
+    #[test]
+    fn a_footage_item_missing_at_save_is_reported_missing() {
+        let bytes = file(&list(
+            b"Fold",
+            &list(
+                b"Item",
+                &footage_item(6, "/gone/clip.mov", 1, &chunk(b"opti", b"MOoV\0\0")),
+            ),
+        ));
+        let parsed = parse_capture(&bytes).expect("the walk survives");
+        assert_eq!(parsed.capture.items[0].is_missing, Some(true));
     }
 
     /// **A project with no item tree is refused, not half-imported.**

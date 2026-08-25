@@ -174,10 +174,19 @@ fn collect(
         }),
         // Nothing Lumit animates: kept whole rather than approximated.
         None => {
-            if node.unreadable.is_some() {
-                // Raising the row is `from_node`'s job for the animatable
-                // leaves; this branch is the only place an unreadable
-                // non-numeric leaf would otherwise go unmentioned.
+            // Raising the row is `from_node`'s job for the animatable leaves;
+            // this branch is the only place an unreadable non-numeric leaf
+            // would otherwise go unmentioned.
+            //
+            // **A group is not a parameter**, though, and that exception is
+            // load-bearing rather than tidy-minded: an effect's topic headings
+            // and its declared-empty slots are unreadable in exactly the sense
+            // that there was never anything to read, and a plug-in-heavy
+            // project has thousands of them (one real project: 1,907 of them
+            // against 509 rows worth reading). A report nobody can scroll
+            // through says nothing at all (docs/11 §9), and none of those rows
+            // named a single thing the user lost.
+            if node.unreadable.is_some() && node.value_type.as_deref() != Some("group") {
                 conv.report.row(
                     path.property(display_name(node, &id)),
                     Outcome::Skipped,

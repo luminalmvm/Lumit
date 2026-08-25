@@ -1000,3 +1000,56 @@ fn a_mapped_document_round_trips_through_a_saved_project() {
         }
     );
 }
+
+/// **A row in the Project panel always has a name to show, and a file to
+/// point at.**
+///
+/// Both halves of the one bug: After Effects stores an *empty* name for an
+/// item nobody renamed, so a capture can honestly carry one — and a footage
+/// item with no name and no path is a blank row that cannot be found, cannot
+/// be relinked (a sibling sweep matches by file name) and cannot be told apart
+/// from the forty other blank rows beside it. The `.aep` reader puts the
+/// file's own name back where there is a path to take it from; this is the
+/// guard for everything that reaches the mapping still nameless.
+#[test]
+fn an_item_with_no_name_of_its_own_is_labelled_rather_than_left_blank() {
+    use lumit_import::capture::{Capture, Item};
+
+    let capture = Capture {
+        items: vec![
+            Item {
+                id: Some(1),
+                name: Some("   ".to_string()),
+                kind: Some("footage".to_string()),
+                path: Some(r"C:\Shoot\clip.mov".to_string()),
+                ..Item::default()
+            },
+            Item {
+                id: Some(2),
+                name: None,
+                kind: Some("folder".to_string()),
+                ..Item::default()
+            },
+        ],
+        ..Capture::default()
+    };
+
+    let (doc, _) = map_capture(&capture);
+    for item in &doc.items {
+        assert!(
+            !item.name().trim().is_empty(),
+            "every item has something to show in the panel"
+        );
+    }
+
+    let footage = match &doc.items[0] {
+        ProjectItem::Footage(f) => f,
+        other => panic!("expected footage, got {other:?}"),
+    };
+    // Both sides of the reference carry the path After Effects recorded: the
+    // absolute one is what resolves on the machine the project was made on,
+    // and the relative one is rebased against the project folder on the first
+    // save (docs/10 §2).
+    assert_eq!(footage.media.absolute_path, r"C:\Shoot\clip.mov");
+    assert_eq!(footage.media.relative_path, r"C:\Shoot\clip.mov");
+}

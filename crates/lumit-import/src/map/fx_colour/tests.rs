@@ -1240,6 +1240,50 @@ fn curves_imports_as_a_placeholder_with_its_unreadable_named() {
     ));
 }
 
+/// **A plug-in's topic headings never reach the report.**
+///
+/// The regression: an effect Lumit does not know arrives with one node per
+/// heading and one per slot the plug-in declared as empty, each of them
+/// "unreadable" in the sense that there was never anything to read. Filing a
+/// skipped row for each buried the rows that mattered — a real project put
+/// 1,907 of them against 509 rows worth reading — while naming nothing the
+/// user had lost. The placeholder row above already names the effect, and the
+/// blob beside it is still reported, because that one *is* data.
+#[test]
+fn an_effects_topic_headings_are_not_reported_as_lost_properties() {
+    let heading = AeProp {
+        match_name: Some("S_Glow-0001".to_string()),
+        name: Some("Glow".to_string()),
+        value_type: Some("group".to_string()),
+        unreadable: Some("an effect topic heading, which carries no value of its own".to_string()),
+        ..AeProp::default()
+    };
+    let blob = AeProp {
+        match_name: Some("S_Glow-0520".to_string()),
+        name: Some("Preset".to_string()),
+        value_type: Some("custom_blob".to_string()),
+        unreadable: Some("arbitrary data: 1033 bytes carried undecoded".to_string()),
+        ..AeProp::default()
+    };
+    let ran = run(&effect("S_Glow", "S_Glow", vec![heading, blob]));
+
+    assert!(!ran.mapped);
+    let unreadable: Vec<&str> = ran
+        .report
+        .rows
+        .iter()
+        .filter_map(|r| match &r.reason {
+            Reason::PropertyUnreadable { match_name } => Some(match_name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        unreadable,
+        vec!["S_Glow-0520"],
+        "the blob is named and the heading is not"
+    );
+}
+
 /// **Remove Grain and Timewarp are placeholders on purpose, and each says what
 /// does the job instead** — a denoiser is a programme of its own, and a
 /// retimer is Retime.
