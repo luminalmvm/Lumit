@@ -47,20 +47,173 @@ turn the suite from a proof into a decoration, so each is an `#[ignore]`d test i
 | `aces-1.2.fixture` | The legacy ACES 1.2 config, run through the reference OpenColorIO library offline (§7.1). The config itself loads today — the legacy configs are pure data — so this waits only on somebody producing the expected values. |
 | `aces-cg.fixture` | The same for the OCIO v2 ACES CG config, whose views are `BuiltinTransform` styles — so this fixture and the vendored builtin bakes (`../../vendored/`) come from one run, and until it happens those styles refuse by name and the v2 configs do not resolve end to end. |
 
-CI never builds OpenColorIO; it reads whatever table is here. The regeneration
-recipe belongs in each fixture's header when it lands, so a later reader can
-reproduce it rather than trust it.
+CI never builds OpenColorIO; it reads whatever table is here.
+
+**Both are data drops, not coding jobs.** The reader is written and tested:
+`conformance.rs` resolves a row's id through the config, runs both of §7.2's
+gates, and `a_reference_fixture_is_read_and_gated_before_any_reference_data_exists`
+proves that path against a stand-in config and the published sRGB numbers. So
+landing a fixture is: put the two paths below in place, delete the one
+`#[ignore]` line above its test, run the suite.
+
+## Reproducing the reference fixtures offline
+
+Runs on any machine with Python 3.9 or newer and a network connection. Nothing
+is built from source, and nothing here ever runs in CI.
+
+### 1. The tool
+
+```sh
+python -m pip install "opencolorio==2.5.2"
+```
+
+That is the reference implementation's own Python binding, published as wheels
+for Windows, macOS and Linux — no C++ toolchain, no CMake. Pin the version and
+record it: the generated header must name the exact library that produced the
+numbers, because "OpenColorIO said so" is only provenance if a later reader can
+find out *which* OpenColorIO.
+
+### 2. The configs
+
+| Fixture | Config | Where it comes from |
+|---|---|---|
+| `aces-1.2` | ACES 1.2, a directory (`config.ocio` plus `luts/`) | `git clone --depth 1 https://github.com/colour-science/OpenColorIO-Configs`, then the `aces_1.2/` folder. It is the maintained home of the legacy configs; the original `imageworks/OpenColorIO-Configs` stops at 1.0.3. |
+| `aces-cg` | The OCIO v2 ACES CG config, a single file | The release assets of `https://github.com/AcademySoftwareFoundation/OpenColorIO-Config-ACES` — `cg-config-v4.0.0_aces-v2.0_ocio-v2.5.ocio` at the time of writing. Take the newest, and record which. |
+
+Both land under this directory, config file named `config.ocio`, LUTs beside it
+exactly as the config's `search_path` expects:
+
+```
+tests/fixtures/aces-1.2/config.ocio      (+ luts/…)
+tests/fixtures/aces-cg/config.ocio
+```
+
+The config directory is checked in with the table. A fixture whose config is not
+in the repository is not reproducible, and the ACES 1.2 LUT set is a few
+megabytes — worth it for a golden that gates the whole legacy path.
+
+### 3. The generator
+
+Save as `generate.py` beside the config directory and run
+`python generate.py aces-1.2 > aces-1.2.fixture`.
+
+```python
+"""Generate a Lumit reference fixture with the reference OpenColorIO library.
+
+The rows it prints are what conformance.rs reads. Nothing about Lumit is
+imported here on purpose: the whole value of this file is that it is a second,
+independent opinion.
+"""
+import sys, datetime, PyOpenColorIO as ocio
+
+name = sys.argv[1]                      # "aces-1.2" or "aces-cg"
+cfg = ocio.Config.CreateFromFile(f"{name}/config.ocio")
+
+# The probe set §7.1 names: neutrals, primaries, gamut edges, negatives, HDR to
+# a hundred, denormals, exact 0 and 1.
+probes = [
+    [0.0, 0.0, 0.0], [1.0, 1.0, 1.0], [0.18, 0.18, 0.18], [0.5, 0.25, 0.75],
+    [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 1.0, 0.0],
+    [0.004, 0.002, 0.001], [1e-7, 1e-7, 1e-7],
+    [-0.05, 0.4, 0.9], [-0.2, -0.1, 0.02],
+    [2.0, 1.4, 0.3], [16.0, 8.0, 4.0], [100.0, 12.0, -0.3], [64.0, 64.0, 64.0],
+]
+
+# Lumit's working space is scene-linear Rec.709 and never moves (K-490), so a
+# view row's INPUT is in Lumit's working space and the reference run has to
+# enter the config at the same door. WHICH door is §2.1's two readings, and
+# they are genuinely different — getting this wrong makes every view row wrong
+# by a primaries matrix and looks like a tolerance problem:
+#
+#   aces-cg has an `aces_interchange` role, so Lumit crosses Rec.709 → AP0 and
+#     enters at the config's own linear Rec.709 space.
+#   aces-1.2 is an OCIO v1 config with no interchange role, so Lumit TAKES its
+#     working space to be the config's `scene_linear` space and applies no
+#     matrix at all. The door is that role.
+if cfg.hasRole("aces_interchange"):
+    WORKING = "Linear Rec.709 (sRGB)"        # name it per config; v2 configs have one
+else:
+    WORKING = cfg.getColorSpace(ocio.ROLE_SCENE_LINEAR).getName()
+
+# The edges to tabulate. Space pairs are both endpoints in the config's own
+# vocabulary, reached through roles so this works on either config; views are
+# every (display, view) the config offers.
+ends = [WORKING]
+for role in ("scene_linear", "compositing_log", "color_timing",
+             "aces_interchange", "default"):
+    cs = cfg.getColorSpace(role)
+    if cs and cs.getName() not in ends:
+        ends.append(cs.getName())
+
+edges = [("space", a, b) for a in ends for b in ends if a != b]
+for d in cfg.getDisplays():
+    for v in cfg.getViews(d):
+        edges.append(("view", d, v))
+
+def processor(kind, a, b):
+    if kind == "space":
+        return cfg.getProcessor(a, b)
+    t = ocio.DisplayViewTransform(src=WORKING, display=a, view=b)
+    return cfg.getProcessor(t, ocio.TRANSFORM_DIR_FORWARD)
+
+print(f"# {name}: expected values from the REFERENCE OpenColorIO library.")
+print(f"# library: PyOpenColorIO {ocio.GetVersion()}")
+print(f"# config: {name}/config.ocio  (record the release tag here)")
+print(f"# generated: {datetime.date.today()} by tests/fixtures/README.md's generate.py")
+print("# View rows start in Lumit's fixed working space, scene-linear Rec.709,")
+print(f"#   entering the config at {WORKING!r} (docs/impl/ocio.md §2.1).")
+print("# A fifth field is the BAKED gate's own bound: rows outside the shaper's")
+print("#   domain carry §5.4's looser ceiling, to be tightened, never widened.")
+for kind, a, b in edges:
+    cpu = processor(kind, a, b).getDefaultCPUProcessor()
+    ident = f"space: {a} -> {b}" if kind == "space" else f"view: {a} / {b}"
+    for p in probes:
+        out = cpu.applyRGB(list(p))
+        rgb = " ".join(f"{v:.8f}" for v in p)
+        want = " ".join(f"{v:.8f}" for v in out)
+        # §5.4: the cube form clamps below zero and above the shaper ceiling.
+        out_of_domain = any(v < 0.0 or v > 32.0 for v in p)
+        tail = " | 5e-2" if out_of_domain else ""
+        print(f"{ident} | {rgb} | {want} | 1e-5{tail}")
+```
+
+### 4. Dropping it in
+
+1. `tests/fixtures/<name>/config.ocio` (and `luts/` for ACES 1.2).
+2. `tests/fixtures/<name>.fixture`, the generator's output, header and all.
+3. Delete the `#[ignore]` line above that fixture's test in `conformance.rs`.
+4. `cargo test -p lumit-colour`.
+
+For `aces-cg` there is a fifth step that comes **first**: the config's views are
+`BuiltinTransform` styles, and until `../../vendored/` holds their bakes the
+config does not resolve end to end and every view row refuses. The same
+OpenColorIO session produces both — `../../vendored/README.md` carries that half
+of the recipe, and the two must be generated from one run at one library
+version or the fixture proves nothing about the bake it is paired with.
+
+If a view row disagrees by a small, uniform amount across every probe, suspect
+the working-space bridge (§2.1) rather than the tolerance: that is the one place
+Lumit and the reference library are entitled to have chosen different matrices,
+and it is a finding, not a number to widen.
 
 ## The fixture format
 
-One row per line, four fields separated by `|`:
+One row per line, four fields separated by `|`, with an optional fifth:
 
 ```
-<chain id> | <r g b in> | <R G B expected> | <tolerance>
+<chain id> | <r g b in> | <R G B expected> | <tolerance> | <baked tolerance>
 ```
 
-`#` starts a comment. The chain ids are built in `conformance.rs`; a fixture
-naming an id the test does not know fails loudly rather than being skipped,
-because a silently skipped golden is not a golden. `clf/clf.fixture` uses the
-same four fields, with the vendored document's file name in place of the chain
-id.
+`#` starts a comment. The fifth field is the baked gate's own bound, for rows
+whose input leaves the shaper's domain (§5.4); without it the bound comes from
+the artefact's shape.
+
+Three id vocabularies, one format:
+
+- `published.fixture` names chains built by hand in `conformance.rs`;
+- `clf/clf.fixture` names a vendored document's file name;
+- the reference fixtures name a **config edge**, `space: <from> -> <to>` or
+  `view: <display> / <view>`, resolved through the config beside the table.
+
+An id the test cannot resolve fails loudly rather than being skipped, because a
+silently skipped golden is not a golden.

@@ -13,7 +13,7 @@
 use lumit_colour::bake::{bake, Shaper};
 use lumit_colour::matrix;
 use lumit_colour::op::{CdlParams, Direction, LogParams, Op};
-use lumit_colour::Chain;
+use lumit_colour::{Chain, LoadedConfig};
 
 /// The chains the fixture rows name. A fixture naming an id that is not here
 /// fails the run rather than being skipped.
@@ -200,16 +200,150 @@ fn every_published_row_passes_the_baked_gate() {
 // gates nothing while looking as though it does.
 // ---------------------------------------------------------------------------
 
+/// The chain a reference row names. Its id is a **config edge** rather than a
+/// hand-built chain, in one of two shapes, and the generator recipe in
+/// `fixtures/README.md` writes exactly these:
+///
+/// ```text
+/// space: <from> -> <to>
+/// view: <display> / <view>
+/// ```
+fn config_edge(loaded: &LoadedConfig, id: &str, line: usize) -> Chain {
+    let fail = |what: &str| -> ! { panic!("line {line}: {what} in {id:?}") };
+    if let Some(rest) = id.strip_prefix("space:") {
+        let Some((from, to)) = rest.split_once("->") else {
+            fail("a space edge reads `space: <from> -> <to>`; no arrow")
+        };
+        loaded
+            .space_to_space(from.trim(), to.trim())
+            .unwrap_or_else(|e| panic!("line {line}: {id:?} did not resolve ({e})"))
+    } else if let Some(rest) = id.strip_prefix("view:") {
+        let Some((display, view)) = rest.split_once('/') else {
+            fail("a view edge reads `view: <display> / <view>`; no slash")
+        };
+        loaded
+            .display_view(display.trim(), view.trim())
+            .unwrap_or_else(|e| panic!("line {line}: {id:?} did not resolve ({e})"))
+    } else {
+        fail("an id must start with `space:` or `view:`")
+    }
+}
+
+/// §7.2's two gates over rows whose chains come from a config: exact on the
+/// processor, then the baked artefact the graphics card would sample.
+///
+/// This is the whole of what a reference fixture needs beyond its data, which
+/// is the point of it existing before the data does — the offline run drops a
+/// config directory and a table in, and nothing has to be written to read them.
+fn gate_config_rows(loaded: &LoadedConfig, rows: &[Row]) {
+    for row in rows {
+        let chain = config_edge(loaded, &row.id, row.line);
+        let exact = chain.eval(row.input);
+        for k in 0..3 {
+            let off = (exact[k] - row.expected[k]).abs();
+            assert!(
+                off <= row.tolerance,
+                "line {} ({}), exact: {:?} → {exact:?}, expected {:?}, off by {off}",
+                row.line,
+                row.id,
+                row.input,
+                row.expected
+            );
+        }
+
+        let baked = bake(&chain, Shaper::DEFAULT)
+            .unwrap_or_else(|e| panic!("line {}: the chain did not bake ({e})", row.line));
+        let tolerance = row.baked_tolerance.unwrap_or(match &baked {
+            lumit_colour::Artefact::Factorised { .. } => row.tolerance.max(1e-5),
+            lumit_colour::Artefact::ShaperCube { .. } => 2e-3,
+        });
+        let sampled = baked.eval(row.input);
+        for k in 0..3 {
+            let off = (sampled[k] - row.expected[k]).abs();
+            assert!(
+                off <= tolerance,
+                "line {} ({}), baked: {:?} → {sampled:?}, expected {:?}, off by {off}",
+                row.line,
+                row.id,
+                row.input,
+                row.expected
+            );
+        }
+    }
+}
+
+/// A reference fixture as the offline run drops it in: `fixtures/<name>/` is
+/// the config directory and `fixtures/<name>.fixture` is the table.
+fn reference_fixture(name: &str) -> (LoadedConfig, Vec<Row>) {
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures"));
+    let config = dir.join(name).join("config.ocio");
+    let loaded = LoadedConfig::load(&config)
+        .unwrap_or_else(|e| panic!("{} did not load ({e})", config.display()));
+    let table = dir.join(format!("{name}.fixture"));
+    let text = std::fs::read_to_string(&table)
+        .unwrap_or_else(|e| panic!("{} could not be read ({e})", table.display()));
+    (loaded, read_fixture(&text))
+}
+
+// The two reference-library fixtures. These are ignored, not absent, and each
+// says exactly what it waits for — see fixtures/README.md, which carries the
+// recipe that produces both. Nothing here invents an expected value; an
+// invented golden is worse than a missing one, because it gates nothing while
+// looking as though it does. Dropping the artefacts in means adding the two
+// paths the recipe names and deleting the `#[ignore]` line above the test.
+
 #[test]
-#[ignore = "pending: fixtures/aces-1.2.fixture, generated offline from the legacy ACES 1.2 config with the reference OpenColorIO library (docs/impl/ocio.md §7.1)"]
+#[ignore = "pending: fixtures/aces-1.2/ and fixtures/aces-1.2.fixture, generated offline from the legacy ACES 1.2 config with the reference OpenColorIO library (docs/impl/ocio.md §7.1; the recipe is in fixtures/README.md)"]
 fn the_legacy_aces_config_matches_the_reference() {
-    unreachable!("no fixture data yet");
+    let (loaded, rows) = reference_fixture("aces-1.2");
+    gate_config_rows(&loaded, &rows);
 }
 
 #[test]
-#[ignore = "pending: fixtures/aces-cg.fixture and the vendored builtin bakes, from one reference OpenColorIO run (docs/impl/ocio.md §7.1, §4.1)"]
+#[ignore = "pending: fixtures/aces-cg/ and fixtures/aces-cg.fixture, and the vendored builtin bakes, from one reference OpenColorIO run (docs/impl/ocio.md §7.1, §4.1; the recipe is in fixtures/README.md)"]
 fn the_aces_cg_config_matches_the_reference() {
-    unreachable!("no fixture data yet");
+    let (loaded, rows) = reference_fixture("aces-cg");
+    gate_config_rows(&loaded, &rows);
+}
+
+/// The reader above, proven before the data arrives — which is the only way to
+/// promise that the offline run's output is *droppable*. A small config stands
+/// in for the ACES ones; the expected values are the published sRGB numbers
+/// from `published.fixture`, so this row set is a golden in its own right and
+/// not a self-check.
+#[test]
+fn a_reference_fixture_is_read_and_gated_before_any_reference_data_exists() {
+    const CONFIG: &str = r"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+  reference: ref
+displays:
+  sRGB:
+    - !<View> {name: Standard, colorspace: out_srgb}
+colorspaces:
+  - !<ColorSpace>
+    name: ref
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: srgb_texture
+    to_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0]}
+  - !<ColorSpace>
+    name: out_srgb
+    from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
+";
+    // IEC 61966-2-1, the same published values published.fixture carries.
+    const ROWS: &str = "
+space: srgb_texture -> lin | 0.5 0.5 0.5 | 0.21404114 0.21404114 0.21404114 | 1e-5
+space: srgb_texture -> lin | 1.0 1.0 1.0 | 1.0 1.0 1.0 | 1e-6
+view: sRGB / Standard      | 0.21404114 0.21404114 0.21404114 | 0.5 0.5 0.5 | 1e-5
+";
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures"));
+    let loaded = LoadedConfig::new(
+        lumit_colour::Config::parse(dir, CONFIG).expect("the stand-in config parses"),
+    );
+    gate_config_rows(&loaded, &read_fixture(ROWS));
 }
 
 // ---------------------------------------------------------------------------
