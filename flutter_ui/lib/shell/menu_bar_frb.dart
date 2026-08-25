@@ -32,6 +32,7 @@ import 'package:provider/provider.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
@@ -492,8 +493,17 @@ List<MenuSection> lumitMenus(
   final ui = context.read<LumitUiState>();
   final project = app.project;
   // Null while no project is loaded, so every document item is disabled rather
-  // than throwing when pressed.
-  final history = project?.history();
+  // than throwing when pressed. A *dead* reference gets the same answer:
+  // openProject clears the engine's registry before _adopt lands the new
+  // reference, so a rebuild inside that window holds a project every call
+  // refuses. One build with the rows disabled; the adopt notification
+  // rebuilds with the live one.
+  BridgeHistory? history;
+  String? projectPath;
+  try {
+    history = project?.history();
+    projectPath = project?.path();
+  } catch (_) {}
   final comp = ui.selectedComp;
   final layer = ui.selectedLayer.value;
   final layers = ui.selectedLayers.value;
@@ -586,7 +596,7 @@ List<MenuSection> lumitMenus(
         // Not in the specified list, and kept: recovering work beside a project
         // is the one command whose absence costs a day's work.
         MenuEntry(l10n.menuRecover,
-            project?.path() == null ? null : () => _recover(context, app)),
+            projectPath == null ? null : () => _recover(context, app)),
       ]
     ),
     (

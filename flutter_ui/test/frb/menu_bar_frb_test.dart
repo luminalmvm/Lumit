@@ -134,6 +134,28 @@ void main() {
       return walk(state.project?.getItems() ?? const []);
     }
 
+    /// The startup race the 2026-08-25 run log caught: openProject clears the
+    /// engine's registry before _adopt lands the new reference, so a rebuild
+    /// inside that window builds the bar with a project every call refuses.
+    /// The bar must build disabled rather than throw (the same answer a null
+    /// project gets).
+    testWidgets('a dead project reference builds the bar, not an error',
+        (tester) async {
+      final p = await mount(tester);
+      // Close the project in the engine while the state keeps the reference -
+      // exactly what the mid-swap window holds.
+      p.state.project!.close();
+      await tester.pump();
+      // A selection notification is what rebuilt the bar in the wild. A new
+      // list instance, because an identical value does not notify.
+      p.uiState.selectedLayers.value = List.of(p.uiState.selectedLayers.value);
+      await tester.pump();
+      expect(tester.takeException(), isNull,
+          reason: 'a dead reference reads as no project, not as a throw');
+      expect(find.byKey(const ValueKey('menu-File')), findsOneWidget);
+      p.state.project = null; // the teardown close would throw the same way
+    });
+
     testWidgets('File shows its items', (tester) async {
       await mount(tester);
       await tester.tap(find.byKey(const ValueKey<String>('menu-File')));
