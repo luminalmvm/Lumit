@@ -666,7 +666,17 @@ pub struct ColourEngine {
     /// sixteen-bit sRGB format exists for the hardware to do it (see
     /// `colour.wgsl`); everything else about the pass is the same.
     display16: wgpu::RenderPipeline,
+    /// The four passes again with a baked colour artefact bound
+    /// (docs/impl/ocio.md §5.2). Separate pipelines rather than a branch,
+    /// because the render TARGET differs: an artefact's output is already
+    /// display-encoded, so these write through a plain `Unorm` view where the
+    /// built-in ones write through `UnormSrgb` and let the hardware encode.
+    linearise_ocio: wgpu::RenderPipeline,
+    display_ocio: wgpu::RenderPipeline,
+    display_bgra_ocio: wgpu::RenderPipeline,
+    display16_ocio: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
+    ocio_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     linear_sampler: wgpu::Sampler,
     /// The view uniform, as **two buffers made once** rather than one made per
@@ -742,6 +752,46 @@ impl Default for DisplayParams {
     }
 }
 
+/// One RGB table as an `Rgba32Float` texture, alpha padded and unread.
+fn upload_rgb_f32(
+    ctx: &GpuContext,
+    label: &str,
+    dimension: wgpu::TextureDimension,
+    size: wgpu::Extent3d,
+    data: &[[f32; 3]],
+) -> wgpu::Texture {
+    let tex = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension,
+        format: wgpu::TextureFormat::Rgba32Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let count =
+        (size.width as usize) * (size.height as usize) * (size.depth_or_array_layers as usize);
+    let mut rgba = vec![0f32; count * 4];
+    for (i, c) in data.iter().take(count).enumerate() {
+        rgba[i * 4] = c[0];
+        rgba[i * 4 + 1] = c[1];
+        rgba[i * 4 + 2] = c[2];
+        rgba[i * 4 + 3] = 1.0;
+    }
+    ctx.queue.write_texture(
+        tex.as_image_copy(),
+        bytemuck::cast_slice(&rgba),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(size.width * 16),
+            rows_per_image: Some(size.height),
+        },
+        size,
+    );
+    tex
+}
+
 /// One view uniform, sized and written at creation.
 fn view_uniform(ctx: &GpuContext, label: &str, view: DisplayParams) -> wgpu::Buffer {
     wgpu::util::DeviceExt::create_buffer_init(
@@ -781,6 +831,111 @@ pub const SRGB_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb
 // `TEXTURE_FORMAT_16BIT_NORM` feature, with this as the fallback for adapters
 // that lack it.
 pub const DEEP_DISPLAY_FORMAT: wgpu::TextureFormat = WORKING_FORMAT;
+
+/// The same pixel format with the hardware's sRGB encode taken off it.
+///
+/// **The double-encode trap** (docs/impl/ocio.md §5.2). The built-in display
+/// pass writes linear values into an `Rgba8UnormSrgb` target and lets the
+/// hardware do the encode — that is the whole trick this file opens with. A
+/// baked view's output is *already* display-encoded, so the OCIO variants must
+/// write through a plain `Unorm` view of the same texture or the hardware
+/// encodes a second time and the picture washes out pale. It is the kind of
+/// bug that reads as a subtle grading mistake rather than as a bug, which is
+/// why it is a named function and a pinned test rather than a comment.
+///
+/// The texture itself keeps its sRGB format, so everything downstream — the
+/// read-back, the pool, the share handle, the Viewer's own decode — sees what
+/// it always saw. Only the write goes through the other view.
+#[must_use]
+pub fn unencoded(format: wgpu::TextureFormat) -> wgpu::TextureFormat {
+    match format {
+        wgpu::TextureFormat::Rgba8UnormSrgb => wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureFormat::Bgra8UnormSrgb => wgpu::TextureFormat::Bgra8Unorm,
+        other => other,
+    }
+}
+
+/// How a baked artefact's tables arrive from `lumit-colour`, as plain numbers.
+///
+/// This crate depends on no other Lumit crate and this keeps it that way: the
+/// renderer converts an `Artefact` into one of these, and the shape mirrors
+/// `Artefact` closely enough that the conversion is obvious and nothing can be
+/// silently reinterpreted on the way.
+#[derive(Debug, Clone, PartialEq)]
+pub enum OcioTables {
+    /// The factorised form, in the fixed `curve → matrix → curve` shape. Each
+    /// curve is `CURVE_SAMPLES` samples indexed over 0–1 in *signed shaper*
+    /// space; either may be absent.
+    Curves {
+        pre: Option<Vec<[f32; 3]>>,
+        /// Row-major 3×4, exactly `lumit_colour::matrix::Matrix34`.
+        matrix: [f32; 12],
+        post: Option<Vec<[f32; 3]>>,
+        shaper: OcioShaper,
+    },
+    /// The shaper-and-cube form: `size³` samples, red fastest.
+    Cube {
+        size: u32,
+        data: Vec<[f32; 3]>,
+        shaper: OcioShaper,
+    },
+}
+
+/// `lumit_colour::Shaper`, repeated here for the same reason [`OcioTables`] is.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OcioShaper {
+    Lg2 {
+        min_log2: f32,
+        max_log2: f32,
+        offset: f32,
+    },
+    Uniform {
+        min: f32,
+        max: f32,
+    },
+}
+
+/// The row length a curve table is uploaded at, matching `CURVE_WIDTH` in
+/// `colour.wgsl`. A power of two, so the shader's wrap is a shift and a mask.
+const CURVE_WIDTH: u32 = 1024;
+
+/// `OcioParams` in `colour.wgsl`, laid out for the card.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct OcioParamsRaw {
+    mode: u32,
+    has_pre: u32,
+    has_post: u32,
+    shaper_kind: u32,
+    shaper_a: f32,
+    shaper_b: f32,
+    shaper_c: f32,
+    curve_last: f32,
+    curve_rows: u32,
+    cube_last: f32,
+    _pad0: u32,
+    _pad1: u32,
+    matrix: [f32; 12],
+}
+
+/// A baked colour artefact as the graphics card holds it: the tables, plus the
+/// numbers that say how to read them, plus the bind group that ties them to a
+/// pass.
+///
+/// Both textures always exist, because a shader's bindings must all be filled;
+/// the one the mode does not use is a single texel. Immutable once built and
+/// cheap to keep, so the renderer caches one per artefact and every pass in
+/// every frame binds the same one.
+pub struct OcioArtefact {
+    bind: wgpu::BindGroup,
+    /// Kept alive for the bind group, and read by the parity test.
+    #[allow(dead_code)]
+    curve: wgpu::Texture,
+    #[allow(dead_code)]
+    cube: wgpu::Texture,
+    #[allow(dead_code)]
+    params: wgpu::Buffer,
+}
 
 /// A read-back in flight: the copy is already on the graphics card's queue and
 /// the buffer is being mapped, with nobody waiting. Started by
@@ -895,6 +1050,48 @@ impl ColourEngine {
                     },
                 ],
             });
+        let ocio_layout = ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("colour-ocio"),
+                entries: &[
+                    // The curve table. `filterable: false` and no sampler at
+                    // all: the interpolation is done by hand in the shader, so
+                    // it is the arithmetic the processor does rather than
+                    // whatever the card's fixed-function unit rounds to
+                    // (docs/impl/lut.md §3).
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D3,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
         let pipeline_layout = ctx
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -902,29 +1099,43 @@ impl ColourEngine {
                 bind_group_layouts: &[&layout],
                 push_constant_ranges: &[],
             });
-        let make = |target: wgpu::TextureFormat, label: &str, entry: &str| {
+        let ocio_pipeline_layout =
             ctx.device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some(label),
-                    layout: Some(&pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader,
-                        entry_point: Some("vs_fullscreen"),
-                        buffers: &[],
-                        compilation_options: Default::default(),
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader,
-                        entry_point: Some(entry),
-                        targets: &[Some(target.into())],
-                        compilation_options: Default::default(),
-                    }),
-                    primitive: Default::default(),
-                    depth_stencil: None,
-                    multisample: Default::default(),
-                    multiview: None,
-                    cache: None,
-                })
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("colour-ocio"),
+                    bind_group_layouts: &[&layout, &ocio_layout],
+                    push_constant_ranges: &[],
+                });
+        let make_with =
+            |pl: &wgpu::PipelineLayout, target: wgpu::TextureFormat, label: &str, entry: &str| {
+                ctx.device
+                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some(label),
+                        layout: Some(pl),
+                        vertex: wgpu::VertexState {
+                            module: &shader,
+                            entry_point: Some("vs_fullscreen"),
+                            buffers: &[],
+                            compilation_options: Default::default(),
+                        },
+                        fragment: Some(wgpu::FragmentState {
+                            module: &shader,
+                            entry_point: Some(entry),
+                            targets: &[Some(target.into())],
+                            compilation_options: Default::default(),
+                        }),
+                        primitive: Default::default(),
+                        depth_stencil: None,
+                        multisample: Default::default(),
+                        multiview: None,
+                        cache: None,
+                    })
+            };
+        let make = |target: wgpu::TextureFormat, label: &str, entry: &str| {
+            make_with(&pipeline_layout, target, label, entry)
+        };
+        let make_ocio = |target: wgpu::TextureFormat, label: &str, entry: &str| {
+            make_with(&ocio_pipeline_layout, target, label, entry)
         };
         let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("colour-nearest"),
@@ -950,11 +1161,162 @@ impl ColourEngine {
                 "fs_copy",
             ),
             display16: make(DEEP_DISPLAY_FORMAT, "display16", "fs_display16"),
+            linearise_ocio: make_ocio(WORKING_FORMAT, "linearise-ocio", "fs_ocio"),
+            display_ocio: make_ocio(unencoded(SRGB_FORMAT), "display-ocio", "fs_ocio"),
+            display_bgra_ocio: make_ocio(
+                unencoded(wgpu::TextureFormat::Bgra8UnormSrgb),
+                "display-bgra-ocio",
+                "fs_ocio",
+            ),
+            display16_ocio: make_ocio(DEEP_DISPLAY_FORMAT, "display16-ocio", "fs_ocio16"),
             layout,
+            ocio_layout,
             sampler,
             linear_sampler,
             neutral_buf: view_uniform(ctx, "colour-view-neutral", DisplayParams::NEUTRAL),
             view_buf: view_uniform(ctx, "colour-view", DisplayParams::NEUTRAL),
+        }
+    }
+
+    /// Put a baked artefact on the graphics card (docs/impl/ocio.md §5.2–§5.3).
+    ///
+    /// `Rgba32Float` for both tables rather than fp16: the point of the whole
+    /// design is that the CPU oracle and this shader read the *same numbers*,
+    /// and rounding the table on the way here would put a conversion between
+    /// them that the parity gate would then have to be loosened for. Four
+    /// megabytes of texture is not worth a looser gate.
+    pub fn upload_ocio(&self, ctx: &GpuContext, tables: &OcioTables) -> OcioArtefact {
+        let shaper = match tables {
+            OcioTables::Curves { shaper, .. } | OcioTables::Cube { shaper, .. } => *shaper,
+        };
+        let (shaper_kind, shaper_a, shaper_b, shaper_c) = match shaper {
+            OcioShaper::Lg2 {
+                min_log2,
+                max_log2,
+                offset,
+            } => (0, min_log2, max_log2, offset),
+            OcioShaper::Uniform { min, max } => (1, min, max, 0.0),
+        };
+
+        // One texel stands in for whichever table this mode does not read: a
+        // shader's bindings must all be filled, and a dummy is less code than
+        // a second bind group layout to avoid one.
+        let stub_curve = vec![[0.0_f32; 3]; 1];
+        let stub_cube = vec![[0.0_f32; 3]; 1];
+
+        let (curve_data, curve_rows, curve_last, params_mode, has_pre, has_post, matrix) =
+            match tables {
+                OcioTables::Curves {
+                    pre, matrix, post, ..
+                } => {
+                    let n = pre.as_ref().or(post.as_ref()).map_or(1, |c| c.len().max(1));
+                    let rows = (n as u32).div_ceil(CURVE_WIDTH);
+                    let per_stage = (rows * CURVE_WIDTH) as usize;
+                    let mut data = vec![[0.0_f32; 3]; per_stage * 2];
+                    for (slot, stage) in [(pre, 0_usize), (post, 1_usize)] {
+                        if let Some(c) = slot {
+                            let base = stage * per_stage;
+                            for (i, s) in c.iter().enumerate().take(per_stage) {
+                                data[base + i] = *s;
+                            }
+                        }
+                    }
+                    (
+                        data,
+                        rows,
+                        (n.max(2) - 1) as f32,
+                        1_u32,
+                        u32::from(pre.is_some()),
+                        u32::from(post.is_some()),
+                        *matrix,
+                    )
+                }
+                OcioTables::Cube { .. } => (
+                    stub_curve,
+                    1,
+                    1.0,
+                    2_u32,
+                    0,
+                    0,
+                    [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+                ),
+            };
+        let (cube_size, cube_data) = match tables {
+            OcioTables::Cube { size, data, .. } => (*size, data.clone()),
+            OcioTables::Curves { .. } => (1, stub_cube),
+        };
+
+        let curve = upload_rgb_f32(
+            ctx,
+            "colour-ocio-curve",
+            wgpu::TextureDimension::D2,
+            wgpu::Extent3d {
+                width: CURVE_WIDTH,
+                height: curve_rows * 2,
+                depth_or_array_layers: 1,
+            },
+            &curve_data,
+        );
+        let cube = upload_rgb_f32(
+            ctx,
+            "colour-ocio-cube",
+            wgpu::TextureDimension::D3,
+            wgpu::Extent3d {
+                width: cube_size,
+                height: cube_size,
+                depth_or_array_layers: cube_size,
+            },
+            &cube_data,
+        );
+        let params = wgpu::util::DeviceExt::create_buffer_init(
+            &ctx.device,
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("colour-ocio-params"),
+                contents: bytemuck::bytes_of(&OcioParamsRaw {
+                    mode: params_mode,
+                    has_pre,
+                    has_post,
+                    shaper_kind,
+                    shaper_a,
+                    shaper_b,
+                    shaper_c,
+                    curve_last,
+                    curve_rows,
+                    cube_last: (cube_size.max(2) - 1) as f32,
+                    _pad0: 0,
+                    _pad1: 0,
+                    matrix,
+                }),
+                usage: wgpu::BufferUsages::UNIFORM,
+            },
+        );
+        let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("colour-ocio"),
+            layout: &self.ocio_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &curve.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        &cube.create_view(&Default::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params.as_entire_binding(),
+                },
+            ],
+        });
+        OcioArtefact {
+            bind,
+            curve,
+            cube,
+            params,
         }
     }
 
@@ -978,7 +1340,9 @@ impl ColourEngine {
             dimension: wgpu::TextureDimension::D2,
             format: SRGB_FORMAT,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
+            // So an OCIO input transform can read the raw code values instead
+            // of letting the hardware decode them as sRGB first (5.2).
+            view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
         });
         ctx.queue.write_texture(
             texture.as_image_copy(),
@@ -1007,8 +1371,19 @@ impl ColourEngine {
         extra_usage: wgpu::TextureUsages,
         label: &str,
         view: DisplayParams,
+        ocio: Option<&OcioArtefact>,
     ) -> wgpu::Texture {
-        self.pass_sized(ctx, pipeline, src, None, format, extra_usage, label, view)
+        self.pass_sized(
+            ctx,
+            pipeline,
+            src,
+            None,
+            format,
+            extra_usage,
+            label,
+            view,
+            ocio,
+        )
     }
 
     /// [`Self::pass`] with an explicit destination size. A `size` smaller than
@@ -1025,6 +1400,7 @@ impl ColourEngine {
         extra_usage: wgpu::TextureUsages,
         label: &str,
         view: DisplayParams,
+        ocio: Option<&OcioArtefact>,
     ) -> wgpu::Texture {
         let scaled = size.is_some();
         let size = match size {
@@ -1035,6 +1411,12 @@ impl ColourEngine {
             },
             None => src.size(),
         };
+        // The double-encode trap, both ends of it (see [`unencoded`]). With an
+        // artefact bound, the destination is written through a plain `Unorm`
+        // view of the same sRGB texture, and an eight-bit *source* is read
+        // through one too — otherwise the hardware would decode footage code
+        // values as sRGB before the input transform ever saw them.
+        let plain = ocio.map(|_| unencoded(format)).filter(|f| *f != format);
         let dst = ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size,
@@ -1045,7 +1427,7 @@ impl ColourEngine {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
                 | extra_usage,
-            view_formats: &[],
+            view_formats: plain.as_slice(),
         });
         // Queue writes are ordered against submissions, so writing here lands
         // before this pass's own submit — and before any other pass batched
@@ -1064,7 +1446,12 @@ impl ColourEngine {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(
-                        &src.create_view(&Default::default()),
+                        &src.create_view(&wgpu::TextureViewDescriptor {
+                            format: ocio
+                                .map(|_| unencoded(src.format()))
+                                .filter(|f| *f != src.format()),
+                            ..Default::default()
+                        }),
                     ),
                 },
                 wgpu::BindGroupEntry {
@@ -1083,7 +1470,10 @@ impl ColourEngine {
         });
         let mut encoder = ctx.encoder(label);
         {
-            let view = dst.create_view(&Default::default());
+            let view = dst.create_view(&wgpu::TextureViewDescriptor {
+                format: plain,
+                ..Default::default()
+            });
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(label),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1098,6 +1488,9 @@ impl ColourEngine {
             });
             rpass.set_pipeline(pipeline);
             rpass.set_bind_group(0, &bind, &[]);
+            if let Some(ocio) = ocio {
+                rpass.set_bind_group(1, &ocio.bind, &[]);
+            }
             rpass.draw(0..3, 0..1);
         }
         drop(encoder);
@@ -1106,15 +1499,36 @@ impl ColourEngine {
 
     /// sRGB source texture → linear fp16 working texture.
     pub fn linearise(&self, ctx: &GpuContext, src: &wgpu::Texture) -> wgpu::Texture {
+        self.linearise_through(ctx, src, None)
+    }
+
+    /// [`Self::linearise`] with the footage item's own input transform
+    /// (docs/impl/ocio.md 5.2): the same pass, new tables, still no processor
+    /// round trip. `None` is the built-in interpretation - the hardware sRGB
+    /// decode this file opens by describing - and is the pass this always was.
+    pub fn linearise_through(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        ocio: Option<&OcioArtefact>,
+    ) -> wgpu::Texture {
         self.pass(
             ctx,
-            &self.linearise,
+            if ocio.is_some() {
+                &self.linearise_ocio
+            } else {
+                &self.linearise
+            },
             src,
             WORKING_FORMAT,
-            wgpu::TextureUsages::empty(),
+            // Readable, like the display pass beside it, so the linear stage
+            // can be compared against its CPU oracle (docs/08 §1.6) — which is
+            // how the OCIO input transform is gated at all.
+            wgpu::TextureUsages::COPY_SRC,
             "linearise",
             // Decoding source pixels is not a view of anything.
             DisplayParams::NEUTRAL,
+            ocio,
         )
     }
 
@@ -1130,14 +1544,34 @@ impl ColourEngine {
         src: &wgpu::Texture,
         view: DisplayParams,
     ) -> wgpu::Texture {
+        self.display_through(ctx, src, view, None)
+    }
+
+    /// [`Self::display`] through a baked display/view transform, or through
+    /// the built-in one when there is none.
+    ///
+    /// **This is the dispatch the export runs too** - not a second
+    /// implementation that agrees with it, the same one (K-031, K-185).
+    pub fn display_through(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        view: DisplayParams,
+        ocio: Option<&OcioArtefact>,
+    ) -> wgpu::Texture {
         self.pass(
             ctx,
-            &self.display,
+            if ocio.is_some() {
+                &self.display_ocio
+            } else {
+                &self.display
+            },
             src,
             SRGB_FORMAT,
             wgpu::TextureUsages::COPY_SRC,
             "display",
             view,
+            ocio,
         )
     }
 
@@ -1153,14 +1587,30 @@ impl ColourEngine {
         src: &wgpu::Texture,
         view: DisplayParams,
     ) -> wgpu::Texture {
+        self.display_bgra_through(ctx, src, view, None)
+    }
+
+    /// [`Self::display_bgra`] through a baked display/view transform.
+    pub fn display_bgra_through(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        view: DisplayParams,
+        ocio: Option<&OcioArtefact>,
+    ) -> wgpu::Texture {
         self.pass(
             ctx,
-            &self.display_bgra,
+            if ocio.is_some() {
+                &self.display_bgra_ocio
+            } else {
+                &self.display_bgra
+            },
             src,
             wgpu::TextureFormat::Bgra8UnormSrgb,
             wgpu::TextureUsages::COPY_SRC,
             "display-bgra",
             view,
+            ocio,
         )
     }
 
@@ -1179,6 +1629,9 @@ impl ColourEngine {
         height: u32,
         view: DisplayParams,
     ) -> wgpu::Texture {
+        // No artefact here on purpose: every caller of this is resampling
+        // pixels that were already put through the display transform, and
+        // putting them through a second time would grade the picture twice.
         self.pass_sized(
             ctx,
             &self.display,
@@ -1188,6 +1641,7 @@ impl ColourEngine {
             wgpu::TextureUsages::COPY_SRC,
             "display-scaled",
             view,
+            None,
         )
     }
 
@@ -1209,15 +1663,34 @@ impl ColourEngine {
         size: Option<(u32, u32)>,
         view: DisplayParams,
     ) -> wgpu::Texture {
+        self.display16_through(ctx, src, size, view, None)
+    }
+
+    /// [`Self::display16`] through a baked display/view transform. The deep
+    /// target does the encode by hand either way - with an artefact there is
+    /// simply nothing left to encode, so it only clamps.
+    pub fn display16_through(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        size: Option<(u32, u32)>,
+        view: DisplayParams,
+        ocio: Option<&OcioArtefact>,
+    ) -> wgpu::Texture {
         self.pass_sized(
             ctx,
-            &self.display16,
+            if ocio.is_some() {
+                &self.display16_ocio
+            } else {
+                &self.display16
+            },
             src,
             size,
             DEEP_DISPLAY_FORMAT,
             wgpu::TextureUsages::COPY_SRC,
             "display16",
             view,
+            ocio,
         )
     }
 
