@@ -2,6 +2,8 @@
 // (docs/07 §5) — selected properties as curves, key drags, easing, the F9
 // family, the speed lens, and keyframe copy/paste.
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -16,6 +18,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
 
@@ -65,13 +68,33 @@ void main() {
     String opacityKey(LayerReference layer, int index) =>
         'graph-key-${layer.internallayerId}/transform/opacity@opacity#$index';
 
+    /// Click a property's name in Graph mode's own outline — the filtered
+    /// animated list (§3.3), whose rows are already flat, so the name is the
+    /// whole gesture. A **still** property is not on the Animated list, so
+    /// Show is flipped to All to reach it.
+    Future<void> pickProperty(WidgetTester tester, String label) async {
+      if (find.text(label).evaluate().isEmpty) {
+        await tester.tap(find.byKey(const ValueKey('tl-keys-all')));
+        await tester.pump();
+      }
+      await tester.tap(find.text(label));
+      await tester.pump();
+    }
+
+    /// [layersOutline] is Settings ▸ *Graph mode keeps the Layers outline*
+    /// (K-442): on, the graph shows the Layers columns and its properties are
+    /// reached by twirling, which is what the tests that drag an outline
+    /// **value well** need — the graph's own outline reads values, it does
+    /// not edit them.
     Future<void> mountGraph(WidgetTester tester, dynamic p,
-        {bool selectOpacity = true}) async {
+        {bool selectOpacity = true, bool layersOutline = false}) async {
       // The outline alone is ~740 px of columns; the default 800×600 test
       // surface would push the graph pane off screen.
       tester.view.physicalSize = const Size(1280, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
+      (p.uiState as LumitUiState).workspace.interface.graphOutlineLikeLayers =
+          layersOutline;
       await tester.pumpWidget(hostPanel(
         child: const TimelinePanelFrb(),
         state: p.state as LumitState,
@@ -82,16 +105,15 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
       await tester.pump();
       if (!selectOpacity) return;
-      // Selection lives in the outline: twirl the layer, open Transform,
-      // click the property's name (docs/07 §4.3).
-      final layer = (p as dynamic).layer as LayerReference;
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
-      await tester.pump();
-      await tester.tap(find.text('Transform'));
-      await tester.pump();
-      await tester.tap(find.text('Opacity'));
-      await tester.pump();
+      if (layersOutline) {
+        final layer = (p as dynamic).layer as LayerReference;
+        await tester.tap(
+            find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
+        await tester.pump();
+        await tester.tap(find.text('Transform'));
+        await tester.pump();
+      }
+      await pickProperty(tester, 'Opacity');
     }
 
     testWidgets('with nothing selected the pane says how to start',
@@ -117,8 +139,8 @@ void main() {
           reason: 'the graph keeps the time ruler');
 
       // A static property joins as a flat line: no keys, no complaints.
-      await tester.tap(find.text('Position'));
-      await tester.pump();
+      // It is not on the Animated list, so Show has to be All to reach it.
+      await pickProperty(tester, 'Position');
       expect(tester.takeException(), isNull);
     });
 
@@ -131,7 +153,9 @@ void main() {
         (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer);
-      await mountGraph(tester, p);
+      // The Layers outline, because this drags a **value well** — the graph's
+      // own outline reads values rather than editing them (§3.3).
+      await mountGraph(tester, p, layersOutline: true);
 
       final glyph = find.byKey(ValueKey<String>(opacityKey(p.layer, 0)));
       final before = tester.getCenter(glyph);
@@ -174,7 +198,7 @@ void main() {
       // insert a duplicate key instead of replacing (K-336). Frame 50 is
       // float-exact and cannot catch it.
       p.uiState.scrubTo(31);
-      await mountGraph(tester, p);
+      await mountGraph(tester, p, layersOutline: true);
 
       expect(opacityKeys(p.layer).length, 2);
 
@@ -251,7 +275,7 @@ void main() {
       }
       p.layer.setEffects(effects: staged);
       p.uiState.model.refresh();
-      await mountGraph(tester, p, selectOpacity: false);
+      await mountGraph(tester, p, selectOpacity: false, layersOutline: true);
 
       // Select the Radius property the outline way.
       await tester.tap(
@@ -301,7 +325,7 @@ void main() {
       p.layer.toggleRetimeProperty();
       p.uiState.scrubTo(31);
       p.uiState.model.refresh();
-      await mountGraph(tester, p, selectOpacity: false);
+      await mountGraph(tester, p, selectOpacity: false, layersOutline: true);
 
       final id = p.layer.internallayerId;
       await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
@@ -1057,10 +1081,9 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
       await tester.pump();
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('tl-retime-name')));
+      // Graph mode's outline lists the Retime row flat, under its layer.
+      await tester.tap(find.byKey(
+          ValueKey<String>('tl-graph-name-${layer.internallayerId}/retime')));
       await tester.pump();
     }
 
@@ -1204,8 +1227,8 @@ void main() {
       await tester.tap(key);
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer), hasLength(3),
-          reason:
-              'the key is still there — double-click plants, it does not lift');
+          reason: 'the key is still there — double-click opens its numeric '
+              'fields (§6.2), it does not lift it');
     });
 
     testWidgets('the last key of a channel refuses to be lifted',
@@ -1475,7 +1498,463 @@ void main() {
       await tester.pump();
       expect(pill, findsNothing, reason: 'two keys are a block, not a key');
     });
+
+    // --- TI-6: Graph mode's drawn surface (§3.3, §6.3) --------------------
+
+    /// A ramp on Position x, so the pane can be given two curves in unlike
+    /// units — which is what Normalise exists for.
+    void animatePositionX(
+      CompositionReference comp,
+      LayerReference layer, {
+      List<int> frames = const [0, 100],
+      double scale = 10,
+    }) {
+      layer.setTransform(
+        prop: BridgeTransformProp.positionX,
+        value: BridgeScalar.keyframed([
+          for (final f in frames)
+            BridgeKeyframe(
+              time: comp.timeOfFrame(frame: f),
+              value: f * scale,
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+    }
+
+    testWidgets('the graph outline is the filtered animated list',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      await mountGraph(tester, p, selectOpacity: false);
+      final id = p.layer.internallayerId;
+
+      expect(find.byKey(ValueKey<String>('tl-twirl-$id')), findsNothing,
+          reason: 'not the Layers outline');
+      expect(
+          find.byKey(ValueKey<String>('tl-graph-prop-$id/transform/opacity')),
+          findsOneWidget,
+          reason: 'the animated property is listed');
+      expect(
+          find.byKey(ValueKey<String>('tl-graph-prop-$id/transform/positionX')),
+          findsNothing,
+          reason: 'a still property is not on the Animated list');
+      expect(find.byKey(const ValueKey('tl-graph-normalise')), findsOneWidget,
+          reason: "Normalise sits at the filter row's right");
+
+      // Show: All lists every property a layer has.
+      await tester.tap(find.byKey(const ValueKey('tl-keys-all')));
+      await tester.pump();
+      expect(
+          find.byKey(ValueKey<String>('tl-graph-prop-$id/transform/positionX')),
+          findsOneWidget);
+
+      // The row reads what it holds, with its unit outside the number.
+      expect(
+          find.descendant(
+              of: find.byKey(
+                  ValueKey<String>('tl-graph-prop-$id/transform/opacity')),
+              matching: find.text('%')),
+          findsOneWidget,
+          reason: 'the unit rides beside the value');
+    });
+
+    /// **The tick is the selection**: it puts one property's curves on the
+    /// pane and takes them off, leaving every other row alone.
+    testWidgets('the include tick adds and removes one curve', (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      animatePositionX(p.comp, p.layer);
+      await mountGraph(tester, p, selectOpacity: false);
+      final id = p.layer.internallayerId;
+
+      Finder glyph(String channel) =>
+          find.byKey(ValueKey<String>('graph-key-$id/$channel#0'));
+
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-graph-tick-$id/transform/opacity')));
+      await tester.pump();
+      expect(glyph('transform/opacity@opacity'), findsOneWidget);
+
+      await tester.tap(find
+          .byKey(ValueKey<String>('tl-graph-tick-$id/transform/positionX')));
+      await tester.pump();
+      expect(glyph('transform/opacity@opacity'), findsOneWidget,
+          reason: 'the first curve stayed');
+      expect(glyph('transform/positionX@positionX'), findsOneWidget);
+
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-graph-tick-$id/transform/opacity')));
+      await tester.pump();
+      expect(glyph('transform/opacity@opacity'), findsNothing,
+          reason: 'unticking took only its own curve off');
+      expect(glyph('transform/positionX@positionX'), findsOneWidget);
+    });
+
+    /// **Normalise** (§3.3): each shown curve is scaled to its own min–max, so
+    /// an opacity in per cent and a position in pixels both fill the pane
+    /// instead of one being a flat line under the other. A view setting: the
+    /// keys themselves do not move.
+    testWidgets('Normalise gives every curve its own span', (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      animatePositionX(p.comp, p.layer);
+      await mountGraph(tester, p, selectOpacity: false);
+      final id = p.layer.internallayerId;
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-graph-tick-$id/transform/opacity')));
+      await tester.pump();
+      await tester.tap(find
+          .byKey(ValueKey<String>('tl-graph-tick-$id/transform/positionX')));
+      await tester.pump();
+
+      double topOf(String channel) => tester
+          .getCenter(find.byKey(ValueKey<String>('graph-key-$id/$channel#1')))
+          .dy;
+
+      final apart = (topOf('transform/opacity@opacity') -
+              topOf('transform/positionX@positionX'))
+          .abs();
+      expect(apart, greaterThan(20),
+          reason: 'on one axis, 100 and 1000 are nowhere near each other');
+
+      await tester.tap(find.byKey(const ValueKey('tl-graph-normalise')));
+      await tester.pump();
+      expect(
+          (topOf('transform/opacity@opacity') -
+                  topOf('transform/positionX@positionX'))
+              .abs(),
+          lessThan(2),
+          reason: 'each curve now fills its own span, so both tops meet');
+
+      // A view setting, never data.
+      expect(
+          (p.layer.getTransform().opacity as BridgeScalar_Keyframed)
+              .field0
+              .last
+              .value,
+          100);
+    });
+
+    /// The **Key readout row** (§3.3): pinned at the outline's foot while
+    /// exactly one key is in hand, and its influence wells commit through the
+    /// same write the tangent handles make.
+    testWidgets('the Key readout row reads one key and writes its influence',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer, frames: [0, 50, 90]);
+      await mountGraph(tester, p);
+      final readout = find.byKey(const ValueKey('tl-graph-key-readout'));
+      expect(readout, findsNothing, reason: 'nothing at rest');
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 1))));
+      await tester.pump();
+      expect(readout, findsOneWidget);
+      expect(find.descendant(of: readout, matching: find.text('f50')),
+          findsOneWidget,
+          reason: 'the frame it sits on');
+      expect(find.descendant(of: readout, matching: find.text('50')),
+          findsOneWidget,
+          reason: 'and the value it holds');
+
+      tester
+          .widget<DragValueField>(
+              find.byKey(const ValueKey('tl-graph-key-out')))
+          .onChanged(75);
+      await tester.pump();
+      expect(
+          sideInfluence(opacityKeys(p.layer)[1].interpOut), closeTo(0.75, 1e-6),
+          reason: 'the well wrote the influence the handle would have dragged');
+
+      // Two keys are a block; the single-key readout stands down.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 2))));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      expect(readout, findsNothing);
+    });
+
+    /// **Value labels live in a fixed right-hand gutter** (§12A.2, §6.3) —
+    /// they used to be pinned to the viewport's *left* edge, over the curves.
+    /// Rasterised, because where a painter puts its ground is the whole claim:
+    /// the gutter is a solid translucent strip, so on a bare recording every
+    /// pixel of the right-hand 34 is painted and the left-hand 34 carries only
+    /// the grid and the curves.
+    testWidgets('the axis numbers are painted in the right-hand gutter',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      await mountGraph(tester, p);
+
+      final paint = tester.widget<CustomPaint>(find.byWidgetPredicate((w) =>
+          w is CustomPaint &&
+          w.painter.runtimeType.toString() == '_GraphPainter'));
+      final size = tester.getSize(find.byWidget(paint));
+
+      final recorder = ui.PictureRecorder();
+      paint.painter!.paint(Canvas(recorder), size);
+      // `runAsync`, because rasterising goes out to the engine and back: the
+      // test binding's fake clock never lets that future complete.
+      late final ui.Image image;
+      late final ByteData bytes;
+      await tester.runAsync(() async {
+        image = await recorder
+            .endRecording()
+            .toImage(size.width.round(), size.height.round());
+        bytes = (await image.toByteData())!;
+      });
+      int painted(int from, int to) {
+        var count = 0;
+        for (var y = 0; y < image.height; y++) {
+          for (var x = from; x < to; x++) {
+            if (bytes.getUint8((y * image.width + x) * 4 + 3) != 0) count++;
+          }
+        }
+        return count;
+      }
+
+      final strip = graphGutterWidth.round();
+      final whole = strip * image.height;
+      expect(painted(image.width - strip, image.width), whole,
+          reason: 'the gutter is a solid strip down the right edge');
+      expect(painted(0, strip), lessThan(whole ~/ 2),
+          reason: 'and nothing like it where the labels used to be');
+    });
+
+    // --- TI-7: the transform box and numeric entry (§6.2) -----------------
+
+    /// Put two keys in hand — the first and the last of a ramp spread across
+    /// the whole composition ([spreadOpacity]), so the box is worth aiming at
+    /// in both axes and the key between them is a witness that only the
+    /// selection moves. Keys a few frames apart on a long comp draw a box a
+    /// dozen pixels wide, whose edges sit under their own keys' targets.
+    Future<void> selectEnds(WidgetTester tester, dynamic p) async {
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 2))));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+    }
+
+    testWidgets('two selected keys draw the transform box', (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+
+      final box = find.byKey(const ValueKey('graph-transform-box'));
+      expect(box, findsNothing, reason: 'nothing at rest');
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
+      await tester.pump();
+      expect(box, findsNothing, reason: 'one key is a key, not a block');
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 2))));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+
+      expect(box, findsOneWidget,
+          reason: 'two are a block, and a block has a box');
+      for (final edge in const ['left', 'right', 'top', 'bottom']) {
+        expect(find.byKey(ValueKey<String>('graph-box-$edge')), findsOneWidget,
+            reason: 'a grab on each edge');
+      }
+      expect(find.text('2 keys · ${p.comp.durationFrames() - 1} f'),
+          findsOneWidget,
+          reason: 'the lanes’ own badge: how many keys, how many frames');
+    });
+
+    /// The box's left and right edges scale **time** about the opposite edge
+    /// (docs/07 §5.3, Caddis §2.1).
+    testWidgets("the box's right edge scales time about the left edge",
+        (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+      await selectEnds(tester, p);
+
+      List<int> frames() => [
+            for (final k in opacityKeys(p.layer))
+              p.comp.frameAtTime(time: k.time)
+          ];
+      final before = frames();
+      final values = [for (final k in opacityKeys(p.layer)) k.value];
+
+      await _drag(tester, find.byKey(const ValueKey('graph-box-right')),
+          const Offset(-80, 0));
+
+      final after = frames();
+      expect(after[0], before[0], reason: 'the edge not in hand is the anchor');
+      expect(after[2], lessThan(before[2]),
+          reason: 'and the edge in hand went where the pointer put it');
+      expect(after[1], before[1],
+          reason: 'a key the selection does not hold does not move');
+      expect([for (final k in opacityKeys(p.layer)) k.value], values,
+          reason: 'a time edge changes nothing about value');
+
+      p.state.project!.undo();
+      expect(frames(), before, reason: 'the whole scale is one undo step');
+    });
+
+    /// The top and bottom edges scale **value**, about the opposite edge.
+    testWidgets("the box's top edge scales value about the bottom edge",
+        (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+      await selectEnds(tester, p);
+
+      final before = [for (final k in opacityKeys(p.layer)) k.value];
+      final frames = [
+        for (final k in opacityKeys(p.layer)) p.comp.frameAtTime(time: k.time)
+      ];
+
+      await _drag(tester, find.byKey(const ValueKey('graph-box-top')),
+          const Offset(0, 40));
+
+      final after = [for (final k in opacityKeys(p.layer)) k.value];
+      expect(after[0], closeTo(before[0], 1e-6),
+          reason: 'the bottom edge is the anchor and holds its value');
+      expect(after[2], lessThan(before[2]),
+          reason: 'the top came down, so the span shrank toward the anchor');
+      expect(after[1], before[1], reason: 'the unselected key stays put');
+      expect([
+        for (final k in opacityKeys(p.layer)) p.comp.frameAtTime(time: k.time)
+      ], frames, reason: 'a value edge moves nothing in time');
+    });
+
+    /// `Shift` snaps what the scale lands on to whole numbers — the Caddis
+    /// behaviour, with the readout pill saying live what they are.
+    testWidgets('Shift lands a value scale on whole numbers', (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+      await selectEnds(tester, p);
+
+      final before = [for (final k in opacityKeys(p.layer)) k.value];
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await _drag(tester, find.byKey(const ValueKey('graph-box-top')),
+          const Offset(0, 37));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+
+      final after = [for (final k in opacityKeys(p.layer)) k.value];
+      expect(after[2], lessThan(before[2]), reason: 'the scale still ran');
+      for (final v in after) {
+        expect(v, v.roundToDouble(),
+            reason: 'and every key it moved landed on a whole number');
+      }
+    });
+
+    /// The readout pill rides with the scale and leaves with it (P1), and
+    /// `Escape` abandons the whole gesture (P3, §8's gap 19).
+    testWidgets('Escape abandons a box scale and writes nothing',
+        (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+      await selectEnds(tester, p);
+
+      List<int> frames() => [
+            for (final k in opacityKeys(p.layer))
+              p.comp.frameAtTime(time: k.time)
+          ];
+      final before = frames();
+      final hint = find.byKey(const ValueKey('graph-box-hint'));
+      expect(hint, findsNothing, reason: 'nothing at rest');
+
+      final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('graph-box-right'))));
+      await tester.pump();
+      await gesture.moveBy(const Offset(-60, 0));
+      await tester.pump();
+      expect(hint, findsOneWidget, reason: 'the readout rides under the hand');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(hint, findsNothing, reason: 'and goes with the abandoned gesture');
+
+      // The pointer carries on moving, as a real one does: an abandoned drag
+      // must not follow it.
+      await gesture.moveBy(const Offset(-60, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(frames(), before, reason: 'Escape wrote nothing at all');
+    });
+
+    /// **Numeric entry** (docs/07 §5.3): double-clicking a key opens its exact
+    /// frame, value and influences.
+    testWidgets('double-clicking a key opens its exact fields', (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+
+      final key = find.byKey(ValueKey<String>(opacityKey(p.layer, 1)));
+      await tester.tap(key);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(key);
+      await tester.pumpAndSettle();
+
+      for (final field in const ['frame', 'value', 'in', 'out']) {
+        expect(
+            find.byKey(ValueKey<String>('graph-fields-$field')), findsOneWidget,
+            reason: 'the exact $field field');
+      }
+
+      final was = p.comp.frameAtTime(time: opacityKeys(p.layer)[1].time);
+      await _type(tester, 'graph-fields-value', '80');
+
+      final keys = opacityKeys(p.layer);
+      expect(keys, hasLength(3), reason: 'typing a value plants nothing');
+      expect(keys[1].value, 80, reason: 'the key holds exactly what was typed');
+      expect(p.comp.frameAtTime(time: keys[1].time), was,
+          reason: 'and nothing else about it changed');
+    });
+
+    /// A typed frame moves the key, and cannot be typed past its neighbours —
+    /// the fields are bounded by them, because the box is holding an index
+    /// into a list a re-sort would shuffle.
+    testWidgets('a typed frame moves the key, inside its neighbours',
+        (tester) async {
+      final p = withLayer();
+      spreadOpacity(p);
+      await mountGraph(tester, p);
+
+      final key = find.byKey(ValueKey<String>(opacityKey(p.layer, 1)));
+      await tester.tap(key);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(key);
+      await tester.pumpAndSettle();
+
+      final last = p.comp.durationFrames() - 1;
+      await _type(tester, 'graph-fields-frame', '${last + 500}');
+
+      final keys = opacityKeys(p.layer);
+      expect(keys, hasLength(3));
+      expect(p.comp.frameAtTime(time: keys[1].time), last - 1,
+          reason: 'held one frame short of the key after it, never past it');
+      expect(p.comp.frameAtTime(time: keys[2].time), last,
+          reason: 'which is still where it was');
+    });
   }, skip: !engineAvailable);
+}
+
+/// Click a value well open and type [text] into it, then commit with Enter.
+///
+/// The field is found *inside* the well rather than as the first
+/// [EditableText] on screen: the Timeline panel has fields of its own, and the
+/// popover is a route over the top of them.
+Future<void> _type(WidgetTester tester, String key, String text) async {
+  final well = find.byKey(ValueKey<String>(key));
+  await tester.tap(well);
+  await tester.pump();
+  await tester.enterText(
+      find.descendant(of: well, matching: find.byType(EditableText)), text);
+  await tester.testTextInput.receiveAction(TextInputAction.done);
+  await tester.pumpAndSettle();
 }
 
 /// Drag from a widget's centre in steps, as a real pointer moves.

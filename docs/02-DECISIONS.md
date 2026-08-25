@@ -13819,3 +13819,52 @@ Make proxy · a ticked Use proxy · Clear proxy, offered on footage rows alone
 two only once there is a proxy, so the menu never lists a word that would do
 nothing — the rule the layer menu's ticked *Accepts lights* entry set in K-483.
 The row itself keeps one badge and no buttons, as the mockup draws it.
+
+## K-505 — The graph's transform box scales by its edges, `Shift` rounds, and nothing tapers
+
+*Status: DECIDED. Supersedes the transform-box and numeric-entry sentences of docs/07
+§5.3. See docs/impl/timeline-interaction.md §6.2 (TI-7).*
+
+docs/07 §5.3 described the graph's selection transform box in one parenthesis — *"corner
+drag; `Ctrl` tapers"* — written before the box existed. Building it (TI-7) found both
+halves wrong for this editor, and this entry records what it does instead.
+
+**Four edge grabs, no corners.** The box spans the selected keys in time and in value;
+its left and right edges scale time about the opposite edge, its top and bottom edges
+scale value about the opposite edge. There is no corner grab, because a box drawn round a
+selection has its corners **on the selection's own extreme keys** — with two keys selected
+the corners *are* those keys — so a corner target would either swallow the key's click and
+drag or sit unreachable beneath it, and P5 of the interaction note forbids both. Scaling
+both axes takes two gestures: the same arithmetic, one extra drag, and every key keeps
+every gesture it answers. For the same reason the edge strips sit **below** the key glyphs
+in the stack, so a key standing on an edge is still the thing under the pointer.
+
+**`Shift` is the modifier, not `Ctrl`.** The study's own sentence is *"Shift locks to the
+dominant drag axis and snaps values to integers with a live readout tooltip"* (`Caddis
+study/notes-editor-ux.md` §4). The axis-lock half already belongs to the box's other
+gesture — the **slide**, which is the ordinary key drag, where `Shift` has held one axis
+since K-333. The integer-snap half is the edge scale's: `Shift` rounds what the scale
+lands on, whole frames in time and whole numbers in value, with a readout pill under the
+box saying live what the box now reaches. `Ctrl` is left alone deliberately: it suspends
+the magnet on every other drag in this panel (docs/07 §4.5), and a taper — which nothing
+draws, and for which no arithmetic is recorded anywhere in these docs — is not worth
+giving one key two meanings a few pixels apart.
+
+**The scaling is the lane block's arithmetic.** `scaledAbout` in `key_block.dart` — an
+anchor, an old reach, a new one — now carries both the lane stretch and this box, time in
+frames and value in **pixels**. Pixels for value because Normalise (K-442, §3.3) gives
+each curve its own range: one gesture must scale the whole selection by the one amount the
+hand asked for, and a pixel scale is the only scale that means the same thing on two
+curves in unlike units. A drag stages in Dart and commits once, so the box is one undo
+step, and `Escape` abandons it — which the graph's key and tangent-handle drags gained in
+the same package, on the shared `DragEscape`.
+
+**Numeric entry is frame, value and In/Out %.** Double-clicking a key opens a small
+popover holding those four numbers. docs/07 §5.3 also listed *speed*: a side's speed is
+what the tangent handle drags and what the influence field writes at, so a fourth field
+would be a second way to say one thing. The double-click is counted by timestamps, never
+by an `onDoubleTap` recogniser — registering one holds every *single* click on a key back
+until its timer expires, and selecting a key is the commonest gesture on the pane. The
+frame field is bounded by the key's two neighbours, because the popover holds an index
+into a list that a re-sort would shuffle underneath it, and the channel is looked up by id
+at each write rather than held, because a channel is a snapshot of the read model.

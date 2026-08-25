@@ -8738,5 +8738,50 @@
       "first": { "type": "int" },
       "last": { "type": "int" }
     }
+  },
+  "graphNormalise": "Normalise",
+  "@graphNormalise": {
+    "description": "Timeline, Graph mode: the label of the checkbox at the right of the filter row above the outline. On, every curve is scaled to its own smallest and largest value so curves in unlike units share the pane. Shown in small capitals."
+  },
+  "graphKeyKicker": "Key",
+  "@graphKeyKicker": {
+    "description": "Timeline, Graph mode: the label opening the readout row at the foot of the outline, which appears while exactly one keyframe is selected and says which frame and value it holds. Shown in small capitals."
+  },
+  "graphKeyFrame": "f{frame}",
+  "@graphKeyFrame": {
+    "description": "Timeline, Graph mode: a frame number in the selected keyframe's readout row, written the short way with a lower-case f in front of it. Mono type.",
+    "placeholders": {
+      "frame": { "type": "int" }
+    }
+  },
+  "graphEaseIn": "In",
+  "@graphEaseIn": {
+    "description": "Timeline, Graph mode: the label before the editable field holding the incoming influence, as a percentage, of the selected keyframe. Shown in small capitals beside an Out field."
+  },
+  "graphEaseOut": "Out",
+  "@graphEaseOut": {
+    "description": "Timeline, Graph mode: the label before the editable field holding the outgoing influence, as a percentage, of the selected keyframe. Shown in small capitals beside an In field."
+  },
+  "settingsGraphKeepsTheLayersOutline": "Graph mode keeps the Layers outline",
+  "@settingsGraphKeepsTheLayersOutline": {
+    "description": "Settings, Timeline page, Panels group: a switch. On, the graph editor's left-hand list is the same one Layers mode shows, instead of the graph's own list of animated properties with a tick beside each."
+  },
+  "graphBoxHint": "f{first}–f{last} · {low}–{high}",
+  "@graphBoxHint": {
+    "description": "Timeline, Graph mode: the small readout pill under the selection box while its edge is being dragged to scale a group of keyframes. It says which frames the box now reaches from and to, and the lowest and highest values it now covers. Very small mono type; an en dash inside each pair and a middle dot between them.",
+    "placeholders": {
+      "first": { "type": "int" },
+      "last": { "type": "int" },
+      "low": { "type": "String" },
+      "high": { "type": "String" }
+    }
+  },
+  "graphKeyFrameField": "Frame",
+  "@graphKeyFrameField": {
+    "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact frame, in the small box that opens when a keyframe is double-clicked."
+  },
+  "graphKeyValueField": "Value",
+  "@graphKeyValueField": {
+    "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact value, in the small box that opens when a keyframe is double-clicked."
   }
 }

@@ -562,6 +562,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
+        settings.graphOutlineLikeLayers = shipped.graphOutlineLikeLayers;
         workspace.settingsChanged();
       case SettingsPage.viewer:
         workspace.setSmoothZoomedViewer(false);
@@ -1199,6 +1200,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _flag(t, 'settings-easing-in-popup', l10n.settingsShapeEasesInAPopup,
               value: settings.easingInPopup, set: (on) {
             settings.easingInPopup = on;
+            changed();
+          }),
+          _flag(t, 'settings-graph-outline-like-layers',
+              l10n.settingsGraphKeepsTheLayersOutline,
+              value: settings.graphOutlineLikeLayers, set: (on) {
+            settings.graphOutlineLikeLayers = on;
             changed();
           }),
         ],

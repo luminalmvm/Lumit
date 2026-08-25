@@ -230,6 +230,17 @@ class InterfaceSettings {
   /// and dismissed where the button is.
   bool easingInPopup;
 
+  /// Whether **Graph mode** keeps the Layers outline instead of its own
+  /// filtered animated list (K-442, §12A.2).
+  ///
+  /// Off by default: the graph's own outline is the drawing's, and it is the
+  /// surface the curves are chosen from — one row per animated property, with
+  /// a tick that puts it on the pane. On restores an outline identical to
+  /// Layers mode, for anyone who would rather have one shape everywhere; the
+  /// curves are then chosen the way they always were, by selecting property
+  /// rows.
+  bool graphOutlineLikeLayers;
+
   /// Whether rows are drawn a pixel or two tighter than the approved mockups
   /// render them (K-454, `DensityTokens` in `theme/theme.dart`).
   ///
@@ -274,6 +285,7 @@ class InterfaceSettings {
     this.waveformsFromBottom = false,
     this.showToneMap = false,
     this.easingInPopup = false,
+    this.graphOutlineLikeLayers = false,
     this.compact = false,
     this.viewerBars = ViewerBars.split,
   });
@@ -292,6 +304,7 @@ class InterfaceSettings {
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
+        'graph_outline_like_layers': graphOutlineLikeLayers,
         'compact': compact,
         'viewer_bars': viewerBars.name,
       };
@@ -336,6 +349,12 @@ class InterfaceSettings {
         // this replaced never shipped in a release, so no settings file can be
         // asking for it by silence.
         easingInPopup: j['easing_in_popup'] as bool? ?? false,
+        // Absent means off: the graph's own outline is the new default
+        // (K-442), and a settings file written before this field existed
+        // should get the drawing's surface rather than be pinned to the
+        // outline it happened to have.
+        graphOutlineLikeLayers:
+            j['graph_outline_like_layers'] as bool? ?? false,
         // Absent means off, which is the roomy default — and every settings
         // file written before this field existed was written by a build that
         // drew the tight rows. Those users get the extra pixel or two back,

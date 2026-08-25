@@ -8539,6 +8539,59 @@ differently. In the code this is one field saying which mode is up
 per mode, because two switches can say "graph and keys at once" and a state nobody can
 draw is a state something will eventually reach.
 
+### The graph's own list, and Normalise
+
+Graph mode has a different left-hand list from the other two. Layers mode's list is a
+control surface — switches, blend modes, parents, in and out times — and none of that has
+anything to do with shaping a curve, so the graph replaces it with the one question it
+actually asks: **which properties am I looking at?**
+
+The list is every *animated* property, flat, one row each, and each row carries a small
+tick box, a coloured dot, its name, and what it reads at the playhead. Tick a row and its
+curve appears on the pane in the colour of its dot; untick it and the curve goes, leaving
+the others alone. Click the row's **name** instead and you get just that property, with
+its keyframes selected — the quick way to work on one curve. A property with two axes,
+like Position, is one row with two dots, because ticking is per property. **Show — All**
+lists everything a layer has, including the properties with nothing keyed on them yet.
+
+There is no separate idea of "what the graph is showing" underneath this. The ticked rows
+*are* the panel's property selection — the same list the Layers outline picks with — so
+there is one answer anywhere in the editor to which curves are up, and no way for two
+parts of the panel to disagree about it.
+
+**Normalise** is the checkbox at the right of that same row. The problem it solves: a
+rotation measured in degrees might run from 0 to 45 while a position measured in pixels
+runs from 0 to 1900, and drawn on one axis the rotation is a flat line squashed along the
+bottom while the position uses the whole pane. With Normalise on, every curve is drawn
+against **its own** smallest and largest value, so each one fills the height and you can
+compare their *shapes* — which is what you were looking at them together for.
+
+It changes nothing about the animation. Under the hood each curve simply gets its own
+top-and-bottom pair rather than the values themselves being scaled, which matters more
+than it sounds: it means every measurement in the pane stays in the property's real units,
+so dragging a key with Normalise on writes exactly the value it would have written with
+Normalise off. A curve's own top and bottom are worked out from the saved keyframes rather
+than from the drag in progress, too — otherwise the curve would rescale under your hand
+and a key you were dragging upward would appear to stay still. While Normalise is on, the
+numbers down the side read 0 to 100 as a percentage, because with unlike units on one pane
+there is no single scale left to write.
+
+Those numbers live in a narrow strip pinned to the **right** edge of what you can see —
+never over the curves, and never scrolling away. The pane itself is as wide as the whole
+composition and slides sideways inside a window onto it, so the strip is measured from the
+window rather than from the pane: whatever the zoom and wherever you have scrolled to, the
+scale is in the same place.
+
+Finally, while exactly one keyframe is selected, a small row appears at the foot of the
+list reading which frame it sits on, what it holds, and its two **influences** as editable
+percentages — how far each side's ease reaches toward its neighbour. Typing into those is
+the same edit as dragging the key's handle on the pane, and lands as one undo step. Two or
+more keys are a block, and a block has its own badge, so the row steps aside.
+
+Anyone who would rather have one shape everywhere can turn on Settings ▸ Interface ▸
+Panels ▸ *Graph mode keeps the Layers outline*, and the graph goes back to showing the
+Layers list.
+
 ### Selecting a run of keyframes as one thing
 
 Drag a box across some keyframes and they stop being several marks and become a **block**.
@@ -8562,6 +8615,55 @@ same way — one piece of code, not two that have to be kept in step. The arithm
 it (how far each key moves, what the label counts, what Reverse and Stagger do to a time)
 lives on its own in `flutter_ui/lib/panels/key_block.dart`, with no picture and no engine
 in it, so it can be checked directly rather than measured off a screen.
+
+### The same block, in the graph: scaling by its edges
+
+Graph mode draws the same box round two or more selected keyframes, and there it has a
+second dimension to it. On the dope sheet a block only has a length — the frames it
+covers. On the graph a block also has a *height*, because up and down is the value the
+property holds. So the box there is a real rectangle, and each of its four edges is
+something you can take hold of.
+
+Drag the **left or right** edge and the selection scales in time, exactly as the dope
+sheet's handles do: the edge you did not touch stays put, the one in your hand goes where
+you put it, and every key keeps its share of the distance. Drag the **top or bottom** edge
+and the same thing happens to the values: pull the top down and the whole animation gets
+tamer, push it up and it gets bigger, and whichever edge you left alone holds its keys
+exactly where they were. It is the ordinary way to say "same movement, half as much" or
+"same shape, twice as long" without touching a single key by hand.
+
+Hold `Shift` while you drag an edge and the answer lands on whole numbers — whole frames
+on the time axis, whole values on the other — and a small label under the box says live
+what it now reaches, so you can drive it to a round number by eye. There is no grab at the
+*corners*, and that is deliberate rather than missing: a box drawn round a selection has
+its corners sitting on the selection's own outermost keyframes, and a corner target there
+would take the clicks and drags those keys need for themselves. Scaling both directions is
+two drags instead of one, which is a small price for keeping every keyframe reachable.
+
+The sums are the dope sheet's sums. `scaledAbout` in
+`flutter_ui/lib/panels/key_block.dart` — "here is the end that stays, here is how far the
+other end used to reach, here is how far it reaches now, where does this one go?" — is the
+whole of it, and both the lane handles and the graph's edges ask it. Time is measured in
+frames; value is measured in **pixels on screen**, which sounds odd until you remember
+Normalise: with each curve drawn against its own range, a scale that meant "half" in one
+curve's units would mean something else in another's, whereas half the height on screen is
+half the height on screen for all of them.
+
+### Typing a keyframe's numbers
+
+Double-click a keyframe in the graph and a small box opens holding four numbers: which
+**frame** it sits on, the **value** it holds, and the reach of its two eases as **In** and
+**Out** percentages. Type into any of them and the key moves; the box stays up, because
+whoever is typing numbers usually has more than one to type.
+
+Two details are worth knowing. The **frame** field will not take you past the keyframes on
+either side of this one — it stops one frame short — because reordering the keys while the
+box is open would leave it pointing at whichever key had taken this one's place. And the
+double-click is spotted by looking at the *clock* rather than by asking Flutter for a
+double-tap gesture: asking for one would make Flutter hold every ordinary single click on
+a keyframe back until it was sure a second was not coming, and a visible delay on the
+commonest gesture on the pane is a much worse thing than a slightly hand-rolled
+double-click.
 
 ### The Ease popover
 
@@ -8618,7 +8720,8 @@ group left open would quietly stop recording history at all.
 ### Letting go of a drag half way: Escape
 
 Everything in the Timeline that you drag — a layer's bar, a keyframe, the handle at the
-end of a block — works the same way underneath. Nothing is written to the document while
+end of a block, and in the graph a curve's tangent handle or an edge of the transform box
+— works the same way underneath. Nothing is written to the document while
 the button is down. The panel remembers how far the pointer has travelled, draws the thing
 where that puts it, and makes exactly one edit when you let go. That is what makes a drag
 one undo step, and it is also what gives a drag a way *out*: if nothing has been written
@@ -9094,36 +9197,6 @@ repository, and the test suite checks our engine against them on every change. A
 config uses some feature we have not built, Lumit refuses it *by name* — it tells you what
 it cannot do — rather than quietly producing almost-right colours, because a plausible
 wrong picture is the one failure this design refuses to ship.
-
-### Colours off the end of the scale
-
-A baked table has a first entry and a last one, so there is always a question about what
-happens to a colour past either end — and in a colour pipeline that question is not a
-corner case, it is where the interesting colours live. Two kinds of value fall outside
-the ordinary nought-to-one range. **Above one** are highlights: a practical light in shot,
-a specular hit off chrome, a sun. **Below nought** are the colours a wide-gamut camera
-saw that an ordinary monitor's three primaries cannot make; converting them into Lumit's
-working space leaves them as slightly negative numbers, which is not a mistake but the
-honest arithmetic of "redder than this red".
-
-The tempting answer is to keep the original formulas beside the table and work those
-values out properly when one turns up. That is exact — on the processor. The graphics card
-cannot do it: it would have to re-implement every logarithm and power in the chain and
-agree with the processor's version of them to the last decimal, and some steps in a chain
-are themselves tables with no formula to re-implement. Preview and export would part
-company precisely on the colours people care most about.
-
-So Lumit does the opposite: it makes the *table* cover everything instead. The samples are
-not spread evenly across nought to one. They are spread **logarithmically and
-symmetrically about zero** — packed tightly around black, where the eye is most sensitive
-and every transfer curve bends hardest, and thinning out towards the extremes, with the
-same treatment mirrored on the negative side. Sixteen thousand samples arranged this way
-reach from minus sixty-five thousand to plus sixty-five thousand, which is everything the
-working format can hold, and the darkest part of the picture still gets more samples than
-an evenly-spread table of the same size would give it. Looking a colour up is then the
-same two steps everywhere: fold the value into the table's scale, then blend the two
-nearest entries. The processor and the graphics card both do exactly that, so they cannot
-disagree — which is the point.
 
 ### Colours off the end of the scale
 

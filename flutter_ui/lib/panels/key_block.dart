@@ -102,7 +102,7 @@ class KeyStretch {
   /// thing, and a stretch that left every key on a fraction of a frame while a
   /// drag of one landed on a whole one would be two rules for one act.
   double frameOf(double frame, {required bool whole}) {
-    final moved = anchor + (frame - anchor) * scale;
+    final moved = scaledAbout(anchor: anchor, from: from, to: to, at: frame);
     if (!whole) return moved;
     // **The dragged end lands exactly where the drag put it.** [to] is the
     // handle's own answer, and the handle snaps to the shared targets — a
@@ -113,6 +113,30 @@ class KeyStretch {
     if ((moved - to).abs() < 1e-9) return moved;
     return moved.roundToDouble();
   }
+}
+
+/// [at] scaled about [anchor] by however much of its old reach ([from]) the
+/// dragged end now has ([to]) — the arithmetic of every scaling gesture on a
+/// block of keys, in whatever unit the caller is working in.
+///
+/// A lane stretch works in **frames** ([KeyStretch.frameOf]); the graph's
+/// transform box scales time in frames and value in **pixels**, because a
+/// pixel scale is the same visual scale on every curve even when Normalise has
+/// given each of them its own range (§6.2). One arithmetic either way: an
+/// anchor, an old reach, a new one.
+///
+/// A gesture whose end started *on* its anchor has no reach to scale, and
+/// dividing by it is how a scale becomes infinities — [at] comes back
+/// untouched instead, which leaves every key where it is.
+double scaledAbout({
+  required double anchor,
+  required double from,
+  required double to,
+  required double at,
+}) {
+  final was = from - anchor;
+  if (was == 0) return at;
+  return anchor + (at - anchor) * ((to - anchor) / was);
 }
 
 /// [to] clamped so the block keeps at least [minBlockSpan] frames and never

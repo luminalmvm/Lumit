@@ -91,6 +91,32 @@ void main() {
     });
   });
 
+  /// The primitive under every scaling gesture on a block: the lane stretch
+  /// works in frames, the graph's transform box in frames *and* pixels
+  /// (docs/impl/timeline-interaction.md §6.2).
+  group('scaledAbout', () {
+    test('holds the anchor and lands the dragged end where it was put', () {
+      expect(scaledAbout(anchor: 0, from: 100, to: 50, at: 0), 0,
+          reason: 'the anchor never moves');
+      expect(scaledAbout(anchor: 0, from: 100, to: 50, at: 100), 50,
+          reason: 'the end in hand lands exactly there');
+      expect(scaledAbout(anchor: 0, from: 100, to: 50, at: 40), 20,
+          reason: 'and everything between keeps its share');
+    });
+
+    /// Pixels count down the screen where values count up, so a value scale
+    /// hands this an anchor *below* its origin — the arithmetic does not care
+    /// which way the axis runs.
+    test('works with the axis the other way up', () {
+      expect(scaledAbout(anchor: 300, from: 100, to: 200, at: 200),
+          closeTo(250, 1e-9));
+    });
+
+    test('a zero reach scales by one rather than by infinity', () {
+      expect(scaledAbout(anchor: 40, from: 40, to: 90, at: 12), 12);
+    });
+  });
+
   group('clampStretch', () {
     /// A handle dragged onto its anchor would ask for a curve with two keys on
     /// one time, which the engine must refuse; one dragged past it would

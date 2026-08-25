@@ -1589,10 +1589,15 @@ instead (K-248, §4.4).
 ### 5.3 Editing behaviours
 
 - **Box-select** keys by drag; add with `Shift`. A transform box around a multi-selection
-  scales the group in time and value (corner drag; `Ctrl` tapers).
+  scales the group in time and value — **its four edges**, each about the opposite edge,
+  with `Shift` rounding what the scale lands on (K-505 supersedes this line's original
+  "corner drag; `Ctrl` tapers": corners stand on the selection's own extreme keys, and
+  `Ctrl` already suspends the magnet).
 - **Handle editing** with per-side independence; `Alt+drag` breaks tangent continuity;
   a *Continuous* lock keeps in/out speeds equal.
-- **Numeric entry**: double-click a keyframe for exact time/value/speed/influence fields.
+- **Numeric entry**: double-click a keyframe for exact **frame, value and In/Out
+  influence** fields (K-505; a side's speed is what the tangent handle drags and what the
+  influence field writes at, so it is not a fifth number).
 - **Preset eases**: Ease (`F9`), Ease in (`Shift+F9`), Ease out (`Ctrl+Shift+F9`), hold,
   linear, auto-bezier — buttons along the graph editor footer and in the context menu.
 - **Snap-to-beat-markers**: beat markers render as vertical lines in the graph; keyframe
@@ -1634,8 +1639,16 @@ in a popup* puts the same editor in a floating box over the footer instead. **A 
 every tick renders the values the release will write, through the same patched clone the
 value rows use — a key drag, a tangent handle and a Vegas envelope point alike. It covers the
 grabbed key's layer, so a selection spanning several layers still shows the rest on release.
+**The selection transform box and numeric entry** (K-505): two or more selected keys in
+the value lens draw the lanes' own `text_primary` block box, spanning the selection in
+time *and* value, with a grab on each of its four edges — left and right scale time about
+the opposite edge, top and bottom scale value about the opposite edge, `Shift` rounds what
+the scale lands on and a readout pill under the box says live what it reaches. One undo
+step, `Escape` abandons it (as it now does the graph's key and tangent drags), and the
+badge is the lanes' `n keys · n f`. **Double-clicking a key** opens its exact frame, value
+and In/Out influence as fields, the frame bounded by the key's two neighbours.
 Still to build:
-the acceleration lens and auto view (K-070), numeric entry, the transform-box scaling,
+the acceleration lens and auto view (K-070),
 snap-to-beat-markers in the graph, waveform ghosting, and the Retime lenses of §5.2.
 
 ### 5.4 The Easing panel (K-349)

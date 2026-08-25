@@ -369,8 +369,12 @@ middle of **every** key, same-shape pairs included.
   `_handleEndpointFor`, `_tangentHandles` (~2684) and `_HandlesPainter` keep reading the
   document's unmoved keys: the line stretches from the moving key to a stranded endpoint
   and the endpoint dot never moves. The fix folds the key drag into `_shownKeys` (time
-  and value deltas applied to every selected key, the same `_snappedDx` rounding the dot
-  uses), so every reader — curve, endpoints, lines — derives from one moved list. The
+  and value deltas applied to every selected key, with the commit's own whole-frame
+  rounding), so every reader — curve, endpoints, lines — derives from one moved list.
+  Generalised in TI-7: a gesture in flight is a `_KeyMove` — *"where does the key at this
+  frame and value go?"* — which both `_shownKeys` and the commit read, so the preview and
+  the write cannot drift apart, and the transform box's scale rides the same rails as the
+  key drag's delta. The
   regression test starts a key drag, moves it, and asserts the handle endpoint translated
   with the key before release.
 - Breaking/joining stays `Alt` at drag start (shipped); the joined partner keeps its
@@ -394,14 +398,43 @@ middle of **every** key, same-shape pairs included.
   the drawing puts it and where a key is one point; the speed lens draws a key as two dots
   with a speed each, which is a different readout and not this one.
 - Box-select is additive with `Shift`/`Ctrl` (shipped) and restyles per §4.4.
-- **The selection transform box** (docs/07 §5.3, Caddis §2.1): two or more selected keys
-  in the value lens draw the same block box the lanes draw, spanning the selection in
-  time *and value*; its left/right edges scale time about the opposite edge, its
-  top/bottom edges scale value, corners scale both, `Ctrl` tapers. Same `text_primary`
-  hairline, same one-undo commit, same Escape revert, same badge (`n keys · n f`).
-- **Numeric entry**: double-clicking a key opens exact time / value / influence fields
-  (docs/07 §5.3, still to build — the Key readout row of §3.3 covers the single-selection
-  case; the double-click editor is the popover form).
+- **The selection transform box** (docs/07 §5.3, Caddis §2.1) — **built in TI-7**: two or
+  more selected keys in the value lens draw the same block box the lanes draw, spanning
+  the selection in time *and value*; its left/right edges scale time about the opposite
+  edge, its top/bottom edges scale value about the opposite edge. Same `text_primary`
+  hairline, same one-undo commit, same Escape revert, same badge (`n keys · n f`), and
+  the scaling arithmetic is the lane stretch's own (`scaledAbout`, `clampStretch` in
+  `key_block.dart`) — time in frames, value in **pixels**, so that under Normalise, where
+  each curve has its own range, one gesture still scales the whole selection by one
+  amount. `Shift` **rounds what the scale lands on** — whole frames in time, whole
+  numbers in value — with a readout pill under the box saying live what it reaches
+  (`f<first>–f<last> · <low>–<high>`, gone on release, P1).
+- **Two corrections to the sentence above, made in TI-7 and binding from here.**
+  - **`Ctrl` does not taper.** docs/07 §5.3 named a taper on the corner drag; nothing
+    draws it, no arithmetic for it is recorded anywhere, and `Ctrl` already has a job on
+    every other drag in this panel — it suspends the magnet (§4.3, §4.5). `Shift` carries
+    the modifier's work instead, which is what the study actually describes: *"Shift locks
+    to the dominant drag axis and snaps values to integers with a live readout tooltip"*
+    (`Caddis study/notes-editor-ux.md` §4). The axis lock half of that sentence belongs to
+    the box's **slide** — the key drag, where `Shift` has constrained the axis since K-333
+    — and the integer snap half belongs to the edge scale, which is where TI-7 put it.
+    Logged as K-505.
+  - **There are no corner grabs**, only the four edges. A box's corners stand exactly on
+    the selection's extreme keys — with two keys selected they *are* those keys — so a
+    corner grab would either swallow the key's own click and drag or sit unreachable
+    underneath it, and P5 forbids both. The two axes are scaled in two gestures instead:
+    the same arithmetic, one extra drag, and every key keeps every gesture it answers.
+    The edge strips are 10px and sit **below** the key glyphs for the same reason.
+- **Numeric entry** — **built in TI-7**: double-clicking a key opens a small popover
+  holding its exact **frame, value, In % and Out %** (docs/07 §5.3, whose "speed" is not
+  offered — a side's speed is what the tangent handle drags and what the influence field
+  writes at, and a fourth number that restates it would be a second way to say one thing).
+  Counted by timestamps (`DoubleTap`), never by an `onDoubleTap` recogniser, which would
+  hold every single click on a key back until its timer expired. The frame field is
+  bounded by the key's two neighbours, because the popover holds an index into a list a
+  re-sort would shuffle; the channel is looked up by id at each write, never held, because
+  a channel is a snapshot of the read model. The Key readout row of §3.3 covers the same
+  numbers for the single-selection case without a gesture.
 
 ### 6.3 The tool strip and the frame
 
@@ -489,9 +522,13 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     drag's `f · value` badge (drawing; study §3 "live readout"). (§4.2, §6.2)
 11. **[missing] Tangents Auto / Clamp / Free** strip with per-side modes that survive a
     round-trip through Free (drawing strip; study §2.1). Engine seam required. (§6.3)
-12. **[missing] Graph selection transform box** with edge-drag time/value scaling and
-    `Ctrl` taper (docs/07 §5.3 still-to-build; study §2.1). (§6.2)
-13. **[missing] Numeric entry** — double-click a key for exact fields (docs/07 §5.3).
+12. ~~**[missing] Graph selection transform box**~~ — **landed, TI-7**: the four edge
+    grabs, time and value scaled about the opposite edge, `Shift` rounding what the scale
+    lands on with its readout pill, the badge, one undo step and the Escape revert. No
+    corner grabs and no `Ctrl` taper — both corrections recorded in §6.2 and logged as
+    K-505. (§6.2)
+13. ~~**[missing] Numeric entry**~~ — **landed, TI-7**: double-clicking a key opens its
+    exact frame, value and In/Out % (docs/07 §5.3). (§6.2)
 14. **[missing] Right-click menu on lane keys** (docs/07 §4.3; `_KeyLane` has no
     secondary-tap, ~8627). (§2.1)
 15. **[missing] `Ctrl`+click plants a key on a lane** (docs/07 §4.3; graph only today).
@@ -505,8 +542,10 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     block stretch landed in TI-2**; bar, work-area and marker drags stay with TI-9.
 19. **[missing] Escape reverts any drag in flight** (study §2.2; P3). **Landed in TI-2**
     for the bar, the lane key and the block stretch, on one shared `DragEscape`
-    (`widgets/drag_escape.dart`); the marker and work-area drags adopt it in TI-9 and the
-    graph's in TI-7 — a line each, now the mechanism exists.
+    (`widgets/drag_escape.dart`); **the graph's three drags — key, tangent handle and
+    transform box — adopted it in TI-7**, on one `DragEscape` the state holds, since only
+    one of them can be in flight at a time. The marker and work-area drags stay with
+    TI-9.
 20. **[missing] Double-click resets the work area / creates a marker** (docs/07 §4.1;
     ruler has no double-tap, timeline_extras_frb.dart ~1253).
 21. **[missing] `B`/`N` work-area keymap actions** (docs/07 §4.1; no such actions in the
@@ -578,10 +617,13 @@ anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
   the right-hand value gutter, the Layers-identical-outline setting. Files:
   `timeline_panel_frb.dart`, `graph_editor_frb.dart`, `settings.dart`,
   `settings_window_frb.dart`, arb keys.
-- **TI-7 — Graph transform box and numeric entry** (§6.2; gaps 12–13). The selection box
-  with edge/corner scaling and `Ctrl` taper, sharing TI-2's escape/undo/snap behaviour;
-  the double-click exact-fields editor. Files: `graph_editor_frb.dart`, `key_block.dart`
-  (shared block maths).
+- **TI-7 — Graph transform box and numeric entry** (§6.2; gaps 12–13). **Landed.** The
+  selection box with **edge** scaling of time and of value about the opposite edge,
+  `Shift` rounding the result with its live readout, sharing TI-2's escape and one-undo
+  behaviour; the double-click exact-fields popover. No corner grabs, no `Ctrl` taper
+  (§6.2, K-505). Files: `graph_editor_frb.dart`, `key_block.dart` (`scaledAbout`, the
+  shared block maths), `timeline_panel_frb.dart` (the Key readout row's influence write
+  moved to the shared `sideWithInfluence`), arb keys.
 - **TI-8 — Tangent modes** (§6.3; gap 11). The per-side Auto/Clamp/Free field through
   engine, bridge and strip, with the Free-round-trip-keeps-the-ease test; the maths lands
   in docs/impl/keyframe-eval.md in the same commit. Files: `crates/lumit-core` (keyframe

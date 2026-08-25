@@ -34,6 +34,7 @@ import '../l10n/strings.dart';
 import '../state/os_keys.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/drag_escape.dart';
 import '../widgets/marquee.dart';
 import 'easing_curve.dart';
 import 'effect_param_row_frb.dart';
@@ -115,6 +116,21 @@ const double _handleGrab = 18;
 /// move the pointer's meaning under a still hand.
 const double _keyGlyph = 10;
 const double _selectedKeyGlyph = 12;
+
+/// How thick a **transform box** edge's grab is (§6.2): a strip this wide,
+/// centred on the edge and running its whole length.
+///
+/// Narrower than a key's own target ([_keyGrab]) on purpose. The box's edges
+/// run through the very keys at its extremes, and the keys are drawn *over*
+/// the box, so a key at a corner keeps every gesture it has and the edge is
+/// grabbable everywhere else along its length (P5).
+const double _boxGrab = 10;
+
+/// How wide the **value gutter** is: the drawing's 34px strip down the right
+/// of the graph, on a translucent ground, where every value label lives
+/// (§12A.2 — "value labels live in a fixed right-hand gutter, never on the
+/// curve").
+const double graphGutterWidth = 34;
 
 /// One animatable channel on the graph: a single scalar curve, where it came
 /// from, and how to write it back.
@@ -482,6 +498,26 @@ List<BridgeKeyframe> _withKeyAt(
 /// frames with the magnet off).
 double _keyFrame(BridgeKeyframe key, double fps) =>
     rationalSeconds(key.time) * fps;
+
+/// A number as this pane's readouts write it: whole numbers plain, everything
+/// else to two places — the same hand the dope sheet's own numbers are set in.
+String graphNumberText(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(2);
+
+/// One side of `keys[index]` as a bezier reaching [percent] of its span, at
+/// the speed the side already reads.
+///
+/// The tangent handle's own commit, reached by typing instead of by dragging
+/// — the graph's Key readout row writes influence with it, and so does the
+/// numeric-entry popover (§3.3, §6.2). A side that was linear becomes a
+/// bezier that looks exactly as it did, which is the only way to give a
+/// straight side a reach at all.
+BridgeSideInterp sideWithInfluence(
+        List<BridgeKeyframe> keys, int index, bool isOut, double percent) =>
+    BridgeSideInterp.bezier(BridgeBezierSide(
+      speed: sideSpeedAtKey(keys, index, isOut: isOut),
+      influence: (percent / 100).clamp(1e-3, 1.0).toDouble(),
+    ));
 
 /// Set one or both sides of every selected key to [side] — the F9 family and
 /// the bottom bar's Linear / Bezier / Hold buttons. `inSide`/`outSide` pick
@@ -1188,6 +1224,22 @@ class GraphEditorFrb extends StatefulWidget {
   /// range is the user's — the wheel pans it and `Alt`+wheel zooms it.
   final bool autoFit;
 
+  /// **Normalise** (§3.3): every shown curve scaled to its own min–max, so
+  /// unlike units share the pane — a rotation in degrees and an opacity in per
+  /// cent both fill the height instead of one being a flat line under the
+  /// other.
+  ///
+  /// A **view** setting, never data: no key moves, and a drag under it writes
+  /// the same values it would write without it. It is implemented as a range
+  /// per channel rather than as a scaling of values, so every coordinate in
+  /// this file stays in the property's own units and a pointer's y still comes
+  /// back as a real value ([rangeOf]).
+  ///
+  /// The shared range — the grid and the gutter's numbers — becomes 0–100,
+  /// read as per cent of each curve's own span, because with unlike units on
+  /// one pane there is no single value axis left to label.
+  final bool normalise;
+
   /// Whether the Pen tool is armed on the toolbar (docs/07 §1.7).
   ///
   /// With it in hand the graph plants and lifts keys on a single click — the
@@ -1229,6 +1281,7 @@ class GraphEditorFrb extends StatefulWidget {
     required this.magnet,
     required this.lens,
     required this.autoFit,
+    this.normalise = false,
     this.vegas = false,
     this.penArmed = false,
     required this.selectedKeys,
@@ -1270,6 +1323,74 @@ class _KeyDrag {
       !HardwareKeyboard.instance.isShiftPressed || _horizontal ? rawDx : 0;
   double get dyPx =>
       !HardwareKeyboard.instance.isShiftPressed || !_horizontal ? rawDy : 0;
+}
+
+/// Where a gesture in flight puts a selected key: given the channel it is on
+/// and the frame and value it rests at, the frame and value it should be
+/// **drawn** at and, on release, written to.
+///
+/// One shape for every move on this pane, so that the preview and the commit
+/// cannot drift apart: the shown keys are built from it ([_withMove]) and so
+/// are the edits ([_editsFor]). A key drag adds the same delta to every key;
+/// the transform box scales each key by its distance from an anchor; both are
+/// the same function seen from different ends.
+typedef _KeyMove = (double frame, double value) Function(
+    GraphChannel channel, double frame, double value);
+
+/// A drag on the **selection transform box** (§6.2, docs/07 §5.3): which of
+/// the box's two axes the grabbed handle scales, which edge is in hand, and
+/// how far the pointer has taken it.
+///
+/// The box spans the selected keys in time and in value; a handle scales the
+/// selection about the **opposite** edge, so the edge you are not holding is
+/// the one that stays put — a stretch rather than a move, exactly as a lane
+/// block's handle behaves (K-458).
+class _BoxDrag {
+  /// Which axis this edge scales: the left and right edges scale **time**, the
+  /// top and bottom edges scale **value**. One axis each, so the box answers
+  /// "how long" and "how far" as two separate questions — which is how the
+  /// study describes the gesture, and what keeps the anchor unambiguous.
+  final bool time;
+
+  /// Whether the edge in hand is the earlier frame / the higher value, so the
+  /// other end of the axis can be the anchor.
+  final bool start;
+
+  /// The end that stays put and the end that was grabbed — frames on the time
+  /// axis, **pixels** on the value axis (see [scaledAbout]).
+  final double anchor;
+  final double from;
+
+  /// Everything the pointer has travelled, `Shift` or no `Shift` — the same
+  /// bargain [_KeyDrag] strikes, so letting the modifier go mid-drag gives the
+  /// suppressed travel back rather than losing it.
+  double rawDx = 0;
+  double rawDy = 0;
+
+  _BoxDrag({
+    required this.time,
+    required this.start,
+    required this.anchor,
+    required this.from,
+  });
+
+  /// The travel along the axis this edge scales. The other axis is ignored
+  /// outright: an edge is a one-dimensional grab, and following the pointer
+  /// sideways as well would make the box a move as well as a scale.
+  double get travel => time ? rawDx : rawDy;
+
+  /// `Shift` on this box is the Caddis modifier: it **rounds what the scale
+  /// lands on** — whole frames in time, whole numbers in value — with the
+  /// readout pill saying live what those numbers are. (The axis lock the same
+  /// sentence of the study describes belongs to the box's other gesture, the
+  /// *slide*, which is the key drag `Shift` already constrains — see
+  /// [_KeyDrag].)
+  ///
+  /// `Ctrl` is deliberately not the taper docs/07 §5.3 once named: it already
+  /// suspends the magnet on every other drag in this panel, and the taper has
+  /// no drawing, no recorded arithmetic and no second gesture asking for it.
+  /// See docs/impl/timeline-interaction.md §6.2.
+  static bool get shiftHeld => HardwareKeyboard.instance.isShiftPressed;
 }
 
 /// A tangent-handle drag in flight (value lens), or a speed-dot/influence
@@ -1352,6 +1473,25 @@ class _HandleDrag {
 class GraphEditorFrbState extends State<GraphEditorFrb> {
   _KeyDrag? _keyDrag;
 
+  /// A drag on the selection transform box, or null between them (§6.2).
+  _BoxDrag? _boxDrag;
+
+  /// `Escape` abandons the drag in flight and writes nothing (P3, §8's gap
+  /// 19): the box scale, the key drag and the handle drag alike, on the one
+  /// shared mechanism the lanes already use.
+  final DragEscape _escape = DragEscape();
+
+  /// When a key was last clicked, and which one — for spotting the
+  /// double-click that opens the numeric fields (§6.2's numeric entry).
+  ///
+  /// Counted with [DoubleTap] rather than by registering `onDoubleTap` beside
+  /// the key's own tap, for the reason the pane's own double-click is counted
+  /// this way: a double-tap recogniser makes Flutter hold every *single* tap
+  /// back until its timer expires, so selecting a key — the commonest thing
+  /// anyone does here — would gain a visible delay.
+  final _keyTap = DoubleTap();
+  String? _keyTapId;
+
   /// How often a drag in flight may ask the engine for a frame of the values it
   /// is about to write (see [previewChannelEdits]).
   final PreviewThrottle _preview = PreviewThrottle();
@@ -1370,6 +1510,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void dispose() {
     rowValueDrag.removeListener(_rowDragChanged);
     _preview.cancel();
+    _escape.dispose();
     super.dispose();
   }
 
@@ -1427,6 +1568,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// The length a side is drawn at, from its stored ease.
   double _measuredLength(GraphChannel channel, int index, bool isOut,
       (double, double) range, double height) {
+    range = rangeOf(channel, range);
     final keys = channel.keys;
     final key = keys[index];
     final end = _sideEndpoint(keys, index, isOut);
@@ -1441,6 +1583,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// under the scales in force now, else the one its stored ease draws it at.
   double _handleLength(GraphChannel channel, int index, bool isOut,
       (double, double) range, double height) {
+    range = rangeOf(channel, range);
     final held =
         _handleLenPx[_handleLenKey(channel, channel.keys[index], isOut)];
     final (xScale, yScale) = _scales(range, height);
@@ -1454,6 +1597,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   void _rememberLength(GraphChannel channel, BridgeKeyframe key, bool isOut,
       double lenPx, (double, double) range, double height) {
+    range = rangeOf(channel, range);
     final (xScale, yScale) = _scales(range, height);
     _handleLenPx[_handleLenKey(channel, key, isOut)] =
         (lenPx: lenPx, xScale: xScale, yScale: yScale);
@@ -1577,13 +1721,49 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return c != null && c.hasClients ? c.offset : 0;
   }
 
+  /// How wide that viewport is. Falls back to the pane's own width for a test
+  /// that builds the pane with no scroll view around it — where the canvas
+  /// *is* the viewport.
+  double _viewportWidth(double paneWidth) {
+    final c = widget.hScroll;
+    return c != null && c.hasClients ? c.position.viewportDimension : paneWidth;
+  }
+
   (double, double) _range() {
+    // Normalised, the pane has no single value axis: each curve is drawn
+    // against its own span, and what the grid and the gutter can honestly say
+    // is *how far up its own range* a curve is. Hence 0–100, read as per cent.
+    if (widget.normalise) return normalisedRange;
     final frozen = _frozen;
     if (frozen != null) return frozen;
     if (!widget.autoFit) {
       return _manual[widget.lens] ??= _fitRange();
     }
     return _fitRange();
+  }
+
+  /// The shared range while Normalise is on: per cent of each curve's own span.
+  static const (double, double) normalisedRange = (0.0, 100.0);
+
+  /// One channel's own fitted range, cached for the length of a build.
+  ///
+  /// Fitted from the **document's** keys rather than the shown ones: a
+  /// normalised curve whose range followed its own drag would rescale under
+  /// the hand, so the key would appear not to move.
+  final Map<String, (double, double)> _ownRange = {};
+
+  /// The vertical range [channel] is drawn against: the pane's shared one, or
+  /// — with Normalise on — the channel's own min–max (§3.3).
+  ///
+  /// Everything that turns a value into a y, or a y back into a value, goes
+  /// through this, so the curve, its keys, its handles and a drag on any of
+  /// them all agree about where the channel sits.
+  (double, double) rangeOf(GraphChannel channel, (double, double) shared) {
+    if (!widget.normalise) return shared;
+    return _ownRange[channel.id] ??= lensOf(channel) == GraphLens.value
+        ? fitValueRange(
+            [channel.keys], channel.isStatic ? [channel.staticValue] : const [])
+        : fitSpeedRange([channel.keys]);
   }
 
   double _yOf(double v, (double, double) range, double height) {
@@ -1609,6 +1789,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // that is actually being drawn (K-334, K-336).
     final shown = _shownKeys(channel);
     if (index >= shown.length) return 0;
+    range = rangeOf(channel, range);
     if (lensOf(channel) == GraphLens.value) {
       return _yOf(shown[index].value, range, height);
     }
@@ -1771,7 +1952,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             : evaluateKeysSpeed(keys, seconds) *
                 (isEnvelope(channel) ? 100 : 1);
       }
-      final d = (_yOf(drawn, range, height) - local.dy).abs();
+      final d = (_yOf(drawn, rangeOf(channel, range), height) - local.dy).abs();
       if (d < best) {
         best = d;
         nearest = channel;
@@ -1865,15 +2046,35 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       _keyDrag = _KeyDrag(id);
       _frozen = _range();
     });
+    _escape.begin(_abandonDrag);
+  }
+
+  /// Put the pane back where the gesture found it and write nothing — what
+  /// `Escape` does to any drag in flight (P3).
+  ///
+  /// The provisional geometry *is* the drag object, so dropping it is the
+  /// whole revert: the curve, the glyphs, the handles and the box all derive
+  /// from [_shownKeys], which reads the document again the moment there is no
+  /// move to fold in.
+  void _abandonDrag() {
+    _preview.cancel();
+    if (!mounted) return;
+    setState(() {
+      _keyDrag = null;
+      _boxDrag = null;
+      _handleDrag = null;
+      _frozen = null;
+    });
   }
 
   void _commitKeyDrag((double, double) range, double height) {
     final drag = _keyDrag;
+    final commit = _escape.end();
     setState(() {
       _keyDrag = null;
       _frozen = null;
     });
-    if (drag == null || (drag.dxPx == 0 && drag.dyPx == 0)) return;
+    if (!commit || drag == null || (drag.dxPx == 0 && drag.dyPx == 0)) return;
     // The commit is the last word on this gesture: a preview tick still held
     // would put the provisional picture back on top of it.
     _preview.cancel();
@@ -1887,19 +2088,37 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     widget.onChanged();
   }
 
-  /// What a key drag would write, and the selection it would leave: the keys
-  /// moved by the gesture so far, per channel. Read twice — once per preview
-  /// tick and once by the release — so the picture during the drag is made of
-  /// exactly the values the commit will write.
+  /// What a key drag would write, and the selection it would leave.
   (Map<GraphChannel, BridgeScalar>, Set<String>) _keyDragEdits(
-      _KeyDrag drag, (double, double) range, double height) {
+          _KeyDrag drag, (double, double) range, double height) =>
+      _editsFor(_keyDragMove(drag, range, height));
+
+  /// A key drag's move: the same delta on every selected key — sideways in
+  /// frames, and (in the value lens) up or down in the units of whichever
+  /// range that key's own curve is drawn against.
+  _KeyMove _keyDragMove(_KeyDrag drag, (double, double) range, double height) {
     final perFrame = widget.axis.perFrame;
     final dFrames = perFrame <= 0 ? 0.0 : drag.dxPx / perFrame;
-    final span =
-        (range.$2 - range.$1).abs() < 1e-12 ? 1.0 : range.$2 - range.$1;
-    final dValue =
-        widget.lens == GraphLens.value ? -drag.dyPx / height * span : 0.0;
+    return (channel, frame, value) {
+      // Per channel, because Normalise gives each curve its own range: the
+      // same travel in pixels is a different travel in value on each of them,
+      // and it is each curve's own scale the hand was working against.
+      final own = rangeOf(channel, range);
+      final span = (own.$2 - own.$1).abs() < 1e-12 ? 1.0 : own.$2 - own.$1;
+      final dValue = widget.lens == GraphLens.value && height > 0
+          ? -drag.dyPx / height * span
+          : 0.0;
+      var moved = (frame + dFrames).clamp(0.0, widget.frames.toDouble());
+      if (widget.magnet) moved = moved.roundToDouble();
+      return (moved, value + dValue);
+    };
+  }
 
+  /// What [move] would write, and the selection it would leave: every selected
+  /// key put where the gesture puts it, per channel. Read twice — once per
+  /// preview tick and once by the release — so the picture during the drag is
+  /// made of exactly the values the commit will write.
+  (Map<GraphChannel, BridgeScalar>, Set<String>) _editsFor(_KeyMove move) {
     final edits = <GraphChannel, BridgeScalar>{};
     final newSelection = <String>{};
     for (final channel in widget.channels) {
@@ -1920,13 +2139,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           placed.add((base, keys[i], false));
           continue;
         }
-        var frame = (base + dFrames).clamp(0.0, widget.frames.toDouble());
-        if (widget.magnet) frame = frame.roundToDouble();
+        final (frame, value) = move(channel, base, keys[i].value);
         placed.add((
           frame,
           BridgeKeyframe(
             time: timeOfSubframe(frame, widget.fpsNum, widget.fpsDen),
-            value: keys[i].value + dValue,
+            value: value,
             interpIn: keys[i].interpIn,
             interpOut: keys[i].interpOut,
           ),
@@ -1952,17 +2170,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       }
     }
     return (edits, newSelection);
-  }
-
-  /// [travel] pixels of sideways drag, rounded to whole frames when the magnet
-  /// is on — what [_keyDragEdits] will commit, so the key draws where it lands.
-  double _snappedDx(BridgeKeyframe key, double travel) {
-    final perFrame = widget.axis.perFrame;
-    if (!widget.magnet || perFrame <= 0) return travel;
-    final base = _keyFrame(key, widget.fps);
-    final moved =
-        (base + travel / perFrame).clamp(0.0, widget.frames.toDouble());
-    return (moved.roundToDouble() - base) * perFrame;
   }
 
   /// A drag tick: render the values the release will write, without writing
@@ -1991,7 +2198,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final shown = _shownKeys(channel);
     if (index >= shown.length) return Offset.zero;
     final key = shown[index];
-    // The key drag's travel is already in [shown] — folded in by [_withKeyDrag]
+    // The gesture's travel is already in [shown] — folded in by [_withMove]
     // so that the handles and the curve move with the glyph rather than after
     // it — so there is nothing to add here.
     var x = widget.axis.xOf(_keyFrame(key, widget.fps));
@@ -2004,9 +2211,149 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         dot.channel.id == channel.id &&
         dot.index == index) {
       x += dot.dxPx;
-      if (dot.isOut == isOut) y = _yOf(dot.shownSpeed, range, height);
+      if (dot.isOut == isOut) {
+        y = _yOf(dot.shownSpeed, rangeOf(channel, range), height);
+      }
     }
     return Offset(x, y);
+  }
+
+  // --- the selection transform box (§6.2) ----------------------------------
+
+  /// Where the box stands: the selected keys' extent on screen, the gesture in
+  /// flight already folded in, with the frames its badge counts.
+  ///
+  /// Null unless there is a block to draw — **two or more** selected keys in
+  /// the **value** lens. One key is a key: it has its own drag and its own
+  /// readout pill, and a box round it would say "0 f". The speed lens draws a
+  /// key as two dots with a speed each, which is a different reading and not a
+  /// value extent to scale.
+  ({Rect rect, int count, double first, double last})? _boxOf(
+      (double, double) range, double height) {
+    if (widget.lens != GraphLens.value) return null;
+    var left = double.infinity, right = -double.infinity;
+    var top = double.infinity, bottom = -double.infinity;
+    var first = double.infinity, last = -double.infinity;
+    var count = 0;
+    for (final channel in widget.channels) {
+      final keys = _shownKeys(channel);
+      for (var i = 0; i < keys.length; i++) {
+        if (!widget.selectedKeys.contains('${channel.id}#$i')) continue;
+        final point = _keyPoint(channel, i, range, height, isOut: true);
+        final frame = _keyFrame(keys[i], widget.fps);
+        count++;
+        if (point.dx < left) left = point.dx;
+        if (point.dx > right) right = point.dx;
+        if (point.dy < top) top = point.dy;
+        if (point.dy > bottom) bottom = point.dy;
+        if (frame < first) first = frame;
+        if (frame > last) last = frame;
+      }
+    }
+    if (!KeyBlock.isBlock(count) || !left.isFinite || !top.isFinite) {
+      return null;
+    }
+    return (
+      rect: Rect.fromLTRB(left, top, right, bottom),
+      count: count,
+      first: first,
+      last: last,
+    );
+  }
+
+  /// The box's scale, as the move it makes to every key it holds.
+  ///
+  /// **About the opposite edge**: the anchor is the edge the hand is *not*
+  /// holding, so a key's distance from it is what gets multiplied — which is
+  /// what makes this a scale rather than a slide (docs/07 §5.3, Caddis §2.1).
+  /// Time is scaled in frames; value is scaled in **pixels**, so that under
+  /// Normalise — where every curve has its own range — the whole selection
+  /// still scales by the one amount the hand asked for.
+  _KeyMove _boxMove(_BoxDrag box, (double, double) range, double height) {
+    final perFrame = widget.axis.perFrame;
+    final round = _BoxDrag.shiftHeld;
+    if (box.time) {
+      // Clamped exactly as a lane stretch is: a box pulled through its own
+      // anchor would turn the selection back to front in time, which is
+      // Reverse's job and not a scale's.
+      final to = clampStretch(
+        anchor: box.anchor,
+        from: box.from,
+        to: box.from + (perFrame <= 0 ? 0 : box.travel / perFrame),
+      );
+      return (channel, frame, value) {
+        var f =
+            scaledAbout(anchor: box.anchor, from: box.from, to: to, at: frame);
+        if (widget.magnet || round) f = f.roundToDouble();
+        return (f.clamp(0.0, widget.frames.toDouble()), value);
+      };
+    }
+    final to = box.from + box.travel;
+    return (channel, frame, value) {
+      if (height <= 0) return (frame, value);
+      // Value is scaled in **pixels**, so that under Normalise — where every
+      // curve is drawn against its own range — the whole selection still
+      // scales by the one amount the hand asked for.
+      final own = rangeOf(channel, range);
+      var v = _valueAt(
+        scaledAbout(
+            anchor: box.anchor,
+            from: box.from,
+            to: to,
+            at: _yOf(value, own, height)),
+        own,
+        height,
+      );
+      // `Shift` snaps what the scale lands on to whole numbers — the Caddis
+      // behaviour the readout pill reports live.
+      if (round) v = v.roundToDouble();
+      return (frame, v);
+    };
+  }
+
+  void _startBoxDrag(
+    ({Rect rect, int count, double first, double last}) box, {
+    required bool time,
+    required bool start,
+  }) {
+    setState(() {
+      _boxDrag = _BoxDrag(
+        time: time,
+        start: start,
+        // The value axis runs the other way on screen: the *top* of the box is
+        // the largest value, so a value edge and its anchor are read off the
+        // rectangle rather than off the values.
+        anchor: time
+            ? (start ? box.last : box.first)
+            : (start ? box.rect.bottom : box.rect.top),
+        from: time
+            ? (start ? box.first : box.last)
+            : (start ? box.rect.top : box.rect.bottom),
+      );
+      _frozen = _range();
+    });
+    _escape.begin(_abandonDrag);
+  }
+
+  void _commitBoxDrag((double, double) range, double height) {
+    final box = _boxDrag;
+    final commit = _escape.end();
+    setState(() {
+      _boxDrag = null;
+      _frozen = null;
+    });
+    if (!commit || box == null || box.travel == 0) return;
+    // The commit is the last word on this gesture: a preview tick still held
+    // would put the provisional picture back on top of it.
+    _preview.cancel();
+    final (edits, newSelection) = _editsFor(_boxMove(box, range, height));
+    if (edits.isEmpty) return;
+    commitChannelEdits(edits);
+    widget.selectedKeys
+      ..clear()
+      ..addAll(newSelection);
+    widget.onSelectionChanged();
+    widget.onChanged();
   }
 
   // --- handle drags --------------------------------------------------------
@@ -2048,6 +2395,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   void _startHandleDrag(GraphChannel channel, int index, bool isOut,
       bool dotOnly, (double, double) range, double height) {
+    range = rangeOf(channel, range);
     final keys = channel.keys;
     final key = keys[index];
     final side = isOut ? key.interpOut : key.interpIn;
@@ -2085,12 +2433,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       );
       _frozen = _range();
     });
+    _escape.begin(_abandonDrag);
   }
 
   void _updateHandleDrag(Offset local, (double, double) range, double height,
       {double dx = 0, double dy = 0}) {
     final drag = _handleDrag;
     if (drag == null) return;
+    range = rangeOf(drag.channel, range);
     final keys = drag.channel.keys;
     final key = keys[drag.index];
     final nb = _neighbour(keys, drag.index, drag.isOut);
@@ -2169,6 +2519,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void _mirrorPartner(_HandleDrag drag, BridgeKeyframe key, double speed,
       double influence, (double, double) range, double height) {
     if (!drag.mirrored) return;
+    range = rangeOf(drag.channel, range);
     final keys = drag.channel.keys;
     final partnerNb = _neighbour(keys, drag.index, !drag.isOut);
     if (partnerNb == null) return;
@@ -2211,11 +2562,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   void _commitHandleDrag() {
     final drag = _handleDrag;
+    final commit = _escape.end();
     setState(() {
       _handleDrag = null;
       _frozen = null;
     });
-    if (drag == null) return;
+    if (!commit || drag == null) return;
     // As in [_commitKeyDrag]: the write is the last word, so no held preview
     // tick may land after it.
     _preview.cancel();
@@ -2396,56 +2748,56 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// dragging an unkeyed value moves the line without appearing to key it.
   List<BridgeKeyframe> _shownKeys(GraphChannel channel,
           {bool painting = false}) =>
-      _withKeyDrag(channel, _keysWithSideDrags(channel, painting: painting));
+      _withMove(channel, _keysWithSideDrags(channel, painting: painting));
 
-  /// A key drag's travel, applied to the keys it holds.
+  /// The move a gesture in flight is making, or null when none is — the key
+  /// drag's delta, or the transform box's scale.
+  ///
+  /// Only one of the two ever runs: a box handle is a different target from a
+  /// key glyph, and a pointer is in one place.
+  _KeyMove? _activeMove() {
+    final range = _range();
+    final height = _paneSize.height;
+    final box = _boxDrag;
+    if (box != null) return _boxMove(box, range, height);
+    final drag = _keyDrag;
+    if (drag == null || (drag.dxPx == 0 && drag.dyPx == 0)) return null;
+    return _keyDragMove(drag, range, height);
+  }
+
+  /// The gesture in flight, applied to the keys it holds.
   ///
   /// **Why it lives here rather than in [_keyPoint].** The delta used to be
   /// added to the glyph's coordinates alone, so a dragged key moved while
   /// [_handleEndpointFor] and [_HandlesPainter] went on reading the document's
   /// unmoved key: the handle line stretched from the travelling glyph to a
-  /// stranded dot, and the dot never moved at all. Folding the same delta into
-  /// the shown keys moves the key *and* everything measured from it, because
-  /// they are all measured from this one list.
+  /// stranded dot, and the dot never moved at all. Folding the same move into
+  /// the shown keys moves the key *and* everything measured from it — the
+  /// curve, the handles, and the transform box's own edges — because they are
+  /// all measured from this one list.
   ///
   /// The order is left alone. A key dragged past its neighbour keeps its index
   /// for the length of the gesture — the ids in the selection, the glyph loop
   /// and the handles are all indexed into this list, and re-sorting mid-drag
   /// would re-aim them at each other's keys. The release sorts (and refuses a
-  /// collision) in [_keyDragEdits].
-  List<BridgeKeyframe> _withKeyDrag(
+  /// collision) in [_editsFor].
+  List<BridgeKeyframe> _withMove(
       GraphChannel channel, List<BridgeKeyframe> keys) {
-    final drag = _keyDrag;
-    if (drag == null || (drag.dxPx == 0 && drag.dyPx == 0)) return keys;
-    final perFrame = widget.axis.perFrame;
-    // The value delta the release will write, in the units of this pane's
-    // vertical range — the same number [_keyDragEdits] works out, so the key
-    // draws where it lands.
-    final range = _range();
-    final height = _paneSize.height;
-    final span =
-        (range.$2 - range.$1).abs() < 1e-12 ? 1.0 : range.$2 - range.$1;
-    final dValue = widget.lens == GraphLens.value && height > 0
-        ? -drag.dyPx / height * span
-        : 0.0;
-
+    final move = _activeMove();
+    if (move == null) return keys;
     List<BridgeKeyframe>? moved;
     for (var i = 0; i < keys.length; i++) {
       if (!widget.selectedKeys.contains('${channel.id}#$i')) continue;
       moved ??= [...keys];
       final key = keys[i];
-      // [_snappedDx] is the rounding the commit uses, so with the magnet on
-      // the key draws on the whole frame it will land on (K-333); the clamp is
-      // the commit's too, so a key dragged off either end of the composition
-      // draws where it will actually come to rest.
-      final base = _keyFrame(key, widget.fps);
-      final frame = perFrame <= 0
-          ? base
-          : (base + _snappedDx(key, drag.dxPx) / perFrame)
-              .clamp(0.0, widget.frames.toDouble());
+      // The commit's own arithmetic, so with the magnet on the key draws on
+      // the whole frame it will land on (K-333) and a key taken off either end
+      // of the composition draws where it will actually come to rest.
+      final (frame, value) =
+          move(channel, _keyFrame(key, widget.fps), key.value);
       moved[i] = BridgeKeyframe(
         time: timeOfSubframe(frame, widget.fpsNum, widget.fpsDen),
-        value: key.value + dValue,
+        value: value,
         interpIn: key.interpIn,
         interpOut: key.interpOut,
       );
@@ -2479,6 +2831,105 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // ends. The same move the release will commit, applied to the preview.
     if (!drag.dotOnly || drag.dxPx == 0) return shaped;
     return _keysWithDotTimeMove(drag, shaped) ?? shaped;
+  }
+
+  // --- numeric entry (docs/07 §5.3) ----------------------------------------
+
+  /// Double-clicking a key opens its exact frame, value and influences as
+  /// fields (§6.2's numeric entry; the Key readout row of §3.3 is the same
+  /// numbers, kept in the outline for the single-selection case).
+  Future<void> _openKeyFields(
+      GraphChannel channel, int index, Offset position) async {
+    final keys = channel.keys;
+    if (index < 0 || index >= keys.length) return;
+    final key = keys[index];
+    final frame = _keyFrame(key, widget.fps);
+    // The frame field is bounded by the key's neighbours: a typed time that
+    // crossed one would re-sort the curve under the popover, which is holding
+    // an index into it. Everything else about crossing keys stays the drag's
+    // business, where the list is rebuilt on release.
+    final gap = widget.magnet ? 1.0 : 0.01;
+    var lower = index > 0 ? _keyFrame(keys[index - 1], widget.fps) + gap : 0.0;
+    var upper = index + 1 < keys.length
+        ? _keyFrame(keys[index + 1], widget.fps) - gap
+        : widget.frames.toDouble();
+    if (upper < lower) {
+      lower = frame;
+      upper = frame;
+    }
+    await showKeyFieldsPopover(
+      context: context,
+      position: position,
+      frame: frame,
+      value: key.value,
+      inPercent: (sideInfluence(key.interpIn) * 100).roundToDouble(),
+      outPercent: (sideInfluence(key.interpOut) * 100).roundToDouble(),
+      minFrame: lower,
+      maxFrame: upper,
+      onApply: (frame, value, inPercent, outPercent) => _applyKeyFields(
+        channel.id,
+        index,
+        frame: frame,
+        value: value,
+        inPercent: inPercent,
+        outPercent: outPercent,
+      ),
+    );
+  }
+
+  /// Write what the numeric fields hold onto one key.
+  ///
+  /// The channel is looked up **by id at the moment of the write**, never held
+  /// by the popover: a channel is a snapshot of the read model, and a box that
+  /// kept the one it opened with would write its second edit on top of a curve
+  /// that no longer exists.
+  void _applyKeyFields(
+    String channelId,
+    int index, {
+    required double frame,
+    required double value,
+    required int inPercent,
+    required int outPercent,
+  }) {
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      final keys = channel.keys;
+      if (index < 0 || index >= keys.length) return;
+      final key = keys[index];
+      final f = frame.clamp(0.0, widget.frames.toDouble());
+      for (var i = 0; i < keys.length; i++) {
+        if (i != index && (_keyFrame(keys[i], widget.fps) - f).abs() < 1e-9) {
+          return;
+        }
+      }
+      // A side is rewritten only when its own number changed: giving a side an
+      // influence turns a linear one into a bezier at its current speed, and
+      // typing a *frame* must not quietly do that to both sides of the key.
+      var interpIn = key.interpIn;
+      var interpOut = key.interpOut;
+      if ((sideInfluence(key.interpIn) * 100).round() != inPercent) {
+        interpIn = sideWithInfluence(keys, index, false, inPercent.toDouble());
+      }
+      if ((sideInfluence(key.interpOut) * 100).round() != outPercent) {
+        interpOut = sideWithInfluence(keys, index, true, outPercent.toDouble());
+      }
+      commitChannelEdits({
+        channel: BridgeScalar.keyframed([
+          for (var i = 0; i < keys.length; i++)
+            if (i == index)
+              BridgeKeyframe(
+                time: timeOfSubframe(f, widget.fpsNum, widget.fpsDen),
+                value: value,
+                interpIn: interpIn,
+                interpOut: interpOut,
+              )
+            else
+              keys[i],
+        ]),
+      });
+      widget.onChanged();
+      return;
+    }
   }
 
   // --- menus ---------------------------------------------------------------
@@ -2554,6 +3005,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = constraints.maxHeight;
+        // Fitted afresh each build: the keys it is fitted from change with
+        // every edit, and a stale normalised range would draw a curve outside
+        // its own pane.
+        _ownRange.clear();
         final range = _range();
         _lastRange = range;
         _paneSize = Size(constraints.maxWidth, height);
@@ -2599,6 +3054,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         axis: widget.axis,
                         fps: widget.fps,
                         range: range,
+                        ranges: [
+                          for (final c in widget.channels) rangeOf(c, range)
+                        ],
                         palette: t.curve,
                         comp: Provider.of<LumitUiState>(context, listen: false)
                             .model,
@@ -2608,6 +3066,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         // as body text ruling the graph.
                         label: t.mono.copyWith(fontSize: 8, color: t.textMuted),
                         viewportLeft: _viewportLeft,
+                        viewportWidth: _viewportWidth(constraints.maxWidth),
+                        gutterFill: t.surface0.withValues(alpha: 0.85),
+                        labelSuffix:
+                            widget.normalise ? l10n.unitSymbolPercent : null,
                         vegas: widget.vegas,
                       ),
                     ),
@@ -2623,6 +3085,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                   onClear: () {},
                 ),
               ),
+              // The selection transform box (§6.2). Above the marquee, so its
+              // edges take their own drags; **below** the keys and handles,
+              // so a key sitting at an extreme of the box keeps every gesture
+              // it answers everywhere else (P5).
+              ..._transformBox(t, range, height, constraints.maxWidth),
               // The tangent handles (or speed influence handles), above the
               // marquee so they win their own gestures.
               Positioned.fill(
@@ -2681,6 +3148,174 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     );
   }
 
+  /// The **selection transform box** (§6.2, docs/07 §5.3): the same hairline
+  /// box the lanes draw round a block of keys, spanning the selection in time
+  /// *and* value, with a grab on each of its four edges.
+  ///
+  /// An edge scales one axis about the opposite edge — left and right scale
+  /// time, top and bottom scale value. `Shift` snaps what the scale lands on
+  /// to whole frames and whole numbers, the readout pill saying live what
+  /// those are. One undo step, and `Escape` puts it all back (P3).
+  ///
+  /// **No corner grabs.** The box's corners stand exactly on the selection's
+  /// extreme keys — with two keys selected they *are* those keys — so a corner
+  /// grab would either swallow the key's own drag or sit unreachable beneath
+  /// it (P5). The two axes are scaled in two gestures instead, which is the
+  /// same arithmetic and costs one extra drag.
+  List<Widget> _transformBox(
+      LumitTheme t, (double, double) range, double height, double paneWidth) {
+    final box = _boxOf(range, height);
+    if (box == null) return const [];
+    final r = box.rect;
+    final live = _boxDrag;
+    return [
+      // The box itself takes no pointer: it covers the keys it holds, and one
+      // that ate their clicks would make a selected key the one key that
+      // cannot be picked up again. Its edges are the separate grabs below.
+      Positioned(
+        key: const ValueKey<String>('graph-transform-box'),
+        left: r.left,
+        top: r.top,
+        width: r.width,
+        height: r.height,
+        child: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(border: Border.all(color: t.textPrimary)),
+          ),
+        ),
+      ),
+      _boxHandle(box,
+          name: 'graph-box-left',
+          time: true,
+          start: true,
+          range: range,
+          height: height),
+      _boxHandle(box,
+          name: 'graph-box-right',
+          time: true,
+          start: false,
+          range: range,
+          height: height),
+      _boxHandle(box,
+          name: 'graph-box-top',
+          time: false,
+          start: true,
+          range: range,
+          height: height),
+      _boxHandle(box,
+          name: 'graph-box-bottom',
+          time: false,
+          start: false,
+          range: range,
+          height: height),
+      // The block's badge, in the lanes' own words: how many keys it holds and
+      // how many frames it spans. It reads the box as it stands, so a scale in
+      // flight reports the span the release will write.
+      Positioned(
+        key: const ValueKey<String>('graph-box-badge'),
+        left: r.right + 6,
+        top: r.top - 1,
+        child: IgnorePointer(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: t.surface4,
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Text(
+              l10n.keyBlockBadge(
+                  box.count,
+                  KeyBlock(first: box.first, last: box.last, count: box.count)
+                      .spanFrames),
+              style: t.mono.copyWith(fontSize: 8, color: t.textPrimary),
+            ),
+          ),
+        ),
+      ),
+      // The live readout, under the hand while the scale runs and gone on
+      // release (P1). It reads the frames the box now spans and the values its
+      // top and bottom now stand at — against the pane's own value axis, which
+      // is the axis the gutter's numbers label.
+      if (live != null)
+        Positioned(
+          key: const ValueKey<String>('graph-box-hint'),
+          left: r.left + 8 + 132 > paneWidth ? r.left - 8 - 132 : r.left + 8,
+          top: r.bottom + 4,
+          child: IgnorePointer(
+            child: HintPill(
+              text: l10n.graphBoxHint(
+                box.first.round(),
+                box.last.round(),
+                graphNumberText(_valueAt(r.bottom, range, height)),
+                graphNumberText(_valueAt(r.top, range, height)),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  /// One edge of the box, as a strip wide enough to aim at.
+  Widget _boxHandle(
+    ({Rect rect, int count, double first, double last}) box, {
+    required String name,
+    required bool time,
+    required bool start,
+    required (double, double) range,
+    required double height,
+  }) {
+    final r = box.rect;
+    // The strip's length never falls below a grab's own width: a selection
+    // whose keys all hold the same value has a box with no height, and an edge
+    // nobody can put a pointer on is an edge that is not there (P5).
+    final w = time ? _boxGrab : (r.width < _boxGrab ? _boxGrab : r.width);
+    final h = time ? (r.height < _boxGrab ? _boxGrab : r.height) : _boxGrab;
+    return Positioned(
+      key: ValueKey<String>(name),
+      left: time
+          ? (start ? r.left : r.right) - _boxGrab / 2
+          : r.center.dx - w / 2,
+      top: time
+          ? r.center.dy - h / 2
+          : (start ? r.top : r.bottom) - _boxGrab / 2,
+      width: w,
+      height: h,
+      child: MouseRegion(
+        // The cursor says which way this grab pulls before the button goes
+        // down (P2).
+        cursor: time
+            ? SystemMouseCursors.resizeLeftRight
+            : SystemMouseCursors.resizeUpDown,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          supportedDevices: dragDevices,
+          // From the down rather than from the slop, as the lanes' own block
+          // handles are: a precision grab that starts a pointer's width behind
+          // the cursor stays behind it for the whole gesture.
+          dragStartBehavior: DragStartBehavior.down,
+          onPanStart: (_) => _startBoxDrag(box, time: time, start: start),
+          onPanUpdate: (d) {
+            if (!_escape.running) return;
+            setState(() {
+              _boxDrag
+                ?..rawDx += d.delta.dx
+                ..rawDy += d.delta.dy;
+            });
+            final live = _boxDrag;
+            if (live != null) {
+              _previewDrag(_editsFor(_boxMove(live, range, height)).$1);
+            }
+          },
+          onPanEnd: (_) => _commitBoxDrag(range, height),
+          onPanCancel: () {
+            _escape.end();
+            _abandonDrag();
+          },
+        ),
+      ),
+    );
+  }
+
   /// The drawing's **value hint pill**, riding beside the one key in hand:
   /// `f<frame> · <value> · <in> / <out> %` (§6.2).
   ///
@@ -2720,9 +3355,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           child: HintPill(
             text: l10n.graphKeyHint(
               _keyFrame(key, widget.fps).round(),
-              value == value.roundToDouble()
-                  ? value.round().toString()
-                  : value.toStringAsFixed(2),
+              graphNumberText(value),
               (sideInfluence(key.interpIn) * 100).round(),
               (sideInfluence(key.interpOut) * 100).round(),
             ),
@@ -2774,9 +3407,20 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               // here — would gain a visible delay. Double-click stays the
               // gesture for *planting* a key on empty curve, where there is no
               // competing single click to slow down.
-              onTap: () {
+              onTapUp: (d) {
                 if (altActuallyHeld() || widget.penArmed) {
+                  _keyTapId = null;
                   _removeKey(channel, i);
+                  return;
+                }
+                // **Double-click opens the numeric fields** (docs/07 §5.3):
+                // the same key twice inside the double-tap window, counted by
+                // timestamps so the first click still selects at once.
+                final again = _keyTap.tap() && _keyTapId == id;
+                _keyTapId = id;
+                if (again) {
+                  _keyTapId = null;
+                  _openKeyFields(channel, i, d.globalPosition);
                   return;
                 }
                 _selectKey(id,
@@ -2886,7 +3530,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           if (e == null) continue;
           final point = Offset(
             widget.axis.xOf(e.$1 * widget.fps),
-            _yOf(e.$2, range, height),
+            _yOf(e.$2, rangeOf(channel, range), height),
           );
           // A handle's reach is a fraction of the gap to the next key, so on a
           // long composition both handles sit a few pixels from their key —
@@ -2968,6 +3612,165 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 }
 
 // ---------------------------------------------------------------------------
+// Numeric entry (docs/07 §5.3).
+// ---------------------------------------------------------------------------
+
+/// The popover's width and its label column — the Ease popover's own two
+/// measures, so the two small boxes the graph opens read as one family.
+const double _keyFieldsWidth = 168;
+const double _keyFieldsLabel = 46;
+
+/// Open the **numeric entry** box on one keyframe: its exact frame, its exact
+/// value, and how far each of its two eases reaches.
+///
+/// [onApply] is called with all four numbers on every change, so the caller
+/// writes one key rather than four separate edits, and the box stays up — the
+/// point of typing numbers is usually to type more than one. It carries no
+/// buttons for the same reason every value well in the application carries
+/// none: a field commits what it holds.
+Future<void> showKeyFieldsPopover({
+  required BuildContext context,
+  required Offset position,
+  required double frame,
+  required double value,
+  required double inPercent,
+  required double outPercent,
+  required double minFrame,
+  required double maxFrame,
+  required void Function(
+          double frame, double value, int inPercent, int outPercent)
+      onApply,
+}) =>
+    showLumitPopup<void>(
+      context: context,
+      position: position,
+      builder: (close) => _KeyFieldsPopover(
+        frame: frame,
+        value: value,
+        inPercent: inPercent,
+        outPercent: outPercent,
+        minFrame: minFrame,
+        maxFrame: maxFrame,
+        onApply: onApply,
+      ),
+    );
+
+class _KeyFieldsPopover extends StatefulWidget {
+  final double frame;
+  final double value;
+  final double inPercent;
+  final double outPercent;
+  final double minFrame;
+  final double maxFrame;
+  final void Function(double frame, double value, int inPercent, int outPercent)
+      onApply;
+
+  const _KeyFieldsPopover({
+    required this.frame,
+    required this.value,
+    required this.inPercent,
+    required this.outPercent,
+    required this.minFrame,
+    required this.maxFrame,
+    required this.onApply,
+  });
+
+  @override
+  State<_KeyFieldsPopover> createState() => _KeyFieldsPopoverState();
+}
+
+class _KeyFieldsPopoverState extends State<_KeyFieldsPopover> {
+  /// The four numbers as the box holds them. Kept here rather than read back
+  /// off the key, because the box outlives the channel snapshot it opened on
+  /// (see `_applyKeyFields`): what it shows is what was typed into it.
+  late double _frame = widget.frame;
+  late double _value = widget.value;
+  late double _in = widget.inPercent;
+  late double _out = widget.outPercent;
+
+  void _apply() => widget.onApply(_frame, _value, _in.round(), _out.round());
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return FloatSurface(
+      width: _keyFieldsWidth,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _row(t, l10n.graphKeyFrameField, 'graph-fields-frame', _frame,
+              min: widget.minFrame,
+              max: widget.maxFrame,
+              decimals: 0, set: (v) {
+            _frame = v;
+            _apply();
+          }),
+          _row(t, l10n.graphKeyValueField, 'graph-fields-value', _value,
+              min: -100000, max: 100000, decimals: 2, set: (v) {
+            _value = v;
+            _apply();
+          }),
+          _row(t, l10n.graphEaseIn, 'graph-fields-in', _in,
+              min: 0,
+              max: 100,
+              decimals: 0,
+              suffix: l10n.unitSymbolPercent, set: (v) {
+            _in = v;
+            _apply();
+          }),
+          _row(t, l10n.graphEaseOut, 'graph-fields-out', _out,
+              min: 0,
+              max: 100,
+              decimals: 0,
+              suffix: l10n.unitSymbolPercent, set: (v) {
+            _out = v;
+            _apply();
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(
+    LumitTheme t,
+    String label,
+    String key,
+    double value, {
+    required num min,
+    required num max,
+    required int decimals,
+    String? suffix,
+    required ValueChanged<double> set,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: _keyFieldsLabel,
+              child: Text(label,
+                  style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: DragValueField(
+                key: ValueKey<String>(key),
+                value: value,
+                min: min,
+                max: max,
+                decimals: decimals,
+                suffix: suffix,
+                keyed: true,
+                onChanged: (v) => setState(() => set(v.toDouble())),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+// ---------------------------------------------------------------------------
 // Painters.
 // ---------------------------------------------------------------------------
 
@@ -2978,7 +3781,14 @@ class _GraphPainter extends CustomPainter {
   final GraphLens lens;
   final TimelineAxis axis;
   final double fps;
+
+  /// The shared range — what the grid lines and the gutter's numbers say.
   final (double, double) range;
+
+  /// The range each channel is drawn against, one per entry of [channels].
+  /// The same as [range] for every channel unless Normalise is on, when each
+  /// curve has its own (§3.3).
+  final List<(double, double)> ranges;
   final List<Color> palette;
   final Color grid;
   final TextStyle label;
@@ -2994,6 +3804,17 @@ class _GraphPainter extends CustomPainter {
   /// readable wherever the view is and at whatever zoom.
   final double viewportLeft;
 
+  /// How wide that viewport is, so the gutter can be pinned to its **right**
+  /// edge.
+  final double viewportWidth;
+
+  /// The gutter's translucent ground.
+  final Color gutterFill;
+
+  /// Appended to every axis number — `%` while Normalise is on, where the
+  /// numbers are per cent of each curve's own span rather than values.
+  final String? labelSuffix;
+
   /// Whether Retime channels draw as the Vegas envelope (K-247) — which puts
   /// their curve on the axis in **per cent** rather than in source seconds per
   /// second, so it lands on the points drawn over it.
@@ -3006,15 +3827,19 @@ class _GraphPainter extends CustomPainter {
     required this.axis,
     required this.fps,
     required this.range,
+    required this.ranges,
     required this.palette,
     required this.grid,
     required this.label,
     required this.comp,
     required this.viewportLeft,
+    required this.viewportWidth,
+    required this.gutterFill,
+    this.labelSuffix,
     this.vegas = false,
   });
 
-  double _yOf(double v, Size size) {
+  double _yOf(double v, (double, double) range, Size size) {
     final (lo, hi) = range;
     final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
     return size.height - (v - lo) / span * size.height;
@@ -3027,6 +3852,7 @@ class _GraphPainter extends CustomPainter {
     for (var c = 0; c < channels.length; c++) {
       final channel = channels[c];
       final keys = shownKeys[c];
+      final range = c < ranges.length ? ranges[c] : this.range;
       // A Retime drawn as the Vegas envelope reads in per cent, so its curve
       // is scaled onto the same axis as its points (K-247).
       final envelope = vegas && channel.retime && lens == GraphLens.speed;
@@ -3043,14 +3869,14 @@ class _GraphPainter extends CustomPainter {
       if (channel.scalar is! BridgeScalar_Expression) {
         if (channel.isStatic || keys.isEmpty) {
           // A static property is a flat line of its value (a flat 0 as speed).
-          final y =
-              _yOf(chLens == GraphLens.value ? channel.staticValue : 0, size);
+          final y = _yOf(
+              chLens == GraphLens.value ? channel.staticValue : 0, range, size);
           canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
           continue;
         }
         if (keys.length == 1) {
-          final y =
-              _yOf(chLens == GraphLens.value ? keys.first.value : 0, size);
+          final y = _yOf(
+              chLens == GraphLens.value ? keys.first.value : 0, range, size);
           canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
           continue;
         }
@@ -3080,7 +3906,7 @@ class _GraphPainter extends CustomPainter {
 
         for (var i = 0; i < result.length; i++) {
           final x = size.width * (i.toDouble() / samples.toDouble());
-          final point = Offset(x, _yOf(result[i], size));
+          final point = Offset(x, _yOf(result[i], range, size));
           if (first) {
             path.moveTo(point.dx, point.dy);
             first = false;
@@ -3094,7 +3920,7 @@ class _GraphPainter extends CustomPainter {
           final v = chLens == GraphLens.value
               ? evaluateKeys(keys, seconds)
               : evaluateKeysSpeed(keys, seconds) * speedScale;
-          final point = Offset(x, _yOf(v, size));
+          final point = Offset(x, _yOf(v, range, size));
           if (first) {
             path.moveTo(point.dx, point.dy);
             first = false;
@@ -3113,23 +3939,22 @@ class _GraphPainter extends CustomPainter {
           ..strokeWidth = 1;
         for (var i = 0; i < keys.length; i++) {
           final x = axis.xOf(_keyFrame(keys[i], f));
-          final yIn = _yOf(sideSpeedAtKey(keys, i, isOut: false), size);
-          final yOut = _yOf(sideSpeedAtKey(keys, i, isOut: true), size);
+          final yIn = _yOf(sideSpeedAtKey(keys, i, isOut: false), range, size);
+          final yOut = _yOf(sideSpeedAtKey(keys, i, isOut: true), range, size);
           if ((yIn - yOut).abs() > 1) {
             canvas.drawLine(Offset(x, yIn), Offset(x, yOut), joinPaint);
           }
         }
       }
     }
+    _paintGutter(canvas, size);
   }
 
-  void _paintGrid(Canvas canvas, Size size) {
+  /// The values the grid rules at: a nice step whose lines sit at least ~36 px
+  /// apart. Empty when the range is not a range at all.
+  List<double> _gridValues(Size size) {
     final (lo, hi) = range;
     final span = (hi - lo).abs() < 1e-12 ? 1.0 : hi - lo;
-    final paint = Paint()
-      ..color = grid
-      ..strokeWidth = 1;
-    // A nice value step whose lines sit at least ~36 px apart.
     final rawStep = span / (size.height / 36).clamp(1, 12);
     final magnitude = _pow10((rawStep.abs()).clamp(1e-12, double.infinity));
     var step = magnitude;
@@ -3139,23 +3964,56 @@ class _GraphPainter extends CustomPainter {
         break;
       }
     }
-    if (!step.isFinite || step <= 0) return;
-    final start = (lo / step).ceilToDouble() * step;
-    for (var v = start; v <= hi; v += step) {
-      final y = _yOf(v, size);
+    if (!step.isFinite || step <= 0) return const [];
+    final out = <double>[];
+    for (var v = (lo / step).ceilToDouble() * step; v <= hi; v += step) {
+      out.add(v);
+      // A range and a step that disagree by a rounding error would otherwise
+      // rule a line per pixel for ever.
+      if (out.length > 64) break;
+    }
+    return out;
+  }
+
+  void _paintGrid(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (final v in _gridValues(size)) {
+      final y = _yOf(v, range, size);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  /// The value labels, in the **fixed right-hand gutter** the drawing gives
+  /// them (§12A.2, §6.3): a [graphGutterWidth] strip of translucent ground at
+  /// the right edge of the *viewport*, with each grid line's number sitting on
+  /// it.
+  ///
+  /// The viewport, not the canvas: the pane is as wide as the whole
+  /// composition and lives inside the Timeline's horizontal scroll view, so a
+  /// gutter pinned to the canvas would be off screen at every zoom but one.
+  /// Drawn last, over the curves — the drawing's own translucent strip, which
+  /// lets a curve be seen running under its own numbers.
+  void _paintGutter(Canvas canvas, Size size) {
+    final left = viewportLeft + viewportWidth - graphGutterWidth;
+    canvas.drawRect(
+      Rect.fromLTWH(left, 0, graphGutterWidth, size.height),
+      Paint()..color = gutterFill,
+    );
+    for (final v in _gridValues(size)) {
+      final y = _yOf(v, range, size);
       final text = TextPainter(
         text: TextSpan(
-            text: v.abs() >= 100 || v == v.roundToDouble()
-                ? v.round().toString()
-                : v.toStringAsFixed(1),
+            text: (v.abs() >= 100 || v == v.roundToDouble()
+                    ? v.round().toString()
+                    : v.toStringAsFixed(1)) +
+                (labelSuffix ?? ''),
             style: label),
         textDirection: TextDirection.ltr,
       )..layout();
-      text.paint(
-          canvas,
-          Offset(viewportLeft + 2,
-              (y - text.height - 1).clamp(0, size.height - 12)));
+      text.paint(canvas,
+          Offset(left + 4, (y - text.height - 1).clamp(0, size.height - 12)));
     }
   }
 
@@ -3217,7 +4075,7 @@ class _HandlesPainter extends CustomPainter {
               : state._keyPoint(channel, i, range, height, isOut: isOut);
           final to = Offset(
             widget.axis.xOf(e.$1 * widget.fps),
-            state._yOf(e.$2, range, height),
+            state._yOf(e.$2, state.rangeOf(channel, range), height),
           );
           _dashed(canvas, from, to, paint);
         }
