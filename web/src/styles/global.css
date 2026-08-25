@@ -59,10 +59,12 @@
     @apply flex items-center gap-2 font-mono text-[12px] leading-none
            tracking-[0.08em] uppercase text-fg-3;
   }
+  /* REMOVED THIS PART FOR NOW Prefer text just sitting by itself on the left
   .kicker::before {
     content: "";
     @apply block h-2 w-3.5 shrink-0 rounded-ctl border border-current;
   }
+  */
   /* One button shape: a resting outline (K-450). No filled action on the site -
      the drawing's hero download is an outline and nothing here outranks it. */
   .btn {
