@@ -9656,5 +9656,13 @@
   "workspaceFileUnwritable": "That file could not be written.",
   "@workspaceFileUnwritable": {
     "description": "Status-line notice when exporting a workspace failed to write the chosen file."
+  },
+  "dropProjectFile": "A Lumit project is opened rather than imported — use File › Open project.",
+  "@dropProjectFile": {
+    "description": "Status-line notice after a .lum project file was dragged onto the Project panel from the file manager. It is not opened silently, because opening one replaces the project on screen."
+  },
+  "dropAeProject": "An After Effects project is brought in with File › Import › After Effects project.",
+  "@dropAeProject": {
+    "description": "Status-line notice after an .aep file or a zipped Lumit Bridge bundle was dragged onto the Project panel from the file manager. It is not imported silently, because the conversion is a long job that ends in a report."
   }
 }

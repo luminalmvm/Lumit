@@ -14,24 +14,29 @@ import 'workspace.dart' show workspaceFileExtension;
 XTypeGroup _projectGroup() =>
     XTypeGroup(label: l10n.fileTypeProject, extensions: const ['lum']);
 
-/// The footage type group, mirroring the egui import filter exactly
-/// (crates/lumit-ui/src/app_state/layers.rs `import_footage_dialog`).
-XTypeGroup _footageGroup() => XTypeGroup(
-      label: l10n.fileTypeFootage,
-      extensions: const [
-        'mp4',
-        'mov',
-        'mkv',
-        'avi',
-        'webm',
-        'png',
-        'jpg',
-        'jpeg',
-        'wav',
-        'mp3',
-        'flac',
-      ],
-    );
+/// The extensions the footage filter offers, mirroring the egui import filter
+/// exactly (crates/lumit-ui/src/app_state/layers.rs `import_footage_dialog`).
+///
+/// Public because the file picker is no longer the only road in: a folder
+/// dropped on the Project panel (K-581) is read with this same list, so what a
+/// folder yields and what the dialogue offers cannot drift apart.
+const List<String> footageExtensions = [
+  'mp4',
+  'mov',
+  'mkv',
+  'avi',
+  'webm',
+  'png',
+  'jpg',
+  'jpeg',
+  'wav',
+  'mp3',
+  'flac',
+];
+
+/// The footage type group.
+XTypeGroup _footageGroup() =>
+    XTypeGroup(label: l10n.fileTypeFootage, extensions: footageExtensions);
 
 /// Pick one project file to open, or null when the dialogue was cancelled.
 Future<String?> pickProjectToOpen() async {

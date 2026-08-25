@@ -10908,3 +10908,41 @@ The quad is read as it stands at the start — you cannot keyframe it, and that 
 rather than missing: it describes where the surface *is on the reference frame*, and a moving
 starting shape would be asking the tracker to chase a target from a moving chair. And it works
 on footage layers, not on precomps.
+
+### Dropping files on the Project panel (K-581)
+
+Dragging a clip out of Explorer and letting go over the Project panel imports it. That is
+the whole feature from the outside, and it is deliberately not a second way of importing:
+the drop calls exactly the same code the **File › Import footage** menu item calls, so
+whatever is true of one is true of the other — the same probe of the file, the same
+image-sequence detection, the same row in the panel.
+
+Flutter itself cannot hear that drag. A window accepting files from the desktop is an
+operating-system arrangement (on Windows an interface called `IDropTarget` that the window
+registers with the shell), and Flutter's own toolkit does not register one; nothing in
+version 3.47 exposes it. So Lumit uses a small package, **desktop_drop**, whose entire job
+is to do that registration on each platform and forward the result to Dart as a message.
+It was chosen over the alternatives because it is the least of them: it adds no build
+tooling, and it does not try to make Lumit a drag *source* as well, which nothing asks for.
+
+Three kinds of thing can land, and the panel answers each differently.
+
+**A folder** is read one level deep, and the media files in it are handed over as if you
+had selected them all in the picker. That is what makes a folder of numbered stills come in
+as one image sequence: the engine recognises the run (above) and folds every later frame
+into the item it already made, so three thousand files produce one row. Files the import
+filter does not offer — the readme, the stray spreadsheet — are left where they are.
+
+**A `.lum` project or an After Effects `.aep`** is not opened. Both are big, slow doors:
+opening a project puts away the one you are working on, and importing an After Effects
+project is a conversion that ends in a report you are meant to read. Neither should happen
+because something landed on a panel, so instead the status line names the menu that does it.
+
+**Everything else** is handed to the engine as footage, even a format the picker does not
+list. If it turns out to be unreadable the row says so with its **missing** badge, which
+tells you more than a drop that silently did nothing.
+
+One drag is one undo. A drop carrying six files opens an *undo group* — a marker that says
+"treat everything until I close it as a single step" — so one Ctrl-Z takes all six away
+again. Selecting six files in the import dialogue now behaves the same way, because both go
+through that one function.

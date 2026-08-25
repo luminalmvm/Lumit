@@ -21,7 +21,9 @@
 // raises New composition on it, a folder shows or hides its children. Renaming
 // is `Enter` or the row menu. A right-click raises that menu; footage and comp
 // rows drag onto the Timeline (a comp lands as a Precomp layer);
-// double-clicking empty space imports. Missing footage wears the mockup's
+// double-clicking empty space imports, and files dragged in from the OS file
+// manager import the same way (K-581) — the panel lights up while they hover.
+// Missing footage wears the mockup's
 // `missing` badge, and that badge *is* the relink control — clicking it opens
 // the file picker, which is where the old inline "Relink…" button's job went.
 // The "show only missing" filter moved onto the bottom bar's count, which
@@ -37,9 +39,11 @@
 // one row, costing nothing at the bridge (the budget test expects zero).
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -588,6 +592,66 @@ String _sampleRateText(int hz) {
   return '$text ${l10n.unitKhz}';
 }
 
+/// Put what the OS file manager dropped on the Project panel down the road it
+/// belongs on (K-581), and say whether anything was imported.
+///
+/// **In plain terms**: dropping files on the panel is the same command as
+/// **File › Import footage**, so it goes through the same call — one undo step
+/// for the whole batch, the probe worker started per file, image sequences
+/// spotted by the engine rather than here (K-539).
+///
+/// Three shapes arrive and each is answered differently:
+///
+/// * a **folder** is read one level deep for the files the import filter
+///   offers, sorted, and handed over as if they had been picked — which is how
+///   a folder of numbered stills becomes one image-sequence item: the engine
+///   sees the run and folds it, and folds every later frame of the same run
+///   into the item it already made;
+/// * a **`.lum`** or an After Effects **`.aep`/`.zip`** is *not* opened
+///   quietly. Opening a project throws away the one on screen, and importing
+///   an After Effects project is a long conversion with a report at the end;
+///   neither should happen because something landed on a panel. The status
+///   line names the menu road instead;
+/// * anything else is handed to the engine as footage. The list above is the
+///   *dialogue's* filter, not the engine's — a format the picker does not
+///   think to offer still imports, and a file the engine cannot read wears the
+///   panel's own missing badge, which is a truer answer than silence.
+Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
+  final media = <String>[];
+  var isProject = false;
+  var isAe = false;
+  for (final path in dropped) {
+    final folder = Directory(path);
+    if (folder.existsSync()) {
+      media.addAll(folder
+          .listSync()
+          .whereType<File>()
+          .map((f) => f.path)
+          .where((p) => footageExtensions.contains(_extensionOf(p)))
+          .toList()
+        ..sort());
+      continue;
+    }
+    switch (_extensionOf(path)) {
+      case 'lum':
+        isProject = true;
+      case 'aep':
+      case 'zip':
+        isAe = true;
+      default:
+        media.add(path);
+    }
+  }
+  if (isProject) state.postNotice(l10n.dropProjectFile);
+  if (isAe) state.postNotice(l10n.dropAeProject);
+  return state.importFootagePaths(media);
+}
+
+String _extensionOf(String path) {
+  final dot = path.lastIndexOf('.');
+  return dot < 0 ? '' : path.substring(dot + 1).toLowerCase();
+}
+
 class ProjectPanelFrb extends StatefulWidget {
   /// The relink file picker seam (chosen path, or null when cancelled). Defaults
   /// to the real footage picker; tests inject their own so no plugin channel
@@ -898,10 +962,41 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// of v0's `documentEpoch`.
   int _epoch = 0;
 
+  /// True while a drag from the OS file manager is over the panel, so it can
+  /// wear the drop-target treatment (§6.5) the folder rows already wear.
+  bool _dropHover = false;
+
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, box) => _build(context, box.maxWidth),
-      );
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return DropTarget(
+      onDragEntered: (_) => setState(() => _dropHover = true),
+      onDragExited: (_) => setState(() => _dropHover = false),
+      onDragDone: (details) {
+        setState(() => _dropHover = false);
+        _dropped([for (final f in details.files) f.path]);
+      },
+      // Painted over the panel rather than behind it, for the reason the row
+      // target gives: the panel draws its own fill, and a drop with no
+      // feedback is indistinguishable from one that did nothing.
+      child: Container(
+        foregroundDecoration: !_dropHover
+            ? null
+            : BoxDecoration(
+                border: Border.all(color: t.accent, width: 1.5),
+                color: t.accent.withValues(alpha: 0.1),
+              ),
+        child: LayoutBuilder(
+          builder: (context, box) => _build(context, box.maxWidth),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _dropped(List<String> paths) async {
+    final state = Provider.of<LumitState>(context, listen: false);
+    if (await importDroppedPaths(state, paths)) _documentChanged();
+  }
 
   Widget _build(BuildContext context, double width) {
     final t = ThemeScope.of(context).theme;

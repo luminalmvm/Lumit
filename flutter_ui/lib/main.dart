@@ -471,11 +471,21 @@ class LumitState extends ChangeNotifier {
   /// Here rather than in the menu bar because the Project panel offers the same
   /// command, and two copies of "import each path, then notify" is one copy too
   /// many for something every new user's first action goes through.
+  /// A batch is **one** undo step (K-581): picking six files in the dialogue,
+  /// or dropping six on the panel, is one action the user took, so it is one
+  /// Ctrl-Z. The group is closed in a `finally` because a group left open
+  /// records nothing.
   Future<bool> importFootagePaths(List<String> paths) async {
     final project = this.project;
     if (project == null || paths.isEmpty) return false;
-    for (final path in paths) {
-      project.importFootage(path: path);
+    final group = paths.length > 1;
+    if (group) project.beginUndoGroup();
+    try {
+      for (final path in paths) {
+        project.importFootage(path: path);
+      }
+    } finally {
+      if (group) project.endUndoGroup();
     }
     notifyDocumentChanged();
     return true;

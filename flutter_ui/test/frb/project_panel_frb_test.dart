@@ -11,6 +11,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -1483,8 +1484,7 @@ void main() {
       final p = freshProject();
       final project = p.state.project!;
       final outer = project.newFolder(name: 'Outer', parent: null);
-      final inner =
-          project.newFolder(name: 'Inner', parent: outer.internalid);
+      final inner = project.newFolder(name: 'Inner', parent: outer.internalid);
       // Real files: a missing clip wears the warning glyph, which wins over
       // every tag — so an inheritance test needs footage that is there.
       final plain = project.importFootage(path: _probeableImageFile('a.bmp'));
@@ -1698,6 +1698,163 @@ void main() {
       await tester.tap(find.byKey(key));
       await tester.pumpAndSettle();
       expect(p.state.project!.useProxies(), isTrue);
+    });
+
+    /// **Files dragged in from the OS file manager (K-581).** Flutter 3.47
+    /// has no drop API of its own, so the event arrives on the `desktop_drop`
+    /// plugin's method channel; these drive that channel directly, which is
+    /// the whole mechanism minus the operating system.
+    group('a drop from the file manager', () {
+      /// One `desktop_drop` platform message, delivered the way the plugin's
+      /// native side delivers it.
+      Future<void> dropEvent(String method, Object? arguments) =>
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .handlePlatformMessage(
+            'desktop_drop',
+            const StandardMethodCodec()
+                .encodeMethodCall(MethodCall(method, arguments)),
+            (_) {},
+          );
+
+      /// A hover over the middle of a 480×760 panel, in the physical pixels
+      /// the plugin reports. The host's device pixel ratio is 1, so these are
+      /// the logical coordinates too.
+      Future<void> hover() => dropEvent('entered', <double>[240, 380]);
+
+      testWidgets('lights the panel while it hovers, and imports on release',
+          (tester) async {
+        final p = freshProject();
+        await tester.pumpWidget(hostPanel(
+          child: const ProjectPanelFrb(),
+          state: p.state,
+          uiState: p.uiState,
+        ));
+        await tester.pump();
+
+        BoxDecoration? highlight() => tester
+            .widget<Container>(find
+                .descendant(
+                  of: find.byType(DropTarget),
+                  matching: find.byType(Container),
+                )
+                .first)
+            .foregroundDecoration as BoxDecoration?;
+
+        expect(highlight(), isNull, reason: 'nothing is being dragged');
+
+        await hover();
+        await tester.pump();
+        expect(highlight()?.border,
+            Border.all(color: LumitTheme.dark().accent, width: 1.5),
+            reason: 'the drop-target treatment, as the folder rows wear it');
+
+        await dropEvent('performOperation', <String>['C:/clips/shot.mov']);
+        await tester.pump();
+
+        expect(highlight(), isNull, reason: 'the drag is over');
+        expect(find.text('shot.mov'), findsOneWidget);
+      });
+
+      testWidgets('leaving without dropping puts the highlight out',
+          (tester) async {
+        final p = freshProject();
+        await tester.pumpWidget(hostPanel(
+          child: const ProjectPanelFrb(),
+          state: p.state,
+          uiState: p.uiState,
+        ));
+        await tester.pump();
+
+        await hover();
+        await tester.pump();
+        await dropEvent('exited', null);
+        await tester.pump();
+
+        expect(
+          (tester
+              .widget<Container>(find
+                  .descendant(
+                    of: find.byType(DropTarget),
+                    matching: find.byType(Container),
+                  )
+                  .first)
+              .foregroundDecoration as BoxDecoration?),
+          isNull,
+        );
+      });
+    });
+
+    /// The import road itself, driven without the plugin: what each shape of
+    /// dropped path turns into.
+    group('what a dropped path becomes', () {
+      testWidgets('a batch of files is one import and one undo step',
+          (tester) async {
+        final p = freshProject();
+        await tester.pumpWidget(hostPanel(
+          child: const SizedBox.shrink(),
+          state: p.state,
+          uiState: p.uiState,
+        ));
+
+        expect(
+          await importDroppedPaths(
+              p.state, ['C:/clips/a.mov', 'C:/clips/b.mov']),
+          isTrue,
+        );
+        expect(p.state.project!.getItems().length, 2);
+
+        p.state.project!.undo();
+        expect(p.state.project!.getItems(), isEmpty,
+            reason: 'one drop is one Ctrl-Z, however many files it carried');
+      });
+
+      testWidgets('a folder of numbered stills lands as one sequence',
+          (tester) async {
+        final p = freshProject();
+        await tester.pumpWidget(hostPanel(
+          child: const SizedBox.shrink(),
+          state: p.state,
+          uiState: p.uiState,
+        ));
+
+        final folder = Directory.systemTemp.createTempSync('lumit-drop');
+        addTearDown(() => folder.deleteSync(recursive: true));
+        for (var i = 1; i <= 3; i++) {
+          File('${folder.path}/frames${i.toString().padLeft(4, '0')}.png')
+              .writeAsBytesSync(const <int>[]);
+        }
+        // A stray file the import filter does not offer: a folder read must
+        // not file the readme as footage.
+        File('${folder.path}/readme.txt').writeAsStringSync('ignore me');
+
+        expect(await importDroppedPaths(p.state, [folder.path]), isTrue);
+
+        final items = p.state.project!.getItems();
+        expect(items.length, 1,
+            reason: 'three frames of one run are one image sequence (K-539)');
+        expect(items.single, isA<ItemReference_Footage>());
+      });
+
+      testWidgets('a project or an After Effects file is named, not opened',
+          (tester) async {
+        final p = freshProject();
+        await tester.pumpWidget(hostPanel(
+          child: const SizedBox.shrink(),
+          state: p.state,
+          uiState: p.uiState,
+        ));
+
+        expect(
+            await importDroppedPaths(p.state, ['C:/work/scene.lum']), isFalse,
+            reason: 'a project is opened, not imported');
+        expect(p.state.project!.getItems(), isEmpty);
+        expect(p.state.notice.value?.message, contains('Open project'));
+
+        expect(
+            await importDroppedPaths(p.state, ['C:/work/scene.aep']), isFalse);
+        expect(p.state.project!.getItems(), isEmpty);
+        expect(p.state.notice.value?.message, contains('After Effects'));
+      });
     });
   }, skip: !engineAvailable);
 }

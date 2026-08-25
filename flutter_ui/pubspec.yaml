@@ -18,6 +18,11 @@ dependencies:
   # Draws Lumit's own glyphs, which are inline SVG (docs/15-DESIGN.md §5).
   flutter_svg: ^2.3.0
   file_selector: ^1.1.0
+  # Files dropped on the window from the OS file manager (K-581). Flutter 3.47
+  # has no drop API of its own — neither the framework nor the Windows
+  # embedder — so this is the smallest maintained way to hear the event: one
+  # method channel per platform, no native drag *sources*, no Rust toolchain.
+  desktop_drop: ^0.8.0
   lumit_bridge:
     path: rust_builder
   flutter_rust_bridge: 2.12.0

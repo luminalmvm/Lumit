@@ -16785,3 +16785,45 @@ the travel subtracted from its `log_scale`, the rack spanning its own pairs, the
 end-to-end focal curve, and the two-knot bundle drive (`lumit-track`); the pre-existing
 cut, ramp, still-lens, lunge, dolly-with-cut and determinism tests all pinned against the
 redesign in the same file.
+
+## K-581 — Files dropped on the Project panel take the import road, and only that road
+
+**DECIDED 2026-08-26.** Dragging footage out of the OS file manager onto the Project panel
+imports it. The claim was already made on the public site (`web-docs`' project page), and
+the panel is where a user reaches for it first.
+
+**The mechanism is a package, because there is no native path.** Flutter 3.47 stable
+exposes no desktop drop API: nothing in `packages/flutter/lib/src` registers a drop target,
+and the Windows embedder does not either — the only "drop" in it is a shadow. So the ladder
+runs out at rung five and a dependency is the answer. **`desktop_drop`** is it: a method
+channel per platform and nothing else, no Rust toolchain and no build step, and no drag
+*source* machinery Lumit has not asked for. The alternative, `super_drag_and_drop`, brings
+`super_native_extensions` and a second native build for a feature half of which would go
+unused. If Flutter ever grows the API, this package is one widget's worth of code to delete.
+
+**One road in.** The drop calls `LumitState.importFootagePaths` — the same function **File
+› Import footage** calls — so the probe, the K-539 image-sequence detection and the panel's
+own refresh are shared rather than mirrored. `importFootagePaths` now wraps a multi-file
+batch in an undo group, which makes one drop, and equally one multi-select in the dialogue,
+**one Ctrl-Z**.
+
+**What each dropped shape becomes.** A folder is read one level deep and filtered by the
+import dialogue's own extension list (now `footageExtensions`, shared between the two, so
+the filter cannot drift); the files go through the same call, and a run of numbered stills
+therefore folds into one sequence item by K-539's existing rule rather than by anything new
+here. A `.lum`, an `.aep` or a `.zip` is **not** acted on: opening a project discards the
+one on screen and importing an After Effects project is a long conversion ending in a
+report, and neither is an appropriate answer to a drag landing on a panel — the status line
+names the menu instead. Anything else is handed to the engine as footage even when the
+picker would not have offered its extension, because a file the engine cannot read wears
+the panel's `missing` badge, which says more than silence.
+
+**The highlight is the existing grammar.** While a drag hovers, the panel wears the
+drop-target treatment of docs/15 §6.5 — the accent border at 1.5 and the accent at 10 %,
+painted in front — the same one the panel's folder rows already wear for an internal drag.
+
+Regression tests: the hover highlight and the release, driven through the plugin's own
+platform channel; the exit without a drop; a two-file batch undone in one step; a temp
+folder of three numbered stills beside a `readme.txt` landing as one item; and a dropped
+`.lum` and `.aep` importing nothing and posting their notices
+(`flutter_ui/test/frb/project_panel_frb_test.dart`).
