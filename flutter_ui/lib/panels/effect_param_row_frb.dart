@@ -250,14 +250,15 @@ class EffectParamRowFrb extends StatelessWidget {
   Widget _build(BuildContext context, int frame) {
     final t = ThemeScope.of(context).theme;
     final id = effectId;
-    final scalar = _animatableScalarOf(value);
-    // Only the number-shaped kinds animate; a choice or a file has nothing to
-    // interpolate, so those rows carry no stopwatch at all.
-    final keyframes = scalar == null
+    final scalars = _animatableScalarsOf(value);
+    // Only the interpolatable kinds animate; a choice or a file has nothing to
+    // blend between, so those rows carry no stopwatch at all.
+    final keyframes = scalars == null
         ? null
         : KeyframeControlsFrb(
-            // An effect parameter is one value, so one channel.
-            scalars: [scalar],
+            // One channel for a number, four for a colour — and one stopwatch
+            // over them either way.
+            scalars: scalars,
             comp: comp,
             playheadFrame: playheadFrame,
             onSeek: onSeek,
@@ -265,7 +266,10 @@ class EffectParamRowFrb extends StatelessWidget {
             // The panel's fixed columns (K-443); the Timeline's fold-out takes
             // the other branch and keeps its narrow gutter.
             fixedColumns: twoColumn && valueColumn == null,
-            onWrite: (next) => _set(BridgeEffectValue.float(next.single)),
+            onWrite: (next) => _set(next.length == 4
+                ? BridgeEffectValue.colour(BridgeColour(
+                    r: next[0], g: next[1], b: next[2], a: next[3]))
+                : BridgeEffectValue.float(next.single)),
           );
 
     // The name is the row's handle for the graph editor, so it is built once
@@ -424,19 +428,42 @@ class EffectParamRowFrb extends StatelessWidget {
     );
   }
 
-  BridgeScalar? _animatableScalarOf(BridgeEffectValue? value) {
+  /// The animations this row's stopwatch covers, or null for a kind with
+  /// nothing to interpolate.
+  ///
+  /// **A colour is four of them under one stopwatch** (K-535). The engine has
+  /// always stored a colour as four independent properties and sampled them
+  /// one by one (`EffectParams::colour_at`, "channels animate independently"),
+  /// and [KeyframeControlsFrb] has always taken a list — Position's x and y are
+  /// the same shape. This helper answered with a single scalar, so a colour row
+  /// asked for no controls at all and the stopwatch simply was not drawn: the
+  /// one thing missing between an engine that could key colours and a panel
+  /// that could not.
+  List<BridgeScalar>? _animatableScalarsOf(BridgeEffectValue? value) {
     // Int is a Float value with integer display (docs/08 §1.2), and a Slider is
     // a Float value inside a closed range (K-414), so both animate exactly like
     // Float — the kind is the control, not the storage.
-    if (param.kind is! BridgeParamKind_Float &&
-        param.kind is! BridgeParamKind_Int &&
-        param.kind is! BridgeParamKind_Slider) {
-      return null;
+    if (param.kind is BridgeParamKind_Float ||
+        param.kind is BridgeParamKind_Int ||
+        param.kind is BridgeParamKind_Slider ||
+        param.kind is BridgeParamKind_Angle) {
+      return switch (value) {
+        BridgeEffectValue_Float(:final field0) => [field0],
+        _ => null,
+      };
     }
-    return switch (value) {
-      BridgeEffectValue_Float(:final field0) => field0,
-      _ => null,
-    };
+    if (param.kind is BridgeParamKind_Colour) {
+      return switch (value) {
+        BridgeEffectValue_Colour(:final field0) => [
+            field0.r,
+            field0.g,
+            field0.b,
+            field0.a,
+          ],
+        _ => null,
+      };
+    }
+    return null;
   }
 
   /// Write this parameter. The value goes up to the panel rather than being
@@ -587,7 +614,7 @@ class EffectParamRowFrb extends StatelessWidget {
 
       case BridgeParamKind_Colour(:final min, :final max):
         if (value case BridgeEffectValue_Colour(:final field0)) {
-          return _colourSwatch(context, id, field0, min, max);
+          return _colourSwatch(context, id, field0, min, max, frame);
         }
         return Text('—', style: t.small);
 
@@ -1038,33 +1065,35 @@ class EffectParamRowFrb extends StatelessWidget {
   /// swatch edit writes all four statics at once; an animated channel is left
   /// alone for the same reason a scalar is.
   Widget _colourSwatch(BuildContext context, UuidValue id, BridgeColour colour,
-      double min, double max) {
-    double chan(BridgeScalar s) => s is BridgeScalar_Static ? s.field0 : 0;
-    final animated = colour.r is! BridgeScalar_Static ||
-        colour.g is! BridgeScalar_Static ||
-        colour.b is! BridgeScalar_Static;
+      double min, double max, int frame) {
+    // **The channel as it reads under the playhead**, keyed or not (K-535).
+    // The swatch used to say the word `animated` and stand down, the way a
+    // number field never did — so a colour with keys on it could be looked at
+    // and not changed, which is half of "keyframe a colour" missing.
+    double chan(BridgeScalar s) =>
+        sampleScalar(scalar: s, time: timeOfFrame(comp, frame));
     final t = ThemeScope.of(context).theme;
-    if (animated) {
-      return SizedBox(
-        width: effectCellWidth,
-        child: Text('animated',
-            style: t.small.copyWith(color: t.textMuted),
-            textAlign: TextAlign.right),
-      );
-    }
 
     int byte(double f) => (f.clamp(0.0, 1.0) * 255).round();
     final shown = documentColour(
         byte(chan(colour.r)), byte(chan(colour.g)), byte(chan(colour.b)), 255);
 
-    // The value written for a picked colour: the three channels as statics,
-    // clamped to the parameter's declared range, with alpha left alone.
+    // The value written for a picked colour: the three channels clamped to the
+    // parameter's declared range, with alpha left alone.
+    //
+    // **A keyed channel takes a key at the playhead** rather than being
+    // flattened back to a static — `scalarWithValueAt` is the same call an
+    // animated number's field makes for the same reason, and it is what turns
+    // "move the playhead and change the colour" into a second key rather than
+    // into the loss of the first.
     BridgeEffectValue valueOf(PickedColour picked) {
       double clamp(double v) => v < min ? min : (v > max ? max : v);
+      BridgeScalar at(BridgeScalar was, double v) =>
+          scalarWithValueAt(was, clamp(v), comp, frame);
       return BridgeEffectValue.colour(BridgeColour(
-        r: BridgeScalar.static_(clamp(picked.r)),
-        g: BridgeScalar.static_(clamp(picked.g)),
-        b: BridgeScalar.static_(clamp(picked.b)),
+        r: at(colour.r, picked.r),
+        g: at(colour.g, picked.g),
+        b: at(colour.b, picked.b),
         a: colour.a,
       ));
     }

@@ -351,6 +351,114 @@ void main() {
           reason: 'the fixed columns are measured in unpadded buttons (K-443)');
     });
 
+    // -------------------------------------------------------------------
+    // **A colour keyframes like anything else** (K-535, owner desk test: "for
+    // effects that have a color value property, I can't animate them, the
+    // stopwatch is just gone").
+    //
+    // The engine could always do it — a colour is four independent properties
+    // and `colour_at` samples them one by one. What was missing was in the
+    // row: the helper that decides what a stopwatch would cover answered with
+    // a single scalar, so a colour row asked for no controls and drew none.
+    // -------------------------------------------------------------------
+
+    /// The four channels of a `colour_control` effect's colour parameter.
+    BridgeColour colourOf(LayerReference layer) {
+      final info = layer.getEffects().single.getInfo();
+      for (final p in info.values) {
+        if (p.value case BridgeEffectValue_Colour(:final field0)) return field0;
+      }
+      throw StateError('no colour parameter on the effect');
+    }
+
+    List<BridgeKeyframe> keysOf(BridgeScalar s) =>
+        s is BridgeScalar_Keyframed ? s.field0 : const [];
+
+    testWidgets('a colour row carries the stopwatch and its navigator',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'colour_control');
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = p.layer.getEffects().single.id();
+
+      final stopwatch = find.byKey(ValueKey<String>('kf-stopwatch-$id-colour'));
+      expect(stopwatch, findsOneWidget,
+          reason: 'the row that could not be animated at all');
+      expect(find.byKey(ValueKey<String>('kf-prev-$id-colour')), findsNothing,
+          reason: 'the navigator waits until there is a curve to walk');
+
+      await tester.tap(stopwatch);
+      await tester.pump();
+
+      expect(
+          find.byKey(ValueKey<String>('kf-prev-$id-colour')), findsOneWidget);
+      expect(
+          find.byKey(ValueKey<String>('kf-next-$id-colour')), findsOneWidget);
+      // And the swatch is still a swatch: it used to say the word `animated`
+      // and stand down, so a keyed colour could not be changed.
+      expect(
+          find.byKey(ValueKey<String>('fx-colour-$id-colour')), findsOneWidget);
+      expect(find.text('animated'), findsNothing);
+    });
+
+    /// The whole flow the owner asked for: key it, move on, change it, and
+    /// find two keys with the picture between them interpolating.
+    testWidgets('keyframing a colour: one key, then a second, then a ramp',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'colour_control');
+      p.uiState
+        ..model.refresh()
+        ..playheadFrame.value = 0;
+      await mount(tester, p);
+      final id = p.layer.getEffects().single.id();
+
+      final was = colourOf(p.layer);
+      expect(keysOf(was.r), isEmpty, reason: 'still to begin with');
+      final wasRed = (was.r as BridgeScalar_Static).field0;
+
+      await tester.tap(find.byKey(ValueKey<String>('kf-stopwatch-$id-colour')));
+      await tester.pump();
+
+      final keyed = colourOf(p.layer);
+      for (final channel in [keyed.r, keyed.g, keyed.b, keyed.a]) {
+        expect(keysOf(channel), hasLength(1),
+            reason: 'every channel keys together under one stopwatch');
+        expect(p.comp.frameAtTime(time: keysOf(channel).single.time), 0);
+      }
+      expect(keysOf(keyed.r).single.value, closeTo(wasRed, 1e-6),
+          reason: 'turning animation on must not move the picture');
+
+      // Move on, and change the colour through the swatch's own picker.
+      p.uiState.playheadFrame.value = 48;
+      await tester.pump();
+      await tester.tap(find.byKey(ValueKey<String>('fx-colour-$id-colour')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('colour-picker-R')));
+      await tester.pumpAndSettle();
+      // Down to nothing, which the default red is not.
+      await tester.enterText(find.byType(EditableText).first, '0');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final ramped = colourOf(p.layer);
+      final red = keysOf(ramped.r);
+      expect(red, hasLength(2),
+          reason: 'the edit at frame 48 planted a key rather than flattening '
+              'the one at frame 0');
+      expect(
+          red.map((k) => p.comp.frameAtTime(time: k.time)).toList(), [0, 48]);
+      expect(red.first.value, closeTo(wasRed, 1e-6));
+      expect(red.last.value, closeTo(0, 1e-6));
+
+      // And between them the channel really ramps — a curve, not a step.
+      final middle =
+          sampleScalar(scalar: ramped.r, time: p.comp.timeOfFrame(frame: 24));
+      expect(middle, lessThan(red.first.value));
+      expect(middle, greaterThan(red.last.value));
+    });
+
     // Without the built library there is nothing to test against; the harness
     // throws with the command to run.
   }, skip: !engineAvailable);

@@ -14874,3 +14874,35 @@ the selection to that row.
 The rule generalises past this panel and is stated once here: **clicking something that is
 already selected re-affirms the selection and nothing else.** Any surface wanting a second
 meaning for a click must take it from a gesture that cannot be produced by accident.
+
+## K-535 — A colour parameter animates, under one stopwatch, like every other row
+
+**DECIDED 2026-08-25** (owner desk test: *"for effects that have a color value property, I
+can't animate them for some reason, the stopwatch is just gone for them"*).
+
+**The engine could always do it.** A colour parameter has been four independent properties
+since the model was written, and `EffectParams::colour_at` samples them one at a time with
+"channels animate independently" in the comment above it. `KeyframeControlsFrb` has always
+taken a *list* of animations under one stopwatch, because Position's x and y are two
+properties and one row. The two halves never met: the row's helper that decides what a
+stopwatch would cover answered with a single scalar and returned null for every kind but
+Float, Int and Slider — so a colour row asked for no keyframe controls and drew none. Not a
+refusal, not a limitation, just a column that was never filled in.
+
+**So a colour keys as four channels under one stopwatch**, which is the multi-axis case
+already specified: they key together at the same times, the navigator reads the first, and
+turning animation on plants one key per channel holding the value that was already there.
+Angle rows were in the same position for the same reason and are fixed in the same line.
+
+**And an animated colour stays editable**, which is the half that would have made the
+stopwatch a dead control. The swatch used to draw the word *animated* and stand down once
+any channel was keyed — but an animated *number* never did: its field shows the value under
+the playhead and an edit lands in the key there, or plants one. The swatch does that now,
+through the same `scalarWithValueAt` call, so "move the playhead and change the colour" is
+a second key rather than the loss of the first. That is the whole of the owner's flow, and
+it is what the regression test walks.
+
+**The rule this states once**: a parameter kind whose value is a number, or a fixed set of
+numbers, animates. Which kinds those are is decided in one helper on the row, and a kind
+that has a working control but no entry there is a bug of exactly this shape — silent,
+because nothing is drawn to be wrong.
