@@ -16188,3 +16188,16 @@ cost by two to the depth. And **footage beneath is held** — a re-render re-dec
 sub-frame motion of footage playing back beneath the adjustment. Closing that is the FX-1
 shape one level up (the decode planner snapping each covered layer's neighbour frames) and
 is logged in docs/TODO.md rather than folded in here.
+
+## K-566 — A project saved under a bare name gets `.lum`
+
+**Status: DECIDED (2026-08-25).** The save dialogue hands back exactly the path the user
+typed, and on Windows a name typed without an extension comes back bare — so "my montage"
+was written as a file the shell could not associate, could not double-click, and the open
+dialogue's own `.lum` filter would not list. The fix belongs in the engine, not the picker:
+`ProjectReference::save` appends `.lum` when the target has **no** extension at all, and
+answers the path it actually wrote, which is what Dart displays and remembers. An extension
+the user did type is a choice and stands untouched — `montage.backup` saves as
+`montage.backup` — because guessing that a typed extension is a mistake is worse than
+leaving one odd filename alone. The rule lives on the one save path both Save and Save as
+go through, so neither can drift from the other.

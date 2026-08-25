@@ -915,6 +915,34 @@ fn save_reports_its_path_and_refuses_to_guess_one() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// A name typed with no extension is saved as `.lum`; an extension the user
+/// typed — `.lum` or anything else — is left exactly as typed.
+#[test]
+fn a_bare_name_is_saved_as_a_lum_file() {
+    let dir = std::env::temp_dir().join("lumit-save-extension");
+    std::fs::create_dir_all(&dir).expect("temp dir");
+
+    let (project, ..) = project_with_folder();
+    let written = project
+        .save(dir.join("bare").to_string_lossy().into_owned())
+        .expect("saved");
+    assert!(written.ends_with("bare.lum"), "got {written}");
+    assert!(dir.join("bare.lum").is_file());
+
+    let written = project
+        .save(dir.join("kept.lum").to_string_lossy().into_owned())
+        .expect("saved");
+    assert!(written.ends_with("kept.lum"), "got {written}");
+
+    let written = project
+        .save(dir.join("chosen.backup").to_string_lossy().into_owned())
+        .expect("saved");
+    assert!(written.ends_with("chosen.backup"), "got {written}");
+    assert!(dir.join("chosen.backup").is_file());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// The status bar's saved/unsaved readout. Fails without `saved_revision`
 /// being stamped on save.
 #[test]

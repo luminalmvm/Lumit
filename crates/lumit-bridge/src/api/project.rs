@@ -413,7 +413,15 @@ impl ProjectReference {
             // Never saved and no path given: the caller has to pick one.
             state.path.clone().ok_or(BridgeError::NoProjectPath)?
         } else {
-            std::path::PathBuf::from(path)
+            let mut target = std::path::PathBuf::from(path);
+            // A name typed without any extension is a name, not a choice: the
+            // save dialogue on Windows hands back exactly what was typed, and a
+            // bare `my comp` would sit on disk unopenable by its own file type.
+            // A *different* extension the user typed is a choice, and stands.
+            if target.extension().is_none() {
+                target.set_extension("lum");
+            }
+            target
         };
 
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
