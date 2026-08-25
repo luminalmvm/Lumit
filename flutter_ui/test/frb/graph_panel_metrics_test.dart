@@ -303,5 +303,38 @@ void main() {
       expect(find.text('Adds a driver node'), findsOneWidget,
           reason: 'no wire in hand, so the footer says what a pick will do');
     });
+
+    /// 9. **A wire always leaves its socket** (owner, desk test). The cubic's
+    /// handles used to be ±dx/2, so a consumer dragged left of — or on top of
+    /// — its producer collapsed them to nothing and the wire vanished behind
+    /// the two cards. [graphWireStub] is the floor that keeps the classic
+    /// node-editor S-curve: the curve reaches past the output socket to the
+    /// right and past the input socket to the left, whichever way round the
+    /// boxes sit.
+    test('a backwards wire still leaves both sockets', () {
+      // The consumer is 60 px LEFT of the producer, and level with it.
+      const from = Offset(400, 200);
+      const to = Offset(340, 200);
+      final bounds = graphWirePath(from, to).getBounds();
+
+      expect(bounds.right, greaterThan(from.dx + graphWireStub / 2),
+          reason: 'the curve reaches out to the right of the output socket');
+      expect(bounds.left, lessThan(to.dx - graphWireStub / 2),
+          reason: 'and out to the left of the input socket');
+      expect(bounds.width, greaterThan((from.dx - to.dx).abs()),
+          reason: 'so it is wider than the gap, not hidden inside it');
+
+      // Stacked one on the other is the same story, and the degenerate case
+      // that used to draw a zero-length path.
+      final stacked = graphWirePath(from, from).getBounds();
+      expect(stacked.width, greaterThanOrEqualTo(graphWireStub),
+          reason: 'even a wire onto itself is a visible loop out and back');
+
+      // And the ordinary left-to-right wire is unchanged where the gap is
+      // already wider than the stub.
+      final wide = graphWirePath(const Offset(0, 0), const Offset(400, 0));
+      expect(wide.getBounds().width, 400,
+          reason: 'a long wire still runs socket to socket with no overshoot');
+    });
   });
 }
