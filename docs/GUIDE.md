@@ -10597,3 +10597,139 @@ three, and moving the folder of clips takes the proxies with it. It runs in the 
 reports progress exactly as an export does, because from where you are sitting it is the same
 kind of wait. Sound is not copied — the audio always comes from the original, so there is
 nothing to gain by re-encoding it and something to lose.
+## 26. Camera tracking, in plain terms
+
+Somebody shot a street with a hand-held camera. You want to put a sign on the wall so that it
+sits there while the camera walks past — sticking to the bricks, growing as you approach,
+sliding out of frame at the right moment. Doing that by hand means animating the sign's
+position, scale and rotation on almost every frame, and it will still slip, because your eye
+is guessing at a three-dimensional move from a flat picture.
+
+**Camera tracking works out the move instead of guessing it.** Lumit watches the footage,
+notices that the picture is a fixed street seen from a camera that moved, and recovers the
+camera: where it was on every frame, which way it pointed, and how wide the lens was. Once it
+has that, you do not animate the sign at all. You put a camera in the composition, tell it to
+follow the solve, and place the sign once in the space the footage was shot in. The camera
+moves and the sign stays put on the wall, because that is what actually happened.
+
+### Following the specks
+
+The first half of the job is dull and mechanical, and everything else stands on it. Lumit
+picks a few hundred small, distinctive patches of the picture and follows each of them through
+the shot.
+
+Three ideas carry that. **Pick patches worth following**: a square of sky matches every other
+square of sky, while a corner of a window matches only itself, so the picker scores every
+pixel by how distinctive its surroundings are and keeps the best few in each square of a grid
+laid over the frame — which spreads the specks over the whole picture instead of piling them
+onto the one bright object. **Follow each speck by matching its little square of pixels in the
+next frame**, letting that square stretch and turn rather than merely slide: a zoom makes
+every patch grow, and a follower that can only slide loses every speck the moment the lens
+moves. How much everything grew between two frames is also, later, exactly how a zoom is
+spotted. **Check the answer, and stop rather than lie**: every step is run backwards as well
+as forwards, and if following a speck back does not return it to where it started, the match
+was wrong and that track *ends*. It is never nudged somewhere plausible. A wrong point is far
+worse than a missing one for the arithmetic that reads these next.
+
+That last rule is why a track can be **partial**. If the lens racks, the frame whites out or
+the camera whips, the specks stop crossing from one frame to the next, and there is then
+nothing after that point that can be tied to anything before it. The run ends there, the part
+that worked is solved and kept, and the readout says how far it got. Half a shot honestly
+measured is worth having; a whole one with an invented tail is not.
+
+### From specks to a camera
+
+The second half turns those trails into a camera. Two frames of the same still scene, seen
+from two places, are related in a way that can be read off the trails alone; told how wide the
+lens is, that relationship becomes "the camera turned by this much and travelled off in that
+direction". Every pair of frames has an opinion, the opinions disagree, and Lumit finds the
+one set of orientations and positions that fits all of them best — so a few loud wrong
+opinions are outvoted rather than split the difference with. Then each speck becomes a point
+in space, being where the lines of sight to it from several frames come closest to meeting;
+and finally the whole arrangement — every camera and every point at once — is nudged until the
+specks land where the pictures actually show them.
+
+Some shots genuinely have no answer, and Lumit says so rather than inventing one. A camera
+that only turns on the spot, like a tripod pan, never sees anything from two places, so there
+is no depth in the shot to recover — that is a refusal, not a failure. So is a shot with
+nothing still enough in it to follow.
+
+### The camera points at the tracked layer
+
+When an analysis finishes you have a solved path, and the way you use it is a **link**, not a
+copy. A Camera layer can be set to follow a tracked layer: at every moment the camera asks
+"which frame of that clip is on screen right now?", looks that frame up in the solve, and
+stands where the real camera stood.
+
+Asking that question rather than storing the answer is the whole trick, because the question
+follows your edit. Trim the clip, slide it, ramp it to half speed, cut it into a sequence and
+reorder the cuts, put it inside a precomp and retime that — the same moment of footage still
+answers with the same solved camera, and the linked camera moves with the picture without you
+touching it. Several thousand baked keyframes could not do that: they would be pinned to
+composition time, and the first trim would slide the camera off the footage it belongs to. It
+also keeps the file small and the timeline readable, and it keeps one truth in one place —
+re-analyse the shot at a different setting and every camera linked to it is right again at
+once.
+
+Past the end of what was solved, the last measured position simply **holds** rather than
+drifting or snapping to nothing. The camera wears a small badge saying which of these it is
+doing — following the solve, holding past the end, or unable to find a solve at all — so you
+are never left guessing why it is not moving.
+
+### Convert to keyframes
+
+A link is a live reading, and sometimes you want the numbers themselves: to hand the
+composition to somebody without the footage, to nudge one frame by hand, or to take the move
+somewhere the link cannot follow. **Convert to keyframes** writes the derived motion out as
+ordinary keyframes — one per frame of the camera's own span — and severs the link in the same
+step, so the camera becomes a perfectly normal animated camera you can edit like any other. It
+is one undo, and undoing it puts the link back exactly as it was.
+
+### Where the answer is kept
+
+Tracking a real shot takes minutes: every frame has to be read off the disk and decoded before
+a single speck can be followed. Paying that twice for the same footage would be daft, so the
+finished solve is written into a small file in Lumit's cache folder, in a subfolder called
+`track`.
+
+What names that file is the *content of the clip* and the settings it was analysed under — not
+the project. That is deliberate, and it means three good things. Analyse a shot once and every
+project that cuts the same rushes finds the answer already there. Copy a project to another
+drive with its footage and the solves go with the footage rather than with the project file.
+And opening a project reads its solves straight back, so a linked camera is right on the first
+frame you look at, with nobody pressing anything.
+
+Deleting that folder is always safe. It costs a re-analysis and nothing else — nothing in your
+project lives there, and Lumit will simply work it out again the next time you ask.
+
+### Masks, and the thing that moves by itself
+
+The arithmetic above assumes the scene stood still and the camera moved. An actor walking
+through the shot breaks that assumption: specks stuck to the actor tell the solve a confident
+lie about where the camera was. The answer is a mask — draw a shape round the mover, and the
+tracker refuses to put specks inside it and ends any track that wanders in.
+
+A mover moves, so that shape has to move too, and you keyframe it exactly as you would
+keyframe any other mask. Lumit reads the shape **at each frame's own moment** while it tracks,
+so the exclusion sits where you drew it on that frame rather than where it started. A mask
+that is not animated is read once, and costs the run nothing.
+
+The mask is part of what names the cached answer, animation and all. Re-key it and you have
+asked a different question, so you get a fresh analysis rather than the old one handed back.
+
+### Tracking a precomp
+
+Usually you track a clip. Sometimes the thing you want tracked is a **composition** — a set of
+stills assembled into a scene, say, with a camera move already animated on top. Putting the
+Camera track on a Precomp layer tracks the composition inside it: instead of decoding a file,
+Lumit renders that composition frame by frame and follows the specks through the pictures it
+makes. It renders those frames smaller than the composition really is, because an analysis
+wants structure rather than sharpness, and the answer is scaled back up before anything reads
+it, so nothing downstream can tell.
+
+One difference is worth knowing. A file's contents cannot change behind your back, which is
+why a clip's solve can safely be kept on disk; a composition changes every time you touch
+anything in it. So a precomp's solve is **not** written to the `track` folder — it lives for
+as long as the project is open, and tracking one again after reopening means analysing it
+again. That is the honest trade: better a few minutes than a saved answer that quietly
+describes a composition you have since edited.
