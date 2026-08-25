@@ -726,7 +726,7 @@ String _formatRate(int num, int den) {
 /// gets the exact rate back. Anything else is read on the thousandths grid and
 /// reduced, so 12.5 is 25/2 rather than 12500/1000.
 (int, int)? parseRate(String text) {
-  final value = double.tryParse(text.trim());
+  final value = parseNumberField(text.trim())?.toDouble();
   if (value == null || value <= 0 || value > 1000000) return null;
   for (final (label, num, den) in _ratePresets) {
     if ((value - double.parse(label)).abs() < 0.0005) return (num, den);
