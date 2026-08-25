@@ -19,6 +19,98 @@ typedef PanelBuilder = Widget Function(BuildContext context, Panel panel);
 /// drag rather than a click.
 const double _dragSlop = 6.0;
 
+/// **The width below which a panel stops giving way and starts sliding**
+/// (K-451's degradation ladder, step 5, and the "every panel declares a
+/// minimum" the same entry asks for).
+///
+/// In plain terms: a panel shrinks by shedding — a word here, a column there —
+/// but every panel reaches a width where there is nothing left to shed and the
+/// only honest answers are to slide the content sideways or to paint outside
+/// the box. This number is where that line is, and [PanelFloor] is what does
+/// the sliding. Dragging a seam past it is refused outright, so the ordinary
+/// way of making a panel narrow never reaches the scrolling case at all; the
+/// scroll is for the window that is simply too small to hold the workspace.
+///
+/// The numbers are what each panel measurably needs once its own ladder has
+/// run out — the width its narrowest useful arrangement lays out at without
+/// overflowing — and `panel_width_sweep_test` is what keeps them honest.
+double panelMinWidth(Panel panel) => switch (panel) {
+      // A row is a twirl, a type mark, a name, its state badges and the
+      // metadata columns still standing at this width; that is what 300 buys.
+      Panel.project => 300,
+      // The picture itself will draw at any size, and both strips slide on
+      // their own below the width they want, so the Viewer's floor is only
+      // about there being a picture worth looking at.
+      Panel.viewer => 200,
+      // The outline's own columns, before a single lane of time.
+      Panel.timeline => 220,
+      // A parameter row: its name, its wells and its keyframe marks.
+      Panel.effectControls => 300,
+      Panel.graph => 320,
+      Panel.effectsAndPresets => 180,
+      Panel.node => 200,
+      Panel.nodePreview => 160,
+      Panel.scopes => 160,
+      Panel.hierarchy => 180,
+      Panel.easing => 220,
+      Panel.debug => 180,
+    };
+
+/// The smallest width a whole dock subtree can be drawn at: a pane is its
+/// panel's floor, a tab group is the widest of the panels stacked in it, and a
+/// split is the sum of its children across, or the widest of them down.
+double dockMinWidth(DockNode node) => switch (node) {
+      DockPane(:final panel) => panelMinWidth(panel),
+      DockTabs(:final children) => children.isEmpty
+          ? 0
+          : children
+              .map((c) => panelMinWidth(c.panel))
+              .reduce((a, b) => a > b ? a : b),
+      DockSplit(:final axis, :final children) => children.isEmpty
+          ? 0
+          : axis == DockAxis.horizontal
+              ? children.map(dockMinWidth).reduce((a, b) => a + b)
+              : children.map(dockMinWidth).reduce((a, b) => a > b ? a : b),
+    };
+
+/// Holds [child] to [minWidth] and slides it sideways when the pane is
+/// narrower than that (§12A.6's ladder, step 5).
+///
+/// In plain terms: rather than squeeze a panel into a box it cannot fit, give
+/// it the box it needs and let the user push it left and right. Every docked
+/// panel is wrapped in one of these, which is why a panel nobody has audited
+/// for narrow widths still cannot paint outside its pane.
+class PanelFloor extends StatelessWidget {
+  final double minWidth;
+  final Widget child;
+
+  const PanelFloor({super.key, required this.minWidth, required this.child});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (context, box) {
+          // Nothing to hold it to, or room to spare: the panel lays out
+          // exactly as it always did, and this wrapper costs one LayoutBuilder.
+          if (!box.hasBoundedWidth ||
+              !box.hasBoundedHeight ||
+              box.maxWidth >= minWidth) {
+            return child;
+          }
+          return SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: minWidth,
+              // The height has to be handed over as a number: a panel is a
+              // Column with an Expanded in it, and inside a scroll view the
+              // cross axis arrives loose.
+              height: box.maxHeight,
+              child: child,
+            ),
+          );
+        },
+      );
+}
+
 class DockWidget extends StatefulWidget {
   final DockSplit root;
   final PanelBuilder buildPanel;
@@ -151,6 +243,19 @@ class _DockWidgetState extends State<DockWidget> {
     final a = split.shares[i] + deltaShare;
     final b = split.shares[i + 1] - deltaShare;
     if (a < minShare || b < minShare) return;
+    // **The seam stops at the panels' own minimums** (K-451: "every panel
+    // declares a minimum; the dock will not shrink it past that"). Across a
+    // horizontal split that minimum is a width, so the drag is refused rather
+    // than clamped — a seam that slid on while the panel underneath stopped
+    // moving was how a panel ended up narrower than anything it could draw.
+    if (split.axis == DockAxis.horizontal) {
+      final aPx = a / total * totalExtent;
+      final bPx = b / total * totalExtent;
+      if (aPx < dockMinWidth(split.children[i]) ||
+          bPx < dockMinWidth(split.children[i + 1])) {
+        return;
+      }
+    }
     split.shares[i] = a;
     split.shares[i + 1] = b;
   }
@@ -841,7 +946,12 @@ class _PaneChrome extends StatelessWidget {
             clipBehavior: round ? Clip.antiAlias : Clip.none,
             child: Stack(
               children: [
-                child,
+                // **Nothing paints outside its pane** (K-451, step 5): below
+                // the panel's declared minimum the content keeps that width
+                // and slides. Wrapped here rather than in each panel so a
+                // panel that has not thought about narrow widths still cannot
+                // overflow — and so there is one place to read the rule.
+                PanelFloor(minWidth: panelMinWidth(panel), child: child),
                 Positioned.fill(child: _DropPreview(panel: panel, drag: drag)),
               ],
             ),

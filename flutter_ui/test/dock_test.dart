@@ -1,8 +1,12 @@
 // The dock model: default workspace fidelity to dock.rs::default_layout,
 // serialisation round-trip, and the start-up Project-tab rule.
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/theme/theme.dart';
+import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
   test('default layout matches default_layout() structure and shares', () {
@@ -280,6 +284,79 @@ void main() {
       final root = defaultLayout();
       setPanelVisible(root, Panel.node, true);
       expect(panelVisible(root, Panel.node), isTrue);
+    });
+  });
+
+  group('Panels declare a minimum, and the seam respects it', () {
+    /// **A subtree's minimum is its panels'** (K-451). Across a row the floors
+    /// add up, because every pane in it needs its own width at the same time;
+    /// down a column they do not, because those panes share one.
+    test('a subtree is as wide as the panels in it need', () {
+      expect(
+          dockMinWidth(DockPane(Panel.project)), panelMinWidth(Panel.project));
+
+      // A tab group is one pane's worth of room, so it needs the widest of the
+      // panels stacked behind each other in it.
+      final tabs = DockTabs([DockPane(Panel.scopes), DockPane(Panel.project)]);
+      expect(dockMinWidth(tabs), panelMinWidth(Panel.project));
+
+      final across = DockSplit(DockAxis.horizontal,
+          [DockPane(Panel.project), DockPane(Panel.viewer)], [0.5, 0.5]);
+      expect(dockMinWidth(across),
+          panelMinWidth(Panel.project) + panelMinWidth(Panel.viewer));
+
+      final down = DockSplit(DockAxis.vertical,
+          [DockPane(Panel.project), DockPane(Panel.viewer)], [0.5, 0.5]);
+      expect(
+          dockMinWidth(down),
+          panelMinWidth(Panel.project) > panelMinWidth(Panel.viewer)
+              ? panelMinWidth(Panel.project)
+              : panelMinWidth(Panel.viewer),
+          reason: 'stacked panes share a width rather than adding theirs up');
+    });
+
+    /// **The seam stops at the floor** — the owner's own gesture. Dragging the
+    /// boundary between Project and Viewer all the way to the left used to
+    /// take the Project panel down to a sliver, which is where it crashed.
+    testWidgets('dragging a seam past a panel\'s floor is refused',
+        (tester) async {
+      final root = DockSplit(DockAxis.horizontal,
+          [DockPane(Panel.project), DockPane(Panel.viewer)], [0.5, 0.5]);
+      tester.view.physicalSize = const Size(1000, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(Directionality(
+        textDirection: TextDirection.ltr,
+        child: ThemeScope(
+          theme: LumitTheme.dark(),
+          animationLevel: AnimationLevel.none,
+          showTooltips: false,
+          child: Overlay(initialEntries: [
+            OverlayEntry(
+              builder: (context) => DockWidget(
+                root: root,
+                buildPanel: (context, panel) => SizedBox.expand(
+                    key: ValueKey<String>('pane-${panel.name}')),
+                onLayoutChanged: () {},
+                activePanel: ValueNotifier<Panel?>(null),
+              ),
+            ),
+          ]),
+        ),
+      ));
+      await tester.pump();
+
+      final pane = find.byKey(const ValueKey<String>('pane-project'));
+      final seam = tester.getRect(pane).centerRight.translate(4, 0);
+      // Far further than the panel could ever give — one drag, so the refusal
+      // is not something a slower gesture could creep past.
+      await tester.dragFrom(seam, const Offset(-900, 0));
+      await tester.pump();
+
+      expect(tester.getRect(pane).width,
+          greaterThanOrEqualTo(panelMinWidth(Panel.project)),
+          reason: 'the seam will not shrink a panel past its own minimum');
     });
   });
 }

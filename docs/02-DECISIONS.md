@@ -14402,6 +14402,58 @@ selection. The rest of the audit — the Timeline's switches, label colour and r
 Effect controls card's `_withHandle`, and the Project panel's context menu — is recorded in
 docs/TODO.md with the file and line of each, because those files were being edited by other
 work in the same round and a collision there would have cost more than the delay.
+
+## K-524 — Every panel declares a floor; the Viewer's transport is the last thing on its bar
+
+**DECIDED 2026-08-25** (owner, desk test). Three rulings from one session of narrowing
+panels, all of them K-451's degradation ladder finally being implemented rather than
+described. The owner's report was blunt: shrinking the Project panel or the Viewer crashes
+the editor, and it is "a common issue with panel adjustments" — a claim about all the
+panels, not two of them. It was: five of the seven big panels painted outside their pane
+below some width, because K-451's step 5 had never been built.
+
+**The floor is declared once and enforced twice.** Every panel states a minimum width, in
+one table in `shell/dock_widget.dart`. Dragging a seam that would take a pane below its
+subtree's minimum is **refused** — the boundary does not move — which is the "the dock will
+not shrink it past that" half of K-451's step 5. And every pane wraps its panel in one
+widget that gives the panel its minimum width and **slides it sideways** when the pane is
+narrower still, which is the other half, and which a seam cannot cause: it is for a window
+too small to hold the arrangement at all. Wrapping every pane rather than fixing each panel
+is the point — a panel nobody has audited at 40px cannot overflow, and there is one place
+to read the rule. `panel_width_sweep_test` pumps all seven big panels across 40..400 and
+fails on the first complaint, which is the gate that keeps the numbers honest.
+
+**The Viewer's bottom bar sheds in a fixed order, and the transport is last.** The owner's
+ruling, refining §12A.6's ladder for that strip: the two gaps close and the bar stops
+spreading; the reading sheds its own statements (K-466's ladder); the reading goes
+entirely; the ways of looking fold into a single overflow mark — step 4 exactly, and it
+opens the *same widgets* in a floating strip rather than a menu written out a second time;
+the clock goes; and the five transport buttons stand alone, sliding only if the bar is
+narrower than they are. Someone who has squeezed the Viewer into a sidebar is still
+watching something, and a bar that kept the exposure field and lost Play kept the wrong
+half. The Viewer's **header** strip slides the same way the bottom bar does: it was a plain
+row with a spacer, and a Viewer narrower than its three pickers — which is most sidebars —
+overflowed on every frame.
+
+**In the Project panel, Path reads from its left edge and every boundary is ruled.** Path
+is the column the panel's spare width lands in, so a right-anchored reading inside it
+travelled with the panel as it was widened — which is the "Path's column still shifts" the
+owner kept reading, even though no boundary was moving. Anchored left, the heading and the
+values stand still. Separately, the header drew its seam only where the seam could drag,
+which left the `items|size` and `fps|path` boundaries unmarked beside ruled neighbours: the
+rule now stands at every boundary and only the resize cursor and the drag say which of them
+take hold.
+
+**And a value well opens its editor where the number already was.** Not a width question,
+but the same desk test: clicking a well jumped the number, which the owner called very
+jarring. [DragValueField] rested at the width of its own reading with the number against
+the right edge and opened a fixed 72-wide box with the text against the *left* edge — both
+the box and the digits moved. [TimeReadout] kept its box but rested against the left of a
+slot cut for the longest reading it can carry, so the frame count's `F48` losing its letter
+(K-460) slid the digits one glyph left. Both are now right-anchored in both states, at the
+resting face's own width: the glyphs that survive the change stay on the pixels they were
+on.
+
 ## K-525 — A channel graph draws in its channel's colour
 
 **DECIDED 2026-08-25** (owner, desk test). Extends K-413 (Levels' display) and K-412
@@ -14423,3 +14475,28 @@ tab strip the only way to tell which channel was up.
 **The escape is a setting, off by default**: Settings → Appearance → *Effect graphs use
 theme colour*. It is the same shape as K-202's scopes toggle and carries the same reasoning
 — a reading is a reading, and a taste that retints one is opt-in.
+
+## K-526 — Effects & presets has favourites, and they are a stored preference
+
+**DECIDED 2026-08-25** (owner, desk test).
+
+A star sits on every row of the Effects & presets panel — every built-in effect and every
+saved preset alike — and the starred ones gather under a **Favourites** heading above
+everything else, twirling like any other heading. The star toggles from either place, and
+the row stays where it lives as well: an effect under Favourites has not moved out of its
+category, it is listed twice, because a favourite is a shortcut and not a filing decision.
+
+Favourites are **workspace state, not view state**. Which headings are folded dies with the
+session, deliberately (that is how the panel is being looked at); which effects somebody
+reaches for is a preference and outlives the panel, the workspace and the application. So
+they are written to the settings file, keyed by the effect's own match name and by
+`preset:` and the preset's name — opaque keys, so `workspace.dart` never learns about effect
+schemas and an effect and a preset of the same name cannot share a star.
+
+The heading is absent while nothing is starred, rather than sitting empty at the top of the
+panel: a permanently empty heading is a standing instruction to use a feature, which is not
+what a heading is for.
+
+Landed alongside: the panel's search box had no placeholder at all, so an empty field beside
+the panel's star said nothing about what typing in it would do. It now reads *Search
+effects & presets*, and it searches both.

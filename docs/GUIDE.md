@@ -3393,6 +3393,24 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   where it was. A workspace saved before this change tidies itself the first time it loads.
   Under the bonnet this uses a "tiling" layout engine that, unlike the docking library we
   tried first, is happy to leave any lone pane without a tab bar.
+
+  **Every panel has a floor, and the seam stops there.** A panel narrows by giving things
+  up in a fixed order — a word shortens, a column hides, a run of buttons folds into one
+  `⋯` mark — but eventually there is nothing left to give up, and squeezing further would
+  mean drawing over the panel's own edge. So each panel states the width below which it
+  will not be squeezed, and dragging a seam past that simply stops: the boundary refuses to
+  move rather than sliding on while the panel underneath breaks. The floors live in one
+  list in `shell/dock_widget.dart`, next to the wrapper that enforces them.
+
+  There is a second half to that, for the case a seam cannot cause: a window genuinely too
+  small to hold the arrangement at all. Then the panel keeps its own width and **slides
+  sideways** inside its pane, like a table wider than the page it is printed on. That is
+  better than the alternative, which is what used to happen — Flutter draws a striped
+  warning band over the part that did not fit and complains once per frame, and on a real
+  build the panel simply looked broken. Because the sliding is done by one wrapper around
+  every pane rather than by each panel separately, a panel nobody has ever tested at 40
+  pixels wide still cannot paint outside its box; `panel_width_sweep_test` pumps all seven
+  of the big panels across every width from 40 to 400 and fails on the first complaint.
 - **The Scopes panel** (`shell/scopes.rs`, K-096) — the colourist's instruments. Instead of
   showing the picture, a scope plots its numbers: the **waveform** shows how bright each
   column of the image is (bright at the top, dark at the bottom), the **histogram** counts
@@ -9007,6 +9025,17 @@ half-resolution preview, which is why it may look softer than it will export. Th
 be a badge that appeared and vanished during playback and shoved the rest of the bar about
 as it came and went; a line that is always there and always true is easier to trust and
 easier to ignore.
+
+**As the Viewer narrows, things leave the bottom strip in a fixed order**, and the
+transport is the last of them. Drag the Viewer's edge in and first the line at the far
+right shortens — it drops the arrowed preview size, then the composition's name — then it
+goes altogether, because everything it says is said again in the header, the tabs and the
+clock. Narrower still and the ways of looking fold into a single `⋯` mark that opens all of
+them in a little floating strip: the very same controls, gathered rather than removed.
+Narrower again and the clock goes. What is left, on a Viewer squeezed into a sidebar, is
+the five transport buttons — because someone who has made the Viewer small is still
+watching something, and a strip that had kept the exposure field and lost Play would have
+kept the wrong half.
 
 **And one mark on the picture itself**: the name of the selected layer, in a small
 gold-outlined chip at the top-left corner. Selection is agreed in four places — the

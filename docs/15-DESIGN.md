@@ -1102,6 +1102,16 @@ carries. The rules worth writing down:
   8px between them and the same 8px inset at the right edge as the rows below. The header
   and the rows are laid out from one description of the columns, because the alignment
   came apart twice in the mockup rounds when they were not.
+- **Path reads from its left edge; every other column from its right** (K-524). Path is
+  the column the panel's spare width lands in, and a right-anchored reading inside a box
+  that grows travels with it — which is the "Path's column still shifts" the owner read
+  while widening the panel, even though no boundary was moving. Anchored left, the heading
+  and the values stand still and only the room after them grows.
+- **Every column boundary is ruled, draggable or not** (K-524): the Timeline header's own
+  1×10 `hairline_strong` seam, centred in the 8px gap. Whether the seam *takes hold* is a
+  separate matter, said by the resize cursor and the drag — beside a fixed-width column
+  (Items, fps, Path) it is a plain rule. Drawing it only where it dragged left the
+  `items|size` and `fps|path` boundaries unmarked beside ruled neighbours.
 - **Values are mono at 10, muted**; the Path column is quieter again (`text_disabled`),
   because it is the one column that is context rather than fact about the item.
 - **Per-type icon tints on media rows**, drawn from the layer-label palette (K-188), not
@@ -1463,6 +1473,21 @@ before later ones, and nothing ever paints outside its box:
 
 The user-facing column toggles (switches, modes, parent) are the user's, not the
 degradation ladder's — the ladder never flips them.
+
+**The minimum is declared once, in one place, and enforced twice** (K-524). The floors are
+the table in `shell/dock_widget.dart`; the seam refuses a drag that would cross one, and
+every pane wraps its panel in the widget that slides it when the *window* is too small for
+the arrangement. Both halves are needed: the first is the behaviour a person meets, the
+second is why a panel nobody has audited still cannot paint outside its box.
+`panel_width_sweep_test` walks every panel from 40 to 400 and fails on any complaint.
+
+**The Viewer's bottom bar sheds in this order, and the transport is last** (K-524, the
+owner's ruling): the two gaps close and the bar stops spreading (560); the reading sheds
+its own statements, arrowed preview size then composition name; the reading goes entirely
+(460); the ways of looking fold into one overflow mark (400), which is step 4 above
+applied to that run; the clock goes (280); and the five transport buttons stand alone,
+sliding only if the bar is narrower than they are. A Viewer squeezed into a sidebar is
+still a Viewer somebody is watching.
 
 ### 12A.7 The node graph surfaces (K-471, K-472, K-473)
 
