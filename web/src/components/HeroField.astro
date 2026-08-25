@@ -162,20 +162,24 @@
 
       // Grain, drawn rather than tiled. A repeating noise texture is a pattern
       // however fine it is, and the eye finds it; one random value per pixel
-      // per frame has nothing to find. It goes on the field's own colour, and
-      // only there - never on the black the field fades into.
-      vec2 jitter = vec2(mod(u_t * 91.7, 137.0), mod(u_t * 137.3, 91.0));
-      col += (hash(gl_FragCoord.xy + jitter) - 0.5) * 0.055;
+      // has nothing to find. It goes on the field's own colour, and only there
+      // - never on the black the field fades into.
+      //
+      // The value is fixed per pixel, not rolled again each frame. Re-rolling
+      // is what film grain does, but at this size and over this much of the
+      // screen it is a wall of shimmer to sit under, and the field beneath it
+      // is already moving.
+      col += (hash(gl_FragCoord.xy) - 0.5) * 0.055;
 
       // The bottom of the field dissolves into the page's black rather than
       // ramping into it. A ramp between two dark colours is where 8 bits a
       // channel runs out and the gradient steps into visible arcs; a dissolve
       // has no ramp to quantise - each pixel is either field or page, and the
-      // proportion is what changes down the band. The dice are rolled again
-      // every frame, so it reads as the field thinning out.
+      // proportion is what changes down the band. Fixed per pixel, like the
+      // grain, so the band holds still while the colour moves through it.
       vec3 page = vec3(0.043, 0.047, 0.055);  // #0b0c0e, the page itself
       float fade = smoothstep(0.0, 0.42, uv.y);
-      float d = hash(gl_FragCoord.xy * 1.37 + jitter.yx);
+      float d = hash(gl_FragCoord.xy * 1.37 + 41.7);
       col = mix(page, col, step(1.0 - fade, d));
 
       gl_FragColor = vec4(col, 1.0);
