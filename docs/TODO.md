@@ -86,6 +86,15 @@ settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
 - OFX hosting (7.8, docs/impl/ofx-host.md) as its own programme, with 7.23's OFX/LFX
   presets-panel groups landing with it.
 
+**FP3.5 - lock hardening (after FP3 lands; found by the 9d96a24f investigation).**
+Three more locks held across slow work in the bridge, same class as the freeze that was
+fixed: FootageReference::thumbnail holds the WRITE lock across an FFmpeg decode; save and
+autosave hold locks across serialize + fsync. Each wants the 9d96a24f shape - take what
+the slow work needs under the lock, release, then do the work. Runs after FP3 because the
+autosave scheduler agent is building in that exact code. Also from the same hunt, landed
+already: the idle measure's guard (9d96a24f) and the graph grid's non-finite spin
+(595fa150).
+
 **FP4 - the points family and shapes (K-561, K-564).**
 - Particulate to 3D with camera interaction (K-561), then the family, each its own
   package on the wire: Grid, Scatter, Clone to points, Connect points, Trail, Emit
