@@ -802,12 +802,16 @@ fn beam_converts_its_points_its_per_cents_and_reports_the_perspective() {
     ));
     assert_eq!(ran.inst.effect.match_name, "beam");
     assert!(close(ran.f("start_x"), 120.0) && close(ran.f("end_y"), 800.0));
+    // AE's Length is a fraction of the run and Lumit's is px@comp (K-558), so
+    // both keys are multiplied by the run these two points describe:
+    // hypot(1580, 500) = 1657.2266.
+    let run = 1580.0f64.hypot(500.0);
     let length = ran.keys("length");
-    assert!(close(length[0].value, 20.0) && close(length[1].value, 80.0));
+    assert!(close(length[0].value, 0.2 * run) && close(length[1].value, 0.8 * run));
     // The handle's speed is in value-units a second, so it scales with them.
     assert!(matches!(
         length[0].interp_out,
-        SideInterp::Bezier { speed, .. } if close(speed, 10.0)
+        SideInterp::Bezier { speed, .. } if close(speed, 0.1 * run)
     ));
     assert!(close(ran.f("time"), 35.0));
     assert!(close(ran.f("start_thickness"), 18.0));

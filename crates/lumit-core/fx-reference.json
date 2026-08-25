@@ -7167,7 +7167,7 @@
       "slug": "beam",
       "match_name": "beam",
       "label": "Beam",
-      "version": 1,
+      "version": 2,
       "category": "Generate",
       "category_slug": "generate",
       "params": [
@@ -7211,12 +7211,11 @@
           "id": "length",
           "label": "Length",
           "kind": "float",
-          "unit": "percent",
-          "default": 100.0,
+          "unit": "px",
+          "default": 1560.0,
           "slider_min": 0.0,
-          "slider_max": 100.0,
-          "hard_min": 0.0,
-          "hard_max": 100.0
+          "slider_max": 4000.0,
+          "hard_min": 0.0
         },
         {
           "id": "time",

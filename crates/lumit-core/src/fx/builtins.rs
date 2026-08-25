@@ -306,6 +306,32 @@ pub fn migrate_percent_to_px(effects: &mut [EffectInstance], w: f64, h: f64) {
             }
             e.effect.version = 2;
         }
+        // Beam v1 → v2: Length was a per cent of the *run* between Start and
+        // End (K-558). The run is the only basis that was ever right for it, so
+        // the conversion reads the instance's own four points — at time zero,
+        // because a keyframed pair means the old percentage described a
+        // distance that moved, and no single pixel number can be all of them.
+        // A still beam, which is nearly every beam, converts exactly.
+        if e.effect.match_name == "beam" && e.effect.version < 2 {
+            let at_zero = |id: &str| match e.param(id) {
+                Some(EffectValue::Float(p)) => p.value_at(0.0),
+                _ => 0.0,
+            };
+            let (dx, dy) = (
+                at_zero("end_x") - at_zero("start_x"),
+                at_zero("end_y") - at_zero("start_y"),
+            );
+            let run = dx.hypot(dy);
+            for p in &mut e.params {
+                if p.id != "length" {
+                    continue;
+                }
+                if let EffectValue::Float(prop) = &mut p.value {
+                    scale_property(prop, run / 100.0);
+                }
+            }
+            e.effect.version = 2;
+        }
     }
 }
 

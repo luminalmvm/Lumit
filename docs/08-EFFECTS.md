@@ -4637,7 +4637,8 @@ Maps AE's Beam ([11-AE-IMPORT.md](11-AE-IMPORT.md)). A **Generate** effect, and 
 member of the draw family: one segment, two colours and a taper.
 
 **Parameters:** Start x and Start y (px@comp, default 240, 840), End x and End y (px@comp,
-default 1680, 240), Length (per cent, 0..100, default 100, hard 0..100), Time (per cent,
+default 1680, 240), Length (**px@comp**, K-558, 0..4000, default 1560 — the length of the run
+those defaults describe, hard min 0), Time (per cent,
 0..100, default 100, hard 0..100), Start thickness (px@comp, 0..200, default 14, hard min 0),
 End thickness (px@comp, 0..200, default 3, hard min 0), Softness (per cent, 0..100, default
 30, hard 0..100), Inside colour (default white), Outside colour (default a saturated blue),
@@ -4648,7 +4649,7 @@ answers: how far am I from the segment, and how far along it is the nearest poin
 
 ```
 u1     = clamp(Time ÷ 100, 0, 1)                    # the head, host-side
-u0     = clamp(Time ÷ 100 − Length ÷ 100, 0, 1)     # the tail
+u0     = clamp(Time ÷ 100 − Length ÷ |d|, 0, 1)     # the tail, Length in px@comp
 active = u1 > u0                                    # a zero-length beam draws nothing
 d      = End − Start                                # raster px
 s      = clamp((p − Start)·d ÷ max(|d|², ε), u0, u1)
@@ -4668,9 +4669,12 @@ Four notes:
 
 - **Time and Length are two ends of one interval, not a speed.** §3.53's ruling again: an
   effect that animated itself off the clock would make preview and export disagree. Time says
-  where the beam's *head* has got to, Length how far its tail trails behind, and both are
-  ordinary per cents the timeline keyframes. AE's are the same two controls, so the import is
-  a copy.
+  where the beam's *head* has got to and Length how far its tail trails behind it, both
+  ordinary controls the timeline keyframes. Time is a per cent of the run; Length is px@comp
+  since K-558, because it is a distance and a distance is pixels — the kernel divides it by
+  the run once, host-side, and both numbers carry the same preview factor, so a Half preview
+  draws the same beam the export does. AE's Length is a fraction of the run, so the import
+  multiplies it by the run those points describe.
 - **The taper runs along the drawn beam**, not along Start→End, which is what makes a short
   beam read as a comet at every Time rather than only at the end of its travel. It is the one
   place this effect diverges from AE's picture, and it is invisible at the default Length 100

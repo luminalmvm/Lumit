@@ -128,6 +128,9 @@ fn render_the_five_draw_effects() {
         write("0-source", &a.rgba);
 
         // ---- Beam: the whole shaft, then a short one part way along its run.
+        // Length is px@comp since K-558, so "the whole shaft" is the run's own
+        // length rather than a hundred per cent of it.
+        let run = (fw * 0.76).hypot(fh * 0.64);
         let bm = |length: f32, time: f32, t0: f32, t1: f32, soft: f32| {
             let mut b = Beam::read(Params::EMPTY);
             b.start_x = fw * 0.12;
@@ -146,7 +149,7 @@ fn render_the_five_draw_effects() {
             &mut full,
             w,
             h,
-            &bm(100.0, 100.0, fh * 0.045, fh * 0.008, 45.0).packed(),
+            &bm(run, 100.0, fh * 0.045, fh * 0.008, 45.0).packed(),
         );
         write("1-beam-full", &to_srgb(&over_grey(&full)));
         let mut shot = lin.clone();
@@ -154,7 +157,7 @@ fn render_the_five_draw_effects() {
             &mut shot,
             w,
             h,
-            &bm(25.0, 70.0, fh * 0.014, fh * 0.055, 70.0).packed(),
+            &bm(run * 0.25, 70.0, fh * 0.014, fh * 0.055, 70.0).packed(),
         );
         write("2-beam-shot", &to_srgb(&over_grey(&shot)));
 

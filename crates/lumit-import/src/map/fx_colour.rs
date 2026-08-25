@@ -1049,11 +1049,22 @@ fn fractal_noise(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Optio
 /// name; the two thicknesses cross from raster pixels to px@comp, Softness is
 /// measured against the rim rather than the whole width, and AE's 3D
 /// Perspective foreshortens from a camera Lumit keeps on the composition.
+///
+/// AE's Length is a fraction of the run between the two points and Lumit's is
+/// px@comp (K-558), so it is multiplied by the run the points just converted
+/// describe — read at time zero, since a keyframed pair means AE's fraction
+/// stood for a distance that moved and no single pixel number is all of them.
 fn beam(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, "beam", "Beam")?;
     fx.point(conv, "ADBE Laser-0001", "start_x", "start_y", 1.0);
     fx.point(conv, "ADBE Laser-0002", "end_x", "end_y", 1.0);
-    fx.float(conv, "ADBE Laser-0003", "length", 100.0, 0.0);
+    let at_zero = |fx: &Fx<'_>, id: &str| match fx.inst.param(id) {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        _ => 0.0,
+    };
+    let run = (at_zero(&fx, "end_x") - at_zero(&fx, "start_x"))
+        .hypot(at_zero(&fx, "end_y") - at_zero(&fx, "start_y"));
+    fx.float(conv, "ADBE Laser-0003", "length", run, 0.0);
     fx.float(conv, "ADBE Laser-0004", "time", 100.0, 0.0);
     fx.float(conv, "ADBE Laser-0005", "start_thickness", 1.0, 0.0);
     fx.float(conv, "ADBE Laser-0006", "end_thickness", 1.0, 0.0);

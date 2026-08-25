@@ -27,7 +27,7 @@ Drawing a shaft of light across the frame, created between two points and has a 
 | **Start y** | Slider | 0 to 2160; any value by typing | 840 | Pixels at composition size |
 | **End x** | Slider | 0 to 3840; any value by typing | 1680 | Pixels at composition size |
 | **End y** | Slider | 0 to 2160; any value by typing | 240 | Pixels at composition size |
-| **Length** | Slider | 0 to 100 | 100 | Per cent |
+| **Length** | Slider | 0 to 4000; higher | 1560 | Pixels at composition size |
 | **Time** | Slider | 0 to 100 | 100 | Per cent |
 | **Start thickness** | Slider | 0 to 200; higher | 14 | Pixels at composition size |
 | **End thickness** | Slider | 0 to 200; higher | 3 | Pixels at composition size |
@@ -51,7 +51,9 @@ In the Effect Controls panel:
 
 - **Start x** and **Start y**: the start position of the beam.
 - **End x** and **End y**: the end position of the beam.
-- **Length**: how much of the length the beam occupies, as a percentage.
+- **Length**: how long the drawn shaft is, in pixels, measured back from wherever Time has
+  put its head. Set it longer than the run between the two points and the tail simply sits at
+  the start point.
 - **Time**: where the beam's **head** has reached along the length.
 - **Start thickness**: how wide the beam is at its base.
 - **End thickness**: how wide it is at the head.

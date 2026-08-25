@@ -7030,6 +7030,71 @@ fn radial_blurs_percent_centre_converts_to_pixels_on_load() {
     assert_eq!(effects[0].params, before.params);
 }
 
+// Beam's Length was a per cent of the *run* between Start and End, so its
+// conversion (K-558) reads the instance's own points rather than the frame:
+// 25 % of a 1560-pixel run is 390 pixels, and the beam that saved is the beam
+// that loads. The points are read at time zero — a keyframed pair means the
+// old percentage described a distance that moved, and no single pixel number
+// can be all of them.
+#[test]
+fn beams_percent_length_converts_against_its_own_run() {
+    let mut inst = instantiate("beam").unwrap();
+    inst.effect.version = 1;
+    for p in &mut inst.params {
+        if p.id == "length" {
+            p.value = EffectValue::Float(Property::fixed(25.0));
+        }
+    }
+    // The declared points: 240,840 to 1680,240 — a run of exactly 1560.
+    let mut effects = vec![inst];
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    let read = |effects: &[crate::model::EffectInstance], id: &str| match effects[0].param(id) {
+        Some(EffectValue::Float(p)) => p.value_at(0.0),
+        _ => panic!("{id} must be a float"),
+    };
+    assert!((read(&effects, "length") - 390.0).abs() < 1e-9);
+    assert_eq!(effects[0].effect.version, 2);
+    migrate_percent_to_px(&mut effects, 1920.0, 1080.0);
+    assert!(
+        (read(&effects, "length") - 390.0).abs() < 1e-9,
+        "idempotent"
+    );
+}
+
+// And the arithmetic Length now feeds: it is a distance in raster pixels, so
+// the share of the run it covers is the one division. The declared default
+// draws the whole run, which is the picture Beam has always shipped, and a
+// Length past the run simply puts the tail at the start point.
+#[test]
+fn beams_length_is_a_distance_back_from_the_head() {
+    let b = effects::beam::Beam::read(Params::EMPTY);
+    // Default: 1560 px along a 1560-px run, head at Time 100 — the whole beam.
+    let p = b.packed();
+    assert!((p.u1 - 1.0).abs() < 1e-6);
+    assert!(p.u0.abs() < 1e-6, "the tail is at the start point");
+
+    // Half the run, head at the far end: the tail sits halfway along.
+    let mut half = b;
+    half.length = 780.0;
+    assert!((half.packed().u0 - 0.5).abs() < 1e-6);
+
+    // Longer than the run clamps rather than running off the start.
+    let mut over = b;
+    over.length = 5000.0;
+    assert!(over.packed().u0.abs() < 1e-6);
+
+    // Length 0 draws nothing, and a degenerate run (Start == End) divides by
+    // the floored `len2` rather than by zero — the share clamps at 1, exactly
+    // as a hundred per cent did.
+    let mut none = b;
+    none.length = 0.0;
+    assert!(!none.packed().active);
+    let mut point = b;
+    point.end_x = point.start_x;
+    point.end_y = point.start_y;
+    assert!(point.packed().u0.abs() < 1e-6);
+}
+
 // A fresh Radial blur spins about the middle of the comp it landed on, not
 // about the schema's nominal 1080p centre (K-558, the `instantiate_for_raster`
 // rule every other centre already follows).
@@ -10121,6 +10186,7 @@ fn every_parameter_declares_a_unit() {
             ("beam", "start_y"),
             ("beam", "end_x"),
             ("beam", "end_y"),
+            ("beam", "length"),
             ("beam", "start_thickness"),
             ("beam", "end_thickness"),
             ("lightning", "origin_x"),

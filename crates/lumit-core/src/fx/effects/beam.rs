@@ -2,8 +2,9 @@
 //! — AE's Beam.
 //!
 //! **In plain terms.** Two points, and a shaft of light drawn between them. Time
-//! says how far the beam's head has travelled, Length how far its tail trails
-//! behind, and the two thicknesses taper it from a fat root to a thin tip. The
+//! says how far the beam's head has travelled, Length how many pixels its tail
+//! trails behind it, and the two thicknesses taper it from a fat root to a thin
+//! tip. The
 //! inside colour is the core, the outside colour the rim, and Softness is how
 //! much of the beam's width the one becomes the other in.
 //!
@@ -19,7 +20,9 @@ use lumit_fx_macros::Effect;
 #[effect(
     match_name = "beam",
     label = "Beam",
-    version = 1,
+    // 2: Length crossed from a per cent of the run to px@comp (K-558).
+    // `migrate_percent_to_px` converts a v1 instance on load.
+    version = 2,
     category = Generate,
     cost = Cheap,
     roi = Exact,
@@ -45,15 +48,17 @@ pub struct Beam {
     #[slider(label = "End y", min = 0.0, max = 2160.0, default = 240.0, unit = Px)]
     pub end_y: f32,
 
-    /// How much of the run between the two points the beam occupies, per cent.
-    /// AE's control and AE's default.
+    /// How long the drawn shaft is, px@comp (K-558: a distance is pixels).
+    /// Measured back along the run from wherever Time has put the head; longer
+    /// than the run itself simply means the tail is at the start point. The
+    /// default is the length of the run the default Start and End describe on a
+    /// nominal 1080p frame, which is AE's whole-run default picture.
     #[slider(
         min = 0.0,
-        max = 100.0,
-        default = 100.0,
+        max = 4000.0,
+        default = 1560.0,
         hard_min = 0.0,
-        hard_max = 100.0,
-        unit = Percent
+        unit = Px
     )]
     pub length: f32,
 
@@ -145,7 +150,12 @@ impl Beam {
         let axis = [self.end_x - self.start_x, self.end_y - self.start_y];
         let len2 = (axis[0] * axis[0] + axis[1] * axis[1]).max(1e-6);
         let u1 = (self.time / 100.0).clamp(0.0, 1.0);
-        let u0 = (u1 - (self.length / 100.0).clamp(0.0, 1.0)).clamp(0.0, 1.0);
+        // Length is px@comp (K-558) and the run is raster pixels, so the share
+        // of the run it covers is the one division — and both numbers arrive
+        // scaled by the same preview factor, which is why a Half preview draws
+        // the same beam the export does. `len2` is floored, so the divisor
+        // cannot be zero.
+        let u0 = (u1 - (self.length.max(0.0) / len2.sqrt()).clamp(0.0, 1.0)).clamp(0.0, 1.0);
         cpu::BeamParams {
             start: [self.start_x, self.start_y],
             axis,
