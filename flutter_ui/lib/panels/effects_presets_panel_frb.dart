@@ -9,6 +9,13 @@
 // the panel never holds a copy of what effects exist. Adding a built-in to the
 // engine puts it here with no Dart change at all.
 //
+// **Favourites** (owner, desk test). A star on every row, and the ones starred
+// gather under a Favourites heading above everything else — the effects you
+// reach for are four or five of the forty, and hunting them down their
+// categories every time is the panel's oldest annoyance. A star is a
+// *preference*, so it lives in the workspace and survives a restart, not in
+// this widget beside the folds.
+//
 // **Every heading twirls.** A category — and the saved-preset group above them
 // — folds its rows away behind the set's triangle, the same one the Timeline
 // and the Project panel fold with: right is shut, down is open. Which headings
@@ -74,6 +81,14 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   /// The saved-preset group's name in [_shut]. No engine category is called
   /// this, so one set holds the presets and the categories without collision.
   static const String _presetsKey = '*saved-presets';
+
+  /// The Favourites group's name in [_shut], on the same footing.
+  static const String _favouritesKey = '*favourites';
+
+  /// A saved preset's key in the workspace's favourites. An effect is starred
+  /// under its own match name, which no preset can collide with because a
+  /// preset's carries this prefix.
+  static String _presetFavouriteKey(String name) => 'preset:$name';
 
   /// Whether a heading's rows are showing. A live search opens every group
   /// that still has a match in it, without disturbing what was folded — so
@@ -150,6 +165,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                   key: const ValueKey('fx-search'),
                   controller: _search,
                   focusNode: _searchFocus,
+                  hint: l10n.searchEffectsAndPresets,
                   width: 160,
                 ),
               ),
@@ -163,6 +179,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           // double-click applies the whole stack. A search that matches a
           // preset but no effect still shows the preset.
           child: Builder(builder: (context) {
+            final favouriteRows = _favouriteRows(t, ui, grouped, needle);
             final presetRows = _presetRows(t, ui, needle);
             if (grouped.isEmpty && presetRows.isEmpty) {
               return Center(child: Text(l10n.noEffectsMatch, style: t.small));
@@ -170,6 +187,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
             return ListView(
               padding: const EdgeInsets.symmetric(vertical: 4),
               children: [
+                ...favouriteRows,
                 ...presetRows,
                 for (final entry in grouped.entries) ...[
                   _heading(
@@ -184,6 +202,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
                         key: ValueKey<String>('fx-item-${effect.name}'),
                         effect: effect,
                         onApply: () => _apply(ui, effect.name),
+                        favourite: ui.workspace.isFavouriteEffect(effect.name),
+                        onToggleFavourite: () => _star(ui, effect.name),
                       ),
                 ],
               ],
@@ -242,6 +262,65 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
         ),
       );
 
+  /// Star something, or take the star off. The workspace saves itself; this
+  /// only has to redraw, because the Favourites group above is built from the
+  /// same set the star reads.
+  void _star(LumitUiState ui, String key) {
+    ui.workspace.toggleFavouriteEffect(key);
+    setState(() {});
+  }
+
+  /// The Favourites heading and its rows — the starred effects in the engine's
+  /// own schema order, then the starred presets.
+  ///
+  /// It draws nothing at all until something is starred: a permanently empty
+  /// heading at the top of the panel would be a standing instruction to use a
+  /// feature, which is not what a heading is for. [grouped] is the already
+  /// search-filtered effect list, so a search narrows Favourites exactly as it
+  /// narrows everything under it.
+  List<Widget> _favouriteRows(
+    LumitTheme t,
+    LumitUiState ui,
+    Map<String, List<BridgeEffectInfo>> grouped,
+    String needle,
+  ) {
+    final effects = [
+      for (final entry in grouped.entries)
+        for (final effect in entry.value)
+          if (ui.workspace.isFavouriteEffect(effect.name)) effect,
+    ];
+    final presets = [
+      for (final preset in _presets)
+        if (ui.workspace.isFavouriteEffect(_presetFavouriteKey(preset.name)) &&
+            (needle.isEmpty || preset.name.toLowerCase().contains(needle)))
+          preset,
+    ];
+    if (effects.isEmpty && presets.isEmpty) return const [];
+    final open = _isOpen(_favouritesKey, needle);
+    return [
+      _heading(t, group: _favouritesKey, label: l10n.favourites, open: open),
+      if (open) ...[
+        for (final effect in effects)
+          _EffectRow(
+            key: ValueKey<String>('fav-item-${effect.name}'),
+            effect: effect,
+            onApply: () => _apply(ui, effect.name),
+            favourite: true,
+            onToggleFavourite: () => _star(ui, effect.name),
+          ),
+        for (final preset in presets)
+          _PresetRow(
+            key: ValueKey<String>('fav-preset-${preset.name}'),
+            preset: preset,
+            onApply: () => _applyPreset(ui, preset),
+            favourite: true,
+            onToggleFavourite: () =>
+                _star(ui, _presetFavouriteKey(preset.name)),
+          ),
+      ],
+    ];
+  }
+
   List<Widget> _presetRows(LumitTheme t, LumitUiState ui, String needle) {
     final shown = _presets
         .where((p) => needle.isEmpty || p.name.toLowerCase().contains(needle))
@@ -252,16 +331,14 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
       _heading(t, group: _presetsKey, label: l10n.savedPresets, open: open),
       if (open)
         for (final preset in shown)
-          GestureDetector(
+          _PresetRow(
             key: ValueKey<String>('preset-item-${preset.name}'),
-            behavior: HitTestBehavior.opaque,
-            onDoubleTap: () => _applyPreset(ui, preset),
-            child: Container(
-              height: 20,
-              padding: const EdgeInsets.symmetric(horizontal: 22),
-              alignment: Alignment.centerLeft,
-              child: Text(preset.name, style: t.body),
-            ),
+            preset: preset,
+            onApply: () => _applyPreset(ui, preset),
+            favourite: ui.workspace
+                .isFavouriteEffect(_presetFavouriteKey(preset.name)),
+            onToggleFavourite: () =>
+                _star(ui, _presetFavouriteKey(preset.name)),
           ),
     ];
   }
@@ -286,24 +363,125 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   }
 }
 
+/// How wide the column the star sits in is — the same indent the rows already
+/// had before their labels, so the star costs no width and the labels do not
+/// move.
+const double _starColumn = 22;
+
+/// One row's star, and the tap that turns it on or off.
+///
+/// Filled with the accent when it is on, drawn in the hairline when it is not:
+/// an unstarred row still shows where its star would be, because a control
+/// that only appears on hover is a control most people never find.
+Widget _star(BuildContext context,
+    {required bool on, required VoidCallback onToggle, required String name}) {
+  final t = ThemeScope.of(context).theme;
+  return LumitTooltip(
+    message: on ? l10n.tipUnfavourite : l10n.tipFavourite,
+    child: GestureDetector(
+      key: ValueKey<String>(name),
+      behavior: HitTestBehavior.opaque,
+      onTap: onToggle,
+      child: SizedBox(
+        width: _starColumn,
+        height: 20,
+        child: Center(
+          child: lumitIcon(
+            LumitIcon.star,
+            size: iconSize,
+            color: on ? t.accent : t.hairlineStrong,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// One row in the list: the star, then the name, laid out so that starring
+/// something and dragging it onto a layer are the same row's two gestures.
+Widget _libraryRow(
+  BuildContext context, {
+  required String label,
+  required bool favourite,
+  required VoidCallback onToggleFavourite,
+  required VoidCallback onApply,
+  required String starKey,
+}) {
+  final t = ThemeScope.of(context).theme;
+  return SizedBox(
+    height: 20,
+    child: Row(
+      children: [
+        _star(context,
+            on: favourite, onToggle: onToggleFavourite, name: starKey),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onDoubleTap: onApply,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child:
+                    Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// A saved preset's row: the same shape an effect's has, so the two halves of
+/// the panel read as one list.
+class _PresetRow extends StatelessWidget {
+  final BridgePresetInfo preset;
+  final VoidCallback onApply;
+  final bool favourite;
+  final VoidCallback onToggleFavourite;
+  const _PresetRow({
+    super.key,
+    required this.preset,
+    required this.onApply,
+    required this.favourite,
+    required this.onToggleFavourite,
+  });
+
+  @override
+  Widget build(BuildContext context) => _libraryRow(
+        context,
+        label: preset.name,
+        favourite: favourite,
+        onToggleFavourite: onToggleFavourite,
+        onApply: onApply,
+        starKey: 'preset-star-${preset.name}',
+      );
+}
+
 class _EffectRow extends StatelessWidget {
   final BridgeEffectInfo effect;
   final VoidCallback onApply;
-  const _EffectRow({super.key, required this.effect, required this.onApply});
+  final bool favourite;
+  final VoidCallback onToggleFavourite;
+  const _EffectRow({
+    super.key,
+    required this.effect,
+    required this.onApply,
+    required this.favourite,
+    required this.onToggleFavourite,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final row = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onDoubleTap: onApply,
-      child: Container(
-        height: 20,
-        // Indented under the heading's own label, past the twirl's column.
-        padding: const EdgeInsets.symmetric(horizontal: 22),
-        alignment: Alignment.centerLeft,
-        child: Text(effect.label, style: t.body),
-      ),
+    final row = _libraryRow(
+      context,
+      label: effect.label,
+      favourite: favourite,
+      onToggleFavourite: onToggleFavourite,
+      onApply: onApply,
+      starKey: 'fx-star-${effect.name}',
     );
 
     return Draggable<EffectDragData>(

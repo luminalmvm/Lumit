@@ -9080,5 +9080,21 @@
   "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
   "@settingsEffectGraphsUseThemeColour": {
     "description": "Settings window, Appearance: the name of the switch that draws an effect's own graph - the Levels histogram, a Curves channel - entirely in the theme's colours. With it off the red, green and blue channel views draw in red, green and blue."
+  },
+  "searchEffectsAndPresets": "Search effects & presets",
+  "@searchEffectsAndPresets": {
+    "description": "Placeholder in the Effects & presets panel's search box. It searches the built-in effects and the user's saved presets alike."
+  },
+  "favourites": "Favourites",
+  "@favourites": {
+    "description": "The heading above the starred effects and presets, at the top of the Effects & presets panel."
+  },
+  "tipFavourite": "Add to favourites",
+  "@tipFavourite": {
+    "description": "Hover text on the star beside an effect or preset that is not starred yet. Pressing it puts the row under the Favourites heading."
+  },
+  "tipUnfavourite": "Remove from favourites",
+  "@tipUnfavourite": {
+    "description": "Hover text on the star beside an effect or preset that is already starred. Pressing it takes the row out of the Favourites heading."
   }
 }

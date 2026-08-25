@@ -280,6 +280,25 @@ class Workspace extends ChangeNotifier {
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
 
+  /// The effects and presets the owner has starred in Effects & presets
+  /// (owner, desk test), by the panel's own key — an effect's match name, or
+  /// `preset:` and the preset's name.
+  ///
+  /// Here rather than in the panel because a favourite is a preference, not a
+  /// view state: it has to survive the panel being closed, the workspace being
+  /// switched and the application being restarted, which is exactly what this
+  /// file is for. Opaque keys, so the panel decides what may be starred
+  /// without this file learning about effect schemas.
+  final Set<String> favouriteEffects = <String>{};
+
+  bool isFavouriteEffect(String key) => favouriteEffects.contains(key);
+
+  /// Star it, or take the star off again.
+  void toggleFavouriteEffect(String key) {
+    if (!favouriteEffects.remove(key)) favouriteEffects.add(key);
+    settingsChanged();
+  }
+
   /// Whether an effect's own graph — Levels' histogram, a Curves channel —
   /// draws entirely in the theme's colours (owner, desk test). Off by default,
   /// and for the same reason the scopes toggle is: a red curve should be red.
@@ -822,6 +841,7 @@ class Workspace extends ChangeNotifier {
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
+        'favourite_effects': favouriteEffects.toList()..sort(),
         'themed_effect_graphs': themedEffectGraphs,
         'themed_viewer_surround': themedViewerSurround,
         'smooth_zoomed_viewer': smoothZoomedViewer,
@@ -885,6 +905,13 @@ class Workspace extends ChangeNotifier {
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
+    favouriteEffects
+      ..clear()
+      ..addAll([
+        if (j['favourite_effects'] case final List<dynamic> starred)
+          for (final key in starred)
+            if (key is String) key,
+      ]);
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     themedViewerSurround = j['themed_viewer_surround'] == true;
     smoothZoomedViewer = j['smooth_zoomed_viewer'] == true;

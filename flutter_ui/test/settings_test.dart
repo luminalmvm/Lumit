@@ -425,4 +425,28 @@ void main() {
             .themedEffectGraphs,
         isTrue);
   });
+
+  /// **Favourites are a preference, not a view state** (owner, desk test):
+  /// they outlive the panel, the workspace and the session, so they travel in
+  /// this file rather than in the widget that draws the stars.
+  test('starred effects and presets round-trip', () {
+    final fresh = Workspace();
+    expect(fresh.favouriteEffects, isEmpty);
+    expect(fresh.isFavouriteEffect('blur'), isFalse);
+
+    final ws = Workspace();
+    ws.favouriteEffects.addAll(['blur', 'preset:Soft glow']);
+    final back = Workspace()..applyJson(Map<String, dynamic>.from(ws.toJson()));
+    expect(back.isFavouriteEffect('blur'), isTrue);
+    expect(back.isFavouriteEffect('preset:Soft glow'), isTrue,
+        reason: 'a preset is starred under its own prefixed key, so it cannot '
+            'collide with an effect of the same name');
+    expect(back.isFavouriteEffect('vignette'), isFalse);
+
+    // A file written before favourites existed simply has none.
+    expect(
+        (Workspace()..applyJson(<String, dynamic>{'ui_scale': 1.0}))
+            .favouriteEffects,
+        isEmpty);
+  });
 }

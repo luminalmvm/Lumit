@@ -15,6 +15,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effects_presets_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
+import 'package:lumit_flutter/state/workspace.dart';
 import 'package:lumit_flutter/panels/hierarchy_panel_frb.dart';
 import 'package:lumit_flutter/panels/scopes_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -195,6 +196,88 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('preset-item-Soft glow')), findsNothing);
       expect(find.text('Saved presets'), findsOneWidget);
+    });
+
+    /// **The search box says what it searches** (owner, desk test): it had no
+    /// placeholder at all, so an empty field beside a star said nothing about
+    /// what typing in it would do.
+    testWidgets('the search box says what it searches', (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+      expect(find.text('Search effects & presets'), findsOneWidget);
+    });
+
+    /// **Favourites** (owner, desk test). The star was drawn and did nothing.
+    /// Starring a row gathers it under a Favourites heading above everything
+    /// else, the star toggles from either place, and — because a favourite is
+    /// a preference rather than a view state — it is written to the workspace
+    /// rather than kept in the widget.
+    testWidgets('starring an effect gathers it under Favourites',
+        (tester) async {
+      final store = '${Directory.systemTemp.createTempSync('lumit-fav').path}'
+          '${Platform.pathSeparator}workspace.json';
+      Workspace.storeOverride = store;
+      addTearDown(() => Workspace.storeOverride = null);
+
+      final p = withLayer();
+      await mount(tester, p);
+
+      expect(find.text('Favourites'), findsNothing,
+          reason: 'nothing starred, so no standing instruction to star '
+              'something');
+
+      await tester.tap(find.byKey(const ValueKey('fx-star-blur')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Favourites'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fav-item-blur')), findsOneWidget,
+          reason: 'the starred effect is under the new heading');
+      expect(find.byKey(const ValueKey('fx-item-blur')), findsOneWidget,
+          reason: 'and still in its own category, which is where it lives');
+      expect(p.uiState.workspace.isFavouriteEffect('blur'), isTrue,
+          reason: 'the star is a preference, so it went to the workspace');
+
+      // It twirls like every other heading.
+      await tester.tap(find.byKey(const ValueKey('fx-group-*favourites')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('fav-item-blur')), findsNothing);
+      expect(find.text('Favourites'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('fx-group-*favourites')));
+      await tester.pumpAndSettle();
+
+      // And the star comes off from either row.
+      await tester.tap(find.byKey(const ValueKey('fx-star-blur')).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Favourites'), findsNothing);
+      expect(p.uiState.workspace.isFavouriteEffect('blur'), isFalse);
+    });
+
+    /// A saved preset stars the same way, under its own key — an effect and a
+    /// preset that happened to share a name must not share a star.
+    testWidgets('a saved preset stars too, under a key of its own',
+        (tester) async {
+      final store = '${Directory.systemTemp.createTempSync('lumit-fav2').path}'
+          '${Platform.pathSeparator}workspace.json';
+      Workspace.storeOverride = store;
+      addTearDown(() => Workspace.storeOverride = null);
+
+      final p = withLayer();
+      final dir = Directory.systemTemp.createTempSync('lumit-fav-lib');
+      final path = '${dir.path}/blur.lumfx';
+      final donor = withLayer();
+      donor.layer.addEffect(name: 'blur');
+      File(path).writeAsStringSync(donor.layer.savePreset(name: 'blur'));
+      await mount(tester, p,
+          presetsLister: () => [BridgePresetInfo(name: 'blur', path: path)]);
+
+      await tester.tap(find.byKey(const ValueKey('preset-star-blur')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('fav-preset-blur')), findsOneWidget);
+      expect(p.uiState.workspace.isFavouriteEffect('preset:blur'), isTrue);
+      expect(p.uiState.workspace.isFavouriteEffect('blur'), isFalse,
+          reason: 'the effect of the same name is untouched');
+      expect(find.byKey(const ValueKey('fav-item-blur')), findsNothing);
     });
 
     /// Each heading remembers its own state: folding one leaves the rest as
