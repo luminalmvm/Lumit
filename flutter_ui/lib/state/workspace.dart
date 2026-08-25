@@ -280,6 +280,13 @@ class Workspace extends ChangeNotifier {
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
 
+  /// Whether an effect's own graph — Levels' histogram, a Curves channel —
+  /// draws entirely in the theme's colours (owner, desk test). Off by default,
+  /// and for the same reason the scopes toggle is: a red curve should be red.
+  /// With it off the *channel* views take the standard R, G and B, and only
+  /// Master takes the theme colour; with it on the whole graph is themed.
+  bool themedEffectGraphs = false;
+
   /// Whether the Viewer's surround takes the theme's own surface rather than
   /// the neutral grey (K-203). Off by default, and for the same reason the
   /// scopes toggle is: a grade cannot be judged against a tinted surround
@@ -601,6 +608,11 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setThemedEffectGraphs(bool on) {
+    themedEffectGraphs = on;
+    settingsChanged();
+  }
+
   void setThemedViewerSurround(bool on) {
     themedViewerSurround = on;
     settingsChanged();
@@ -810,6 +822,7 @@ class Workspace extends ChangeNotifier {
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
+        'themed_effect_graphs': themedEffectGraphs,
         'themed_viewer_surround': themedViewerSurround,
         'smooth_zoomed_viewer': smoothZoomedViewer,
         'precompose_move_attributes': precomposeMoveAttributes,
@@ -872,6 +885,7 @@ class Workspace extends ChangeNotifier {
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
+    themedEffectGraphs = j['themed_effect_graphs'] == true;
     themedViewerSurround = j['themed_viewer_surround'] == true;
     smoothZoomedViewer = j['smooth_zoomed_viewer'] == true;
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;

@@ -64,6 +64,7 @@ import 'camera_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
+import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
 import 'placeholder.dart';
 import 'flow_rows_frb.dart';
@@ -502,6 +503,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         isGroupOpen: _isGroupOpen,
                         onToggleGroup: _toggleGroup,
                         pressed: _actionPressed,
+                        themedGraphs: ui.workspace.themedEffectGraphs,
                         onAction: (effect, param) {
                           try {
                             fireEffectAction(
@@ -698,6 +700,12 @@ class _EffectSection extends StatelessWidget {
   final void Function(UuidValue effect, String param) onAction;
   final int pressed;
 
+  /// Settings → "Use theme colours in effect graphs" (owner, desk test). Off
+  /// by default, when a channel curve draws in its own R, G or B; on, the
+  /// whole graph takes the theme. Read once by the panel and passed down, so a
+  /// card asks nothing of its own in a rebuild.
+  final bool themedGraphs;
+
   const _EffectSection({
     super.key,
     required this.info,
@@ -725,6 +733,7 @@ class _EffectSection extends StatelessWidget {
     required this.onToggleGroup,
     required this.onAction,
     required this.pressed,
+    this.themedGraphs = false,
   });
 
   /// Run [op] on a freshly read handle for this card's effect.
@@ -1012,6 +1021,11 @@ class _EffectSection extends StatelessWidget {
           key: ValueKey<String>('fx-curves-$id'),
           keyPrefix: 'fx-curves-$id',
           labels: [for (final p in run) engineLabel(p.label)],
+          // A Red tab draws red (owner, desk test) — unless the setting hands
+          // the whole graph back to the theme.
+          channelColours: themedGraphs
+              ? null
+              : [for (final p in run) curveChannelColour(p.id)],
           curves: [
             for (final p in run)
               switch (stagedValue(id, p.id) ?? values[p.id]) {
@@ -1417,6 +1431,23 @@ class _TransformSection extends StatelessWidget {
         ).rows(context),
       );
 }
+
+/// The colour a curve channel is drawn in, or null for the ones that take the
+/// theme's own (owner, desk test).
+///
+/// Curves and Levels both declare their channels as `red`, `green` and `blue`
+/// beside a `master` — so the schema's own ids answer this, and an effect that
+/// grows a fourth channel one day is coloured without a table here being
+/// remembered. The three are [ScopeColours.standard]'s, which is where every
+/// other channel reading in the application takes its red from: a histogram
+/// hump and a Curves tab that disagreed about what red looks like would be two
+/// pictures of the same channel.
+Color? curveChannelColour(String paramId) => switch (paramId) {
+      'red' => ScopeColours.standard.red,
+      'green' => ScopeColours.standard.green,
+      'blue' => ScopeColours.standard.blue,
+      _ => null,
+    };
 
 /// The display an effect draws *above* its rows, or null for the effects that
 /// draw none — which is nearly all of them.

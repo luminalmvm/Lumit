@@ -14402,3 +14402,24 @@ selection. The rest of the audit — the Timeline's switches, label colour and r
 Effect controls card's `_withHandle`, and the Project panel's context menu — is recorded in
 docs/TODO.md with the file and line of each, because those files were being edited by other
 work in the same round and a collision there would have cost more than the delay.
+## K-525 — A channel graph draws in its channel's colour
+
+**DECIDED 2026-08-25** (owner, desk test). Extends K-413 (Levels' display) and K-412
+(Curves' folded editor); a sibling of K-202, not a reversal of it.
+
+An effect that plots a **channel** draws that channel in its own colour: Red in red, Green
+in green, Blue in blue, taken from `ScopeColours.standard` — the same three the Scopes panel
+reads a parade with, so a histogram hump and a Curves tab cannot disagree about what red
+looks like. Master, Alpha and anything else that is not a channel of colour keep the
+theme's own colour, because they are not a channel and colouring them would be decoration.
+The ground behind a plot and the luma trace over it stay themed throughout: those are
+chrome, not a measurement.
+
+What this replaces: Levels' histogram asked for `scopeColoursFor(themed: true)` outright, so
+its three humps came out in whatever the theme happened to offer — a layer-palette blue
+standing for red — and every Curves channel drew in the primary text colour, which made the
+tab strip the only way to tell which channel was up.
+
+**The escape is a setting, off by default**: Settings → Appearance → *Effect graphs use
+theme colour*. It is the same shape as K-202's scopes toggle and carries the same reasoning
+— a reading is a reading, and a taste that retints one is opt-in.

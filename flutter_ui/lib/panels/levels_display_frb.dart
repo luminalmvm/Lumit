@@ -38,6 +38,7 @@ import 'package:uuid/uuid.dart';
 
 import '../l10n/engine_labels.dart';
 import '../state/comp_time.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'keyframe_controls_frb.dart';
 import 'scopes_panel_frb.dart';
@@ -66,6 +67,24 @@ const double _plotWidth = 200;
 const double _plotHeight = 54;
 const double _handleStrip = 9;
 const double _outputBar = 8;
+
+/// What the histogram behind the handles is drawn in (owner, desk test).
+///
+/// The display used to ask for `scopeColoursFor(themed: true)` outright, so the
+/// three channel humps came out in whatever the theme happened to offer — a
+/// layer-palette blue for red, a solid green for green, the accent for blue.
+/// A channel graph has to be readable as *that channel*, which is what the
+/// standard R, G and B are for; the ground and the luma trace stay themed,
+/// because those are chrome and not a measurement.
+///
+/// [themed] — Settings → "Use theme colours in effect graphs", off by default
+/// — gives the whole graph back to the theme for anyone who wants it that way.
+List<Uint8List> levelsHistogramColours(LumitTheme t, {required bool themed}) {
+  final chrome = scopeColoursFor(t, themed: true);
+  if (themed) return chrome;
+  final standard = scopeColoursFor(t);
+  return [chrome[0], chrome[1], standard[2], standard[3], standard[4]];
+}
 
 /// Levels' histogram, handles and output bar.
 class LevelsDisplayFrb extends StatefulWidget {
@@ -140,7 +159,8 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
         frame: BigInt.from(widget.playheadFrame),
         scale: state.viewerScale,
         kind: _histogramKind,
-        colours: scopeColoursFor(t, themed: true),
+        colours: levelsHistogramColours(t,
+            themed: state.workspace.themedEffectGraphs),
       );
     } catch (_) {
       // A comp that went away under the row is not worth an error here: the

@@ -404,4 +404,25 @@ void main() {
     expect(back.theme.tokens, ShapeTokens.round);
     expect((back.theme.accent.r * 255).round(), 0x80);
   });
+
+  /// **Effect graphs use theme colour** (owner, desk test). Off by shipped
+  /// default — a Levels histogram's red hump and a Curves Red tab draw in red,
+  /// and only Master takes the theme's own colour — and it round-trips, so the
+  /// switch is not forgotten at the next launch.
+  test('the effect-graph colour preference defaults off and round-trips', () {
+    expect(Workspace().themedEffectGraphs, isFalse,
+        reason: 'a new setting never changes the editor on somebody who has '
+            'not asked for it');
+    expect(
+        (Workspace()..applyJson(<String, dynamic>{'ui_scale': 1.0}))
+            .themedEffectGraphs,
+        isFalse,
+        reason: 'and a file written before it existed reads as off');
+
+    final ws = Workspace()..themedEffectGraphs = true;
+    expect(
+        (Workspace()..applyJson(Map<String, dynamic>.from(ws.toJson())))
+            .themedEffectGraphs,
+        isTrue);
+  });
 }

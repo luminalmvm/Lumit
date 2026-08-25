@@ -146,12 +146,18 @@ class CurveEditor extends StatefulWidget {
   /// The plot's side, in logical pixels.
   final double size;
 
+  /// What the curve itself is drawn in. Null is the theme's primary text
+  /// colour, which is what a Master curve wants; a channel curve passes its
+  /// own colour so a Red tab draws red (owner, desk test).
+  final Color? line;
+
   const CurveEditor({
     super.key,
     required this.points,
     required this.onLive,
     required this.onCommit,
     this.size = 150,
+    this.line,
   });
 
   @override
@@ -321,7 +327,7 @@ class _CurveEditorState extends State<CurveEditor> {
             plot: t.surface0,
             grid: t.hairline,
             diagonal: t.hairlineStrong,
-            line: t.textPrimary,
+            line: widget.line ?? t.textPrimary,
             knob: t.accent,
           ),
         ),
@@ -427,6 +433,13 @@ class CurveChannelEditor extends StatefulWidget {
   /// Its tooltip.
   final String resetTip;
 
+  /// What each channel's curve draws in, parallel to [labels]. A null entry —
+  /// or no list at all — leaves that channel on the theme's own colour, which
+  /// is what Master and Alpha want; Red, Green and Blue pass theirs, because a
+  /// channel curve that is not its own colour is a graph you have to read the
+  /// tab strip to understand (owner, desk test).
+  final List<Color?>? channelColours;
+
   const CurveChannelEditor({
     super.key,
     required this.labels,
@@ -436,6 +449,7 @@ class CurveChannelEditor extends StatefulWidget {
     required this.keyPrefix,
     required this.resetLabel,
     required this.resetTip,
+    this.channelColours,
   });
 
   @override
@@ -444,6 +458,13 @@ class CurveChannelEditor extends StatefulWidget {
 
 class _CurveChannelEditorState extends State<CurveChannelEditor> {
   int _channel = 0;
+
+  /// The channel's own colour, or null for the ones drawn in the theme's.
+  Color? _colourOf(int channel) {
+    final colours = widget.channelColours;
+    if (colours == null || channel < 0 || channel >= colours.length) return null;
+    return colours[channel];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -469,7 +490,9 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
                     child: Text(
                       widget.labels[i],
                       style: t.small.copyWith(
-                        color: i == channel ? t.textPrimary : t.textMuted,
+                        color: i == channel
+                            ? (_colourOf(i) ?? t.textPrimary)
+                            : t.textMuted,
                       ),
                     ),
                   ),
@@ -494,6 +517,7 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
           CurveEditor(
             key: ValueKey<String>('${widget.keyPrefix}-plot-$channel'),
             points: widget.curves[channel],
+            line: _colourOf(channel),
             onLive: (p) => widget.onLive(channel, p),
             onCommit: (p) => widget.onCommit(channel, p),
           ),

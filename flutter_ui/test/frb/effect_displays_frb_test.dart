@@ -5,6 +5,8 @@
 // asserted below is a value the engine actually holds — which is the point:
 // what a curve editor must not do is look right and commit something else.
 
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,6 +15,8 @@ import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/levels_display_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/panels/scopes_panel_frb.dart' show scopeColoursFor;
+import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/curve_editor.dart';
 
 import 'frb_test_support.dart';
@@ -83,6 +87,81 @@ void main() {
         [0.0, 0.0],
         [1.0, 1.0]
       ]);
+    });
+
+    /// **A channel curve draws in its channel's colour** (owner, desk test).
+    /// Every plot used to be the theme's primary text colour, so a Curves Red
+    /// tab and a Master tab were the same picture and the tab strip was the
+    /// only way to tell which was up. Red, Green and Blue take the standard
+    /// R, G and B — the ones every other channel reading in the application
+    /// uses — and Master and Alpha stay themed, because they are not a
+    /// channel of colour.
+    testWidgets('a Curves channel draws in its own colour', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'curves');
+      await mount(tester, p);
+      final id = p.layer.getEffects().single.id();
+      final t = LumitTheme.dark();
+
+      Color lineNow() => tester.widget<CurveEditor>(find.byType(CurveEditor))
+          .line ??
+          t.textPrimary;
+
+      // Tab 0 is Master: no channel colour of its own.
+      expect(lineNow(), t.textPrimary);
+
+      for (final (tab, wanted) in [
+        (1, ScopeColours.standard.red),
+        (2, ScopeColours.standard.green),
+        (3, ScopeColours.standard.blue),
+      ]) {
+        await tester.tap(find.byKey(ValueKey<String>('fx-curves-$id-tab-$tab')));
+        await tester.pumpAndSettle();
+        expect(lineNow(), wanted, reason: 'channel $tab draws as itself');
+      }
+
+      // Alpha is not a colour channel, so it takes the theme's own.
+      await tester.tap(find.byKey(ValueKey<String>('fx-curves-$id-tab-4')));
+      await tester.pumpAndSettle();
+      expect(lineNow(), t.textPrimary);
+    });
+
+    /// And the setting hands the whole graph back to the theme for anyone who
+    /// wants it that way. Off by default, so this is the deviation.
+    testWidgets('the theme-colour setting takes the channel colours off',
+        (tester) async {
+      final p = withLayer();
+      p.uiState.workspace.themedEffectGraphs = true;
+      p.layer.addEffect(name: 'curves');
+      await mount(tester, p);
+      final id = p.layer.getEffects().single.id();
+
+      await tester.tap(find.byKey(ValueKey<String>('fx-curves-$id-tab-1')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<CurveEditor>(find.byType(CurveEditor)).line, isNull,
+          reason: 'no colour of its own; the plot takes the theme figure');
+    });
+
+    /// Levels' histogram is the same claim on the other display: the ground
+    /// and the luma trace are chrome and stay themed, the three channel humps
+    /// are a measurement and take the standard R, G and B.
+    test('the Levels histogram keeps its channel colours', () {
+      final t = LumitTheme.dark();
+      const standard = ScopeColours.standard;
+      Uint8List rgb(Color c) => Uint8List.fromList(
+          [(c.r * 255).round(), (c.g * 255).round(), (c.b * 255).round()]);
+
+      final plain = levelsHistogramColours(t, themed: false);
+      expect(plain[2], rgb(standard.red));
+      expect(plain[3], rgb(standard.green));
+      expect(plain[4], rgb(standard.blue));
+      expect(plain[0], rgb(t.surface0), reason: 'the ground is still chrome');
+      expect(plain[1], rgb(t.textPrimary),
+          reason: 'and so is the luma trace, which is what Master reads on');
+
+      // With the setting on, every one of the five is the theme's.
+      expect(levelsHistogramColours(t, themed: true),
+          scopeColoursFor(t, themed: true));
     });
 
     testWidgets('a tab shows that channel, and Reset restores only it',

@@ -9076,5 +9076,9 @@
   "popOutPanelBlocked": "A panel in its own window needs multi-window support Flutter has not released yet.",
   "@popOutPanelBlocked": {
     "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu. It says honestly why the row cannot be pressed: separate operating-system windows are not available in the toolkit Lumit is built on."
+  },
+  "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
+  "@settingsEffectGraphsUseThemeColour": {
+    "description": "Settings window, Appearance: the name of the switch that draws an effect's own graph - the Levels histogram, a Curves channel - entirely in the theme's colours. With it off the red, green and blue channel views draw in red, green and blue."
   }
 }

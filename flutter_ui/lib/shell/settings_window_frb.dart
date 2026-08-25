@@ -546,12 +546,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ui.setShape(ThemeShape.sharp);
         workspace.setAnimationLevel(AnimationLevel.all);
         workspace.setThemedScopes(false);
+        workspace.setThemedEffectGraphs(false);
         workspace.setThemedViewerSurround(false);
         settings.uiScale = shipped.uiScale;
         settings.showTooltips = shipped.showTooltips;
         settings.multiwaveWaveforms = shipped.multiwaveWaveforms;
         settings.waveformsFromBottom = shipped.waveformsFromBottom;
         settings.compact = shipped.compact;
+        settings.chromeLabels = shipped.chromeLabels;
         workspace.recompose();
         workspace.save();
       case SettingsPage.timeline:
@@ -808,6 +810,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _flag(t, 'settings-themed-scopes', l10n.settingsScopesUseThemeColour,
               value: ui.workspace.themedScopes,
               set: ui.workspace.setThemedScopes),
+          // The same question for an effect's own graph (owner, desk test).
+          // Off, so a Levels histogram's red channel is red and a Curves Red
+          // tab draws red; on, the whole graph takes the theme.
+          _flag(t, 'settings-themed-effect-graphs',
+              l10n.settingsEffectGraphsUseThemeColour,
+              value: ui.workspace.themedEffectGraphs,
+              set: ui.workspace.setThemedEffectGraphs),
           _row(
             t,
             l10n.settingsSurround,
