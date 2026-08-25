@@ -15,13 +15,7 @@ const links = [
 ---
 
 <header class="sticky top-0 z-20 transition-colors" data-header>
-  <div class="blur-stack" aria-hidden="true">
-    <div></div>
-    <div></div>
-    <div></div>
-    <div></div>
-  </div>
-  <div class="wrap relative flex h-32 items-center">
+  <div class="wrap flex h-16 items-center">
     <a href="/" class="mr-auto flex items-center no-underline">
       <img src="/lumit-wordmark.svg" alt="Lumit" height="18" class="block h-[18px] w-auto" />
     </a>
@@ -53,47 +47,11 @@ const links = [
   /* The bar rides on the hero's own wash, as the drawing draws it, and only
      grows a ground once the page has scrolled far enough for content to pass
      underneath it. Without script it simply stays clear, which is what it looks
-     like at the top of every page anyway.
-
-     The ground is not flat. It is four blurred bands, each one starting lower
-     than the last, so blur and ink both deepen towards the top edge and reach
-     nothing at the bottom of the bar. One blurred layer under a fading mask
-     would fade only the ink - the blur would stay even. Stacking is what makes
-     the blur itself graduate. */
-  .blur-stack {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-  [data-header].scrolled .blur-stack {
-    opacity: 1;
-  }
-  .blur-stack > div {
-    position: absolute;
-    inset: 0;
-    background: color-mix(in srgb, var(--color-ink) 30%, transparent);
-  }
-  .blur-stack > div:nth-child(1) {
-    backdrop-filter: blur(2px);
-    -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 45%);
-    mask-image: linear-gradient(to top, transparent 0%, #000 45%);
-  }
-  .blur-stack > div:nth-child(2) {
-    backdrop-filter: blur(3px);
-    -webkit-mask-image: linear-gradient(to top, transparent 25%, #000 65%);
-    mask-image: linear-gradient(to top, transparent 25%, #000 65%);
-  }
-  .blur-stack > div:nth-child(3) {
-    backdrop-filter: blur(5px);
-    -webkit-mask-image: linear-gradient(to top, transparent 50%, #000 85%);
-    mask-image: linear-gradient(to top, transparent 50%, #000 85%);
-  }
-  .blur-stack > div:nth-child(4) {
-    backdrop-filter: blur(8px);
-    -webkit-mask-image: linear-gradient(to top, transparent 72%, #000 100%);
-    mask-image: linear-gradient(to top, transparent 72%, #000 100%);
+     like at the top of every page anyway. */
+  [data-header].scrolled {
+    background: color-mix(in srgb, var(--color-ink) 80%, transparent);
+    border-bottom: 1px solid var(--color-line);
+    backdrop-filter: blur(20px);
   }
 </style>
 
