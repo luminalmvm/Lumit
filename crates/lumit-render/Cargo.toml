@@ -15,6 +15,7 @@ publish = false
 lumit-core = { path = "../lumit-core" }
 lumit-audio = { path = "../lumit-audio" }
 lumit-cache = { path = "../lumit-cache" }
+lumit-colour = { path = "../lumit-colour" }
 lumit-eval = { path = "../lumit-eval" }
 lumit-flow = { path = "../lumit-flow" }
 lumit-gpu = { path = "../lumit-gpu" }
@@ -53,6 +54,10 @@ shared-texture-macos = ["lumit-gpu/shared-texture-macos"]
 [dev-dependencies]
 lumit-media = { path = "../lumit-media", features = ["test-fixtures"] }
 tempfile = "3"
+# The colour parity tests write fp16 texels and read them back, which is what
+# the working format is; `bytemuck` casts the row.
+half = "2"
+bytemuck = "1"
 
 [lints]
 workspace = true

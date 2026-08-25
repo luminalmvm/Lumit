@@ -604,6 +604,22 @@ item reassignment retires that item's, view switch re-encodes only); the
 double-encode trap pinned (baked identity view == built-in output exactly); K-031
 parity row (§7.5), skip-on-no-GPU.
 
+**Landed.** The seam WP1 left open — a factorised stage's analytic tail — is closed in
+the bake rather than in the shader (§5.1); the factorised form is guaranteed to be
+`curve → matrix → curve`, so the shader has three fixed slots. Measured on the reference
+machine: a factorised bake 0.75 ms and 192 KiB, a shaper+cube bake 5.5 ms and 3.1 MiB;
+uploading them 0.5 ms and 1.9 ms; the 1080p display pass 0.12 ms/frame with a table bound
+and 0.12 ms/frame without, i.e. the table costs nothing measurable at that raster. The
+input transforms are built once per render, one table per distinct space the project's
+footage names.
+
+**The seam WP4 exposes** — everything WP3 wired, none of it crossing the bridge yet:
+`HeadlessRenderer::{colour, sync_colour, set_colour_view, colour_view, set_colour_output,
+can_deliver_colour_space}`, and on the state itself
+`ColourState::{loaded, frame_identity}` with `Loaded::{usable, problem, path, vocabulary}`
+— which is exactly `BridgeColourSummary`'s content (§6.1). `ExportSpec::check_with_colour`
+replaces `check` wherever a project is in hand.
+
 ### WP4 — The bridge seam
 
 `colour_summary`, `set_colour_config`, `set_colour_space`, the viewer look call's

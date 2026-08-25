@@ -1660,8 +1660,11 @@ version = "0.2.0"
 dependencies = [
  "bincode",
  "blake3",
+ "bytemuck",
+ "half",
  "lumit-audio",
  "lumit-cache",
+ "lumit-colour",
  "lumit-core",
  "lumit-eval",
  "lumit-flow",

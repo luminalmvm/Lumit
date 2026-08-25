@@ -131,6 +131,16 @@ pub enum DrawSource {
         rgba: Vec<u8>,
         tex_w: u32,
         tex_h: u32,
+        /// The footage item's OCIO colour space, by the loaded config's name
+        /// (K-490). `None` — every layer that is not footage, and every
+        /// footage item nobody has assigned — is the built-in interpretation
+        /// this always did.
+        ///
+        /// It travels with the pixels rather than being looked up later
+        /// because the draw list is flattened: a collapsed Precomp splices
+        /// its children in beside their neighbours, so by the time the
+        /// realiser sees a draw there is no comp to ask.
+        colour_space: Option<String>,
     },
     Nested {
         width: u32,

@@ -527,11 +527,21 @@ pub const BUILT_IN_COLOUR_SPACES: &[ColourSpace] = &[
 pub const UNTAGGED_COLOUR_SPACE: &[ColourSpace] = &[ColourSpace::SrgbRec709];
 
 impl ColourSpace {
-    /// Whether this build can actually perform the transform. Every built-in
-    /// space can; an OCIO config's space cannot, and refuses (docs/TODO.md
-    /// carries OCIO-the-config-format as recorded future work).
+    /// Whether this build can perform the transform **with no project in
+    /// hand**. Every built-in space can; a config's space depends on the
+    /// project's config, so it is asked about separately — see
+    /// [`ExportSpec::check_with_colour`].
     pub fn is_available(&self) -> bool {
         !matches!(self, ColourSpace::Ocio(_))
+    }
+
+    /// The config's name, if this is one of its spaces.
+    #[must_use]
+    pub fn ocio_name(&self) -> Option<&str> {
+        match self {
+            ColourSpace::Ocio(name) => Some(name),
+            _ => None,
+        }
     }
 
     pub fn label(&self) -> String {
@@ -585,9 +595,15 @@ impl ColourSpace {
             ColourSpace::Rec709 => ColourTags::Bt709,
             ColourSpace::Rec2020 => ColourTags::Bt2020,
             ColourSpace::DisplayP3 => ColourTags::DisplayP3,
-            // Never written: `check` refuses an OCIO space before a frame is
-            // rendered. Unspecified is the honest fallback for a space nothing
-            // here can name.
+            // **Untagged, deliberately** (K-490, docs/impl/ocio.md §5.2). A
+            // config's name has no reliable primaries or transfer metadata in
+            // general — the config author may have composed anything — so a
+            // file written through one carries no colour tag rather than a
+            // guessed one. A player that finds no tag falls back to its own
+            // sensible default; a player that finds a wrong tag confidently
+            // shows the wrong colour, which is worse. The known ACES
+            // display/view names that correspond exactly to a built-in tag may
+            // reuse it one explicit table entry at a time; none does yet.
             ColourSpace::Ocio(_) => ColourTags::Unspecified,
         }
     }
@@ -598,6 +614,13 @@ impl ColourSpace {
         let (primaries, transfer) = match self {
             // The frame arrives in this space. No arithmetic at all — an
             // identity that ran anyway would still round twice.
+            //
+            // An OCIO space takes this arm for a different reason and it is the
+            // load-bearing one: its transform ran on the graphics card, in the
+            // same display blit the Viewer presents through (§5.2). A second
+            // transform here would be a second implementation of one transform
+            // in the delivery path, which is the exact structure K-031 exists
+            // to forbid.
             ColourSpace::SrgbRec709 | ColourSpace::Ocio(_) => return None,
             ColourSpace::Linear => (None, Transfer::Linear),
             ColourSpace::Rec709 => (None, Transfer::Bt709),
@@ -1438,6 +1461,39 @@ impl ExportSpec {
     /// rendered. A setting a format cannot carry is a mistake worth naming —
     /// silently ignoring it would deliver a file that is not what was asked
     /// for, and the user would find out from someone else.
+    /// [`Self::check`], with the project's loaded colour config to hand
+    /// (K-479, K-490).
+    ///
+    /// This is the delivery half of the asymmetry. A preview whose config has
+    /// gone missing degrades calmly to the built-in transform and still shows a
+    /// picture; a delivery does not, because a wrong colour space in a file
+    /// somebody hands over is worse than an export that did not run. So a name
+    /// the config can honour passes here, and every other name refuses —
+    /// including the same name a moment after the config moved.
+    pub fn check_with_colour(&self, colour: &crate::colour::ColourState) -> Result<(), String> {
+        if let Some(name) = self.colour_space.ocio_name() {
+            let usable = colour
+                .loaded()
+                .filter(|l| l.usable())
+                .and_then(|l| l.artefact(&crate::colour::Edge::Output(name.to_string())))
+                .is_some();
+            if !usable {
+                return Err(match colour.loaded().and_then(|l| l.problem.clone()) {
+                    Some(why) => format!("the colour space \"{name}\" cannot be delivered: {why}"),
+                    None => format!(
+                        "the colour space \"{name}\" is not in this project's colour config"
+                    ),
+                });
+            }
+            // Everything else the plain check asks still applies, minus the
+            // build-availability line it would refuse on.
+            let mut without = self.clone();
+            without.colour_space = ColourSpace::default();
+            return without.check();
+        }
+        self.check()
+    }
+
     pub fn check(&self) -> Result<(), String> {
         let caps = self.format.caps();
         if caps.video && !caps.depths.contains(&self.depth) {
@@ -1655,7 +1711,6 @@ fn run(
     tx: &Sender<ExportEvent>,
     cancel: &AtomicBool,
 ) -> Result<(), String> {
-    spec.check()?;
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
     let overridden = apply_render_overrides(doc, &spec.render);
@@ -1746,6 +1801,17 @@ fn run(
     // Viewer's GPU work.
     let mut renderer =
         crate::headless::HeadlessRenderer::new().map_err(|e| format!("export renderer: {e}"))?;
+    // The project's colour config, before anything is written: the refusal has
+    // to happen with the config in hand, and it has to happen before a file
+    // exists rather than halfway through one.
+    renderer.sync_colour(doc);
+    spec.check_with_colour(renderer.colour())?;
+    // A config's space is delivered by binding its baked table to the SAME
+    // display blit the Viewer presents through (docs/impl/ocio.md §5.2). Not a
+    // second transform at the pack stage: that would be a second implementation
+    // of one transform in the delivery path, which is the exact structure K-031
+    // exists to forbid.
+    renderer.set_colour_output(spec.colour_space.ocio_name().map(str::to_owned));
     let (out_num, out_den) = fps_rational(out_fps);
     // One sink, two shapes: the mp4 muxer, or one image file per frame. The
     // loop below is shared — a second frame loop would be a second chance to

@@ -1167,6 +1167,7 @@ pub fn build_comp_draws_at(
                         rgba,
                         tex_w: w,
                         tex_h: h,
+                        colour_space: crate::colour::footage_colour_space(doc, &layer.kind),
                     },
                     natural,
                 )
@@ -2011,6 +2012,7 @@ mod render_below_at_tests {
             render_scale: 1.0,
             samples: 1,
             profiler: None,
+            colour_inputs: None,
         };
         // A softbox in front of the comp, big enough to rake across it.
         let mut light = text_layer(160.0);
@@ -2112,6 +2114,7 @@ mod render_below_at_tests {
             render_scale: 1.0,
             samples: 1,
             profiler: None,
+            colour_inputs: None,
         };
         let comp = Composition {
             id: Uuid::now_v7(),
@@ -2222,6 +2225,7 @@ mod render_below_at_tests {
             render_scale: 1.0,
             samples: 1,
             profiler: None,
+            colour_inputs: None,
         };
         let comp = Composition {
             id: Uuid::now_v7(),
@@ -2583,6 +2587,7 @@ mod render_below_at_tests {
             render_scale: 1.0,
             samples: 1,
             profiler: None,
+            colour_inputs: None,
         };
         let comp = posterize_comp();
         let doc = Document::new();
@@ -2761,6 +2766,7 @@ mod render_below_at_tests {
             render_scale: 1.0,
             samples: 1,
             profiler: None,
+            colour_inputs: None,
         };
         let doc = Document::new();
         let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();

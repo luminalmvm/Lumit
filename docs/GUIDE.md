@@ -9125,6 +9125,36 @@ same two steps everywhere: fold the value into the table's scale, then blend the
 nearest entries. The processor and the graphics card both do exactly that, so they cannot
 disagree — which is the point.
 
+### Colours off the end of the scale
+
+A baked table has a first entry and a last one, so there is always a question about what
+happens to a colour past either end — and in a colour pipeline that question is not a
+corner case, it is where the interesting colours live. Two kinds of value fall outside
+the ordinary nought-to-one range. **Above one** are highlights: a practical light in shot,
+a specular hit off chrome, a sun. **Below nought** are the colours a wide-gamut camera
+saw that an ordinary monitor's three primaries cannot make; converting them into Lumit's
+working space leaves them as slightly negative numbers, which is not a mistake but the
+honest arithmetic of "redder than this red".
+
+The tempting answer is to keep the original formulas beside the table and work those
+values out properly when one turns up. That is exact — on the processor. The graphics card
+cannot do it: it would have to re-implement every logarithm and power in the chain and
+agree with the processor's version of them to the last decimal, and some steps in a chain
+are themselves tables with no formula to re-implement. Preview and export would part
+company precisely on the colours people care most about.
+
+So Lumit does the opposite: it makes the *table* cover everything instead. The samples are
+not spread evenly across nought to one. They are spread **logarithmically and
+symmetrically about zero** — packed tightly around black, where the eye is most sensitive
+and every transfer curve bends hardest, and thinning out towards the extremes, with the
+same treatment mirrored on the negative side. Sixteen thousand samples arranged this way
+reach from minus sixty-five thousand to plus sixty-five thousand, which is everything the
+working format can hold, and the darkest part of the picture still gets more samples than
+an evenly-spread table of the same size would give it. Looking a colour up is then the
+same two steps everywhere: fold the value into the table's scale, then blend the two
+nearest entries. The processor and the graphics card both do exactly that, so they cannot
+disagree — which is the point.
+
 **What happens when the config file goes missing.** Nothing dramatic. The project opens,
 every assignment keeps its name, and the picture falls back to the built-in colour
 handling with the Viewer's picker saying so calmly. The one thing that refuses is export:

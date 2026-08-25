@@ -65,9 +65,28 @@ pub struct Realiser<'a> {
     /// frame of playback, and every unwatched render — walks exactly as it did
     /// before this existed: no clocks, no fences, no extra allocations.
     pub profiler: Option<&'a crate::profile::FrameProfiler>,
+    /// The footage input transforms this frame may need, already baked and
+    /// uploaded (docs/impl/ocio.md §5.2). `None` — no config, an unusable
+    /// one, or any of the test builders — means every source linearises
+    /// through the built-in interpretation, which is what this always did.
+    ///
+    /// ponytail: footage pixels only. A matte, a light-wrap plate and a
+    /// mask's coverage raster still take the built-in path; the first two are
+    /// image content and would want the same treatment, and the upgrade is to
+    /// carry the space name on `LayerInputDraw` as it is carried on
+    /// `DrawSource::Pixels`.
+    pub colour_inputs: Option<&'a crate::colour::InputTransforms>,
 }
 
 impl Realiser<'_> {
+    /// The baked input transform for one colour space name, or `None` for the
+    /// built-in interpretation — which is the answer for an unassigned item, a
+    /// project with no config, a config that is not usable, and a name the
+    /// loaded config does not have.
+    fn input_transform(&self, space: &Option<String>) -> Option<&lumit_gpu::OcioArtefact> {
+        self.colour_inputs?.get(space.as_deref()?)
+    }
+
     /// Start one layer's measurement: the clock, and the list its effect stack
     /// writes a millisecond into per op. Both `None` unless this render is
     /// being measured, which is what keeps an ordinary frame free of them.
@@ -613,9 +632,18 @@ impl Realiser<'_> {
             // (crate::profile).
             let (started, mut fx_ms) = self.layer_clock();
             let tex = match &l.source {
-                DrawSource::Pixels { rgba, tex_w, tex_h } => {
+                DrawSource::Pixels {
+                    rgba,
+                    tex_w,
+                    tex_h,
+                    colour_space,
+                } => {
                     let src = self.engine.upload_srgb8(&self.ctx, rgba, *tex_w, *tex_h);
-                    self.engine.linearise(&self.ctx, &src)
+                    self.engine.linearise_through(
+                        &self.ctx,
+                        &src,
+                        self.input_transform(colour_space),
+                    )
                 }
                 DrawSource::Nested {
                     width,

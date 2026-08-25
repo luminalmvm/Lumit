@@ -166,6 +166,18 @@ pub struct HeadlessRenderer {
     /// the promise is a property of the code's shape rather than a rule anyone
     /// has to remember — and `an_export_ignores_the_viewer_view` pins it.
     view: lumit_gpu::DisplayParams,
+    /// The project's OCIO config, loaded and baked (docs/impl/ocio.md §3.2).
+    /// Derived state, rebuilt from the file, never stored in the document.
+    colour: crate::colour::ColourState,
+    /// Which of the config's displays and views the picture is shown through.
+    /// Session state, like [`Self::view`] beside it, and `None` — the built-in
+    /// transform — for every export and for a project with no config.
+    colour_view: Option<(String, String)>,
+    /// The colour space an *export* is delivering into, when it named one of
+    /// the config's (K-479, K-490). Set only by the export path, and set
+    /// instead of `colour_view`: a delivered file is written in the space the
+    /// dialogue asked for, not in whatever the Viewer happens to be showing.
+    colour_output: Option<String>,
     /// Whether the fronted comp's own background colour is left out of the
     /// composite, so pixels nothing covers stay transparent and the Viewer's
     /// transparency grid shows through them (K-352). The Viewer sets it to
@@ -546,6 +558,9 @@ impl HeadlessRenderer {
             watching: false,
             measuring: false,
             view: lumit_gpu::DisplayParams::NEUTRAL,
+            colour: crate::colour::ColourState::default(),
+            colour_view: None,
+            colour_output: None,
             transparent_background: false,
             region: None,
             #[cfg(all(windows, feature = "shared-texture"))]
@@ -684,6 +699,73 @@ impl HeadlessRenderer {
         self.view = view;
     }
 
+    /// Show the picture through one of the loaded config's display/view pairs,
+    /// or through the built-in transform (`None`).
+    ///
+    /// A way of looking, like the display view above, and folded into the
+    /// frame's name for the same reason: two views are two different pictures,
+    /// and a frame banked under one must never be served as the other. The
+    /// linear tiers upstream are untouched, which is most of the point of
+    /// caching linear (docs/impl/ocio.md §5.5).
+    pub fn set_colour_view(&mut self, view: Option<(String, String)>) {
+        self.colour_view = view;
+    }
+
+    /// What the Viewer is currently looking through, of the config's own names.
+    #[must_use]
+    pub fn colour_view(&self) -> Option<&(String, String)> {
+        self.colour_view.as_ref()
+    }
+
+    /// Deliver into one of the config's colour spaces (K-479's refusal, now
+    /// with an answer). The export path sets this; nothing else does.
+    pub fn set_colour_output(&mut self, space: Option<String>) {
+        self.colour_output = space;
+    }
+
+    /// Whether a named colour space can actually be delivered right now — the
+    /// question the export's refusal asks, and the one half of K-490's
+    /// asymmetry that says no. A preview degrades; a delivery does not.
+    #[must_use]
+    pub fn can_deliver_colour_space(&self, name: &str) -> bool {
+        self.colour
+            .loaded()
+            .filter(|l| l.usable())
+            .and_then(|l| l.artefact(&crate::colour::Edge::Output(name.to_string())))
+            .is_some()
+    }
+
+    /// The project's colour state, for the seam that reports it.
+    #[must_use]
+    pub fn colour(&self) -> &crate::colour::ColourState {
+        &self.colour
+    }
+
+    /// Bring the colour state into line with the document. Called at the top of
+    /// every render, so a config swapped, moved or edited on disk is picked up
+    /// without anyone having to remember to say so.
+    pub fn sync_colour(&mut self, doc: &lumit_core::model::Document) {
+        self.colour.sync(doc);
+    }
+
+    /// The tables the display pass binds: the export's output space if one was
+    /// named, else the Viewer's chosen view, else nothing at all.
+    ///
+    /// Both come out of the same bake and bind to the same dispatch, which is
+    /// how K-031 is kept **by construction** rather than by two paths agreeing.
+    fn display_tables(&self) -> Option<lumit_gpu::OcioTables> {
+        let loaded = self.colour.loaded().filter(|l| l.usable())?;
+        let edge = match (&self.colour_output, &self.colour_view) {
+            (Some(space), _) => crate::colour::Edge::Output(space.clone()),
+            (None, Some((display, view))) => {
+                crate::colour::Edge::DisplayView(display.clone(), view.clone())
+            }
+            (None, None) => return None,
+        };
+        let artefact = loaded.artefact(&edge)?;
+        Some(crate::colour::tables(&artefact))
+    }
+
     /// Leave the fronted comp's background colour out of the composite, so
     /// pixels nothing covers stay transparent and the Viewer's transparency
     /// grid shows through them (K-352). A way of looking, like the display
@@ -753,12 +835,35 @@ impl HeadlessRenderer {
     /// the same hash the name was built with, under its own tag so a look can
     /// never be confused for content.
     fn named_under_view(&self, base: u128) -> u128 {
-        if self.view.is_neutral() && !self.transparent_background && self.region.is_none() {
+        let colour_id = self.colour.frame_identity();
+        if self.view.is_neutral()
+            && !self.transparent_background
+            && self.region.is_none()
+            && colour_id == 0
+            && self.colour_view.is_none()
+            && self.colour_output.is_none()
+        {
             return base;
         }
         let mut h = blake3::Hasher::new();
         h.update(b"view/");
         h.update(&base.to_le_bytes());
+        // The colour config, and which of its views the picture is shown
+        // through (docs/impl/ocio.md §5.5). The config's own content hash, so
+        // editing it on disk retires every frame it made; the view names, so
+        // switching view re-encodes and switching back finds the old frames
+        // still banked.
+        h.update(&colour_id.to_le_bytes());
+        if let Some((display, view)) = &self.colour_view {
+            h.update(b"dv/");
+            h.update(display.as_bytes());
+            h.update(b"/");
+            h.update(view.as_bytes());
+        }
+        if let Some(space) = &self.colour_output {
+            h.update(b"out/");
+            h.update(space.as_bytes());
+        }
         h.update(&self.view.gain.to_bits().to_le_bytes());
         h.update(&[
             u8::from(self.view.tone_map),
@@ -942,6 +1047,13 @@ impl HeadlessRenderer {
         quality: Quality,
         present: Present,
     ) -> Result<(wgpu::Texture, u32, u32), String> {
+        // The config the document names, before anything is drawn. Cheap when
+        // nothing changed — one file read and a hash comparison — and the
+        // reason a config edited on disk is picked up without anyone having to
+        // remember to say so. The frontend calls [`Self::sync_colour`] on a
+        // document change as well, so `frame_key` never names a frame under a
+        // config the render is about to disagree with.
+        self.colour.sync(doc);
         let comp = doc
             .comp(comp_id)
             .ok_or_else(|| "headless preview: unknown composition".to_string())?;
@@ -1023,6 +1135,12 @@ impl HeadlessRenderer {
         let Some(parts) = self.parts.take() else {
             return Err("headless preview: renderer is unavailable after an earlier fault".into());
         };
+        // The footage input transforms this comp asks for (docs/impl/ocio.md
+        // §5.2). `None` — the usual case — is the built-in interpretation and
+        // uploads nothing at all.
+        let built =
+            crate::colour::InputTransforms::build(doc, &self.colour, &self.gpu, &parts.colour);
+        let inputs = (!built.is_empty()).then_some(built);
         let out = {
             let realiser = crate::realise::Realiser {
                 ctx: self.gpu.clone_handle(),
@@ -1038,6 +1156,7 @@ impl HeadlessRenderer {
                 // preview-only reduction — so the two stay the same picture.
                 samples: self.gpu.sample_count(doc.anti_aliasing.samples()),
                 profiler: watcher.as_ref(),
+                colour_inputs: inputs.as_ref(),
             };
             let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
                 .pixels
@@ -1098,16 +1217,31 @@ impl HeadlessRenderer {
             }
             // The one place the Viewer's own way of looking is applied: on the
             // linear composite, on its way to display bytes (docs/06 §3.3).
+            // The baked display transform, if there is one. Uploaded here and
+            // dropped with the frame: one table per pass is nothing beside the
+            // composite that just ran, and holding it would mean holding a
+            // graphics-card resource keyed on a state that changes with a
+            // menu tick.
+            let artefact = self
+                .display_tables()
+                .map(|t| parts.colour.upload_ocio(&self.gpu, &t));
+            let artefact = artefact.as_ref();
             Ok(match present {
-                Present::Bgra8 => parts.colour.display_bgra(&self.gpu, &linear, self.view),
-                Present::Rgba8 => parts.colour.display(&self.gpu, &linear, self.view),
+                Present::Bgra8 => parts
+                    .colour
+                    .display_bgra_through(&self.gpu, &linear, self.view, artefact),
+                Present::Rgba8 => parts
+                    .colour
+                    .display_through(&self.gpu, &linear, self.view, artefact),
                 // The deep pass resamples on its way out where the eight-bit
                 // caller would have resampled afterwards (`render_preview`'s
                 // `display_scaled`), so a coarse tier still delivers the comp's
                 // own raster and only one pass ever touches these pixels.
                 Present::Rgba16 => {
                     let size = ((linear.width(), linear.height()) != (cw, ch)).then_some((cw, ch));
-                    parts.colour.display16(&self.gpu, &linear, size, self.view)
+                    parts
+                        .colour
+                        .display16_through(&self.gpu, &linear, size, self.view, artefact)
                 }
             })
         };
@@ -2508,6 +2642,115 @@ fn crop_texture(
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
+    /// **What a frame is named under, once colour is in the picture** (K-490,
+    /// docs/impl/ocio.md §5.5). Three separate sensitivities, and the third is
+    /// the one worth having: switching view must rename the *display* frames
+    /// and nothing else, so switching back finds the old ones still banked.
+    ///
+    /// This exercises `named_under_view` directly rather than through a render,
+    /// because it is a naming rule and needs no graphics card to be true.
+    #[test]
+    fn the_colour_choices_reach_the_frames_name() {
+        let Ok(mut r) = super::HeadlessRenderer::new() else {
+            eprintln!("no adapter here");
+            return;
+        };
+        let base = 0x1234_5678_9abc_def0_1234_5678_9abc_def0_u128;
+        let plain = r.named_under_view(base);
+        assert_eq!(
+            plain, base,
+            "with no config and no view, a frame is named exactly as it was"
+        );
+
+        r.set_colour_view(Some(("sRGB".into(), "Standard".into())));
+        let one_view = r.named_under_view(base);
+        assert_ne!(one_view, plain, "a view is part of the picture");
+
+        r.set_colour_view(Some(("sRGB".into(), "Log".into())));
+        let other_view = r.named_under_view(base);
+        assert_ne!(other_view, one_view, "two views are two pictures");
+
+        // And back: the old name returns, which is what lets a flick between
+        // two views be free the second time.
+        r.set_colour_view(Some(("sRGB".into(), "Standard".into())));
+        assert_eq!(r.named_under_view(base), one_view);
+
+        // An export's output space names frames its own way, and is not the
+        // same name as any view.
+        r.set_colour_view(None);
+        r.set_colour_output(Some("out_srgb".into()));
+        let delivered = r.named_under_view(base);
+        assert_ne!(delivered, plain);
+        assert_ne!(delivered, one_view);
+
+        r.set_colour_output(None);
+        assert_eq!(
+            r.named_under_view(base),
+            plain,
+            "clearing every colour choice puts the old names back"
+        );
+    }
+
+    /// **An item's colour space renames that item's frames, and only those.**
+    /// It goes in the per-item stamp rather than in the comp's own name, so a
+    /// forty-layer comp does not throw away thirty-nine layers' worth of work
+    /// because one clip was reinterpreted (§5.5).
+    #[test]
+    fn reassigning_one_item_renames_that_items_frames() {
+        use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
+
+        let mut doc = lumit_core::model::Document::new();
+        let a = uuid::Uuid::now_v7();
+        let b = uuid::Uuid::now_v7();
+        for (id, name) in [(a, "a.mov"), (b, "b.mov")] {
+            doc.items.push(ProjectItem::Footage(FootageItem {
+                id,
+                name: name.into(),
+                media: MediaRef {
+                    relative_path: name.into(),
+                    absolute_path: format!("/tmp/{name}"),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                colour_space: None,
+                extra: serde_json::Map::new(),
+            }));
+        }
+        // Both items probe as ordinary video of the same shape, so the only
+        // thing that can differ between their stamps is the colour space.
+        let probes: std::collections::HashMap<uuid::Uuid, crate::source::SourceProbe> = [a, b]
+            .into_iter()
+            .map(|id| {
+                (
+                    id,
+                    crate::source::SourceProbe::Video {
+                        fps: 24.0,
+                        width: 640,
+                        height: 480,
+                        frames: 100,
+                        audio: false,
+                    },
+                )
+            })
+            .collect();
+        let stamp = |doc: &lumit_core::model::Document, id: uuid::Uuid| {
+            use lumit_eval::SourceStamper;
+            crate::cache::Stamper::new(doc, &probes, Quality::default()).stamp(id, 0.0, false)
+        };
+        let before_a = stamp(&doc, a);
+        let before_b = stamp(&doc, b);
+
+        if let Some(ProjectItem::Footage(f)) = doc.items.iter_mut().find(|i| i.id() == a) {
+            f.colour_space = Some("ACEScct".into());
+        }
+        assert_ne!(
+            stamp(&doc, a),
+            before_a,
+            "the reassigned item's frames must retire"
+        );
+        assert_eq!(stamp(&doc, b), before_b, "and every other item's must not");
+    }
+
     use super::*;
     use lumit_core::anim::Property;
     use lumit_core::model::{
@@ -3249,7 +3492,7 @@ mod tests {
                     extra: serde_json::Map::new(),
                 },
                 extra: serde_json::Map::new(),
-            colour_space: None,
+                colour_space: None,
             }));
         if let Some(ProjectItem::Composition(c)) = doc
             .items
@@ -4125,7 +4368,7 @@ surfaces:
                 extra: serde_json::Map::new(),
             },
             extra: serde_json::Map::new(),
-        colour_space: None,
+            colour_space: None,
         }));
         let mut music = matrix_layer("Music", LayerKind::Footage { item }, cw, ch);
         music.audio_only = true;
@@ -4311,7 +4554,7 @@ surfaces:
                         extra: serde_json::Map::new(),
                     },
                     extra: serde_json::Map::new(),
-                colour_space: None,
+                    colour_space: None,
                 }));
                 let comp_id = push_comp(&mut doc, "Scene", cw, ch);
                 let clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -4782,7 +5025,7 @@ surfaces:
                         extra: serde_json::Map::new(),
                     },
                     extra: serde_json::Map::new(),
-            colour_space: None,
+                    colour_space: None,
                 }));
             let comp_id = Uuid::now_v7();
             let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -4879,7 +5122,7 @@ surfaces:
                         extra: serde_json::Map::new(),
                     },
                     extra: serde_json::Map::new(),
-        colour_space: None,
+                    colour_space: None,
                 }));
             let comp_id = Uuid::now_v7();
             let mut layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -5543,7 +5786,7 @@ surfaces:
                     extra: serde_json::Map::new(),
                 },
                 extra: serde_json::Map::new(),
-            colour_space: None,
+                colour_space: None,
             }));
         let (inner_doc, inner_id, _) = matrix_base(32, 24, LinearColour([0.0, 0.0, 0.0, 0.0]));
         for it in inner_doc.items {
