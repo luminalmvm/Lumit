@@ -23,14 +23,19 @@ void main() {
     /// and which leave it to mean "every layer".
     test('only the panels that keep a selection claim the chord', () {
       final p = freshProject();
-      for (final panel in [Panel.project, Panel.effectControls]) {
+      // The Node graph joined once its pick became a set (K-533): before that
+      // a single-node selection had nothing to select *all* of, and claiming
+      // the chord there would only have made it a dead key.
+      for (final panel in [
+        Panel.project,
+        Panel.effectControls,
+        Panel.graph,
+      ]) {
         p.uiState.activePanel.value = panel;
         expect(p.uiState.requestSelectAll(), isTrue,
             reason: '${panel.name} answers Ctrl+A itself');
       }
-      // The Node graph is not here yet: a single-node selection has nothing to
-      // select all of, so the chord must not be swallowed there.
-      for (final panel in [Panel.timeline, Panel.viewer, Panel.graph, null]) {
+      for (final panel in [Panel.timeline, Panel.viewer, null]) {
         p.uiState.activePanel.value = panel;
         expect(p.uiState.requestSelectAll(), isFalse,
             reason: 'the shell still means every layer in ${panel?.name}');
