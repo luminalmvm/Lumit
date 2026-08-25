@@ -14,10 +14,10 @@
 //
 // The same three hues as the static wash it replaces, so the page's colour does
 // not change - only its stillness. The wash itself is still here, under the
-// canvas, as the whole of the fallback for a browser with no WebGL. The grain
-// and the fade into the page below are both the shader's work too, for the
-// same reason: a tiled grain repeats, and a ramp between two dark colours
-// bands.
+// canvas, as the whole of the fallback for a browser with no WebGL. The fade
+// into the page below is the shader's work too, and it is a dissolve rather
+// than a ramp, because a ramp between two dark colours is exactly where eight
+// bits a channel runs out and the gradient steps into visible arcs.
 ---
 
 <div class="field" aria-hidden="true">
@@ -111,6 +111,15 @@
       );
     }
 
+    // Interleaved gradient noise. Plain random noise clumps - by chance it puts
+    // eight lit pixels in one place and none in the next, which the eye reads
+    // as blotches rather than as an even scatter. This spreads its values out
+    // instead, which is why it is the standard pattern for dithering and for
+    // dissolves, and it costs three instructions.
+    float ign(vec2 p) {
+      return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
+    }
+
     // Four octaves, each half the size and half the strength of the last. The
     // even halving is what keeps the field wispy: the big shapes carry it and
     // the fine detail only softens their edges. Giving the small octaves more
@@ -160,27 +169,20 @@
       // the whole field rather than a single band of it.
       col = mix(col, wine, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
-      // Grain, drawn rather than tiled. A repeating noise texture is a pattern
-      // however fine it is, and the eye finds it; one random value per pixel
-      // has nothing to find. It goes on the field's own colour, and only there
-      // - never on the black the field fades into.
-      //
-      // The value is fixed per pixel, not rolled again each frame. Re-rolling
-      // is what film grain does, but at this size and over this much of the
-      // screen it is a wall of shimmer to sit under, and the field beneath it
-      // is already moving.
-      col += (hash(gl_FragCoord.xy) - 0.5) * 0.055;
+      // Dither, not grain: one level of it, far below anything the eye reads as
+      // texture, and enough on its own to stop a dark gradient stepping into
+      // the arcs it otherwise bands into.
+      col += (ign(gl_FragCoord.xy) - 0.5) / 255.0;
 
       // The bottom of the field dissolves into the page's black rather than
       // ramping into it. A ramp between two dark colours is where 8 bits a
-      // channel runs out and the gradient steps into visible arcs; a dissolve
-      // has no ramp to quantise - each pixel is either field or page, and the
-      // proportion is what changes down the band. Fixed per pixel, like the
-      // grain, so the band holds still while the colour moves through it.
+      // channel runs out and the gradient steps; a dissolve has no ramp to
+      // quantise - each pixel is either field or page, and it is the proportion
+      // that changes down the band. Fixed per pixel, so the pattern holds still
+      // and the colour moves through it.
       vec3 page = vec3(0.043, 0.047, 0.055);  // #0b0c0e, the page itself
       float fade = smoothstep(0.0, 0.42, uv.y);
-      float d = hash(gl_FragCoord.xy * 1.37 + 41.7);
-      col = mix(page, col, step(1.0 - fade, d));
+      col = mix(page, col, step(ign(gl_FragCoord.yx + 23.7), fade));
 
       gl_FragColor = vec4(col, 1.0);
     }
