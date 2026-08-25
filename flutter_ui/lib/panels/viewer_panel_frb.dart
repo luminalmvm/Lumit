@@ -1054,8 +1054,12 @@ class _Stage extends StatelessWidget {
     // it in as a cached `child` kept the *pointer* current while every tool
     // layer under it stayed armed for whichever tool was in hand when the panel
     // last rebuilt (K-225).
+    //
+    // The dropper is listened to beside the tools, and for the same reason: it
+    // is armed from a parameter row in another panel, and arming it takes the
+    // drag away from the pan below (see [_stage]).
     return ListenableBuilder(
-      listenable: uiState.tools,
+      listenable: Listenable.merge([uiState.tools, uiState.dropper]),
       builder: (context, _) => MouseRegion(
         // Which pointer the armed tool wears over the picture.
         cursor: viewerCursorFor(uiState.tools.tool),
@@ -1065,11 +1069,20 @@ class _Stage extends StatelessWidget {
   }
 
   Widget _stage(BuildContext context, LumitTheme t) {
+    // **While a pick is armed, the drag is the dropper's** (K-532, docs/07
+    // §6.1). Every tool layer in the stack below settles this by sitting above
+    // the pan and taking the hit; the dropper cannot, because it reads raw
+    // pointer events rather than recognising a gesture — a [Listener] never
+    // joins the arena, so this recogniser went on winning it underneath and
+    // picking a colour dragged the whole preview about. The one place the two
+    // can be told apart is here, where the pan is declared: an armed pick
+    // means no pan recogniser exists at all, and disarming brings it back.
+    final picking = uiState.dropper.value != null;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       // Panning the picture, not the layer: the overlay's own handle takes
       // the gesture first when it is hit, so this only fires on empty space.
-      onPanUpdate: (d) => onPan(d.delta),
+      onPanUpdate: picking ? null : (d) => onPan(d.delta),
       child: Container(
         color: viewerSurroundFor(
           t,

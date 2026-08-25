@@ -309,6 +309,68 @@ void main() {
       await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
     });
 
+    /// **An armed pick takes the drag off the pan** (K-532, docs/07 §6.1).
+    ///
+    /// The finding: picking a colour dragged the preview about with it. The
+    /// dropper reads raw pointer events, and a `Listener` never joins the
+    /// gesture arena, so the Viewer's own pan recogniser went on winning it
+    /// underneath the pick. Both legs are asserted, because the fix is an
+    /// arbitration and not a deletion: unarmed, the drag still pans.
+    testWidgets('a pick drag samples without panning the picture',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+      // The tool whose whole job over the picture is the drag this is about.
+      p.uiState.tools.select(ToolMode.hand);
+      await tester.pump();
+
+      // Where the picture sits at the current magnification and pan — the
+      // Viewer's transform, said in the one number the dropper cares about.
+      Rect picture() =>
+          tester.widget<DropperLayer>(find.byType(DropperLayer)).fitted;
+      final stage = find.byKey(const ValueKey('viewer-stage'));
+
+      final unarmed = picture();
+      await tester.drag(stage, const Offset(40, 24));
+      await tester.pump();
+      final panned = picture();
+      expect(panned.topLeft, isNot(unarmed.topLeft),
+          reason: 'nothing armed: a drag over the Viewer still pans');
+
+      final picked = <DropperSample>[];
+      p.uiState.armDropper(DropperArm(
+        id: 'test',
+        reads: DropperReads.colour,
+        label: 'Key colour',
+        onPick: picked.add,
+        onPreview: (_) {},
+      ));
+      p.uiState.dropperPatch.value = wholePicture();
+      await tester.pump();
+
+      final from = tester.getTopLeft(stage) + panned.center;
+      final gesture = await tester.startGesture(from);
+      for (var step = 1; step <= 4; step++) {
+        await gesture.moveTo(from + Offset(step * 12.0, 0));
+        await tester.pump(const Duration(milliseconds: 25));
+      }
+      expect(picture(), panned,
+          reason: 'the picking drag left the preview where it was');
+
+      await gesture.up();
+      await tester.pump();
+      expect(picked.length, 1, reason: 'and it was a pick, not a pan');
+      expect(picture(), panned, reason: 'still where it was after the commit');
+
+      // Disarmed by the commit: the pan comes back.
+      await tester.drag(stage, const Offset(-40, -24));
+      await tester.pump();
+      expect(picture().topLeft, isNot(panned.topLeft),
+          reason: 'the pick is over, so the drag is the pan\'s again');
+
+      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
+    });
+
     /// **Escape mid-drag puts back what was staged** — the convention every
     /// staged gesture in the application keeps. Nothing was committed, so the
     /// revert has only the preview to undo, and no pick may be written.
@@ -2622,7 +2684,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(p.layer.getPaint().last.shape, BridgeBrushShape.square);
       expect(p.layer.getPaint().first.shape, BridgeBrushShape.round,
-          reason: 'and the one already painted keeps the shape it was made with');
+          reason:
+              'and the one already painted keeps the shape it was made with');
     });
 
     testWidgets('the eraser and the clone stamp commit their own modes',

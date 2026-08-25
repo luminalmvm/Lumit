@@ -1999,6 +1999,11 @@ value drag's are, and the newest position is never dropped. A pick MUST NOT ask 
 anything per pointer move beyond the window reads below: a position pick reads the
 composition's size **once, when the tool is armed**.
 
+**The armed pick owns the drag.** While any picker is armed the Viewer's own pan stands
+down entirely — pressing on the picture starts a pick and nothing else, and the picture
+does not move under the pointer while pixels are being read off it. The pan comes back the
+moment the tool is put away.
+
 While armed, the Viewer grows a **magnifier** that follows the pointer. It is on screen only
 while the pointer is **over the picture** — arming the tool shows nothing until then, and a
 fresh arm never opens where the last pick left off — and it keeps **one fixed offset** from the
