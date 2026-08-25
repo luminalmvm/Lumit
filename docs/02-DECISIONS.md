@@ -16052,3 +16052,91 @@ Regression tests: `a_placeholders_refused_parameters_are_counted_in_one_row` in
 the golden fixture's Curves keeps its own named row in
 `the_report_counts_what_it_says_and_names_both_placeholders`. New string:
 `aeEffectParamsUnreadable`.
+
+## K-557 — The lane's decisions join the log a hundred later
+
+**Status: DECIDED (2026-08-25).** Housekeeping, recorded so history stays readable. The
+2026-08-23 lane session (branch `safe-lane`) and the redesign session both numbered their
+decisions from K-438. At the merge (commit "Merge safe-lane"), the lane's nineteen entries
+were appended here renumbered **K-538..K-556** — exactly their old number plus one hundred —
+and every reference in code and docs that came from the lane side was renumbered with them.
+Commit messages cannot be rewritten: a `safe-lane` commit citing K-438..K-456 means the
+entry now carrying its number plus one hundred. Nothing else about either line's decisions
+changed, and where both lines had ruled on the same fact the later, redesign-side entry
+already governs.
+
+## K-558 — No distance and no point is a per cent of the frame: the last six convert to px@comp
+
+**Status: DECIDED (2026-08-25, owner).** K-419 outlawed %-of-diagonal distances; the owner
+now closes the list. Everything spatial still expressed as a share of the frame converts to
+px@comp: **Radial blur's centre pair**, **Beam's length**, **Vegas' segment length**,
+**Card wipe's transition width**, **Tile's width and height**, and the Lens flare's
+`ghost_softness` (the one exception K-419's sweep had left standing). Tile keeps its
+lands-as-identity property (K-542) the way its centre already does: `instantiate_for_raster`
+writes the comp's own size into a fresh instance, so the default is the exact identity on
+any comp and the *stored* number is honest pixels. Each conversion changes what a saved
+project renders if done carelessly, so each lands with a K-258-style compatibility read
+(old fraction → px at load, version bump) and its own before-and-after. The AE import's
+conversion tables follow in the same commits. This supersedes K-542's percent rationale for
+Tile's pair and empties K-419's exception list.
+
+## K-559 — Threshold's matte moves the threshold, not the amount
+
+**Status: DECIDED (2026-08-25, owner).** K-426 left Threshold on the generic Strength
+dissolve, and for the *amount* form that was right — scaling a hard cut toward neutral is
+exactly the lerp the Mix row already applies, so claiming it would have changed nothing.
+The owner's 7.38 asked for the other form, and it is a real one: **the matte scales the
+threshold level per pixel** — `level·matte` at each pixel before the cut — so a bright
+matte region cuts at the set level and a dark one cuts near black, which is spatially
+varying *behaviour*, not a fade. This is the D-group rule's "better property" clause
+applied to Threshold, and it supersedes K-426's Threshold sentence. Held by a
+`check_matte_claim` row like every other override.
+
+## K-560 — The interface's presentation baseline is 1.1, and a popup anchors in the space it draws in
+
+**Status: DECIDED (2026-08-25, owner).** Testing at 110% scale, the owner ruled that size
+right: **what 110% showed becomes the new 100%.** The drawings stay authoritative at their
+logical sizes (K-450) — no metric, manifest or mockup changes — the scale mechanism gains a
+fixed presentation baseline of ×1.1 under the user's own factor, the Settings slider's
+percentages read against the new baseline, and a stored `ui_scale` from before divides by
+1.1 once on load so nobody's interface jumps. With it, the positioning defect scaling
+exposed is fixed as a rule: **anything anchored to a point — context menus, popups,
+dropdowns — converts that point through the overlay it draws into** (`globalToLocal` on the
+overlay's box), never raw window coordinates, so anchors hold at every scale.
+
+## K-561 — Particulate's particles live in 3D, and the composition's camera sees them
+
+**Status: DECIDED (2026-08-25, owner).** Supersedes K-495 (points were `Vec2`, 2.5D "a
+recorded growth path" — the growth is now commissioned). A particle carries three
+coordinates; emitters gain their z extent; the closed forms integrate the third axis with
+the same drag and wind algebra; and on a 3D layer the stream projects through the
+composition's active camera, exactly as the layer's own transform does — an effect reading
+the composition camera has precedent waiting in K-406's Card wipe note. The points *wire*
+stays one stream type: consumers that think in 2D read the projected positions. Depth-map
+occlusion and collision remain out of scope (K-474's no-simulation rule stands), and the
+owner's framing is recorded: Particulate is the simple, deterministic generator; a
+full simulated particle system, if it ever comes, is its own layer kind, not this effect.
+
+## K-562 — The Hierarchy panel leaves the default workspaces, and its graph view waits
+
+**Status: DECIDED (2026-08-25, owner).** No default workspace preset includes the
+Hierarchy panel any more; it stays available from the Window menu and the panel switcher.
+Its graph view (6.46) and the indent/graph switch (7.24) are deferred to the backlog's
+tail, not abandoned — the Node graph that shipped (K-445) is the effect-stack view and is
+not this.
+
+## K-563 — Mix keeps its name
+
+**Status: DECIDED (2026-08-25, owner).** 7.52 proposed renaming Mix to Opacity beside the
+blend-mode option; the owner rules the name stays. Recorded so the question is not
+re-asked.
+
+## K-564 — The points family and the shape operators are commissioned
+
+**Status: DECIDED (2026-08-25, owner's commission).** Two deferred families move from
+design to implementation. The **points family** of points-stream.md §2.3 — Grid, Scatter,
+Clone to points, Connect points, Trail, Emit from image, and the cross-layer points tap —
+each as its own work package on the wire K-492 built, now over K-561's 3D stream. And the
+**shape operators** beyond the four that landed with K-551..K-554: boolean combines and
+path morphing, plus **text as data** — per-glyph animation, text on a path, text to
+shapes and to points. Design decisions inside each package land as their own entries.

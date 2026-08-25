@@ -13,6 +13,105 @@ this file is the concrete backlog underneath it.
 
 ---
 
+## Now - the finishing programme (owner, 2026-08-25; K-557..K-564)
+
+The owner's commission off the Caddis-study audit: everything below lands, in roughly
+this order; U (guides) after all of it, and the web-docs pass (with V, the proofread)
+dead last. Delete each package when it lands, as ever. Owner rulings already taken:
+no Alt-click label reset (the per-effect Reset button suffices); no `F` fit-panel key
+(backtick's maximise suffices) but the Escape ladder is wanted and documented; 7.22
+hover-scrub thumbnails only if cheap (skip if they cost frame time); A14 release-notes
+format is the owner's own later; Mix keeps its name (K-563); multi-window stays gated
+(K-449).
+
+**FP1 - units and semantics (engine first).**
+- The K-558 sweep: Radial blur centre, Beam length, Vegas segment length, Card wipe
+  transition width, Tile width/height (identity kept via `instantiate_for_raster`),
+  Lens flare `ghost_softness` - all to px@comp, each with its compat read, version
+  bump, before-and-after, and the AE-import conversion-table update in the same commit.
+- Threshold's matte moves the level per pixel (K-559), with its `check_matte_claim` row.
+- Fast motion blur (and Datamosh) on adjustment and Precomp layers: build the
+  below-stack at the neighbour time, measure flow between the two composites on the
+  card (the `GpuFlow` texture entry point) - the designed shape further down this file.
+- The Lens flare Matte row's Invert (already listed under Next).
+- The flaky `smooth_of_a_ramp_is_the_ramp` threshold (drivers/mod.rs test): make the
+  bound honest for the wiggle signal it measures.
+
+**FP2 - chrome, panels, interaction.**
+- UI scale rebase and popup anchoring (K-560): the 1.1 presentation baseline, the
+  slider relabel, the stored-value migration, and every popup/context menu anchored
+  through the overlay's own box (`globalToLocal`), never raw window coordinates.
+- G: 6.7 menu-bar/toolbar divider; 6.9 append `.lum` on first save; 6.12 drop the last
+  static settings hint; 6.16 settings scrollbar drag must not pan the movable dialog;
+  6.48 tooltip sweep to one-or-two words (tighten the arb gate from five); 7.19 user
+  workspaces (save-as/rename/export, the strip, Alt+Shift+1-9).
+- H: 6.2 drag across enable switches toggles one way; 6.3 collapse follows the
+  selection; 6.13 numbered layer pickers ("1. NAME"); 6.28 selection fronts the effect
+  controls, project open/close fronts the project panel; 6.35 comp switch keeps the
+  panel unless the new comp has a selection; 6.6's effect-delete in the panel.
+- I: 6.4 collapse all selected rows; 6.5 magnify-slider end nudges; 6.20 the 1px
+  toggle offset and Round's squircles; 6.22 separate axes (anchor/position
+  right-click, linked scale with one value, unlink, separate); 6.24's lane half (drag
+  moves the whole lane selection, and delete works on it); 6.26 keyframes travel with
+  a dragged layer live; 6.27 drop the ramp/percent text beside the Sequence thumbnail;
+  6.40 frame-rate change keeps the playhead's time; 6.43 the row-level Animated filter
+  (K-441's shape); 7.7 razor through eased ramps; 6.15 equal scrollbar thumbs.
+- J: 6.32's remainder - channel buttons beside the plot (not a tab strip above) and
+  the Curves graph-size option.
+- Caddis tier A/B: A3 arithmetic in numeric fields (`(1920-100)*0.5` evaluates); A7
+  the documented Escape ladder; A8 slide/trim on `[`/`]` and Alt+`[`/`]`; A12 label
+  colours inherit from the folder, an item's own colour overriding; B2 is built.
+- R: the easing panel grows editable custom easings that persist with the user (the
+  Flow-plugin shape), on the docked panel that exists.
+
+**FP3 - engine features.**
+- The three Settings pages, engine first (K-465's omitted nav entries): audio output
+  device enumeration + selection; the autosave mechanism plus interval/keep-count;
+  the export defaults store (preset + filename template) the queue reads.
+- B5 whole: `video_memory_bytes` on Metal (`recommendedMaxWorkingSetSize`) and Vulkan
+  (device-local heap), and real GPU OOM/device-loss recovery instead of the eprintln.
+- B6 track-once-then-nudge: corrections as keyframes over a baked solve, the
+  "edited since track" dot.
+- B7 planar tracker + corner-pin auto-setup.
+- Camera track finishing: warm/clear wired to project open/close; analysing a Precomp
+  (render frames rather than decode); the train-POV forward-motion zoom loss (the
+  focal curve tracking.md owes plus a detector that judges a pair against its
+  neighbours); the 2D track exports.
+- L 7.2: OS drag-and-drop of files onto the Project panel.
+- M remainder: 7.6 Retime Stretch dialog + AE-level popup options; 7.11 pressure/tilt
+  (3.47's pointer data) and the rest of paint's owed list; 7.5's last two single-layer
+  add paths follow the K-523 multi-selection rule.
+- OFX hosting (7.8, docs/impl/ofx-host.md) as its own programme, with 7.23's OFX/LFX
+  presets-panel groups landing with it.
+
+**FP4 - the points family and shapes (K-561, K-564).**
+- Particulate to 3D with camera interaction (K-561), then the family, each its own
+  package on the wire: Grid, Scatter, Clone to points, Connect points, Trail, Emit
+  from image, the cross-layer points tap (points-stream.md 2.3).
+- 4.1's border emission for Ellipse/Rectangle emitters (outline mode, as MaskPath has).
+- Shape booleans and path morphing; text as data (per-glyph animation, text on a
+  path, text to shapes/points) - K-564.
+
+**FP5 - the ponytail ledger, resolved.** Each `ponytail:` marker either gets its
+upgrade built or its comment rewritten with a concrete trigger a profile can hit;
+none may name no trigger. Known builds: the menu tick becomes a drawn glyph (with
+K-440's owed set); the Viewer snapshot photographs the visible region; the OCIO
+fingerprint folds in `files_read()`; `realise.rs` carries the space name on
+`LayerInputDraw`; the audio-tap cache goes least-recently-used; the keyed-sibling
+proportional write gets its decision (scale every key by the factor) and its entry.
+
+**FP6 - guides (U), after everything above.** 8.1 build guide trued for three
+platforms; 8.2 the 1000-line splits of owner-edited files; 8.3 the audio-workspace
+tutorial trued against the finished code; 8.4 the scripts, kept current.
+
+**FP7 - web-docs, dead last (with V).** The full manual pass in the owner's own
+voice as the example: 7.18 export.mdx with its picture; the viewer pictures
+regenerated again (K-524 moved the bar); the Drivers category and Particulate pages
+the generator's --check already demands; new pages for what the redesign added
+(views, workspaces, the node graph, multi-keyframe editing, proxies, sequences,
+OCIO); then V's proofread and separator pass. Closes with a table of every changed
+page for the owner's own review.
+
 ## Now - the preview must keep up
 
 These sit above everything else: they are what the editor feels like in the hand.
@@ -606,11 +705,6 @@ What OCIO still owes, all of it recorded and none of it blocking:
 
 ## Next - engine/bridge follow-ups
 
-**The Lens flare's `ghost_softness` is a fraction of the frame diagonal**, which K-419
-outlawed for distances (docs/08 §2.3: every distance is px@comp). Noticed while every
-parameter was learning its unit (K-443) and left alone there: converting it changes
-pictures, so it wants a change of its own with its own before-and-after.
-
 **The Settings drawing's Audio, Autosave and Export pages** (K-458, K-465,
 docs/15-DESIGN.md §12A.4). The drawing gives Settings three pages the engine cannot
 back yet, so their nav entries are omitted rather than opening empty: an audio
@@ -661,24 +755,10 @@ the frame key both go through, so proxy and full-resolution frames can never sha
 background transcode that makes one (`name_proxy.mov` beside the original, half size); and
 `RenderOptions::use_proxies`, off by default, so delivery reads the originals whatever the
 Viewer is working at. A proxy that disagrees with the original about frame count or rate is
-refused and falls back.
-
-The seam landed with it on 2026-08-25 (K-503). What is left is entirely interface — every
-call below exists and is tested:
-
-- **The Project panel's proxy controls.** Set a proxy (a file picker), clear it, and the
-  per-item *use proxy* tick; the project-wide *use proxies* switch; and the row state that
-  says an item has one — attached and read, attached and off, or none. The calls are
-  `FootageReference::{get_proxy, set_proxy, clear_proxy, set_use_proxy}` and
-  `ProjectReference::{use_proxies, set_use_proxies}`. Nothing yet says whether the proxy
-  *file* is broken; that would need a new query over the renderer.
-- **MAKE-PROXY as an action**, with its progress: `FootageReference::proxy_path()` says
-  where it would go, `make_proxy()` starts it, `proxy_poll()`/`proxy_cancel()` drive it, and
-  the finished file attaches itself. The panel owes the button, the progress row and the
-  words for both.
-- **The Timeline's guide column and its glyph** (K-497). The switch crosses as
-  `BridgeLayerSwitch::Guide` and reads back as `get_switches().guide`; docs/07 §4 names the
-  cell's home, beside shy.
+refused and falls back. The interface landed too (K-503 seam, K-504 panel: set/clear,
+MAKE-PROXY with its progress, the per-item tick, the project-wide switch, the badge).
+Still open: **nothing says whether the proxy *file* itself is broken** - that wants a
+new query over the renderer.
 
 **Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
 drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it
@@ -719,12 +799,10 @@ cancellation between frames and inside the solve, the `track/` sidecar keyed by
 conversion into `CameraPose`, and the derived camera threaded into the render path
 and the frame key.
 
-**Stage 3** owes the bridge and the interface: a `BridgeParamKind` for an Action
-and the press event behind it (`list_parameters` filters the row out until then),
-`lumit_render::track::Progress` surfaced as the effect's status readout,
-`LinkState` as the read-only badge on a linked camera's rows, the point-cloud
-overlay with select → Null/Solid, and the 2D track → keyframed transform /
-corner-pin export.
+**Stage 3 largely landed** (the effect's Analyse/Cancel and staged status readout,
+the point cloud following the effect and the solve, K-430; the analysed-span bar,
+K-540). Still owed from its list: **the 2D track exports** (keyframed transform /
+corner-pin from a track group, docs/08 §7's Tracker row).
 
 Four smaller things stage 2 left, each recorded in docs/impl/tracking.md §5b:
 
@@ -751,17 +829,6 @@ keyframes does, and what the `track/` sidecar is for (why analysing once serves
 every clip of that footage, and why deleting the folder is always safe). Owed
 rather than written because GUIDE.md was another session's file when stages 1 and
 2 landed.
-
-**The displacement class still takes the generic matte.** K-395 names
-"displacement-class effects scale their vectors before sampling" as an override
-worth having, beside the four that landed (Gaussian blur's radius, Glow's seed
-gate, Depth of field's depth, the Lens flare's source detection). Turbulent
-displace and its neighbours currently take the strength dissolve, which for a
-displacement is the *veil* failure the blur had: the pixels still moved the full
-distance and the result is faded back over them, rather than moving less far.
-The hook is in place and the change is per effect — declare
-`matte = ("matte", "<what it means>")`, read `aux.matte()` in the kernel, scale
-the vector, update the oracle op-for-op (docs/impl/effect-registry.md §2.5b).
 
 **The Lens flare's Matte row has no Invert.** Every other matte row carries one
 (K-395); the flare's predates the uniform row and it has no `matte_invert`, so
@@ -1423,7 +1490,8 @@ list, not a re-statement of the roadmap.
 - **Phase 4 - Extensibility** (whole docs, nothing built -
     [11-AE-IMPORT.md](11-AE-IMPORT.md), [12-PLUGINS.md](12-PLUGINS.md)). AE
     import (Bridge panel, `.aep` parser, Lottie, fidelity report); the OFX host;
-    the LFX C ABI + validator; expressions (QuickJS-ng). Placeholder
+    the LFX C ABI + validator; expressions landed on Rhai (K-305);
+    the OFX host and the LFX C ABI + validator remain. Placeholder
     round-tripping already preserves unknown effects/expressions.
 - **Phase 5 - AE parity march.** 2.5D cameras/lights/DOF, tracker/stabiliser,
     keying, rotoscoping, particles, tier-2 effects, text animators, shape
@@ -1506,6 +1574,20 @@ the per-frame error. Forty-three tests, all synthetic, no assets.
    re-detection runs** - 24.4 ms/frame against 11.0 with re-detection off, on
    100 features over 640x360 (the note's measured number). Its box sums are
    separable; that is the cheap win, and it comes before any WGSL port.
+
+
+**From the Caddis study, parked by the owner (2026-08-25):**
+- **B8 - Choke, Inner glow, Inner shadow** as catalogue effects.
+- **B9 - Slitscan, Dither, Draw Glass**; and aperture-shape upgrades beyond DOF's.
+- **B4 - a details inspector** (read-only per-layer engine state: buffer size, format,
+  colour space, cache tier). The bottom strip already reads the cache; the unique
+  value is per-layer format/colour-space once OCIO debugging is routine - build it
+  then, as a section of the existing Source card rather than a new panel.
+- **7.22 hover-scrub thumbnails** on Project rows - only if they cost nothing at rest.
+
+**The Hierarchy panel's graph view** (6.46, 7.24; K-562): deferred to the tail on the
+owner's word. The panel has left the default workspaces; the graph view and the
+indent/graph switch wait until something needs them, and 7.24's doc note waits with it.
 
 ## Deliberately deferred (not backlog)
 
