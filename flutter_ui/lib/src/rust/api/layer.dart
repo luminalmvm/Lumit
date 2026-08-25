@@ -1135,13 +1135,21 @@ class BridgeStrokePoint {
   final double x;
   final double y;
 
+  /// How hard the stylus was pressed here, 0..1 (K-583). **1.0 is "no stylus
+  /// said otherwise"** — a mouse, a finger, a tablet with the brush's
+  /// pressure toggle off — and a stroke whose points are all 1.0 is stored
+  /// with no pressures at all, so it is the stroke it would have been before
+  /// any of this existed.
+  final double pressure;
+
   const BridgeStrokePoint({
     required this.x,
     required this.y,
+    required this.pressure,
   });
 
   @override
-  int get hashCode => x.hashCode ^ y.hashCode;
+  int get hashCode => x.hashCode ^ y.hashCode ^ pressure.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1149,7 +1157,8 @@ class BridgeStrokePoint {
       other is BridgeStrokePoint &&
           runtimeType == other.runtimeType &&
           x == other.x &&
-          y == other.y;
+          y == other.y &&
+          pressure == other.pressure;
 }
 
 /// A layer's whole transform, one scalar per property.

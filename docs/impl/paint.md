@@ -20,8 +20,8 @@ stroke, because a stroke is one thing rather than a smear of changed pixels.
 ## The shape of a stroke
 
 `lumit_core::paint::PaintStroke` — id, name, `points` (layer space, in the order drawn),
-`colour`, `width` (diameter), `hardness`, `shape`, `opacity`, `start`, `end`, `mode`, `blend`,
-`clone_offset`.
+`pressures`, `colour`, `width` (diameter), `hardness`, `shape`, `opacity`, `start`, `end`,
+`mode`, `blend`, `clone_offset`.
 
 A **polyline**, not a bezier. Masks and shape layers are the bezier things; nobody edits a
 stroke vertex by vertex, and the points are samples of a gesture rather than a designed shape.
@@ -29,6 +29,17 @@ They are thinned before they are stored (`thinStroke` in `viewer_paint.dart`): s
 than two screen pixels to the last one kept are dropped, and the first and last always survive.
 A slow drag can raise several hundred pointer events a second; a thousand-point path costs the
 renderer for nothing anyone can see.
+
+**`pressures` is a list beside the path** (K-583), one 0..1 per point: how hard the stylus was
+pressed there. It is a parallel list rather than a third number inside each point because
+**empty has to mean something** — empty is the constant 1.0 everybody painted with, so a
+mouse-drawn stroke and every stroke drawn before there was a stylus to read write exactly the
+bytes they wrote yesterday and stamp exactly the pixels they stamped. A list that stops short
+is read the same way, point by point: a missing entry is 1.0, and so is a NaN, because this is
+a file the engine did not necessarily write and a stroke that draws is a better answer than one
+that vanishes. The frontend thins the pressures with the points, through the same
+`thinStrokeIndices` — a second thinning that happened to agree would be a second thinning that
+one day did not.
 
 ## Stamping (`apply_strokes`)
 
@@ -51,6 +62,19 @@ this frame is being rendered at.
 3. **Dabs.** Each segment of the trimmed polyline is walked at a quarter of the brush radius
    and a dab is stamped at each step, plus one at the far end so a stroke never falls short of
    where the pointer stopped. A one-point stroke is one dab.
+
+   **Pressure is a scale on the radius, per dab** (K-583), and nothing else: `radius ×
+   pressure`, never below half a pixel, with the hardness ramp worked out from *that* radius so
+   a light dab softens in proportion rather than turning to fog. A pressure of 0 is no dab at
+   all — the pen lifted. The dab spacing follows the pressure too, measured from the lighter of
+   the segment's two ends, because a light dab is a smaller dab and spacing taken from the full
+   radius would leave a dotted line wherever the hand went light; it is floored at a tenth so a
+   pressure sliding towards nothing cannot ask for an unbounded number of invisible dabs. At
+   pressure 1 every one of these numbers is the number the rasteriser has always used, to the
+   bit, which is the point.
+   The **trim carries the pressures with it**: `trimmed_with` is the one walk, lerping the
+   pressure at the two segments the ends cut into, so a write-on of a pressed stroke thins
+   where the whole stroke thins and no second copy of the arc-length arithmetic exists.
 4. **Coverage.** Each dab writes a soft falloff into a 0..255 coverage buffer, taking the
    **greatest** value at each pixel rather than adding. Greatest, not sum: the dabs overlap
    heavily by design, and adding them would make the middle of a slow stroke opaque and its ends
@@ -151,6 +175,15 @@ gesture that has not happened yet cannot go through the engine's preview path, w
 *values* into a copy of the document rather than lists. On release the whole stroke is committed
 once. `Escape` abandons; `Backspace` calls `delete_last_stroke`.
 
+**The pressure arrives free.** `PointerEvent.pressure` is on the raw stream the `Listener`
+already wrapped round the gesture detector, and a hit-test target is handed each event before
+the gesture arena routes it to a recogniser — so the pressure read in `onPointerMove` is the
+press that made the point `onPanUpdate` is about to add. It is normalised against the device's
+own `pressureMin`/`pressureMax` (a tablet reporting 0..1024 is not taken at face value), and
+anything that is not a stylus is a flat 1.0. The brush's **pressure controls size** toggle in
+the tool options decides whether the captured presses are committed at all; off commits 1.0
+everywhere, which the bridge stores as no pressures, which is the stroke a mouse would make.
+
 The clone stamp needs `Alt`-click first, which sets the source in *layer* coordinates so it
 stays put on the picture while the view is panned and zoomed. The offset committed with a stroke
 is `source − first point`, so the whole stroke keeps the relationship the first dab set.
@@ -168,10 +201,17 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
   the same stroke at half resolution is half the size in pixels; erase takes alpha and leaves
   colour; clone copies from its offset; clone reads the layer as it was; empty, zero-width and
   zero-opacity strokes do nothing; a stroke off the layer is skipped; bounds include the brush
-  width; painting twice gives identical bytes (determinism, docs/14).
+  width; painting twice gives identical bytes (determinism, docs/14);
+  pressure scales the width of a dab by the number given (a numeric row: 40px, half, a
+  quarter, nothing), a stroke thickens where it was pressed harder without breaking where it
+  was light, a trim lerps the pressures at its cut and leaves an unpressed stroke's empty, an
+  unpressed stroke is absent from the file, a full press everywhere paints exactly what no
+  pressure does, and a short or absurd pressure list is read calmly.
 * **Render** (`build_tests.rs`): a stroke reaches the layer's pixels, and a painted solid is
   rasterised at its real size rather than as a tile.
-* **Bridge** (`api/tests.rs`): add/read/undo/redo in one step; strokes ride the read model;
+* **Bridge** (`api/tests.rs`): a point's pressure round trips, is clamped to 0..1, and a stroke
+  nobody pressed reads back as a full press throughout;
+  add/read/undo/redo in one step; strokes ride the read model;
   edit and delete by id with a calm error for a stale id; the last stroke can be taken back; an
   empty stroke is refused; absurd numbers are clamped; all three modes and a clone offset round
   trip; both brush shapes round trip and an unstated one reads back Round; a stroke's Start and
@@ -182,11 +222,20 @@ is `source − first point`, so the whole stroke keeps the relationship the firs
   and clone stamp commit their own modes and the clone refuses without a source; painting with
   nothing selected says what to do; the Timeline grows its Paint heading and its rows write
   through, and a stroke's Start and End rows write through under it; a stroke's row picks a
-  blend from the layer list.
+  blend from the layer list; `thinStrokeIndices` agrees with `thinStroke` so a pressure is
+  dropped with its own point, a mouse and a touch always press fully while a stylus is read
+  against its own range, and a stylus drag commits the pressure it was drawn with — a full
+  press everywhere once the brush's toggle is off.
 
 ## Not built
 
-Pressure and tilt; spacing and scatter; painting in Layer view rather than on the composite; a stroke's Start/End **curve in the graph editor** (the lane
+**Tilt**, and here is why. Honouring it needs a brush tip that can *turn*, and there is
+deliberately no angle anywhere in `BrushShape`: K-548 refused the brush-tip system that would
+carry one. Angling a round dab is a no-op dressed as a feature, and angling the square one is
+that refused system arriving by the back door. So tilt is owed on a **shaped brush with an
+angle**, not on this rasteriser, and the stylus's tilt fields are read by nothing today.
+
+Also: spacing and scatter; painting in Layer view rather than on the composite; a stroke's Start/End **curve in the graph editor** (the lane
 draws its diamonds and they drag, but `graphChannels` walks transform, effect and mask paths
 only in v1); and a GPU stamping path. The last one is the only one that would change any code
 here rather than adding to it — and it changes the *rasteriser*, not the stored stroke, which is why the

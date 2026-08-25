@@ -5110,8 +5110,16 @@ mod tests {
             id: uuid::Uuid::from_u128(3),
             name: "Brush 1".into(),
             points: vec![
-                BridgeStrokePoint { x: 4.0, y: 5.0 },
-                BridgeStrokePoint { x: 40.0, y: 50.0 },
+                BridgeStrokePoint {
+                    x: 4.0,
+                    y: 5.0,
+                    pressure: 1.0,
+                },
+                BridgeStrokePoint {
+                    x: 40.0,
+                    y: 50.0,
+                    pressure: 1.0,
+                },
             ],
             colour: BridgeColourRgba {
                 r: 1.0,

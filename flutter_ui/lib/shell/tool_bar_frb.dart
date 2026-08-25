@@ -228,6 +228,24 @@ class _ToolOptions extends StatelessWidget {
             suffix: '%',
             onChanged: (v) => tools.brushHardness = v,
           ),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: LumitTooltip(
+              message: l10n.tipBrushPressure,
+              child: Row(
+                children: [
+                  HouseCheckbox(
+                    key: const ValueKey<String>('tool-brush-pressure'),
+                    value: tools.brushPressureSize,
+                    onChanged: (v) => tools.brushPressureSize = v,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(l10n.toolPressureSize,
+                      style: t.small.copyWith(color: t.textSecondary)),
+                ],
+              ),
+            ),
+          ),
           _Number(
             label: l10n.toolOpacity,
             tip: l10n.tipMarkOpacity,

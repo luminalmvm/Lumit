@@ -438,7 +438,7 @@ Future<void> main() async {
         id: _id(),
         name: name,
         points: [
-          for (final (x, y) in points) BridgeStrokePoint(x: x, y: y),
+          for (final (x, y) in points) BridgeStrokePoint(x: x, y: y, pressure: 1),
         ],
         colour: colour,
         width: 34,

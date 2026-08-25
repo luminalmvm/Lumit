@@ -5328,6 +5328,10 @@
   "@tipBrushShape": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
   },
+  "tipBrushPressure": "Stylus pressure sets the brush width",
+  "@tipBrushPressure": {
+    "description": "Tooltip on the toolbar's pressure tick, shown when a painting tool is in hand. Explains what the tick does: on a pen tablet, pressing harder makes a wider mark."
+  },
   "tipEnable": "Enable",
   "@tipEnable": {
     "description": "Tooltip on the checkbox that switches an effect on. One or two words."
@@ -6112,6 +6116,10 @@
   "toolShape": "Shape",
   "@toolShape": {
     "description": "Toolbar options strip — label beside the brush shape picker."
+  },
+  "toolPressureSize": "Pressure",
+  "@toolPressureSize": {
+    "description": "Toolbar options strip — label beside a tick box that, when on, lets a graphics tablet pen's pressure set how wide the brush mark is. One word, beside Size, Shape, Hardness and Opacity."
   },
   "toolHardness": "Hardness",
   "@toolHardness": {

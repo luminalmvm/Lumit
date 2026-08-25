@@ -16865,3 +16865,111 @@ here" and which the frontend already handles by falling back to its own document
 two that answer with no renderer open, and deliberately asserts nothing on Linux, where 0 is a
 healthy machine's honest answer. macOS and Linux compile under `cfg` on any host but can only
 *run* on their own, so CI on those two is the runtime proof.
+
+## K-583 — Stretch is a command that lowers into Retime, anchored at the in point
+
+**DECIDED 2026-08-26.** This resolves the standing open question in
+[03-DATA-MODEL.md](03-DATA-MODEL.md) ("should `stretch` survive long-term, or is it sugar the
+UI lowers into Retime?"). **It is sugar.** There is no `stretch` field on a layer, no runtime
+rate multiplier, and nothing in playback consults a stretch factor. Layer ▸ Stretch… is a
+*command*: it asks for a speed, works out the length that speed implies, and writes the
+layer's span and its Retime map together as one undo step.
+
+That is the same lowering the After Effects importer has always done from the other
+direction — an imported layer's `stretch` becomes the equivalent Retime ramp and reports
+`StretchAsRetime` — so the two directions now agree, and the graph editor always shows the
+true curve because the curve is all there is.
+
+**Anchored at the in point.** After Effects offers three anchors (in point, current frame,
+out point); Lumit offers the one that needs no extra question. The in point and the start
+offset hold, so the frame showing at the start of the layer is the frame that stays there,
+and the end moves. This is a deliberate simplification and is stated in the dialogue itself
+("the in point holds; the end of the layer moves"), not left to be discovered.
+
+**The existing curve survives the stretch.** Every key's time is scaled about the in point
+and every stored side speed is divided by the same factor — the shape said over a longer or
+shorter stretch, not a new shape — which is docs/04 §11.2's rule expressed on the property
+path K-249 left behind. A layer with no map yet is given the identity one first, so
+stretching an ordinary layer means what it looks like it means. Refused on a Sequence layer
+(K-075: its clips carry the maps, and `set_clip_speed` is their road) and on a speed that is
+not a positive finite number.
+
+**Freeze at the playhead arrives with it** (docs/04 §7.3, `retime.freeze_at_playhead`): the
+moment showing is held for one second, everything after it is pushed that far later, and the
+map is cropped back to the layer's own out point — so the layer's length never changes and
+the beat-sync covenant holds (K-022). The hold is two ordinary keyframes afterwards, dragged
+like anything else, and the tail may newly overrun, which is drawn rather than repaired. The
+segment engine's `Retime::insert_freeze` is **not** what runs: it operates on the segment
+store that K-249 reduced to a load-time conversion, and reaching it would mean building a
+property-to-segments converter. The freeze is done on the keyframes directly, through the
+same `insert_key_preserving_shape` split the razor uses (K-221).
+
+**Where the commands live.** A layer's right-click carries Retime's own set — Enable/Disable
+Retime, Stretch…, Freeze frame at playhead — and applies each to the whole picked set
+(K-523). A Sequence layer is offered none of them; its clips' menu gains the numeric speed
+entry (docs/04 §12.1's `retime.set_segment_speed`) as **Speed…**, sharing the Stretch
+dialogue with the duration well hidden, because a clip's place and length are fixed by the
+covenant and a duration to type would be a promise the engine is right to refuse.
+
+**Still engine-less, and deliberately not built here**: `retime.add_boundary`,
+`retime.trim_to_source_end` / `…_start`, `retime.quantise_boundaries_to_beats`,
+`retime.apply_preset` (including the Hold preset, which needs a segment's entry speed that
+nothing reads out), and `retime.toggle_reverse_allowed` (whose `allow_reverse` flag went with
+the segment store).
+
+## K-583 — A stroke carries the pressure it was drawn with, and pressure sets width alone
+
+**DECIDED.** A `PaintStroke` gains `pressures`, a list of 0..1 beside `points`, one per point:
+how hard the stylus was pressed there. The rasteriser uses it for exactly one thing — the
+**radius of each dab** — and tilt is not built.
+
+**Why a list beside the path rather than a third number in each point.** Because *empty has to
+mean something*. An empty `pressures` is the constant 1.0 everybody painted with, and it is
+absent from the file entirely (`skip_serializing_if = "Vec::is_empty"`), so a mouse-drawn stroke
+and every stroke drawn before there was a stylus to read write exactly the bytes they wrote
+yesterday, stamp exactly the pixels they stamped, and keep every frame the cache has banked. A
+per-point struct would have had to carry a default that serialised, or grow a second shape of
+point; a parallel list has one absent state and it is the right one. The same habit as `shape`
+(K-548), `start`/`end` (K-549) and `blend` (K-550), for the same reason each time.
+
+A list that stops short, runs long, or holds a NaN is read point by point — a missing or
+unusable entry is a full press. This is a file the engine did not necessarily write, and a
+stroke that draws is a better answer than one that vanishes or a load that fails.
+
+**Pressure is width and nothing else.** `radius × pressure`, floored at half a pixel, with the
+hardness ramp worked out from that radius so a light dab softens in proportion rather than
+turning to fog; pressure 0 stamps no dab at all. Not opacity, not colour, not hardness: each of
+those is already a stroke-wide number the user set deliberately, and having the pen quietly
+override one is how a brush stops being predictable. Width is the one a hand expects to control
+and the one the stored-gesture model can honour at any resolution. The **dab spacing** follows
+the pressure too, measured from the lighter end of each segment, because spacing worked from the
+full radius leaves a dotted line wherever the hand went light — floored at a tenth so a pressure
+sliding to nothing cannot ask for an unbounded number of invisible dabs. At pressure 1 every one
+of these numbers is the number the rasteriser already used, to the bit.
+
+The **trim carries the pressures**: `trimmed` grows into `trimmed_with`, one walk that lerps the
+pressure at the two segments the ends cut into, rather than a second copy of K-549's arc-length
+arithmetic that could one day disagree with the first about where "ten along" is. The frontend
+thins pressures through the same `thinStrokeIndices` `thinStroke` is now written on, for the
+identical reason.
+
+**The seam and the toggle.** `BridgeStrokePoint` gains `pressure`, defaulting to a full press on
+the way out so the frontend never has to ask whether a stroke has any; on the way in, an all-1.0
+path is stored as no pressures at all. Flutter reads `PointerEvent.pressure` off the raw stream
+in the `Listener` already wrapped round the paint gesture — a hit-test target is handed each
+event before the gesture arena routes it to a recogniser, so the pressure read in
+`onPointerMove` is the press that made the point `onPanUpdate` is about to add, with no
+timestamp matching. It is normalised against the device's own `pressureMin`/`pressureMax`, and
+anything that is not a stylus is a flat 1.0: **with no pen in the room nothing changes at all.**
+A per-brush **Pressure** tick in the tool options turns it off, which commits a full press
+everywhere, which is the stroke a mouse would have made.
+
+**Tilt is refused, not forgotten.** Honouring tilt needs a brush tip that can *turn*, and there
+is deliberately no angle anywhere in `BrushShape` — K-548 refused the brush-tip system that
+would carry one. Angling a round dab is a no-op dressed as a feature; angling the square one is
+that refused system arriving by the back door. Tilt is owed **with** a shaped brush that has an
+angle, and the stylus's tilt fields are read by nothing today. Recorded in
+`docs/impl/paint.md` §Not built.
+
+**GPU stamping is still the separate item it was.** This changes the CPU rasteriser only; the
+stored stroke it stamps is the one a GPU path would upload, unchanged in shape.

@@ -321,6 +321,17 @@ class ToolsState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether a stylus's pressure widens the mark (K-583). On, because a pen
+  /// that does not thin under a light hand is a pen nobody reaches for — and
+  /// with no stylus in the room it changes nothing at all.
+  bool _brushPressureSize = true;
+  bool get brushPressureSize => _brushPressureSize;
+  set brushPressureSize(bool value) {
+    if (_brushPressureSize == value) return;
+    _brushPressureSize = value;
+    notifyListeners();
+  }
+
   double _brushOpacity = 100;
   double get brushOpacity => _brushOpacity;
   set brushOpacity(double value) {

@@ -14,6 +14,12 @@
 // frame is being rendered at, and every setting stays changeable afterwards. The
 // engine's side of this is `lumit_core::paint`.
 //
+// **A stylus presses.** On a pen tablet each point also carries how hard it was
+// pressed, and the brush's "pressure controls size" toggle decides whether that
+// widens the mark (K-583). With a mouse — or with the toggle off — every point
+// is a full press, which the engine stores as no pressures at all, so nothing
+// about the stroke changes.
+//
 // **One drag is one stroke is one undo step.** The stroke is drawn on the
 // overlay while the pointer is down and committed once on release, exactly as
 // the type tool commits a document once. `Escape` abandons a stroke in flight;
@@ -24,6 +30,7 @@
 // one, the tool says so instead of stamping nothing — After Effects' rule and
 // the same honesty every other unbuilt path here follows.
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -70,14 +77,38 @@ BridgePaintMode paintModeFor(ToolMode tool) => switch (tool) {
 /// The first and last points always survive: a stroke that stopped short of
 /// where the pointer stopped is a stroke that does not go where it was drawn.
 List<Offset> thinStroke(List<Offset> points,
+        {double minimum = paintSampleDistance}) =>
+    [for (final i in thinStrokeIndices(points, minimum: minimum)) points[i]];
+
+/// Which of [points] [thinStroke] keeps, by index — the same thinning, said in
+/// a way anything travelling *beside* the path can follow.
+///
+/// The stylus pressures are that beside-the-path list (K-583): a pressure has
+/// to be dropped with the point it belongs to, and a second thinning that
+/// happened to agree would be a second thinning that one day did not.
+List<int> thinStrokeIndices(List<Offset> points,
     {double minimum = paintSampleDistance}) {
-  if (points.length < 2) return List.of(points);
-  final out = <Offset>[points.first];
-  for (final p in points.skip(1)) {
-    if ((p - out.last).distance >= minimum) out.add(p);
+  if (points.length < 2) return [for (var i = 0; i < points.length; i++) i];
+  final out = <int>[0];
+  for (var i = 1; i < points.length; i++) {
+    if ((points[i] - points[out.last]).distance >= minimum) out.add(i);
   }
-  if (out.last != points.last) out.add(points.last);
+  if (out.last != points.length - 1) out.add(points.length - 1);
   return out;
+}
+
+/// How hard the stylus is pressing, 0..1, or **1.0 for anything that is not a
+/// stylus** — a mouse, a finger, a tablet that reports no range. That is the
+/// whole of "if no stylus is present nothing changes" (K-583): a full press
+/// everywhere is stored as no pressures at all.
+double stylusPressure(PointerEvent event) {
+  if (event.kind != PointerDeviceKind.stylus &&
+      event.kind != PointerDeviceKind.invertedStylus) {
+    return 1.0;
+  }
+  final span = event.pressureMax - event.pressureMin;
+  if (span <= 0) return 1.0;
+  return ((event.pressure - event.pressureMin) / span).clamp(0.0, 1.0);
 }
 
 /// The painting tools over the picture.
@@ -121,6 +152,16 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
   /// The stroke in flight, in screen coordinates.
   final List<Offset> _stroke = [];
 
+  /// How hard the stylus was pressing at each of those points, 0..1 (K-583).
+  /// Parallel to [_stroke], and all 1.0 when there is no stylus.
+  final List<double> _pressures = [];
+
+  /// The pressure of the last pointer event seen. The drag callbacks carry no
+  /// pressure of their own, so it is read off the raw stream in the `Listener`
+  /// wrapped round them — which sees each event before the gesture recogniser
+  /// does, so what is read here is the press that made this point.
+  double _pressure = 1.0;
+
   /// Where the press landed. The framework only reports a drag once it has
   /// travelled its slop, and a stroke that began 18px along is the wrong stroke
   /// (K-217's trap, and every tool since).
@@ -144,7 +185,7 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
   /// (widgets/escape_ladder.dart), so it is taken back before a menu closes.
   bool _escape() {
     if (!widget.active || _stroke.isEmpty) return false;
-    setState(_stroke.clear);
+    setState(_clearStroke);
     return true;
   }
 
@@ -157,6 +198,12 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
   }
 
   bool get _isClone => widget.tool == ToolMode.cloneStamp;
+
+  /// The path and its pressures go together or not at all.
+  void _clearStroke() {
+    _stroke.clear();
+    _pressures.clear();
+  }
 
   /// The layer being painted on: the primary selection, as the shape tools use.
   LayerBox? get _target {
@@ -202,14 +249,18 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
       child: DrawnPointerRegion(
         onPointer: (at) => setState(() => _pointer = at),
         child: Listener(
-          onPointerDown: (event) => _downAt = event.localPosition,
+          onPointerDown: (event) {
+            _downAt = event.localPosition;
+            _pressure = stylusPressure(event);
+          },
+          onPointerMove: (event) => _pressure = stylusPressure(event),
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapUp: _onTapUp,
             onPanStart: _onPanStart,
             onPanUpdate: _onPanUpdate,
             onPanEnd: (_) => _onPanEnd(),
-            onPanCancel: () => setState(_stroke.clear),
+            onPanCancel: () => setState(_clearStroke),
             child: Stack(
               children: [
                 Positioned.fill(
@@ -263,37 +314,45 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
       widget.state.postNotice(l10n.cloneSourceSet);
       return;
     }
-    _commit(box, [details.localPosition]);
+    _commit(box, [details.localPosition], [_pressure]);
   }
 
   void _onPanStart(DragStartDetails details) {
     final at = _downAt ?? details.localPosition;
     setState(() {
+      _clearStroke();
       _stroke
-        ..clear()
         ..add(at)
         ..add(details.localPosition);
+      _pressures
+        ..add(_pressure)
+        ..add(_pressure);
     });
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
-    setState(() => _stroke.add(details.localPosition));
+    setState(() {
+      _stroke.add(details.localPosition);
+      _pressures.add(_pressure);
+    });
   }
 
   void _onPanEnd() {
     final points = List.of(_stroke);
-    setState(_stroke.clear);
+    final pressures = List.of(_pressures);
+    setState(_clearStroke);
     if (points.isEmpty) return;
     final box = _target;
     if (box == null) {
       _sayNoLayer();
       return;
     }
-    _commit(box, points);
+    _commit(box, points, pressures);
   }
 
   /// One stroke, one op, one undo step.
-  void _commit(LayerBox box, List<Offset> screenPoints) {
+  void _commit(
+      LayerBox box, List<Offset> screenPoints, List<double> pressures) {
     if (_isClone && _cloneSource == null) {
       widget.state.postNotice(
         l10n.cloneSourceFirst,
@@ -301,12 +360,21 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
       return;
     }
     final tools = widget.uiState.tools;
-    final thinned = thinStroke(screenPoints);
+    // The pressures are thinned with the points they belong to, and a brush
+    // with the toggle off commits a full press throughout — which the engine
+    // stores as no pressures at all, so the stroke is the stroke it would have
+    // been (K-583).
     final points = [
-      for (final p in thinned)
+      for (final i in thinStrokeIndices(screenPoints))
         () {
-          final layer = box.map.layerOf(p);
-          return BridgeStrokePoint(x: layer.dx, y: layer.dy);
+          final layer = box.map.layerOf(screenPoints[i]);
+          return BridgeStrokePoint(
+            x: layer.dx,
+            y: layer.dy,
+            pressure: tools.brushPressureSize && i < pressures.length
+                ? pressures[i]
+                : 1.0,
+          );
         }(),
     ];
     if (points.isEmpty) return;

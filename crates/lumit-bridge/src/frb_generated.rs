@@ -12844,7 +12844,12 @@ impl SseDecode for crate::api::layer::BridgeStrokePoint {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_x = <f64>::sse_decode(deserializer);
         let mut var_y = <f64>::sse_decode(deserializer);
-        return crate::api::layer::BridgeStrokePoint { x: var_x, y: var_y };
+        let mut var_pressure = <f64>::sse_decode(deserializer);
+        return crate::api::layer::BridgeStrokePoint {
+            x: var_x,
+            y: var_y,
+            pressure: var_pressure,
+        };
     }
 }
 
@@ -17689,6 +17694,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeStrokePoint {
         [
             self.x.into_into_dart().into_dart(),
             self.y.into_into_dart().into_dart(),
+            self.pressure.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -20002,6 +20008,7 @@ impl SseEncode for crate::api::layer::BridgeStrokePoint {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <f64>::sse_encode(self.x, serializer);
         <f64>::sse_encode(self.y, serializer);
+        <f64>::sse_encode(self.pressure, serializer);
     }
 }
 

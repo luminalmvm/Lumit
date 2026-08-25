@@ -356,6 +356,12 @@ pub enum BridgeBrushShape {
 pub struct BridgeStrokePoint {
     pub x: f64,
     pub y: f64,
+    /// How hard the stylus was pressed here, 0..1 (K-583). **1.0 is "no stylus
+    /// said otherwise"** — a mouse, a finger, a tablet with the brush's
+    /// pressure toggle off — and a stroke whose points are all 1.0 is stored
+    /// with no pressures at all, so it is the stroke it would have been before
+    /// any of this existed.
+    pub pressure: f64,
 }
 
 /// One paint stroke on a layer (K-227): the path the pointer took, and how it
@@ -406,7 +412,14 @@ impl BridgeStroke {
             points: stroke
                 .points
                 .iter()
-                .map(|&(x, y)| BridgeStrokePoint { x, y })
+                .enumerate()
+                .map(|(i, &(x, y))| BridgeStrokePoint {
+                    x,
+                    y,
+                    // No pressures is the constant 1.0, and so is a list that
+                    // stops short — the frontend never has to ask which.
+                    pressure: stroke.pressures.get(i).copied().unwrap_or(1.0),
+                })
                 .collect(),
             colour: crate::api::assets::colour_of(stroke.colour),
             width: stroke.width,
@@ -444,6 +457,18 @@ impl BridgeStroke {
             id: self.id,
             name: self.name.clone(),
             points: self.points.iter().map(|p| (p.x, p.y)).collect(),
+            // All-1.0 is stored as nothing at all (K-583): a mouse-drawn stroke
+            // has to be the stroke it was before there was a stylus, in the
+            // file as well as on the screen, or every old project's bytes move
+            // the first time it is opened and saved.
+            pressures: if self.points.iter().all(|p| p.pressure >= 1.0) {
+                Vec::new()
+            } else {
+                self.points
+                    .iter()
+                    .map(|p| p.pressure.clamp(0.0, 1.0))
+                    .collect()
+            },
             colour: crate::api::assets::linear_of(self.colour),
             width: self.width.clamp(0.0, 10_000.0),
             hardness: self.hardness.clamp(0.0, 1.0),

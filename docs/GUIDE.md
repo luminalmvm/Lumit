@@ -9024,6 +9024,40 @@ same code rather than growing a third copy that could drift. And the eraser igno
 entirely, because an eraser has no colour to combine: it takes transparency away, and a mode
 there would only be a second way of saying nothing.
 
+### A brush that feels the pen (K-583)
+
+A graphics tablet's pen reports **how hard it is being pressed** as well as where it is, and a
+brush that ignores that is a brush that draws with a dead hand. Lumit now records the press at
+every point of the stroke, and uses it for one thing: the **width** of the mark. Lean on the
+pen and the stroke thickens; ease off and it tapers. There is a "pressure controls size" tick in
+the tool options beside the brush's size and shape, so a brush can be told to ignore the pen and
+draw at one width whatever the hand is doing.
+
+Two details are worth knowing, because both were the hard part.
+
+The first is that **nothing changes if there is no pen**. A mouse has no pressure to report, so
+Lumit treats it as pressing fully, and a stroke that presses fully everywhere is stored with *no
+pressures at all* — an empty list rather than a row of ones. That matters more than it sounds.
+Every project painted before this existed has no pressures in it, and so does every stroke drawn
+with a mouse afterwards, which means the file on disk is byte for byte the file it was, the
+pixels are the pixels they were, and every frame Lumit had already worked out and banked in its
+cache is still correct. A feature that quietly rewrote every old project the first time it was
+opened would be a much worse trade than it looks.
+
+The second is that the press has to reach the right point. Flutter hands a drag to Lumit as a
+tidy stream of "the pointer moved here", and that stream has had the pressure stripped out of
+it — it is only on the raw pointer events underneath. Lumit was already listening to those raw
+events for another reason, and it turns out they arrive *just before* the tidy ones, so the
+pressure noted from the raw event is the press that made the point arriving a moment later. No
+guessing and no matching up by timestamp.
+
+**Tilt is not built**, and that is a decision rather than an omission. A pen also reports the
+angle it is being held at, and the obvious use for it is the one a calligraphy nib makes: a
+tip that turns as the hand turns. Lumit's brush has exactly two tips, a circle and a square, and
+neither has an angle — turning a circle does nothing at all, and turning the square would mean
+building the whole shaped-brush system that was deliberately left out. Tilt is owed, but it is
+owed *with* that system, not before it.
+
 ## 13. The two public web sites
 
 `web/` and `web-docs/` are the public face of the project: **lumitlab.com**,

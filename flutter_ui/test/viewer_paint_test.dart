@@ -6,6 +6,7 @@
 // what thinning decides, and what would silently bloat every project file if it
 // were wrong.
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_paint.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -64,6 +65,51 @@ void main() {
       final thinned = thinStroke(dense);
       expect(thinned.length, lessThan(dense.length / 5));
       expect(thinned.last, dense.last);
+    });
+
+    test('the indices are the same thinning, so a pressure rides along', () {
+      final dense = [
+        for (var i = 0; i < 200; i++) Offset(i * 0.7, i.isEven ? 0 : 0.3),
+      ];
+      final indices = thinStrokeIndices(dense);
+      expect([for (final i in indices) dense[i]], thinStroke(dense));
+      expect(indices.first, 0);
+      expect(indices.last, dense.length - 1);
+    });
+  });
+
+  group('Reading the stylus (K-583)', () {
+    PointerDownEvent event(PointerDeviceKind kind,
+            {double pressure = 1, double min = 0, double max = 1}) =>
+        PointerDownEvent(
+          kind: kind,
+          pressure: pressure,
+          pressureMin: min,
+          pressureMax: max,
+        );
+
+    test('a mouse always presses fully, so nothing changes without a pen', () {
+      expect(stylusPressure(event(PointerDeviceKind.mouse, pressure: 0.2)), 1);
+      expect(stylusPressure(event(PointerDeviceKind.touch, pressure: 0)), 1);
+    });
+
+    test('a stylus reports where it is between its own two ends', () {
+      expect(stylusPressure(event(PointerDeviceKind.stylus, pressure: 0.5)),
+          closeTo(0.5, 1e-9));
+      // A tablet whose range is not 0..1 is read against its own ends rather
+      // than taken at face value.
+      expect(
+        stylusPressure(
+            event(PointerDeviceKind.stylus, pressure: 512, min: 0, max: 1024)),
+        closeTo(0.5, 1e-9),
+      );
+      // And one that reports no range at all is a full press, not a divide by
+      // nothing.
+      expect(
+        stylusPressure(
+            event(PointerDeviceKind.stylus, pressure: 7, min: 7, max: 7)),
+        1,
+      );
     });
   });
 }

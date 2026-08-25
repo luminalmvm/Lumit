@@ -32,9 +32,18 @@
 //! colour the mark lays down. It never changes how the mark *covers*, and an
 //! eraser ignores it, having no colour to combine.
 //!
-//! **What is deliberately not here.** Pressure, tilt, spacing curves and any
-//! GPU path. Each is a real feature; none of them changes the shape of what is
-//! stored, which is what this first cut is for.
+//! **A stroke can be pressed.** `pressures` (K-583) is how hard the stylus was
+//! pressed at each point, and the only thing it changes is the *width* of the
+//! dab stamped there. An empty list is the constant 1.0 — every mouse-drawn
+//! stroke, and everything painted before there was a stylus to read — so it
+//! costs an old project neither a byte in the file nor a pixel on the screen.
+//!
+//! **What is deliberately not here.** Tilt, spacing curves and any GPU path.
+//! Tilt needs a brush tip that can *turn*, and there is deliberately no angle
+//! anywhere in [`BrushShape`]; angling a round dab would be a lie and angling a
+//! square one is the brush-tip system K-548 refused. Each is a real feature;
+//! none of them changes the shape of what is stored, which is what this first
+//! cut is for.
 //!
 //! **A stroke can draw itself on.** `start` and `end` (K-549) are a per cent of
 //! the stroke's own length, animatable like any other property: hold Start at 0,
@@ -130,6 +139,17 @@ pub struct PaintStroke {
     /// The pointer's path in **layer** coordinates, in the order it was drawn.
     /// One point is a dab; two or more are joined by round-capped segments.
     pub points: Vec<(f64, f64)>,
+    /// How hard the stylus was pressed at each point, 0..1, parallel to
+    /// [`points`](Self::points) (K-583).
+    ///
+    /// **Empty is the whole of the compatibility story**: an empty list is the
+    /// constant 1.0 everybody painted with, so a mouse-drawn stroke — and every
+    /// stroke drawn before there was a stylus to read — writes exactly the
+    /// bytes it wrote yesterday and stamps exactly the pixels it stamped. A
+    /// short or overlong list is read the same way point by point: a missing
+    /// entry is 1.0, rather than an error nobody could act on.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pressures: Vec<f64>,
     pub colour: LinearColour,
     /// The brush's **diameter** in layer pixels.
     pub width: f64,
@@ -188,6 +208,7 @@ impl PaintStroke {
             id: Uuid::now_v7(),
             name: name.into(),
             points,
+            pressures: Vec::new(),
             colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
             width: 20.0,
             hardness: 0.8,
@@ -216,7 +237,31 @@ impl PaintStroke {
     /// The piece of the path drawn at `t`, in the order it was painted — the
     /// whole path when Start is 0 and End is 100, which is nearly always.
     pub fn drawn_at(&self, t: f64) -> Vec<(f64, f64)> {
-        trimmed(&self.points, self.start.value_at(t), self.end.value_at(t))
+        self.drawn_pressed_at(t).0
+    }
+
+    /// [`drawn_at`](Self::drawn_at) with the pressure at each surviving point
+    /// beside it — empty when the stroke has no pressures at all, which is the
+    /// constant 1.0.
+    pub fn drawn_pressed_at(&self, t: f64) -> (Vec<(f64, f64)>, Vec<f64>) {
+        trimmed_with(
+            &self.points,
+            &self.pressures,
+            self.start.value_at(t),
+            self.end.value_at(t),
+        )
+    }
+}
+
+/// The pressure at point `i` of a path: 1.0 wherever there is none, which is
+/// the whole of a mouse-drawn stroke and of every stroke drawn before K-583.
+fn pressure_at(pressures: &[f64], i: usize) -> f64 {
+    match pressures.get(i) {
+        // A number nobody could act on reads as a full press rather than as an
+        // error: this is a file the engine did not necessarily write, and a
+        // stroke that draws is a better answer than one that vanishes.
+        Some(p) if p.is_finite() => p.clamp(0.0, 1.0),
+        _ => 1.0,
     }
 }
 
@@ -249,25 +294,45 @@ fn bounds_of(points: &[(f64, f64)], width: f64) -> Option<(f64, f64, f64, f64)> 
 /// sample repeated) has nothing to cut, so it is drawn whole whenever anything
 /// of it is asked for.
 pub(crate) fn trimmed(points: &[(f64, f64)], start: f64, end: f64) -> Vec<(f64, f64)> {
+    trimmed_with(points, &[], start, end).0
+}
+
+/// [`trimmed`] carrying a per-point scalar through the same walk — the stylus
+/// pressures (K-583), lerped at the two segments the ends cut into, so a
+/// write-on of a pressed stroke thins and thickens exactly where the untrimmed
+/// one does.
+///
+/// One walk rather than two: a second copy of this arithmetic is a second place
+/// for a dash and a trim to disagree about where "ten along" is. An empty
+/// `pressures` stays empty on the way out, which is how "the constant 1.0"
+/// survives a trim.
+fn trimmed_with(
+    points: &[(f64, f64)],
+    pressures: &[f64],
+    start: f64,
+    end: f64,
+) -> (Vec<(f64, f64)>, Vec<f64>) {
     let from_pct = start.clamp(0.0, 100.0);
     let to_pct = end.clamp(0.0, 100.0);
     if to_pct <= from_pct {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
     if from_pct <= 0.0 && to_pct >= 100.0 {
-        return points.to_vec();
+        return (points.to_vec(), pressures.to_vec());
     }
     let seg_len = |a: (f64, f64), b: (f64, f64)| ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
     let total: f64 = points.windows(2).map(|p| seg_len(p[0], p[1])).sum();
     if total <= 0.0 {
-        return points.to_vec();
+        return (points.to_vec(), pressures.to_vec());
     }
     let (from, to) = (total * from_pct / 100.0, total * to_pct / 100.0);
     let at = |a: (f64, f64), b: (f64, f64), t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+    let pressed = !pressures.is_empty();
 
     let mut out: Vec<(f64, f64)> = Vec::new();
+    let mut out_p: Vec<f64> = Vec::new();
     let mut walked = 0.0;
-    for pair in points.windows(2) {
+    for (i, pair) in points.windows(2).enumerate() {
         let (p0, p1) = (pair[0], pair[1]);
         let length = seg_len(p0, p1);
         if length <= 0.0 {
@@ -281,12 +346,19 @@ pub(crate) fn trimmed(points: &[(f64, f64)], start: f64, end: f64) -> Vec<(f64, 
         }
         let t0 = ((from - s0) / length).clamp(0.0, 1.0);
         let t1 = ((to - s0) / length).clamp(0.0, 1.0);
+        let (a, b) = (pressure_at(pressures, i), pressure_at(pressures, i + 1));
         if out.is_empty() {
             out.push(at(p0, p1, t0));
+            if pressed {
+                out_p.push(a + (b - a) * t0);
+            }
         }
         out.push(at(p0, p1, t1));
+        if pressed {
+            out_p.push(a + (b - a) * t1);
+        }
     }
-    out
+    (out, out_p)
 }
 
 /// How far apart, as a fraction of the brush's radius, the dabs along a segment
@@ -390,7 +462,7 @@ fn fill_coverage(
     // The piece drawn at this frame (K-549). Measured and dabbed from the
     // trimmed path, so a write-on's box grows with it rather than reserving
     // the whole stroke from the first frame.
-    let points = stroke.drawn_at(t);
+    let (points, pressures) = stroke.drawn_pressed_at(t);
     let (min_x, min_y, max_x, max_y) = bounds_of(&points, stroke.width)?;
     if max_x * sx < 0.0
         || max_y * sy < 0.0
@@ -405,9 +477,12 @@ fn fill_coverage(
     // enough. Taking the smaller of the two keeps a stroke from bleeding if
     // that ever stops being true.
     let scale = sx.min(sy);
+    // The brush at full pressure. Every dab is this scaled by how hard the
+    // stylus was pressed there (K-583); with no pressures that factor is 1.0
+    // at every dab and the numbers below are the ones the rasteriser has always
+    // used, to the bit.
     let radius = (stroke.width / 2.0 * scale).max(0.5);
-    let feather = (radius * (1.0 - stroke.hardness.clamp(0.0, 1.0))).max(MIN_FEATHER);
-    let solid = (radius - feather).max(0.0);
+    let hardness = stroke.hardness.clamp(0.0, 1.0);
 
     // The raster rectangle this stroke can reach: its bounds scaled onto the
     // raster, grown by the brush radius — the same floor/ceil `stamp` uses per
@@ -420,18 +495,23 @@ fn fill_coverage(
         let row = (y as usize) * (w as usize);
         coverage[row + x0 as usize..=row + x1 as usize].fill(0);
     }
-    for (cx, cy) in dabs(&points, radius) {
-        let px = cx * sx;
-        let py = cy * sy;
+    for (cx, cy, pressure) in dabs(&points, &pressures, radius) {
+        // Nothing pressed is nothing drawn — the stylus lifted, or a tablet
+        // reporting a zero on the way down.
+        if pressure <= 0.0 {
+            continue;
+        }
+        let r = (radius * pressure).max(0.5);
+        let feather = (r * (1.0 - hardness)).max(MIN_FEATHER);
         stamp(
             coverage,
             w,
             h,
-            px,
-            py,
+            cx * sx,
+            cy * sy,
             Dab {
-                radius,
-                solid,
+                radius: r,
+                solid: (r - feather).max(0.0),
                 feather,
                 shape: stroke.shape,
             },
@@ -440,25 +520,28 @@ fn fill_coverage(
     Some((x0, y0, x1, y1))
 }
 
-/// Where the dabs along a stroke's polyline go, in layer coordinates.
+/// Where the dabs along a stroke's polyline go, in layer coordinates, and how
+/// hard each one presses (K-583).
 ///
 /// One point gives one dab. Each segment is walked at [`DAB_SPACING`] of the
 /// radius so the marks overlap into a line; the segment's far end is always
 /// stamped, so a stroke never falls short of where the pointer stopped.
-fn dabs(points: &[(f64, f64)], radius_px: f64) -> Vec<(f64, f64)> {
+///
+/// The step shrinks with the pressure along the segment, because a light dab is
+/// a *smaller* dab: spacing worked out from the full radius would leave a dotted
+/// line wherever the hand went light. The lighter of the segment's two ends is
+/// what it is measured from, and never below a tenth, so a pressure sliding
+/// towards nothing cannot ask for an unbounded number of invisible dabs.
+fn dabs(points: &[(f64, f64)], pressures: &[f64], radius_px: f64) -> Vec<(f64, f64, f64)> {
     let mut out = Vec::new();
     let Some(&first) = points.first() else {
         return out;
     };
-    out.push(first);
+    out.push((first.0, first.1, pressure_at(pressures, 0)));
     if points.len() == 1 {
         return out;
     }
-    // The step is measured in layer units: the radius is in raster pixels, so a
-    // stroke on a layer being drawn small still gets dabs close enough together
-    // to join up.
-    let step = (radius_px * DAB_SPACING).max(0.25);
-    for pair in points.windows(2) {
+    for (i, pair) in points.windows(2).enumerate() {
         let (x0, y0) = pair[0];
         let (x1, y1) = pair[1];
         let dx = x1 - x0;
@@ -467,10 +550,15 @@ fn dabs(points: &[(f64, f64)], radius_px: f64) -> Vec<(f64, f64)> {
         if length <= f64::EPSILON {
             continue;
         }
+        let (p0, p1) = (pressure_at(pressures, i), pressure_at(pressures, i + 1));
+        // The step is measured in layer units: the radius is in raster pixels,
+        // so a stroke on a layer being drawn small still gets dabs close enough
+        // together to join up.
+        let step = (radius_px * p0.min(p1).max(0.1) * DAB_SPACING).max(0.25);
         let count = (length / step).ceil().min(4096.0) as usize;
-        for i in 1..=count {
-            let t = i as f64 / count as f64;
-            out.push((x0 + dx * t, y0 + dy * t));
+        for j in 1..=count {
+            let t = j as f64 / count as f64;
+            out.push((x0 + dx * t, y0 + dy * t, p0 + (p1 - p0) * t));
         }
     }
     out
@@ -1193,5 +1281,130 @@ mod tests {
         apply_strokes(&mut once, 20, 20, 20.0, 20.0, &strokes, 0.0);
         apply_strokes(&mut twice, 20, 20, 20.0, 20.0, &strokes, 0.0);
         assert_eq!(once, twice);
+    }
+
+    // --- Pressure (K-583) -------------------------------------------------
+
+    /// How wide the mark is across the middle of a dab: the numeric row a
+    /// pressure has to move, and the whole of what pressure does.
+    fn marked_width(rgba: &[u8], w: u32, y: u32) -> u32 {
+        (0..w).filter(|&x| alpha_at(rgba, w, x, y) > 0).count() as u32
+    }
+
+    /// Width scales by pressure, dab by dab. A golden-ish row rather than an
+    /// exact byte: what is being pinned is that half the pressure is half the
+    /// brush, not the anti-aliasing at its edge.
+    #[test]
+    fn pressure_scales_the_width_of_the_mark() {
+        let dab = |pressure: Option<f64>| {
+            let mut rgba = raster(60, 60, [0, 0, 0, 0]);
+            let mut stroke = PaintStroke::new("Dab", vec![(30.0, 30.0)]);
+            stroke.width = 40.0;
+            stroke.hardness = 1.0;
+            if let Some(p) = pressure {
+                stroke.pressures = vec![p];
+            }
+            apply_strokes(&mut rgba, 60, 60, 60.0, 60.0, &[stroke], 0.0);
+            marked_width(&rgba, 60, 30)
+        };
+
+        let full = dab(None);
+        assert!((39..=42).contains(&full), "a 40px brush marks 40px: {full}");
+        assert_eq!(dab(Some(1.0)), full, "a full press is the plain brush");
+        let half = dab(Some(0.5));
+        assert!(
+            (19..=22).contains(&half),
+            "half the press, half of it: {half}"
+        );
+        let light = dab(Some(0.25));
+        assert!((9..=12).contains(&light), "and a quarter: {light}");
+        assert_eq!(dab(Some(0.0)), 0, "nothing pressed is nothing drawn");
+    }
+
+    /// The pressure moves *along* the stroke, so a gesture that pressed harder
+    /// as it went leaves a mark that widens — and no gap where it was light,
+    /// which is the dab spacing following the pressure rather than the width.
+    #[test]
+    fn a_stroke_thickens_where_it_was_pressed_harder() {
+        let mut rgba = raster(120, 40, [0, 0, 0, 0]);
+        let mut stroke = PaintStroke::new("Line", vec![(10.0, 20.0), (110.0, 20.0)]);
+        stroke.width = 24.0;
+        stroke.hardness = 1.0;
+        stroke.pressures = vec![0.2, 1.0];
+        apply_strokes(&mut rgba, 120, 40, 120.0, 40.0, &[stroke], 0.0);
+
+        let height = |x: u32| (0..40).filter(|&y| alpha_at(&rgba, 120, x, y) > 0).count();
+        assert!(
+            height(100) > height(20) * 2,
+            "the pressed end is much the wider: {} against {}",
+            height(100),
+            height(20)
+        );
+        for x in 11..110 {
+            assert!(alpha_at(&rgba, 120, x, 20) > 0, "the line broke at x={x}");
+        }
+    }
+
+    /// A trim cuts the pressures with the points (K-549 + K-583), so a write-on
+    /// of a pressed stroke thins where the whole stroke thins.
+    #[test]
+    fn a_trim_carries_the_pressure_with_it() {
+        let mut stroke = PaintStroke::new("Line", vec![(0.0, 0.0), (100.0, 0.0)]);
+        stroke.pressures = vec![0.0, 1.0];
+        stroke.start = Property::fixed(50.0);
+        let (points, pressures) = stroke.drawn_pressed_at(0.0);
+        assert_eq!(points, vec![(50.0, 0.0), (100.0, 0.0)]);
+        assert_eq!(pressures, vec![0.5, 1.0], "lerped at the cut");
+
+        // A stroke with no pressures keeps none: empty is the constant 1.0 and
+        // has to stay empty, or the trim invents a list the file never had.
+        let plain = PaintStroke::new("Line", vec![(0.0, 0.0), (100.0, 0.0)]);
+        assert!(plain.drawn_pressed_at(0.0).1.is_empty());
+    }
+
+    /// The compatibility promise in one test: a stroke nobody pressed writes
+    /// the bytes it always wrote, and reads back the same either way.
+    #[test]
+    fn an_unpressed_stroke_is_absent_from_the_file() {
+        let stroke = PaintStroke::new("Line", vec![(1.0, 2.0), (3.0, 4.0)]);
+        let json = serde_json::to_string(&stroke).expect("serialise");
+        assert!(!json.contains("pressure"), "nothing about pressure: {json}");
+        let back: PaintStroke = serde_json::from_str(&json).expect("read back");
+        assert!(back.pressures.is_empty(), "and none comes back");
+
+        let mut pressed = stroke.clone();
+        pressed.pressures = vec![0.25, 0.75];
+        let json = serde_json::to_string(&pressed).expect("serialise");
+        let back: PaintStroke = serde_json::from_str(&json).expect("read back");
+        assert_eq!(back.pressures, vec![0.25, 0.75]);
+    }
+
+    /// No pressures at all and a full press everywhere are the same pixels, to
+    /// the byte — the thing that keeps every banked frame of every old project
+    /// valid.
+    #[test]
+    fn a_full_press_paints_exactly_what_no_pressure_does() {
+        let plain = PaintStroke::new("Line", vec![(3.0, 3.0), (30.0, 24.0), (50.0, 8.0)]);
+        let mut pressed = plain.clone();
+        pressed.pressures = vec![1.0, 1.0, 1.0];
+
+        let mut a = raster(60, 30, [0, 0, 0, 0]);
+        let mut b = raster(60, 30, [0, 0, 0, 0]);
+        apply_strokes(&mut a, 60, 30, 60.0, 30.0, &[plain], 0.0);
+        apply_strokes(&mut b, 60, 30, 60.0, 30.0, &[pressed], 0.0);
+        assert_eq!(a, b);
+    }
+
+    /// A pressure list that stops short — or runs long, or carries nonsense —
+    /// is read point by point rather than refused: a missing entry is a full
+    /// press, and the engine does not panic on a file it did not write.
+    #[test]
+    fn a_short_or_absurd_pressure_list_is_read_calmly() {
+        let mut stroke = PaintStroke::new("Line", vec![(5.0, 15.0), (55.0, 15.0)]);
+        stroke.width = 10.0;
+        stroke.pressures = vec![f64::NAN, 9.0, -4.0, 0.5];
+        let mut rgba = raster(60, 30, [0, 0, 0, 0]);
+        apply_strokes(&mut rgba, 60, 30, 60.0, 30.0, &[stroke], 0.0);
+        assert!(alpha_at(&rgba, 60, 55, 15) > 0, "the far end is drawn");
     }
 }

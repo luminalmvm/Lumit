@@ -4310,7 +4310,11 @@ fn stroke(name: &str, points: &[(f64, f64)]) -> crate::api::layer::BridgeStroke 
         name: name.into(),
         points: points
             .iter()
-            .map(|&(x, y)| BridgeStrokePoint { x, y })
+            .map(|&(x, y)| BridgeStrokePoint {
+                x,
+                y,
+                pressure: 1.0,
+            })
             .collect(),
         colour: crate::api::assets::BridgeColourRgba {
             r: 1.0,
@@ -4504,6 +4508,39 @@ fn both_brush_shapes_round_trip() {
     let strokes = layer.get_paint().expect("paint");
     assert_eq!(strokes[0].shape, BridgeBrushShape::Round);
     assert_eq!(strokes[1].shape, BridgeBrushShape::Square);
+}
+
+/// A stylus's pressure crosses with the point it belongs to, is clamped to the
+/// 0..1 it means, and a stroke nobody pressed is stored with no pressures at
+/// all — so a mouse-drawn stroke is byte for byte the stroke it was before
+/// there was a stylus to read (K-583).
+#[test]
+fn stroke_pressure_round_trips_and_an_unpressed_stroke_stores_none() {
+    let (_project, layer) = project_with_layer();
+
+    let mut pressed = stroke("Pressed", &[(1.0, 1.0), (9.0, 9.0)]);
+    pressed.points[0].pressure = 0.25;
+    pressed.points[1].pressure = 4.0;
+    layer.add_stroke(pressed).expect("added");
+    layer
+        .add_stroke(stroke("Plain", &[(2.0, 2.0), (8.0, 8.0)]))
+        .expect("added");
+
+    let strokes = layer.get_paint().expect("paint");
+    assert_eq!(strokes[0].points[0].pressure, 0.25);
+    assert_eq!(
+        strokes[0].points[1].pressure, 1.0,
+        "clamped to a full press"
+    );
+    assert_eq!(
+        strokes[1]
+            .points
+            .iter()
+            .map(|p| p.pressure)
+            .collect::<Vec<_>>(),
+        vec![1.0, 1.0],
+        "and a stroke with none reads back as a full press throughout"
+    );
 }
 
 /// A stroke's blend crosses as an index into the same list a layer's does, and

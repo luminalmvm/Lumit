@@ -11797,11 +11797,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeStrokePoint dco_decode_bridge_stroke_point(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeStrokePoint(
       x: dco_decode_f_64(arr[0]),
       y: dco_decode_f_64(arr[1]),
+      pressure: dco_decode_f_64(arr[2]),
     );
   }
 
@@ -14895,7 +14896,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_x = sse_decode_f_64(deserializer);
     var var_y = sse_decode_f_64(deserializer);
-    return BridgeStrokePoint(x: var_x, y: var_y);
+    var var_pressure = sse_decode_f_64(deserializer);
+    return BridgeStrokePoint(x: var_x, y: var_y, pressure: var_pressure);
   }
 
   @protected
@@ -18043,6 +18045,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_f_64(self.x, serializer);
     sse_encode_f_64(self.y, serializer);
+    sse_encode_f_64(self.pressure, serializer);
   }
 
   @protected

@@ -715,6 +715,9 @@ pub fn rasterise_contents(
                         id: item.id,
                         name: item.name.clone(),
                         points,
+                        // A vector outline is not a gesture: there is no stylus
+                        // behind it and its width is the item's own (K-583).
+                        pressures: Vec::new(),
                         colour: stroke,
                         width: item.stroke_width * scale,
                         // A vector outline has a hard edge; the rasteriser keeps

@@ -504,6 +504,7 @@ mod tests {
             id: Uuid::from_u128(7),
             name: "Brush 1".into(),
             points: vec![(1.0, 2.0), (30.0, 40.0)],
+            pressures: Vec::new(),
             colour: lumit_core::model::LinearColour([1.0, 0.0, 0.0, 1.0]),
             width,
             hardness: 1.0,

@@ -2812,6 +2812,64 @@ void main() {
               'and the one already painted keeps the shape it was made with');
     });
 
+    /// A stylus's pressure rides in with the points and widens the mark
+    /// (K-583) — and the brush's own toggle turns that off, which stores a
+    /// full press throughout and so the stroke a mouse would have made.
+    testWidgets('a stylus drag commits the pressure it was drawn with',
+        (tester) async {
+      final p = withLayer();
+      p.uiState.tools.select(ToolMode.brush);
+      await mount(tester, p);
+      final fitted = fittedRect(tester, p.comp);
+
+      // The drag callbacks carry no pressure, so the events are made by hand:
+      // this is exactly the stream a pen tablet raises.
+      Future<void> penDrag(Offset from, List<double> presses) async {
+        var at = from;
+        tester.binding.handlePointerEvent(PointerDownEvent(
+            pointer: 8,
+            kind: PointerDeviceKind.stylus,
+            position: at,
+            pressure: presses.first,
+            pressureMin: 0,
+            pressureMax: 1));
+        await tester.pump();
+        for (final press in presses.skip(1)) {
+          at += const Offset(12, 0);
+          tester.binding.handlePointerEvent(PointerMoveEvent(
+              pointer: 8,
+              kind: PointerDeviceKind.stylus,
+              position: at,
+              delta: const Offset(12, 0),
+              pressure: press,
+              pressureMin: 0,
+              pressureMax: 1));
+          await tester.pump();
+        }
+        tester.binding.handlePointerEvent(PointerUpEvent(
+            pointer: 8, kind: PointerDeviceKind.stylus, position: at));
+        await tester.pumpAndSettle();
+      }
+
+      const presses = <double>[1, 0.9, 0.75, 0.5, 0.3, 0.2];
+      await penDrag(fitted.center, presses);
+      final pressed = p.layer.getPaint().single.points;
+      expect(pressed.last.pressure, closeTo(0.2, 1e-6),
+          reason: 'the press the pen ended on');
+      expect(pressed.any((point) => point.pressure < 0.5), isTrue,
+          reason: 'and the lighter part of the gesture came across');
+
+      // With the toggle off the same pen leaves the stroke a mouse would: a
+      // full press at every point, which the engine stores as none at all.
+      p.uiState.tools.brushPressureSize = false;
+      await tester.pumpAndSettle();
+      await penDrag(fitted.center + const Offset(0, 40), presses);
+      expect(
+        p.layer.getPaint().last.points.map((point) => point.pressure),
+        everyElement(1.0),
+      );
+    });
+
     testWidgets('the eraser and the clone stamp commit their own modes',
         (tester) async {
       final p = withLayer();
