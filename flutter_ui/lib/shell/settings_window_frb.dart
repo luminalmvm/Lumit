@@ -121,6 +121,13 @@ const double _scaleWell = 70;
 /// One accent swatch.
 const double _swatch = 14;
 
+/// The page's scrollbar: six pixels of gutter, two in from the right edge and
+/// eight clear at each end. Named because the scrollbar is drawn to them and
+/// the strip that answers a drag on it has to sit exactly on top (6.16).
+const double _gutterThickness = 6;
+const double _gutterInset = 2;
+const double _gutterEnds = 8;
+
 /// One page in the sidebar.
 enum SettingsPage {
   general,
@@ -498,33 +505,74 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       SettingsPage.previewAndCache => _performance(t, ui),
       SettingsPage.shortcuts => _keymap(t, ui),
     };
-    return RawScrollbar(
-      controller: _scroll,
-      thumbVisibility: true,
-      trackVisibility: true,
-      thickness: 6,
-      radius: const Radius.circular(3),
-      thumbColor: t.surface4,
-      trackColor: t.surface2,
-      trackRadius: const Radius.circular(3),
-      padding: const EdgeInsets.fromLTRB(0, 8, 2, 8),
-      child: ListView(
-        key: ValueKey<String>('settings-body-${_page.name}'),
+    return Stack(children: [
+      RawScrollbar(
         controller: _scroll,
-        padding: EdgeInsets.zero,
-        children: [
-          ...sections,
-          if (sections.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(l10n.settingsNoMatches,
-                  key: const ValueKey('settings-no-matches'),
-                  style: t.small.copyWith(color: t.textMuted)),
-            ),
-          const SizedBox(height: 8),
-        ],
+        thumbVisibility: true,
+        trackVisibility: true,
+        thickness: _gutterThickness,
+        radius: const Radius.circular(3),
+        thumbColor: t.surface4,
+        trackColor: t.surface2,
+        trackRadius: const Radius.circular(3),
+        padding: const EdgeInsets.fromLTRB(
+            0, _gutterEnds, _gutterInset, _gutterEnds),
+        child: ListView(
+          key: ValueKey<String>('settings-body-${_page.name}'),
+          controller: _scroll,
+          padding: EdgeInsets.zero,
+          children: [
+            ...sections,
+            if (sections.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(l10n.settingsNoMatches,
+                    key: const ValueKey('settings-no-matches'),
+                    style: t.small.copyWith(color: t.textMuted)),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
-    );
+      // **6.16: dragging the scrollbar scrolls, it does not carry the window
+      // off.** `RawScrollbar` answers a *tap* on its track and a drag on its
+      // thumb, and with a mouse nothing else answers a drag at all — a list
+      // is not drag-scrolled by a mouse — so a drag that began anywhere on
+      // the gutter fell through to the movable window's own pan (K-242) and
+      // took the whole dialog with it. This claims the gutter's own six
+      // pixels: translucent, so a tap still reaches the track underneath and
+      // pages the way it always did, and above the thumb, whose drag it
+      // reproduces exactly (the ratio below is the one the thumb is drawn
+      // with).
+      Positioned(
+        key: const ValueKey('settings-gutter'),
+        right: _gutterInset,
+        top: _gutterEnds,
+        bottom: _gutterEnds,
+        width: _gutterThickness,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onVerticalDragUpdate: _dragGutter,
+        ),
+      ),
+    ]);
+  }
+
+  /// A drag on the gutter, in the page the drag started on.
+  ///
+  /// The thumb is the viewport's share of the whole page, so a pixel of gutter
+  /// is worth as much of the page as a pixel of thumb: the same ratio the
+  /// scrollbar draws itself with, which is what makes the thumb keep up with
+  /// the pointer rather than lag behind it.
+  void _dragGutter(DragUpdateDetails d) {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    final viewport = position.viewportDimension;
+    final range = position.maxScrollExtent;
+    // Nothing overflows: there is no thumb to move and nothing to scroll.
+    if (viewport <= 0 || range <= 0) return;
+    _scroll.jumpTo((position.pixels + d.delta.dy * (viewport + range) / viewport)
+        .clamp(0.0, range));
   }
 
   /// Put the page back the way it ships. What "the way it ships" means is
@@ -804,10 +852,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           // What the chrome says (K-440), on the Appearance page's Interface
           // section — the place K-465 named for it, drawn now that a surface
           // reads it.
+          // No description under it (6.12): K-465 leaves the second line to a
+          // *live report* — what the machine has, what a choice costs here and
+          // now — and the four of those stay. A paragraph explaining a setting
+          // is the thing the drawing does not have, however well written.
           _row(
             t,
             l10n.settingsChromeLabels,
-            description: l10n.settingsHelpChromeLabels,
             _dropdown<ChromeLabels>(
               key: 'settings-chrome-labels',
               value: settings.chromeLabels,
