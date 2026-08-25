@@ -30,6 +30,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/state.dart';
 
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
@@ -183,6 +185,44 @@ class PickedColour {
   String toString() => 'PickedColour($r, $g, $b)';
 }
 
+/// The project's colour shelf as the picker needs it: the colours it holds,
+/// and the one way to change them (K-448, docs/07 §6.1).
+///
+/// **The whole list, not an add and a remove**, because that is the engine's
+/// op: keeping a colour is the list with one more, forgetting one is the list
+/// with one fewer, and each is a single undo step in the project.
+///
+/// The engine's own swatches rather than plain colours, so the alpha and the
+/// optional name a `.lum` carries survive an edit made here — the picker edits
+/// neither, and rebuilding the list from colours alone would quietly drop both.
+@immutable
+class SwatchShelf {
+  final List<BridgeSwatch> swatches;
+  final ValueChanged<List<BridgeSwatch>> write;
+
+  const SwatchShelf(this.swatches, this.write);
+
+  /// The open project's shelf, or null when no project is open — and then the
+  /// picker draws no strip at all.
+  ///
+  /// Read when the picker opens, which is a click, never a rebuild: a shelf is
+  /// a handful of colours, so there is nothing to cache. Anything at all going
+  /// wrong across the seam reads as "no shelf", because a picker that will not
+  /// open is a worse answer than a picker without its strip.
+  static SwatchShelf? open() {
+    try {
+      final project = LumitBridgeState.getCurrentProject();
+      if (project == null) return null;
+      return SwatchShelf(
+        project.projectSwatches(),
+        (swatches) => project.setProjectSwatches(swatches: swatches),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 const double _pickerWidth = 232;
 const double _squareHeight = 150;
 const double _stripHeight = 16;
@@ -204,6 +244,10 @@ const double _stripHeight = 16;
 ///
 /// [presets] draws an optional row of quick swatches inside the popup. The
 /// future completes when the picker closes, for a caller that wants to know.
+///
+/// [shelf] is the project's own colour shelf, and defaults to the open
+/// project's — so no call site has to pass one, and a picker opened with no
+/// project open simply has no strip. A test hands one in.
 Future<void> showColourPicker({
   required BuildContext context,
   required Offset position,
@@ -214,7 +258,9 @@ Future<void> showColourPicker({
   double min = 0,
   double max = 1,
   List<Color> presets = const [],
+  SwatchShelf? shelf,
 }) async {
+  shelf ??= SwatchShelf.open();
   await showLumitPopup<PickedColour>(
     context: context,
     position: position,
@@ -227,6 +273,7 @@ Future<void> showColourPicker({
         child: _ColourPickerBody(
           initial: initial,
           presets: presets,
+          shelf: shelf,
           scale: scale,
           min: min,
           max: max,
@@ -299,6 +346,9 @@ class ColourSwatchButton extends StatelessWidget {
 class _ColourPickerBody extends StatefulWidget {
   final PickedColour initial;
   final List<Color> presets;
+
+  /// The project's colour shelf, or null when no project is open.
+  final SwatchShelf? shelf;
   final ColourScale scale;
   final double min, max;
 
@@ -313,6 +363,7 @@ class _ColourPickerBody extends StatefulWidget {
   const _ColourPickerBody({
     required this.initial,
     required this.presets,
+    required this.shelf,
     required this.scale,
     required this.min,
     required this.max,
@@ -340,9 +391,15 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
   late final TextEditingController _hexController;
   final FocusNode _hexFocus = FocusNode();
 
+  /// The shelf as it stands, read once when the picker opened and kept in step
+  /// here as colours are kept and forgotten — so the strip redraws without
+  /// asking the engine again.
+  late List<BridgeSwatch> _shelf;
+
   @override
   void initState() {
     super.initState();
+    _shelf = widget.shelf?.swatches ?? const [];
     _colour = widget.initial;
     _hue = rgbToHsv(_colour.clipped).$1;
     _hexController = TextEditingController(text: formatHex(_colour.clipped));
@@ -555,6 +612,12 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
           const SizedBox(height: 8),
           _presetRow(t),
         ],
+        // The project's own colours, and the way to keep one. Only with a
+        // project open: with none there is no shelf to keep them on.
+        if (widget.shelf != null) ...[
+          const SizedBox(height: 8),
+          _shelfStrip(t),
+        ],
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -671,6 +734,101 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
           ),
         ],
       );
+
+  /// Keep the shelf and send it, which is one op and one undo step.
+  void _writeShelf(List<BridgeSwatch> next) {
+    setState(() => _shelf = next);
+    widget.shelf?.write(next);
+  }
+
+  /// The project's colour shelf: the colours kept for this project, then the
+  /// plus that keeps the one being edited. A click applies a colour; a
+  /// right-click or a long press offers to forget it.
+  ///
+  /// A [Wrap] rather than a row, so a shelf longer than the picker is wide
+  /// flows onto a second line instead of running off the edge.
+  Widget _shelfStrip(LumitTheme t) => Wrap(
+        key: const Key('colour-picker-shelf'),
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          for (var i = 0; i < _shelf.length; i++)
+            _shelfSwatch(t, i, PickedColour(_shelf[i].r, _shelf[i].g, _shelf[i].b)),
+          LumitTooltip(
+            message: l10n.swatchKeep,
+            child: GestureDetector(
+              key: const Key('colour-picker-shelf-add'),
+              onTap: () => _writeShelf([
+                ..._shelf,
+                BridgeSwatch(
+                  r: _colour.r,
+                  g: _colour.g,
+                  b: _colour.b,
+                  a: 1,
+                  name: '',
+                ),
+              ]),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: t.surface0,
+                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                    border: Border.all(color: t.hairlineStrong),
+                  ),
+                  // The symbol, like the '#' beside the hex field: a mark, not
+                  // a word, so it is not a translated string.
+                  child: Text('+', style: t.small.copyWith(color: t.textMuted)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+
+  Widget _shelfSwatch(LumitTheme t, int index, PickedColour colour) =>
+      GestureDetector(
+        key: Key('colour-picker-shelf-$index'),
+        onTap: () => _setColour(colour, settled: true),
+        onSecondaryTapDown: (d) => _forgetMenu(d.globalPosition, index),
+        onLongPressStart: (d) => _forgetMenu(d.globalPosition, index),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: colour.clipped,
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              border: Border.all(color: t.hairlineStrong),
+            ),
+          ),
+        ),
+      );
+
+  /// The one thing a kept colour offers: forgetting it. On the ordinary popup
+  /// chain, so a click anywhere else takes it down (K-519).
+  void _forgetMenu(Offset at, int index) {
+    showLumitPopup<void>(
+      context: context,
+      position: at,
+      builder: (close) => FloatSurface(
+        child: IntrinsicWidth(
+          child: MenuRow(
+            key: const Key('colour-picker-shelf-forget'),
+            onPressed: () {
+              close(null);
+              _writeShelf([..._shelf]..removeAt(index));
+            },
+            child: Text(l10n.swatchForget),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _presetRow(LumitTheme t) => Row(
         children: [

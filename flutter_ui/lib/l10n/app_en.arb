@@ -4967,6 +4967,14 @@
   "@splashSubtitle": {
     "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
   },
+  "swatchForget": "Forget this colour",
+  "@swatchForget": {
+    "description": "Row of the right-click menu on a colour kept on the project's shelf, inside the colour picker. Takes the colour off the shelf."
+  },
+  "swatchKeep": "Keep this colour",
+  "@swatchKeep": {
+    "description": "Tooltip on the plus at the end of the project colour shelf, inside the colour picker. Adds the colour being edited to the project's shelf."
+  },
   "switchAudible": "Audible",
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."

@@ -1999,6 +1999,15 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   colour**; **Apply** does the same from a button; **Cancel** puts back the colour you started
   with and closes.
 
+  **The project's own colours live inside the picker** (K-448). Along the bottom of it is a
+  strip of small squares: the colours this project has kept. Click one and it is applied, the
+  same as picking it by hand. The **+** at the end of the strip keeps whatever colour the
+  picker is currently showing, and a **right-click** (or a long press) on a kept colour offers
+  to forget it. The strip is there only when a project is open, because that is what the
+  colours belong to: they are stored in the `.lum` beside the compositions, so a copy of the
+  project carries them and so does the machine you open it on next. Keeping a colour and
+  forgetting one are ordinary edits — each is one step of undo, like anything else.
+
   Beside the swatch sits the **dropper** — a small pipette. Click it and the tool arms (the
   pipette lights up so you can see it is armed), then move the pointer over the Viewer and a
   **magnifier** follows it. It appears only once the pointer is actually over the picture, and

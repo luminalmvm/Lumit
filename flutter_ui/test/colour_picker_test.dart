@@ -7,8 +7,10 @@
 
 import 'dart:ui';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/colour_picker.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -56,6 +58,7 @@ Future<_Applied> _openPicker(
   ColourScale scale = ColourScale.bytes,
   double min = 0,
   double max = 1,
+  SwatchShelf? shelf,
 }) async {
   final applied = _Applied();
   await tester.pumpWidget(_harness((context) => showColourPicker(
@@ -65,6 +68,7 @@ Future<_Applied> _openPicker(
         scale: scale,
         min: min,
         max: max,
+        shelf: shelf,
         onPreview: applied.previews.add,
         onCommit: applied.commits.add,
       )));
@@ -321,6 +325,75 @@ void main() {
     testWidgets('a display colour never shows the clipped note', (tester) async {
       await _openPicker(tester, scale: ColourScale.bytes);
       expect(find.byKey(const Key('colour-picker-clipped')), findsNothing);
+    });
+  });
+
+  /// The project's colour shelf, inside the picker where K-448 put it: the
+  /// kept colours apply on a click, the plus keeps the one being edited, and
+  /// the strip is absent altogether when no project is open.
+  group('the project colour shelf', () {
+    SwatchShelf recording(List<BridgeSwatch> held, List<List<BridgeSwatch>> writes) =>
+        SwatchShelf(held, writes.add);
+
+    BridgeSwatch swatch(double r, double g, double b, {String name = ''}) =>
+        BridgeSwatch(r: r, g: g, b: b, a: 1, name: name);
+
+    testWidgets('no project, no strip', (tester) async {
+      await _openPicker(tester);
+      expect(find.byKey(const Key('colour-picker-shelf')), findsNothing);
+    });
+
+    testWidgets('a kept colour applies on a click', (tester) async {
+      final writes = <List<BridgeSwatch>>[];
+      final applied = await _openPicker(
+        tester,
+        shelf: recording([swatch(1, 0, 0), swatch(0, 0, 1, name: 'Sky')], writes),
+      );
+      expect(find.byKey(const Key('colour-picker-shelf')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('colour-picker-shelf-1')));
+      await tester.pumpAndSettle();
+      expect(applied.commits.last, const PickedColour(0, 0, 1));
+      expect(writes, isEmpty, reason: 'applying a colour does not edit the shelf');
+    });
+
+    testWidgets('the plus keeps the colour being edited', (tester) async {
+      final writes = <List<BridgeSwatch>>[];
+      await _openPicker(
+        tester,
+        initial: const PickedColour(1, 0, 0),
+        shelf: recording([swatch(0, 0, 1, name: 'Sky')], writes),
+      );
+      await tester.tap(find.byKey(const Key('colour-picker-shelf-add')));
+      await tester.pumpAndSettle();
+
+      expect(writes.length, 1, reason: 'one write, so one undo step');
+      expect(writes.single.length, 2);
+      expect(writes.single.first.name, 'Sky',
+          reason: 'the colour already on the shelf keeps its name');
+      final kept = writes.single.last;
+      expect([kept.r, kept.g, kept.b], [1, 0, 0]);
+      // And the strip shows it without asking the engine again.
+      expect(find.byKey(const Key('colour-picker-shelf-1')), findsOneWidget);
+    });
+
+    testWidgets('a right-click offers to forget one', (tester) async {
+      final writes = <List<BridgeSwatch>>[];
+      await _openPicker(
+        tester,
+        shelf: recording([swatch(1, 0, 0), swatch(0, 0, 1)], writes),
+      );
+      await tester.tapAt(
+        tester.getCenter(find.byKey(const Key('colour-picker-shelf-0'))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('colour-picker-shelf-forget')));
+      await tester.pumpAndSettle();
+
+      expect(writes.length, 1);
+      expect(writes.single.length, 1);
+      expect(writes.single.single.b, 1, reason: 'the blue one is what is left');
     });
   });
 }
