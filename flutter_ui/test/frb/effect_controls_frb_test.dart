@@ -17,6 +17,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/fx_section.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
     show effectLabelOf, EffectParamRowFrb, EffectPointRowFrb;
 import 'package:lumit_flutter/icons/lumit_icon.dart';
@@ -43,6 +44,20 @@ void main() {
     /// schema label and the arb string both stay sentence case and only the
     /// finder knows about the capitals.
     Finder heading(String label) => find.text(label.toUpperCase());
+
+    /// `Ctrl+C` and `Ctrl+V` as the hardware keyboard delivers them, modifier
+    /// held across the letter the way a person presses them.
+    Future<void> chord(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> copyChord(WidgetTester tester) =>
+        chord(tester, LogicalKeyboardKey.keyC);
+    Future<void> pasteChord(WidgetTester tester) =>
+        chord(tester, LogicalKeyboardKey.keyV);
 
     /// A project with one comp, one layer in it, and that layer selected — the
     /// state the panel needs before it draws anything at all.
@@ -410,6 +425,91 @@ void main() {
 
       expect(p.layer.getEffects().map((e) => e.name()).toList(),
           ['sharpen', 'blur']);
+    });
+
+    /// **The drop indicator** (owner, desk test). A reorder drag drew a line
+    /// along the top of whatever heading was under the pointer, whichever way
+    /// the drag was travelling — so half the time it marked a gap the effect
+    /// was not going into. The line now draws on the edge the effect lands
+    /// against, which is what an insertion point means.
+    testWidgets('a reorder drag marks the gap the effect will land in',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      p.layer.addEffect(name: 'sharpen');
+      await mount(tester, p);
+
+      /// The drop line's border while [from] is held over [onto], or null.
+      Future<Border?> lineDragging(Finder from, Finder onto) async {
+        final drag = await tester.startGesture(tester.getCenter(from));
+        await tester.pump(const Duration(milliseconds: 20));
+        await drag.moveTo(tester.getCenter(onto));
+        await tester.pump(const Duration(milliseconds: 20));
+        final found = find.byKey(const ValueKey('fx-drop-line'));
+        final border = found.evaluate().isEmpty
+            ? null
+            : ((tester.widget<DecoratedBox>(found).decoration as BoxDecoration)
+                .border as Border?);
+        // Back over its own heading before letting go: a section refuses a
+        // drop on itself, so the stack is left exactly as it was and the two
+        // directions can be read off one arrangement.
+        await drag.moveTo(tester.getCenter(from));
+        await tester.pump(const Duration(milliseconds: 20));
+        await drag.up();
+        await tester.pumpAndSettle();
+        return border;
+      }
+
+      final top = heading(effectLabelOf('blur'));
+      final bottom = heading(effectLabelOf('sharpen'));
+      final t = LumitTheme.dark();
+
+      // Travelling DOWN the stack: the effect lands after the heading it is
+      // over, so the line is under that heading.
+      final down = await lineDragging(top, bottom);
+      expect(down, isNotNull, reason: 'the drag says where it will land');
+      expect(down!.bottom.color, t.accent);
+      expect(down.bottom.width, fxDropLineWidth);
+      expect(down.top.width, 0, reason: 'and only on the one edge');
+
+      // Travelling UP: it lands before, so the line is over the heading.
+      final up = await lineDragging(bottom, top);
+      expect(up, isNotNull);
+      expect(up!.top.color, t.accent);
+      expect(up.bottom.width, 0);
+    });
+
+    /// **The enable switch is a target you can hit** (owner, desk test). The
+    /// mark keeps K-450's small box; the area that answers to a click is the
+    /// whole stopwatch column for the whole height of the heading, because
+    /// this is the control the panel is poked at most and it was being missed.
+    testWidgets('the enable switch takes clicks across the whole column',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      await mount(tester, p);
+      final id = p.layer.getEffects().single.id();
+
+      final hit = find.byKey(ValueKey<String>('fx-enabled-hit-$id'));
+      final box = tester.getSize(hit);
+      expect(box.width, fxEnableHitWidth);
+      expect(box.height, fxEnableHitHeight);
+      expect(box.width * box.height, greaterThan(14 * 14),
+          reason: "bigger than the checkbox's own 14px box, which is what was "
+              'being missed');
+
+      // The very corner of that block — well outside the drawn mark — still
+      // switches the effect, and switches it exactly once.
+      final corner = tester.getTopLeft(hit) + const Offset(1, 1);
+      await tester.tapAt(corner);
+      await tester.pump();
+      expect(p.layer.getEffects().single.enabled(), isFalse);
+
+      // And the mark itself is not a second switch that fires as well: a tap
+      // dead centre toggles once, not twice.
+      await tester.tap(find.byKey(ValueKey<String>('fx-enabled-$id')));
+      await tester.pump();
+      expect(p.layer.getEffects().single.enabled(), isTrue);
     });
 
     testWidgets('the top card is offered no way up, and the bottom none down',
@@ -1018,6 +1118,80 @@ void main() {
         isA<BridgeEffectValue_Bool>().having((v) => v.field0, 'invert', isTrue),
         reason: 'the stored id did not move with the label',
       );
+    });
+
+    /// **P0 — copying an effect and pasting it did nothing** (owner, desk
+    /// test). The chord had no handler on this panel at all, so it went to the
+    /// shell, where `copySelectionFrb` offers it first to whichever panel has
+    /// *claimed* copy for keyframes — and a paste that answers the claim puts
+    /// keys back, not the effect. The panel now answers for its own selection
+    /// while it is the active one, which is what makes the round trip land.
+    testWidgets('Ctrl+C and Ctrl+V carry an effect, onto another layer too',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      p.layer.addEffect(name: 'vignette');
+      await mount(tester, p);
+      p.uiState.activePanel.value = Panel.effectControls;
+
+      // Anything at all could have claimed the chord at the shell — this is
+      // exactly what the Timeline does with a property row picked — and the
+      // effect must still win while this panel is the one being used.
+      p.uiState.copyClaim = () => true;
+      p.uiState.pasteClaim = () => true;
+
+      final second = p.layer.getEffects()[1];
+      await tester.tap(heading(effectLabelOf(second.name())));
+      await tester.pumpAndSettle();
+      expect(p.uiState.selectedEffects.value, [second.id()]);
+
+      await copyChord(tester);
+      expect(p.uiState.clipboard.kind, ClipboardKind.effects,
+          reason: 'the picked effect went on the clipboard, not the keys a '
+              'panel elsewhere had claimed');
+
+      // Paste onto ANOTHER layer: select it, and the panel follows.
+      final other = p.uiState.selectedComp!.addSolidLayer();
+      p.uiState.setSelection([other]);
+      await tester.pumpAndSettle();
+
+      await pasteChord(tester);
+      expect(other.getEffects(), hasLength(1),
+          reason: 'one effect, not the whole stack it was picked out of');
+      expect(other.getEffects().single.name(), second.name());
+      expect(other.getEffects().single.id(), isNot(second.id()),
+          reason: 'a pasted effect is a fresh instance, never a shared id');
+
+      // And it is on screen, not only in the document.
+      expect(heading(effectLabelOf(second.name())), findsOneWidget);
+
+      // Pasting again onto the same layer stacks a second copy — the paste is
+      // an append, exactly as loading a preset is.
+      await pasteChord(tester);
+      expect(other.getEffects(), hasLength(2));
+    });
+
+    /// With nothing picked out of a stack the chord is **not** claimed: the
+    /// shell copies the layer whole, as it always did.
+    testWidgets('with no effect picked the copy chord falls through',
+        (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      await mount(tester, p);
+      p.uiState.activePanel.value = Panel.effectControls;
+
+      var claimed = false;
+      p.uiState.copyClaim = () {
+        claimed = true;
+        return true;
+      };
+
+      await copyChord(tester);
+      expect(copySelectionFrb(p.uiState), isTrue,
+          reason: 'the shell is still the one that answers');
+      expect(claimed, isTrue);
+      expect(p.uiState.clipboard.kind, isNull,
+          reason: 'the panel took nothing it had not been asked for');
     });
 
     testWidgets('Enter renames the selected effect, and the name persists',

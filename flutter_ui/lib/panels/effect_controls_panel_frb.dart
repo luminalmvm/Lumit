@@ -64,6 +64,7 @@ import 'camera_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'fx_section.dart';
 import 'transform_rows_frb.dart';
+import '../state/clipboard.dart';
 import '../theme/theme.dart';
 import '../state/drag_payloads.dart';
 import 'placeholder.dart';
@@ -237,7 +238,64 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
       setState(() => _renamingEffect = picked.first);
       return true;
     }
+    if (action == 'edit.copy') return _copyPickedEffects(ui);
+    if (action == 'edit.paste') return _pastePickedEffects(ui);
     return false;
+  }
+
+  /// **`Ctrl+C` on this panel copies the picked effects** (K-275, K-300).
+  ///
+  /// The chord had no handler here at all, so it went to the shell — where
+  /// `copySelectionFrb` offers it first to whichever panel has *claimed* copy
+  /// (the Timeline, for keyframes) and only then looks at the effect
+  /// selection. With a property row picked in the Timeline the claim answers
+  /// yes, the keyframe clipboard takes the chord, and `Ctrl+C` on an effect
+  /// heading in a panel the user is looking at quietly copies something else
+  /// — which is a copy that "does nothing", because the paste that follows
+  /// puts keyframes back rather than the effect.
+  ///
+  /// A `HardwareKeyboard` handler runs before the focus tree, so answering
+  /// here settles it: while this panel is the active one and an effect is
+  /// picked in it, the effect is what the chord means. Nothing is claimed
+  /// otherwise — with no effect picked the chord falls through to the shell,
+  /// which copies the layer as it always did.
+  bool _copyPickedEffects(LumitUiState ui) {
+    final layer = ui.selectedEffectsLayer;
+    final picked = ui.selectedEffects.value;
+    if (layer == null || picked.isEmpty) return false;
+    try {
+      ui.copyEffectsToClipboard(layer.copyEffects(effects: picked));
+    } catch (_) {
+      // The effects went away under the selection; the clipboard keeps what
+      // it had, and the layer below is not a silent substitute.
+      return false;
+    }
+    return true;
+  }
+
+  /// **`Ctrl+V` puts them on the layer this panel is showing** — the same one
+  /// its rows are for, which is not always `selectedLayer` (deselecting keeps
+  /// the last stack up, deliberately).
+  ///
+  /// Claimed only when the tray actually holds effects. A layer on the
+  /// clipboard is the shell's business, and an empty tray is too: the shell's
+  /// paste reads the *system* clipboard for a document copied in another Lumit
+  /// window (K-302), which is asynchronous and has no place in a key handler
+  /// that must answer yes or no on the spot.
+  bool _pastePickedEffects(LumitUiState ui) {
+    if (ui.clipboard.kind != ClipboardKind.effects) return false;
+    final text = ui.clipboard.text;
+    final layer = ui.selectedLayer.value ?? _lastLayer;
+    if (text == null || layer == null) return false;
+    try {
+      layer.pasteEffects(text: text, atFrame: ui.playheadFrame.value);
+    } catch (_) {
+      // Not a stack this layer can take, or the layer has gone.
+      return false;
+    }
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
+    return true;
   }
 
   /// Which parameter twirls the owner has opened or shut, by path.
@@ -746,6 +804,14 @@ class _EffectSection extends StatelessWidget {
     }
   }
 
+  /// Switch this effect on or off. One implementation, because the heading's
+  /// enlarged hit area and the checkbox mark inside it are two ways at the same
+  /// switch and must not drift into two.
+  void _setEnabled(bool on) {
+    _withHandle((e) => layer.setEffectEnabled(effect: e, enabled: on));
+    onStackChanged();
+  }
+
   /// Chain or unchain a vector pair (K-443).
   ///
   /// Staged onto a fresh handle and committed with the stack, exactly as a
@@ -821,13 +887,30 @@ class _EffectSection extends StatelessWidget {
       enabled: info.enabled,
       leading: LumitTooltip(
         message: info.enabled ? l10n.tipDisable : l10n.tipEnable,
-        child: HouseCheckbox(
-          key: ValueKey<String>('fx-enabled-$id'),
-          value: info.enabled,
-          onChanged: (on) {
-            _withHandle((e) => layer.setEffectEnabled(effect: e, enabled: on));
-            onStackChanged();
-          },
+        // **A target you can hit** (owner, desk test). The checkbox's own 14px
+        // box is what a settings page wants; here it is the control reached
+        // for most, and it was being missed. The whole stopwatch column, for
+        // the whole height of the heading, switches the effect — and the mark
+        // inside is drawn a step larger so it holds its own beside the
+        // heading's capitals (see `fxEnableHitWidth`).
+        child: GestureDetector(
+          key: ValueKey<String>('fx-enabled-hit-$id'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _setEnabled(!info.enabled),
+          child: SizedBox(
+            width: fxEnableHitWidth,
+            height: fxEnableHitHeight,
+            child: Center(
+              child: Transform.scale(
+                scale: fxEnableMarkScale,
+                child: HouseCheckbox(
+                  key: ValueKey<String>('fx-enabled-$id'),
+                  value: info.enabled,
+                  onChanged: _setEnabled,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
       actions: [

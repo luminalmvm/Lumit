@@ -101,6 +101,28 @@ const double _fxRowChrome = 5;
 /// and the heading's own actions.
 const double fxHeadingHeight = 24;
 
+/// The effect enable switch's **hit target** on a heading (owner, desk test).
+///
+/// [HouseCheckbox] draws K-450's 9px mark inside a 14px box, which is the right
+/// size for a settings page and too small to aim at in a stack of effect
+/// headings — the one control in the panel a person reaches for over and over,
+/// and the one they were missing. The mark keeps its language; the *target*
+/// grows to fill the stopwatch column and the whole height of the heading, so
+/// anywhere in that little block switches the effect off.
+const double fxEnableHitWidth = fxStopwatchColumn;
+const double fxEnableHitHeight = fxHeadingHeight - 4;
+
+/// How much larger the mark itself is drawn here than the 14px checkbox's
+/// default — 9px becomes 11, which is the modest step the owner asked for
+/// beside a heading's capitals without becoming a different control.
+const double fxEnableMarkScale = 11 / 9;
+
+/// How thick the line is that says where a dragged effect will land. Two
+/// pixels, in the accent — the same weight and colour every other drop in the
+/// application draws its feedback in (the Timeline's and the Project panel's
+/// outlines), so a drop indicator is recognisably one.
+const double fxDropLineWidth = 2;
+
 /// One twirl-open section: Source, Transform, or one effect.
 class FxSection extends StatelessWidget {
   /// The section's own control, left of the name — an effect's enable switch.
@@ -228,38 +250,57 @@ class FxSection extends StatelessWidget {
   /// The heading, wrapped in the drag-and-drop that reorders the stack when
   /// this section has a place in one. Dragging the *name* is how a stack is
   /// reordered everywhere else in the application (layers in the Timeline,
-  /// items in the Project panel), so an effect stack reorders the same way; the
-  /// heading also stays a drop target, and the one under the pointer lights up
-  /// so it is clear which place is being taken.
+  /// items in the Project panel), so an effect stack reorders the same way.
+  ///
+  /// **The drop indicator** (owner, desk test). The heading used to take a
+  /// line along its top edge whichever way the drag came from, which said the
+  /// wrong thing half the time: dropping an effect from *above* onto this one
+  /// puts it after this one, and a line drawn above it pointed at the gap it
+  /// was not going into. The line is now drawn on the edge the effect will
+  /// actually land against — under the heading when it is travelling down the
+  /// stack, over it when it is travelling up — so it reads as the insertion
+  /// point rather than as a highlight on the row.
   Widget _draggableHeading(LumitTheme t) {
     final index = dragIndex;
     if (index == null || onDropped == null) return _heading(t);
     return DragTarget<int>(
       onWillAcceptWithDetails: (d) => d.data != index,
       onAcceptWithDetails: (d) => onDropped!(d.data),
-      builder: (context, candidate, _) => Draggable<int>(
-        data: index,
-        // The pointer carries the effect's name and nothing else: a full-width
-        // card under the cursor hides the stack it is being placed into.
-        feedback: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: t.surface2,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            border: Border.all(color: t.accent),
+      builder: (context, candidate, _) {
+        // Which side the gap is on: a heading dragged from above this one
+        // lands below it, and one from below lands above it.
+        final from = candidate.isEmpty ? null : candidate.first;
+        final line = BorderSide(color: t.accent, width: fxDropLineWidth);
+        return Draggable<int>(
+          data: index,
+          // The pointer carries the effect's name and nothing else: a
+          // full-width card under the cursor hides the stack it is being
+          // placed into.
+          feedback: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: t.surface2,
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              border: Border.all(color: t.accent),
+            ),
+            child: Text(title, style: t.small),
           ),
-          child: Text(title, style: t.small),
-        ),
-        childWhenDragging: Opacity(opacity: 0.4, child: _heading(t)),
-        child: candidate.isEmpty
-            ? _heading(t)
-            : DecoratedBox(
-                decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: t.accent, width: 2)),
+          childWhenDragging: Opacity(opacity: 0.4, child: _heading(t)),
+          child: from == null
+              ? _heading(t)
+              : DecoratedBox(
+                  key: const ValueKey('fx-drop-line'),
+                  // Foreground, so the line sits over the heading's own fill
+                  // rather than being painted under it.
+                  position: DecorationPosition.foreground,
+                  decoration: BoxDecoration(
+                    border:
+                        from < index ? Border(bottom: line) : Border(top: line),
+                  ),
+                  child: _heading(t),
                 ),
-                child: _heading(t),
-              ),
-      ),
+        );
+      },
     );
   }
 
