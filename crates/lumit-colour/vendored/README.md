@@ -22,9 +22,16 @@ produced `../tests/fixtures/aces-cg.fixture`:
 | `ACES-LMT - ACES 1.3 Reference Gamut Compression` | 9.3 MiB |
 
 Each is 65³ samples at nine significant digits, which is what an `f32` needs to
-round-trip and about a third of the size of Python's own `repr`. They are
-`include_str!`ed one `match` arm each from `src/builtin.rs`, so they land in the
-binary — that is the cost the design accepted for a table nobody has to fetch.
+round-trip and about a third of the size of Python's own `repr`. They are **not**
+compiled into the binary — 47 MiB riding in every build was the cost of the
+first cut, and K-527 removed it. `src/builtin.rs` reads them at runtime, style
+name as file name, from the first directory that exists: `data/colour/` beside
+the executable (a shipped Windows or Linux build), `Contents/Resources/colour/`
+(a shipped macOS bundle), then this directory (a development checkout, which is
+also what the tests read). The packaging scripts copy them in —
+`packaging/windows/build-installer.ps1`, `packaging/macos/make-dmg.sh` and
+release.yml's Linux staging step — and a file that is absent leaves its style
+refusing by name, exactly as if it had never been vendored.
 
 A vendored artefact becomes **ordinary chain steps** rather than getting its own
 execution path: the lg2 shaper *is* a log curve with a lin-side offset, and the
@@ -93,9 +100,9 @@ silent LUT bug: it survives every test that only looks at neutrals. That is why
 grid point with three *different* indices against the reference library's own
 answer there.
 
-Then add the style to `vendored()` and to `VENDORED` in `src/builtin.rs` — the
-registry is a `match` on the style name returning `VendoredArtefact::from_text`,
-so an entry is one `include_str!` arm.
+Then add the style to `VENDORED` in `src/builtin.rs` — the registry is that
+list: `vendored()` only looks on disk for a style the list names, and the style
+name is the file name, so a new bake is one list entry and one file here.
 
 ## Which builtins the ACES 2.x configs need — the debt as it now stands
 
