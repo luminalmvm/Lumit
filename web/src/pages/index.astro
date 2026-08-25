@@ -10,7 +10,7 @@ const shots = [
     src: "/shots/timeline.webp",
     alt: "Lumit's timeline: four layers with their modes, mattes, blends and keyframes",
     h: "Intuitively designed.",
-    p: "Bring your knowledge directly into Lumit. We know time matters,so you can work without interuption.",
+    p: "Bring your knowledge directly into Lumit. We know time matters,so you can work without interruption.",
   },
   {
     src: "/shots/welcome.webp",
@@ -29,19 +29,19 @@ const clips = [
     src: "/clips/retime.webm",
     poster: "/shots/poster-retime.webp",
     alt: "The timeline's keyframes and graph column",
-    h: "Retime with a curve.",
+    h: "Timeline.",
   },
   {
     src: "/clips/flare.webm",
     poster: "/shots/poster-flare.webp",
     alt: "The Viewer showing a composited frame",
-    h: "Physical lens flares.",
+    h: "Graph.",
   },
   {
     src: "/clips/camera.webm",
     poster: "/shots/poster-camera.webp",
     alt: "The Viewer beside the effects and presets list",
-    h: "Camera solve.",
+    h: "Nodes.",
   },
 ];
 
@@ -153,16 +153,14 @@ const roadmap = [
           </svg>
           <span data-dl-label>Download</span>
         </a>
+      </div>
+
+      <p class="relative mt-2 text-[14px] text-fg-2>
         <a class="text-[13px] text-fg-2 no-underline hover:text-accent-2" href="/download" data-alt>
           All download options
         </a>
-      </div>
+      </p>
 
-      {/* Naming the visitor's OS changes the width of both lines above, so it has
-          to happen before the browser paints them - a deferred module runs after
-          the first paint and the labels visibly jump. This is the whole reason
-          the two lines are written here, inline and in place, rather than in the
-          module at the foot of the page. */}
       <script is:inline>
         (function () {
           var ua = navigator.userAgent;
@@ -178,7 +176,7 @@ const roadmap = [
           var others = {
             Windows: "Also for macOS and Linux",
             macOS: "Also for Windows and Linux",
-            Linux: "Also for Windows and macOS",
+            Linux: "Also for macOS and Windows",
           };
           var label = document.querySelector("[data-dl-label]");
           var alt = document.querySelector("[data-alt]");
@@ -187,8 +185,8 @@ const roadmap = [
         })();
       </script>
 
-      <p class="relative mt-6 text-[14px] text-fg-2">
-        Free and open source, GPLv3. No account, no trial, no card.
+      <p class="relative mt-6 text-[17px] text-fg-2">
+        Let your creativity flow. Free and open-source, forever.
       </p>
     </section>
   </div>
@@ -198,18 +196,32 @@ const roadmap = [
     <div class="flex flex-col gap-3.5">
       <p class="kicker">Welcome to Lumit</p>
       <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
-        <span class="text-fg">Composite the way you know</span>
+        <span class="text-fg">Composite the way you know.</span>
       </h2>
     </div>
 
-    {/* THIS IMG SHOULD BE A VIDEO I MAKE QUICKLY SHOWING THE BIG UI FEATURES */}
-    <img
-      class="w-full rounded-card border border-line bg-ink-2"
-      src="/shots/workspace.webp"
-      width="1704"
-      height="961"
-      alt="The Lumit workspace: project panel, viewer, effects list and timeline"
-    />
+    {/* The one wide slot under the heading. It was the workspace still; it is a
+        video now, and the still it replaced is gone rather than left underneath
+        it. Same hover-to-play as the three below, so the page has one rule for
+        moving pictures rather than two. */}
+    <figure class="clip relative m-0 overflow-hidden rounded-card border border-line bg-ink-2">
+      <video
+        class="block w-full"
+        src="/clips/workspace.webm"
+        poster="/shots/workspace.webp"
+        aria-label="The Lumit workspace: project panel, viewer, effects list and timeline"
+        muted
+        loop
+        playsinline
+        preload="none"
+      />
+      <span
+        class="pointer-events-none absolute bottom-2 left-2 rounded-ctl bg-ink/70 px-1.5 py-1 font-mono text-[11px] leading-none tracking-[0.08em] uppercase text-fg-3 transition-opacity"
+        data-hint
+      >
+        Video · plays on hover
+      </span>
+    </figure>
 
     <div class="grid gap-10 md:grid-cols-2">
       {
@@ -232,30 +244,65 @@ const roadmap = [
       }
     </div>
 
-    <div class="grid gap-6 sm:grid-cols-3">
-      {
-        clips.map((c) => (
-          <figure class="clip m-0 flex flex-col gap-2">
-            <div class="relative overflow-hidden rounded-card border border-line bg-ink-2">
-              <video
-                class="block aspect-[384/182] w-full object-cover"
-                src={c.src}
-                poster={c.poster}
-                aria-label={c.alt}
-                muted
-                loop
-                playsinline
-                preload="none"
-              />
-              <span
-                class="pointer-events-none absolute bottom-2 left-2 rounded-ctl bg-ink/70 px-1.5 py-1 font-mono text-[11px] leading-none tracking-[0.08em] uppercase text-fg-3 transition-opacity"
-                data-hint
+    <div class="flex flex-col gap-3.5">
+      <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
+        <span class="text-fg"> Meet the interface. </span>
+      </h2>
+    </div>
+    {/* Three names on one rule, and one picture under them - the drawing's own
+        idea, and a good one: three slots side by side had to be small to fit,
+        and the point of these is that you can see what is happening in them.
+        One is always open, so the panel is never empty and the row never reads
+        as three things you have not chosen yet. */}
+    <div data-tabs>
+      <div
+        class="flex items-baseline border-b border-line pb-3.5"
+        role="tablist"
+        aria-label="Meet the interface"
+      >
+        {
+          clips.map((c, i) => (
+            <>
+              {i > 0 && (
+                <span class="px-4 text-[15px] text-fg-4" aria-hidden="true">
+                  |
+                </span>
+              )}
+              <button
+                type="button"
+                role="tab"
+                id={`tab-${i}`}
+                aria-controls={`panel-${i}`}
+                aria-selected={i === 0 ? "true" : "false"}
+                tabindex={i === 0 ? 0 : -1}
+                class="tab cursor-pointer border-0 bg-transparent p-0 font-mono text-[17px] text-fg-3"
               >
-                Video · plays on hover
-              </span>
-            </div>
-            <figcaption class="font-mono text-[15px] text-fg">{c.h}</figcaption>
-          </figure>
+                {c.h}
+              </button>
+            </>
+          ))
+        }
+      </div>
+      {
+        clips.map((c, i) => (
+          <div
+            id={`panel-${i}`}
+            role="tabpanel"
+            aria-labelledby={`tab-${i}`}
+            class="mt-6 overflow-hidden rounded-card border border-line bg-ink-2"
+            hidden={i !== 0}
+          >
+            <video
+              class="block aspect-video w-full object-cover"
+              src={c.src}
+              poster={c.poster}
+              aria-label={c.alt}
+              muted
+              loop
+              playsinline
+              preload="none"
+            />
+          </div>
         ))
       }
     </div>
@@ -338,6 +385,23 @@ const roadmap = [
 </Base>
 
 <style>
+
+  /* The name of the panel you are looking at lifts a few pixels off the rule
+     and takes the full text colour. It is the whole indicator - no underline,
+     no box, nothing that needs a second colour - and it moves rather than
+     changes size, so the row's own width never shifts as you switch. */
+  .tab {
+    transition:
+      color 0.15s,
+      transform 0.15s;
+  }
+  .tab:hover {
+    color: var(--color-fg-2);
+  }
+  .tab[aria-selected="true"] {
+    color: var(--color-fg);
+    transform: translateY(-4px);
+  }
 
   /* Numbered stages against a rail. Each stage carries its own rail segment so
      the last one can go dashed: past 1.0 the order is a guess, and the line
@@ -444,7 +508,53 @@ const roadmap = [
       });
   }
 
-  // The three slots play on hover. A slot whose clip does not exist yet keeps
+  // Meet the interface: one panel open at a time, and always one. Clicking a
+  // name opens its panel and plays it; the arrow keys walk the row, which is
+  // what a tablist is expected to do and is four lines here. The panel that is
+  // open is the only one that ever plays, so two clips are never running at
+  // once for the sake of a switch nobody has made yet.
+  const tabsRoot = document.querySelector<HTMLElement>("[data-tabs]");
+  if (tabsRoot) {
+    const tabs = [...tabsRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const panels = [...tabsRoot.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+
+    const open = (want: number, focus = false) => {
+      tabs.forEach((tab, i) => {
+        const on = i === want;
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+        tab.tabIndex = on ? 0 : -1;
+        panels[i].hidden = !on;
+        const video = panels[i].querySelector("video");
+        if (!video) return;
+        if (on) video.play().catch(() => {});
+        else video.pause();
+      });
+      if (focus) tabs[want].focus();
+    };
+
+    tabs.forEach((tab, i) => {
+      tab.addEventListener("click", () => open(i));
+      tab.addEventListener("keydown", (e) => {
+        const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        open((i + step + tabs.length) % tabs.length, true);
+      });
+    });
+
+    // Nothing plays until the row is on screen: preload is off, so starting the
+    // open panel here is also what fetches it.
+    new IntersectionObserver((entries, obs) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        obs.disconnect();
+        const shown = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+        open(shown < 0 ? 0 : shown);
+      }
+    }).observe(tabsRoot);
+  }
+
+  // The wide slot plays on hover. A slot whose clip does not exist yet keeps
   // its poster and drops the "plays on hover" label rather than removing
   // itself: the picture is a real screenshot and is worth showing on its own.
   for (const slot of document.querySelectorAll<HTMLElement>(".clip")) {

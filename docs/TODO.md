@@ -617,15 +617,19 @@ does not gate the four. Delete each phase here when it lands, as with everything
     whenever any of them does. Below the hero: the wide screenshot, the two captioned
     screenshots, and the three hover-play slots, every picture a real capture from the
     application (`web/public/shots/`, 124 KB the lot).
-    Two things the drawing shows are deliberately **not** built. Its closing tab strip
+    One thing the drawing showed is deliberately **not** built: its closing tab strip
     (Animate / Composite / Retime / Export) is a control with nothing behind it, so it
-    is omitted rather than shipped dead. And the three clips are **content debt**:
-    - **Record `retime.webm`, `flare.webm` and `camera.webm`** into `web/public/clips/`
-      (see `web/README.md`). The slots are built and working - a real `<video>` that
-      plays on hover - and until the files exist each shows its poster, a crop of a
-      real screenshot, and drops its "plays on hover" label. Nothing fakes motion. The
-      posters for the flare and the camera slot are stand-ins from the Viewer; a
-      capture of each feature would be better and can replace them in place.
+    is omitted rather than shipped dead. The clips are **content debt**:
+    - **Record `workspace.webm`, `retime.webm`, `flare.webm` and `camera.webm`** into
+      `web/public/clips/` (see `web/README.md`). The slots are built and working - real
+      `<video>` elements - and until the files exist each shows its poster, a crop of a
+      real screenshot, and the wide slot drops its "plays on hover" label. Nothing fakes
+      motion. `workspace.webm` is the wide slot under "Composite the way you know",
+      which was a still until the owner asked for a video there; its poster is that
+      same still. The other three are behind the Timeline / Graph / Nodes tabs, one
+      open at a time, and the open one plays. The posters for the flare and the camera
+      slot are stand-ins from the Viewer; a capture of each feature would be better and
+      can replace them in place.
 - **Later, gated - the Flutter multi-window upgrade** (K-449, K-444, K-182). Blocked
     upstream: windowing is main-channel-only, flagged, and its API promises breaking
     changes, so Lumit takes no production dependency on it until it reaches the
