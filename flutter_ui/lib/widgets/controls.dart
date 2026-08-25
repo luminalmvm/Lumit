@@ -13,6 +13,7 @@ import '../theme/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
 import 'package:lumit_flutter/widgets/hover_intent.dart';
+import 'package:lumit_flutter/widgets/time_readout.dart' show monoSlotWidth;
 
 /// The devices whose drags mean "move this thing" — **the trackpad's
 /// two-finger scroll deliberately excluded**.
@@ -2749,6 +2750,21 @@ class _DragValueFieldState extends State<DragValueField>
     _focus.requestFocus();
   }
 
+  /// The face both states are set in: the resting reading and the open
+  /// editor, so neither can drift from the other.
+  TextStyle _valueStyle(LumitTheme t) =>
+      t.mono.copyWith(fontSize: widget.bare ? barValueTextSize : wellTextSize);
+
+  /// How wide the resting face draws — the reading's own width plus the well's
+  /// padding and its edge.
+  ///
+  /// The reading is monospaced, so a character count is a width; [monoSlotWidth]
+  /// is the same measurement the readouts use, and caches by face and length.
+  double _restingWidth(LumitTheme t) =>
+      monoSlotWidth(_valueStyle(t), _format(widget.value).length) +
+      (widget.bare ? 0 : 12) +
+      2;
+
   String _format(num v) {
     var s = _plain(v);
     // `toStringAsFixed` already carries a minus; only the plus has to be put
@@ -2834,16 +2850,23 @@ class _DragValueFieldState extends State<DragValueField>
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     if (_editing) {
+      // **The editor is the resting face, with a caret in it.** Same box, same
+      // padding, same border, same type, same right-hand anchor — because
+      // anything else moves the number under the pointer that just clicked it,
+      // which the owner read as jarring and was right to. It used to be a
+      // fixed 72-wide box with the text against its *left* edge, so clicking
+      // a well both resized the box and threw the digits across it.
       return SizedBox(
-        width: 72,
-        height: wellHeight,
+        width: _restingWidth(t),
+        height: widget.bare ? null : wellHeight,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: t.surface0,
+            color: widget.bare ? null : widget.fill ?? t.surface0,
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
             // `animated`, not `accent`: the focused value field is the one
-            // focus that means "you are about to change a value" (§3.1).
-            border: Border.all(color: t.animated),
+            // focus that means "you are about to change a value" (§3.1). Drawn
+            // at the resting face's own width so the edge does not move either.
+            border: Border.all(color: t.animated, width: 1),
           ),
           // The selection gestures, so a press puts the caret down and a drag
           // highlights — without this the editor took keys but a drag over the
@@ -2851,7 +2874,11 @@ class _DragValueFieldState extends State<DragValueField>
           child: TextSelectionGestureDetectorBuilder(delegate: this)
               .buildGestureDetector(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
+              // The resting face's 6 of padding **plus its 1px edge**: a
+              // `Container`'s decoration insets its child by the border it
+              // draws and a `DecoratedBox` does not, so the 7 here is what
+              // puts the two readings on exactly the same pixel.
+              padding: const EdgeInsets.symmetric(horizontal: 7),
               child: EditableText(
                 key: textFieldKey,
                 controller: _controller,
@@ -2859,8 +2886,11 @@ class _DragValueFieldState extends State<DragValueField>
                 // Mono while focused too — the number must not change width
                 // between reading it and typing over it (§7.1) — the same
                 // size as the resting number, so nothing reflows on the click.
-                style: t.mono
-                    .copyWith(fontSize: wellTextSize, color: t.textPrimary),
+                style: _valueStyle(t).copyWith(color: t.textPrimary),
+                // The resting face is right-anchored, so the editor is too: the
+                // digits stay where they were even though the reading loses its
+                // sign or its unit on the way into the field.
+                textAlign: TextAlign.right,
                 cursorColor: t.accent,
                 backgroundCursorColor: t.surface2,
                 selectionColor: t.accent.withValues(alpha: 0.5),
@@ -2974,8 +3004,7 @@ class _DragValueFieldState extends State<DragValueField>
             child: Text(
               _format(widget.value),
               textAlign: TextAlign.right,
-              style: t.mono.copyWith(
-                fontSize: widget.bare ? barValueTextSize : wellTextSize,
+              style: _valueStyle(t).copyWith(
                 color: _dragging
                     ? t.accent
                     : widget.keyed

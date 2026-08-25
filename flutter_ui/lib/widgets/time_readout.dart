@@ -238,6 +238,10 @@ class _TimeReadoutState extends State<TimeReadout>
                 cursorColor: t.accent,
                 backgroundCursorColor: t.surface2,
                 selectionColor: t.accent.withValues(alpha: 0.5),
+                // The resting face's own anchor (see the `Text` below), so
+                // the reading does not jump across its slot on the click that
+                // opens the editor.
+                textAlign: TextAlign.right,
                 onSubmitted: (_) => _commitTyped(),
                 // Clicking away finishes the edit rather than throwing it
                 // away: people leave a field by looking at the next thing
@@ -249,6 +253,15 @@ class _TimeReadoutState extends State<TimeReadout>
         : Text(
             widget.format(widget.frame),
             style: widget.style,
+            // Right-anchored, like every other number in the editor — and
+            // here it is load-bearing rather than a convention. A readout's
+            // slot is cut for the longest reading it can carry, so a shorter
+            // one leaves slack; and the editor's text is not always the
+            // resting text (`F48` rests, `48` edits, K-460). Anchored left,
+            // clicking the frame count threw its digits one glyph to the left
+            // the moment the letter went. Anchored right, the digits that
+            // survive the change stay exactly where they were.
+            textAlign: TextAlign.right,
             maxLines: 1,
             overflow: TextOverflow.clip,
             softWrap: false,
@@ -308,7 +321,7 @@ class _TimeReadoutState extends State<TimeReadout>
           width: width,
           height: widget.well ? readoutWellHeight : null,
           padding: readoutPadding,
-          alignment: Alignment.centerLeft,
+          alignment: Alignment.centerRight,
           decoration: BoxDecoration(
             // A well keeps its recess in every state — it does not lift under
             // the pointer, or it would stop being a recess (§2.1). Hover and
