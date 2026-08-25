@@ -124,6 +124,121 @@ impl AnalysisSettings {
     }
 }
 
+/// The exclusion regions of one run, **as they move**.
+///
+/// The layer's own masks, kept as masks rather than as one flattened set, so the
+/// analysis can ask what shape each of them has at each frame's own moment. A
+/// mask drawn round a mover is keyframed to follow it, and a tracker that took
+/// the shape it starts on would exclude the wrong part of every frame after the
+/// first.
+///
+/// **The factor is one**, as it has always been (§5b's seventh deviation): a
+/// mask's vertices are in the layer's own pixel coordinates, and for a footage
+/// layer those *are* the source raster, which is what the tracker works in
+/// (K-248). Nothing converts.
+///
+/// **The clock is the source's own.** Source frame `n` is read at layer time
+/// `n / fps`, which is exact for the ordinary case and is what the old
+/// flatten-at-zero was the `n = 0` instance of. A retime between layer time and
+/// source time is not inverted — the analysis is of the *file*, from its first
+/// frame at its own rate, and one clip is in many layers with many retimes,
+/// only one of which could be honoured.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct MaskTrack {
+    masks: Vec<lumit_core::mask::Mask>,
+}
+
+impl MaskTrack {
+    /// The exclusion regions `layer` contributes, or none when the effect's
+    /// *Use masks* is off.
+    #[must_use]
+    pub fn of(layer: &Layer, settings: AnalysisSettings) -> Self {
+        MaskTrack {
+            masks: if settings.use_masks {
+                layer.masks.clone()
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    /// The regions as they stand at layer time `t`.
+    #[must_use]
+    pub fn at(&self, t: f64) -> Vec<ExclusionMask> {
+        self.masks
+            .iter()
+            .map(|m| ExclusionMask::from_mask(m, t, 1.0))
+            .collect()
+    }
+
+    /// Whether any of the masks changes shape over the run. False — the
+    /// ordinary case — lets the analysis flatten once for the whole clip
+    /// instead of once per frame.
+    #[must_use]
+    pub fn animated(&self) -> bool {
+        self.masks.iter().any(|m| m.path_keys.len() > 1)
+    }
+
+    /// Feed the geometry into the analysis key.
+    ///
+    /// The still shapes go in exactly as they always did, so every solve already
+    /// in the sidecar for an unanimated mask keeps the name it was filed under.
+    /// A **keyed** path then adds its own keys — each one's moment, its shape,
+    /// and the eases either side of it, which are what decide every shape in
+    /// between. Without that the key would name only the shape at zero, and an
+    /// animation edited after an analysis would read its own stale solve back
+    /// as if nothing had changed.
+    fn feed(&self, h: &mut blake3::Hasher) {
+        for region in self.at(0.0) {
+            feed_region(h, &region);
+        }
+        for mask in &self.masks {
+            if mask.path_keys.len() < 2 {
+                continue;
+            }
+            h.update(b"mask-anim/");
+            for k in &mask.path_keys {
+                h.update(&k.time.to_f64().to_le_bytes());
+                feed_side(h, k.interp_in);
+                feed_side(h, k.interp_out);
+                feed_region(h, &ExclusionMask::from_mask(mask, k.time.to_f64(), 1.0));
+            }
+        }
+    }
+}
+
+/// One flattened region's contribution to the key.
+fn feed_region(h: &mut blake3::Hasher, region: &ExclusionMask) {
+    let (points, inverted) = region.outline();
+    h.update(b"mask/");
+    h.update(&[u8::from(inverted)]);
+    for point in points {
+        h.update(&point[0].to_le_bytes());
+        h.update(&point[1].to_le_bytes());
+    }
+}
+
+/// One keyframe side's contribution: which of the four it is, and the two
+/// numbers that shape it. `Auto` carries a remembered ease that does not
+/// evaluate, and it goes in anyway — it is cheap, and a key that ignored a
+/// stored field would have to be revisited the day the field starts mattering.
+fn feed_side(h: &mut blake3::Hasher, side: lumit_core::anim::SideInterp) {
+    use lumit_core::anim::SideInterp;
+    let (tag, speed, influence) = match side {
+        SideInterp::Hold => (0u8, 0.0, 0.0),
+        SideInterp::Linear => (1, 0.0, 0.0),
+        SideInterp::Bezier { speed, influence } => (2, speed, influence),
+        SideInterp::Auto {
+            clamped,
+            speed,
+            influence,
+        } => (if clamped { 3 } else { 4 }, speed, influence),
+    };
+    h.update(&[tag]);
+    h.update(&speed.to_le_bytes());
+    h.update(&influence.to_le_bytes());
+}
+
 /// What names one analysis: the file's content, the settings it was analysed
 /// under, and this module's own format version.
 ///
@@ -137,13 +252,11 @@ impl AnalysisKey {
     ///
     /// The masks are hashed as geometry, not as ids: two different masks that
     /// flatten to the same outline exclude the same pixels and deserve the same
-    /// cached answer, and renaming one deserves not to throw it away.
+    /// cached answer, and renaming one deserves not to throw it away. What
+    /// exactly goes in — including the animation, since the analysis honours it
+    /// — is [`MaskTrack::feed`].
     #[must_use]
-    pub fn new(
-        fingerprint: &Fingerprint,
-        settings: AnalysisSettings,
-        masks: &[ExclusionMask],
-    ) -> Self {
+    pub fn new(fingerprint: &Fingerprint, settings: AnalysisSettings, masks: &MaskTrack) -> Self {
         let mut h = blake3::Hasher::new();
         h.update(b"lumit-track/");
         h.update(&FORMAT_VERSION.to_le_bytes());
@@ -151,15 +264,7 @@ impl AnalysisKey {
         h.update(fingerprint.head_tail_hash.as_bytes());
         h.update(&settings.density.to_le_bytes());
         h.update(&[u8::from(settings.use_masks)]);
-        for mask in masks {
-            let (points, inverted) = mask.outline();
-            h.update(b"mask/");
-            h.update(&[u8::from(inverted)]);
-            for point in points {
-                h.update(&point[0].to_le_bytes());
-                h.update(&point[1].to_le_bytes());
-            }
-        }
+        masks.feed(&mut h);
         AnalysisKey(*h.finalize().as_bytes())
     }
 
@@ -195,9 +300,9 @@ pub struct Job {
     /// What the sidecar calls it.
     pub key: AnalysisKey,
     pub settings: AnalysisSettings,
-    /// Regions no track may be born in or wander into, already in source raster
-    /// pixels.
-    pub masks: Vec<ExclusionMask>,
+    /// Regions no track may be born in or wander into, in source raster pixels
+    /// and re-flattened at each frame's own moment.
+    pub masks: MaskTrack,
     /// Opens the frames, **on the worker thread**. `None` means the media could
     /// not be read, which is a refusal and not a fault.
     pub open: Box<dyn FnOnce() -> Option<Box<dyn LumaFrames>> + Send>,
@@ -983,7 +1088,18 @@ fn track_frames(
     }
     let (w, h) = (width as usize, height as usize);
 
-    let mut tracker = Tracker::new(job.settings.tracker()).with_masks(job.masks);
+    let mut tracker = Tracker::new(job.settings.tracker());
+    // A still mask is flattened once for the whole run; a keyed one is
+    // re-flattened per frame, below. Per frame rather than per span because a
+    // path flatten is a few hundred line segments off a handful of cubics —
+    // microseconds — against a pyramid build and several hundred KLT solves for
+    // the same frame, which are milliseconds. A span table would be a second
+    // thing to keep honest about where the shape actually is, to save a cost
+    // that does not show.
+    let animated = job.masks.animated();
+    if !animated {
+        tracker.set_masks(job.masks.at(0.0));
+    }
     let mut pushed = 0usize;
     let mut severed: Option<i64> = None;
     for n in 0..total {
@@ -997,6 +1113,11 @@ fn track_frames(
         let Some(luma) = frames.luma(n) else {
             break;
         };
+        if animated {
+            // Source frame `n` shows at layer time `n / fps`, which is the
+            // clock the mask's keys are on (see [`MaskTrack`]).
+            tracker.set_masks(job.masks.at(n as f64 / fps));
+        }
         let plane = FramePlane::new(&luma, w, h).map_err(AnalysisError::Tracking)?;
         tracker
             .push(n as i64, plane, None)
@@ -1036,30 +1157,6 @@ pub fn camera_track_effect(layer: &Layer) -> Option<&EffectInstance> {
         .find(|e| e.enabled && e.effect.match_name == CAMERA_TRACK)
 }
 
-/// The exclusion masks a tracked layer contributes.
-///
-/// **The factor is one**, and that is a statement rather than an omission: a
-/// mask's vertices are in the layer's own pixel coordinates, and for a footage
-/// layer those are the source raster — `build.rs` rasterises them at the layer's
-/// *natural* size, which is the decoded file's own size regardless of the
-/// preview tier. The tracker works in the same pixels (K-248), so nothing has to
-/// be converted.
-///
-/// **Flattened at layer time zero.** A tracker takes one fixed set of regions
-/// for a whole run, so a mask keyframed to follow a moving object cannot be
-/// honoured; the shape it starts on is used. Owed, and listed in docs/TODO.md.
-#[must_use]
-pub fn exclusion_masks(layer: &Layer, settings: AnalysisSettings) -> Vec<ExclusionMask> {
-    if !settings.use_masks {
-        return Vec::new();
-    }
-    layer
-        .masks
-        .iter()
-        .map(|m| ExclusionMask::from_mask(m, 0.0, 1.0))
-        .collect()
-}
-
 /// Build the job for the tracked layer `layer` of `comp`, ready to hand to
 /// [`request`]. `path` is where the frontend resolved the media to (K-173 keeps
 /// absolute paths out of the document, so only it can say).
@@ -1076,7 +1173,7 @@ pub fn job_for(
         return None;
     };
     let settings = AnalysisSettings::of(camera_track_effect(layer)?);
-    let masks = exclusion_masks(layer, settings);
+    let masks = MaskTrack::of(layer, settings);
     Some(Job {
         media: item,
         key: AnalysisKey::new(fingerprint, settings, &masks),
@@ -1362,7 +1459,7 @@ mod tests {
         }
     }
 
-    fn job(media: Uuid, tag: &str, masks: Vec<ExclusionMask>) -> Job {
+    fn job(media: Uuid, tag: &str, masks: MaskTrack) -> Job {
         let settings = AnalysisSettings::default();
         Job {
             media,
@@ -1378,7 +1475,7 @@ mod tests {
     fn degrading_job(media: Uuid, tag: &str, tail: usize) -> Job {
         Job {
             open: Box::new(move || Some(Box::new(Shot::degrading(tail)) as Box<dyn LumaFrames>)),
-            ..job(media, tag, Vec::new())
+            ..job(media, tag, MaskTrack::default())
         }
     }
 
@@ -1625,7 +1722,7 @@ mod tests {
         let media = Uuid::now_v7();
 
         let cancel = AtomicBool::new(false);
-        let (out, steps) = run_here(job(media, "solve", Vec::new()), &cancel);
+        let (out, steps) = run_here(job(media, "solve", MaskTrack::default()), &cancel);
         let (fps, clip_frames, solve) = out.expect("the synthetic shot solves");
         assert_eq!(clip_frames, FRAMES, "the whole clip was followed");
 
@@ -1835,7 +1932,7 @@ mod tests {
         let before = key().expect("a probed comp is keyable");
 
         let cancel = AtomicBool::new(false);
-        let (out, _) = run_here(job(media, "key", Vec::new()), &cancel);
+        let (out, _) = run_here(job(media, "key", MaskTrack::default()), &cancel);
         let (fps, clip_frames, solve) = out.expect("the synthetic shot solves");
         publish(media, fps, clip_frames, solve);
 
@@ -1855,11 +1952,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         with_cache(dir.path());
         let media = Uuid::now_v7();
-        let key = AnalysisKey::new(&fingerprint("cancel"), AnalysisSettings::default(), &[]);
+        let key = AnalysisKey::new(
+            &fingerprint("cancel"),
+            AnalysisSettings::default(),
+            &MaskTrack::default(),
+        );
 
         // Raised after a handful of frames, which is where a real Cancel lands.
         let cancel = AtomicBool::new(false);
-        let mut first = job(media, "cancel", Vec::new());
+        let mut first = job(media, "cancel", MaskTrack::default());
         first.key = key;
         let log = Mutex::new(Vec::new());
         let out = analyse(first, &cancel, &|step| {
@@ -1886,7 +1987,7 @@ mod tests {
 
         // And the same job, uncancelled, is a whole clean analysis.
         let clean = AtomicBool::new(false);
-        let mut again = job(media, "cancel", Vec::new());
+        let mut again = job(media, "cancel", MaskTrack::default());
         again.key = key;
         let (out, _) = run_here(again, &clean);
         assert!(out.is_ok(), "the rerun after a cancel found nothing broken");
@@ -1902,10 +2003,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         with_cache(dir.path());
         let media = Uuid::now_v7();
-        let key = AnalysisKey::new(&fingerprint("cache"), AnalysisSettings::default(), &[]);
+        let key = AnalysisKey::new(
+            &fingerprint("cache"),
+            AnalysisSettings::default(),
+            &MaskTrack::default(),
+        );
         let cancel = AtomicBool::new(false);
 
-        let mut first = job(media, "cache", Vec::new());
+        let mut first = job(media, "cache", MaskTrack::default());
         first.key = key;
         let (fps, clip_frames, solve) = run_here(first, &cancel).0.unwrap();
         write_sidecar(dir.path(), key, fps, clip_frames, &solve);
@@ -1928,7 +2033,7 @@ mod tests {
 
         // A second analysis of the same input is the same solve — which is what
         // makes the cache safe to trust at all.
-        let mut again = job(media, "cache", Vec::new());
+        let mut again = job(media, "cache", MaskTrack::default());
         again.key = key;
         let (fps_again, clip_again, solve_again) = run_here(again, &cancel).0.unwrap();
         assert_eq!(fps_again, fps);
@@ -1945,7 +2050,7 @@ mod tests {
                 density: 0,
                 use_masks: true,
             },
-            &[],
+            &MaskTrack::default(),
         );
         assert!(read_sidecar(dir.path(), other).is_none());
         // Neither does a file from a version this build does not know.
@@ -1959,7 +2064,7 @@ mod tests {
         // the next analysis rebuilds the identical answer.
         std::fs::remove_file(dir.path().join(key.file_name())).unwrap();
         assert!(read_sidecar(dir.path(), key).is_none());
-        let mut rebuilt = job(media, "cache", Vec::new());
+        let mut rebuilt = job(media, "cache", MaskTrack::default());
         rebuilt.key = key;
         let (fps_rebuilt, clip_rebuilt, solve_rebuilt) = run_here(rebuilt, &cancel).0.unwrap();
         assert_eq!(
@@ -1997,8 +2102,13 @@ mod tests {
             (W / 2) as f64 - 40.0,
             (H / 2) as f64 - 40.0,
         ));
-        let masks = exclusion_masks(&tracked, AnalysisSettings::default());
+        let track = MaskTrack::of(&tracked, AnalysisSettings::default());
+        let masks = track.at(0.0);
         assert_eq!(masks.len(), 1);
+        assert!(
+            !track.animated(),
+            "a drawn rectangle does not move on its own"
+        );
 
         // Asked of the tracks, not of the solved cloud: a solved point is a
         // *place in space*, and projecting it through frames the track was not
@@ -2014,10 +2124,14 @@ mod tests {
         };
 
         let media = Uuid::now_v7();
-        let unmasked = track_frames(job(media, "unmasked", Vec::new()), &cancel, &|_| {})
-            .unwrap()
-            .2;
-        let masked = track_frames(job(media, "masked", masks.clone()), &cancel, &|_| {})
+        let unmasked = track_frames(
+            job(media, "unmasked", MaskTrack::default()),
+            &cancel,
+            &|_| {},
+        )
+        .unwrap()
+        .2;
+        let masked = track_frames(job(media, "masked", track.clone()), &cancel, &|_| {})
             .unwrap()
             .2;
 
@@ -2057,7 +2171,11 @@ mod tests {
         let (mut doc, comp) = linked_document(media);
         online(&mut doc, media, "warm-open");
 
-        let key = AnalysisKey::new(&fingerprint("warm-open"), AnalysisSettings::default(), &[]);
+        let key = AnalysisKey::new(
+            &fingerprint("warm-open"),
+            AnalysisSettings::default(),
+            &MaskTrack::default(),
+        );
         let solve = written_solve();
         write_sidecar(dir.path(), key, FPS, FRAMES, &solve);
         assert_eq!(
@@ -2105,6 +2223,139 @@ mod tests {
         );
     }
 
+    /// A layer carrying one mask that slides from `from` to `to` across the
+    /// clip, keyed at its first and last frames.
+    fn moving_mask_layer(from: f64, to: f64) -> Layer {
+        use lumit_core::anim::SideInterp;
+        use lumit_core::mask::{Mask, PathKeyframe};
+        let (w, h) = (130.0, H as f64 - 40.0);
+        let start = Mask::rectangle(from, 20.0, w, h);
+        let end = Mask::rectangle(to, 20.0, w, h);
+        let mut mask = start.clone();
+        mask.path_keys = vec![
+            PathKeyframe {
+                time: Rational::new(0, 1).unwrap(),
+                path: start.path,
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Linear,
+            },
+            PathKeyframe {
+                time: Rational::new(FRAMES as i64 - 1, FPS as i64).unwrap(),
+                path: end.path,
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Linear,
+            },
+        ];
+        let mut l = layer(
+            "shot",
+            LayerKind::Footage {
+                item: Uuid::now_v7(),
+            },
+            secs(1, 1),
+        );
+        l.masks.push(mask);
+        l
+    }
+
+    /// A keyframed mask excludes where it **is**, frame by frame.
+    ///
+    /// The old behaviour flattened the shape once at layer time zero and used
+    /// it for the whole run, which for the obvious case — a mask drawn round a
+    /// mover and keyed to follow it — excluded the wrong part of every frame
+    /// after the first. Two claims, and the second is what makes the first mean
+    /// anything: nothing is tracked inside the region *as it stands on that
+    /// frame*, and plenty is tracked where the region **started**, which the
+    /// flatten-at-zero run could not have produced.
+    #[test]
+    fn a_keyframed_mask_excludes_where_it_is_on_each_frame() {
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+        let cancel = AtomicBool::new(false);
+
+        let l = moving_mask_layer(20.0, 240.0);
+        let track = MaskTrack::of(&l, AnalysisSettings::default());
+        assert!(track.animated(), "the mask is keyed, so it moves");
+        let started_at = track.at(0.0);
+        let ended_at = track.at((FRAMES as f64 - 1.0) / FPS);
+
+        let set = track_frames(
+            job(Uuid::now_v7(), "moving-mask", track.clone()),
+            &cancel,
+            &|_| {},
+        )
+        .unwrap()
+        .2;
+
+        let mut trespasses = 0usize;
+        let mut behind = 0usize;
+        for t in set.tracks() {
+            for p in &t.points {
+                let here = track.at(p.frame as f64 / FPS);
+                if here.iter().any(|m| m.excludes(p.x, p.y)) {
+                    trespasses += 1;
+                }
+                // Where the mask *was* at the start, on a frame it has since
+                // left. Flattening at zero would have forbidden every one.
+                if p.frame > FRAMES as i64 / 2 && started_at[0].excludes(p.x, p.y) {
+                    behind += 1;
+                }
+            }
+        }
+        assert_eq!(trespasses, 0, "a track lived inside the mask's own shape");
+        assert!(
+            behind > 20,
+            "only {behind} points were followed where the mask began, so the \
+             shape may as well have been frozen there"
+        );
+        // And the two ends really are different regions, or none of the above
+        // distinguishes anything.
+        assert!(!ended_at[0].excludes(30.0, 150.0));
+        assert!(started_at[0].excludes(30.0, 150.0));
+        clear();
+    }
+
+    /// The key is honest about the animation.
+    ///
+    /// Two masks with the *same* shape at zero and different journeys are two
+    /// different analyses, and naming them the same would hand the second one
+    /// the first one's solve. A still mask keeps hashing exactly as it did, so
+    /// no existing sidecar entry is orphaned — which is why the animation is
+    /// appended to the key rather than replacing what was there.
+    #[test]
+    fn the_analysis_key_follows_a_masks_animation() {
+        let settings = AnalysisSettings::default();
+        let fp = fingerprint("anim-key");
+        let still = MaskTrack::of(
+            &{
+                let mut l = layer(
+                    "shot",
+                    LayerKind::Footage {
+                        item: Uuid::now_v7(),
+                    },
+                    secs(1, 1),
+                );
+                l.masks
+                    .push(lumit_core::mask::Mask::rectangle(20.0, 20.0, 130.0, 260.0));
+                l
+            },
+            settings,
+        );
+        let near = MaskTrack::of(&moving_mask_layer(20.0, 60.0), settings);
+        let far = MaskTrack::of(&moving_mask_layer(20.0, 240.0), settings);
+
+        assert_eq!(
+            still.at(0.0),
+            near.at(0.0),
+            "the fixture is wrong: all three must start on the same shape"
+        );
+        assert_eq!(near.at(0.0), far.at(0.0));
+
+        let key = |m: &MaskTrack| AnalysisKey::new(&fp, settings, m);
+        assert_ne!(key(&still), key(&near), "an animation was not named");
+        assert_ne!(key(&near), key(&far), "two journeys were named the same");
+    }
+
     /// The thread path: `request` accepts one analysis, refuses a second while
     /// it runs, and the solve arrives in the store and the sidecar without any
     /// caller waiting on the disk.
@@ -2114,15 +2365,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         with_cache(dir.path());
         let media = Uuid::now_v7();
-        let key = AnalysisKey::new(&fingerprint("thread"), AnalysisSettings::default(), &[]);
-        let mut first = job(media, "thread", Vec::new());
+        let key = AnalysisKey::new(
+            &fingerprint("thread"),
+            AnalysisSettings::default(),
+            &MaskTrack::default(),
+        );
+        let mut first = job(media, "thread", MaskTrack::default());
         first.key = key;
 
         assert_eq!(request(first), Requested::Started);
         // One at a time: a second request while the first is in flight is
         // refused rather than queued behind it.
         assert_eq!(
-            request(job(Uuid::now_v7(), "second", Vec::new())),
+            request(job(Uuid::now_v7(), "second", MaskTrack::default())),
             Requested::Busy
         );
 
@@ -2146,7 +2401,7 @@ mod tests {
             media,
             key,
             settings: AnalysisSettings::default(),
-            masks: Vec::new(),
+            masks: MaskTrack::default(),
             open: Box::new(|| panic!("a warm pass must never open the media")),
             analyse: false,
         };
@@ -2168,9 +2423,13 @@ mod tests {
         let cold = Uuid::now_v7();
         let miss = Job {
             media: cold,
-            key: AnalysisKey::new(&fingerprint("cold"), AnalysisSettings::default(), &[]),
+            key: AnalysisKey::new(
+                &fingerprint("cold"),
+                AnalysisSettings::default(),
+                &MaskTrack::default(),
+            ),
             settings: AnalysisSettings::default(),
-            masks: Vec::new(),
+            masks: MaskTrack::default(),
             open: Box::new(|| panic!("a warm pass must never open the media")),
             analyse: false,
         };

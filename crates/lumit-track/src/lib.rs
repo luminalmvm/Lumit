@@ -675,8 +675,21 @@ impl Tracker {
     /// wanders into one ends (§2's mask rule).
     #[must_use]
     pub fn with_masks(mut self, masks: Vec<ExclusionMask>) -> Self {
-        self.masks = masks;
+        self.set_masks(masks);
         self
+    }
+
+    /// Replace the exclusion regions between frames.
+    ///
+    /// A mask drawn round a moving object is keyframed to follow it, so the
+    /// regions are not one fixed set for a whole run: the caller re-flattens
+    /// the shapes at each frame's own moment and hands them over here before
+    /// pushing that frame. Everything the regions decide — where a feature may
+    /// be born, and whether a carried track has wandered somewhere it must not
+    /// be — is read out of this field at push time, so a swap between frames
+    /// takes effect from the next push and disturbs nothing already tracked.
+    pub fn set_masks(&mut self, masks: Vec<ExclusionMask>) {
+        self.masks = masks;
     }
 
     /// How many tracks are live right now — a caller's progress read.

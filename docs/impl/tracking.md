@@ -552,6 +552,7 @@ Eight things are deviations from, or decisions under, K-417's wording:
    same pixels (K-248), so nothing converts. The mask is flattened at layer time
    zero: a tracker takes one fixed set of regions for a whole run, so a mask
    keyframed to follow a mover cannot be honoured yet (owed, in TODO).
+   *Superseded — the regions are now re-flattened per frame; see §5e.*
 8. **The frame key asks the stamper for the camera.** `lumit_eval::SourceStamper`
    gained a defaulted `camera(doc, comp, t)` answering `comp.camera_pose(t)`, and
    `lumit-render`'s `Stamper` overrides it to follow the link. Without it a frame
@@ -819,6 +820,44 @@ Two things about it are choices rather than transcription:
    equality is asserted directly, which is the part a warm pass can silently get
    wrong: asking for a *different* analysis finds nothing and looks exactly like
    having no cache at all.
+
+**Masks follow their keyframes** (2026-08-25). `MaskTrack` replaces the flattened
+`Vec<ExclusionMask>` a job carried: it keeps the layer's masks *as masks*, and
+answers `at(t)` with the regions as they stand at layer time `t`. The frame loop
+asks it once per frame and hands the answer to `Tracker::set_masks` before the
+push, so where a feature may be born and whether a carried track has strayed are
+both judged against the shape that frame actually has.
+
+Four things worth stating:
+
+1. **Per frame, not per span.** A path flatten is a few hundred line segments off
+   a handful of cubics — microseconds — against the pyramid build and several
+   hundred KLT solves the same frame costs, which are milliseconds. A span table
+   would be a second thing to keep honest about where the shape is, to save a
+   cost that does not show. A **still** mask is flattened once for the whole run
+   (`MaskTrack::animated` is false), so the ordinary case pays nothing at all.
+2. **The clock is the source's own.** Source frame `n` is read at layer time
+   `n / fps` — exact for the ordinary case, and the generalisation of the old
+   flatten-at-zero, which was its `n = 0` instance. A retime between layer time
+   and source time is not inverted: the analysis is of the *file*, from its first
+   frame at its own rate, and one clip lives in many layers with many retimes,
+   only one of which could ever be honoured. The factor from comp to source
+   pixels is still one, for §5b's seventh deviation's reason.
+3. **The key is honest about the animation.** A still mask hashes exactly the
+   bytes it always did, so every solve already in the sidecar keeps the name it
+   was filed under; a keyed path then **appends** its own keys — each moment, its
+   shape, and the eases either side, which are what decide every shape in between.
+   Hashing only the shape at zero would have handed a re-keyed mask its own stale
+   solve back as though nothing had changed. No `FORMAT_VERSION` bump: the
+   animated keys simply name a different file, and nothing already written is
+   orphaned.
+4. **The test's second claim is the one that bites.** That nothing is tracked
+   inside the moving region is easy to satisfy by tracking nothing near it; the
+   assertion beside it is that *plenty* is tracked where the region began, on
+   frames it has since left — which a flatten-at-zero run could not produce. The
+   old behaviour fails the first assertion too, for the mirror-image reason: the
+   features it allowed in the mask's destination are still there when the mask
+   arrives.
 
 ## 5. Test plan
 
