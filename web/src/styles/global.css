@@ -2,7 +2,8 @@
 
 /* The site's tokens ARE the application's tokens (docs/15-DESIGN.md §2.1-§2.3, §3.1):
    the same three greys, the same four text tiers, the same two hairlines, the same
-   spruce accent (K-511). Nothing here is a website-only colour. The wordmark carries its own
+   clay accent (K-531, which brought it back over K-511's spruce). Nothing here is a
+   website-only colour. The wordmark carries its own
    gradient inside its SVG, and that is the only place a saturated hue appears at size. */
 @theme {
   --color-ink:      #0b0c0e;  /* surface_0 - the page */
@@ -14,8 +15,8 @@
   --color-fg-2:     #c2c8cb;  /* text_secondary - body copy */
   --color-fg-3:     #8b9296;  /* text_muted - kickers, hints */
   --color-fg-4:     #5e666b;  /* text_disabled - the dimmest labels only */
-  --color-accent:   #35785e;  /* spruce: link hover, focus, the active tab tick */
-  --color-accent-2: #ea7288;  /* accent_hover - spruce, +0x12 a channel */
+  --color-accent:   #e05a72;  /* clay: link hover, focus, the active tab tick */
+  --color-accent-2: #f26c84;  /* accent_hover - clay, +0x12 a channel, as the app derives it */
 
   /* K-476: a control's corner is 2. Cards are the drawing's own 4. */
   --radius-ctl:  2px;
