@@ -91,6 +91,86 @@ impl SourceProbe {
 /// An item nobody has probed answers [`SourceProbe::Unprobed`].
 pub trait SourceProbes {
     fn probe(&self, item: Uuid) -> SourceProbe;
+
+    /// The same question about this item's **proxy** file, when it has one.
+    ///
+    /// A separate question rather than a second entry under the same id: the
+    /// two files are probed independently and both answers are needed at once
+    /// — the original's to lay the layer out, the proxy's to decide whether the
+    /// stand-in may be believed ([`effective_media`]).
+    ///
+    /// The default answers `Unprobed`, which reads the original: a frontend
+    /// that has never heard of proxies keeps working exactly as it did, and a
+    /// proxy nobody has probed yet is simply not used until it has been.
+    fn proxy_probe(&self, _item: Uuid) -> SourceProbe {
+        SourceProbe::Unprobed
+    }
+}
+
+/// Which file a footage item's pixels are read from this render, and what the
+/// pipeline should believe about them — **the one proxy resolution point**
+/// (docs/06 §5.7).
+///
+/// # In plain terms
+///
+/// A footage item can carry a proxy: a small stand-in file the Viewer decodes
+/// while you work. Two things then have to agree, or the frame cache starts
+/// handing back the wrong picture: the decode planner, which says which file to
+/// open, and the frame key, which names the finished frame. So both ask this
+/// one function, and the answer carries the path *and* the probe together.
+///
+/// Two rules, both deliberate:
+///
+/// * **The probe returned is always the original's.** A proxy is a smaller
+///   copy of the same footage, so the layer keeps the original's pixel size and
+///   the original's rate and length: geometry is in px@comp against the
+///   original's raster (K-419), and every transform, mask and effect parameter
+///   goes on meaning what it meant. All the proxy changes is how many pixels
+///   come back from the decode — which is exactly what the preview-resolution
+///   tier already does, through the same `target_width` machinery.
+/// * **A proxy that disagrees about the footage's length is not used.** A
+///   stand-in with a different frame count or a different rate is a stand-in
+///   for something else: frame 300 of it is not frame 300 of the original, and
+///   quietly showing it would put the wrong picture on the timeline with
+///   nothing on screen to say so. It falls back to the original, and so does a
+///   proxy that is missing, unreadable, or not probed yet.
+///
+/// `None` when `item` is not a footage item at all.
+#[must_use]
+pub fn effective_media<'a>(
+    doc: &'a lumit_core::model::Document,
+    probes: &dyn SourceProbes,
+    item: Uuid,
+) -> Option<(&'a lumit_core::model::MediaRef, SourceProbe)> {
+    let lumit_core::model::ProjectItem::Footage(f) = doc.item(item)? else {
+        return None;
+    };
+    let original = probes.probe(item);
+    let Some(proxy) = doc.proxy_in_use(item) else {
+        return Some((&f.media, original));
+    };
+    if proxy_agrees(original, probes.proxy_probe(item)) {
+        Some((proxy, original))
+    } else {
+        Some((&f.media, original))
+    }
+}
+
+/// Whether a proxy's own probe agrees with the original's about *what footage
+/// this is*: same frame count, same rate. Dimensions are free to differ — that
+/// is the whole point of a proxy — and are taken from the original either way.
+///
+/// The rate is compared loosely (a thousandth of a frame per second), because
+/// two containers can state 29.97 as 30000/1001 and as a rounded double and
+/// mean the same footage; the frame count is compared exactly, because it is a
+/// count.
+fn proxy_agrees(original: SourceProbe, proxy: SourceProbe) -> bool {
+    let (Some((ofps, _, _, oframes)), Some((pfps, _, _, pframes))) =
+        (original.video(), proxy.video())
+    else {
+        return false;
+    };
+    oframes == pframes && (ofps - pfps).abs() < 1e-3
 }
 
 /// Nothing is probed — the do-nothing implementation a build with no media
@@ -106,6 +186,23 @@ impl SourceProbes for NoProbes {
 impl SourceProbes for std::collections::HashMap<Uuid, SourceProbe> {
     fn probe(&self, item: Uuid) -> SourceProbe {
         self.get(&item).copied().unwrap_or(SourceProbe::Unprobed)
+    }
+}
+
+/// Originals and proxies as two plain maps — the pair form, for a caller (or a
+/// test) that holds both without a probe cache of its own.
+impl SourceProbes
+    for (
+        std::collections::HashMap<Uuid, SourceProbe>,
+        std::collections::HashMap<Uuid, SourceProbe>,
+    )
+{
+    fn probe(&self, item: Uuid) -> SourceProbe {
+        self.0.probe(item)
+    }
+
+    fn proxy_probe(&self, item: Uuid) -> SourceProbe {
+        self.1.probe(item)
     }
 }
 

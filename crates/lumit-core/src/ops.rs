@@ -62,6 +62,32 @@ pub enum Op {
         id: Uuid,
         media: Box<crate::model::MediaRef>,
     },
+    /// Attach a proxy to a footage item, or clear it (`None`). Carries the
+    /// whole [`crate::model::ProxyRef`] — reference and its own *use proxy*
+    /// switch — so it is trivially invertible and attaching one is a single
+    /// undo step, exactly as [`Op::SetMediaRef`] is for a relink.
+    ///
+    /// Clearing removes the entry rather than leaving a disabled one, so a
+    /// project whose proxies have all been detached saves with no line for
+    /// them again.
+    SetItemProxy {
+        id: Uuid,
+        proxy: Option<Box<crate::model::ProxyRef>>,
+    },
+    /// Flip one item's *use proxy* switch, leaving the proxy attached. Refuses
+    /// on an item with no proxy: a switch on nothing would sit in the document
+    /// meaning nothing, and the panel would have asked about a control it is
+    /// not drawing.
+    SetItemUseProxy {
+        id: Uuid,
+        use_proxy: bool,
+    },
+    /// The project-wide *use proxies* master switch
+    /// (`Document::use_proxies`). Off reads originals everywhere, however many
+    /// proxies are attached and switched on.
+    SetUseProxies {
+        use_proxies: bool,
+    },
     RenameItem {
         id: Uuid,
         name: String,
@@ -617,6 +643,35 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetMediaRef {
                 id: *id,
                 media: Box::new(previous),
+            })
+        }
+        Op::SetItemProxy { id, proxy } => {
+            // Footage only: nothing else has media to stand in for, and an
+            // entry against a solid or a comp would never be read again.
+            if !matches!(doc.item(*id), Some(crate::model::ProjectItem::Footage(_))) {
+                return Err(OpError::UnknownItem);
+            }
+            let previous = match proxy {
+                Some(p) => doc.proxies.insert(*id, (**p).clone()),
+                None => doc.proxies.remove(id),
+            };
+            Ok(Op::SetItemProxy {
+                id: *id,
+                proxy: previous.map(Box::new),
+            })
+        }
+        Op::SetItemUseProxy { id, use_proxy } => {
+            let p = doc.proxies.get_mut(id).ok_or(OpError::UnknownItem)?;
+            let previous = std::mem::replace(&mut p.enabled, *use_proxy);
+            Ok(Op::SetItemUseProxy {
+                id: *id,
+                use_proxy: previous,
+            })
+        }
+        Op::SetUseProxies { use_proxies } => {
+            let previous = std::mem::replace(&mut doc.use_proxies, *use_proxies);
+            Ok(Op::SetUseProxies {
+                use_proxies: previous,
             })
         }
         Op::RenameItem { id, name } => {

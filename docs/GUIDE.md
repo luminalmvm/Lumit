@@ -9111,3 +9111,69 @@ gets a say. A fine checkerboard shrunk 4:1 should be an even grey; High gives yo
 and the test in the engine checks it against exactly that arithmetic. Fast stays the default
 because changing it would silently alter what every existing export writes, and an export
 that quietly changed is the thing this whole part of the program is built to avoid.
+
+## 25. Proxies, in plain terms
+
+Editing 6K footage on any machine is slow for one boring reason: every frame you scrub past
+has to be read off the disk and decoded, and a 6K frame is a lot of pixels to decode for a
+picture you are looking at in a window a quarter that size. A **proxy** is the old,
+obvious answer. You make a small copy of the clip once — half the width, so a quarter of the
+pixels — and tell Lumit to look at *that* while you work. When you come to deliver, the big
+file comes back and the small one is forgotten. Every editing application has this, and it is
+the single biggest thing you can do to make a heavy project feel light.
+
+**What Lumit stores.** A footage item keeps its own file reference: where the clip is, and a
+fingerprint so it can be found again if it moves. A proxy is a *second* one of those, kept
+beside it — same path handling, same fingerprint, same relinking — plus a tick saying whether
+this item is currently using it. There is also one switch for the whole project, so you can
+say "show me what I am really delivering" without going round every clip and back.
+
+**Where the danger is, and it is not where you would guess.** The obvious risk is that the
+wrong file gets opened. That one is harmless, because you can see it. The real risk is in the
+frame cache. Lumit gives every finished frame a *name* made from everything that went into
+it, so it never has to render the same picture twice (§4's cache notes go into this). If the
+name did not mention *which file* the pixels came out of, then the small version of frame 300
+and the big version of frame 300 would have the same name — and once one of them was banked,
+the other would never be rendered again. You would turn proxies off, and get the soft picture
+back anyway, with nothing on screen to explain it. Worse, you could export it.
+
+So there is exactly one function in the engine that answers "which file does this item read?"
+— and both the part that opens files and the part that names frames ask *it*, never each
+other and never separately. The name already contained the file path, so the moment the
+answer changes, every frame that reads that item is renamed by itself. Nothing had to be
+added to the naming scheme; it just had to be asked in one place. That is also why switching
+proxies back off is instant: those full-resolution frames are still sitting in the cache
+under their own names, waiting.
+
+**What a proxy is *not* allowed to change.** It has fewer pixels, and that is all. The layer
+is still laid out at the original's size, still runs at the original's rate, and still has the
+original's number of frames — so no position, no mask, no effect setting means anything
+different when you switch a proxy on. If you have moved a layer to x = 1400, it stays at
+1400; the picture inside it is simply decoded smaller and drawn into the same box. This is
+the same trick the preview-resolution setting has always used, and it uses the same machinery.
+
+**When a proxy is refused.** If the small file has a different number of frames, or a
+different frame rate, it is not a smaller copy of this clip — it is a copy of *something
+else*, and its frame 300 is not this clip's frame 300. Lumit will not use it: it quietly goes
+back to the original rather than showing you the wrong moment. Same if the proxy is missing,
+unreadable, or has not been looked at yet. And if the *original* goes missing, you get the
+colour bars and the relink prompt even though a perfectly good proxy is sitting there, because
+the clip in your timeline is the original and pretending otherwise would hide a lost file.
+
+**Exporting.** The export ignores your proxies. Not "usually" — by default, always, whatever
+the project is set to, because delivering the small version by accident is exactly the mistake
+that is expensive to discover later. If you genuinely want a quick small file for someone to
+review, you ask for it on the export itself. Mechanically this works the way the guide-layer
+override does: the export makes its own throwaway copy of the document with the proxy switch
+turned off, so everything downstream — what gets opened, what the frames are called, what
+happens inside nested compositions — agrees without anybody having to pass an extra flag
+around.
+
+**Making one.** Lumit reads every frame of the original in order and writes it out half size
+through the same encoder an export uses, into a file called `something_proxy.mov` sitting
+next to the original. Beside the original rather than in a project folder, because the proxy
+belongs to the footage: use the same clip in three projects and you want one proxy, not
+three, and moving the folder of clips takes the proxies with it. It runs in the background and
+reports progress exactly as an export does, because from where you are sitting it is the same
+kind of wait. Sound is not copied — the audio always comes from the original, so there is
+nothing to gain by re-encoding it and something to lose.

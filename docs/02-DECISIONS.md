@@ -13544,3 +13544,89 @@ docs/impl/timeline-interaction.md §2 is the binding spec. The rulings:
   list applied to the marquee box, the graph's selected keys and the tangent handles.
 - Two or more selected keys are the block wherever the selection came from — marquee,
   clicks or a property name — in Layers mode and Keys alike (K-458's tools, one overlay).
+
+## K-501 — Proxies: a second media reference, one resolution point, and a name that says which file
+
+**DECIDED 2026-08-25**, building the second of the two subsystems K-479 left out of the
+Export drawing (guide layers were the first, K-497). K-469 called proxies "a document
+feature first and an export override second", and that ordering is what this entry settles:
+the document carries them, one function decides which file is read, and the export's
+override is off by default.
+
+**A proxy is a second media reference, not a swapped one.** A footage item's own
+`MediaRef` stays exactly what it was; a `ProxyRef` sits beside it carrying its own path,
+its own fingerprint and its own *use proxy* switch, resolved on open and rebased on save by
+the same rules ([03-DATA-MODEL.md](03-DATA-MODEL.md) §3a). It is stored as
+`Document::proxies`, a map by item id, for the reason `item_labels` gives at length (K-451):
+only one of the four kinds of project item can carry one, almost none does, and a field
+would have written `proxy: None` at every place a `FootageItem` is built in the engine and
+in thirty tests. An entry outliving a deleted item is deliberate and identical to a colour
+tag's — undoing the delete brings the proxy back with it. Both the map and the
+project-wide `use_proxies` switch are absent from a `.lum` that has nothing to say, so every
+file written before proxies round-trips byte for byte.
+
+Three undoable ops, on the existing patterns: `SetItemProxy` (attach, replace, or clear —
+carrying the whole reference, so it is its own inverse, exactly as `SetMediaRef` is for a
+relink), `SetItemUseProxy`, and `SetUseProxies`. The project switch defaults **on**, so
+making a proxy has an effect without a second action; a file written before it existed loads
+on, which is the same answer.
+
+**One resolution point, and the key folds the choice in for free.** Two things must never
+disagree about which file a footage layer reads: the decode planner, which opens it, and the
+frame key, which names the finished picture. They ask one function —
+`lumit_render::source::effective_media` — which answers with the path and the probe
+together. Nothing was added to the naming scheme: the key already hashed each footage
+layer's file path, so choosing the proxy renames every frame that reads that item by
+construction. That is the whole of the mechanism, and it is why switching proxies off hands
+back the frames banked before they were switched on rather than re-rendering them.
+
+**The original's numbers govern; the proxy only changes the pixel count.** Size, rate and
+duration come from the original whatever file is read, so px@comp stays the original's
+raster (K-419) and no transform, mask or effect parameter changes meaning when a proxy is
+switched on. A proxy is decoded at fewer pixels, which is exactly what the preview
+resolution tier already does through the same `target_width` — one mechanism, not two.
+
+**A proxy that disagrees about the footage is refused, not adapted.** A different frame
+count or a different frame rate means the stand-in is a stand-in for something else: its
+frame 300 is not the original's frame 300, and showing it would put the wrong moment on the
+timeline with nothing on screen to say so. Such a proxy falls back to the original, as do
+one that is missing, unreadable, or not yet probed. Rates are compared to a thousandth of a
+frame per second, because two containers can state 29.97 differently and mean the same
+footage. A **missing original** still draws the colour-bar slate whatever proxy is attached:
+the layer is the original, and quietly playing on from the stand-in would hide a lost file
+from the one person who needs to know. (Offline-with-proxy, which After Effects does allow,
+is the recorded ceiling here — it would make the proxy's own dimensions the layer's, which
+is the rule above reversed.)
+
+**Delivery reads the originals.** `RenderOptions::use_proxies` is off by default whatever
+the project is set to, and it reaches the render the way K-497's guide-layer override does:
+by clearing the master switch on the export's own throwaway document snapshot, so the draw
+builder, the decode planner, the frame key and every nested walk agree at every depth
+without a second flag threaded through any of them. Turning proxies on to work therefore
+cannot quietly ship the small picture, which is K-031 in the direction that costs money. The
+snapshot is only cloned when a proxy is genuinely switched on somewhere, so an ordinary
+export of an ordinary project copies nothing.
+
+**MAKE-PROXY: half size, `name_proxy.mov`, beside the original.** The transcode
+(`lumit_render::proxy`) reads every frame of the source in order and writes it through the
+same encoder every export writes through, at half the width rounded down to an even raster,
+into a `.mov` named for the original with `_proxy` appended. Beside the original rather than
+in a project-relative folder, because a proxy belongs to the *footage*: one clip used by
+three projects wants one proxy, and a folder of clips carries its proxies when it moves.
+`.mov` whatever the source's container is, so the extension alone says which of the two
+files in a folder is the stand-in. It runs on its own thread and streams `Progress` /
+`Done` / `Failed` in the shape `ExportEvent` already has, since to the person waiting it is
+the same kind of wait; a cancelled job removes the half-written file rather than leaving a
+trap that looks finished. **Sound is not copied** — the audio path reads the item's original
+reference and always did, so a proxy carrying re-encoded sound would be a second, worse
+answer to a question nobody asked.
+
+**Proxies do not travel.** Collect for sharing drops them: they are local convenience files,
+remade in one action from the originals the copy is already carrying, and shipping them
+would double the folder to send pictures nobody delivers.
+
+The **seam is unchanged by this entry**. Nothing of this crosses to Flutter yet: the export
+dialog's proxies row stays drawn dead (K-485) until `BridgeExportSpec` carries
+`use_proxies`, and the Project panel's set / clear / *use proxy* / *use proxies* controls and
+the MAKE-PROXY action with its progress are all interface work, listed in
+[TODO.md](TODO.md). No user-facing string is added by this entry.

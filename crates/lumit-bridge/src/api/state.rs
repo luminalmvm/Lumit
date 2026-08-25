@@ -394,6 +394,15 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // chips, so the panel has to hear about it (K-451).
         | Op::SetItemLabel { .. }
         | Op::SetMediaRef { .. }
+        // A proxy is a second media reference on a footage item (K-501), and
+        // all three of these change what the item's row says about itself —
+        // whether it has a stand-in, whether it is being used, and the
+        // project-wide switch that governs every row at once. All of them also
+        // rename every frame that reads the item, so the panel and the cache
+        // bar both have to hear.
+        | Op::SetItemProxy { .. }
+        | Op::SetItemUseProxy { .. }
+        | Op::SetUseProxies { .. }
         | Op::SetFolderChildren { .. }
         | Op::SetAutoFolder { .. }
         // Where this project parks its frames. No panel draws it — Settings

@@ -23,7 +23,7 @@
 
 use crate::decode::CompJob;
 use crate::source::SourceProbes;
-use lumit_core::model::{Composition, Document, LayerKind, ProjectItem};
+use lumit_core::model::{Composition, Document, LayerKind};
 use std::path::PathBuf;
 use uuid::Uuid;
 
@@ -249,9 +249,14 @@ pub fn collect_comp_jobs(
                 if let Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) =
                     lumit_core::sequence::resolve(clips, lt)
                 {
-                    let (Some(ProjectItem::Footage(f)), Some((fps, nat_w, nat_h, src_frames))) =
-                        (doc.item(item), probes.probe(item).video())
+                    // The one proxy resolution point (K-501): which file this
+                    // item's pixels come from, and the probe to believe about
+                    // them (always the original's — see `effective_media`).
+                    let Some((media, probe)) = crate::source::effective_media(doc, probes, item)
                     else {
+                        continue;
+                    };
+                    let Some((fps, nat_w, nat_h, src_frames)) = probe.video() else {
                         continue;
                     };
                     use lumit_core::retime::Interpolation;
@@ -281,7 +286,7 @@ pub fn collect_comp_jobs(
                     jobs.push(CompJob {
                         layer: layer.id,
                         item,
-                        path: PathBuf::from(&f.media.absolute_path),
+                        path: PathBuf::from(&media.absolute_path),
                         source_frame,
                         target_width,
                         natural_w: nat_w,
@@ -321,10 +326,13 @@ pub fn collect_comp_jobs(
                 }
             }
             LayerKind::Footage { item } => {
-                let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
+                // The one proxy resolution point (K-501): which file this
+                // item's pixels come from, and the probe to believe about them
+                // (always the original's — see `effective_media`).
+                let Some((media, probe)) = crate::source::effective_media(doc, probes, *item)
+                else {
                     continue;
                 };
-                let probe = probes.probe(*item);
                 // Missing media still draws (docs/07 §3.3): a slate job at
                 // comp size, so the layer shows test bars in place of the
                 // picture instead of silently vanishing. Sized to the comp
@@ -333,7 +341,7 @@ pub fn collect_comp_jobs(
                     jobs.push(CompJob {
                         layer: layer.id,
                         item: *item,
-                        path: PathBuf::from(&f.media.absolute_path),
+                        path: PathBuf::from(&media.absolute_path),
                         source_frame: 0,
                         target_width: None,
                         natural_w: comp.width,
@@ -420,7 +428,7 @@ pub fn collect_comp_jobs(
                 jobs.push(CompJob {
                     layer: layer.id,
                     item: *item,
-                    path: PathBuf::from(&f.media.absolute_path),
+                    path: PathBuf::from(&media.absolute_path),
                     source_frame,
                     target_width,
                     natural_w: nat_w,
@@ -538,6 +546,7 @@ impl CompJob {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+    use lumit_core::model::ProjectItem;
 
     /// **A scale and its thousandth are named the same** — the scrub asks with
     /// the raw float, the cache bar with the scale rounded to a thousandth, and

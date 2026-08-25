@@ -826,6 +826,45 @@ nobody can see. The dimmed state probes the adaptive tiers' scales (Half, Third,
 which are the scales frames genuinely get cached at, rather than every scale a Viewer could
 be resized to.
 
+### 5.7 Proxies: one resolution point, folded into the key (K-501)
+
+A footage item can carry a **proxy** — a small stand-in file, usually half size, decoded in
+place of the original while you work ([03-DATA-MODEL.md](03-DATA-MODEL.md) §3a). Two things
+in this pipeline have to agree about which file that is, and they are in different modules:
+the **decode plan** (§1), which says what to open, and the **frame key** (§5.2), which names
+the finished picture. So they ask one function — `lumit_render::source::effective_media` —
+and it answers with the path and the probe together.
+
+The name is the load-bearing half. A frame's key already folds in the *path* each footage
+layer reads, so choosing the proxy renames every frame that reads it, and a proxy frame and
+a full-resolution frame of the same moment can never share a name. Nothing else had to be
+added to the key: the choice is in it by construction, which is also why turning the switch
+off hands back the frames banked before it was turned on rather than re-rendering them.
+
+What the resolution point believes:
+
+- **The probe it returns is always the original's** — size, rate and frame count. A proxy
+  changes how many pixels come back from a decode, which is exactly what the preview
+  resolution tier (§6.1) already does through the same `target_width`; it changes nothing
+  about the layer's geometry, which is px@comp against the original's raster (K-419).
+- **A proxy whose frame count or rate disagrees with the original is not used.** It is a
+  stand-in for different footage, and showing it would put the wrong picture on the
+  timeline with nothing on screen to say so. Missing, unreadable and not-yet-probed
+  proxies fall back the same way, and a missing *original* slates (07 §3.3) whatever
+  proxy is attached.
+
+**Export reads the originals.** `RenderOptions::use_proxies` is off by default whatever the
+project is set to, and it is applied the way *render guide layers* is (§7.2): by clearing
+the master switch on the export's own throwaway document snapshot, so the planner, the key
+and every nested walk agree at every depth without a second flag threaded through any of
+them. Turning proxies on to work can therefore never quietly ship the small picture; a
+draft export for review asks for them explicitly.
+
+**Making one** is a background transcode — `lumit_render::proxy` — reading every frame of
+the original in order and writing it through the same encoder an export uses, at half width
+rounded to an even raster, into `name_proxy.mov` beside the original. Sound is not copied:
+the audio path reads the item's original reference and always did.
+
 ## 6. Preview
 
 ### 6.1 Preview resolution
@@ -1042,12 +1081,13 @@ falls back to whatever was typed.
 never drafts, §7.3), the **disk-cache policy** (off during export by default: a single pass
 through the timeline would evict the frames the user is actually working with), whether
 **effects** run, whether **solo switches** are honoured (K-105), and whether **guide layers**
-are delivered (K-497 — off by default, which is what a guide layer is). All three act on the
-export's own document snapshot and never reach the project (§7.2): the snapshot's guide layers
-are left neither visible nor audible nor soloed, at every depth, so the draw builder, the
-decode planner and the frame key all agree the layer is not there while the Viewer, which
-never takes this path, keeps drawing it. **Proxies are not among them**: the concept does not
-exist in the document model, so it cannot be overridden at export — see [TODO.md](TODO.md).
+are delivered (K-497 — off by default, which is what a guide layer is), and whether the
+**proxies** are read (K-501 — off by default, so delivery takes the full-resolution files
+whatever the project is working at; §5.7). All of them act on the export's own document
+snapshot and never reach the project (§7.2): the snapshot's guide layers are left neither
+visible nor audible nor soloed and its proxy master switch is cleared, at every depth, so the
+draw builder, the decode planner and the frame key all agree while the Viewer, which never
+takes this path, keeps its guide layers and its proxies.
 
 **When done.** An export finishing can do nothing, play a short sound, or show the file in the
 file browser. The sound is a bundled file; when there is none, the hook is silent rather than

@@ -1018,6 +1018,17 @@ pub struct RenderOptions {
     /// the file, at every depth. On overrides that for the one export that
     /// wants the reference in the picture.
     pub render_guides: bool,
+    /// Read the proxies instead of the originals (K-501). **Off by default,
+    /// whatever the project is set to**: a proxy is a working convenience, and
+    /// delivery is the one moment it must not apply, so an export takes the
+    /// full-resolution files unless it is explicitly asked not to — a draft for
+    /// review being the only export a proxy is right for.
+    ///
+    /// The override lives here rather than being read off the Viewer's state
+    /// precisely so K-031 keeps holding in the direction that matters: what is
+    /// delivered is decided by the export, and turning proxies on to work
+    /// cannot quietly ship the small picture.
+    pub use_proxies: bool,
 }
 
 impl Default for RenderOptions {
@@ -1028,6 +1039,7 @@ impl Default for RenderOptions {
             effects: true,
             honour_solo: true,
             render_guides: false,
+            use_proxies: false,
         }
     }
 }
@@ -1065,10 +1077,25 @@ pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Opti
     // all agree, at every depth, that the layer is not there. The Viewer never
     // takes this path, so it keeps drawing them.
     let drop_guides = !opts.render_guides && has_guide_layer(doc);
-    if !opts.changes_document() && !drop_guides {
+    // Proxies leave the delivery by the same route (K-501), and for the same
+    // reason it worked for guide layers: the project's own master switch is one
+    // field on the snapshot, so clearing it here makes the decode planner, the
+    // frame key and every nested walk agree — at every depth, and without a
+    // second flag threaded through any of them — that this export reads the
+    // originals. The Viewer never takes this path and keeps its proxies.
+    //
+    // Guarded on a proxy actually being *switched on* somewhere, not merely on
+    // the two flags differing: nearly every project has the master switch on
+    // and no proxies at all, and every ordinary export would otherwise clone a
+    // whole document to alter a field that changes nothing (`render_guides`
+    // takes the same care, for the same reason).
+    let set_proxies =
+        doc.use_proxies != opts.use_proxies && doc.proxies.values().any(|p| p.enabled);
+    if !opts.changes_document() && !drop_guides && !set_proxies {
         return None;
     }
     let mut copy = Document::clone(doc);
+    copy.use_proxies = opts.use_proxies;
     for item in &mut copy.items {
         let ProjectItem::Composition(comp) = item else {
             continue;

@@ -112,6 +112,36 @@ pub struct FootageItem {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+/// A footage item's **proxy**: a second media reference standing in for the
+/// original while you work (docs/03-DATA-MODEL.md §3a).
+///
+/// # In plain terms
+///
+/// A proxy is a small, cheap copy of a piece of footage — usually half size —
+/// that the Viewer decodes instead of the real thing, so scrubbing a folder of
+/// 6K clips feels like scrubbing a folder of small ones. The original is
+/// swapped back in for delivery, so the file you send is never the small one.
+///
+/// It is a *second* reference beside [`FootageItem::media`], never a
+/// replacement: the original's path, size, rate and duration remain the
+/// item's own, and everything the picture is laid out by keeps coming from
+/// them. Only the pixels are read elsewhere.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProxyRef {
+    /// Where the stand-in file lives — path pair and fingerprint, resolved and
+    /// relinked exactly like the original's reference.
+    pub media: MediaRef,
+    /// This item's own *use proxy* switch. Off keeps the proxy attached and
+    /// reads the original, which is how one clip is checked at full quality
+    /// without giving up the proxy that took minutes to make.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Unknown fields from newer Lumit versions, preserved on load/save
+    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
 /// A shared solid definition (docs/03-DATA-MODEL.md §2): solids are assets,
 /// so many layers can reference one colour/size and they dedupe naturally.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -814,6 +844,12 @@ impl EffectInstance {
 
 fn default_true() -> bool {
     true
+}
+
+/// `skip_serializing_if` for a field whose default is `true`: an untouched
+/// project writes no line for it, so older files round-trip unchanged.
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1905,6 +1941,33 @@ pub struct Document {
     /// brings the item back still wearing its colour.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub item_labels: std::collections::BTreeMap<Uuid, u8>,
+    /// Footage items' proxies, by item id ([`ProxyRef`], docs/03 §3a).
+    ///
+    /// **A map beside the items rather than a field on each of them**, for the
+    /// reason `item_labels` above gives at length: only one of the four kinds
+    /// of project item can have a proxy, almost no item has one, and a field
+    /// would have written `proxy: None` at every place a `FootageItem` is
+    /// built. An entry whose item has since been deleted is harmless and
+    /// deliberately kept, so undoing the delete brings the proxy back with it.
+    ///
+    /// A `BTreeMap`, so two saves of the same document are byte-identical
+    /// (docs/10 §1), and absent when empty, so a project with no proxies gains
+    /// no line for it.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub proxies: std::collections::BTreeMap<Uuid, ProxyRef>,
+    /// The project-wide *use proxies* master switch (docs/03 §3a).
+    ///
+    /// On — the default, and what a file written before proxies existed loads
+    /// as — means each item's own [`ProxyRef::enabled`] decides. Off means the
+    /// whole project reads originals however many proxies are attached: the one
+    /// switch for "show me what I am actually delivering". It changes no
+    /// picture's *geometry* and no timing, only which file the pixels come out
+    /// of, so it is saved with the project and undoable like any other edit.
+    ///
+    /// Export ignores it entirely and delivers full resolution unless asked
+    /// otherwise — see `lumit_render::export::RenderOptions::use_proxies`.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub use_proxies: bool,
     /// How hard the renderer works at the edges of transformed layers
     /// (K-274, docs/impl/anti-aliasing.md).
     ///
@@ -2034,6 +2097,8 @@ impl Document {
             items: Vec::new(),
             auto_folders: AutoFolders::default(),
             item_labels: std::collections::BTreeMap::new(),
+            proxies: std::collections::BTreeMap::new(),
+            use_proxies: true,
             anti_aliasing: AntiAliasing::default(),
             cache_location: None,
             ui_state: None,
@@ -2083,6 +2148,33 @@ impl Document {
     #[must_use]
     pub fn item_label(&self, id: Uuid) -> u8 {
         self.item_labels.get(&id).copied().unwrap_or(0)
+    }
+
+    /// The proxy attached to footage item `id`, whether or not it is switched
+    /// on (the Project panel's row draws an attached-but-off proxy differently
+    /// from none at all).
+    #[must_use]
+    pub fn proxy(&self, id: Uuid) -> Option<&ProxyRef> {
+        self.proxies.get(&id)
+    }
+
+    /// The proxy this item's pixels come from **as far as the document is
+    /// concerned**: the project switch on, the item's own switch on, and a
+    /// proxy attached. `None` means "read the original".
+    ///
+    /// This is only half the answer. Whether the file on the end of it is
+    /// usable — present, readable, and agreeing with the original about how
+    /// long the footage is — is a question about media, which this crate does
+    /// not open; `lumit_render::source::effective_media` asks both halves and
+    /// is the single resolution point the decode planner and the frame key
+    /// both go through.
+    #[must_use]
+    pub fn proxy_in_use(&self, id: Uuid) -> Option<&MediaRef> {
+        if !self.use_proxies {
+            return None;
+        }
+        let p = self.proxies.get(&id)?;
+        p.enabled.then_some(&p.media)
     }
 
     /// Whether any composition places `id` as a layer — the Project panel's

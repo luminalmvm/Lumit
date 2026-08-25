@@ -378,6 +378,10 @@ pub(crate) fn to_export_spec(
             // engine's default — a guide layer is reference-only — stands
             // until the seam carries the override.
             render_guides: false,
+            // Nor a *use proxies* tick (K-501). The engine's default is the
+            // one an export must have if the seam is silent: full resolution,
+            // whatever the project is set to work at.
+            ..RenderOptions::default()
         },
         // The two ticks are one enum in the engine, and showing the folder is
         // the louder of the two — the queue honours both flags itself.

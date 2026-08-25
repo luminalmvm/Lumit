@@ -597,33 +597,35 @@ built-ins the container is stamped with. What is left:
   which is what happens: the export renderer is a fresh `HeadlessRenderer` with no disk
   tier at all. *Read-only* becomes a real choice the day the export path gains one.
 
-**Proxies — needs a subsystem, not an export setting** (K-469). The Export drawing puts
-proxies among the render settings, and the row is left out because the concept exists
-nowhere in Lumit. It is a document feature first and an export override second, and faking
-it at export would be worse than the empty row. (Guide layers, the other half of this
-paragraph, landed as K-497: the switch, the delivery snapshot, the AE mapping and the
-export override are all in. What is left of that one is interface — the Timeline switch
-column and glyph, and the dialog's *render guide layers* tick over the seam.)
+**Proxies — the subsystem landed, the interface has not** (K-501; K-469 asked for it,
+docs/03 §3a, docs/06 §5.7). The engine half is in: a second media reference per footage item
+with its own probe, resolved and fingerprinted like the original; a per-item and a
+project-wide *use proxies* state on undoable ops; one resolution point the decode planner and
+the frame key both go through, so proxy and full-resolution frames can never share a name; a
+background transcode that makes one (`name_proxy.mov` beside the original, half size); and
+`RenderOptions::use_proxies`, off by default, so delivery reads the originals whatever the
+Viewer is working at. A proxy that disagrees with the original about frame count or rate is
+refused and falls back.
 
-- **Proxies.** A proxy is a low-resolution stand-in for a footage item — the file the
-  Viewer decodes while you work, with the full-resolution original swapped back in for
-  delivery. The subsystem is a second media reference on the footage item (path,
-  fingerprint, its own probe and frame index), a per-item and per-project *use proxies*
-  state, and a resolution point in the decode planner that picks which file a source
-  reads from, with the plan's cache key folding the choice in so a proxy frame and a
-  full-resolution frame are never confused for one another. It also wants a way to *make*
-  proxies (a background transcode queue reusing the exporter) and an honest answer for a
-  proxy whose dimensions or duration disagree with the original. Only then is "use
-  proxies / use full resolution" an export override worth drawing.
+What is left is entirely interface, and none of it exists over the seam yet:
 
-The proxies row **is** on the page now, disabled and with a reason on hover (K-485), because
-the drawing shows it and an honest dead control says more than an absent one; the guide-layer
-row beside it is waiting only for the seam to carry `RenderOptions::render_guides`. Two more
-sit beside them for the same reason and want the same kind of work: **motion blur** and
-**Retime blend** at export are comp-wide settings with no export override in
-`RenderOptions` — an export renders what the composition renders — and giving them one
-means an override that survives into nested comps, exactly as *effects off* and *solo
-ignored* already do in `apply_render_overrides`.
+- **The Project panel's proxy controls.** Set a proxy (a file picker), clear it, and the
+  per-item *use proxy* tick; the project-wide *use proxies* switch; and the row state that
+  says an item has one — attached and read, attached and off, or none. The engine ops are
+  `SetItemProxy`, `SetItemUseProxy` and `SetUseProxies`.
+- **MAKE-PROXY as an action**, with its progress. `lumit_render::proxy::start` returns a
+  handle that streams `Progress`/`Done`/`Failed` exactly as an export does; the seam needs
+  the same start/poll/cancel shape the export queue already has, and the *Done* path should
+  attach the finished file with `SetItemProxy`.
+- **The export dialog's proxies row**, which is drawn dead with a reason on hover (K-485).
+  It is waiting only for `BridgeExportSpec` to carry `use_proxies`; the guide-layer row
+  beside it is waiting the same way for `RenderOptions::render_guides`.
+
+Two more rows sit beside them for the same reason and want the same kind of work: **motion
+blur** and **Retime blend** at export are comp-wide settings with no export override in
+`RenderOptions` — an export renders what the composition renders — and giving them one means
+an override that survives into nested comps, exactly as *effects off* and *solo ignored*
+already do in `apply_render_overrides`.
 
 **Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
 drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it

@@ -24,7 +24,7 @@
 
 use crate::plan::Quality;
 use crate::source::{SourceProbe, SourceProbes};
-use lumit_core::model::{Composition, Document, ProjectItem};
+use lumit_core::model::{Composition, Document};
 use uuid::Uuid;
 
 /// A frame's cache-bar tier (docs/06 §5.6): green plays now, blue promotes.
@@ -92,22 +92,26 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
     }
 
     fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
-        let Some(ProjectItem::Footage(f)) = self.doc.item(item) else {
-            return None;
-        };
-        let probe = self.probes.probe(item);
+        // The same proxy resolution point the decode planner goes through
+        // (K-501, `crate::source::effective_media`), and for the reason the key
+        // exists at all: the name of a frame has to say which file its pixels
+        // came out of, or a proxy frame and a full-resolution frame of the same
+        // moment share a name and one is served for the other. The path is in
+        // the stamp already — so folding the choice in is nothing more than
+        // asking the same question the plan asked.
+        let (media, probe) = crate::source::effective_media(self.doc, self.probes, item)?;
         // Missing media renders the slate (docs/07 §3.3), which is perfectly
         // cacheable: it is a pure function of the size. Key it on the state
         // and the path so relinking retires those frames — returning None
         // here would instead make every frame of the comp unkeyable, so a
         // project with one lost file would cache nothing at all.
         if probe.slates() {
-            return Some((format!("missing#{}", f.media.relative_path), 0));
+            return Some((format!("missing#{}", media.relative_path), 0));
         }
         // Audio-only contributes no picture but is fully known, so it is a
         // stable stamp rather than an unkeyable unknown.
         if probe == SourceProbe::AudioOnly {
-            return Some((format!("audio#{}", f.media.relative_path), 0));
+            return Some((format!("audio#{}", media.relative_path), 0));
         }
         let (fps, width, _height, frames) = probe.video()?;
         let source_frame = ((lt * fps).round().max(0.0) as usize).min(frames.saturating_sub(1));
@@ -126,7 +130,7 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
             settled.target_width(width)
         };
         Some((
-            format!("{}#w{}", f.media.absolute_path, target.unwrap_or(0)),
+            format!("{}#w{}", media.absolute_path, target.unwrap_or(0)),
             source_frame as u64,
         ))
     }
@@ -270,7 +274,8 @@ pub fn playback_lookahead(playhead: usize, end: usize, lookahead: usize) -> Vec<
 mod tests {
     use super::*;
     use lumit_core::model::{
-        Composition, Layer, LayerKind, LinearColour, MediaRef, Switches, TransformGroup,
+        Composition, Layer, LayerKind, LinearColour, MediaRef, ProjectItem, Switches,
+        TransformGroup,
     };
     use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
     use std::collections::HashMap;

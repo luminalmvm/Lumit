@@ -118,10 +118,51 @@ struct MediaRef {
 **Future** — not in v1 yet:
 
 - a `FootageInterpretation` (frame-rate override, alpha mode, colour-space tag, loop count,
-  timecode policy) — v1 treats every source as sRGB with no per-item overrides;
+  timecode policy) — v1 treats every source as sRGB with no per-item overrides.
 (The **missing**-footage state is built: the automatic resolver runs on open, a lost file
 gets a project badge and a generated colour-bar slate in comps, and *Relink…* re-points it
 along with its siblings — [07-UI-SPEC.md](07-UI-SPEC.md) §3.3.)
+
+### 3a. Proxies (K-501)
+
+A **proxy** is a low-resolution stand-in for a footage item: the file the Viewer decodes
+while you work, with the full-resolution original swapped back in for delivery. It is a
+*second* media reference beside the item's own, never a replacement.
+
+```rust
+struct ProxyRef {
+    media: MediaRef,   // resolved, relinked and fingerprinted exactly like the original
+    enabled: bool,     // this item's own "use proxy" switch (default on)
+}
+
+// on Document:
+proxies: BTreeMap<Uuid, ProxyRef>,  // by footage item id; absent when empty
+use_proxies: bool,                  // the project-wide master switch (default on)
+```
+
+Stored as a map beside the items rather than as a field on `FootageItem`, for the reason
+`item_labels` is (§2): only one of the four kinds of project item can carry one, almost no
+item does, and an entry that outlives a deleted item is what makes undoing the delete bring
+the proxy back with it. Both fields are absent from a `.lum` that has nothing to say about
+proxies, so every file written before them round-trips byte for byte.
+
+Three rules decide what a proxy may do, and all three exist so that a small picture can
+never be mistaken for a large one:
+
+- **The original's numbers still govern.** Size, rate and duration are the original's
+  whatever file the pixels come out of, so px@comp (K-419) stays the original's raster and
+  no transform, mask or effect parameter changes meaning when a proxy is switched on. A
+  proxy is simply decoded at fewer pixels — the same thing preview resolution already does.
+- **A proxy that disagrees about the footage is refused.** A different frame count or a
+  different rate means frame 300 of the stand-in is not frame 300 of the original; that
+  proxy falls back to the original, as do one that is missing, unreadable or not yet
+  probed. A missing *original* still shows the colour-bar slate whatever proxy is attached
+  — the layer is the original, and a lost clip must lead to the relink.
+- **Delivery reads the originals.** The export's own override is off by default whatever
+  the project is set to ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §5.7).
+
+Proxies are local working files: **collect for sharing drops them**, so a shared copy
+carries the media it delivers and nothing else.
 
 ---
 

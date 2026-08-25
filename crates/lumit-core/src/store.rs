@@ -743,6 +743,174 @@ mod tests {
         assert_eq!(doc.item_label(Uuid::now_v7()), 0);
     }
 
+    /// **Attaching, switching and detaching a proxy are ordinary undoable
+    /// edits** (K-501): one step each, each its own inverse, and detaching
+    /// leaves the document exactly as it was found so a project whose proxies
+    /// have all gone writes no line for them again.
+    #[test]
+    fn a_proxy_is_attached_switched_and_detached_in_one_step_each() {
+        use crate::model::{FootageItem, MediaRef, ProxyRef};
+
+        let store = DocumentStore::new(Document::new());
+        let id = Uuid::now_v7();
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(FootageItem {
+                    id,
+                    name: "shot".into(),
+                    media: MediaRef {
+                        relative_path: "shot.mp4".into(),
+                        absolute_path: "/media/shot.mp4".into(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    extra: serde_json::Map::new(),
+                })),
+            })
+            .unwrap();
+        let proxy = |path: &str| {
+            Box::new(ProxyRef {
+                media: MediaRef {
+                    relative_path: path.into(),
+                    absolute_path: format!("/media/{path}"),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                enabled: true,
+                extra: serde_json::Map::new(),
+            })
+        };
+
+        assert!(store.snapshot().proxy(id).is_none());
+        assert!(
+            store.snapshot().use_proxies,
+            "a new project is ready to use proxies the moment one is made"
+        );
+
+        store
+            .commit(Op::SetItemProxy {
+                id,
+                proxy: Some(proxy("shot_proxy.mov")),
+            })
+            .unwrap();
+        assert_eq!(
+            store
+                .snapshot()
+                .proxy_in_use(id)
+                .map(|m| m.relative_path.clone()),
+            Some("shot_proxy.mov".to_string())
+        );
+
+        // The item's own switch: attached but not read.
+        store
+            .commit(Op::SetItemUseProxy {
+                id,
+                use_proxy: false,
+            })
+            .unwrap();
+        assert!(store.snapshot().proxy(id).is_some(), "still attached");
+        assert!(store.snapshot().proxy_in_use(id).is_none(), "but not read");
+
+        // The project switch overrules every item.
+        store
+            .commit(Op::SetItemUseProxy {
+                id,
+                use_proxy: true,
+            })
+            .unwrap();
+        store
+            .commit(Op::SetUseProxies { use_proxies: false })
+            .unwrap();
+        assert!(store.snapshot().proxy_in_use(id).is_none());
+        store.undo().unwrap();
+        assert!(store.snapshot().proxy_in_use(id).is_some());
+
+        // Replacing one proxy with another is one step, and undo brings the
+        // first one back rather than leaving none.
+        store
+            .commit(Op::SetItemProxy {
+                id,
+                proxy: Some(proxy("other_proxy.mov")),
+            })
+            .unwrap();
+        assert_eq!(
+            store
+                .snapshot()
+                .proxy_in_use(id)
+                .map(|m| m.relative_path.clone()),
+            Some("other_proxy.mov".to_string())
+        );
+        store.undo().unwrap();
+        assert_eq!(
+            store
+                .snapshot()
+                .proxy_in_use(id)
+                .map(|m| m.relative_path.clone()),
+            Some("shot_proxy.mov".to_string())
+        );
+
+        // Detaching removes the entry rather than leaving a disabled one.
+        store.commit(Op::SetItemProxy { id, proxy: None }).unwrap();
+        assert!(store.snapshot().proxies.is_empty());
+        assert!(
+            !json(&store.snapshot()).contains("proxies"),
+            "a project with none writes no line for them"
+        );
+        store.undo().unwrap();
+        assert!(store.snapshot().proxy(id).is_some(), "undo re-attaches");
+
+        // And the proxy survives the item being deleted and undeleted, exactly
+        // as a colour tag does — the entry outlives the item on purpose.
+        store.commit(Op::RemoveItem { id }).unwrap();
+        store.undo().unwrap();
+        assert!(store.snapshot().proxy(id).is_some());
+    }
+
+    /// A proxy on an item that is not footage, or on nothing at all, would sit
+    /// in the map for ever unread — and a *use proxy* switch with no proxy
+    /// under it is a control the panel is not drawing. Both refuse.
+    #[test]
+    fn proxy_ops_refuse_what_they_cannot_mean() {
+        let store = DocumentStore::new(Document::new());
+        let folder = Folder {
+            id: Uuid::now_v7(),
+            name: "Renders".into(),
+            children: Vec::new(),
+            extra: serde_json::Map::new(),
+        };
+        let folder_id = folder.id;
+        store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Folder(folder)),
+            })
+            .unwrap();
+
+        assert_eq!(
+            store.commit(Op::SetItemProxy {
+                id: folder_id,
+                proxy: None
+            }),
+            Err(crate::ops::OpError::UnknownItem)
+        );
+        assert_eq!(
+            store.commit(Op::SetItemProxy {
+                id: Uuid::now_v7(),
+                proxy: None
+            }),
+            Err(crate::ops::OpError::UnknownItem)
+        );
+        assert_eq!(
+            store.commit(Op::SetItemUseProxy {
+                id: folder_id,
+                use_proxy: true
+            }),
+            Err(crate::ops::OpError::UnknownItem)
+        );
+        assert!(store.snapshot().proxies.is_empty());
+    }
+
     fn t(n: i64, d: i64) -> CompTime {
         CompTime(Rational::new(n, d).unwrap())
     }

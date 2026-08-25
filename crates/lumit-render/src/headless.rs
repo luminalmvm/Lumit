@@ -99,6 +99,11 @@ pub struct HeadlessRenderer {
     items: HashMap<Uuid, ItemInfo>,
     /// Probe results by footage id, so each file is probed at most once.
     probe_cache: HashMap<Uuid, Probe>,
+    /// The same, for each item's **proxy** file (K-501) — kept beside its path
+    /// rather than under the id alone, so attaching a different proxy (or the
+    /// one MAKE-PROXY has just written) re-probes instead of answering from a
+    /// stale entry about a file that is no longer the one referenced.
+    proxy_probes: HashMap<Uuid, (PathBuf, Probe)>,
     /// The audio-jobs walk with its has-audio probe cache, so building the
     /// export audio jobs probes each file at most once (export path only).
     audio_jobs: AudioJobsBuilder,
@@ -521,6 +526,7 @@ impl HeadlessRenderer {
             scope,
             items: HashMap::new(),
             probe_cache: HashMap::new(),
+            proxy_probes: HashMap::new(),
             audio_jobs: AudioJobsBuilder::new(),
             pool,
             retained: None,
@@ -861,7 +867,7 @@ impl HeadlessRenderer {
             comp,
             frame as usize,
             quality,
-            &ProbeView(&self.probe_cache),
+            &ProbeView(&self.probe_cache, &self.proxy_probes),
         )
         .map(|k| self.named_under_view(k))
     }
@@ -899,7 +905,7 @@ impl HeadlessRenderer {
             comp,
             frame as usize,
             quality,
-            &ProbeView(&self.probe_cache),
+            &ProbeView(&self.probe_cache, &self.proxy_probes),
         )
         .map(|k| self.named_under_view(k))
     }
@@ -955,7 +961,7 @@ impl HeadlessRenderer {
         // realiser asks for. A measured frame realises every Precomp so its
         // inner rows get numbers (see `Realiser::realise_nested`), so it must
         // not skip their decodes either.
-        let probes = ProbeView(&self.probe_cache);
+        let probes = ProbeView(&self.probe_cache, &self.proxy_probes);
         let keys = crate::cache::NestedKeys {
             doc,
             probes: &probes,
@@ -1245,7 +1251,13 @@ impl HeadlessRenderer {
         self.sync_items(doc, comp);
         let fps = comp.frame_rate.fps().max(1.0);
         let t = frame as f64 / fps;
-        let jobs = plan_comp_frame(doc, comp, t, quality, &ProbeView(&self.probe_cache));
+        let jobs = plan_comp_frame(
+            doc,
+            comp,
+            t,
+            quality,
+            &ProbeView(&self.probe_cache, &self.proxy_probes),
+        );
         let mut wants = Vec::new();
         for job in &jobs {
             if job.slate {
@@ -2133,6 +2145,22 @@ impl HeadlessRenderer {
             let Some(ProjectItem::Footage(f)) = doc.item(id) else {
                 continue;
             };
+            // The proxy, if this item has one and the project is using it. It is
+            // probed here beside the original because both answers are needed at
+            // once to decide which file is read (`source::effective_media`), and
+            // re-probed when the reference has moved on from what was cached.
+            if let Some(proxy) = doc.proxy_in_use(f.id) {
+                let path = media_path(proxy);
+                match self.proxy_probes.get(&f.id) {
+                    Some((cached, _)) if *cached == path => {}
+                    _ => {
+                        let probe = probe_item(&path);
+                        self.proxy_probes.insert(f.id, (path, probe));
+                    }
+                }
+            } else {
+                self.proxy_probes.remove(&f.id);
+            }
             let probe = self
                 .probe_cache
                 .entry(f.id)
@@ -2328,10 +2356,18 @@ fn composite_scale(quality: Quality) -> f32 {
 /// The on-disk path a footage item points at (absolute when known, else the
 /// stored relative path) — the same resolution the bridge's decode path uses.
 pub(crate) fn footage_path(f: &FootageItem) -> PathBuf {
-    if f.media.absolute_path.is_empty() {
-        PathBuf::from(&f.media.relative_path)
+    media_path(&f.media)
+}
+
+/// Where a media reference points on this machine: the session's absolute path,
+/// falling back to the stored relative one when there is none (an unsaved
+/// project has nothing to be relative to). The same rule for an item's original
+/// and for its proxy.
+pub(crate) fn media_path(m: &lumit_core::model::MediaRef) -> PathBuf {
+    if m.absolute_path.is_empty() {
+        PathBuf::from(&m.relative_path)
     } else {
-        PathBuf::from(&f.media.absolute_path)
+        PathBuf::from(&m.absolute_path)
     }
 }
 
@@ -2368,29 +2404,42 @@ fn probe_item(path: &Path) -> Probe {
 /// question ([`SourceProbes`]), so the decode planner and the frame-key stamper
 /// read exactly what `sync_items` already resolved — no second probe, and no
 /// chance of the two disagreeing about what a file is.
-pub(crate) struct ProbeView<'a>(&'a HashMap<Uuid, Probe>);
+pub(crate) struct ProbeView<'a>(
+    &'a HashMap<Uuid, Probe>,
+    &'a HashMap<Uuid, (PathBuf, Probe)>,
+);
 
 impl SourceProbes for ProbeView<'_> {
     fn probe(&self, item: Uuid) -> SourceProbe {
-        match self.0.get(&item) {
-            None => SourceProbe::Unprobed,
-            Some(Probe::NoVideo) => SourceProbe::AudioOnly,
-            Some(Probe::Slate) => SourceProbe::Missing,
-            Some(Probe::Ok {
-                fps,
-                frames,
-                width,
-                height,
-            }) => SourceProbe::Video {
-                fps: *fps,
-                width: *width,
-                height: *height,
-                frames: *frames,
-                // The has-audio question is answered by `AudioJobsBuilder`,
-                // which probes for it separately; the picture path never asks.
-                audio: false,
-            },
-        }
+        seen(self.0.get(&item))
+    }
+
+    fn proxy_probe(&self, item: Uuid) -> SourceProbe {
+        seen(self.1.get(&item).map(|(_, p)| p))
+    }
+}
+
+/// One cached [`Probe`] as the pipeline's own [`SourceProbe`]; nothing cached
+/// is [`SourceProbe::Unprobed`].
+fn seen(probe: Option<&Probe>) -> SourceProbe {
+    match probe {
+        None => SourceProbe::Unprobed,
+        Some(Probe::NoVideo) => SourceProbe::AudioOnly,
+        Some(Probe::Slate) => SourceProbe::Missing,
+        Some(Probe::Ok {
+            fps,
+            frames,
+            width,
+            height,
+        }) => SourceProbe::Video {
+            fps: *fps,
+            width: *width,
+            height: *height,
+            frames: *frames,
+            // The has-audio question is answered by `AudioJobsBuilder`,
+            // which probes for it separately; the picture path never asks.
+            audio: false,
+        },
     }
 }
 

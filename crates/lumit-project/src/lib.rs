@@ -637,30 +637,46 @@ pub fn rebase_for_save(doc: &Document, project_dir: &Path) -> Document {
         let ProjectItem::Footage(f) = item else {
             continue;
         };
-        // Where is the file, right now? The session's absolute path first,
-        // else wherever the stored relative path points.
-        let abs = Path::new(&f.media.absolute_path);
-        let located: Option<PathBuf> = if !f.media.absolute_path.is_empty() && abs.is_file() {
-            Some(abs.to_path_buf())
-        } else {
-            let rel = project_dir.join(&f.media.relative_path);
-            rel.is_file().then_some(rel)
-        };
-        let Some(located) = located else {
-            continue; // missing: keep the reference untouched for relinking
-        };
-        if let Some(rel) = relative_between(project_dir, &located) {
-            f.media.relative_path = rel;
-        } else if let Some(name) = located.file_name() {
-            // No relative path exists (another drive): the bare name — the
-            // footage-beside-the-project convention — plus the fingerprint.
-            f.media.relative_path = name.to_string_lossy().into_owned();
-        }
-        if f.media.fingerprint.is_none() {
-            f.media.fingerprint = fingerprint_path(&located).ok();
-        }
+        rebase_one(&mut f.media, project_dir);
+    }
+    // A proxy is a media reference like any other (K-501): it is written
+    // relative, fingerprinted, and found again after a move by exactly the same
+    // rules — otherwise reopening a project would silently lose every proxy and
+    // the small pictures would come back as full-resolution ones with no
+    // explanation on screen.
+    for proxy in doc.proxies.values_mut() {
+        rebase_one(&mut proxy.media, project_dir);
     }
     doc
+}
+
+/// One media reference rebased against `project_dir`: the relative path
+/// recomputed from wherever the file is right now, and a fingerprint stamped
+/// where none was held. A reference whose file cannot be found is left exactly
+/// as it is — saving must never lose the information a later relink needs.
+fn rebase_one(media: &mut lumit_core::model::MediaRef, project_dir: &Path) {
+    // Where is the file, right now? The session's absolute path first,
+    // else wherever the stored relative path points.
+    let abs = Path::new(&media.absolute_path);
+    let located: Option<PathBuf> = if !media.absolute_path.is_empty() && abs.is_file() {
+        Some(abs.to_path_buf())
+    } else {
+        let rel = project_dir.join(&media.relative_path);
+        rel.is_file().then_some(rel)
+    };
+    let Some(located) = located else {
+        return; // missing: keep the reference untouched for relinking
+    };
+    if let Some(rel) = relative_between(project_dir, &located) {
+        media.relative_path = rel;
+    } else if let Some(name) = located.file_name() {
+        // No relative path exists (another drive): the bare name — the
+        // footage-beside-the-project convention — plus the fingerprint.
+        media.relative_path = name.to_string_lossy().into_owned();
+    }
+    if media.fingerprint.is_none() {
+        media.fingerprint = fingerprint_path(&located).ok();
+    }
 }
 
 /// Wire the docs/10 §2 resolver over a whole opened document: every footage
@@ -689,6 +705,18 @@ pub fn resolve_all_media(
                 f.media.absolute_path = path.to_string_lossy().into_owned();
             }
             Resolved::Missing => missing.push(f.name.clone()),
+        }
+    }
+    // Proxies resolve by the same three steps, and a proxy that cannot be found
+    // is **not** reported missing (K-501): a missing stand-in is not a missing
+    // clip, the render falls back to the original on its own, and putting it in
+    // this list would open the relink dialogue over footage that is perfectly
+    // present. It also does not count as a relink, which is a count of the
+    // project's real media.
+    for proxy in doc.proxies.values_mut() {
+        if let Resolved::Found { path, .. } = resolve_media(&proxy.media, project_dir, search_roots)
+        {
+            proxy.media.absolute_path = path.to_string_lossy().into_owned();
         }
     }
     (relinked, missing)
@@ -778,6 +806,13 @@ pub fn collect_for_sharing(
     let mut out = doc.clone();
     let mut used = std::collections::HashSet::new();
     let mut missing = Vec::new();
+    // Proxies do not travel (K-501). A collected project is a copy of the
+    // *work*: the stand-ins are local convenience files, regenerable in one
+    // action from the originals that are being copied, and carrying them would
+    // double the size of the folder to ship pictures nobody delivers. Dropping
+    // them here rather than leaving dangling references also means the copy
+    // opens with no missing-proxy state to explain.
+    out.proxies.clear();
     for item in &mut out.items {
         let lumit_core::model::ProjectItem::Footage(f) = item else {
             continue;
@@ -1809,6 +1844,177 @@ mod tests {
             lumit_core::model::AntiAliasing::default(),
             "a file with no setting must load at the default, not fail"
         );
+    }
+
+    /// **A proxy is a media reference like any other, and it survives the
+    /// file** (K-501, docs/03 §3a). Three things at once, because all three are
+    /// easy to get wrong and only the first is visible:
+    ///
+    /// 1. A project with **no** proxies writes no line for either field, so
+    ///    every `.lum` saved before proxies existed round-trips unchanged.
+    /// 2. An attached proxy comes back whole — its path, its own *use proxy*
+    ///    switch, and the project-wide switch — and its **relative path is
+    ///    rebased and fingerprinted on save** exactly as the original's is. A
+    ///    proxy that did not get that treatment would be found on the machine
+    ///    that made it and nowhere else.
+    /// 3. A file written before the fields existed loads with the master switch
+    ///    **on**, which is the default a new project has.
+    #[test]
+    fn a_proxy_round_trips_and_a_project_without_one_writes_no_line_for_it() {
+        use lumit_core::model::ProxyRef;
+
+        let dir = tempfile::tempdir().unwrap();
+        let media_dir = dir.path().join("media");
+        fs::create_dir_all(&media_dir).unwrap();
+        let original = media_dir.join("clip.bin");
+        let proxy_file = media_dir.join("clip_proxy.mov");
+        fs::write(&original, vec![7u8; 4096]).unwrap();
+        fs::write(&proxy_file, vec![9u8; 512]).unwrap();
+
+        // 1. Nothing attached: neither key reaches the file.
+        let plain = dir.path().join("plain.lum");
+        save(&doc_with_item(), &plain).unwrap();
+        let raw = document_json(&plain);
+        let obj = raw.as_object().unwrap();
+        assert!(
+            !obj.contains_key("proxies") && !obj.contains_key("use_proxies"),
+            "a project with no proxies must save exactly as it did before them"
+        );
+
+        // 2. One attached, with a deliberately stale relative path to prove the
+        //    save rebases it.
+        let mut doc = Document::new();
+        let mut item = footage("clip.bin");
+        item.media.relative_path = "stale/nonsense.bin".into();
+        item.media.absolute_path = original.to_string_lossy().into_owned();
+        let id = item.id;
+        apply(
+            &mut doc,
+            &Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(item)),
+            },
+        )
+        .unwrap();
+        apply(
+            &mut doc,
+            &Op::SetItemProxy {
+                id,
+                proxy: Some(Box::new(ProxyRef {
+                    media: lumit_core::model::MediaRef {
+                        relative_path: "also/stale.mov".into(),
+                        absolute_path: proxy_file.to_string_lossy().into_owned(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    enabled: false,
+                    extra: serde_json::Map::new(),
+                })),
+            },
+        )
+        .unwrap();
+        doc.use_proxies = false;
+
+        let path = dir.path().join("edit.lum");
+        // The shell rebases before it writes, so the test does too.
+        save(&rebase_for_save(&doc, dir.path()), &path).unwrap();
+        let (loaded, _) = open(&path).unwrap();
+        assert!(!loaded.use_proxies, "the master switch survives");
+        let back = loaded.proxy(id).expect("the proxy survives");
+        assert!(!back.enabled, "and so does the item's own switch");
+        assert_eq!(
+            back.media.relative_path, "media/clip_proxy.mov",
+            "a proxy's relative path is rebased on save like any other reference"
+        );
+        assert!(
+            back.media.fingerprint.is_some(),
+            "and it is fingerprinted, so it can be found again after a move"
+        );
+        // And resolving — the step the shell runs after opening — points the
+        // session path at the file that is actually there, without reporting
+        // anything missing, because nothing is.
+        let mut loaded = loaded;
+        let (_, missing) = resolve_all_media(&mut loaded, dir.path(), &[]);
+        assert!(missing.is_empty());
+        let back = loaded.proxy(id).unwrap();
+        assert_eq!(
+            Path::new(&back.media.absolute_path).canonicalize().ok(),
+            proxy_file.canonicalize().ok()
+        );
+
+        // A proxy that has gone missing is **not** a missing clip: the render
+        // falls back to the original on its own, so it must never open the
+        // relink dialogue over footage that is perfectly present.
+        fs::remove_file(&proxy_file).unwrap();
+        let (_, missing) = resolve_all_media(&mut loaded, dir.path(), &[]);
+        assert!(
+            missing.is_empty(),
+            "a missing proxy is not reported as missing media"
+        );
+
+        // 3. The same file with the two keys removed — what a `.lum` written
+        //    before proxies looks like.
+        let half = dir.path().join("half.lum");
+        let older = dir.path().join("older.lum");
+        strip_document_key(&path, &half, "proxies");
+        strip_document_key(&half, &older, "use_proxies");
+        let (old, _) = open(&older).unwrap();
+        assert!(old.proxies.is_empty());
+        assert!(
+            old.use_proxies,
+            "a file with no master switch loads with it on, like a new project"
+        );
+    }
+
+    /// A collected project ships the originals and **not** the proxies (K-501):
+    /// the stand-ins are local convenience files, remade in one action, and a
+    /// copy that carried them would be twice the size and open with references
+    /// to files nobody sent.
+    #[test]
+    fn collecting_for_sharing_leaves_the_proxies_behind() {
+        use lumit_core::model::ProxyRef;
+
+        let src = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let clip = src.path().join("clip.bin");
+        fs::write(&clip, vec![3u8; 2048]).unwrap();
+
+        let mut doc = Document::new();
+        let mut item = footage("clip.bin");
+        item.media.relative_path = "clip.bin".into();
+        item.media.absolute_path = clip.to_string_lossy().into_owned();
+        let id = item.id;
+        doc.items.push(ProjectItem::Footage(item));
+        doc.proxies.insert(
+            id,
+            ProxyRef {
+                media: lumit_core::model::MediaRef {
+                    relative_path: "clip_proxy.mov".into(),
+                    absolute_path: src
+                        .path()
+                        .join("clip_proxy.mov")
+                        .to_string_lossy()
+                        .into_owned(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                enabled: true,
+                extra: serde_json::Map::new(),
+            },
+        );
+
+        let collected = collect_for_sharing(&doc, src.path(), dest.path()).unwrap();
+        assert!(collected.missing.is_empty());
+        assert!(
+            collected.doc.proxies.is_empty(),
+            "the copy carries no proxy references"
+        );
+        assert!(
+            !dest.path().join("media/clip_proxy.mov").exists(),
+            "and no proxy file was copied"
+        );
+        // The original did travel, which is the half that must not break.
+        assert!(dest.path().join("media/clip.bin").is_file());
     }
 
     /// **A marker can carry a span, and the span survives the file**

@@ -63,6 +63,7 @@ pub mod headless;
 pub mod media_index;
 pub mod plan;
 pub mod profile;
+pub mod proxy;
 pub mod realise;
 pub mod source;
 pub mod track;
