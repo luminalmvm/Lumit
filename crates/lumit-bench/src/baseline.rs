@@ -38,17 +38,23 @@ pub const NOISE_FLOOR_MS: f64 = 1.0;
 
 /// docs/13 §2's reference-desktop column, in the units [`Measurement::value_ms`]
 /// reports: a latency for B3/B4, milliseconds per frame for B5–B7 (60 fps is
-/// 16.67, 24 fps is 41.67), and the whole fill for B11.
+/// 16.67, 24 fps is 41.67), the whole fill for B11, and one evaluate-and-draw
+/// **above the pass floor** for B12–B14 (K-475; see
+/// [`crate::scenarios::particulate`] for what the floor is and why it is
+/// subtracted).
 ///
 /// Asserted only under [`reference_hardware`]. Anywhere else these are what the
 /// harness is aiming at, not what it is judged by.
-pub const DESKTOP_BUDGET_MS: [(&str, f64); 6] = [
+pub const DESKTOP_BUDGET_MS: [(&str, f64); 9] = [
     ("B3", 50.0),
     ("B4", 500.0),
     ("B5", 1000.0 / 60.0),
     ("B6", 1000.0 / 60.0),
     ("B7", 1000.0 / 24.0),
     ("B11", 60_000.0),
+    ("B12", 0.2),
+    ("B13", 1.0),
+    ("B14", 16.0),
 ];
 
 /// A run's numbers, keyed by budget — the results file the harness writes and,

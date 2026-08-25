@@ -95,3 +95,18 @@ fn b7_cold_full_playback() {
 fn b11_idle_fill() {
     measure(Harness::b11_idle_fill);
 }
+
+/// **B12-B14 in one run** (K-475): the three per-effect numbers, which share a
+/// floor measurement and so are measured together rather than one at a time.
+/// No reference media, so no ffmpeg — only a graphics adapter.
+#[test]
+#[ignore = "measurement, not an oracle: run it explicitly"]
+fn b12_b14_particulate() {
+    match lumit_bench::scenarios::particulate::budgets(&mut |m: Measurement| {
+        println!("{}", serde_json::to_string(&m).unwrap_or_default());
+    }) {
+        Ok(_) => {}
+        Err(e) if e.contains("adapter") => lumit_gpu::no_adapter(),
+        Err(e) => panic!("{e}"),
+    }
+}

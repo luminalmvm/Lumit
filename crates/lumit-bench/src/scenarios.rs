@@ -352,6 +352,197 @@ impl Harness {
     }
 }
 
+/// **B12-B14 — Particulate's own three numbers** (docs/13 §2, K-475).
+///
+/// # In plain terms
+///
+/// The six scenarios above time the *editor* doing something. These three time
+/// one **effect** doing its work, because K-475 made Particulate's budget its
+/// own: Max particles is the user's dial, so an instance's cost is a number the
+/// document states rather than one a comp average hides. docs/13 §7.3 has owed
+/// "a harness scenario apiece" since PS2 measured them.
+///
+/// **Each number is the effect's work, not the pass's.** A fourth fixture runs
+/// first with nothing to emit — one full-frame copy and one round trip to the
+/// queue, which every effect in the stack pays and no particle count changes —
+/// and that floor is subtracted from all three. Without it a good part of B12
+/// is the copy — on a development desktop it measures 0.09 ms against a whole
+/// reading of 0.35 — so a budget of 0.2 ms for "300 particles" would be judging
+/// the frame's paperwork rather than the effect. Subtracting makes the three
+/// numbers comparable with one another and with the closed forms they time.
+///
+/// docs/13 §2's note carries the reasoning; this is where it is done.
+pub mod particulate {
+    use std::sync::Arc;
+
+    use super::{elapsed_ms, Instant, Measurement};
+    use lumit_core::anim::Property;
+    use lumit_core::expression::ExpressionContext;
+    use lumit_core::fx::effects::particulate::Particulate;
+    use lumit_core::fx::points::{PointsSchedule, Schedule, CAP_DEFAULT, CAP_HARD};
+    use lumit_core::fx::{instantiate, resolve_stack, EffectMetadata, MarkerContext};
+    use lumit_core::model::EffectValue;
+
+    /// 1080p, which is what docs/13 §1's display target and every B-row assume.
+    const SIZE: (u32, u32) = (1920, 1080);
+    /// Runs behind the stopwatch, after the warm-up. Submitted back to back and
+    /// settled once: a flush per iteration would time the queue, not the pass.
+    const RUNS: u32 = 20;
+    const WARMUP: u32 = 4;
+    /// How many times each timed block is repeated, of which the **fastest** is
+    /// kept.
+    ///
+    /// The six scenarios above report a mean or a percentile because they are
+    /// asked "how long does the editor take"; these three are asked "how much
+    /// work is this pass", and the honest estimator for that is the best run.
+    /// It matters here in a way it does not there, because the number reported
+    /// is a *difference* between two measurements: a stray reading in the floor
+    /// does not make B13 look slow, it makes it look free, and a gate that
+    /// silently reads nought is worse than no gate. (Measured, with another
+    /// suite competing for the same card: a floor of 8 ms against 0.1 ms
+    /// quiet, which zeroed the row below it.)
+    const REPEATS: u32 = 3;
+
+    /// One fixture: the budget it measures (`None` for the floor), emit rate,
+    /// declared cap, particle size.
+    struct Case(Option<&'static str>, f64, i64, f64);
+
+    /// The floor and the three budgets, in the order they are measured.
+    const CASES: [Case; 4] = [
+        // Nothing to draw: the pass's fixed cost, subtracted from the rest.
+        Case(None, 0.0, CAP_DEFAULT, 4.0),
+        // ~300 live at 150 a second over a two-second life: K-475's default look.
+        Case(Some("B12"), 150.0, CAP_DEFAULT, 4.0),
+        Case(Some("B13"), 10_000.0, CAP_DEFAULT, 4.0),
+        Case(Some("B14"), 500_000.0, CAP_HARD, 2.0),
+    ];
+
+    /// Measure all three. `Err` when there is no graphics adapter — a harness
+    /// that measured nothing has not passed (see `main.rs`).
+    pub fn budgets(progress: &mut dyn FnMut(Measurement)) -> Result<Vec<Measurement>, String> {
+        let ctx = lumit_gpu::GpuContext::headless().map_err(|e| format!("no GPU adapter: {e}"))?;
+        let fx = lumit_gpu::fx::FxEngine::new(&ctx);
+        let mut floor = 0.0;
+        let mut out = Vec::new();
+        for case in &CASES {
+            let each = time_one(&ctx, &fx, case)?;
+            let Some(budget) = case.0 else {
+                floor = each;
+                // Not a docs/13 §2 row, so not a measurement — but printed,
+                // because it is what every number below is stated against and
+                // the place the copy itself getting dearer would show.
+                eprintln!("lumit-bench: particulate pass floor {floor:.3} ms");
+                continue;
+            };
+            let m = Measurement {
+                budget,
+                // Never below nought: on a quiet machine a fixture can measure
+                // a shade under the floor it was compared with, and a negative
+                // millisecond would sail through every gate there is.
+                value_ms: (each - floor).max(0.0),
+                frames: u64::from(RUNS),
+            };
+            progress(m);
+            out.push(m);
+        }
+        Ok(out)
+    }
+
+    /// One fixture, timed: milliseconds per evaluate-and-draw.
+    ///
+    /// It goes through `run_ops` — the shipping path — so the op the stopwatch
+    /// times is built by the one conversion the renderer uses, and a change to
+    /// that conversion shows up here rather than in a second copy of it.
+    fn time_one(
+        ctx: &lumit_gpu::GpuContext,
+        fx: &lumit_gpu::fx::FxEngine,
+        case: &Case,
+    ) -> Result<f64, String> {
+        let (w, h) = SIZE;
+        let Case(_, rate, cap, size) = *case;
+        let mut inst = instantiate("particulate")
+            .ok_or_else(|| "particulate is not in the catalogue".to_string())?;
+        for p in &mut inst.params {
+            let v = match p.id.as_str() {
+                // A big soft emitter across the frame, so the draw covers real
+                // ground rather than piling every quad on one pixel.
+                "position_x" => 960.0,
+                "position_y" => 540.0,
+                "width" => 1600.0,
+                "height" => 900.0,
+                "emit_rate" => rate,
+                "size" => size,
+                "life" => 2.0,
+                #[allow(clippy::cast_precision_loss)]
+                "max_particles" => cap as f64,
+                _ => continue,
+            };
+            p.value = EffectValue::Float(Property::fixed(v));
+        }
+        // Four seconds in at 60 fps, which is two whole lifetimes: the live set
+        // is at its steady state rather than still filling.
+        let dt = 1.0 / 60.0;
+        let t = 4.0;
+        let ops = resolve_stack(
+            std::slice::from_ref(&inst),
+            t,
+            0.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        );
+        let read = Particulate::read(
+            ops.get(0)
+                .ok_or_else(|| "the stack resolved to nothing".to_string())?
+                .params,
+        );
+        let mut schedule =
+            Schedule::scan(dt, (t / dt).floor() as i64, read.window_frames(dt), &|_| {
+                rate
+            });
+        schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
+        let carriage = PointsSchedule { schedule, t };
+
+        let tex = lumit_gpu::fx::upload_linear_f32(ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let run = || {
+            lumit_render::fxops::run_ops(
+                fx,
+                ctx,
+                tex.clone(),
+                w,
+                h,
+                &ops,
+                &[],
+                None,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                std::slice::from_ref(&carriage),
+                None,
+                None,
+            )
+        };
+        for _ in 0..WARMUP {
+            let _ = run();
+        }
+        ctx.flush();
+        ctx.settle();
+        let mut best = f64::INFINITY;
+        for _ in 0..REPEATS {
+            let started = Instant::now();
+            for _ in 0..RUNS {
+                let _ = run();
+            }
+            ctx.flush();
+            ctx.settle();
+            best = best.min(elapsed_ms(started) / f64::from(RUNS));
+        }
+        Ok(best)
+    }
+}
+
 /// Milliseconds since `t`, as a float.
 fn elapsed_ms(t: Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1000.0

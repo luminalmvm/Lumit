@@ -68,6 +68,17 @@ fn run() -> Result<(), String> {
     });
     results.extend(measured?);
 
+    // The three per-effect numbers (docs/13 §2 B12-B14, K-475). They need no
+    // media and no comp, so they run after the six rather than beside them.
+    results.extend(lumit_bench::scenarios::particulate::budgets(
+        &mut |m: Measurement| {
+            println!(
+                "{}",
+                serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+            );
+        },
+    )?);
+
     let out = out_path();
     let banked = Baseline::from_results(&results);
     let text =
