@@ -71,6 +71,7 @@ import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/dropper_overlay.dart';
+import '../widgets/escape_ladder.dart';
 import '../widgets/time_readout.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_anchor.dart';
@@ -1034,10 +1035,10 @@ class _Stage extends StatelessWidget {
         shapeContents: entry.info.shapeContents,
         // Where the art's box starts, which is where the layer's pixels do
         // (K-308) — without it every drawn point sat a box away from its art.
-        artOrigin: shapeContentsRect(entry.info.shapeContents,
-                    t: playheadSeconds)
-                ?.topLeft ??
-            Offset.zero,
+        artOrigin:
+            shapeContentsRect(entry.info.shapeContents, t: playheadSeconds)
+                    ?.topLeft ??
+                Offset.zero,
       ));
     }
     return out;
@@ -1470,13 +1471,14 @@ class _DropperLayerState extends State<DropperLayer> {
     super.initState();
     // Escape puts the tool away wherever the focus happens to be — a tool armed
     // by accident must never need a click on the picture to get rid of.
-    HardwareKeyboard.instance.addHandler(_onKey);
+    _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
     widget.uiState.dropper.addListener(_onArmChanged);
   }
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_onKey);
+    _escapeRelease?.call();
+    _escapeRelease = null;
     widget.uiState.dropper.removeListener(_onArmChanged);
     _hideViewfinder();
     _throttle.cancel();
@@ -1535,9 +1537,10 @@ class _DropperLayerState extends State<DropperLayer> {
     });
   }
 
-  bool _onKey(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
+
+  bool _escape() {
     if (widget.uiState.dropper.value == null) return false;
     // Escape mid-drag puts back what was being previewed *and* puts the tool
     // away — the convention every staged gesture keeps (docs/07 §4).

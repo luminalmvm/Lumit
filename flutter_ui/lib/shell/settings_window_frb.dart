@@ -57,6 +57,7 @@ import '../theme/custom_theme.dart';
 import '../theme/theme.dart';
 import '../theme/theme_file.dart';
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
@@ -571,8 +572,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final range = position.maxScrollExtent;
     // Nothing overflows: there is no thumb to move and nothing to scroll.
     if (viewport <= 0 || range <= 0) return;
-    _scroll.jumpTo((position.pixels + d.delta.dy * (viewport + range) / viewport)
-        .clamp(0.0, range));
+    _scroll.jumpTo(
+        (position.pixels + d.delta.dy * (viewport + range) / viewport)
+            .clamp(0.0, range));
   }
 
   /// Put the page back the way it ships. What "the way it ships" means is
@@ -2062,10 +2064,6 @@ class _ChordCellState extends State<_ChordCell> {
   /// wrong key. A refusal comes back into the cell as a message beside it.
   Future<bool> _capture(KeyEvent event) async {
     if (event is! KeyDownEvent) return true;
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      _stopListening();
-      return true;
-    }
     if (event.logicalKey == LogicalKeyboardKey.backspace ||
         event.logicalKey == LogicalKeyboardKey.delete) {
       _stopListening();
@@ -2089,18 +2087,35 @@ class _ChordCellState extends State<_ChordCell> {
   void dispose() {
     // The handler outlives the widget otherwise: a row scrolled out of the
     // lazy list mid-capture would go on swallowing every keypress in the app.
-    if (_listening) HardwareKeyboard.instance.removeHandler(_handler);
+    if (_listening) _stopListening();
     super.dispose();
   }
 
+  /// Escape leaves the capture, and does it from the ladder's gesture rung
+  /// (widgets/escape_ladder.dart) rather than from here: a chord being captured
+  /// is a gesture in flight, and the press that abandons it must not also shut
+  /// the window it is being captured in.
+  bool _escape() {
+    _stopListening();
+    return true;
+  }
+
   bool _handler(KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      return false;
+    }
     unawaited(_capture(event));
     return true;
   }
 
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
+
   void _startListening() {
     if (_listening) return;
     HardwareKeyboard.instance.addHandler(_handler);
+    _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
     setState(() {
       _listening = true;
       _refusal = null;
@@ -2110,6 +2125,8 @@ class _ChordCellState extends State<_ChordCell> {
   void _stopListening() {
     if (!_listening) return;
     HardwareKeyboard.instance.removeHandler(_handler);
+    _escapeRelease?.call();
+    _escapeRelease = null;
     if (mounted) {
       setState(() => _listening = false);
     } else {

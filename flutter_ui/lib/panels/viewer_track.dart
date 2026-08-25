@@ -24,6 +24,7 @@ import 'package:lumit_flutter/src/rust/api/track.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 import '../widgets/marquee.dart';
 
 /// How near a click has to land to take a point, in panel pixels. Generous,
@@ -119,7 +120,7 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
   @override
   void initState() {
     super.initState();
-    HardwareKeyboard.instance.addHandler(_onKey);
+    _release = EscapeLadder.register(EscapeRung.selection, _escape);
     WidgetsBinding.instance.addPostFrameCallback((_) => _read());
   }
 
@@ -131,16 +132,20 @@ class _ViewerTrackLayerState extends State<ViewerTrackLayer> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_onKey);
+    _release?.call();
+    _release = null;
     super.dispose();
   }
 
+  /// How to stand down from the ladder.
+  VoidCallback? _release;
+
   /// Escape clears the selection — the same thing it does everywhere a
-  /// selection is held.
-  bool _onKey(KeyEvent event) {
-    if (event is! KeyDownEvent || !mounted) return false;
-    if (event.logicalKey != LogicalKeyboardKey.escape) return false;
-    if (_picked.isEmpty || lumitModalOpen) return false;
+  /// selection is held. The ladder's bottom rung (widgets/escape_ladder.dart):
+  /// a drag, a menu or a dialogue is what one press takes first, and the
+  /// points are only cleared when there is nothing above them.
+  bool _escape() {
+    if (!mounted || _picked.isEmpty) return false;
     setState(_picked.clear);
     return true;
   }

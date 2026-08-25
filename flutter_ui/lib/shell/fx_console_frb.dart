@@ -44,6 +44,7 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 import '../widgets/radial_maths.dart';
 
 /// Where the pointer last was, in global coordinates — recorded by the shell
@@ -253,10 +254,10 @@ class _FxConsoleState extends State<_FxConsole> {
     _query.addListener(() => setState(() => _highlighted = 0));
     // Escape has to work from anywhere — over the ring, mid-flick, wherever
     // focus happens to sit. A handler on the search field's node covers only
-    // the field, so this listens at the keyboard itself for the console's
-    // lifetime, the same reason the shell's own shortcuts are global. It is
-    // the only place Escape is handled, so one press is one step back.
-    HardwareKeyboard.instance.addHandler(_escapeAnywhere);
+    // the field, so this claims the ladder's dialogue rung for the console's
+    // lifetime (widgets/escape_ladder.dart): one press is one step back, and
+    // a menu raised over the console is what that press takes first.
+    _escapeRelease = EscapeLadder.register(EscapeRung.dialog, _escapeAnywhere);
     // While the console is up, the keyboard is the console's (K-328): the
     // panels' hardware-keyboard commands stand down exactly as they do for a
     // dialogue, so a keystroke meant for the search box can never rename a
@@ -275,7 +276,8 @@ class _FxConsoleState extends State<_FxConsole> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_escapeAnywhere);
+    _escapeRelease?.call();
+    _escapeRelease = null;
     markModalUnmounted();
     _queryFocus
       ..removeListener(_keepFocus)
@@ -288,11 +290,10 @@ class _FxConsoleState extends State<_FxConsole> {
     if (mounted && !_queryFocus.hasFocus) _queryFocus.requestFocus();
   }
 
-  bool _escapeAnywhere(KeyEvent event) {
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.escape) {
-      return false;
-    }
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
+
+  bool _escapeAnywhere() {
     _back();
     return true;
   }
@@ -379,8 +380,8 @@ class _FxConsoleState extends State<_FxConsole> {
       // actually has (the showLumitPopup lesson).
       child: LayoutBuilder(
         builder: (context, box) {
-          final anchor = widget.anchor ??
-              Offset(box.maxWidth / 2, box.maxHeight / 2);
+          final anchor =
+              widget.anchor ?? Offset(box.maxWidth / 2, box.maxHeight / 2);
           final at = fxConsoleLayout(
             screenWidth: box.maxWidth,
             screenHeight: box.maxHeight,
@@ -455,8 +456,8 @@ class _FxConsoleState extends State<_FxConsole> {
   /// part of the picture. Derived from the theme — never its own colour.
   BoxDecoration _float(LumitTheme t, {double radius = 0}) => BoxDecoration(
         color: t.surface3.withValues(alpha: 0.88),
-        borderRadius: BorderRadius.circular(
-            radius == 0 ? t.tokens.floatRadius : radius),
+        borderRadius:
+            BorderRadius.circular(radius == 0 ? t.tokens.floatRadius : radius),
         border: Border.all(color: t.hairline, width: 1),
         boxShadow: t.floatShadow,
       );
@@ -514,8 +515,7 @@ class _FxConsoleState extends State<_FxConsole> {
       decoration: _float(t),
       padding: const EdgeInsets.all(4),
       child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
+        constraints: BoxConstraints(maxHeight: room.clamp(48.0, 260.0)),
         child: ListView.builder(
           shrinkWrap: true,
           itemCount: matches.length,
@@ -675,8 +675,7 @@ class _FxConsoleState extends State<_FxConsole> {
             // accent, which is what "about to happen" looks like.
             color: chosen ? t.accent : t.surface3.withValues(alpha: 0.88),
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            border: Border.all(
-                color: chosen ? t.accent : t.hairline, width: 1),
+            border: Border.all(color: chosen ? t.accent : t.hairline, width: 1),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

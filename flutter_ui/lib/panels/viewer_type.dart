@@ -42,6 +42,7 @@ import '../widgets/controls.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_shape_layer.dart' show ShapeSpace;
 import 'viewer_tool_cursor.dart';
+import '../widgets/escape_ladder.dart';
 import 'viewer_layer_map.dart';
 
 /// The anchor a text layer of this text wants: the middle of its estimated
@@ -120,23 +121,31 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
     super.initState();
     _controller.addListener(_onTyped);
     HardwareKeyboard.instance.addHandler(_onKey);
+    _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
   }
 
-  /// The two keys a typing session has to answer while the text field has the
-  /// keyboard (K-230).
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
+
+  /// Escape ends the edit, which the tool always promised and never did — the
+  /// ladder's gesture rung (widgets/escape_ladder.dart), because a sentence
+  /// being typed is the innermost thing on screen.
+  bool _escape() {
+    if (!_editingNow) return false;
+    _finish();
+    return true;
+  }
+
+  /// The other key a typing session has to answer while the text field has the
+  /// keyboard (K-230); Escape is [_escape] on the ladder.
   ///
-  /// **Escape** ends the edit, which the tool always promised and never did.
-  /// **Ctrl+Z** ends it as well and then lets go: an undo pressed mid-sentence
+  /// **Ctrl+Z** ends the edit as well and then lets go: an undo pressed mid-sentence
   /// used to be swallowed by the text field, so the document did not move and
   /// the application looked as though undo had stopped working. Ending the edit
   /// first is what makes the next `Ctrl+Z` undo the thing the user means — the
   /// line they just typed, and after that the layer itself.
   bool _onKey(KeyEvent event) {
     if (!_editingNow || event is! KeyDownEvent) return false;
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      _finish();
-      return true;
-    }
     final undo = event.logicalKey == LogicalKeyboardKey.keyZ &&
         (HardwareKeyboard.instance.isControlPressed ||
             HardwareKeyboard.instance.isMetaPressed);
@@ -171,6 +180,8 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _escapeRelease?.call();
+    _escapeRelease = null;
     _clearLive();
     _throttle.cancel();
     _controller.dispose();
@@ -286,7 +297,8 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
   ({LayerBox box, LayerReference layer})? _textLayerAt(Offset at) {
     final textIds = {
       for (final entry in widget.uiState.model.heldLayers)
-        if (entry.info.kind == BridgeLayerKind.text) entry.layer.internallayerId,
+        if (entry.info.kind == BridgeLayerKind.text)
+          entry.layer.internallayerId,
     };
     for (final box in widget.boxes) {
       if (box.contains(at) && textIds.contains(box.id)) {

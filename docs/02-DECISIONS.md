@@ -16455,3 +16455,43 @@ about, and a name ticked over a layout the panels no longer match would be a lie
 name restores both the tick and the write-back. The chords count strip slots, presets first
 (`workspace.switch.N`, already in the engine's keymap); a slot past the end of the strip is
 left unhandled rather than swallowed, so the chord still reaches whatever else wants it.
+
+---
+
+## K-575 — One Escape, one step back: the ladder
+
+**Status: DECIDED (2026-08-25).** Escape has a single documented priority order
+([07-UI-SPEC.md](07-UI-SPEC.md) §14.1) and one arbiter that runs it:
+`flutter_ui/lib/widgets/escape_ladder.dart`. Surfaces register a claim on the rung they belong
+to — gesture, popup, dialogue, selection — and the first claim that says it took the press wins.
+Nothing else is asked.
+
+**Why an arbiter and not the handlers we had.** Every surface used to add its own handler to
+`HardwareKeyboard.instance` and return true to mean "mine". That is not an order: Flutter's own
+documentation says all destinations receive a key event *regardless of what the handlers before
+them returned*, and the focus and shortcut path runs afterwards as well. So one press mid-drag
+put the drag back **and** shut the menu behind it **and** closed the dialogue behind that, in an
+order set by which widget happened to mount first. The claims registry is the same shape as the
+Delete claim (K-234): asking first, rather than racing.
+
+**The rungs, and why in that order.** Innermost first, which is what a user means by "take that
+back": a gesture in flight is the thing being done right now and nothing was written yet, so it
+goes first; then the menu chain, which is above the window it was raised from; then the dialogue
+or full-window surface; then the selection, which is a state rather than an action and is the
+last thing worth losing. A rung with nothing to take back returns false and the press carries on
+down, so a mounted tool that is not dragging costs nothing.
+
+**A focused text editor is deliberately not on the ladder.** An inline rename or an open value
+box answers Escape on its own focus node (K-323), which Flutter runs after every keyboard
+handler — so it is the last thing to get a look in, by construction. Keeping it there rather
+than giving it a rung means a field does not have to know the ladder exists, and the one case
+where the two could disagree — a selection cleared while a rename is open — is a press with an
+editor in front of it, which is rare enough to leave rather than to invent a rule for.
+
+**Dialogues moved off `DismissIntent` (K-319 amended).** A modal window used to dismiss through
+Flutter's own intent, which worked but could not be ordered against anything above it: a drag
+abandoned inside a window shut the window too. The window now claims the dialogue rung from
+`_MovableWindow` itself — the same place it counts itself open (K-243), and for the same reason:
+a window can leave by having the tree taken down under it, and a claim only the close path
+released would go on eating Escape for the rest of the session. What dismissing *means* is
+unchanged: close with null, exactly as a click on the scrim does.

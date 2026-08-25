@@ -15,12 +15,17 @@
 // [dispose] in the state's own `dispose`, so a widget torn down mid-drag does
 // not leave a key handler behind.
 
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+
+import 'escape_ladder.dart';
 
 class DragEscape {
   /// What puts the gesture back where it started — held only while a drag is
   /// in flight, which is also what says whether this is listening.
   void Function()? _revert;
+
+  /// How to stand down from the ladder, held while this is registered.
+  VoidCallback? _release;
 
   /// Whether `Escape` has already taken this drag.
   bool _abandoned = false;
@@ -34,7 +39,7 @@ class DragEscape {
   /// release, and must leave the widget exactly as the drag found it —
   /// including any preview it published for others to read.
   void begin(void Function() revert) {
-    if (_revert == null) HardwareKeyboard.instance.addHandler(_onKey);
+    _release ??= EscapeLadder.register(EscapeRung.gesture, _claim);
     _revert = revert;
     _abandoned = false;
   }
@@ -51,23 +56,20 @@ class DragEscape {
 
   void _stop() {
     if (_revert == null) return;
-    HardwareKeyboard.instance.removeHandler(_onKey);
+    _release?.call();
+    _release = null;
     _revert = null;
     _abandoned = false;
   }
 
-  bool _onKey(KeyEvent event) {
+  /// The ladder's gesture rung (escape_ladder.dart). Taking the press stops it
+  /// there — an `Escape` that abandoned a drag has done its work, and letting
+  /// it travel on would clear a selection or shut a panel as well.
+  bool _claim() {
     final revert = _revert;
-    if (revert == null ||
-        _abandoned ||
-        event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.escape) {
-      return false;
-    }
+    if (revert == null || _abandoned) return false;
     _abandoned = true;
     revert();
-    // Eaten: an `Escape` that abandoned a drag has done its work, and letting
-    // it travel on would clear a selection or shut a panel as well.
     return true;
   }
 }

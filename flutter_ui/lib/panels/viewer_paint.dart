@@ -34,6 +34,7 @@ import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_tool_cursor.dart';
 
@@ -133,11 +134,25 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
+  }
+
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
+
+  /// Escape abandons the stroke being drawn — the ladder's gesture rung
+  /// (widgets/escape_ladder.dart), so it is taken back before a menu closes.
+  bool _escape() {
+    if (!widget.active || _stroke.isEmpty) return false;
+    setState(_stroke.clear);
+    return true;
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _escapeRelease?.call();
+    _escapeRelease = null;
     super.dispose();
   }
 
@@ -152,15 +167,11 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
     return null;
   }
 
-  /// Escape abandons the stroke being drawn; Backspace takes back the last one
-  /// committed. Both are what a painting tool has everywhere else, and both are
-  /// why a bad stroke is never a trip to the Timeline.
+  /// Backspace takes back the last stroke committed — the reason a bad stroke
+  /// is never a trip to the Timeline. (Escape, which abandons the stroke still
+  /// being drawn, is [_escape] on the ladder.)
   bool _onKey(KeyEvent event) {
     if (!widget.active || event is! KeyDownEvent) return false;
-    if (event.logicalKey == LogicalKeyboardKey.escape && _stroke.isNotEmpty) {
-      setState(_stroke.clear);
-      return true;
-    }
     if (event.logicalKey == LogicalKeyboardKey.backspace) {
       final box = _target;
       if (box == null) return false;

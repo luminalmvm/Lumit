@@ -1180,10 +1180,10 @@ down anywhere else, not only on `Enter`.
 open. A dialogue's default action takes focus when the window opens, is drawn with the accent
 edge, and `Enter` presses it.
 
-**Escape dismisses (K-319).** Every modal MUST answer Escape by dismissing — the same
-answer a click on the scrim gives. It is Flutter's own `DismissIntent`, which the app binds
-Escape to above everything, so a window contributes only what dismissing *means* rather than
-another key handler.
+**Escape dismisses (K-319, K-575).** Every modal MUST answer Escape by dismissing — the same
+answer a click on the scrim gives. It does so by claiming the **dialogue rung** of the Escape
+ladder (§14.1) rather than by adding a key handler of its own, so a drag being abandoned or a
+menu being closed inside the window is not also the window shutting.
 
 **Escape cancels an inline editor too, and writes nothing (K-323).** An inline rename or an
 open value box is not a modal, so `DismissIntent` reaches nothing above it; each such editor
@@ -2604,6 +2604,30 @@ Binding, from the household mandate; these override convenience everywhere.
   shows a banner with the message, and renders the keyframed value — never a black frame,
   never a modal.
 - **Voice**: UI copy is en-GB, sentence case, no exclamation marks (K-005).
+
+### 14.1 The Escape ladder (K-575)
+
+**One press is one step back.** Escape MUST be answered by exactly one thing: the innermost
+surface with something to take back. There is one arbiter for the whole application
+(`flutter_ui/lib/widgets/escape_ladder.dart`); a surface registers a claim on its rung and
+nothing else adds a keyboard handler for Escape. The order is:
+
+1. **A gesture in flight is abandoned.** A drag, a marquee, a dropper pick, a path being drawn
+   with the Pen, a stroke being painted, a type edit, a shortcut chord being captured. Nothing
+   was written yet, so this writes nothing and there is no undo step (§2.3.1, §2.3.4, §6.1).
+2. **The open popup chain closes** — the whole chain, innermost first, as one click on a
+   barrier does (§1.8).
+3. **The frontmost dialogue or full-window surface closes**: a modal window, the FX console,
+   the command palette, the welcome screen. Closing means the same as clicking the scrim.
+4. **The finest selection on screen is cleared** — the picked track points, and any selection
+   that registers below them.
+5. **Nothing.** Escape with none of the above is not an error and is not swallowed: it travels
+   on to whatever else wants it.
+
+A rung with nothing to take back stands aside and the press carries on down, so a tool that is
+mounted but idle costs nothing. A **focused text editor is not on the ladder**: it answers
+Escape on its own focus node (K-323), which runs after every keyboard handler, so it is reached
+only when no rung claimed the press.
 
 ---
 

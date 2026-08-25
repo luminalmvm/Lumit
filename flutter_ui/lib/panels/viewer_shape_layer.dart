@@ -31,6 +31,7 @@ import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_tool_cursor.dart';
+import '../widgets/escape_ladder.dart';
 import 'viewer_shapes.dart';
 
 /// How big the "this click closes the path" ring is drawn, in screen pixels.
@@ -124,17 +125,32 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    _escapeRelease = EscapeLadder.register(EscapeRung.gesture, _escape);
+  }
+
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
+
+  /// Escape abandons a path in progress — the ladder's gesture rung
+  /// (widgets/escape_ladder.dart), ahead of every menu and dialogue, because a
+  /// half-drawn path is the innermost thing on screen while it is being drawn.
+  bool _escape() {
+    if (!widget.active || !_isPen || _draft.isEmpty) return false;
+    setState(() => _draft = const PathDraft());
+    return true;
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _escapeRelease?.call();
+    _escapeRelease = null;
     super.dispose();
   }
 
-  /// Escape abandons a path in progress; Backspace takes back its last point.
-  /// Both are what every path tool does, and both are why a half-drawn path is
-  /// never a trap.
+  /// Backspace takes back the path's last point — what every path tool does,
+  /// and part of why a half-drawn path is never a trap. (Escape, which abandons
+  /// the path outright, is [_escape] on the ladder.)
   ///
   /// **`Ctrl+Z` takes back a point too, while a path is being built** (K-232).
   /// This is the one place the application's undo means something narrower than
@@ -146,10 +162,6 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   bool _onKey(KeyEvent event) {
     if (!widget.active || !_isPen || _draft.isEmpty) return false;
     if (event is! KeyDownEvent) return false;
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      setState(() => _draft = const PathDraft());
-      return true;
-    }
     final undo = event.logicalKey == LogicalKeyboardKey.keyZ &&
         (HardwareKeyboard.instance.isControlPressed ||
             HardwareKeyboard.instance.isMetaPressed);
@@ -204,8 +216,7 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
   ShapeSpace get _space {
     final box = _target;
     if (box != null) return ShapeSpace.ofLayer(box);
-    return ShapeSpace.ofComp(
-        fitted: widget.fitted, compSize: widget.compSize);
+    return ShapeSpace.ofComp(fitted: widget.fitted, compSize: widget.compSize);
   }
 
   @override

@@ -7699,11 +7699,10 @@ a dialogue's button would *also* rename a layer in the Timeline behind it
 (K-243).
 
 **Escape closes a window.** A Lumit dialogue is not a Flutter *route* — it is a
-panel painted into the overlay — so it cannot lean on route behaviour. Instead
-it uses what the framework already provides: Flutter binds Escape to something
-called a "dismiss intent" all by itself, and a window only has to say what
-dismissing means for it. Here it means the same as clicking the dimmed
-background — the window closes and answers "cancelled".
+panel painted into the overlay — so it cannot lean on route behaviour. It takes
+its place on the Escape ladder instead (below), on the rung for dialogues, and
+closing means the same as clicking the dimmed background: the window goes and
+answers "cancelled".
 
 **Tab goes the way you read.** Left to right, then top to bottom. It sounds
 like it should be the default, and it is not: the toolkit walks the *widget
@@ -9667,10 +9666,50 @@ never a gesture you are committed to.
 
 The mechanism is one small object, `DragEscape` (`flutter_ui/lib/widgets/drag_escape.dart`),
 which each draggable thing keeps one of. It is told at the start of a gesture how to put
-things back, it listens for `Escape` only while the gesture runs, and at the release it
+things back, it claims `Escape` only while the gesture runs, and at the release it
 answers one question: is there anything to commit? A drag that was escaped answers no.
 Sharing it is the point — a way out that only some drags had would be worse than none,
 because the one time it is wanted is the time you cannot remember which drags have it.
+
+### One Escape, one step back: the ladder
+
+`Escape` is the busiest key in the application. At any moment several things could
+plausibly answer it: a drag is running, a menu is open over the panel it was raised from,
+a dialogue is up behind that, and a selection is sitting under all of it. Only *one* of
+them should move when you press the key — the innermost one, the thing you are doing right
+now — and the rest should be exactly as you left them.
+
+Getting that wrong is easy, and Lumit did for a while. The way a Flutter application
+listens for keys outside a focused text box is to add a handler to the toolkit's keyboard
+object, and each surface added its own and returned "mine" when it took a press. That reads
+like a queue and is not one: the toolkit calls **every** handler on **every** key press,
+whatever the ones before it said, and then runs the focus machinery afterwards as well. So
+one press of `Escape` mid-drag put the drag back *and* shut the menu *and* closed the
+dialogue, in an order decided by which part of the screen happened to be built first.
+
+The fix is an arbiter — one place that knows the order and asks. It is called the Escape
+ladder (`flutter_ui/lib/widgets/escape_ladder.dart`), it adds a single handler to the
+keyboard for the whole application, and it has four rungs, from innermost outwards:
+
+1. a gesture in flight — a drag, a pick, a path, a stroke, a type edit, a shortcut being
+   captured;
+2. the open menu chain;
+3. the frontmost dialogue or full-window surface;
+4. the finest selection on screen.
+
+A surface *registers a claim* on the rung it belongs to when it appears, and stands down
+when it goes. On a press the ladder asks the rungs in order, and the first claim that says
+"I took it" ends the matter — nothing below it is even asked. A claim can also say "not
+just now" (a paint tool that is mounted but has no stroke in progress), and then the press
+carries on down. Pressing `Escape` with nothing to take back is not an error and is not
+swallowed: it travels on to whatever else wants it.
+
+The one thing deliberately left off the ladder is a text box you are typing in. An inline
+rename or an open value box handles `Escape` on its own focus node, which the toolkit runs
+after every keyboard handler, so it is reached only when no rung claimed the press — and
+that is the right place for it, because a field should not need to know the ladder exists.
+The order itself is written down in the interface spec (`docs/07-UI-SPEC.md` §14.1), which
+is the part a reader should be able to check the behaviour against.
 
 
 ## 18. The Viewer's two strips, in plain terms

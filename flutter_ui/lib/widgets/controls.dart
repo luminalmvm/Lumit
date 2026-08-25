@@ -12,6 +12,7 @@ import '../state/workspace.dart';
 import '../theme/theme.dart';
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/widgets/autofill.dart';
+import 'package:lumit_flutter/widgets/escape_ladder.dart';
 import 'package:lumit_flutter/widgets/hover_intent.dart';
 import 'package:lumit_flutter/widgets/time_readout.dart' show monoSlotWidth;
 
@@ -1149,13 +1150,13 @@ class _CaretPainter extends CustomPainter {
 /// A centred modal on the app Overlay, with a dimmed click-to-dismiss backdrop.
 /// Completes with whatever `close` was given, or null when dismissed.
 ///
-/// **Escape is Flutter's own `DismissIntent`, not another key handler** (K-319).
-/// `WidgetsApp` already binds Escape to it above everything, so the window only
-/// has to say what dismissing *means* — an `Actions` entry that closes with
-/// null, the same answer a click on the scrim gives. The comment that used to
-/// sit here claimed Escape worked "via the route": it did not, because this is
-/// an `OverlayEntry` and not a route, so nothing was listening and Escape did
-/// nothing in every dialogue in the application.
+/// **Escape closes it from the ladder's dialogue rung** (K-319, K-575). It was
+/// Flutter's own `DismissIntent` for a while, which did dismiss the window but
+/// could not be ordered against anything: the focus path runs whatever the
+/// hardware-keyboard handlers returned, so a drag being abandoned inside the
+/// window shut the window as well. A claim on the ladder is the same dismissal
+/// with a place in the queue. Closing with null is what a click on the scrim
+/// gives, too.
 ///
 /// The value-returning sibling of [showLumitPopup]. `dialogs.dart` has a private
 /// `_showModal` that returns nothing, which is fine for a dialog that commits
@@ -1185,36 +1186,25 @@ Future<T?> showLumitModal<T>({
   }
 
   entry = OverlayEntry(
-    builder: (_) => Actions(
-      // Escape. `WidgetsApp` binds it to DismissIntent above the whole tree,
-      // so this only has to say what dismissing means here.
-      actions: <Type, Action<Intent>>{
-        DismissIntent: CallbackAction<DismissIntent>(
-          onInvoke: (_) {
-            close(null);
-            return null;
-          },
-        ),
-      },
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => close(null),
-              child: ColoredBox(
-                color: ThemeScope.of(context).theme.scrim,
-              ),
+    builder: (_) => Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => close(null),
+            child: ColoredBox(
+              color: ThemeScope.of(context).theme.scrim,
             ),
           ),
-          _MovableWindow(
-            id: id,
-            initialSize: initialSize,
-            minSize: minSize,
-            child: builder(close),
-          ),
-        ],
-      ),
+        ),
+        _MovableWindow(
+          id: id,
+          initialSize: initialSize,
+          minSize: minSize,
+          onDismiss: () => close(null),
+          child: builder(close),
+        ),
+      ],
     ),
   );
   overlay.insert(entry);
@@ -1264,11 +1254,15 @@ class _MovableWindow extends StatefulWidget {
   final Size minSize;
   final Widget child;
 
+  /// What Escape means here, or null for a window that cannot be dismissed.
+  final VoidCallback? onDismiss;
+
   const _MovableWindow({
     required this.id,
     required this.initialSize,
     required this.minSize,
     required this.child,
+    this.onDismiss,
   });
 
   @override
@@ -1283,6 +1277,13 @@ class _MovableWindowState extends State<_MovableWindow> {
   void initState() {
     super.initState();
     _openModals++;
+    final dismiss = widget.onDismiss;
+    if (dismiss != null) {
+      _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
+        dismiss();
+        return true;
+      });
+    }
     _size = widget.initialSize;
     final id = widget.id;
     final saved = id == null ? null : modalPlacementStore?.windowPlacements[id];
@@ -1297,8 +1298,16 @@ class _MovableWindowState extends State<_MovableWindow> {
   @override
   void dispose() {
     _openModals--;
+    _escapeRelease?.call();
+    _escapeRelease = null;
     super.dispose();
   }
+
+  /// How to stand down from the ladder. Held here rather than beside the call
+  /// that opened the window, for the reason the modal count is: a window can
+  /// leave by having the tree taken down under it, and a claim only the close
+  /// path released would go on eating Escape for the rest of the session.
+  VoidCallback? _escapeRelease;
 
   void _remember() {
     final id = widget.id;
@@ -1975,7 +1984,8 @@ void _truncatePopups(int depth) {
     _popupChain.removeLast().dismiss();
   }
   if (_popupChain.isEmpty) {
-    HardwareKeyboard.instance.removeHandler(_popupEscape);
+    _popupEscapeRelease?.call();
+    _popupEscapeRelease = null;
   }
 }
 
@@ -1988,14 +1998,16 @@ bool get lumitPopupOpen => _popupChain.isNotEmpty;
 
 /// Escape while a chain is up dismisses all of it.
 ///
-/// A hardware-keyboard handler rather than Flutter's own [DismissIntent],
-/// because a menu holds no focus: the intent would be dispatched at whatever
-/// widget the focus was on when the menu opened, which is outside the popup's
-/// subtree, so an `Actions` entry there would never be reached. Registered
-/// only while a chain is open, so nothing else pays for it.
-bool _popupEscape(KeyEvent event) {
-  if (event is! KeyDownEvent) return false;
-  if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+/// The ladder's popup rung (widgets/escape_ladder.dart), not Flutter's own
+/// [DismissIntent], because a menu holds no focus: the intent would be
+/// dispatched at whatever widget the focus was on when the menu opened, which
+/// is outside the popup's subtree, so an `Actions` entry there would never be
+/// reached. Registered only while a chain is open, so nothing else pays for it
+/// — and below the gesture rung, so a menu open over a drag in flight is not
+/// what one press takes.
+VoidCallback? _popupEscapeRelease;
+
+bool _popupEscape() {
   if (_popupChain.isEmpty) return false;
   closeLumitPopups();
   return true;
@@ -2069,7 +2081,7 @@ Future<T?> showLumitPopup<T>({
   handle = _PopupHandle(() => close(null));
   _popupChain.add(handle);
   if (_popupChain.length == 1) {
-    HardwareKeyboard.instance.addHandler(_popupEscape);
+    _popupEscapeRelease = EscapeLadder.register(EscapeRung.popup, _popupEscape);
   }
 
   entry = OverlayEntry(

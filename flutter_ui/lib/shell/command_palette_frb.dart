@@ -15,6 +15,7 @@ import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 
 /// One thing the palette can run.
 class PaletteCommand {
@@ -101,10 +102,23 @@ class _PaletteState extends State<_Palette> {
     super.initState();
     _query.addListener(() => setState(() => _highlighted = 0));
     _focus.requestFocus();
+    // Escape closes the palette from the ladder's dialogue rung
+    // (widgets/escape_ladder.dart) rather than from the field's focus node:
+    // the focus path runs last of all, so a press meant for a menu raised over
+    // the palette used to shut both.
+    _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
+      widget.onClose();
+      return true;
+    });
   }
+
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
 
   @override
   void dispose() {
+    _escapeRelease?.call();
+    _escapeRelease = null;
     _query.dispose();
     _focus.dispose();
     super.dispose();
@@ -157,9 +171,6 @@ class _PaletteState extends State<_Palette> {
             return KeyEventResult.handled;
           case LogicalKeyboardKey.enter:
             _runHighlighted(matches);
-            return KeyEventResult.handled;
-          case LogicalKeyboardKey.escape:
-            widget.onClose();
             return KeyEventResult.handled;
           default:
             return KeyEventResult.ignored;

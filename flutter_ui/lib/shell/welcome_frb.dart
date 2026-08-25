@@ -24,7 +24,6 @@
 
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
@@ -36,6 +35,7 @@ import '../state/external_links.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/escape_ladder.dart';
 import 'about_window_frb.dart';
 import 'menu_bar_frb.dart';
 import 'wordmark.dart';
@@ -162,25 +162,27 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
 
   /// Escape closes the screen with nothing open (K-481) — the standard way out
   /// of anything that has taken the window, and the reason the shell behind it
-  /// has something to show. Registered globally, as every other Escape in the
-  /// shell is (`fx_console_frb`): this page has no focused field to route one.
+  /// has something to show. On the ladder's dialogue rung, as every
+  /// other Escape in the shell is (widgets/escape_ladder.dart): this page has
+  /// no focused field to route one, and a menu open over it is what a press
+  /// takes first.
   @override
   void initState() {
     super.initState();
-    HardwareKeyboard.instance.addHandler(_escapeCloses);
+    _escapeRelease = EscapeLadder.register(EscapeRung.dialog, _escapeCloses);
   }
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_escapeCloses);
+    _escapeRelease?.call();
+    _escapeRelease = null;
     super.dispose();
   }
 
-  bool _escapeCloses(KeyEvent event) {
-    if (event is! KeyDownEvent ||
-        event.logicalKey != LogicalKeyboardKey.escape) {
-      return false;
-    }
+  /// How to stand down from the ladder.
+  VoidCallback? _escapeRelease;
+
+  bool _escapeCloses() {
     widget.onDone();
     return true;
   }
