@@ -10,7 +10,10 @@ import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_shapes.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
+import 'package:uuid/uuid.dart';
 
 void main() {
   List<(double, double)> positions(List<dynamic> vertices) =>
@@ -223,6 +226,74 @@ void main() {
       expect(withinClosingDistance((100, 0), (0, 0), screenScale: 0.1), isTrue);
       // Zoomed right in, one layer pixel is ten screen ones: not a click on it.
       expect(withinClosingDistance((2, 0), (0, 0), screenScale: 10), isFalse);
+    });
+  });
+
+  /// **What the Viewer's feather guide is drawn from** (K-545): half the soft
+  /// edge's width at each point, and nothing at all when there is no width to
+  /// show or the width is keyframed.
+  group('The feather guide', () {
+    BridgeMask masked({
+      required BridgeScalar feather,
+      List<BridgeScalar> perPoint = const [],
+    }) =>
+        BridgeMask(
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: 'Mask',
+          vertices: shapePath(
+            tool: ToolMode.shapeRectangle,
+            from: (0, 0),
+            to: (100, 50),
+          ),
+          closed: true,
+          inverted: false,
+          opacity: const BridgeScalar.static_(100),
+          mode: BridgeMaskMode.add,
+          feather: feather,
+          vertexFeather: perPoint,
+          expansion: const BridgeScalar.static_(0),
+          pathKeys: const [],
+        );
+
+    test('a hard-edged mask has no guide to draw', () {
+      expect(stillHalfFeather(masked(feather: const BridgeScalar.static_(0))),
+          isNull);
+    });
+
+    test('one width gives every point the same half', () {
+      expect(stillHalfFeather(masked(feather: const BridgeScalar.static_(20))),
+          [10.0, 10.0, 10.0, 10.0]);
+    });
+
+    test('per-point widths are halved point by point', () {
+      expect(
+        stillHalfFeather(masked(
+          feather: const BridgeScalar.static_(20),
+          perPoint: const [
+            BridgeScalar.static_(0),
+            BridgeScalar.static_(40),
+            BridgeScalar.static_(4),
+            BridgeScalar.static_(0),
+          ],
+        )),
+        [0.0, 20.0, 2.0, 0.0],
+      );
+    });
+
+    test('a keyframed width draws nothing, rather than a width that is not the '
+        'one in the picture', () {
+      expect(
+        stillHalfFeather(masked(
+          feather: const BridgeScalar.static_(20),
+          perPoint: const [
+            BridgeScalar.static_(0),
+            BridgeScalar.keyframed([]),
+            BridgeScalar.static_(4),
+            BridgeScalar.static_(0),
+          ],
+        )),
+        isNull,
+      );
     });
   });
 }

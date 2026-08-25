@@ -39,9 +39,11 @@
 //! only to file the result (docs/14 §3).
 
 #[cfg(feature = "media")]
+use lumit_media::MediaSource;
+#[cfg(feature = "media")]
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         atomic::{AtomicU64, Ordering},
         mpsc::{channel, Receiver, Sender},
@@ -101,12 +103,12 @@ struct Entry {
 #[cfg(feature = "media")]
 #[derive(Default)]
 struct Cache {
-    by_path: HashMap<PathBuf, Entry>,
+    by_path: HashMap<MediaSource, Entry>,
     /// Insertion order, oldest first.
-    order: Vec<PathBuf>,
-    /// Paths handed to the worker and not yet answered, so a file asked for
+    order: Vec<MediaSource>,
+    /// Sources handed to the worker and not yet answered, so a file asked for
     /// five times in one rebuild is queued once.
-    queued: HashSet<PathBuf>,
+    queued: HashSet<MediaSource>,
 }
 
 #[cfg(feature = "media")]
@@ -127,7 +129,7 @@ fn generation() -> &'static AtomicU64 {
 
 #[cfg(feature = "media")]
 struct Job {
-    path: PathBuf,
+    src: MediaSource,
     generation: u64,
 }
 
@@ -155,19 +157,19 @@ fn run(rx: &Receiver<Job>) {
         let wanted = job.generation == generation().load(Ordering::Relaxed);
         // A stamp is one `stat`; a file that has gone away since it was
         // queued is not probed at all, and nothing is remembered for it.
-        let stamp = wanted.then(|| stamp(&job.path)).flatten();
+        let stamp = wanted.then(|| stamp(job.src.on_disk())).flatten();
         let Some(stamp) = stamp else {
-            unqueue(&job.path);
+            unqueue(&job.src);
             continue;
         };
         // Somebody may have needed the answer before this got here, in which
         // case they probed it inline and the answer is already filed.
-        if lookup(&job.path, stamp).is_some() {
-            unqueue(&job.path);
+        if lookup(&job.src, stamp).is_some() {
+            unqueue(&job.src);
             continue;
         }
-        let probed = probe_now(&job.path);
-        store(&job.path, stamp, probed, true);
+        let probed = probe_now(&job.src);
+        store(&job.src, stamp, probed, true);
     }
 }
 
@@ -185,8 +187,8 @@ fn stamp(path: &Path) -> Option<Stamp> {
 /// Open the container and read its statistics. The one place this crate calls
 /// `lumit_media::probe::probe`.
 #[cfg(feature = "media")]
-fn probe_now(path: &Path) -> Probed {
-    match lumit_media::probe::probe(path) {
+fn probe_now(src: &MediaSource) -> Probed {
+    match lumit_media::probe::probe(src) {
         Ok(info) => Probed::Ready(Arc::new(info)),
         Err(_) => Probed::Unreadable,
     }
@@ -195,10 +197,10 @@ fn probe_now(path: &Path) -> Probed {
 /// What is held for `path` at `stamp`, if anything. An entry filed against a
 /// different stamp is not a hit: the file has changed since.
 #[cfg(feature = "media")]
-fn lookup(path: &Path, stamp: Stamp) -> Option<Probed> {
+fn lookup(src: &MediaSource, stamp: Stamp) -> Option<Probed> {
     let held = cache().lock().ok()?;
     held.by_path
-        .get(path)
+        .get(src)
         .filter(|e| e.stamp == stamp)
         .map(|e| e.probed.clone())
 }
@@ -207,15 +209,15 @@ fn lookup(path: &Path, stamp: Stamp) -> Option<Probed> {
 /// the path off the queue in the same turn of the lock — so a queue that has
 /// emptied means every answer is readable.
 #[cfg(feature = "media")]
-fn store(path: &Path, stamp: Stamp, probed: Probed, off_thread: bool) {
+fn store(src: &MediaSource, stamp: Stamp, probed: Probed, off_thread: bool) {
     let Ok(mut held) = cache().lock() else {
         return;
     };
-    held.queued.remove(path);
+    held.queued.remove(src);
     let replaced = held
         .by_path
         .insert(
-            path.to_path_buf(),
+            src.clone(),
             Entry {
                 stamp,
                 probed,
@@ -224,7 +226,7 @@ fn store(path: &Path, stamp: Stamp, probed: Probed, off_thread: bool) {
         )
         .is_some();
     if !replaced {
-        held.order.push(path.to_path_buf());
+        held.order.push(src.clone());
     }
     while held.order.len() > MAX_ENTRIES {
         // `order` is non-empty here (its length is over the cap), but the
@@ -239,9 +241,9 @@ fn store(path: &Path, stamp: Stamp, probed: Probed, off_thread: bool) {
 
 /// Take `path` off the queue without filing anything — the worker's skip paths.
 #[cfg(feature = "media")]
-fn unqueue(path: &Path) {
+fn unqueue(src: &MediaSource) {
     if let Ok(mut held) = cache().lock() {
-        held.queued.remove(path);
+        held.queued.remove(src);
     }
 }
 
@@ -250,10 +252,11 @@ fn unqueue(path: &Path) {
 /// A file already answered for, already queued, or queued past the budget is
 /// not queued again. Nothing depends on this having run: it only decides
 /// whether [`ensure_probed`] finds its answer waiting or pays for it.
-pub(crate) fn request(path: &std::path::Path) {
+pub(crate) fn request(src: impl Into<MediaSource>) {
     #[cfg(feature = "media")]
     {
-        let Some(stamp) = stamp(path) else {
+        let src = src.into();
+        let Some(stamp) = stamp(src.on_disk()) else {
             return;
         };
         {
@@ -262,34 +265,34 @@ pub(crate) fn request(path: &std::path::Path) {
             };
             if held
                 .by_path
-                .get(path)
+                .get(&src)
                 .is_some_and(|entry| entry.stamp == stamp)
             {
                 return;
             }
-            if held.queued.len() >= MAX_QUEUED || !held.queued.insert(path.to_path_buf()) {
+            if held.queued.len() >= MAX_QUEUED || !held.queued.insert(src.clone()) {
                 return;
             }
         }
         let job = Job {
-            path: path.to_path_buf(),
+            src: src.clone(),
             generation: generation().load(Ordering::Relaxed),
         };
         match jobs() {
             // A worker thread that could not be spawned leaves the queue
             // marker behind and would block this path for the session, so it
             // is taken back off.
-            None => unqueue(path),
+            None => unqueue(&src),
             Some(tx) => {
                 if tx.send(job).is_err() {
-                    unqueue(path);
+                    unqueue(&src);
                 }
             }
         }
     }
     #[cfg(not(feature = "media"))]
     {
-        let _ = path;
+        let _ = src;
     }
 }
 
@@ -300,14 +303,17 @@ pub(crate) fn request(path: &std::path::Path) {
 /// or has not done, this returns exactly what `lumit_media::probe::probe` would
 /// have returned for the file as it is on disk right now.
 #[cfg(feature = "media")]
-pub(crate) fn ensure_probed(path: &Path) -> Option<Arc<lumit_media::probe::MediaProbe>> {
-    let stamp = stamp(path)?;
-    let probed = match lookup(path, stamp) {
+pub(crate) fn ensure_probed(
+    src: impl Into<MediaSource>,
+) -> Option<Arc<lumit_media::probe::MediaProbe>> {
+    let src = src.into();
+    let stamp = stamp(src.on_disk())?;
+    let probed = match lookup(&src, stamp) {
         Some(hit) => hit,
         None => {
             // Nothing held across the probe.
-            let probed = probe_now(path);
-            store(path, stamp, probed.clone(), false);
+            let probed = probe_now(&src);
+            store(&src, stamp, probed.clone(), false);
             probed
         }
     };
@@ -340,7 +346,9 @@ pub(crate) fn clear() {
 #[cfg(all(test, feature = "media"))]
 pub(crate) fn probed_off_thread(path: &Path) -> Option<bool> {
     let held = cache().lock().ok()?;
-    held.by_path.get(path).map(|e| e.off_thread)
+    held.by_path
+        .get(&MediaSource::file(path))
+        .map(|e| e.off_thread)
 }
 
 /// How many paths the worker still owes an answer for. Tests only.
@@ -370,7 +378,10 @@ mod tests {
     fn wait_for(path: &Path) -> bool {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
         while std::time::Instant::now() < deadline {
-            if stamp(path).and_then(|s| lookup(path, s)).is_some() {
+            if stamp(path)
+                .and_then(|s| lookup(&MediaSource::file(path), s))
+                .is_some()
+            {
                 return true;
             }
             std::thread::sleep(std::time::Duration::from_millis(5));
@@ -460,7 +471,7 @@ mod tests {
 
         assert!(ensure_probed(&text).is_none());
         assert!(matches!(
-            lookup(&text, stamp(&text).expect("stamped")),
+            lookup(&MediaSource::file(&text), stamp(&text).expect("stamped")),
             Some(Probed::Unreadable)
         ));
 
@@ -490,7 +501,7 @@ mod tests {
         let second = stamp(&path).expect("stamped again");
         assert_ne!(first, second);
         assert!(
-            lookup(&path, second).is_none(),
+            lookup(&MediaSource::file(&path), second).is_none(),
             "the held answer belongs to the file that was there before"
         );
     }

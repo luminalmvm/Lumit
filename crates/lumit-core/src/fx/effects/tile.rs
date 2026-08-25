@@ -4,10 +4,17 @@
 //! **In plain terms.** Cut a rectangle out of the picture and stamp it side by
 //! side until the frame is full. Tile width and height say how big the rectangle
 //! is (as a per cent of the frame, so 50 gives a 2×2 grid), Tile centre says
-//! where it is cut from, Output width and height say how much of the frame gets
-//! stamped and the rest goes transparent. Mirror edges flips alternate stamps so
-//! they meet without a seam, and Phase slides every other row along so the grid
-//! stops reading as a grid.
+//! where it is cut from, and Output width and height say how much gets stamped.
+//! Below 100 % the rest of the frame goes transparent; above it the stamps carry
+//! on *past* the frame's edges and the working picture grows to hold them, which
+//! is what lets a warp or a blur further down the stack find picture there
+//! instead of nothing. Mirror edges flips alternate stamps so they meet without
+//! a seam, and Phase slides every other row along so the grid stops reading as a
+//! grid.
+//!
+//! Everything starts at the identity (K-542): one whole-frame tile, cut from the
+//! middle, stamped over exactly the frame it came from. Dropping Tile on a layer
+//! changes nothing until a number is moved.
 
 use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, Params};
 use lumit_fx_macros::Effect;
@@ -29,7 +36,8 @@ use lumit_fx_macros::Effect;
 pub struct Tile {
     /// px@comp: the centre of the rectangle that gets stamped. The schema
     /// default is nominal 1080p centre; `instantiate_for_raster` centres a fresh
-    /// instance on the actual comp.
+    /// instance on the actual comp, which is what makes the default the exact
+    /// identity on a comp of any size (K-542).
     #[slider(label = "Tile centre x", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub tile_centre_x: f32,
 
@@ -37,9 +45,10 @@ pub struct Tile {
     #[slider(label = "Tile centre y", min = 0.0, max = 2160.0, default = 540.0, unit = Px)]
     pub tile_centre_y: f32,
 
-    /// Per cent of the frame's width. 50 is a 2×2 repeat, which is the default
-    /// for §1.2's reason: a Tile that had not tiled anything would be a Tile that
-    /// had not been applied (§3.39).
+    /// Per cent of the frame's width: 50 is a 2×2 repeat. The default is 100 —
+    /// one tile the size of the frame, cut from the middle of it, which is AE's
+    /// Motion Tile and is the exact identity (K-542 reverses §3.39's earlier
+    /// 2×2 default).
     ///
     /// **Not a spatial unit**, deliberately: a per cent of the raster does not
     /// move when the raster does, so this needs no rescaling and gets none.
@@ -47,7 +56,7 @@ pub struct Tile {
         label = "Tile width",
         min = 1.0,
         max = 500.0,
-        default = 50.0,
+        default = 100.0,
         hard_min = 1.0,
         unit = Percent
     )]
@@ -58,16 +67,20 @@ pub struct Tile {
         label = "Tile height",
         min = 1.0,
         max = 500.0,
-        default = 50.0,
+        default = 100.0,
         hard_min = 1.0,
         unit = Percent
     )]
     pub tile_height: f32,
 
     /// Per cent of the frame's width: how wide the stamped area is, centred on
-    /// the frame. Outside it the output is transparent. 100 covers the frame,
-    /// which is the default; anything above 100 also covers it, since the frame
-    /// is all there is to cover (§3.39).
+    /// the frame. Below 100 the output is transparent outside it. 100 covers the
+    /// frame exactly, which is the default. **Above 100 the working picture
+    /// grows** (K-542): the stamps carry on past the frame's edges into a wider
+    /// raster, and every effect after this one in the stack runs on that raster,
+    /// so the copies are real picture to them rather than transparency. The
+    /// composite places the wider picture by the layer's own transform, so
+    /// nothing moves — the layer simply reaches further.
     #[slider(
         label = "Output width",
         min = 1.0,

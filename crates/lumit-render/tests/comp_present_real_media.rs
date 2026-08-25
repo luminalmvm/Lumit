@@ -31,6 +31,7 @@ fn doc_with_clip(path: &str, w: u32, h: u32, fps: (u32, u32)) -> (std::sync::Arc
     let mut doc = Document::new();
     let item_id = Uuid::now_v7();
     doc.items.push(ProjectItem::Footage(FootageItem {
+        sequence: None,
         id: item_id,
         name: "clip.mp4".into(),
         media: MediaRef {

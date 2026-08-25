@@ -217,7 +217,122 @@ pub fn parse_cube(text: &str) -> Result<Lut, LutError> {
     }
 }
 
+/// The transfer function a `.cube` was authored against — the LUT effect's
+/// **Input space** row (docs/08 §3.11, K-543).
+///
+/// In plain terms: a LUT is a table of "this colour in, that colour out", and
+/// the colourist who baked it was looking at a particular kind of number. Most
+/// creative cubes are made in a grading application whose input is *display*
+/// encoded, where mid-grey is around 0.5. Lumit's working picture is
+/// scene-linear, where mid-grey is 0.18 — hand that straight to a display-space
+/// cube and every input lands in the wrong cell of the table, which is why an
+/// otherwise correct grade comes out crushed. This says which encoding to put
+/// the picture into before the lookup; the result is brought back to linear
+/// afterwards, so the rest of the stack still sees linear light.
+///
+/// [`Linear`](Self::Linear) is the default and is the identity in both
+/// directions — no arithmetic at all — so a LUT saved before this row existed
+/// renders the bits it always did (K-258).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LutSpace {
+    /// Apply the cube to the working picture as-is: what the effect did before
+    /// K-543, and the right answer for a cube baked from scene-linear input.
+    #[default]
+    Linear,
+    /// The sRGB transfer function (IEC 61966-2-1) — the same curve
+    /// [`crate::pixels::srgb_encode`] and the compositor's display encode use.
+    Srgb,
+    /// The ITU-R BT.709 transfer characteristic: the camera OETF, `4.5·L` below
+    /// the knee and `1.099·L^0.45 − 0.099` above it.
+    Rec709,
+}
+
+impl LutSpace {
+    /// The wire code the GPU uniform carries (0 Linear, 1 sRGB, 2 Rec. 709);
+    /// anything unknown reads as [`Linear`](Self::Linear), so a schema that
+    /// grows a fourth option cannot make an old build fault.
+    #[must_use]
+    pub fn from_code(code: u32) -> Self {
+        match code {
+            1 => Self::Srgb,
+            2 => Self::Rec709,
+            _ => Self::Linear,
+        }
+    }
+
+    /// This space's wire code — the inverse of [`Self::from_code`].
+    #[must_use]
+    pub fn code(self) -> u32 {
+        match self {
+            Self::Linear => 0,
+            Self::Srgb => 1,
+            Self::Rec709 => 2,
+        }
+    }
+
+    /// Scene-linear → this space, per channel. **Binding: `fx_lut.wgsl`'s
+    /// `to_space` is this operation for operation** (docs/08 §1.6).
+    ///
+    /// Both curves take `max(v, 0)` inside the power so a negative working-space
+    /// value (legal — an out-of-gamut colour) takes the linear segment rather
+    /// than producing NaN, exactly as the shader's `select` must. Values above
+    /// 1.0 pass through the curve unclamped and are clamped by the cube's own
+    /// domain at the lookup, where they were clamped before.
+    #[must_use]
+    pub fn from_linear(self, rgb: [f32; 3]) -> [f32; 3] {
+        match self {
+            Self::Linear => rgb,
+            Self::Srgb => rgb.map(|v| {
+                if v <= 0.003_130_8 {
+                    12.92 * v
+                } else {
+                    1.055 * v.max(0.0).powf(1.0 / 2.4) - 0.055
+                }
+            }),
+            Self::Rec709 => rgb.map(|v| {
+                if v < 0.018 {
+                    4.5 * v
+                } else {
+                    1.099 * v.max(0.0).powf(0.45) - 0.099
+                }
+            }),
+        }
+    }
+
+    /// This space → scene-linear, per channel: the exact inverse of
+    /// [`Self::from_linear`], and `fx_lut.wgsl`'s `to_linear` operation for
+    /// operation.
+    #[must_use]
+    pub fn to_linear(self, rgb: [f32; 3]) -> [f32; 3] {
+        match self {
+            Self::Linear => rgb,
+            Self::Srgb => rgb.map(|v| {
+                if v <= 0.040_45 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055).max(0.0) / 1.055).powf(2.4)
+                }
+            }),
+            Self::Rec709 => rgb.map(|v| {
+                if v < 0.081 {
+                    v / 4.5
+                } else {
+                    ((v + 0.099).max(0.0) / 1.099).powf(1.0 / 0.45)
+                }
+            }),
+        }
+    }
+}
+
 impl Lut3d {
+    /// The cube applied through an input space (K-543): linear → `space`,
+    /// trilinear lookup, `space` → linear. The §1.6 oracle the LUT shader is
+    /// checked against; [`LutSpace::Linear`] makes it [`Self::sample`] with no
+    /// arithmetic either side, bit for bit.
+    pub fn sample_in(&self, space: LutSpace, rgb: [f32; 3]) -> [f32; 3] {
+        space.to_linear(self.sample(space.from_linear(rgb)))
+    }
+
     /// Trilinear interpolation of the cube at `rgb`.
     ///
     /// Each channel is mapped through `[domain_min, domain_max]` onto a grid
@@ -652,5 +767,77 @@ LUT_3D_SIZE 2
         let err = parse_cube("TITLE \"empty\"\n").unwrap_err();
         let _as_std: &dyn std::error::Error = &err;
         assert!(!err.to_string().is_empty());
+    }
+
+    /// The Input space (K-543). Linear is the exact identity in both directions
+    /// and `sample_in` through it is bit-for-bit `sample`, which is the whole
+    /// compatibility promise (K-258); the other two are real, invertible curves
+    /// that leave a negative working-space value finite rather than NaN.
+    #[test]
+    fn input_space_linear_is_the_identity_and_the_curves_invert() {
+        // A red/blue swap, so a dropped transfer cannot hide behind symmetry.
+        let cube = Lut3d {
+            size: 2,
+            domain_min: [0.0; 3],
+            domain_max: [1.0; 3],
+            data: vec![
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 1.0, 1.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 0.0],
+                [1.0, 1.0, 1.0],
+            ],
+        };
+        for c in [
+            [0.0, 0.0, 0.0],
+            [0.18, 0.5, 0.9],
+            [1.0, 1.0, 1.0],
+            [-0.2, 0.004, 2.5],
+        ] {
+            assert_eq!(
+                cube.sample_in(LutSpace::Linear, c),
+                cube.sample(c),
+                "Linear must add no arithmetic at all"
+            );
+            assert_eq!(LutSpace::Linear.from_linear(c), c);
+            assert_eq!(LutSpace::Linear.to_linear(c), c);
+
+            for space in [LutSpace::Srgb, LutSpace::Rec709] {
+                let there = space.from_linear(c);
+                let back = space.to_linear(there);
+                for ch in 0..3 {
+                    assert!(there[ch].is_finite(), "{space:?}: encode went non-finite");
+                    assert!(
+                        (back[ch] - c[ch]).abs() < 1e-4,
+                        "{space:?} must invert: {} -> {} -> {}",
+                        c[ch],
+                        there[ch],
+                        back[ch]
+                    );
+                }
+            }
+        }
+
+        // The two curves are genuinely different, and both differ from linear:
+        // mid-grey in scene-linear light lands well above itself in either.
+        let srgb = LutSpace::Srgb.from_linear([0.18; 3]);
+        let r709 = LutSpace::Rec709.from_linear([0.18; 3]);
+        assert!(
+            srgb[0] > 0.45 && srgb[0] < 0.47,
+            "sRGB(0.18) is about 0.461"
+        );
+        assert!(
+            r709[0] > 0.40 && r709[0] < 0.42,
+            "Rec. 709(0.18) is about 0.409"
+        );
+
+        // The wire codes round-trip, and an unknown one degrades to Linear.
+        for space in [LutSpace::Linear, LutSpace::Srgb, LutSpace::Rec709] {
+            assert_eq!(LutSpace::from_code(space.code()), space);
+        }
+        assert_eq!(LutSpace::from_code(99), LutSpace::Linear);
     }
 }

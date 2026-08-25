@@ -10501,6 +10501,18 @@ impl SseDecode for crate::api::effect::BridgeBezierSide {
     }
 }
 
+impl SseDecode for crate::api::layer::BridgeBrushShape {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::layer::BridgeBrushShape::Round,
+            1 => crate::api::layer::BridgeBrushShape::Square,
+            _ => unreachable!("Invalid variant for BridgeBrushShape: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::cache::BridgeCacheLocation {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -11657,6 +11669,8 @@ impl SseDecode for crate::api::layer::BridgeMask {
         let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_mode = <crate::api::layer::BridgeMaskMode>::sse_decode(deserializer);
         let mut var_feather = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_vertexFeather =
+            <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         let mut var_expansion = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_pathKeys = <Vec<crate::api::effect::BridgeKeyframe>>::sse_decode(deserializer);
         return crate::api::layer::BridgeMask {
@@ -11668,6 +11682,7 @@ impl SseDecode for crate::api::layer::BridgeMask {
             opacity: var_opacity,
             mode: var_mode,
             feather: var_feather,
+            vertex_feather: var_vertexFeather,
             expansion: var_expansion,
             path_keys: var_pathKeys,
         };
@@ -11683,7 +11698,9 @@ impl SseDecode for crate::api::layer::BridgeMaskMode {
             1 => crate::api::layer::BridgeMaskMode::Add,
             2 => crate::api::layer::BridgeMaskMode::Subtract,
             3 => crate::api::layer::BridgeMaskMode::Intersect,
-            4 => crate::api::layer::BridgeMaskMode::Difference,
+            4 => crate::api::layer::BridgeMaskMode::Lighten,
+            5 => crate::api::layer::BridgeMaskMode::Darken,
+            6 => crate::api::layer::BridgeMaskMode::Difference,
             _ => unreachable!("Invalid variant for BridgeMaskMode: {}", inner),
         };
     }
@@ -12345,6 +12362,30 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             <Option<crate::api::assets::BridgeColourRgba>>::sse_decode(deserializer);
         let mut var_strokeWidth = <f64>::sse_decode(deserializer);
         let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_trimStart = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_trimEnd = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_trimOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_dashes = <Vec<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
+        let mut var_dashOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradient = <u32>::sse_decode(deserializer);
+        let mut var_gradientColour =
+            <Option<crate::api::assets::BridgeColourRgba>>::sse_decode(deserializer);
+        let mut var_gradientStartX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientStartY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientEndX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_gradientEndY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_offsetAmount = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatCopies = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatAnchorX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatAnchorY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatPositionX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatPositionY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatRotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatScale = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatStartOpacity =
+            <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_repeatEndOpacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeShapeItem {
             id: var_id,
             name: var_name,
@@ -12354,6 +12395,28 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             stroke: var_stroke,
             stroke_width: var_strokeWidth,
             opacity: var_opacity,
+            trim_start: var_trimStart,
+            trim_end: var_trimEnd,
+            trim_offset: var_trimOffset,
+            dashes: var_dashes,
+            dash_offset: var_dashOffset,
+            gradient: var_gradient,
+            gradient_colour: var_gradientColour,
+            gradient_start_x: var_gradientStartX,
+            gradient_start_y: var_gradientStartY,
+            gradient_end_x: var_gradientEndX,
+            gradient_end_y: var_gradientEndY,
+            offset_amount: var_offsetAmount,
+            repeat_copies: var_repeatCopies,
+            repeat_offset: var_repeatOffset,
+            repeat_anchor_x: var_repeatAnchorX,
+            repeat_anchor_y: var_repeatAnchorY,
+            repeat_position_x: var_repeatPositionX,
+            repeat_position_y: var_repeatPositionY,
+            repeat_rotation: var_repeatRotation,
+            repeat_scale: var_repeatScale,
+            repeat_start_opacity: var_repeatStartOpacity,
+            repeat_end_opacity: var_repeatEndOpacity,
         };
     }
 }
@@ -12468,8 +12531,12 @@ impl SseDecode for crate::api::layer::BridgeStroke {
         let mut var_colour = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
         let mut var_width = <f64>::sse_decode(deserializer);
         let mut var_hardness = <f64>::sse_decode(deserializer);
+        let mut var_shape = <crate::api::layer::BridgeBrushShape>::sse_decode(deserializer);
         let mut var_opacity = <f64>::sse_decode(deserializer);
+        let mut var_start = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_end = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_mode = <crate::api::layer::BridgePaintMode>::sse_decode(deserializer);
+        let mut var_blend = <u32>::sse_decode(deserializer);
         let mut var_cloneOffsetX = <f64>::sse_decode(deserializer);
         let mut var_cloneOffsetY = <f64>::sse_decode(deserializer);
         return crate::api::layer::BridgeStroke {
@@ -12479,8 +12546,12 @@ impl SseDecode for crate::api::layer::BridgeStroke {
             colour: var_colour,
             width: var_width,
             hardness: var_hardness,
+            shape: var_shape,
             opacity: var_opacity,
+            start: var_start,
+            end: var_end,
             mode: var_mode,
+            blend: var_blend,
             clone_offset_x: var_cloneOffsetX,
             clone_offset_y: var_cloneOffsetY,
         };
@@ -12572,6 +12643,7 @@ impl SseDecode for crate::api::track::BridgeTrackStatus {
         let mut var_meanError = <f64>::sse_decode(deserializer);
         let mut var_points = <u32>::sse_decode(deserializer);
         let mut var_frames = <u32>::sse_decode(deserializer);
+        let mut var_clipFrames = <u32>::sse_decode(deserializer);
         return crate::api::track::BridgeTrackStatus {
             stage: var_stage,
             done: var_done,
@@ -12580,6 +12652,7 @@ impl SseDecode for crate::api::track::BridgeTrackStatus {
             mean_error: var_meanError,
             points: var_points,
             frames: var_frames,
+            clip_frames: var_clipFrames,
         };
     }
 }
@@ -14602,6 +14675,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeBezierSide>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeBrushShape {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Round => 0.into_dart(),
+            Self::Square => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::layer::BridgeBrushShape
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeBrushShape>
+    for crate::api::layer::BridgeBrushShape
+{
+    fn into_into_dart(self) -> crate::api::layer::BridgeBrushShape {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::cache::BridgeCacheLocation {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -16077,6 +16171,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMask {
             self.opacity.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
             self.feather.into_into_dart().into_dart(),
+            self.vertex_feather.into_into_dart().into_dart(),
             self.expansion.into_into_dart().into_dart(),
             self.path_keys.into_into_dart().into_dart(),
         ]
@@ -16099,7 +16194,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMaskMode {
             Self::Add => 1.into_dart(),
             Self::Subtract => 2.into_dart(),
             Self::Intersect => 3.into_dart(),
-            Self::Difference => 4.into_dart(),
+            Self::Lighten => 4.into_dart(),
+            Self::Darken => 5.into_dart(),
+            Self::Difference => 6.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -16987,6 +17084,28 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.stroke.into_into_dart().into_dart(),
             self.stroke_width.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
+            self.trim_start.into_into_dart().into_dart(),
+            self.trim_end.into_into_dart().into_dart(),
+            self.trim_offset.into_into_dart().into_dart(),
+            self.dashes.into_into_dart().into_dart(),
+            self.dash_offset.into_into_dart().into_dart(),
+            self.gradient.into_into_dart().into_dart(),
+            self.gradient_colour.into_into_dart().into_dart(),
+            self.gradient_start_x.into_into_dart().into_dart(),
+            self.gradient_start_y.into_into_dart().into_dart(),
+            self.gradient_end_x.into_into_dart().into_dart(),
+            self.gradient_end_y.into_into_dart().into_dart(),
+            self.offset_amount.into_into_dart().into_dart(),
+            self.repeat_copies.into_into_dart().into_dart(),
+            self.repeat_offset.into_into_dart().into_dart(),
+            self.repeat_anchor_x.into_into_dart().into_dart(),
+            self.repeat_anchor_y.into_into_dart().into_dart(),
+            self.repeat_position_x.into_into_dart().into_dart(),
+            self.repeat_position_y.into_into_dart().into_dart(),
+            self.repeat_rotation.into_into_dart().into_dart(),
+            self.repeat_scale.into_into_dart().into_dart(),
+            self.repeat_start_opacity.into_into_dart().into_dart(),
+            self.repeat_end_opacity.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -17135,8 +17254,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeStroke {
             self.colour.into_into_dart().into_dart(),
             self.width.into_into_dart().into_dart(),
             self.hardness.into_into_dart().into_dart(),
+            self.shape.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
+            self.start.into_into_dart().into_dart(),
+            self.end.into_into_dart().into_dart(),
             self.mode.into_into_dart().into_dart(),
+            self.blend.into_into_dart().into_dart(),
             self.clone_offset_x.into_into_dart().into_dart(),
             self.clone_offset_y.into_into_dart().into_dart(),
         ]
@@ -17283,6 +17406,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::track::BridgeTrackStatus {
             self.mean_error.into_into_dart().into_dart(),
             self.points.into_into_dart().into_dart(),
             self.frames.into_into_dart().into_dart(),
+            self.clip_frames.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -17869,6 +17993,22 @@ impl SseEncode for crate::api::effect::BridgeBezierSide {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <f64>::sse_encode(self.speed, serializer);
         <f64>::sse_encode(self.influence, serializer);
+    }
+}
+
+impl SseEncode for crate::api::layer::BridgeBrushShape {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::layer::BridgeBrushShape::Round => 0,
+                crate::api::layer::BridgeBrushShape::Square => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -18702,6 +18842,7 @@ impl SseEncode for crate::api::layer::BridgeMask {
         <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
         <crate::api::layer::BridgeMaskMode>::sse_encode(self.mode, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.feather, serializer);
+        <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.vertex_feather, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.expansion, serializer);
         <Vec<crate::api::effect::BridgeKeyframe>>::sse_encode(self.path_keys, serializer);
     }
@@ -18716,7 +18857,9 @@ impl SseEncode for crate::api::layer::BridgeMaskMode {
                 crate::api::layer::BridgeMaskMode::Add => 1,
                 crate::api::layer::BridgeMaskMode::Subtract => 2,
                 crate::api::layer::BridgeMaskMode::Intersect => 3,
-                crate::api::layer::BridgeMaskMode::Difference => 4,
+                crate::api::layer::BridgeMaskMode::Lighten => 4,
+                crate::api::layer::BridgeMaskMode::Darken => 5,
+                crate::api::layer::BridgeMaskMode::Difference => 6,
                 _ => {
                     unimplemented!("");
                 }
@@ -19242,6 +19385,31 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <Option<crate::api::assets::BridgeColourRgba>>::sse_encode(self.stroke, serializer);
         <f64>::sse_encode(self.stroke_width, serializer);
         <f64>::sse_encode(self.opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_start, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_end, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.trim_offset, serializer);
+        <Vec<crate::api::effect::BridgeScalar>>::sse_encode(self.dashes, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.dash_offset, serializer);
+        <u32>::sse_encode(self.gradient, serializer);
+        <Option<crate::api::assets::BridgeColourRgba>>::sse_encode(
+            self.gradient_colour,
+            serializer,
+        );
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_start_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.gradient_end_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.offset_amount, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_copies, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_offset, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_anchor_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_anchor_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_position_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_position_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_rotation, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_scale, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_start_opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_end_opacity, serializer);
     }
 }
 
@@ -19324,8 +19492,12 @@ impl SseEncode for crate::api::layer::BridgeStroke {
         <crate::api::assets::BridgeColourRgba>::sse_encode(self.colour, serializer);
         <f64>::sse_encode(self.width, serializer);
         <f64>::sse_encode(self.hardness, serializer);
+        <crate::api::layer::BridgeBrushShape>::sse_encode(self.shape, serializer);
         <f64>::sse_encode(self.opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.start, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.end, serializer);
         <crate::api::layer::BridgePaintMode>::sse_encode(self.mode, serializer);
+        <u32>::sse_encode(self.blend, serializer);
         <f64>::sse_encode(self.clone_offset_x, serializer);
         <f64>::sse_encode(self.clone_offset_y, serializer);
     }
@@ -19410,6 +19582,7 @@ impl SseEncode for crate::api::track::BridgeTrackStatus {
         <f64>::sse_encode(self.mean_error, serializer);
         <u32>::sse_encode(self.points, serializer);
         <u32>::sse_encode(self.frames, serializer);
+        <u32>::sse_encode(self.clip_frames, serializer);
     }
 }
 

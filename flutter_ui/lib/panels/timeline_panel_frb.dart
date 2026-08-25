@@ -27,6 +27,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
@@ -50,6 +51,8 @@ import '../state/timecode.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
+import '../state/layer_bounds.dart' show shapeContentsRect;
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/marquee.dart';
@@ -4132,12 +4135,14 @@ class _FoldRow extends StatelessWidget {
           },
           onLabelTap: () => onSelectProperty(path),
         ),
-      FoldMaskValueRow(:final mask, :final value) => _MaskValueRow(
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        _MaskValueRow(
           onLabelTap: () => onSelectProperty(path),
           comp: comp,
           layer: layer,
           mask: mask,
           value: value,
+          vertex: vertex,
           valueColumn: valueColumn,
           playheadFrame: playheadFrame,
           onSeek: onSeek,
@@ -4151,6 +4156,33 @@ class _FoldRow extends StatelessWidget {
           layer: layer,
           item: item,
           valueColumn: valueColumn,
+          onChanged: onChanged,
+        ),
+      FoldShapePaintRow(:final item, :final which) => _ShapePaintRow(
+          layer: layer,
+          item: item,
+          which: which,
+          valueColumn: valueColumn,
+          onChanged: onChanged,
+        ),
+      FoldShapeValueRow(:final item, :final value) => _ShapeValueRow(
+          comp: comp,
+          layer: layer,
+          item: item,
+          value: value,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
+          onChanged: onChanged,
+        ),
+      FoldStrokeValueRow(:final stroke, :final value) => _StrokeValueRow(
+          comp: comp,
+          layer: layer,
+          stroke: stroke,
+          value: value,
+          valueColumn: valueColumn,
+          playheadFrame: playheadFrame,
+          onSeek: onSeek,
           onChanged: onChanged,
         ),
       FoldStrokeRow(:final stroke) => _StrokeRow(
@@ -4528,6 +4560,7 @@ BridgeMask maskWith(
   BridgeScalar? opacity,
   BridgeMaskMode? mode,
   BridgeScalar? feather,
+  List<BridgeScalar>? vertexFeather,
   BridgeScalar? expansion,
 }) =>
     BridgeMask(
@@ -4539,6 +4572,7 @@ BridgeMask maskWith(
       opacity: opacity ?? m.opacity,
       mode: mode ?? m.mode,
       feather: feather ?? m.feather,
+      vertexFeather: vertexFeather ?? m.vertexFeather,
       expansion: expansion ?? m.expansion,
       // Where the shape's own keys are is the engine's to say; an edit here
       // never moves them (`set_mask` patches them back).
@@ -4551,6 +4585,8 @@ String maskModeLabel(BridgeMaskMode mode) => switch (mode) {
       BridgeMaskMode.add => l10n.maskModeAdd,
       BridgeMaskMode.subtract => l10n.maskModeSubtract,
       BridgeMaskMode.intersect => l10n.maskModeIntersect,
+      BridgeMaskMode.lighten => l10n.maskModeLighten,
+      BridgeMaskMode.darken => l10n.maskModeDarken,
       BridgeMaskMode.difference => l10n.maskModeDifference,
     };
 
@@ -4701,10 +4737,19 @@ class _MaskRowState extends State<_MaskRow> with _InlineRename<_MaskRow> {
 
   /// Write the mask back with one field changed. The engine takes the whole
   /// mask, so this is the only shape an edit has.
-  void _write({String? name, bool? inverted, BridgeMaskMode? mode}) {
+  void _write({
+    String? name,
+    bool? inverted,
+    BridgeMaskMode? mode,
+    List<BridgeScalar>? vertexFeather,
+  }) {
     try {
       widget.layer.setMask(
-        mask: maskWith(widget.mask, name: name, inverted: inverted, mode: mode),
+        mask: maskWith(widget.mask,
+            name: name,
+            inverted: inverted,
+            mode: mode,
+            vertexFeather: vertexFeather),
       );
       widget.onChanged();
     } catch (_) {
@@ -4798,6 +4843,26 @@ class _MaskRowState extends State<_MaskRow> with _InlineRename<_MaskRow> {
           // The same bare "Rename" the Project panel's row menu offers.
           child: Text(l10n.rename),
         ),
+        // **Where a varying feather is switched on** (K-545). Turning it on
+        // gives every point the width the mask already had, so the picture
+        // does not move until a point is actually dragged; turning it off
+        // drops the points and the one width stands again.
+        MenuRow(
+          key: ValueKey<String>('tl-mask-vary-feather-${widget.mask.id}'),
+          onPressed: () {
+            close(null);
+            final on = widget.mask.vertexFeather.isNotEmpty;
+            _write(
+              vertexFeather: on
+                  ? const []
+                  : List<BridgeScalar>.filled(
+                      widget.mask.vertices.length, widget.mask.feather),
+            );
+          },
+          child: Text(widget.mask.vertexFeather.isEmpty
+              ? l10n.maskFeatherPerPoint
+              : l10n.maskFeatherOneWidth),
+        ),
         MenuRow(
           key: ValueKey<String>('tl-mask-delete-${widget.mask.id}'),
           onPressed: () {
@@ -4815,7 +4880,8 @@ class _MaskRowState extends State<_MaskRow> with _InlineRename<_MaskRow> {
 }
 
 /// One of a mask's values on a row under it (K-222, K-340): its shape, its
-/// opacity, its feather or its expansion.
+/// opacity, its feather — one width or one point's own (K-545) — or its
+/// expansion.
 ///
 /// **Every one of them animates, and animates the way everything else does.**
 /// The row carries the same stopwatch and ◄ ◆ ► the transform and effect rows
@@ -4837,6 +4903,10 @@ class _MaskValueRow extends StatefulWidget {
   final CompositionReference comp;
   final BridgeMask mask;
   final MaskValue value;
+
+  /// Which point this row's width belongs to, for a per-point feather row;
+  /// `-1` on every other row (K-545).
+  final int vertex;
   final ValueColumn valueColumn;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -4855,6 +4925,7 @@ class _MaskValueRow extends StatefulWidget {
     required this.onSeek,
     required this.onChanged,
     this.onLabelTap,
+    this.vertex = -1,
   });
 
   @override
@@ -4869,14 +4940,15 @@ class _MaskValueRowState extends State<_MaskValueRow> {
 
   /// This row's animation. The path has none of its own — its keys are whole
   /// shapes, not numbers — so [maskScalarOf] answers a still zero for it.
-  BridgeScalar get _scalar => maskScalarOf(widget.mask, widget.value);
+  BridgeScalar get _scalar =>
+      maskScalarOf(widget.mask, widget.value, widget.vertex);
 
   /// What a drag on this row may ask for. Feather is a width, so it has no
   /// negative side; expansion grows one way and shrinks the other; opacity is
   /// a percentage.
   (double, double) get _range => switch (widget.value) {
         MaskValue.opacity => (0, 100),
-        MaskValue.feather => (0, 1000),
+        MaskValue.feather || MaskValue.vertexFeather => (0, 1000),
         _ => (-1000, 1000),
       };
 
@@ -4902,7 +4974,7 @@ class _MaskValueRowState extends State<_MaskValueRow> {
           masks: [
             for (final m in widget.layer.getMasks())
               if (m.id == widget.mask.id)
-                maskWithScalar(m, widget.value, v)
+                maskWithScalar(m, widget.value, v, widget.vertex)
               else
                 m,
           ],
@@ -4916,7 +4988,9 @@ class _MaskValueRowState extends State<_MaskValueRow> {
   void _write(BridgeScalar v) {
     setState(() => _staged = null);
     try {
-      widget.layer.setMask(mask: maskWithScalar(widget.mask, widget.value, v));
+      widget.layer.setMask(
+          mask:
+              maskWithScalar(widget.mask, widget.value, v, widget.vertex));
       widget.onChanged();
     } catch (_) {
       // The mask or its layer went away mid-drag.
@@ -4952,7 +5026,7 @@ class _MaskValueRowState extends State<_MaskValueRow> {
             comp: widget.comp,
             playheadFrame: widget.playheadFrame,
             onSeek: widget.onSeek,
-            rowKey: 'tl-mask-${widget.value.name}-${widget.mask.id}',
+            rowKey: _rowKey,
           ),
         const SizedBox(width: 4),
         Expanded(
@@ -4961,7 +5035,7 @@ class _MaskValueRowState extends State<_MaskValueRow> {
             onTap: widget.onLabelTap,
             child: Row(children: [
               Flexible(
-                child: Text(maskValueLabel(widget.value),
+                child: Text(maskValueLabel(widget.value, widget.vertex),
                     style: t.body, overflow: TextOverflow.ellipsis),
               ),
             ]),
@@ -4983,10 +5057,15 @@ class _MaskValueRowState extends State<_MaskValueRow> {
     );
   }
 
+  /// This row's key, which per-point feather rows must not share: they are
+  /// several rows of the same value on the same mask (K-545).
+  String get _rowKey =>
+      'tl-mask-${widget.value.name}-${widget.mask.id}'
+      '${widget.vertex < 0 ? '' : '-${widget.vertex}'}';
+
   Widget _field() {
     final (min, max) = _range;
-    final key =
-        ValueKey<String>('tl-mask-${widget.value.name}-${widget.mask.id}');
+    final key = ValueKey<String>(_rowKey);
     final scalar = _scalar;
     if (scalar is! BridgeScalar_Keyframed) {
       final stored =
@@ -5061,6 +5140,11 @@ class _ItemOpacityRow extends StatefulWidget {
   final VoidCallback onDelete;
   final String deleteLabel;
 
+  /// A control of the item's own, drawn between the name and the value column
+  /// — a paint stroke's blend mode (K-550). Null for a shape item, which has
+  /// no such choice.
+  final Widget? extra;
+
   const _ItemOpacityRow({
     required this.icon,
     required this.name,
@@ -5073,6 +5157,7 @@ class _ItemOpacityRow extends StatefulWidget {
     this.onRename,
     required this.onDelete,
     required this.deleteLabel,
+    this.extra,
   });
 
   @override
@@ -5130,6 +5215,10 @@ class _ItemOpacityRowState extends State<_ItemOpacityRow>
                     style: t.body,
                   ),
           ),
+          if (widget.extra != null) ...[
+            widget.extra!,
+            const SizedBox(width: 6),
+          ],
           SizedBox(
             width: widget.valueColumn.width,
             child: Row(
@@ -5220,16 +5309,7 @@ class _ShapeItemRow extends StatelessWidget {
 
   static BridgeShapeItem _with(BridgeShapeItem i,
           {String? name, double? opacity}) =>
-      BridgeShapeItem(
-        id: i.id,
-        name: name ?? i.name,
-        vertices: i.vertices,
-        closed: i.closed,
-        fill: i.fill,
-        stroke: i.stroke,
-        strokeWidth: i.strokeWidth,
-        opacity: opacity ?? i.opacity,
-      );
+      shapeItemWith(i, name: name, opacity: opacity);
 
   /// Write the contents back with this item changed, or dropped.
   void _write({String? name, double? opacity, bool delete = false}) {
@@ -5303,7 +5383,7 @@ class _StrokeRow extends StatelessWidget {
     required this.comp,
   });
 
-  static BridgeStroke _withOpacity(BridgeStroke s, double opacity) =>
+  static BridgeStroke _with(BridgeStroke s, {double? opacity, int? blend}) =>
       BridgeStroke(
         id: s.id,
         name: s.name,
@@ -5311,8 +5391,12 @@ class _StrokeRow extends StatelessWidget {
         colour: s.colour,
         width: s.width,
         hardness: s.hardness,
-        opacity: opacity,
+        shape: s.shape,
+        opacity: opacity ?? s.opacity,
+        start: s.start,
+        end: s.end,
         mode: s.mode,
+        blend: blend ?? s.blend,
         cloneOffsetX: s.cloneOffsetX,
         cloneOffsetY: s.cloneOffsetY,
       );
@@ -5347,7 +5431,7 @@ class _StrokeRow extends StatelessWidget {
             layer: layer,
             strokes: [
               for (final s in layer.getPaint())
-                if (s.id == stroke.id) _withOpacity(s, opacity) else s,
+                if (s.id == stroke.id) _with(s, opacity: opacity) else s,
             ],
           );
         } catch (_) {
@@ -5356,7 +5440,7 @@ class _StrokeRow extends StatelessWidget {
       },
       onCommit: (opacity) {
         try {
-          layer.setStroke(stroke: _withOpacity(stroke, opacity));
+          layer.setStroke(stroke: _with(stroke, opacity: opacity));
           onChanged();
         } catch (_) {
           // The stroke or its layer went away between the draw and the
@@ -5370,6 +5454,532 @@ class _StrokeRow extends StatelessWidget {
         } catch (_) {}
       },
       deleteLabel: l10n.deleteStroke,
+      // The layer blend list, on a stroke (K-550) — the same words, from the
+      // same engine table, so a mark blends by the name it blends by
+      // everywhere else.
+      extra: _StrokeBlendPicker(
+        layer: layer,
+        stroke: stroke,
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+/// A stroke's blend mode (K-550), on the stroke's own Timeline row.
+///
+/// The engine's list, read once and held: `listBlendModes` is a table of
+/// English words the engine owns, and every one of them has a translation
+/// entry already because a layer's own picker shows the same list.
+class _StrokeBlendPicker extends StatelessWidget {
+  final LayerReference layer;
+  final BridgeStroke stroke;
+  final VoidCallback onChanged;
+
+  const _StrokeBlendPicker({
+    required this.layer,
+    required this.stroke,
+    required this.onChanged,
+  });
+
+  static List<String>? _modes;
+
+  @override
+  Widget build(BuildContext context) {
+    final modes = _modes ??= listBlendModes();
+    return SizedBox(
+      width: 96,
+      child: BareDropdown<int>(
+        key: ValueKey<String>('tl-stroke-blend-${stroke.id}'),
+        value: stroke.blend < modes.length ? stroke.blend : 0,
+        options: [for (var i = 0; i < modes.length; i++) i],
+        label: (i) => engineLabel(modes[i]),
+        onChanged: (i) {
+          try {
+            layer.setStroke(stroke: _StrokeRow._with(stroke, blend: i));
+            onChanged();
+          } catch (_) {
+            // The stroke or its layer went away between the draw and the click.
+          }
+        },
+      ),
+    );
+  }
+}
+
+/// A stroke's Start or End (K-549) — the pair that draws a stroke on.
+///
+/// The same shape as [_MaskValueRow], and for the same reasons: the value is
+/// staged and previewed through the paint preview while it is dragged, the
+/// release commits one op, and an edit on an animated one lands on the key
+/// under the playhead rather than flattening the curve.
+class _StrokeValueRow extends StatefulWidget {
+  final CompositionReference comp;
+  final LayerReference layer;
+  final BridgeStroke stroke;
+  final StrokeValue value;
+  final ValueColumn valueColumn;
+  final int playheadFrame;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onChanged;
+
+  const _StrokeValueRow({
+    required this.comp,
+    required this.layer,
+    required this.stroke,
+    required this.value,
+    required this.valueColumn,
+    required this.playheadFrame,
+    required this.onSeek,
+    required this.onChanged,
+  });
+
+  @override
+  State<_StrokeValueRow> createState() => _StrokeValueRowState();
+}
+
+class _StrokeValueRowState extends State<_StrokeValueRow> {
+  double? _staged;
+  final PreviewThrottle _throttle = PreviewThrottle();
+
+  BridgeScalar get _scalar => strokeScalarOf(widget.stroke, widget.value);
+
+  String get _rowKey => 'tl-stroke-${widget.value.name}-${widget.stroke.id}';
+
+  @override
+  void dispose() {
+    _throttle.cancel();
+    super.dispose();
+  }
+
+  /// Show the value the drag is passing through without writing it (K-240).
+  /// The whole stroke list is sent with this one number replaced, because
+  /// paint is stored and committed as a whole list.
+  void _preview(BridgeScalar v) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithPaintPreview(
+          frame: BigInt.from(ui.playheadFrame.value),
+          scale: ui.viewerScale,
+          layer: widget.layer,
+          strokes: [
+            for (final s in widget.layer.getPaint())
+              if (s.id == widget.stroke.id)
+                strokeWithScalar(s, widget.value, v)
+              else
+                s,
+          ],
+        );
+      } catch (_) {
+        // A preview is a courtesy; the drag carries on without it.
+      }
+    });
+  }
+
+  void _write(BridgeScalar v) {
+    setState(() => _staged = null);
+    try {
+      widget.layer
+          .setStroke(stroke: strokeWithScalar(widget.stroke, widget.value, v));
+      widget.onChanged();
+    } catch (_) {
+      // The stroke or its layer went away mid-drag.
+    }
+  }
+
+  void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
+
+  void _commitKeyed(double v) =>
+      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      children: [
+        KeyframeControlsFrb(
+          scalars: [_scalar],
+          onWrite: (s) => _write(s.first),
+          comp: widget.comp,
+          playheadFrame: widget.playheadFrame,
+          onSeek: widget.onSeek,
+          rowKey: _rowKey,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(strokeValueLabel(widget.value),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
+        SizedBox(
+          width: widget.valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 72, child: _field()),
+          ),
+        ),
+        SizedBox(width: widget.valueColumn.rightInset),
+      ],
+    );
+  }
+
+  Widget _field() {
+    final key = ValueKey<String>(_rowKey);
+    final scalar = _scalar;
+    if (scalar is! BridgeScalar_Keyframed) {
+      final stored =
+          _staged ?? (scalar is BridgeScalar_Static ? scalar.field0 : 0.0);
+      return DragValueField(
+        key: key,
+        value: stored,
+        min: 0,
+        max: 100,
+        decimals: 1,
+        suffix: '%',
+        onChanged: _commitStatic,
+        onChangeLive: (v) {
+          setState(() => _staged = v.toDouble());
+          _preview(BridgeScalar.static_(v.toDouble()));
+        },
+        onChangeEnd: _commitStatic,
+        onDragCancel: () {
+          setState(() => _staged = null);
+          _preview(scalar);
+        },
+      );
+    }
+    // Animated: the field shows what the curve reads at the playhead, and an
+    // edit writes the key there.
+    return KeyedValueField(
+      fieldKey: key,
+      value:
+          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      min: 0,
+      max: 100,
+      decimals: 1,
+      suffix: '%',
+      onCommit: _commitKeyed,
+    );
+  }
+}
+
+/// One of a shape item's animatable numbers in the Timeline (K-551) — its Trim
+/// start, end or offset — on the same shape of row a stroke's write-on uses.
+///
+/// The whole contents list is sent for every write, because a shape layer's art
+/// is stored and committed as a whole list (K-237): a preview shaped differently
+/// from the op would be a second description of the same thing.
+class _ShapeValueRow extends StatefulWidget {
+  final CompositionReference comp;
+  final LayerReference layer;
+  final BridgeShapeItem item;
+  final ShapeValue value;
+  final ValueColumn valueColumn;
+  final int playheadFrame;
+  final ValueChanged<int> onSeek;
+  final VoidCallback onChanged;
+
+  const _ShapeValueRow({
+    required this.comp,
+    required this.layer,
+    required this.item,
+    required this.value,
+    required this.valueColumn,
+    required this.playheadFrame,
+    required this.onSeek,
+    required this.onChanged,
+  });
+
+  @override
+  State<_ShapeValueRow> createState() => _ShapeValueRowState();
+}
+
+class _ShapeValueRowState extends State<_ShapeValueRow> {
+  double? _staged;
+  final PreviewThrottle _throttle = PreviewThrottle();
+
+  BridgeScalar get _scalar => shapeScalarOf(widget.item, widget.value);
+
+  String get _rowKey => 'tl-shape-${widget.value.name}-${widget.item.id}';
+
+  /// The trim's two ends are a per cent of the path's own length; its offset is
+  /// degrees, because degrees go round; the dashes are lengths in layer pixels.
+  (double, double, String) get _units => switch (widget.value) {
+        // Out or in, in layer pixels.
+        ShapeValue.offsetPath => (-1000, 1000, ' px'),
+        // Where the ramp starts and ends, in the art's own coordinates.
+        ShapeValue.gradientStartX ||
+        ShapeValue.gradientStartY ||
+        ShapeValue.gradientEndX ||
+        ShapeValue.gradientEndY =>
+          (-10000, 10000, ' px'),
+        ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
+        ShapeValue.trimOffset => (-3600, 3600, '°'),
+        ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
+        ShapeValue.dashOffset => (-1000, 1000, ' px'),
+        // The repeater: the count and which copy the original is are whole
+        // things, and the step is read in the units the layer's own transform
+        // is — pixels, degrees, per cent.
+        ShapeValue.repeatCopies => (1, maxShapeCopies, ''),
+        ShapeValue.repeatOffset => (-maxShapeCopies, maxShapeCopies, ''),
+        ShapeValue.repeatAnchorX ||
+        ShapeValue.repeatAnchorY ||
+        ShapeValue.repeatPositionX ||
+        ShapeValue.repeatPositionY =>
+          (-10000, 10000, ' px'),
+        ShapeValue.repeatRotation => (-3600, 3600, '°'),
+        ShapeValue.repeatScale => (-1000, 1000, '%'),
+        ShapeValue.repeatStartOpacity ||
+        ShapeValue.repeatEndOpacity =>
+          (0, 100, '%'),
+      };
+  double get _min => _units.$1;
+  double get _max => _units.$2;
+  String get _suffix => _units.$3;
+
+  @override
+  void dispose() {
+    _throttle.cancel();
+    super.dispose();
+  }
+
+  /// Show the value the drag is passing through without writing it (K-240).
+  void _preview(BridgeScalar v) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithShapePreview(
+          frame: BigInt.from(ui.playheadFrame.value),
+          scale: ui.viewerScale,
+          layer: widget.layer,
+          contents: [
+            for (final i in widget.layer.getShapeContents())
+              if (i.id == widget.item.id)
+                shapeWithScalar(i, widget.value, v)
+              else
+                i,
+          ],
+        );
+      } catch (_) {
+        // A preview is a courtesy; the drag carries on without it.
+      }
+    });
+  }
+
+  void _write(BridgeScalar v) {
+    setState(() => _staged = null);
+    try {
+      widget.layer.setShapeContents(contents: [
+        for (final i in widget.layer.getShapeContents())
+          if (i.id == widget.item.id) shapeWithScalar(i, widget.value, v) else i,
+      ]);
+      widget.onChanged();
+    } catch (_) {
+      // The item or its layer went away mid-drag.
+    }
+  }
+
+  void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
+
+  void _commitKeyed(double v) =>
+      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return Row(
+      children: [
+        KeyframeControlsFrb(
+          scalars: [_scalar],
+          onWrite: (s) => _write(s.first),
+          comp: widget.comp,
+          playheadFrame: widget.playheadFrame,
+          onSeek: widget.onSeek,
+          rowKey: _rowKey,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(shapeValueLabel(widget.value),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
+        SizedBox(
+          width: widget.valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(width: 72, child: _field()),
+          ),
+        ),
+        SizedBox(width: widget.valueColumn.rightInset),
+      ],
+    );
+  }
+
+  Widget _field() {
+    final key = ValueKey<String>(_rowKey);
+    final scalar = _scalar;
+    if (scalar is! BridgeScalar_Keyframed) {
+      final stored =
+          _staged ?? (scalar is BridgeScalar_Static ? scalar.field0 : 0.0);
+      return DragValueField(
+        key: key,
+        value: stored,
+        min: _min,
+        max: _max,
+        decimals: 1,
+        suffix: _suffix,
+        onChanged: _commitStatic,
+        onChangeLive: (v) {
+          setState(() => _staged = v.toDouble());
+          _preview(BridgeScalar.static_(v.toDouble()));
+        },
+        onChangeEnd: _commitStatic,
+        onDragCancel: () {
+          setState(() => _staged = null);
+          _preview(scalar);
+        },
+      );
+    }
+    // Animated: the field shows what the curve reads at the playhead, and an
+    // edit writes the key there.
+    return KeyedValueField(
+      fieldKey: key,
+      value:
+          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      min: _min,
+      max: _max,
+      decimals: 1,
+      suffix: _suffix,
+      onCommit: _commitKeyed,
+    );
+  }
+}
+
+/// A shape item's fill colour, its gradient choice, or the gradient's second
+/// colour (K-555). None of the three is a number, so this row carries a swatch
+/// or a dropdown where the others carry a value field — and no stopwatch,
+/// because none of them keys.
+class _ShapePaintRow extends StatelessWidget {
+  final LayerReference layer;
+  final BridgeShapeItem item;
+  final ShapePaint which;
+  final ValueColumn valueColumn;
+  final VoidCallback onChanged;
+
+  const _ShapePaintRow({
+    required this.layer,
+    required this.item,
+    required this.which,
+    required this.valueColumn,
+    required this.onChanged,
+  });
+
+  /// The whole list back with this item changed — how every shape edit is
+  /// written (K-283), so this is one op and one undo step.
+  void _write(BridgeShapeItem Function(BridgeShapeItem) change) {
+    try {
+      layer.setShapeContents(contents: [
+        for (final other in layer.getShapeContents())
+          if (other.id == item.id) change(other) else other,
+      ]);
+      onChanged();
+    } catch (_) {
+      // The item or its layer went away between the draw and the click.
+    }
+  }
+
+  /// The far end of the ramp before anybody has picked one: black, which is
+  /// what the engine draws for a gradient with no second colour.
+  static const _defaultEnd = BridgeColourRgba(r: 0, g: 0, b: 0, a: 1);
+
+  Color _shown(BridgeColourRgba c) => documentColour(
+        (c.r.clamp(0.0, 1.0) * 255).round(),
+        (c.g.clamp(0.0, 1.0) * 255).round(),
+        (c.b.clamp(0.0, 1.0) * 255).round(),
+        255,
+      );
+
+  BridgeColourRgba _picked(PickedColour p, double alpha) =>
+      BridgeColourRgba(r: p.r, g: p.g, b: p.b, a: alpha);
+
+  /// Where a ramp nobody has aimed should start and end: down the art's own
+  /// box for a linear one, out from its middle for a radial one. A gradient
+  /// that read as one flat colour the moment it was switched on would look
+  /// broken rather than unaimed.
+  BridgeShapeItem _aimed(BridgeShapeItem i, int kind) {
+    final aimed = i.gradientStartX != const BridgeScalar.static_(0) ||
+        i.gradientEndX != const BridgeScalar.static_(0) ||
+        i.gradientStartY != const BridgeScalar.static_(0) ||
+        i.gradientEndY != const BridgeScalar.static_(0);
+    if (kind == 0 || aimed) return shapeItemWith(i, gradient: kind);
+    final box = shapeContentsRect([i]);
+    if (box == null) return shapeItemWith(i, gradient: kind);
+    final (start, end) = kind == 2
+        ? (box.center, Offset(box.right, box.center.dy))
+        : (Offset(box.center.dx, box.top), Offset(box.center.dx, box.bottom));
+    return shapeItemWith(
+      i,
+      gradient: kind,
+      gradientStartX: BridgeScalar.static_(start.dx),
+      gradientStartY: BridgeScalar.static_(start.dy),
+      gradientEndX: BridgeScalar.static_(end.dx),
+      gradientEndY: BridgeScalar.static_(end.dy),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final key = 'tl-shape-${which.name}-${item.id}';
+    return Row(
+      children: [
+        // The width the stopwatch and its gap take on every other row, so the
+        // labels line up down the fold.
+        const SizedBox(width: 24),
+        Expanded(
+          child: Text(shapePaintLabel(which),
+              style: t.body, overflow: TextOverflow.ellipsis),
+        ),
+        SizedBox(
+          width: valueColumn.width,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: switch (which) {
+              ShapePaint.gradient => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: item.gradient <= 2 ? item.gradient : 0,
+                    options: const [0, 1, 2],
+                    label: (k) => switch (k) {
+                      1 => l10n.shapeGradientLinear,
+                      2 => l10n.shapeGradientRadial,
+                      _ => l10n.shapeGradientFlat,
+                    },
+                    onChanged: (k) => _write((i) => _aimed(i, k)),
+                  ),
+                ),
+              ShapePaint.fill => ColourSwatchButton(
+                  key: ValueKey<String>(key),
+                  colour: _shown(item.fill ?? _defaultEnd),
+                  // A shape's colours are scene-linear, so the picker counts
+                  // in 0—1 rather than in bytes.
+                  scale: ColourScale.unit,
+                  onPicked: (p) => _write((i) => shapeItemWith(i,
+                      fill: _picked(p, i.fill?.a ?? 1))),
+                ),
+              ShapePaint.gradientColour => ColourSwatchButton(
+                  key: ValueKey<String>(key),
+                  colour: _shown(item.gradientColour ?? _defaultEnd),
+                  scale: ColourScale.unit,
+                  onPicked: (p) => _write((i) => shapeItemWith(i,
+                      gradientColour:
+                          _picked(p, i.gradientColour?.a ?? 1))),
+                ),
+            },
+          ),
+        ),
+        SizedBox(width: valueColumn.rightInset),
+      ],
     );
   }
 }
@@ -6633,7 +7243,10 @@ String? graphChannelUnit(GraphChannel channel) {
   if (channel.maskValue case final value?) {
     return switch (value) {
       MaskValue.opacity => l10n.unitSymbolPercent,
-      MaskValue.feather || MaskValue.expansion => l10n.unitSymbolPx,
+      MaskValue.feather ||
+      MaskValue.vertexFeather ||
+      MaskValue.expansion =>
+        l10n.unitSymbolPx,
       MaskValue.path => null,
     };
   }

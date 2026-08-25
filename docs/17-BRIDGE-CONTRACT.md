@@ -448,8 +448,12 @@ Nothing here does the work; this is the doorway.
   solved position of the named tracks, turned to face the camera at that frame.
 - **Up, and polled** — `track_status(layer)` is one `BridgeTrackStatus`: a stage
   (idle/queued/tracking/solving/done/cancelled/failed), the frames done and total, the
-  solve's mean reprojection error, its point and frame counts, and — on a refusal — a
-  `BridgeTrackFailure`. It is **read, never subscribed to**: the engine keeps the reading as
+  solve's mean reprojection error, its point count, the frames it covers **and the frames the
+  clip has**, and — on a refusal — a `BridgeTrackFailure`. The last pair is the partial track
+  (K-540): `frames < clip_frames` says the analysis stopped before the end of the shot, and
+  since the span is always a prefix — the job follows the source from its first frame and can
+  only ever stop early — those two numbers are the whole of the bar the panel draws and the
+  sentence it writes. It is **read, never subscribed to**: the engine keeps the reading as
   a value and whoever repaints samples it, exactly as the cache bar is sampled. The panel
   polls twice a second *only while a job is moving*, and stops the moment it is not.
 - **The failure is a reason, not a sentence** — the same K-303 chain the import report uses,

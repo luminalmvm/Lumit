@@ -26,8 +26,8 @@ to ramp speed or hold a frame. It can also run footage backwards.
 | 0% | A **freeze**. The frame holds. |
 | −100% | Reverse. |
 
-Speed is usually only useful if you edit with the Velocty style graph instead of the
-Value graph.
+Speed is easiest to work with through the **Speed** lens of the graph editor rather than
+the Value lens, which shows which moment of the source is on screen instead.
 
 ## Make a speed ramp
 
@@ -47,24 +47,35 @@ Overrun never moves layer boundaries or edit points.
 
 ## Frame interpolation
 
-When a retime lands between two source frames, it will act as if it's holding the last frame.
-However Lumit can synthesise one when the flow switch is toggled:
+When a retime lands between two source frames, Lumit has to decide what to show. The
+**In-between frames** setting on a footage layer's Source card offers two answers:
 
 | Mode | How |
 | --- | --- |
 | **Nearest** | Repeat the closer frame. Sharp, but it stutters. |
 | **Blend** | Crossfade the two frames. Smooth, but it ghosts. |
-| **Flow** | Synthesise a new frame from optical flow. |
 
-Flow interpolation is a render setting. It does not change the retime map.
+The third answer is **Flow**, which measures the motion between the two frames and
+synthesises the one in between. It is the **Flow** switch in the layer's switch cluster
+rather than an entry in that dropdown, because it is the most expensive thing a layer can
+ask for and it carries controls of its own. Turning it on reveals a **Flow** group in the
+Effect Controls panel: measurement resolution, input rate, vector detail, smoothness, how
+occlusions are handled, what to fall back to, a guard for on-screen overlays, and a switch
+to force it on where it would otherwise stand down.
 
-:::note[Partly built]
-Flow interpolation is not finished. Nearest and blend work now.
-:::
+Turning Flow off returns the layer to Nearest and parks the group's settings, so comparing
+a flow shot against the plain one costs nothing.
+
+Frame interpolation is a render setting either way. It does not change the retime map.
 
 ## Stretch
 
-**Stretch** is a uniform rate multiplier on the whole layer. Unlike Retime, stretch
+:::note[Not built yet]
+Stretch is specified but not built. Use Retime for now: a straight line through the graph
+is a constant rate.
+:::
+
+**Stretch** would be a uniform rate multiplier on the whole layer. Unlike Retime, it
 rescales the layer's keyframes with it.
 
 ## Related

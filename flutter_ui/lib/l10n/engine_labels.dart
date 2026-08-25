@@ -172,6 +172,7 @@ Map<String, String> get _table => {
       "In low": l10n.fxInLow,
       "Initial speed": l10n.fxInitialSpeed,
       "Inside colour": l10n.fxInsideColour,
+      "Inside mask": l10n.fxInsideMask,
       "Jagged": l10n.fxJagged,
       "Life": l10n.fxLife,
       "Life jitter": l10n.fxLifeJitter,
@@ -200,6 +201,7 @@ Map<String, String> get _table => {
       "Out high": l10n.fxOutHigh,
       "Out low": l10n.fxOutLow,
       "Outside colour": l10n.fxOutsideColour,
+      "Outside mask": l10n.fxOutsideMask,
       "Paint style": l10n.fxPaintStyle,
       "Particle": l10n.fxParticle,
       "Particulate": l10n.fxParticulate,
@@ -251,6 +253,7 @@ Map<String, String> get _table => {
       "Sprite": l10n.fxSprite,
       "Sprite layer": l10n.fxSpriteLayer,
       "Star depth": l10n.fxStarDepth,
+      "sRGB": l10n.fxSrgb,
       "Star": l10n.fxStar,
       "Start": l10n.fxStart,
       "Start thickness": l10n.fxStartThickness,
@@ -318,6 +321,8 @@ Map<String, String> get _table => {
       "Depth of field": l10n.fxDepthOfField,
       "Despill amount": l10n.fxDespillAmount,
       "Despill bias": l10n.fxDespillBias,
+      "Despot black": l10n.fxDespotBlack,
+      "Despot white": l10n.fxDespotWhite,
       "Detail": l10n.fxDetail,
       "Detect edge threshold": l10n.fxDetectEdgeThreshold,
       "Diagonal": l10n.fxDiagonal,
@@ -420,6 +425,7 @@ Map<String, String> get _table => {
       "Inflate": l10n.fxInflate,
       "Input": l10n.fxInput,
       "Input black": l10n.fxInputBlack,
+      "Input space": l10n.fxInputSpace,
       "Input white": l10n.fxInputWhite,
       "Intensity": l10n.fxIntensity,
       "Interlace offset": l10n.fxInterlaceOffset,
@@ -533,6 +539,7 @@ Map<String, String> get _table => {
       "Radial wipe": l10n.fxRadialWipe,
       "Radius": l10n.fxRadius,
       "Ramp": l10n.fxRamp,
+      "Rec. 709": l10n.fxRec709,
       "Rectangular to polar": l10n.fxRectangularToPolar,
       "Red": l10n.fxRed,
       "Red blur": l10n.fxRedBlur,
@@ -559,6 +566,7 @@ Map<String, String> get _table => {
       "Roll speed": l10n.fxRollSpeed,
       "Rotation": l10n.fxRotation,
       "Rotation amount": l10n.fxRotationAmount,
+      "Rotation frequency": l10n.fxRotationFrequency,
       "Rotation jitter": l10n.fxRotationJitter,
       "Rotation °": l10n.fxRotationDeg,
       "Roughen": l10n.fxRoughen,
@@ -580,6 +588,9 @@ Map<String, String> get _table => {
       "Screen colour": l10n.fxScreenColour,
       "Screen gain": l10n.fxScreenGain,
       "Screen matte": l10n.fxScreenMatte,
+      "Screen pre-blur": l10n.fxScreenPreBlur,
+      "Screen shrink/grow": l10n.fxScreenShrinkGrow,
+      "Screen softness": l10n.fxScreenSoftness,
       "Seed": l10n.fxSeed,
       "Sepia": l10n.fxSepia,
       "Set matte": l10n.fxSetMatte,
@@ -905,6 +916,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeLayerSpanRepaired;
     case 'audio_layer_as_footage':
       return l10n.aeAudioLayerAsFootage;
+    case 'audio_levels_differ':
+      return l10n.aeAudioLevelsDiffer(a('left'), a('right'));
     case 'guide_layer_not_supported':
       return l10n.aeGuideLayerNotSupported;
     case 'preserve_transparency_not_supported':
@@ -943,8 +956,6 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeChunkUnreadable(a('chunk'));
 
     // Masks.
-    case 'mask_mode_unavailable':
-      return l10n.aeMaskModeUnavailable(a('ae_mode'));
     case 'mask_feather_axes_differ':
       return l10n.aeMaskFeatherAxesDiffer(a('x'), a('y'));
     case 'mask_roto_bezier_flattened':
@@ -953,6 +964,8 @@ String? importReason(String key, Map<String, String> args) {
     // Effects.
     case 'effect_placeholder':
       return l10n.aeEffectPlaceholder(a('match_name'));
+    case 'effect_params_unreadable':
+      return l10n.aeEffectParamsUnreadable(a('count'));
     case 'effect_param_not_carried':
       return l10n.aeEffectParamNotCarried(a('effect'), a('param'));
     case 'effect_param_approximated':

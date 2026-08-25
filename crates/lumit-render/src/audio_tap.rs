@@ -170,6 +170,7 @@ mod tests {
         let mut doc = Document::new();
         let item = Uuid::now_v7();
         doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
             id: item,
             name: "tone.flac".into(),
             media: MediaRef {

@@ -3290,7 +3290,13 @@ fn render_comp_with_preview(
         apply_text_preview(&mut comp.layers[index].kind, document);
     }
     if let Some(paint) = req.paint {
-        comp.layers[index].paint = paint.into_iter().map(|s| s.write()).collect();
+        // Keys cross the seam on the comp clock (K-213), so the layer's own
+        // zero comes back off on the way in, exactly as the retime below does.
+        let offset = comp.layers[index].start_offset.0;
+        comp.layers[index].paint = paint
+            .into_iter()
+            .map(|s| s.write_at(offset))
+            .collect::<Result<Vec<_>, _>>()?;
     }
     if let Some(map) = req.retime {
         // Keys cross the seam on the comp clock (K-213), so the layer's own
@@ -3332,8 +3338,15 @@ fn render_comp_with_preview(
         // Only a shape layer has art; a stale request against another kind
         // renders the layer as it stands rather than failing the frame, which
         // is the same courtesy `apply_text_preview` gives.
+        // The preview's art is the layer's own, so its trims read on the
+        // layer's clock, exactly as its masks do above.
+        let offset = comp.layers[index].start_offset.0;
         if let lumit_core::model::LayerKind::Shape { contents } = &mut comp.layers[index].kind {
-            *contents = items.into_iter().map(|i| i.write_item()).collect();
+            let written: Result<Vec<_>, _> =
+                items.into_iter().map(|i| i.write_item(offset)).collect();
+            if let Ok(written) = written {
+                *contents = written;
+            }
         }
     }
     if let Some(transform) = &req.transform {
@@ -5014,15 +5027,21 @@ mod tests {
             },
             width: 12.0,
             hardness: 0.8,
+            shape: crate::api::layer::BridgeBrushShape::Round,
             // Mid-drag values are provisional, so an out-of-range one must be
             // clamped rather than rendered — the same rule the commit follows.
             opacity: 140.0,
+            start: crate::api::effect::BridgeScalar::Static(0.0),
+            end: crate::api::effect::BridgeScalar::Static(100.0),
             mode: BridgePaintMode::Paint,
+            blend: 0,
             clone_offset_x: 0.0,
             clone_offset_y: 0.0,
         };
 
-        let written = stroke.write();
+        let written = stroke
+            .write_at(lumit_core::time::Rational::ZERO)
+            .expect("a valid stroke");
         assert_eq!(written.name, "Brush 1");
         assert_eq!(written.points.len(), 2);
         assert_eq!(written.points[1], (40.0, 50.0));

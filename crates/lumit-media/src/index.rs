@@ -1,6 +1,7 @@
 //! The frame index (docs/impl/media-io.md §2): a packet scan without decoding
 //! that maps frame number ↔ pts ↔ nearest keyframe, cached in the sidecar.
 
+use crate::sequence::MediaSource;
 use crate::{Fingerprint, MediaError};
 use rsmpeg::ffi;
 use std::path::{Path, PathBuf};
@@ -101,26 +102,31 @@ impl FrameIndex {
 /// the cache directory cannot be written after a build (the index is still
 /// returned; only the next session pays for it again).
 pub fn load_or_build_index(
-    path: &Path,
+    src: impl Into<MediaSource>,
     cache_dir: Option<&Path>,
 ) -> Result<FrameIndex, MediaError> {
-    load_or_build_with(path, cache_dir, build_frame_index)
+    load_or_build_with(&src.into(), cache_dir, |src| build_frame_index(src.clone()))
 }
 
 /// [`load_or_build_index`] with the build step injected, which is what lets the
 /// cache decision — hit, stale, corrupt, absent — be tested without a media
 /// file and without ffmpeg: the fake builder counts the scans that were avoided.
 pub(crate) fn load_or_build_with(
-    path: &Path,
+    src: &MediaSource,
     cache_dir: Option<&Path>,
-    build: impl FnOnce(&Path) -> Result<FrameIndex, MediaError>,
+    build: impl FnOnce(&MediaSource) -> Result<FrameIndex, MediaError>,
 ) -> Result<FrameIndex, MediaError> {
-    if let (Some(dir), Ok(fp)) = (cache_dir, Fingerprint::of(path)) {
+    // An image sequence is never cached, and never needs to be: its index is
+    // two packet reads and some arithmetic (see [`build_frame_index`]), while
+    // the sidecar is named after one file's fingerprint and could not tell a
+    // run of 300 frames from the same run with 400 in it.
+    let cache_dir = cache_dir.filter(|_| src.sequence_fps.is_none());
+    if let (Some(dir), Ok(fp)) = (cache_dir, Fingerprint::of(src.on_disk())) {
         if let Some(index) = FrameIndex::load_cached(dir, &fp) {
             return Ok(index);
         }
     }
-    let index = build(path)?;
+    let index = build(src)?;
     if let Some(dir) = cache_dir {
         let _ = index.save_to(dir);
     }
@@ -131,9 +137,10 @@ pub(crate) fn load_or_build_with(
 /// index. Seconds for an hour of 4K — run on a background thread. Prefer
 /// [`load_or_build_index`], which pays this cost once per file rather than once
 /// per session.
-pub fn build_frame_index(path: &Path) -> Result<FrameIndex, MediaError> {
-    let fingerprint = Fingerprint::of(path)?;
-    let mut input = crate::probe::open_input(path)?;
+pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, MediaError> {
+    let src = src.into();
+    let fingerprint = Fingerprint::of(src.on_disk())?;
+    let mut input = crate::probe::open_input(&src)?;
 
     let (stream_index, timebase) = input
         .streams()
@@ -141,6 +148,47 @@ pub fn build_frame_index(path: &Path) -> Result<FrameIndex, MediaError> {
         .find(|s| s.codecpar().codec_type == ffi::AVMEDIA_TYPE_VIDEO)
         .map(|s| (s.index, s.time_base))
         .ok_or(MediaError::NoStreams)?;
+
+    // An image sequence needs no scan. Every file is one packet and one
+    // keyframe, evenly spaced, and how many of them there are was already
+    // counted off the directory — so reading the first two packets to learn
+    // where the clock starts and how far it steps is enough to write the whole
+    // table out. Read rather than assumed: `image2` sets the stream's timebase
+    // from the frame rate we passed it, but `avformat_find_stream_info` is
+    // entitled to refine both, and two file reads is a cheap way not to care.
+    // The alternative is a scan that reads every file's bytes — tens of
+    // gigabytes for a feature-length OpenEXR render, for a table this arithmetic
+    // gives exactly.
+    if let Some((run, _)) = src.run() {
+        let mut first: Vec<i64> = Vec::new();
+        while first.len() < 2 {
+            let Some(packet) = input.read_packet()? else {
+                break;
+            };
+            if packet.stream_index == stream_index && packet.pts != ffi::AV_NOPTS_VALUE {
+                first.push(packet.pts);
+            }
+        }
+        let start = first.first().copied().unwrap_or(0);
+        let step = match (first.first(), first.get(1)) {
+            (Some(a), Some(b)) if b > a => b - a,
+            _ => 1,
+        };
+        let entries = (0..i64::from(run.count))
+            .map(|n| IndexEntry {
+                pts: start + n * step,
+                keyframe: true,
+            })
+            .collect();
+        return Ok(FrameIndex {
+            timebase_num: timebase.num,
+            timebase_den: timebase.den,
+            entries,
+            vfr: false,
+            median_delta: step,
+            fingerprint,
+        });
+    }
 
     let mut entries = Vec::new();
     while let Some(packet) = input.read_packet()? {
@@ -534,7 +582,8 @@ mod tests {
     // sidecar and paying for a packet scan. `frames` in the synthetic index
     // says which index the caller ended up with.
 
-    fn synthetic_index(path: &Path, frames: usize) -> FrameIndex {
+    fn synthetic_index(src: &MediaSource, frames: usize) -> FrameIndex {
+        let path = src.on_disk();
         FrameIndex {
             timebase_num: 1,
             timebase_den: 60,
@@ -566,10 +615,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = media_file(dir.path(), 7, 4096);
         let cache = dir.path().join("media-index");
-        synthetic_index(&file, 7).save_to(&cache).unwrap();
+        synthetic_index(&MediaSource::file(&file), 7)
+            .save_to(&cache)
+            .unwrap();
 
         let scans = std::cell::Cell::new(0);
-        let index = load_or_build_with(&file, Some(&cache), |p| {
+        let index = load_or_build_with(&MediaSource::file(&file), Some(&cache), |p| {
             scans.set(scans.get() + 1);
             Ok(synthetic_index(p, 99))
         })
@@ -587,13 +638,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = media_file(dir.path(), 7, 4096);
         let cache = dir.path().join("media-index");
-        synthetic_index(&file, 7).save_to(&cache).unwrap();
+        synthetic_index(&MediaSource::file(&file), 7)
+            .save_to(&cache)
+            .unwrap();
 
         // Re-export over the same path: same name, different bytes.
         std::fs::write(&file, vec![9u8; 8192]).unwrap();
 
         let scans = std::cell::Cell::new(0);
-        let index = load_or_build_with(&file, Some(&cache), |p| {
+        let index = load_or_build_with(&MediaSource::file(&file), Some(&cache), |p| {
             scans.set(scans.get() + 1);
             Ok(synthetic_index(p, 3))
         })
@@ -622,7 +675,7 @@ mod tests {
         std::fs::write(FrameIndex::cache_path(&cache, &fp), b"not an index").unwrap();
 
         let scans = std::cell::Cell::new(0);
-        let index = load_or_build_with(&file, Some(&cache), |p| {
+        let index = load_or_build_with(&MediaSource::file(&file), Some(&cache), |p| {
             scans.set(scans.get() + 1);
             Ok(synthetic_index(p, 5))
         })
@@ -646,7 +699,7 @@ mod tests {
 
         let scans = std::cell::Cell::new(0);
         for _ in 0..2 {
-            let index = load_or_build_with(&file, None, |p| {
+            let index = load_or_build_with(&MediaSource::file(&file), None, |p| {
                 scans.set(scans.get() + 1);
                 Ok(synthetic_index(p, 4))
             })
@@ -666,10 +719,14 @@ mod tests {
         let file = media_file(dir.path(), 7, 4096);
         let cache = dir.path().join("media-index");
 
-        let built =
-            load_or_build_with(&file, Some(&cache), |p| Ok(synthetic_index(p, 11))).unwrap();
-        let loaded =
-            load_or_build_with(&file, Some(&cache), |p| Ok(synthetic_index(p, 99))).unwrap();
+        let built = load_or_build_with(&MediaSource::file(&file), Some(&cache), |p| {
+            Ok(synthetic_index(p, 11))
+        })
+        .unwrap();
+        let loaded = load_or_build_with(&MediaSource::file(&file), Some(&cache), |p| {
+            Ok(synthetic_index(p, 99))
+        })
+        .unwrap();
 
         assert_eq!(built, loaded);
         assert_eq!(

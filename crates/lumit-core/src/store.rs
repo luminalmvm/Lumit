@@ -407,6 +407,7 @@ mod tests {
         let id = Uuid::now_v7();
         doc.items.push(crate::model::ProjectItem::Footage(
             crate::model::FootageItem {
+                sequence: None,
                 id,
                 name: "shot.mov".into(),
                 media: crate::model::MediaRef {
@@ -842,6 +843,7 @@ mod tests {
             .commit(Op::AddItem {
                 index: 0,
                 item: Box::new(ProjectItem::Footage(FootageItem {
+                    sequence: None,
                     id,
                     name: "shot".into(),
                     media: MediaRef {
@@ -1056,6 +1058,7 @@ mod tests {
         let comp = test_comp();
         let comp_id = comp.id;
         let footage = FootageItem {
+            sequence: None,
             id: Uuid::now_v7(),
             name: "capture.mp4".into(),
             extra: serde_json::Map::new(),

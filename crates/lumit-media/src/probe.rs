@@ -1,11 +1,11 @@
 //! File probing: the vital statistics shown in the Project panel and used to
 //! configure decoders. Read-only; never decodes a frame.
 
+use crate::sequence::MediaSource;
 use crate::MediaError;
 use rsmpeg::avformat::AVFormatContextInput;
 use rsmpeg::ffi;
 use std::ffi::CString;
-use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct VideoInfo {
@@ -90,14 +90,22 @@ fn codec_name(id: ffi::AVCodecID) -> String {
         .unwrap_or_else(|| format!("codec#{id}"))
 }
 
-pub(crate) fn open_input(path: &Path) -> Result<AVFormatContextInput, MediaError> {
-    let cpath =
-        CString::new(path.to_str().ok_or(MediaError::BadPath)?).map_err(|_| MediaError::BadPath)?;
+/// Open whatever `src` names: one media file, or the numbered run of stills one
+/// file belongs to (`crate::sequence`). A sequence is handed to FFmpeg's
+/// `image2` demuxer as a pattern, so from here down the two are the same thing
+/// — a container with a video stream.
+pub(crate) fn open_input(src: &MediaSource) -> Result<AVFormatContextInput, MediaError> {
+    if let Some((run, fps)) = src.run() {
+        return crate::sequence::open_run(&run, fps);
+    }
+    let cpath = CString::new(src.on_disk().to_str().ok_or(MediaError::BadPath)?)
+        .map_err(|_| MediaError::BadPath)?;
     Ok(AVFormatContextInput::open(&cpath)?)
 }
 
-pub fn probe(path: &Path) -> Result<MediaProbe, MediaError> {
-    let input = open_input(path)?;
+pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
+    let src = src.into();
+    let input = open_input(&src)?;
 
     let duration_seconds = if input.duration > 0 {
         input.duration as f64 / f64::from(ffi::AV_TIME_BASE)

@@ -48,7 +48,7 @@ Reserved for later (no crate exists yet):
 |---|---|
 | `lumit-time` | The rational time types — **v1 keeps these inside `lumit-core`**, not a separate crate. |
 | `lumit-gpu` (extras) | Texture pool, device-lost recovery, optional CUDA interop — future additions to the existing crate. |
-| `lumit-media` (extras) | Persistent decoder instances, hardware decode, proxy generation, image sequences — future; v1 does one-shot CPU decode. |
+| `lumit-media` (extras) | Persistent decoder instances, hardware decode and image sequences (`sequence.rs`, K-539) are built; proxy generation is future. |
 | `lumit-cache` (extras) | The VRAM tier, `index.db`, and the resource governor — future. |
 | *(no crate)* | Expressions live in `lumit-core` (`src/expression/`), not a crate of their own: a driven property is resolved by the same code that resolves a keyframed one, so splitting them would put the seam through the middle of `Property`. Rhai, per K-305. |
 | `lumit-ofx` | OFX host: out-of-process plugin server, C ABI, shared-memory frame transport. |

@@ -306,6 +306,22 @@
                     { "match_name": "RE:Vision Twixtor-0004", "name": "Source Layer",
                       "value_type": "layer", "value": 3 }
                   ]
+                },
+                {
+                  "match_name": "Trapcode Particular", "name": "Particular", "enabled": true,
+                  "group": [
+                    { "match_name": "Trapcode Particular-0001", "name": "Emitter Type",
+                      "value_type": "custom_blob",
+                      "unreadable": "Error: CUSTOM_VALUE data is not readable from the scripting DOM" },
+                    { "match_name": "Trapcode Particular-0002", "name": "Physics",
+                      "value_type": "custom_blob",
+                      "unreadable": "Error: CUSTOM_VALUE data is not readable from the scripting DOM" },
+                    { "match_name": "Trapcode Particular-0003", "name": "Aux System",
+                      "value_type": "custom_blob",
+                      "unreadable": "Error: CUSTOM_VALUE data is not readable from the scripting DOM" },
+                    { "match_name": "Trapcode Particular-0004", "name": "Particles/sec",
+                      "value_type": "float", "value": 120.0 }
+                  ]
                 }
               ]
             }

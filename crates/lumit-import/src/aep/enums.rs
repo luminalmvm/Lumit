@@ -54,6 +54,14 @@ pub fn layer_kind(code: u32) -> String {
 /// (code 2), `DISSOLVE`, `MULTIPLY`, `SCREEN` and `OVERLAY`, and the rest are
 /// reference.
 ///
+/// The run does not stop at 24. The modes After Effects added after version 4
+/// continue from 25 to 38, and the three the older codes name `CLASSIC_` have
+/// their modern counterparts up there — `DIFFERENCE` at 26 beside
+/// `CLASSIC_DIFFERENCE` at 12, and the same for the two burns and dodges. A
+/// table that ended at 24 answered "unknown" for Difference, Vivid Light,
+/// Lighter Color and Subtract, all four of which a real project uses, and every
+/// one of them imported as Normal with a report row.
+///
 /// Code 0 is **reference, not proven**: in the fixture only the camera and the
 /// light carry it, and a rig has no blend mode for the capture to report, so
 /// nothing sends a 0 through this table. It is mapped to `NORMAL` because that
@@ -84,6 +92,20 @@ const BLEND: &[(u32, &str)] = &[
     (22, "ALPHA_ADD"),
     (23, "CLASSIC_COLOR_DODGE"),
     (24, "CLASSIC_COLOR_BURN"),
+    (25, "EXCLUSION"),
+    (26, "DIFFERENCE"),
+    (27, "COLOR_DODGE"),
+    (28, "COLOR_BURN"),
+    (29, "LINEAR_DODGE"),
+    (30, "LINEAR_BURN"),
+    (31, "LINEAR_LIGHT"),
+    (32, "VIVID_LIGHT"),
+    (33, "PIN_LIGHT"),
+    (34, "HARD_MIX"),
+    (35, "LIGHTER_COLOR"),
+    (36, "DARKER_COLOR"),
+    (37, "SUBTRACT"),
+    (38, "DIVIDE"),
 ];
 
 /// The blend mode. `dancing` is `ldta` byte 103 bit 1: After Effects has no
@@ -234,6 +256,37 @@ mod tests {
         assert_eq!(layer_kind(7), "7");
         assert_eq!(bits_per_channel(9), 9);
         assert_eq!(renderer("ADBE Calder"), "ADBE Calder");
+    }
+
+    /// **The modes After Effects added after version 4 are the ones a real
+    /// project is full of, and the run reaches them.**
+    ///
+    /// The three names that appear twice are the point: 12, 23 and 24 are the
+    /// 4.x arithmetic, kept apart under `CLASSIC_` because the import flags
+    /// them, while 26, 27 and 28 are the modern ones every project since uses.
+    /// A table that stopped at 24 sent Difference, Vivid Light, Lighter Color
+    /// and Subtract to Normal.
+    #[test]
+    fn the_modern_blend_modes_are_in_the_table() {
+        assert_eq!(blend(25, false), "EXCLUSION");
+        assert_eq!(blend(26, false), "DIFFERENCE");
+        assert_eq!(blend(27, false), "COLOR_DODGE");
+        assert_eq!(blend(28, false), "COLOR_BURN");
+        assert_eq!(blend(29, false), "LINEAR_DODGE");
+        assert_eq!(blend(30, false), "LINEAR_BURN");
+        assert_eq!(blend(31, false), "LINEAR_LIGHT");
+        assert_eq!(blend(32, false), "VIVID_LIGHT");
+        assert_eq!(blend(33, false), "PIN_LIGHT");
+        assert_eq!(blend(34, false), "HARD_MIX");
+        assert_eq!(blend(35, false), "LIGHTER_COLOR");
+        assert_eq!(blend(36, false), "DARKER_COLOR");
+        assert_eq!(blend(37, false), "SUBTRACT");
+        assert_eq!(blend(38, false), "DIVIDE");
+        // And the 4.x arithmetic keeps its own three codes, which the import
+        // flags rather than silently modernising twice over.
+        assert_eq!(blend(12, false), "CLASSIC_DIFFERENCE");
+        assert_eq!(blend(23, false), "CLASSIC_COLOR_DODGE");
+        assert_eq!(blend(24, false), "CLASSIC_COLOR_BURN");
     }
 
     /// **Dancing Dissolve is Dissolve plus a flag, and only for Dissolve.**

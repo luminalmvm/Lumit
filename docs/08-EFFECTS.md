@@ -853,6 +853,7 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | Amplitude | 0–400 px@comp | 30 px@comp |
 | Frequency | 0.1–30 Hz | 8 Hz |
 | Rotation amount | 0–45° | 1° |
+| Rotation frequency | ×0–4 | ×1 |
 | *Per-axis wobble* (twirl) | | |
 | — X amount / X frequency | ×0–2 / ×0–4 | ×1 / ×1 |
 | — Y amount / Y frequency | ×0–2 / ×0–4 | ×1 / ×1 |
@@ -867,7 +868,9 @@ exponentially over Decay seconds, so shakes hit on the beat and settle.
 | Seed | seed | per-instance |
 
 The master Amplitude and Frequency drive the overall translational sway; the **Per-axis
-wobble** twirl (K-146) biases each axis and adds depth. X and Y amount/frequency are
+wobble** twirl (K-146) biases each axis and adds depth. **Rotation frequency** (K-541) is the
+twist's own rate multiplier, beside its amount, so a slow sway can carry a fast shudder;
+×1 is the master rate the twist had before the row existed. X and Y amount/frequency are
 dimensionless multipliers on the master values (×1 reproduces the plain uniform shake); Z
 is the depth/scale shake — Z amount is a scale-pump per cent (the old Zoom pump, same
 range), Z frequency a rate multiplier. **Edges** (K-145, the reusable control) governs the
@@ -880,7 +883,8 @@ effect's output is affected (not the layer or comp motion blur). The Shutter (0�
 far across the shutter window the samples spread; off, or Shutter 0, is the plain single
 resample. This is the streak the S_Shake feature wiggle expressions never had.
 
-**Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount, the
+**Status (v1, continuous form, shipped):** Amplitude, Frequency, Rotation amount and
+Rotation frequency, the
 Per-axis wobble twirl (X/Y/Z amount and frequency), the Motion blur twirl (T18/K-165), an
 Edges control (Transparent / Repeat / Mirror, default Mirror — pass 5 owner feedback: the
 reflected border reads most natural under a shake) and Seed (per-instance
@@ -1133,7 +1137,7 @@ Gamma is not 1.
 ### 3.11 LUT — .cube loader
 
 **Parameters:** File (file reference, `.cube` 1D and 3D, sizes to 65³), Input space
-(sRGB / Rec.709 / Linear — what the LUT expects), Interpolation (Trilinear /
+(Linear / sRGB / Rec. 709 — what the LUT expects), Interpolation (Trilinear /
 Tetrahedral, default Tetrahedral), Mix.
 
 **Algorithm sketch.** Host parses and uploads the LUT as a 3D texture at load, converts
@@ -1143,20 +1147,28 @@ render failure ([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) never-crash r
 file's content hash joins the cache key; project save embeds small LUTs (K-040) so shared
 projects survive relinking.
 
-**Status (v1, shipped, K-114):** **File + Mix** only. The File parameter picks a `.cube`
+**Status (v1, shipped, K-114; Input space K-543):** **File + Input space + Mix**. The File
+parameter picks a `.cube`
 cube (animatable by stepping between paths with hold keys — two files cannot be blended,
 K-111) and Mix blends the graded result over the input. **3D trilinear** only (the manual
 eight-corner interpolation of [docs/impl/lut.md](impl/lut.md) §2–3, matching the CPU oracle
-`lut::Lut3d::sample` to ≤ 2 fp16 ULP; Tetrahedral is deferred). The LUT is applied in the
-compositor's **scene-linear working space as-is** — no Input-space transfer, so a `.cube`
-authored for a display- or log-encoded input is applied directly (flagged for the owner).
-Unpremultiplied (§2.2). An **unset, missing, 1D or unreadable** file is a labelled no-op,
+`lut::Lut3d::sample_in` to ≤ 2 fp16 ULP; Tetrahedral is deferred). **Input space** (K-543) is
+a three-option dropdown — **Linear** (default), **sRGB**, **Rec. 709** — naming the transfer
+function the cube was authored against: the straight colour converts into it, the table
+applies, and the result converts back to scene-linear, so a `.cube` baked in a
+display-referred grading application lands in the cells its author was looking at. Linear is
+the identity in both directions and is byte-for-byte the picture this effect rendered before
+the row existed (K-258). There is no Log option: the pipeline defines no log transfer
+function and §1's rules forbid inventing one (a follow-up, with OCIO).
+Unpremultiplied (§2.2), and the transfer sits **inside** the unpremultiply/re-premultiply
+pair — a transfer function is a statement about colour, not about coverage. An **unset,
+missing, 1D or unreadable** file is a labelled no-op,
 never a fault. GPU-only: the parsed cube is threaded beside the resolved op (like Echo's
 neighbour frames and Motion blur's flow field), so the CPU-degradation rung renders a LUT as
-identity — its §1.6 oracle reference is `lut::Lut3d::sample` used directly in the lumit-gpu
+identity — its §1.6 oracle reference is `lut::Lut3d::sample_in` used directly in the lumit-gpu
 test, the one effect whose reference lives outside its own `EffectDef::apply_cpu` (its parameter
-is a file, not a number). Preview and export load and apply it identically (K-031). **Follow-ups:** the
-Input-space control, Tetrahedral interpolation, the content-hash cache key (the cache is
+is a file, not a number). Preview and export load and apply it identically (K-031). **Follow-ups:**
+Tetrahedral interpolation, log input spaces, the content-hash cache key (the cache is
 path-only for now, so an edited-on-disk LUT needs the app reopened), and embedding small LUTs
 in the project (K-040).
 
@@ -1274,11 +1286,14 @@ bit-exact passthrough regardless of the other parameters (pinned by test).
 
 Footage-only: with no -1 neighbour or flow field (a non-footage layer, or a dropped decode) it
 degrades to a no-op, never a fault. Temporal window `{-1, 0}` — static, exactly the shape
-Motion blur's own `{0, +1}` has, so `stack_flow_neighbour` reads the match name the same
-static way. A layer can carry only one flow field per frame in v1; if a stack somehow has both
-a live Motion blur and a live Datamosh, whichever comes first in stack order wins the single
-slot and the other's flow-dependent behaviour degrades to its own missing-field passthrough —
-never a fault, pinned by test. `moderate` cost (a multi-tap streamline like Motion blur's
+Motion blur's own `{0, +1}` has, so `effect_flow_neighbour` reads the match name the same
+static way. **A layer measures one flow field per consuming effect (K-543's successor K-544,
+superseding K-104's one-per-layer rule):** Motion blur wants the forward measurement to `+1`
+and Datamosh the backward one to `-1`, so there was never a single field both could read — a
+stack with both now carries both, each op binding the field keyed by the offset its own
+effect asked for. Before K-544 the first of the two in stack order took the layer's single
+slot and the other silently rendered its missing-field passthrough. A stack with only one of
+them measures exactly once, as it always did. `moderate` cost (a multi-tap streamline like Motion blur's
 streak, plus a bilinear flow re-sample each step), `full-frame` ROI (the flow can point
 anywhere in the frame, the same unbounded-read reasoning Motion blur's own ROI carries). Not
 seeded (`seeded: false`) — no hash or random-looking sequence, just flow-directed sampling.
@@ -1294,7 +1309,7 @@ picture) into the streamline-melt above, adding the Bloom accumulation dial and 
 Reset. The schema bumps version 2 → 3; pre-release, no migration is required (K-148's
 `streak_length` is still read as the Displacement reach as a courtesy, so an existing instance
 keeps its look). `temporal: {-1, 0}` remains the schema's static declaration and
-`stack_flow_neighbour` reads the match name the same static way it reads Motion blur's.
+`effect_flow_neighbour` reads the match name the same static way it reads Motion blur's.
 
 **The Matte, on all three (K-427, §2.6).** **Block glitch** scales its **Intensity** per
 pixel, before any hash is read, so the jitter, the displacement, the channel split and the
@@ -1605,9 +1620,16 @@ oracle, unlike a hard threshold.
   what counts as neutral for the matte; grey is a no-op).
 - **Despill amount** (%, default 100, the Keylight screen despill).
 
-**Screen matte** twirl (collapsed): **Clip black** (%, default 0, matte at/below maps to 0),
-**Clip white** (%, default 100, matte at/above maps to 1), **Clip rollback** (%, default 0,
-eases the clips back toward the un-clipped matte to recover fine edge detail), **Replace
+**Screen matte** twirl (collapsed), in the order the pipeline runs them: **Screen pre-blur**
+(px@comp, default 0, softens the picture the key is *judged from*, never the picture that comes
+out), **Clip black** (%, default 0, matte at/below maps to 0), **Clip white** (%, default 100,
+matte at/above maps to 1), **Clip rollback** (%, default 0, eases the clips back toward the
+un-clipped matte to recover fine edge detail), **Screen shrink/grow** (px@comp, default 0,
+marches the matte's edge inward at negative values and outward at positive ones — morphological,
+so the edge stays as crisp as it was), **Screen softness** (px@comp, default 0, blurs the matte
+and only the matte), **Despot black** and **Despot white** (%, default 0, remove isolated dark
+and bright specks), **Inside mask** and **Outside mask** (mask-path rows, default unset — the
+garbage mattes: inside forces the matte opaque, outside forces it transparent), **Replace
 method** (choice: Source / Hard colour / Soft colour / None, default Soft colour) and
 **Replace colour** (colour, default grey). Then the shared **Mix**.
 
@@ -1624,8 +1646,32 @@ ends and **Clip rollback** blends back toward the un-clipped matte. **Despill** 
 primary channel down toward the (despill-bias shifted) secondary reference by the despill
 fraction, draining screen tint; **Replace method** then recolours where spill was removed —
 Source keeps the original colour, Hard/Soft blend in the replace colour (Soft scaled by the
-pixel's brightness), None leaves the despilled colour. `cheap` cost, `exact` ROI, `{0}`
-temporal. Category **Utility**, beside Transform.
+pixel's brightness), None leaves the despilled colour.
+
+**The spatial stages (K-546).** Every control above judges a pixel on its own; these judge it
+by its neighbours, so the matte becomes a **picture of its own** for the length of the effect
+and is only spent on the colour at the end. Seven stages, in this order: pre-blur the picture
+the key is judged from → the screen matte, clips and rollback → shrink/grow → softness →
+despot → the garbage masks → despill, Replace, View and Mix on the *original* colour. The
+matte is carried as an ordinary four-channel picture with the same number in every channel, so
+Softness and the pre-blur are the **shared** Gaussian blur rather than second implementations.
+Shrink/grow is a separable morphological min or max over a square, with the outermost ring
+eased in by the fractional part of the radius so the control stays continuous. A **despot** is
+an amount rather than a size and reaches exactly one pixel: a speck is a pixel every one of
+whose eight neighbours is on the other side of it, so black lifts such a pixel to the darkest
+of them and white drops it to the brightest, which leaves a real edge — always with a
+neighbour on its own side — untouched. The **garbage masks** are two `ParamKind::MaskPath`
+rows (§1.2, K-408) on this layer's own masks: the outline arrives as geometry, inside/outside
+is an even-odd crossing count, and the soft edge is the **mask's own feather and expansion**
+read through the same ramp the mask's ordinary coverage is read through, so a hold-out and the
+shape it was drawn from soften alike. Both rows are unset by default and an unset row means no
+garbage matte, never "the first mask".
+
+**Nothing spatial asked for is the pointwise keyer**, byte for byte: the staged path is not
+taken at all, on either the CPU or the GPU, so an existing project keys exactly what it keyed
+before. `moderate` cost, `padded_px(251)` ROI — pre-blur, shrink/grow and softness at their own
+hard maxima plus the despot's one pixel — `{0}` temporal. Category **Utility**, beside
+Transform.
 
 **Status (K-154, shipped — supersedes the K-121 chroma-distance key):** the colour-difference
 screen matte, clips, despill and replace model above, with the default green screen + 100 %
@@ -1643,13 +1689,18 @@ Screen colour (`key`) and Spill (now Despill amount); its old Tolerance/Softness
 superseded by gain/balance/clip and simply go unread, and the new controls take their Keylight
 defaults (version bumped 1 → 2, so the frame cache re-keys).
 
-**Deferred to a follow-up (K-155):** the **spatial** Keylight controls — Screen pre-blur,
-Screen shrink/grow, Screen softness, Screen despot black/white — need a multi-pass
-morphology/blur pipeline with its own oracle and are out of scope of this pointwise landing;
-the **Inside/Outside garbage masks** (a layer-input holdout, reusing the DoF layer-reference
-pattern, §3.22); the **Colour correction** twirls (Foreground/Edge saturation, contrast,
-brightness, colour balance); and the **Source crops** (per-axis edge method + crop amounts).
-The core keyer above is what "properly key footage" needs; these refine it.
+**Status (K-546, shipped — the spatial half):** Screen pre-blur, Screen shrink/grow, Screen
+softness, Despot black/white and the Inside/Outside garbage masks, described above. The
+garbage mattes are mask-path rows rather than the layer-input holdout the K-155 deferral
+guessed at — a garbage matte is a shape drawn on this layer, which is what the K-408 carriage
+already delivers. The §1.6 oracle is `cpu::matte_key_spatial`, matched by the WGSL pipeline one
+control at a time, all of them at once, and with the two masks bound; the defaults are pinned
+bit-for-bit against the pointwise kernel.
+
+**Deferred still:** the **Colour correction** twirls (Foreground/Edge saturation, contrast,
+brightness, colour balance) and the **Source crops** (per-axis edge method + crop amounts).
+Both are pointwise and need no pipeline; the keyer above is what "properly key footage" needs,
+and these refine it.
 
 ### 3.22 Depth of field — depth-driven lens blur with an iris (Frischluft / Camera Lens Blur-class)
 
@@ -2778,14 +2829,18 @@ what the effect is.
 
 ### 3.39 Tile — the frame repeated across itself
 
-**Parameters:** Tile centre x and Tile centre y (px@comp, default 960, 540), Tile width and
-Tile height (per cent of the frame, 1..500, default 50), Output width and Output height
-(per cent of the frame, 1..500, default 100), Mirror edges (default off), Phase (dial,
-degrees, default 0), Horizontal phase shift (default off), Mix.
+**Parameters:** Tile centre x and Tile centre y (px@comp, default the frame's own centre),
+Tile width and Tile height (per cent of the frame, 1..500, default 100), Output width and
+Output height (per cent of the frame, 1..500, default 100), Mirror edges (default off),
+Phase (dial, degrees, default 0), Horizontal phase shift (default off), Mix.
 
-**Algorithm sketch.** One rectangle of the picture is copied across the frame:
+**Algorithm sketch.** One rectangle of the picture is copied across the frame, into a
+raster that may be **larger** than the one it read:
 
 ```
+raster = (W, H) · max(output_width ÷ 100, 1), capped at 8 192 a side   # K-542
+origin = (raster − (W, H)) ÷ 2, whole pixels                 # where the frame sits in it
+p      = the output pixel's position in the INCOMING frame's coordinates
 tile   = (tile_width ÷ 100 · W,  tile_height ÷ 100 · H)      # raster pixels
 window = (output_width ÷ 100 · W, output_height ÷ 100 · H)
 outside the window, centred on the frame → transparent
@@ -2795,23 +2850,47 @@ u  = (p − tile centre) ÷ tile + ½                            # position in t
 f  = u − floor(u)                                            # position within this tile
     Mirror edges: f.axis = 1 − f.axis on every odd tile index
 out = bilinear(src, tile centre + (f − ½)·tile, Repeat edges)
+out = orig·(1 − mix) + out·mix      # orig is transparent outside the incoming frame
 ```
 
-Three notes:
+Four notes:
 
-- **The default tiles.** AE's Motion Tile is the identity until it is set up (100 % tiles
-  in a 100 % output); §1.2's "drop it on and it already looks right" says otherwise, so
-  Lumit's Tile width and height default to 50 and a fresh Tile is a 2×2 repeat. Nothing
-  else about the effect diverges. The Transform effect's identity default (§3.5) is not a
-  precedent here: that one inherits the layer's own neutral transform, and "no tiling" is
-  not a tiling.
+- **The default is the identity, and it is AE's** (K-542, which reverses this section's
+  earlier 2×2 default). One whole-frame tile, cut from the middle of the frame, stamped
+  over exactly the frame it came from: dropping Tile on a layer changes not one bit.
+  §1.2's "drop it on and it already looks right" is met by *looking unchanged* here, for
+  the reason §3.5's Transform meets it the same way — Tile is the effect whose controls
+  have no meaning until the user has said where the picture is being repeated **to**, and a
+  2×2 grid nobody asked for is a picture nobody can undo by eye. The exactness matters as
+  much as the value: the mapping is a divide followed by the multiply that undoes it, which
+  fp32 does not always answer exactly, so both kernels short-circuit the identity rather
+  than resampling through it. The centre default is the raster's own, filled by
+  `instantiate_for_raster` — a fixed 960, 540 would shift the picture on any comp that is
+  not 1080p, which is precisely what the identity forbids.
+- **Output width and height above 100 % grow the working raster** (K-542). This is the
+  point of the control, and AE's: the copies land *past* the frame's edges, the working
+  picture grows evenly on all four sides to hold them, and every effect after Tile in the
+  stack runs on that wider picture — so a warp or a directional blur below it finds tiled
+  material where a layer's edge used to be transparency. The composite then places the
+  wider picture by the layer's own transform (the quad grows, the anchor slides with it),
+  so not one of the original pixels moves. Below 100 % nothing grows: the window only
+  clips, which needs no more room than the frame already has. The growth stops at 8 192
+  pixels a side, so a slider dragged to 500 % on a 4K comp cannot ask for a third of a
+  gigabyte of working texture.
+  **Three places cannot grow, and crop back instead**: an adjustment layer's stack (what
+  follows blends it against the composite beneath, which is comp-sized by definition), a
+  matte source's own stack, and a referenced layer's own stack. On those a Tile above
+  100 % reads as the plain clipped tiling. A layer mask is grown into the same margin with
+  nothing in it, so the copies Tile puts outside the layer are outside the mask.
 - **Mirror edges flips alternate tiles** rather than butting copies together, which is what
-  makes a tiled texture seamless without a seamless source.
+  makes a tiled texture seamless without a seamless source. With Output width and height a
+  little over 100 % this is the standard way to give a stabiliser or a warp material to eat
+  into: mirrored edges, a wider raster, nothing moved.
 - **Phase shifts every other row** (or column, with the switch) along by a fraction of a
   tile, which is how a tiled pattern stops reading as a grid. The rows shift by whole
   multiples of `phase ÷ 360` tiles, so 180° is the brickwork offset.
 
-`cheap` cost, `FullFrame` ROI. Mix 0 is the bit-exact identity.
+`cheap` cost, `FullFrame` ROI. Mix 0 is the bit-exact identity, and so is a fresh instance.
 
 ### 3.40 Offset — the frame slid, wrapping round
 
@@ -2829,10 +2908,10 @@ revealed and no edge policy is needed or offered. That is the whole effect, and 
 having for one reason — it is how a seamless texture is repositioned without a seam, and
 how a scrolling background is made out of one still.
 
-**Its default is the identity, and that is right here** (unlike §3.39): a shift is a
-displacement of the picture, exactly as the Transform effect's (§3.5) is, and a
-displacement's neutral is zero. There is no "already looks right" default for "how far",
-because how far depends on the picture.
+**Its default is the identity**, as §3.39's now is: a shift is a displacement of the
+picture, exactly as the Transform effect's (§3.5) is, and a displacement's neutral is zero.
+There is no "already looks right" default for "how far", because how far depends on the
+picture.
 
 **AE names the same control differently.** Its "Shift Center To" is a destination point:
 the pixel that ends up in the middle. Lumit stores a shift, which is that point minus the
@@ -3102,8 +3181,11 @@ out     = orig·(1 − mix) + out·mix
 
 Three notes:
 
-- **Completion defaults to 50, where AE's is 0**, for §3.39's reason: an effect whose
-  default state has removed nothing is an effect that has not been applied (§1.2). Feather
+- **Completion defaults to 50, where AE's is 0**, for §1.2's reason: an effect whose
+  default state has removed nothing is an effect that has not been applied. (§3.39 used to
+  be cited here as the precedent; K-542 turned that one back to the identity, for a reason
+  that does not reach a wipe — a wipe's control means something the moment it is dragged,
+  a tiling's does not until there is somewhere to tile to.) Feather
   keeps AE's 0, because one divergence is enough to make the effect visible and a second
   would be taste imposed on a control that has a right answer of its own.
 - **The edge travels half a feather past each end**, which is what the `± band÷2` in the
@@ -5231,6 +5313,17 @@ being solved, or — when it is done — the point count and the mean reprojecti
 together are the one number that says whether the solve is any good. A refusal is a plain
 sentence in the same line, and nothing about the shot has changed. **Create camera** sits
 beside it once there is a solve to follow.
+
+**A track may cover part of its clip, and says which part** (K-540). Not every shot can be
+followed to its end — the lens racks, the frame whites out, a cut lands mid-clip — and where
+the specks stop crossing from one frame to the next there is nothing after that point that
+can be related to anything before it. The analysis **stops there**, solves the span that
+worked and keeps it: a thin bar above the status line shows that span against the rest of the
+clip, and the line says how far it got instead of quoting an error over frames it never saw.
+A camera linked to a partial solve derives inside the span and **holds** the last derived
+pose outside it, which is K-417's rule meeting a range that ends early. Re-analysing after
+masking the offending region, or with a different Feature density, is the way past it; a
+partial answer is honest, usable and cached like any other.
 
 What the solve is *for* is the **solve link** on a Camera layer
 ([03-DATA-MODEL.md](03-DATA-MODEL.md) §5.6): the camera points at this layer and derives its

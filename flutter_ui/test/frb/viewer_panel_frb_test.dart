@@ -2142,6 +2142,7 @@ void main() {
           opacity: const BridgeScalar.static_(100),
           mode: BridgeMaskMode.add,
           feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
           expansion: const BridgeScalar.static_(0),
           pathKeys: const [],
         ),
@@ -2226,6 +2227,28 @@ void main() {
             stroke: null,
             strokeWidth: 0,
             opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -2303,6 +2326,28 @@ void main() {
             stroke: null,
             strokeWidth: 0,
             opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -2323,6 +2368,7 @@ void main() {
           opacity: const BridgeScalar.static_(100),
           mode: BridgeMaskMode.add,
           feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
           expansion: const BridgeScalar.static_(0),
           pathKeys: const [],
         ),
@@ -2553,6 +2599,30 @@ void main() {
       p.state.project!.undo();
       p.uiState.model.refresh();
       expect(p.layer.getPaint(), isEmpty, reason: 'one undo step');
+    });
+
+    /// The brush shape chosen in the tool options is the shape the stroke is
+    /// committed with (K-548). Round unless somebody picks otherwise, so a
+    /// project painted before there was a choice reads back the way it was.
+    testWidgets('the brush commits the shape chosen in the tool options',
+        (tester) async {
+      final p = withLayer();
+      p.uiState.tools.select(ToolMode.brush);
+      await mount(tester, p);
+
+      final fitted = fittedRect(tester, p.comp);
+      await tester.tapAt(fitted.center);
+      await tester.pumpAndSettle();
+      expect(p.layer.getPaint().single.shape, BridgeBrushShape.round,
+          reason: 'the shape everything was painted with before');
+
+      p.uiState.tools.brushShape = BridgeBrushShape.square;
+      await tester.pumpAndSettle();
+      await tester.tapAt(fitted.center + const Offset(0, 30));
+      await tester.pumpAndSettle();
+      expect(p.layer.getPaint().last.shape, BridgeBrushShape.square);
+      expect(p.layer.getPaint().first.shape, BridgeBrushShape.round,
+          reason: 'and the one already painted keeps the shape it was made with');
     });
 
     testWidgets('the eraser and the clone stamp commit their own modes',

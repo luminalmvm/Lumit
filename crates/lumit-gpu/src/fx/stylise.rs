@@ -3,7 +3,7 @@
 
 use crate::GpuContext;
 
-use super::{work_texture, FxEngine};
+use super::{work_texture, BlurOp, FxEngine};
 
 /// One resolved matte key (docs/08 §3.21, K-121/K-154): a Keylight-style
 /// colour-difference keyer on straight (unpremultiplied) colour. Mirrors
@@ -36,8 +36,95 @@ pub struct MatteKeyOp {
     pub replace_method: u32,
     /// Scene-linear RGBA replace colour.
     pub replace_colour: [f32; 4],
+    /// Screen pre-blur radius, raster pixels (K-546). 0 skips the stage.
+    pub pre_blur: f32,
+    /// Screen matte shrink (−) / grow (+), raster pixels (K-546). 0 skips it.
+    pub shrink_grow: f32,
+    /// Screen matte softness (a blur of the matte), raster pixels (K-546).
+    pub softness: f32,
+    /// Despot black, 0..1 (K-546).
+    pub despot_black: f32,
+    /// Despot white, 0..1 (K-546).
+    pub despot_white: f32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+}
+
+impl MatteKeyOp {
+    /// Whether any spatial stage is asked for — mirrors
+    /// `lumit_core::fx::MatteKeyParams::spatial`, so both render paths choose
+    /// the fast pointwise kernel or the staged pipeline on the same predicate.
+    #[must_use]
+    pub fn spatial(&self) -> bool {
+        self.pre_blur > 0.0
+            || self.shrink_grow != 0.0
+            || self.softness > 0.0
+            || self.despot_black > 0.0
+            || self.despot_white > 0.0
+    }
+}
+
+/// The most straight pieces one garbage mask's outline is walked as — mirrors
+/// `lumit_core::fx::cpu::MASK_FILL_SEGMENTS` (K-546).
+pub const MASK_FILL_SEGMENTS: usize = 512;
+
+/// The farthest a shrink or grow may reach, raster pixels — mirrors
+/// `lumit_core::fx::cpu::MATTE_MORPH_MAX_PX` (K-546). Both paths clamp, so both
+/// paths reach the same distance when a nonsense number arrives.
+pub const MATTE_MORPH_MAX_PX: f32 = 256.0;
+
+/// One resolved garbage mask (docs/08 §3.21, K-546): a closed outline in raster
+/// pixels and how soft its edge is. Mirrors `lumit_core::fx::cpu::MaskFillParams`
+/// field-for-field, exactly as [`MatteKeyOp`] mirrors its own params (K-031).
+///
+/// A `count` of zero is the row's no-op: the pass is not dispatched at all.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MaskFillOp {
+    /// The outline, as `(ax, ay, bx, by)` in raster pixels, closed.
+    pub segments: [[f32; 4]; MASK_FILL_SEGMENTS],
+    /// How many of the above are real.
+    pub count: u32,
+    /// The feather ramp's width, raster pixels, never below one.
+    pub ramp: f32,
+    /// The mask's own grow (+) / shrink (−), raster pixels.
+    pub expansion: f32,
+}
+
+impl MaskFillOp {
+    /// A mask that holds nothing out.
+    #[must_use]
+    pub fn blank() -> Self {
+        Self {
+            segments: [[0.0; 4]; MASK_FILL_SEGMENTS],
+            count: 0,
+            ramp: 1.0,
+            expansion: 0.0,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MaskFillParams {
+    count: u32,
+    ramp: f32,
+    expansion: f32,
+    /// 0 = inside (force opaque), 1 = outside (force transparent).
+    mode: u32,
+    segments: [[f32; 4]; MASK_FILL_SEGMENTS],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MatteTidyParams {
+    dx: i32,
+    dy: i32,
+    ri: i32,
+    frac: f32,
+    grow: u32,
+    black: f32,
+    white: f32,
+    _pad0: f32,
 }
 
 #[repr(C)]
@@ -61,6 +148,30 @@ struct MatteKeyParams {
     _pad0: f32,
     _pad1: f32,
     _pad2: f32,
+}
+
+/// The uniform the pointwise kernel, the screen pass and the combine pass all
+/// read — the same bytes for all three, since the spatial stages are told what
+/// to do by their own small uniforms and never by this one.
+fn matte_key_params(op: &MatteKeyOp) -> MatteKeyParams {
+    MatteKeyParams {
+        key: op.key,
+        despill_bias: op.despill_bias,
+        alpha_bias: op.alpha_bias,
+        replace_colour: op.replace_colour,
+        gain: op.gain,
+        balance: op.balance,
+        spill: op.spill,
+        clip_black: op.clip_black,
+        clip_white: op.clip_white,
+        clip_rollback: op.clip_rollback,
+        view: op.view,
+        replace_method: op.replace_method,
+        mix_amt: op.mix,
+        _pad0: 0.0,
+        _pad1: 0.0,
+        _pad2: 0.0,
+    }
 }
 
 /// One resolved vignette (docs/08 §3.14): darkens toward black away from
@@ -381,11 +492,26 @@ impl FxEngine {
         out
     }
 
-    /// Apply one matte key (docs/08 §3.21, K-121/K-154) to a linear working
-    /// texture, returning a new texture of the same size. One pointwise pass; the
-    /// §2.2 unpremultiply wrap is fused into the kernel, which derives the screen's
-    /// primary channel and reference from `key` exactly as the CPU reference does.
-    /// There is no neutral short-circuit (the default keys); Mix 0 is the identity.
+    /// Apply one matte key (docs/08 §3.21, K-121/K-154, K-546) to a linear
+    /// working texture, returning a new texture of the same size.
+    ///
+    /// **The default is one pointwise pass** — the §2.2 unpremultiply wrap fused
+    /// into the kernel, the screen's primary channel and reference derived from
+    /// `key` exactly as the CPU reference derives them — and that is the whole
+    /// of it whenever no spatial control is asked for and neither garbage mask
+    /// is set, so an old project renders the bytes it always did.
+    ///
+    /// Ask for a spatial control and the matte becomes a picture of its own for
+    /// the length of the effect: pre-blur the picture the key is judged from,
+    /// write the matte, march its edge, blur it, de-speck it, cut the garbage
+    /// masks into it, and only then spend it on the original colour. Seven
+    /// stages, in the order `lumit_core::fx::cpu::matte_key_spatial` runs them
+    /// (§1.6: the CPU is the oracle). Every stage that is not asked for is
+    /// skipped rather than run at a neutral setting.
+    ///
+    /// There is no neutral short-circuit (the default keys); Mix 0 is the
+    /// identity.
+    #[allow(clippy::too_many_arguments)]
     pub fn matte_key(
         &self,
         ctx: &GpuContext,
@@ -393,35 +519,160 @@ impl FxEngine {
         w: u32,
         h: u32,
         op: &MatteKeyOp,
+        inside: &MaskFillOp,
+        outside: &MaskFillOp,
     ) -> wgpu::Texture {
-        let out = work_texture(ctx, w, h, "fx-matte-key-out");
+        let params = matte_key_params(op);
+        let bytes = bytemuck::bytes_of(&params);
+        if !op.spatial() && inside.count == 0 && outside.count == 0 {
+            let out = work_texture(ctx, w, h, "fx-matte-key-out");
+            self.dispatch(ctx, &self.matte_key, src, src, &out, w, h, bytes);
+            return out;
+        }
+
+        // 1. The picture the key is judged from. The colour that comes out is
+        // still `src`, sharp — only the judgement is softened.
+        let blurred = (op.pre_blur > 0.0).then(|| {
+            self.blur(
+                ctx,
+                src,
+                w,
+                h,
+                None,
+                &BlurOp {
+                    radius_px: op.pre_blur,
+                    edge: 1,
+                    mix: 1.0,
+                },
+            )
+        });
+        let key_src = blurred.as_ref().unwrap_or(src);
+
+        // 2. The matte, as an ordinary working texture with the same number in
+        // every channel — which is what lets stage 4 be the shared blur.
+        let mut matte = work_texture(ctx, w, h, "fx-matte-key-matte");
         self.dispatch(
             ctx,
-            &self.matte_key,
-            src,
-            src,
-            &out,
+            &self.matte_key_screen,
+            key_src,
+            key_src,
+            &matte,
             w,
             h,
-            bytemuck::bytes_of(&MatteKeyParams {
-                key: op.key,
-                despill_bias: op.despill_bias,
-                alpha_bias: op.alpha_bias,
-                replace_colour: op.replace_colour,
-                gain: op.gain,
-                balance: op.balance,
-                spill: op.spill,
-                clip_black: op.clip_black,
-                clip_white: op.clip_white,
-                clip_rollback: op.clip_rollback,
-                view: op.view,
-                replace_method: op.replace_method,
-                mix_amt: op.mix,
-                _pad0: 0.0,
-                _pad1: 0.0,
-                _pad2: 0.0,
-            }),
+            bytes,
         );
+
+        // 3. Shrink/grow: two separable morphological passes.
+        if op.shrink_grow != 0.0 {
+            let r = op.shrink_grow.abs().min(MATTE_MORPH_MAX_PX);
+            let ri = r.floor() as i32;
+            let frac = r - ri as f32;
+            let grow = u32::from(op.shrink_grow > 0.0);
+            let tidy = |dx: i32, dy: i32| MatteTidyParams {
+                dx,
+                dy,
+                ri,
+                frac,
+                grow,
+                black: 0.0,
+                white: 0.0,
+                _pad0: 0.0,
+            };
+            let tmp = work_texture(ctx, w, h, "fx-matte-key-morph-h");
+            self.dispatch(
+                ctx,
+                &self.matte_morph,
+                &matte,
+                &matte,
+                &tmp,
+                w,
+                h,
+                bytemuck::bytes_of(&tidy(1, 0)),
+            );
+            let out = work_texture(ctx, w, h, "fx-matte-key-morph-v");
+            self.dispatch(
+                ctx,
+                &self.matte_morph,
+                &tmp,
+                &tmp,
+                &out,
+                w,
+                h,
+                bytemuck::bytes_of(&tidy(0, 1)),
+            );
+            matte = out;
+        }
+
+        // 4. Softness: the shared Gaussian blur, on the matte alone.
+        if op.softness > 0.0 {
+            matte = self.blur(
+                ctx,
+                &matte,
+                w,
+                h,
+                None,
+                &BlurOp {
+                    radius_px: op.softness,
+                    edge: 1,
+                    mix: 1.0,
+                },
+            );
+        }
+
+        // 5. Despot black and white, in one pass.
+        if op.despot_black > 0.0 || op.despot_white > 0.0 {
+            let out = work_texture(ctx, w, h, "fx-matte-key-despot");
+            self.dispatch(
+                ctx,
+                &self.matte_despot,
+                &matte,
+                &matte,
+                &out,
+                w,
+                h,
+                bytemuck::bytes_of(&MatteTidyParams {
+                    dx: 0,
+                    dy: 0,
+                    ri: 0,
+                    frac: 0.0,
+                    grow: 0,
+                    black: op.despot_black,
+                    white: op.despot_white,
+                    _pad0: 0.0,
+                }),
+            );
+            matte = out;
+        }
+
+        // 6. The garbage masks: inside first, then outside — the order the CPU
+        // reference applies them in.
+        for (m, mode) in [(inside, 0u32), (outside, 1u32)] {
+            if m.count == 0 {
+                continue;
+            }
+            let out = work_texture(ctx, w, h, "fx-matte-key-mask");
+            self.dispatch(
+                ctx,
+                &self.matte_mask,
+                &matte,
+                &matte,
+                &out,
+                w,
+                h,
+                bytemuck::bytes_of(&MaskFillParams {
+                    count: m.count,
+                    ramp: m.ramp,
+                    expansion: m.expansion,
+                    mode,
+                    segments: m.segments,
+                }),
+            );
+            matte = out;
+        }
+
+        // 7. Spend the finished matte on the original colour.
+        let out = work_texture(ctx, w, h, "fx-matte-key-out");
+        self.dispatch(ctx, &self.matte_key_combine, src, &matte, &out, w, h, bytes);
         out
     }
 

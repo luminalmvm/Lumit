@@ -20,12 +20,13 @@ Imitates what a compressed video does when reference frames go missing.
 The blurring/melting follows motion in the footage. Moving objects will smear and
 static objects don't change at all.
 
-:::caution[One flow measurement per layer]
-Measuring motion is expensive, so a layer computes it once per frame and shares
-it. If a layer somehow carries both this effect and
-[Fast motion blur](/effects/temporal/fast-motion-blur/) at the same time,
-whichever comes first in the stack gets the measurement and the other quietly
-does nothing. Put them on separate layers if you need both.
+:::note[This and Fast motion blur can share a layer]
+Measuring motion is expensive, so a layer measures only what its effects
+actually ask for. This effect needs the motion looking *backwards*, to the
+previous frame; [Fast motion blur](/effects/temporal/fast-motion-blur/) needs it
+looking *forwards*, to the next one. A layer carrying both measures both, and
+each effect gets its own — so stacking them works. A layer carrying only one
+costs exactly what it always did.
 :::
 
 ## Parameters

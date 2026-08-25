@@ -73,14 +73,14 @@ impl MediaCache {
 /// yet pooled across calls (a later phase caches decoders per item).
 #[cfg(feature = "media")]
 pub(crate) fn decode_frame(
-    path: &std::path::Path,
+    src: &lumit_media::MediaSource,
     frame: u64,
 ) -> Option<lumit_media::DecodedFrame> {
-    if !path.is_file() {
+    if !src.on_disk().is_file() {
         return None;
     }
-    let index = lumit_render::media_index::load_or_build_index(path).ok()?;
-    let mut decoder = lumit_media::VideoDecoder::open(path, index).ok()?;
+    let index = lumit_render::media_index::load_or_build_index(src).ok()?;
+    let mut decoder = lumit_media::VideoDecoder::open(src, index).ok()?;
     let count = decoder.frame_count();
     if count == 0 {
         return None;
@@ -119,9 +119,13 @@ pub(crate) fn thumb_cached(
 /// locks held across expensive work). Callers check [`thumb_cached`], let the
 /// lock go, decode here, and take the lock again only to [`thumb_store`].
 #[cfg(feature = "media")]
-pub(crate) fn thumb_decode(path: &std::path::Path, max_edge: u32, frame: i64) -> Option<Thumb> {
+pub(crate) fn thumb_decode(
+    src: &lumit_media::MediaSource,
+    max_edge: u32,
+    frame: i64,
+) -> Option<Thumb> {
     let max_edge = max_edge.clamp(1, 4096);
-    let decoded = decode_frame(path, frame.max(0).unsigned_abs())?;
+    let decoded = decode_frame(src, frame.max(0).unsigned_abs())?;
     Some(downscale_to_max_edge(
         decoded.width,
         decoded.height,
@@ -155,7 +159,7 @@ pub(crate) fn thumbnail_from_path(
     cache: &mut MediaCache,
     id: Uuid,
     max_edge: u32,
-    path: &std::path::Path,
+    src: &lumit_media::MediaSource,
     at_frame: i64,
 ) -> Option<(u32, u32, Vec<u8>)> {
     let max_edge = max_edge.clamp(1, 4096);
@@ -163,7 +167,7 @@ pub(crate) fn thumbnail_from_path(
     if let Some(hit) = cache.thumb_get(id, max_edge, at_frame) {
         return Some(hit);
     }
-    let frame = decode_frame(path, at_frame.unsigned_abs())?;
+    let frame = decode_frame(src, at_frame.unsigned_abs())?;
     let (w, h, rgba) = downscale_to_max_edge(frame.width, frame.height, &frame.rgba, max_edge);
     cache.thumb_put(id, max_edge, at_frame, w, h, rgba.clone());
     Some((w, h, rgba))

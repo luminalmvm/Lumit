@@ -699,11 +699,25 @@ pub fn resolve_all_media(
     search_roots: &[PathBuf],
 ) -> (usize, Vec<String>) {
     let mut relinked = 0;
-    let mut missing = Vec::new();
-    for item in &mut doc.items {
+    let mut unresolved = Vec::new();
+    for (index, item) in doc.items.iter_mut().enumerate() {
         let ProjectItem::Footage(f) = item else {
             continue;
         };
+        // An image sequence imported from After Effects arrives pointing at the
+        // *folder* the run lives in, because that is what the .aep records — a
+        // folder is not a file, so every step below would call it missing. One
+        // look inside turns it into the run's first frame, which is what a
+        // sequence item points at everywhere else (K-539).
+        if f.sequence.is_some() {
+            if let Some(frame) = first_numbered_file(Path::new(&f.media.absolute_path))
+                .or_else(|| first_numbered_file(&project_dir.join(&f.media.relative_path)))
+            {
+                f.media.relative_path = relative_between(project_dir, &frame)
+                    .unwrap_or_else(|| f.media.relative_path.clone());
+                f.media.absolute_path = frame.to_string_lossy().into_owned();
+            }
+        }
         match resolve_media(&f.media, project_dir, search_roots) {
             Resolved::Found { path, how } => {
                 if how != ResolveStep::RelativePath {
@@ -711,7 +725,36 @@ pub fn resolve_all_media(
                 }
                 f.media.absolute_path = path.to_string_lossy().into_owned();
             }
-            Resolved::Missing => missing.push(f.name.clone()),
+            Resolved::Missing => unresolved.push(index),
+        }
+    }
+    // Step 3b: whatever is still lost, looked for **by file name** under the
+    // project's own folder. This is the weakest of the matches, so it runs last
+    // and only for what nothing else found — and it is the one that answers the
+    // ordinary case: a project that arrived beside its footage but with the
+    // paths of the machine it was made on written into it, which is every
+    // After Effects import on a second computer. The tree is walked once for
+    // all of them rather than once each, because forty-eight lost clips would
+    // otherwise be forty-eight walks of the same folder — and not at all when
+    // nothing is lost, which is what the guard is for: the walk is the whole
+    // cost of this step, and a project that opened clean must not pay it.
+    let mut missing = Vec::new();
+    if !unresolved.is_empty() {
+        let beside = files_by_name(project_dir);
+        for index in unresolved {
+            let Some(ProjectItem::Footage(f)) = doc.items.get_mut(index) else {
+                continue;
+            };
+            let found = file_name_of(&f.media.relative_path)
+                .or_else(|| file_name_of(&f.media.absolute_path))
+                .and_then(|name| beside.get(name));
+            match found {
+                Some(path) => {
+                    relinked += 1;
+                    f.media.absolute_path = path.to_string_lossy().into_owned();
+                }
+                None => missing.push(f.name.clone()),
+            }
         }
     }
     // Proxies resolve by the same three steps, and a proxy that cannot be found
@@ -738,6 +781,59 @@ pub fn resolve_all_media(
         }
     }
     (relinked, missing)
+}
+
+/// The first numbered file directly inside `dir`, in name order — the frame an
+/// image-sequence folder's run starts at.
+///
+/// `None` when `dir` is not a directory (the ordinary case: it is already a
+/// file, or it is not there at all) or holds nothing numbered.
+///
+/// "Numbered" rather than "an image": a sequence folder's stray `readme.txt`,
+/// `Thumbs.db` or `.DS_Store` would otherwise sort ahead of the frames and be
+/// picked as the run's first file. A frame of a sequence has a number in its
+/// name by definition, and those do not.
+fn first_numbered_file(dir: &Path) -> Option<PathBuf> {
+    if !dir.is_dir() {
+        return None;
+    }
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.chars().any(|c| c.is_ascii_digit()))
+        .collect();
+    names.sort();
+    names.first().map(|name| dir.join(name))
+}
+
+/// Every file under `root`, by file name, first one in walk order winning.
+///
+/// Symlinks are not followed, so the walk cannot cycle. Two files of the same
+/// name in different subfolders are a genuine ambiguity and the first found
+/// answers for both; the fingerprint search above it is what tells them apart
+/// once a project has been saved.
+fn files_by_name(root: &Path) -> std::collections::HashMap<String, PathBuf> {
+    let mut out = std::collections::HashMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                stack.push(entry.path());
+            } else if kind.is_file() {
+                out.entry(entry.file_name().to_string_lossy().into_owned())
+                    .or_insert_with(|| entry.path());
+            }
+        }
+    }
+    out
 }
 
 /// The directory remapping implied by one file moving from `old` to `new`,
@@ -773,6 +869,20 @@ pub fn path_mapping(old: &Path, new: &Path) -> Option<(PathBuf, PathBuf)> {
         (old_dir, new_dir) = (up_old, up_new);
     }
     Some((old_dir.to_path_buf(), new_dir.to_path_buf()))
+}
+
+/// The file name at the end of a stored path, split on **both** separators.
+///
+/// `Path::file_name` splits on the separator of the machine it is running on,
+/// and a media reference is written on whichever machine made the project — a
+/// Windows path handed to it on macOS comes back whole, so every name match
+/// against one silently fails. Paths in a project are text until they are
+/// resolved, so they are taken apart as text.
+#[must_use]
+pub fn file_name_of(path: &str) -> Option<&str> {
+    path.rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
 }
 
 /// Apply a [`path_mapping`] to a sibling's old path: if it lived under the
@@ -955,6 +1065,7 @@ mod tests {
 
     fn footage(name: &str) -> FootageItem {
         FootageItem {
+            sequence: None,
             id: Uuid::now_v7(),
             name: name.into(),
             extra: serde_json::Map::new(),
@@ -1172,6 +1283,112 @@ mod tests {
         assert_eq!(abs(1), moved.to_string_lossy(), "found by content");
     }
 
+    /// **An image sequence imported from After Effects opens on its first
+    /// frame** (K-539).
+    ///
+    /// The .aep names the folder a run lives in — that is what its file alias
+    /// targets — and a folder is not a file, so every resolution step would
+    /// call an imported sequence missing and send the user to relink something
+    /// that is sitting right there. One look inside answers it. The stray
+    /// `readme.txt` in the fixture is the reason "the first numbered file"
+    /// rather than "the first file": it sorts ahead of the frames.
+    #[test]
+    fn an_imported_sequence_folder_resolves_to_the_runs_first_frame() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("Depth");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join("readme.txt"), b"notes").unwrap();
+        for n in 0..4u32 {
+            fs::write(folder.join(format!("Depth{n:06}_depth.exr")), b"frame").unwrap();
+        }
+
+        let mut doc = Document::default();
+        let item = FootageItem {
+            colour_space: None,
+            id: Uuid::now_v7(),
+            name: "Depth".into(),
+            media: MediaRef {
+                relative_path: "Depth".into(),
+                absolute_path: folder.to_string_lossy().into_owned(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            sequence: Some(lumit_core::model::SequenceRef::default()),
+            extra: serde_json::Map::new(),
+        };
+        lumit_core::ops::apply(
+            &mut doc,
+            &Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(item)),
+            },
+        )
+        .unwrap();
+
+        let (_, missing) = resolve_all_media(&mut doc, dir.path(), &[]);
+        assert!(missing.is_empty(), "the run is right there: {missing:?}");
+        let ProjectItem::Footage(f) = &doc.items[0] else {
+            unreachable!()
+        };
+        assert_eq!(
+            f.media.relative_path, "Depth/Depth000000_depth.exr",
+            "the folder became the frame the run starts at"
+        );
+        assert!(
+            Path::new(&f.media.absolute_path).is_file(),
+            "and it resolved to a real file: {}",
+            f.media.absolute_path
+        );
+    }
+
+    /// **An import from another machine finds its footage beside the project.**
+    ///
+    /// The paths written into an After Effects project are the paths of the
+    /// computer it was made on, and there are no fingerprints yet — nothing
+    /// was ever saved — so steps 1 to 3 all come back empty on a second
+    /// machine even when every file is sitting right there in a subfolder.
+    /// Step 3b looks for what is left by file name under the project's own
+    /// folder, which is the one thing that is true about a project someone
+    /// copied across with its media.
+    #[test]
+    fn what_nothing_else_found_is_looked_for_by_name_beside_the_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let buried = dir.path().join("Clips").join("Cine1");
+        fs::create_dir_all(&buried).unwrap();
+        fs::write(buried.join("Depth.avi"), b"clip").unwrap();
+
+        let mut doc = Document::new();
+        // As an import leaves it: both paths are the other machine's.
+        let mut found = footage("Depth.avi");
+        found.media.relative_path = "D:/Elsewhere/Clips/Cine1/Depth.avi".into();
+        found.media.absolute_path = found.media.relative_path.clone();
+        let mut lost = footage("Missing.avi");
+        lost.media.relative_path = "D:/Elsewhere/Clips/Cine1/Missing.avi".into();
+        lost.media.absolute_path = lost.media.relative_path.clone();
+        for (i, item) in [found, lost].into_iter().enumerate() {
+            apply(
+                &mut doc,
+                &Op::AddItem {
+                    index: i,
+                    item: Box::new(ProjectItem::Footage(item)),
+                },
+            )
+            .unwrap();
+        }
+
+        let (relinked, missing) = resolve_all_media(&mut doc, dir.path(), &[]);
+        assert_eq!(relinked, 1);
+        assert_eq!(missing, vec!["Missing.avi".to_string()]);
+        match &doc.items[0] {
+            ProjectItem::Footage(f) => assert_eq!(
+                f.media.absolute_path,
+                buried.join("Depth.avi").to_string_lossy(),
+                "found by name however deep it sits"
+            ),
+            _ => unreachable!(),
+        }
+    }
+
     /// The pure relative-path arithmetic behind the rebase.
     #[test]
     fn relative_between_walks_up_and_down() {
@@ -1365,6 +1582,20 @@ mod tests {
             None,
             "a sibling outside the moved folder does not relink"
         );
+        // A whole tree carried to another drive maps its *root*, not the one
+        // folder the relinked file happens to sit in — otherwise a clip four
+        // folders down brings back only its own neighbours.
+        let deep = path_mapping(
+            Path::new("/old/edit/Clips/Cine1/Depth.avi"),
+            Path::new("/new/place/Clips/Cine1/Depth.avi"),
+        )
+        .expect("a tree move maps");
+        assert_eq!(
+            apply_mapping(&deep, Path::new("/old/edit/Clips/Cine5/World.avi")),
+            Some(PathBuf::from("/new/place/Clips/Cine5/World.avi")),
+            "a sibling in a different subfolder relinks under the same move"
+        );
+
         // A rename (different file name) does not generalise to siblings.
         assert_eq!(
             path_mapping(Path::new("/a/b/clip.mp4"), Path::new("/x/y/renamed.mp4")),
@@ -1410,6 +1641,7 @@ mod tests {
 
     fn footage_item(name: &str, rel: &str, abs: &str) -> lumit_core::model::ProjectItem {
         lumit_core::model::ProjectItem::Footage(lumit_core::model::FootageItem {
+            sequence: None,
             id: Uuid::now_v7(),
             name: name.into(),
             media: media_ref(rel, abs, None),
@@ -1777,6 +2009,30 @@ mod tests {
         assert_eq!(back.absolute_path, "");
         assert_eq!(back.relative_path, m.relative_path);
         assert_eq!(back.fingerprint, m.fingerprint);
+    }
+
+    /// **A sequence costs a project that has none nothing at all** (K-539). The
+    /// field is skipped when unset, so every project saved before image
+    /// sequences existed round-trips byte-for-byte — and a project that *does*
+    /// have one carries its rate back exactly, because a rate that went through
+    /// a float would not (docs/14 §2).
+    #[test]
+    fn a_sequence_saves_only_when_there_is_one_and_keeps_its_exact_rate() {
+        let plain = footage("clip.mp4");
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("sequence"),
+            "an ordinary file must not grow a sequence field: {json}"
+        );
+
+        let mut run = footage("shot[0001-0100].exr");
+        run.sequence = Some(lumit_core::model::SequenceRef {
+            frame_rate: lumit_core::time::FrameRate::new(24000, 1001).unwrap(),
+            extra: serde_json::Map::new(),
+        });
+        let back: lumit_core::model::FootageItem =
+            serde_json::from_str(&serde_json::to_string(&run).unwrap()).unwrap();
+        assert_eq!(back.sequence_fps(), Some((24000, 1001)));
     }
 
     /// **A project's own cache location travels with it.** The whole reason it

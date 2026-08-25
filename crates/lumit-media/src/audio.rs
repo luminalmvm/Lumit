@@ -32,7 +32,7 @@ impl AudioBuffer {
 /// Decode the file's first audio stream entirely, resampled to stereo f32
 /// at `target_rate`.
 pub fn decode_all(path: &Path, target_rate: u32) -> Result<AudioBuffer, MediaError> {
-    let mut input = crate::probe::open_input(path)?;
+    let mut input = crate::probe::open_input(&crate::MediaSource::file(path))?;
     let (stream_index, par) = input
         .streams()
         .iter()

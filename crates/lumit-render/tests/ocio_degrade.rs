@@ -66,6 +66,7 @@ fn doc_naming(path: &std::path::Path) -> Document {
         }),
     };
     doc.items.push(ProjectItem::Footage(FootageItem {
+        sequence: None,
         id: Uuid::now_v7(),
         name: "shot.mov".into(),
         media: MediaRef {
@@ -321,6 +322,7 @@ fn one_input_table_is_uploaded_per_distinct_colour_space() {
     // to the built-in interpretation rather than to a wrong one.
     for (name, space) in [("b.mov", "srgb_texture"), ("c.mov", "no_such_space")] {
         doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
             id: Uuid::now_v7(),
             name: name.into(),
             media: MediaRef {

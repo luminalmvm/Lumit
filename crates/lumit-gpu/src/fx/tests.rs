@@ -950,6 +950,11 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
         clip_black: 0.0,
         clip_white: 1.0,
         clip_rollback: 0.0,
+        pre_blur: 0.0,
+        shrink_grow: 0.0,
+        softness: 0.0,
+        despot_black: 0.0,
+        despot_white: 0.0,
         replace_method: 2,
         replace_colour: grey,
         mix: 1.0,
@@ -965,6 +970,11 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
         clip_black: p.clip_black,
         clip_white: p.clip_white,
         clip_rollback: p.clip_rollback,
+        pre_blur: p.pre_blur,
+        shrink_grow: p.shrink_grow,
+        softness: p.softness,
+        despot_black: p.despot_black,
+        despot_white: p.despot_white,
         replace_method: p.replace_method,
         replace_colour: p.replace_colour,
         mix: p.mix,
@@ -1023,7 +1033,8 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
 
         let tex = upload_linear_f32(&ctx, &img, w, h);
         let op = to_op(&p);
-        let out = fx.matte_key(&ctx, &tex, w, h, &op);
+        let blank = MaskFillOp::blank();
+        let out = fx.matte_key(&ctx, &tex, w, h, &op, &blank, &blank);
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
 
         let worst = worst_f16_ulp(&cpu, &gpu);
@@ -1033,10 +1044,269 @@ fn wgsl_matte_key_matches_the_cpu_oracle() {
             assert_eq!(gpu, img, "Mix 0 must be the bit-exact identity");
         }
 
-        let out2 = fx.matte_key(&ctx, &tex, w, h, &op);
+        let out2 = fx.matte_key(&ctx, &tex, w, h, &op, &blank, &blank);
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "GPU matte key must be bit-stable");
     }
+}
+
+/// **The §1.6 oracle for the Matte key's spatial controls** (K-546): Screen
+/// pre-blur, shrink/grow, softness, despot black/white and the two garbage
+/// masks agree with the CPU reference, one control at a time and then all at
+/// once, and the GPU is bit-stable (§2.4).
+///
+/// Moderate-class now rather than cheap: the matte becomes a picture of its own
+/// and travels through as many as seven fp16 passes, so the comparison is the
+/// perceptual epsilon §1.6 allows a moderate effect, the one the Gaussian blur's
+/// own oracle uses, scaled for an HDR corpus.
+///
+/// **The defaults are pinned bit-for-bit against the pointwise kernel**, which
+/// is what "adding these controls changed nothing" means: with nothing asked for
+/// and neither mask set, the staged path is not taken at all.
+#[test]
+fn wgsl_matte_key_spatial_matches_the_cpu_oracle() {
+    use lumit_core::fx::MatteKeyParams;
+    let Ok(ctx) = GpuContext::headless() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = FxEngine::new(&ctx);
+    let (w, h) = (32u32, 24u32);
+    // Corpus (§1.6): a green field sliding to red, brightness rising down the
+    // frame, alpha in bands — plus two single-pixel specks, one black hole in
+    // the kept side and one green fleck in the keyed side, so the despot has
+    // something to find, and an HDR spike.
+    let mut img = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let fx_ = x as f32 / (w - 1) as f32;
+            let fy = y as f32 / (h - 1) as f32;
+            let a = 0.25 + 0.75 * fy;
+            img[i] = fx_ * a;
+            img[i + 1] = (1.0 - fx_) * (0.4 + 0.6 * fy) * a;
+            img[i + 2] = 0.25 * fx_ * a;
+            img[i + 3] = a;
+        }
+    }
+    // A lone screen-coloured pixel deep in the foreground (a hole), and a lone
+    // foreground-coloured pixel deep in the screen (a fleck).
+    let hole = ((12 * w + 26) * 4) as usize;
+    img[hole..hole + 4].copy_from_slice(&[0.0, 0.6, 0.0, 1.0]);
+    let fleck = ((12 * w + 4) * 4) as usize;
+    img[fleck..fleck + 4].copy_from_slice(&[0.7, 0.1, 0.6, 1.0]);
+    let spike = ((10 * w + 20) * 4) as usize;
+    img[spike..spike + 4].copy_from_slice(&[6.0, 3.0, 1.5, 0.5]);
+    let img: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+
+    let grey = [0.5f32, 0.5, 0.5, 1.0];
+    let base = MatteKeyParams {
+        view: 0,
+        key: [0.0, 0.6, 0.0, 1.0],
+        gain: 1.0,
+        balance: 0.5,
+        despill_bias: grey,
+        alpha_bias: grey,
+        spill: 1.0,
+        clip_black: 0.0,
+        clip_white: 1.0,
+        clip_rollback: 0.0,
+        pre_blur: 0.0,
+        shrink_grow: 0.0,
+        softness: 0.0,
+        despot_black: 0.0,
+        despot_white: 0.0,
+        replace_method: 2,
+        replace_colour: grey,
+        mix: 1.0,
+    };
+    let to_op = |p: &MatteKeyParams| MatteKeyOp {
+        view: p.view,
+        key: p.key,
+        gain: p.gain,
+        balance: p.balance,
+        despill_bias: p.despill_bias,
+        alpha_bias: p.alpha_bias,
+        spill: p.spill,
+        clip_black: p.clip_black,
+        clip_white: p.clip_white,
+        clip_rollback: p.clip_rollback,
+        pre_blur: p.pre_blur,
+        shrink_grow: p.shrink_grow,
+        softness: p.softness,
+        despot_black: p.despot_black,
+        despot_white: p.despot_white,
+        replace_method: p.replace_method,
+        replace_colour: p.replace_colour,
+        mix: p.mix,
+    };
+    let to_fill = |m: &lumit_core::fx::cpu::MaskFillParams| MaskFillOp {
+        segments: m.segments,
+        count: m.count,
+        ramp: m.ramp,
+        expansion: m.expansion,
+    };
+
+    // Two real masks off the mask model, flattened exactly as the carriage
+    // flattens them (K-408): a rectangle over the left half to hold in, and one
+    // over the top-right corner to cut out. The feather and expansion are set on
+    // the polyline directly, which is where `mask_path_at` puts a mask's own.
+    let rect = |x: f64, y: f64, rw: f64, rh: f64, feather: f32, expansion: f32| {
+        let masks = vec![lumit_core::mask::Mask::rectangle(x, y, rw, rh)];
+        let mut poly = lumit_core::mask::mask_path_at(&masks, None, true, 0.0);
+        poly.feather = feather;
+        poly.expansion = expansion;
+        poly
+    };
+    let inside_poly = rect(2.0, 2.0, 10.0, 20.0, 3.0, 0.0);
+    let outside_poly = rect(20.0, 1.0, 10.0, 8.0, 0.0, -1.5);
+    let blank = lumit_core::fx::cpu::MaskFillParams::blank();
+    let inside = lumit_core::fx::cpu::mask_fill_params(&inside_poly, 1.0);
+    let outside = lumit_core::fx::cpu::mask_fill_params(&outside_poly, 1.0);
+    assert!(inside.count >= 4, "the hold-out flattened to nothing");
+    assert!(outside.count >= 4, "the cut-out flattened to nothing");
+
+    for (name, p, ins, outs) in [
+        (
+            "pre_blur",
+            MatteKeyParams {
+                pre_blur: 3.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "grow",
+            MatteKeyParams {
+                shrink_grow: 2.5,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "shrink",
+            MatteKeyParams {
+                shrink_grow: -1.75,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "softness",
+            MatteKeyParams {
+                softness: 4.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "despot_black",
+            MatteKeyParams {
+                despot_black: 1.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        (
+            "despot_white",
+            MatteKeyParams {
+                despot_white: 1.0,
+                ..base
+            },
+            blank,
+            blank,
+        ),
+        ("inside_mask", base, inside, blank),
+        ("outside_mask", base, blank, outside),
+        (
+            "both_masks_matte_view",
+            MatteKeyParams { view: 1, ..base },
+            inside,
+            outside,
+        ),
+        (
+            "everything_at_once",
+            MatteKeyParams {
+                pre_blur: 2.0,
+                shrink_grow: -1.5,
+                softness: 2.5,
+                despot_black: 0.75,
+                despot_white: 0.5,
+                clip_black: 0.1,
+                clip_white: 0.9,
+                ..base
+            },
+            inside,
+            outside,
+        ),
+        (
+            "identity_mix0",
+            MatteKeyParams {
+                pre_blur: 3.0,
+                softness: 3.0,
+                mix: 0.0,
+                ..base
+            },
+            inside,
+            outside,
+        ),
+    ] {
+        let mut cpu = img.clone();
+        lumit_core::fx::cpu::matte_key_spatial(&mut cpu, w, h, &p, &ins, &outs);
+
+        let tex = upload_linear_f32(&ctx, &img, w, h);
+        let op = to_op(&p);
+        let out = fx.matte_key(&ctx, &tex, w, h, &op, &to_fill(&ins), &to_fill(&outs));
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("matte key spatial {name}: worst {worst}");
+        assert!(worst < 2e-2, "{name}: worst diff {worst}");
+        if name == "identity_mix0" {
+            assert_eq!(gpu, img, "Mix 0 must be the identity through the pipeline");
+        }
+
+        let out2 = fx.matte_key(&ctx, &tex, w, h, &op, &to_fill(&ins), &to_fill(&outs));
+        let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
+        assert_eq!(gpu, gpu2, "GPU spatial matte key must be bit-stable");
+    }
+
+    // **The default is the old picture.** Nothing spatial, no masks: both paths
+    // must produce exactly what the pointwise kernel produces, bit for bit — on
+    // the CPU because `matte_key_spatial` hands straight over, and on the GPU
+    // because the staged pipeline is not dispatched at all.
+    let mut fused = img.clone();
+    lumit_core::fx::cpu::matte_key(&mut fused, &base);
+    let mut staged = img.clone();
+    lumit_core::fx::cpu::matte_key_spatial(&mut staged, w, h, &base, &blank, &blank);
+    assert_eq!(fused, staged, "the defaults took a different CPU path");
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    let bl = MaskFillOp::blank();
+    let a = readback_linear_f32(
+        &ctx,
+        &fx.matte_key(&ctx, &tex, w, h, &to_op(&base), &bl, &bl),
+        w,
+        h,
+    )
+    .unwrap();
+    let worst = fused
+        .iter()
+        .zip(&a)
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0f32, f32::max);
+    assert!(
+        worst <= 1e-3,
+        "the default GPU picture moved: worst {worst}"
+    );
 }
 
 /// The §1.6 oracle for vignette: a cheap pointwise effect, so the CPU
@@ -1882,6 +2152,7 @@ fn wgsl_shake_motion_blur_matches_the_cpu_oracle() {
         z_amp: 0.08,
         x_freq: 1.0,
         y_freq: 1.3,
+        rot_freq: 1.6,
         z_freq: 0.7,
     };
     let base = 2.0f64;
@@ -3284,12 +3555,14 @@ fn build_lut_over(
 }
 
 /// The §1.6 oracle for the 3D LUT (docs/08 §3.11; docs/impl/lut.md): the
-/// WGSL manual-trilinear lookup matches `lumit_core::lut::Lut3d::sample`
+/// WGSL manual-trilinear lookup matches `lumit_core::lut::Lut3d::sample_in`
 /// wrapped as unpremultiply -> sample -> re-premultiply -> Mix, on a spread
 /// of RGBA pixels **including partial-alpha and out-of-domain HDR ones** and
 /// several cubes (identity, a per-channel gamma, an R/B swap). A cheap
 /// pointwise effect, so CPU and GPU agree to ≤ 2 fp16 ULP; the GPU is
-/// bit-stable (§2.4); Mix 0 is the bit-exact input; and the identity cube
+/// bit-stable (§2.4); Mix 0 is the bit-exact input; every **Input space**
+/// (K-543) is covered, and Linear is the case list's own default so a
+/// transfer leaking into it would fail the same comparison; and the identity cube
 /// round-trips every in-domain pixel to itself (a strong end-to-end check
 /// that the red-fastest indexing, the domain scale and the premult handling
 /// are all right — if it did not, one of those three is wrong).
@@ -3366,25 +3639,38 @@ fn wgsl_lut_matches_the_cpu_oracle() {
     // shader must do the same and not produce NaN.
     let zero_span = build_lut_over(3, [0.5; 3], [0.5; 3], |c| [c[1], c[2], c[0]]);
 
-    let cases: [(&str, &lumit_core::lut::Lut3d, f32); 8] = [
-        ("identity-full", &identity, 1.0),
-        ("identity-mix0", &identity, 0.0),
-        ("gamma-full", &gamma, 1.0),
-        ("gamma-mixed", &gamma, 0.5),
-        ("swap-rb", &swap, 1.0),
-        ("domained-full", &domained, 1.0),
-        ("domained-mixed", &domained, 0.5),
-        ("zero-span-domain", &zero_span, 1.0),
+    use lumit_core::lut::LutSpace;
+    let cases: [(&str, &lumit_core::lut::Lut3d, f32, LutSpace); 14] = [
+        ("identity-full", &identity, 1.0, LutSpace::Linear),
+        ("identity-mix0", &identity, 0.0, LutSpace::Linear),
+        ("gamma-full", &gamma, 1.0, LutSpace::Linear),
+        ("gamma-mixed", &gamma, 0.5, LutSpace::Linear),
+        ("swap-rb", &swap, 1.0, LutSpace::Linear),
+        ("domained-full", &domained, 1.0, LutSpace::Linear),
+        ("domained-mixed", &domained, 0.5, LutSpace::Linear),
+        ("zero-span-domain", &zero_span, 1.0, LutSpace::Linear),
+        // Input space (K-543): the picture converts into the space the cube was
+        // authored for, the table applies, the result converts back. Every case
+        // runs against the same pixels as its Linear sibling, so a shader that
+        // dropped or mis-ordered a transfer misses the oracle rather than
+        // producing a plausible-looking different grade.
+        ("srgb-identity", &identity, 1.0, LutSpace::Srgb),
+        ("srgb-gamma", &gamma, 1.0, LutSpace::Srgb),
+        ("srgb-mixed", &gamma, 0.5, LutSpace::Srgb),
+        ("srgb-domained", &domained, 1.0, LutSpace::Srgb),
+        ("rec709-identity", &identity, 1.0, LutSpace::Rec709),
+        ("rec709-swap", &swap, 1.0, LutSpace::Rec709),
     ];
 
-    for (name, lut, mix) in cases {
+    let mut rendered: Vec<(&str, Vec<f32>)> = Vec::new();
+    for (name, lut, mix, space) in cases {
         // CPU expected: unpremultiply -> Lut3d::sample -> re-premultiply ->
         // Mix, using the same lerp form the shader uses for the final blend.
         let mut cpu = vec![0.0f32; img.len()];
         for px in 0..(w * h) as usize {
             let i = px * 4;
             let o = [img[i], img[i + 1], img[i + 2], img[i + 3]];
-            let graded = lut.sample(unpremult(o));
+            let graded = lut.sample_in(space, unpremult(o));
             let pm = [graded[0] * o[3], graded[1] * o[3], graded[2] * o[3]];
             cpu[i] = o[0] + (pm[0] - o[0]) * mix;
             cpu[i + 1] = o[1] + (pm[1] - o[1]) * mix;
@@ -3402,6 +3688,7 @@ fn wgsl_lut_matches_the_cpu_oracle() {
             &lut_tex,
             lut.size as u32,
             mix,
+            space.code(),
             lut.domain_min,
             lut.domain_max,
         );
@@ -3425,12 +3712,41 @@ fn wgsl_lut_matches_the_cpu_oracle() {
             &lut_tex,
             lut.size as u32,
             mix,
+            space.code(),
             lut.domain_min,
             lut.domain_max,
         );
         let gpu2 = readback_linear_f32(&ctx, &out2, w, h).unwrap();
         assert_eq!(gpu, gpu2, "{name}: GPU LUT must be bit-stable");
+        rendered.push((name, gpu));
     }
+
+    // The oracle above would also be satisfied by a shader that ignored the
+    // Input space entirely, because the reference would then be wrong in the
+    // same way. So: each space must render a *different* picture from Linear
+    // through the same cube, and Linear must still be what it always was.
+    let of = |n: &str| -> &Vec<f32> {
+        &rendered
+            .iter()
+            .find(|(k, _)| *k == n)
+            .expect("case rendered")
+            .1
+    };
+    assert_ne!(
+        of("srgb-gamma"),
+        of("gamma-full"),
+        "sRGB input space must change the grade"
+    );
+    assert_ne!(
+        of("rec709-swap"),
+        of("swap-rb"),
+        "Rec. 709 input space must change the grade"
+    );
+    assert_ne!(
+        of("srgb-gamma"),
+        of("rec709-identity"),
+        "the two spaces are not the same curve"
+    );
 
     // End-to-end: the identity cube at Mix 1.0 returns every *in-domain*
     // pixel to itself (out-of-domain HDR pixels legitimately clamp, so they
@@ -3448,6 +3764,7 @@ fn wgsl_lut_matches_the_cpu_oracle() {
             &lut_tex,
             identity.size as u32,
             1.0,
+            LutSpace::Linear.code(),
             identity.domain_min,
             identity.domain_max,
         ),
@@ -7236,44 +7553,48 @@ fn wgsl_tile_matches_the_cpu_oracle() {
     let img = smooth_corpus(w, h);
     let tex = upload_linear_f32(&ctx, &img, w, h);
 
+    // The shipped defaults, centred on this raster the way
+    // `instantiate_for_raster` centres them on a real comp (K-542). This is the
+    // identity, and the cases below build on it.
     let base = {
         let mut t = Tile::read(Params::EMPTY);
         t.tile_centre_x = 16.0;
         t.tile_centre_y = 12.0;
         t
     };
-    let mut mirrored = base;
+    let tiled = {
+        let mut t = base;
+        t.tile_width = 50.0;
+        t.tile_height = 50.0;
+        t
+    };
+    let mut mirrored = tiled;
     mirrored.mirror_edges = true;
-    let mut phased = base;
+    let mut phased = tiled;
     phased.phase = 180.0;
-    let mut phased_h = base;
+    let mut phased_h = tiled;
     phased_h.phase = 180.0;
     phased_h.horizontal_phase_shift = true;
-    let mut windowed = base;
+    let mut windowed = tiled;
     windowed.output_width = 60.0;
     windowed.output_height = 60.0;
-    let mut wide = base;
+    let mut wide = tiled;
     wide.tile_width = 25.0;
     wide.tile_height = 200.0;
-    let mut whole = base;
-    whole.tile_width = 100.0;
-    whole.tile_height = 100.0;
-    let mut off = base;
+    // The growing case (K-542): output past 100 % writes a wider raster.
+    let mut grown = tiled;
+    grown.output_width = 200.0;
+    grown.output_height = 150.0;
+    let mut off = tiled;
     off.mix = 0.0;
 
-    for (name, t) in [
-        ("default", base),
-        ("mirrored", mirrored),
-        ("phased", phased),
-        ("phased-columns", phased_h),
-        ("windowed", windowed),
-        ("stretched", wide),
-        ("whole-frame", whole),
-        ("mix-zero", off),
-    ] {
+    // `cpu::tile_into` at the raster `cpu::tile_raster` sizes, against
+    // `FxEngine::tile` at the raster it sizes for itself from the same rule.
+    let run = |t: Tile| {
         let p = t.packed();
-        let mut cpu = img.clone();
-        lumit_core::fx::cpu::tile(&mut cpu, w, h, &p);
+        let (ow, oh) = lumit_core::fx::cpu::tile_raster(w, h, &p);
+        let mut cpu = vec![0.0f32; (ow * oh * 4) as usize];
+        lumit_core::fx::cpu::tile_into(&img, w, h, &mut cpu, ow, oh, &p);
         let out = fx.tile(
             &ctx,
             &tex,
@@ -7287,45 +7608,90 @@ fn wgsl_tile_matches_the_cpu_oracle() {
                 mirror_edges: p.mirror_edges,
                 horizontal_phase_shift: p.horizontal_phase_shift,
                 mix: p.mix,
+                out_raster: (ow, oh),
             },
         );
-        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        assert_eq!(
+            (out.width(), out.height()),
+            (ow, oh),
+            "the kernel must write the raster the oracle sized"
+        );
+        let gpu = readback_linear_f32(&ctx, &out, ow, oh).unwrap();
+        (ow, oh, cpu, gpu)
+    };
+
+    for (name, t) in [
+        ("identity", base),
+        ("tiled", tiled),
+        ("mirrored", mirrored),
+        ("phased", phased),
+        ("phased-columns", phased_h),
+        ("windowed", windowed),
+        ("stretched", wide),
+        ("grown", grown),
+        ("mix-zero", off),
+    ] {
+        let (ow, oh, cpu, gpu) = run(t);
         let worst = worst_diff(&cpu, &gpu);
-        eprintln!("tile {name}: worst {worst}");
+        eprintln!("tile {name}: {ow}x{oh}, worst {worst}");
         assert!(worst < 2e-3, "{name}: worst diff {worst}");
         match name {
-            "mix-zero" => assert_eq!(gpu, img, "{name}: must be the bit-exact identity"),
-            // A 100 % tile centred on the frame is the picture itself — to
-            // resampling, not to the bit: the sample lands on the pixel's own
-            // centre only if the two paths contract the same multiply-add.
-            "whole-frame" => assert!(
-                worst_diff(&gpu, &img) < 2e-3,
-                "{name}: a whole-frame tile is the picture"
-            ),
-            _ => assert!(gpu != img, "{name}: the tiling must actually do something"),
+            // **The default is the identity, to the bit** (§1.2, K-542): a fresh
+            // Tile dropped on a layer must change nothing, and "nothing" here is
+            // not "nothing you can see" — the short-circuit both kernels take
+            // means the pixels are the same pixels.
+            "identity" | "mix-zero" => {
+                assert_eq!((ow, oh), (w, h), "{name}: the raster must not grow");
+                assert_eq!(gpu, img, "{name}: must be the bit-exact identity");
+            }
+            _ => assert!(gpu != cpu[..] || gpu != img, "{name}: must do something"),
         }
     }
 
-    // **It repeats.** At the default 2×2 the pixel at (4, 3) and the one a tile
+    // **It repeats.** At a 2×2 tiling the pixel at (4, 3) and the one a tile
     // away at (20, 15) come from the same place, so they must match.
-    let p = base.packed();
-    let mut tiled = img.clone();
-    lumit_core::fx::cpu::tile(&mut tiled, w, h, &p);
+    let (_, _, cpu_tiled, _) = run(tiled);
     let a = ((3 * w + 4) * 4) as usize;
     let b = ((15 * w + 20) * 4) as usize;
     assert_eq!(
-        tiled[a..a + 4],
-        tiled[b..b + 4],
+        cpu_tiled[a..a + 4],
+        cpu_tiled[b..b + 4],
         "tiles one period apart must be the same picture"
     );
 
     // **The window clips.** At 60 % output the frame's corner is outside it.
-    let mut clipped = img.clone();
-    lumit_core::fx::cpu::tile(&mut clipped, w, h, &windowed.packed());
+    let (_, _, cpu_windowed, _) = run(windowed);
     assert_eq!(
-        clipped[0..4],
+        cpu_windowed[0..4],
         [0.0; 4],
         "outside the output window must be transparent"
+    );
+
+    // **Above 100 % the picture grows, and the margin is picture** (K-542).
+    // The raster is Output width and height of the frame, the frame's own
+    // window inside it is what the ungrown tiling produced — the growth adds,
+    // it does not move anything — and the margin holds copies rather than the
+    // transparency a layer's edge used to be.
+    let (ow, oh, cpu_grown, gpu_grown) = run(grown);
+    assert_eq!((ow, oh), (64, 36), "output 200/150 % of 32×24");
+    let (ox, oy) = ((ow - w) / 2, (oh - h) / 2);
+    for y in 0..h {
+        for x in 0..w {
+            let inner = (((y + oy) * ow + x + ox) * 4) as usize;
+            let flat = ((y * w + x) * 4) as usize;
+            assert_eq!(
+                cpu_grown[inner..inner + 4],
+                cpu_tiled[flat..flat + 4],
+                "the frame's own window must be unmoved at ({x}, {y})"
+            );
+        }
+    }
+    let margin: f32 = (0..ow)
+        .map(|x| gpu_grown[((2 * ow + x) * 4 + 3) as usize])
+        .sum();
+    assert!(
+        margin > 0.5 * ow as f32,
+        "the grown margin must hold picture, not transparency (alpha sum {margin})"
     );
 }
 

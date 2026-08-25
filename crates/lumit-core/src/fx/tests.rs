@@ -850,15 +850,16 @@ fn motion_blur_window_reaches_the_next_frame_and_wants_flow() {
     assert_eq!(stack_temporal_window(one, true), vec![0, 1]);
     assert!(stack_is_temporal(one, true));
     // The flow-field gate is set by motion blur and nothing else current.
-    assert_eq!(stack_flow_neighbour(one, true), Some(1));
+    assert_eq!(stack_flow_neighbours(one, true), vec![1]);
+    assert_eq!(effect_flow_neighbour("motion_blur"), Some(1));
     let blur = instantiate("blur").unwrap();
     let echo = instantiate("echo").unwrap();
-    assert_eq!(stack_flow_neighbour(&[blur.clone(), echo], true), None);
+    assert!(stack_flow_neighbours(&[blur.clone(), echo], true).is_empty());
     // Bypassed by the layer fx switch, or disabled, it wants nothing.
-    assert_eq!(stack_flow_neighbour(one, false), None);
+    assert!(stack_flow_neighbours(one, false).is_empty());
     let mut off = mb.clone();
     off.enabled = false;
-    assert_eq!(stack_flow_neighbour(std::slice::from_ref(&off), true), None);
+    assert!(stack_flow_neighbours(std::slice::from_ref(&off), true).is_empty());
 }
 
 #[test]
@@ -870,14 +871,16 @@ fn datamosh_window_reaches_the_prior_frame_and_wants_flow() {
     let one = std::slice::from_ref(&dm);
     assert_eq!(stack_temporal_window(one, true), vec![-1, 0]);
     assert!(stack_is_temporal(one, true));
-    assert_eq!(stack_flow_neighbour(one, true), Some(-1));
+    assert_eq!(stack_flow_neighbours(one, true), vec![-1]);
+    assert_eq!(effect_flow_neighbour("datamosh"), Some(-1));
 
     // A plain Block glitch stays single-frame.
     let plain = instantiate("block_glitch").unwrap();
     let plain_one = std::slice::from_ref(&plain);
     assert_eq!(stack_temporal_window(plain_one, true), vec![0]);
     assert!(!stack_is_temporal(plain_one, true));
-    assert_eq!(stack_flow_neighbour(plain_one, true), None);
+    assert!(stack_flow_neighbours(plain_one, true).is_empty());
+    assert_eq!(effect_flow_neighbour("block_glitch"), None);
 
     // Disabled, or the layer fx switch off, Datamosh wants nothing.
     let mut off = dm.clone();
@@ -886,22 +889,32 @@ fn datamosh_window_reaches_the_prior_frame_and_wants_flow() {
         stack_temporal_window(std::slice::from_ref(&off), true),
         vec![0]
     );
-    assert_eq!(stack_flow_neighbour(std::slice::from_ref(&off), true), None);
-    assert_eq!(stack_flow_neighbour(one, false), None);
+    assert!(stack_flow_neighbours(std::slice::from_ref(&off), true).is_empty());
+    assert!(stack_flow_neighbours(one, false).is_empty());
 }
 
 #[test]
-fn motion_blur_and_datamosh_together_the_first_in_stack_order_wins() {
-    // K-104: a layer can carry only one flow field per frame in v1: if
-    // both a live Motion blur and a live Datamosh are in the same
-    // stack, whichever comes first wins the single slot.
+fn motion_blur_and_datamosh_together_ask_for_both_measurements() {
+    // K-544: a layer used to carry one flow field and the first consumer in
+    // stack order took it, leaving the other silently doing nothing. The two
+    // want opposite measurements — forward to the next frame, back to the
+    // previous — so the stack asks for both, and stack order does not decide
+    // who gets served.
     let mb = instantiate("motion_blur").unwrap();
     let dm = instantiate("datamosh").unwrap();
     assert_eq!(
-        stack_flow_neighbour(&[mb.clone(), dm.clone()], true),
-        Some(1)
+        stack_flow_neighbours(&[mb.clone(), dm.clone()], true),
+        vec![-1, 1]
     );
-    assert_eq!(stack_flow_neighbour(&[dm, mb], true), Some(-1));
+    assert_eq!(
+        stack_flow_neighbours(&[dm.clone(), mb.clone()], true),
+        vec![-1, 1],
+        "the list must not depend on stack order"
+    );
+    // Two of the same effect still measure once: sorted and deduplicated.
+    assert_eq!(stack_flow_neighbours(&[mb.clone(), mb], true), vec![1]);
+    // The fx switch still turns the whole thing off.
+    assert!(stack_flow_neighbours(&[dm], false).is_empty());
 }
 
 #[test]
@@ -2533,6 +2546,11 @@ fn matte_key_instantiates_and_resolves_defaults() {
             clip_black: 0.0,
             clip_white: 1.0,
             clip_rollback: 0.0,
+            pre_blur: 0.0,
+            shrink_grow: 0.0,
+            softness: 0.0,
+            despot_black: 0.0,
+            despot_white: 0.0,
             replace_method: 2,
             replace_colour: [0.5, 0.5, 0.5, 1.0],
             mix: 1.0,
@@ -3278,6 +3296,11 @@ fn cpu_matte_key_behaves() {
         clip_black: 0.0,
         clip_white: 1.0,
         clip_rollback: 0.0,
+        pre_blur: 0.0,
+        shrink_grow: 0.0,
+        softness: 0.0,
+        despot_black: 0.0,
+        despot_white: 0.0,
         replace_method: replace,
         replace_colour: [0.5, 0.5, 0.5, 1.0],
         mix,
@@ -3915,6 +3938,66 @@ fn shake_instantiates_with_a_per_instance_seed_and_resolves() {
     );
 }
 
+/// **Rotation frequency drives the twist and nothing else** (K-541).
+///
+/// The twist was the one axis with an amount but no rate: x, y and z each
+/// multiplied the master Frequency, rotation read the noise at the master rate
+/// flat. This pins the row that fixes that, in the three ways it can go wrong.
+///
+/// The default is the load-bearing one. A shake saved before this row has no
+/// `rot_freq` at all, so it must resolve to the multiplier of one it always
+/// had — and *bit-for-bit*, not nearly, since a shake is a picture and a
+/// changed last bit is a changed frame.
+#[test]
+fn shake_rotation_frequency_moves_the_twist_alone() {
+    use effects::shake::Shaken;
+    let set = |e: &EffectInstance, id: &str, v: f64| {
+        let mut e = e.clone();
+        for p in &mut e.params {
+            if p.id == id {
+                p.value = EffectValue::Float(Property::fixed(v));
+            }
+        }
+        e
+    };
+    let plain = |e: &EffectInstance, lt: f64| match shake_packed(e, lt, 1000.0) {
+        Shaken::Plain { wobble, .. } => wobble,
+        Shaken::Blurred { .. } => panic!("the smear ships off"),
+    };
+
+    // A twist worth measuring; everything else left at its default.
+    let base = set(&instantiate("shake").unwrap(), "rotation", 10.0);
+    let (lt, freq) = (0.4, base.float_at("frequency", 0.4).unwrap());
+    let a = plain(&base, lt);
+    assert_ne!(a.rotation_deg, 0.0, "there is a twist to measure");
+
+    // Writing the default explicitly changes nothing — which is the same
+    // arithmetic an old project takes when the row is missing entirely.
+    assert_eq!(a, plain(&set(&base, "rot_freq", 1.0), lt));
+
+    // Doubled, the twist reads the same noise curve at twice the rate: its
+    // value now is the value it would have had at twice the time. The base is
+    // scaled by two, which is exact, so this is an equality and not a
+    // tolerance.
+    let fast = set(&base, "rot_freq", 2.0);
+    let at_double_time = plain(&base, lt * 2.0);
+    assert_eq!(
+        plain(&fast, lt).rotation_deg,
+        at_double_time.rotation_deg,
+        "twice the rotation frequency is twice the way along the twist"
+    );
+    assert!(
+        (lt * freq * 2.0 - (lt * 2.0) * freq).abs() == 0.0,
+        "the noise base scales exactly by two"
+    );
+
+    // And the other axes do not move with it.
+    let moved = plain(&fast, lt);
+    assert_eq!(moved.offset_px, a.offset_px, "x and y are untouched");
+    assert_eq!(moved.zoom, a.zoom, "the depth pump is untouched");
+    assert_ne!(moved.rotation_deg, a.rotation_deg, "the twist did move");
+}
+
 #[test]
 fn cpu_shake_is_identity_at_zero_and_wobbles_through_the_affine() {
     let (w, h) = (17u32, 9u32);
@@ -4220,6 +4303,7 @@ fn shake_packs_the_wobble_the_old_arm_resolved() {
             "y_amp" => 1.4,
             "x_freq" => 1.3,
             "y_freq" => 0.6,
+            "rot_freq" => 2.2,
             "z_amp" => 12.0,
             "z_freq" => 1.7,
             _ => continue,
@@ -4243,6 +4327,7 @@ fn shake_packs_the_wobble_the_old_arm_resolved() {
         z_amp: ((fl("z_amp").unwrap() as f32) / 100.0).clamp(0.0, 1.0),
         x_freq: fl("x_freq").unwrap().max(0.0),
         y_freq: fl("y_freq").unwrap().max(0.0),
+        rot_freq: fl("rot_freq").unwrap().max(0.0),
         z_freq: fl("z_freq").unwrap().max(0.0),
     };
     let base = lt * fl("frequency").unwrap().max(0.0);
@@ -9790,6 +9875,16 @@ fn every_parameter_declares_a_unit() {
     // size in pixels is derived from the raster the kernel is handed (§3.39's
     // precedent). Find edges and Broadcast safe are pointwise.
     //
+    // The Matte key's spatial controls (K-546) bring three. **Screen pre-blur**
+    // is a blur radius like any other; **Screen shrink/grow** is how far the
+    // matte's edge marches, which must be the same distance in the picture at
+    // any preview resolution; **Screen softness** is a blur radius again. Its
+    // two garbage-mask rows declare none, for the reason the three line-drawing
+    // effects' rows declare none: the geometry is flattened once in px@comp and
+    // each consumer takes it to its own raster. Despot black and white are per
+    // cent and reach exactly one pixel by definition, so neither is a distance
+    // a preview could get wrong.
+    //
     // K-408's two consumers (docs/08 §3.78-§3.79) bring four, all px@comp and
     // all pixel-scale looks. **Scribble's Stroke width, Spacing and Path
     // overlap** are the pencil's own dimensions and must travel together, or a
@@ -9964,6 +10059,9 @@ fn every_parameter_declares_a_unit() {
             // What a full channel of a Motion vectors layer means, in pixels
             // of movement (K-429).
             ("motion_blur", "vector_scale"),
+            ("matte_key", "pre_blur"),
+            ("matte_key", "shrink_grow"),
+            ("matte_key", "softness"),
             ("shadow_highlight", "radius"),
             ("lens_flare", "light_x"),
             ("lens_flare", "light_y"),
@@ -10686,6 +10784,11 @@ fn every_migrated_effect_renders_what_the_old_dispatch_rendered() {
                     clip_black: 0.1,
                     clip_white: 0.9,
                     clip_rollback: 0.25,
+                    pre_blur: 0.0,
+                    shrink_grow: 0.0,
+                    softness: 0.0,
+                    despot_black: 0.0,
+                    despot_white: 0.0,
                     replace_method: 1,
                     replace_colour: [0.3, 0.3, 0.3, 1.0],
                     mix: 0.75,
@@ -11570,8 +11673,28 @@ fn a_mask_path_row_declares_itself_and_defaults_to_the_first_mask() {
         .collect();
     assert_eq!(
         consumers,
-        vec!["vegas", "scribble", "stroke", "particulate"]
+        vec!["vegas", "scribble", "stroke", "particulate", "matte_key"]
     );
+
+    // The Matte key declares **two** rows, not one (K-546), so the carriage
+    // counts rows rather than effects. Both opt out of the first-mask default:
+    // a garbage matte nobody asked for would be a keyer that stopped keying.
+    let keyer = BUILTINS
+        .iter()
+        .find(|s| s.match_name == "matte_key")
+        .expect("the keyer");
+    assert_eq!(keyer.mask_path_count(), 2);
+    assert_eq!(
+        keyer.mask_paths().collect::<Vec<_>>(),
+        vec![("inside_mask", false), ("outside_mask", false)]
+    );
+    for s in BUILTINS.iter() {
+        assert!(
+            s.mask_path_count() <= 2,
+            "{} declares more path rows than the carriage was sized for",
+            s.match_name
+        );
+    }
 }
 
 /// A fresh instance's mask-path row is **unset**, which is the "First mask"
@@ -13140,6 +13263,8 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
 
     // A path to walk, and the same emitter emits again.
     let path = MaskPolyline {
+        expansion: 0.0,
+        feather: 0.0,
         points: vec![[0.0, 0.0], [100.0, 0.0]],
         arc: vec![0.0, 100.0],
         closed: false,
@@ -13503,5 +13628,490 @@ fn the_default_particulate_look_is_a_few_hundred_particles() {
         each < 0.010,
         "the default look costs {:.3} ms an evaluation on the CPU reference",
         each * 1000.0
+    );
+}
+
+/// **A fresh Tile changes nothing** (docs/08 §3.39, §1.2, K-542 — which reverses
+/// the earlier 2×2 default).
+///
+/// AE's Motion Tile is the identity until it is set up, and so is Lumit's: one
+/// whole-frame tile, cut from the middle of the frame, stamped over exactly the
+/// frame it came from. "Nothing" here means to the bit, not to the eye — the
+/// mapping is a divide followed by the multiply that undoes it, which fp32 does
+/// not always answer exactly, so both kernels short-circuit it. This test fails
+/// against a Tile width of 50, and against a centre that has not been moved onto
+/// the raster.
+#[test]
+fn a_fresh_tile_changes_not_one_bit() {
+    let (w, h) = (37u32, 21u32);
+    let source: Vec<f32> = (0..(w * h * 4))
+        .map(|i| ((i * 7 % 251) as f32) / 251.0)
+        .collect();
+
+    for (rw, rh) in [(w, h), (1920, 1080), (3840, 2160)] {
+        let inst = builtins::instantiate_for_raster("tile", f64::from(rw), f64::from(rh))
+            .expect("tile is a builtin");
+        let list = vec![inst];
+        let ops = super::resolve_stack_temporal_named(
+            &list,
+            crate::fx::drivers::ResolvedDrivers::NONE,
+            0.0,
+            0.0,
+            1000.0,
+            1.0,
+            &MarkerContext::NONE,
+            Arc::new(ExpressionContext::detached()),
+        )
+        .1;
+        // The raster the fresh instance was centred on is the one it must be the
+        // identity on; the corpus is small, so the two other cases prove only
+        // that the centring happened, which the next assertion covers.
+        if (rw, rh) != (w, h) {
+            let t = effects::tile::Tile::read(ops.iter().next().expect("one op").params);
+            assert_eq!(
+                (t.tile_centre_x, t.tile_centre_y),
+                (rw as f32 * 0.5, rh as f32 * 0.5),
+                "a fresh Tile must be cut from the middle of the comp it was dropped on"
+            );
+            continue;
+        }
+        let mut out = source.clone();
+        cpu::apply_stack(&mut out, w, h, &ops);
+        assert_eq!(out, source, "dropping Tile on a layer changed the picture");
+    }
+}
+
+/// **Output width and height above 100 % grow the working raster** (docs/08
+/// §3.39, K-542): the copies land past the frame's edges, and the effects after
+/// Tile in the stack run on the wider picture so those copies are picture to
+/// them rather than transparency.
+///
+/// At or below 100 % nothing grows — the window only clips, which needs no more
+/// room than the frame already has — and Mix 0 grows nothing either, because an
+/// identity that reallocated the raster would not be one.
+#[test]
+fn tile_grows_the_raster_only_above_a_hundred_per_cent() {
+    let (w, h) = (32u32, 24u32);
+    let of = |ow: f32, oh: f32, mix: f32| {
+        let mut t = effects::tile::Tile::read(crate::fx::Params::EMPTY);
+        t.tile_centre_x = 16.0;
+        t.tile_centre_y = 12.0;
+        t.tile_width = 50.0;
+        t.tile_height = 50.0;
+        t.output_width = ow;
+        t.output_height = oh;
+        t.mix = mix;
+        t.packed()
+    };
+    assert_eq!(cpu::tile_raster(w, h, &of(100.0, 100.0, 100.0)), (w, h));
+    assert_eq!(cpu::tile_raster(w, h, &of(60.0, 60.0, 100.0)), (w, h));
+    assert_eq!(cpu::tile_raster(w, h, &of(200.0, 150.0, 100.0)), (64, 36));
+    assert_eq!(
+        cpu::tile_raster(w, h, &of(200.0, 150.0, 0.0)),
+        (w, h),
+        "Mix 0 is the identity, and an identity does not reallocate"
+    );
+    // The ceiling holds a slider drag to a raster every backend can allocate.
+    assert_eq!(
+        cpu::tile_raster(3840, 2160, &of(500.0, 500.0, 100.0)),
+        (cpu::TILE_MAX_RASTER, cpu::TILE_MAX_RASTER),
+        "the growth stops at the guaranteed maximum texture side"
+    );
+
+    // The margin holds picture, and the frame's own window is untouched: the
+    // growth adds, it never moves what was already there.
+    let img: Vec<f32> = (0..(w * h * 4))
+        .map(|i| {
+            if i % 4 == 3 {
+                1.0
+            } else {
+                (i % 17) as f32 / 17.0
+            }
+        })
+        .collect();
+    let p = of(200.0, 150.0, 100.0);
+    let (ow, oh) = cpu::tile_raster(w, h, &p);
+    let mut grown = vec![0.0f32; (ow * oh * 4) as usize];
+    cpu::tile_into(&img, w, h, &mut grown, ow, oh, &p);
+    let mut flat = img.clone();
+    cpu::tile(&mut flat, w, h, &of(100.0, 100.0, 100.0));
+    let (ox, oy) = ((ow - w) / 2, (oh - h) / 2);
+    for y in 0..h {
+        for x in 0..w {
+            let a = (((y + oy) * ow + x + ox) * 4) as usize;
+            let b = ((y * w + x) * 4) as usize;
+            assert_eq!(
+                grown[a..a + 4],
+                flat[b..b + 4],
+                "the window moved at ({x}, {y})"
+            );
+        }
+    }
+    let top_row_alpha: f32 = (0..ow).map(|x| grown[(x * 4 + 3) as usize]).sum();
+    assert!(
+        top_row_alpha > 0.5 * ow as f32,
+        "the margin an effect after Tile sees must be picture, not transparency"
+    );
+}
+
+/// The corpus the K-546 spatial tests key against: a `w × h` frame that is the
+/// screen colour everywhere except a foreground block, in premultiplied RGBA.
+#[cfg(test)]
+fn keyer_plate(w: u32, h: u32, block: (u32, u32, u32, u32)) -> Vec<f32> {
+    let mut img = vec![0.0f32; (w * h * 4) as usize];
+    let (bx, by, bw, bh) = block;
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let fg = x >= bx && x < bx + bw && y >= by && y < by + bh;
+            // The foreground is a plain magenta, well away from the screen; the
+            // screen is the effect's own default green.
+            let c = if fg { [0.6, 0.1, 0.5] } else { [0.0, 0.6, 0.0] };
+            img[i..i + 3].copy_from_slice(&c);
+            img[i + 3] = 1.0;
+        }
+    }
+    img
+}
+
+/// A base keyer at its defaults, on the Screen matte view so the tests read the
+/// matte itself out of the red channel rather than inferring it from a colour.
+#[cfg(test)]
+fn matte_view_params() -> MatteKeyParams {
+    MatteKeyParams {
+        view: 1,
+        key: [0.0, 0.6, 0.0, 1.0],
+        gain: 1.0,
+        balance: 0.5,
+        despill_bias: [0.5, 0.5, 0.5, 1.0],
+        alpha_bias: [0.5, 0.5, 0.5, 1.0],
+        spill: 1.0,
+        clip_black: 0.0,
+        clip_white: 1.0,
+        clip_rollback: 0.0,
+        pre_blur: 0.0,
+        shrink_grow: 0.0,
+        softness: 0.0,
+        despot_black: 0.0,
+        despot_white: 0.0,
+        replace_method: 2,
+        replace_colour: [0.5, 0.5, 0.5, 1.0],
+        mix: 1.0,
+    }
+}
+
+/// **The spatial controls change nothing until one is asked for** (K-546).
+///
+/// The promise the whole landing rests on: an existing project keys the bytes it
+/// always keyed. `matte_key_spatial` hands straight over to the pointwise keyer
+/// when nothing spatial is set and neither garbage mask is bound, so this is an
+/// equality on the pixels rather than a tolerance.
+#[test]
+fn the_keyers_defaults_are_the_pointwise_keyer_byte_for_byte() {
+    let (w, h) = (16u32, 12u32);
+    let img = keyer_plate(w, h, (4, 3, 8, 6));
+    let p = MatteKeyParams {
+        view: 0,
+        ..matte_view_params()
+    };
+    let blank = cpu::MaskFillParams::blank();
+    let mut pointwise = img.clone();
+    cpu::matte_key(&mut pointwise, &p);
+    let mut staged = img.clone();
+    cpu::matte_key_spatial(&mut staged, w, h, &p, &blank, &blank);
+    assert_eq!(pointwise, staged, "the defaults took a different path");
+}
+
+/// **Screen pre-blur softens what the key is judged from, not what comes out**
+/// (K-546).
+///
+/// Both halves matter. A pre-blur must move the matte — otherwise the control
+/// does nothing — and it must leave the *colour* alone, which is what separates
+/// it from blurring the layer and keying the result.
+#[test]
+fn the_screen_pre_blur_judges_a_soft_picture_and_returns_a_sharp_one() {
+    let (w, h) = (24u32, 16u32);
+    let img = keyer_plate(w, h, (8, 4, 8, 8));
+    let blank = cpu::MaskFillParams::blank();
+    let base = matte_view_params();
+
+    let mut sharp = img.clone();
+    cpu::matte_key_spatial(&mut sharp, w, h, &base, &blank, &blank);
+    let mut soft = img.clone();
+    cpu::matte_key_spatial(
+        &mut soft,
+        w,
+        h,
+        &MatteKeyParams {
+            pre_blur: 3.0,
+            ..base
+        },
+        &blank,
+        &blank,
+    );
+    // The matte has genuinely moved: a hard edge has become a ramp.
+    let edges = sharp
+        .chunks_exact(4)
+        .zip(soft.chunks_exact(4))
+        .filter(|(a, b)| (a[0] - b[0]).abs() > 0.05)
+        .count();
+    assert!(
+        edges > 8,
+        "a pre-blur that changed {edges} pixels is not one"
+    );
+    let mid: Vec<f32> = soft
+        .chunks_exact(4)
+        .map(|c| c[0])
+        .filter(|m| *m > 0.05 && *m < 0.95)
+        .collect();
+    assert!(
+        !mid.is_empty(),
+        "the softened key produced no partial matte"
+    );
+
+    // And on the Final view the kept colour is the original's, not a blurred
+    // one: the block's middle is still exactly the magenta that went in.
+    let mut final_out = img.clone();
+    cpu::matte_key_spatial(
+        &mut final_out,
+        w,
+        h,
+        &MatteKeyParams {
+            view: 0,
+            pre_blur: 3.0,
+            spill: 0.0,
+            replace_method: 0,
+            ..base
+        },
+        &blank,
+        &blank,
+    );
+    let centre = ((8 * w + 12) * 4) as usize;
+    assert!(
+        (final_out[centre] - 0.6).abs() < 1e-5 && (final_out[centre + 2] - 0.5).abs() < 1e-5,
+        "the colour was blurred as well as the judgement: {:?}",
+        &final_out[centre..centre + 4]
+    );
+}
+
+/// **Shrink and grow march the matte's edge, in opposite directions** (K-546).
+///
+/// Counted rather than sampled: how much of the frame the matte keeps is the
+/// one number a morphological pass is supposed to move, and it must move up for
+/// a grow and down for a shrink.
+#[test]
+fn the_screen_shrink_and_grow_march_the_mattes_edge() {
+    let (w, h) = (24u32, 24u32);
+    let img = keyer_plate(w, h, (8, 8, 8, 8));
+    let blank = cpu::MaskFillParams::blank();
+    let base = matte_view_params();
+    let kept = |amount: f32| {
+        let mut out = img.clone();
+        cpu::matte_key_spatial(
+            &mut out,
+            w,
+            h,
+            &MatteKeyParams {
+                shrink_grow: amount,
+                ..base
+            },
+            &blank,
+            &blank,
+        );
+        out.chunks_exact(4).filter(|c| c[0] > 0.5).count()
+    };
+    let (shrunk, plain, grown) = (kept(-2.0), kept(0.0), kept(2.0));
+    assert_eq!(plain, 64, "the block itself is what the key keeps");
+    assert!(
+        shrunk < plain && plain < grown,
+        "shrink {shrunk}, plain {plain}, grow {grown}"
+    );
+    // A morphological pass is not a blur: the edge that moved is still hard.
+    let mut out = img.clone();
+    cpu::matte_key_spatial(
+        &mut out,
+        w,
+        h,
+        &MatteKeyParams {
+            shrink_grow: 2.0,
+            ..base
+        },
+        &blank,
+        &blank,
+    );
+    assert!(
+        out.chunks_exact(4).all(|c| c[0] <= 0.001 || c[0] >= 0.999),
+        "growing softened the edge, which is Softness' job"
+    );
+}
+
+/// **Softness blurs the matte and only the matte** (K-546): a hard edge becomes
+/// a ramp, and the amount of matte in the frame is roughly conserved.
+#[test]
+fn the_screen_softness_ramps_the_mattes_edge() {
+    let (w, h) = (24u32, 24u32);
+    let img = keyer_plate(w, h, (8, 8, 8, 8));
+    let blank = cpu::MaskFillParams::blank();
+    let base = matte_view_params();
+    let mut out = img.clone();
+    cpu::matte_key_spatial(
+        &mut out,
+        w,
+        h,
+        &MatteKeyParams {
+            softness: 3.0,
+            ..base
+        },
+        &blank,
+        &blank,
+    );
+    let partial = out
+        .chunks_exact(4)
+        .filter(|c| c[0] > 0.05 && c[0] < 0.95)
+        .count();
+    assert!(
+        partial > 16,
+        "a blurred matte has an edge: {partial} pixels"
+    );
+    let total: f32 = out.chunks_exact(4).map(|c| c[0]).sum();
+    assert!(
+        (total - 64.0).abs() < 8.0,
+        "a blur moved the matte's weight: {total}"
+    );
+}
+
+/// **Despot removes a lone speck and leaves a real edge alone** (K-546).
+///
+/// The distinction is the whole control: a pixel that disagrees with all eight
+/// of its neighbours is a speck, and a pixel on an edge always has a neighbour
+/// on its own side.
+#[test]
+fn the_despots_take_specks_and_leave_edges() {
+    let (w, h) = (24u32, 24u32);
+    let mut img = keyer_plate(w, h, (8, 8, 8, 8));
+    // A lone screen pixel inside the block (a pinhole) and a lone foreground
+    // pixel out in the screen (a fleck).
+    let hole = ((11 * w + 11) * 4) as usize;
+    img[hole..hole + 4].copy_from_slice(&[0.0, 0.6, 0.0, 1.0]);
+    let fleck = ((3 * w + 3) * 4) as usize;
+    img[fleck..fleck + 4].copy_from_slice(&[0.6, 0.1, 0.5, 1.0]);
+    let blank = cpu::MaskFillParams::blank();
+    let base = matte_view_params();
+    let run = |p: MatteKeyParams| {
+        let mut out = img.clone();
+        cpu::matte_key_spatial(&mut out, w, h, &p, &blank, &blank);
+        out
+    };
+
+    let plain = run(base);
+    assert!(plain[hole] < 0.01, "the pinhole should key to nothing");
+    assert!(plain[fleck] > 0.99, "the fleck should key to something");
+
+    let black = run(MatteKeyParams {
+        despot_black: 1.0,
+        ..base
+    });
+    assert!(black[hole] > 0.99, "despot black left the pinhole");
+    assert!(black[fleck] > 0.99, "despot black should not touch a fleck");
+
+    let white = run(MatteKeyParams {
+        despot_white: 1.0,
+        ..base
+    });
+    assert!(white[fleck] < 0.01, "despot white left the fleck");
+    assert!(
+        white[hole] < 0.01,
+        "despot white should not touch a pinhole"
+    );
+
+    // The block's own corner is an edge, not a speck, and survives both.
+    let corner = ((8 * w + 8) * 4) as usize;
+    let both = run(MatteKeyParams {
+        despot_black: 1.0,
+        despot_white: 1.0,
+        ..base
+    });
+    assert!(
+        (both[corner] - plain[corner]).abs() < 1e-6,
+        "a despot ate the corner of the foreground"
+    );
+}
+
+/// **The garbage masks force opaque and force transparent** (K-546), and an
+/// unset one is the no-op.
+#[test]
+fn the_garbage_masks_hold_the_matte_open_and_shut() {
+    let (w, h) = (24u32, 24u32);
+    // A frame that is nothing but screen: the key alone keeps none of it.
+    let img = keyer_plate(w, h, (0, 0, 0, 0));
+    let base = matte_view_params();
+    let blank = cpu::MaskFillParams::blank();
+    let masks = vec![crate::mask::Mask::rectangle(6.0, 6.0, 8.0, 8.0)];
+    let poly = crate::mask::mask_path_at(&masks, None, true, 0.0);
+    assert!(
+        !poly.is_empty() && poly.closed,
+        "a rectangle is a closed path"
+    );
+    let fill = cpu::mask_fill_params(&poly, 1.0);
+    assert!(fill.count >= 4, "the outline flattened to nothing");
+
+    let mut nothing = img.clone();
+    cpu::matte_key_spatial(&mut nothing, w, h, &base, &blank, &blank);
+    assert!(
+        nothing.chunks_exact(4).all(|c| c[0] < 0.01),
+        "an all-screen frame keys to nothing"
+    );
+
+    // Inside: the rectangle is opaque, and only the rectangle.
+    let mut held = img.clone();
+    cpu::matte_key_spatial(&mut held, w, h, &base, &fill, &blank);
+    let at = |x: u32, y: u32, buf: &[f32]| buf[((y * w + x) * 4) as usize];
+    assert!(at(10, 10, &held) > 0.99, "the hold-out is not opaque");
+    assert!(at(2, 2, &held) < 0.01, "the hold-out leaked outside itself");
+
+    // Outside: on a frame the key keeps whole, the rectangle is cut away.
+    let fg = keyer_plate(w, h, (0, 0, w, h));
+    let mut cut = fg.clone();
+    cpu::matte_key_spatial(&mut cut, w, h, &base, &blank, &fill);
+    assert!(at(10, 10, &cut) < 0.01, "the cut-out is not transparent");
+    assert!(at(2, 2, &cut) > 0.99, "the cut-out ate the whole frame");
+
+    // An open path holds nothing out: the row's documented no-op.
+    let mut open = poly.clone();
+    open.closed = false;
+    assert_eq!(cpu::mask_fill_params(&open, 1.0).count, 0);
+}
+
+/// **A mask's own feather and expansion ride with its curve** (K-546): the
+/// carriage hands them over so a garbage matte softens exactly where the mask
+/// it was drawn from softens.
+#[test]
+fn a_mask_path_carries_its_own_feather_and_expansion() {
+    let mut masks = vec![crate::mask::Mask::rectangle(6.0, 6.0, 8.0, 8.0)];
+    masks[0].feather = Property::fixed(4.0);
+    masks[0].expansion = Property::fixed(-1.5);
+    let poly = crate::mask::mask_path_at(&masks, None, true, 0.0);
+    assert!((poly.feather - 4.0).abs() < 1e-6);
+    assert!((poly.expansion + 1.5).abs() < 1e-6);
+
+    // The ramp is the feather at this raster, floored at the one pixel a hard
+    // edge is antialiased over; the expansion travels with it.
+    let fill = cpu::mask_fill_params(&poly, 2.0);
+    assert!((fill.ramp - 8.0).abs() < 1e-6, "ramp {}", fill.ramp);
+    assert!((fill.expansion + 3.0).abs() < 1e-6);
+    let hard = crate::mask::mask_path_at(
+        &[crate::mask::Mask::rectangle(0.0, 0.0, 4.0, 4.0)],
+        None,
+        true,
+        0.0,
+    );
+    assert!((cpu::mask_fill_params(&hard, 1.0).ramp - 1.0).abs() < 1e-6);
+
+    // A feathered outline really does ramp rather than step.
+    let fill = cpu::mask_fill_params(&poly, 1.0);
+    let on_edge = cpu::mask_fill_at(6.0, 10.0, &fill);
+    assert!(
+        on_edge > 0.05 && on_edge < 0.95,
+        "a feathered edge stepped: {on_edge}"
     );
 }

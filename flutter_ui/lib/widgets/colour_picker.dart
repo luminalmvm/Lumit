@@ -239,6 +239,63 @@ Future<void> showColourPicker({
   );
 }
 
+/// A colour chip that opens the picker above (K-555).
+///
+/// The chip itself, not the row it sits on: a caller supplies the label and the
+/// width. Panels that need one had each drawn their own before this existed;
+/// this is here so the next one does not, and so the picker is opened the same
+/// way everywhere.
+class ColourSwatchButton extends StatelessWidget {
+  /// What the chip shows, and what the picker opens on.
+  final Color colour;
+
+  /// Called with each colour chosen. The picker applies as it goes, so this
+  /// runs on every change and once more when the choice settles.
+  final ValueChanged<PickedColour> onPicked;
+
+  /// Which numbers the picker shows: a display colour is 0—255, a
+  /// scene-linear one is 0—1 and may leave it.
+  final ColourScale scale;
+
+  const ColourSwatchButton({
+    super.key,
+    required this.colour,
+    required this.onPicked,
+    this.scale = ColourScale.bytes,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () async {
+        final box = context.findRenderObject();
+        if (box is! RenderBox) return;
+        await showColourPicker(
+          context: context,
+          position: box.localToGlobal(Offset(0, box.size.height + 4)),
+          initial: PickedColour.of(colour),
+          scale: scale,
+          onCommit: onPicked,
+        );
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          width: 28,
+          height: 18,
+          decoration: BoxDecoration(
+            color: colour,
+            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+            border: Border.all(color: t.hairlineStrong),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ColourPickerBody extends StatefulWidget {
   final PickedColour initial;
   final List<Color> presets;

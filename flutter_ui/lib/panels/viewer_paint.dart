@@ -27,6 +27,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeScalar;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
@@ -47,6 +48,13 @@ const double paintSampleDistance = 2;
 
 /// The mark drawn where a clone stamp will copy from.
 const double cloneSourceMarkSize = 7;
+
+/// What a brush shape is called in the tool options and on a stroke's row
+/// (K-548).
+String brushShapeLabel(BridgeBrushShape shape) => switch (shape) {
+      BridgeBrushShape.round => l10n.brushShapeRound,
+      BridgeBrushShape.square => l10n.brushShapeSquare,
+    };
 
 /// Which engine mode each painting tool commits.
 BridgePaintMode paintModeFor(ToolMode tool) => switch (tool) {
@@ -314,8 +322,16 @@ class _ViewerPaintLayerState extends State<ViewerPaintLayer> {
           colour: tools.fillRgba,
           width: tools.brushSize,
           hardness: tools.brushHardness / 100,
+          shape: tools.brushShape,
           opacity: tools.brushOpacity,
+          // A fresh stroke is drawn whole; Start and End are trimmed
+          // afterwards, on their own Timeline rows (K-549).
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: paintModeFor(widget.tool),
+          // A fresh mark lays its colour down; the blend is chosen after the
+          // fact on the stroke's own row (K-550). Index 0 is Normal.
+          blend: 0,
           cloneOffsetX: offsetX,
           cloneOffsetY: offsetY,
         ),

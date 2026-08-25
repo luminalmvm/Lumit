@@ -310,11 +310,20 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   It started life as a toggle inside Glitch, off by default, because turning it on means
   fetching an extra frame and running the motion-arrow calculation; when Glitch split into
   three separate effects it became its own, and T19 rebuilt its insides into the walk described
-  above. One wrinkle worth knowing: the app can only carry one motion-arrow map per layer per
-  frame right now, so if a layer somehow had both Motion blur and Datamosh turned on together,
-  only whichever one is listed first in the effect stack gets its arrows this frame — the other
-  quietly sits out, the same "missing data, do nothing" safety rule every temporal effect
-  already follows.
+  above.
+
+  **Two effects, two sets of arrows (K-544).** There used to be a wrinkle here: a layer could
+  carry only one motion-arrow map per frame, so a layer with both Fast motion blur and
+  Datamosh on it served whichever came first in the stack and the other quietly sat out. That
+  was never a shortage that could be shared away, because the two are not asking the same
+  question. Fast motion blur asks "where is each pixel going *next* frame", so it needs the
+  arrows measured forward. Datamosh asks "where did each pixel come *from* last frame", so it
+  needs them measured backward. Different pairs of frames, different answers. Measuring is the
+  expensive part, so the fix is not to measure more than necessary but to measure exactly what
+  was asked for: the layer now works out which arrow maps its effects want — one, both, or
+  none — and makes each one, and every effect is handed the map it asked for rather than
+  whichever one happened to be lying about. A layer with only one of the two effects costs
+  precisely what it always did.
 - **Posterize time — the stop-motion "on twos" look, and a new kind of effect entirely.**
   Every effect so far takes a finished picture and paints on it. **Posterize time** does
   something different: it changes *what moment in time* the layers render at. Drop it on a
@@ -2025,10 +2034,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   that is missing, unreadable, or the older one-dimensional kind — it never errors, just shows
   as doing nothing). Because a colour look is a whole file, you cannot smoothly *blend* from one
   LUT to another; you *step* between them with hold keyframes (the picture snaps to the new look
-  at each key). One honest limitation to know: the file is applied to the picture in Lumit's own
-  internal light space exactly as written, without first translating it into whatever space the
-  LUT was authored for — a proper "input space" control is a later job — so a LUT built for a
-  very different encoding may look off. This grade runs **only on the graphics card**: unlike
+  at each key). This grade runs **only on the graphics card**: unlike
   Contrast or Gamma there is no slow CPU stand-in, so if Lumit ever has to fall back to
   CPU-only drawing a LUT layer shows through ungraded. Under the hood the cube of sample points
   is handed to the card as a **3D texture** — an ordinary image has width and height, a 3D
@@ -2048,6 +2054,22 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   remembers the file's last-changed time as well, so a re-exported grade appears on the next
   frame, and it keeps only the eight most recently used cubes rather than every one the
   session ever touched.
+
+  **Input space (K-543) — telling the LUT what kind of numbers it is being handed.** This is
+  the limitation the paragraph above used to end on, and it is now a dropdown. Lumit does its
+  compositing in *scene-linear* light: numbers that behave the way light behaves, where "mid
+  grey" is 0.18. Almost every LUT a colourist hands you was baked in a grading application
+  that works in *display* numbers, where mid grey is about 0.5. Feed a display-space table
+  scene-linear numbers and every colour arrives in the wrong drawer of the filing cabinet —
+  the grade is not subtly off, it is reading the wrong entries, which is why a perfectly good
+  LUT could come out crushed and murky. **Input space** says which kind of numbers the table
+  expects: leave it on **Linear** and nothing is translated (exactly what the effect did
+  before, to the last bit); choose **sRGB** or **Rec. 709** and Lumit converts the picture
+  into that encoding, looks the colour up, and converts the answer straight back to linear
+  before the rest of the stack sees it. Those two curves are the ones Lumit already knows —
+  sRGB is the same maths that puts pictures on your screen. Log-encoded LUTs (the ones camera
+  manufacturers ship) have no option yet, because Lumit does not yet define any log curve and
+  guessing one would be worse than saying so.
 - `crates/lumit-core/src/lut.rs` — **reading a colour LUT (`.cube` file).** A LUT
   (look-up table) is a colour recipe a colourist bakes elsewhere: feed it a red/green/blue
   and it hands back a graded red/green/blue. The common `.cube` text format stores that as a
@@ -2698,17 +2720,30 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   relative path says? (This is why moving the whole project folder now just works.) If not,
   does an old save's absolute path still point somewhere real? If not, the fingerprint
   search combs the project's folder tree for a file with the same content — so footage that
-  was reorganised into a subfolder is found by what it *is*, not where it was. Anything
-  still missing is named in a notice and its reference kept intact.
+  was reorganised into a subfolder is found by what it *is*, not where it was. And for
+  anything still lost after all that, one last sweep looks for it **by file name** anywhere
+  under the project's folder. That last one is deliberately the weakest, which is why it goes
+  last, and it exists for a case none of the others can help with: a project imported from
+  After Effects on a different computer. Such a project carries the paths of the machine it
+  was made on and has no fingerprints at all — nothing has ever been saved — so if the clips
+  are sitting in a subfolder beside it, their names are the only thing left to go on.
+  Anything still missing after that is named in a notice and its reference kept intact.
 - **When footage goes missing, you see colour bars** — the broadcast test pattern, the same
   one a television shows with no signal. The reasoning is that the alternative is worse: a
   missing layer that renders *black* looks exactly like a deliberate edit, so the mistake
   can survive all the way into an exported file. Bars cannot be mistaken for anything but
   "there is nothing here". They appear in the Viewer and in exports alike, for the same
   reason. In the Project panel the item wears a crossed-link icon and a **Relink…** button;
-  pointing it at the file's new home also relinks every *other* missing file sitting in that
-  same folder, in one undo step — losing a folder of footage is then one dialogue rather
-  than twenty. The pattern itself is drawn by arithmetic at whatever size is needed, not
+  pointing it at the file's new home also relinks every *other* missing file that moved the
+  same way, in one undo step — losing a folder of footage is then one dialogue rather than
+  twenty. "The same way" is worked out from the one file you did point at: whatever its old
+  path and its new path have in common *at the end* is the part that did not move, and
+  everything in front of that is the part that did. So if an edit kept forty-eight clips in
+  forty-eight different subfolders and the whole tree was moved to another drive, relinking
+  any one of them — however deep — tells Lumit where the root went, and it looks for each of
+  the others in its own subfolder under the new root. Files it does not find that way it
+  still looks for by name beside the one you picked, and it never repoints an item that is
+  working or one whose predicted file is not actually there. The pattern itself is drawn by arithmetic at whatever size is needed, not
   loaded from a bundled image, so it is crisp at any resolution and adds nothing to the
   download. When something *is* missing, a toggle appears beside the Project panel's search
   box (and on any footage row's right-click menu) that filters the panel down to just the
@@ -5159,6 +5194,16 @@ mapping table that will recognise the effects Lumit *does* have plugs into a sin
 function (`map_effect`); until it exists, everything takes the placeholder road, which
 is the honest answer rather than a hopeful one.
 
+Those effects come with a wrinkle in the report. After Effects' own scripting cannot
+read a lot of what a third-party effect stores — the settings are kept in a private
+blob it will not hand over — so the import keeps the blob whole and writes a line
+saying it could not be read. On a project built with Particular or Sapphire that is
+dozens of lines for one effect and thousands for the project, which drowns the lines
+that actually need a person: the blend mode that had to change, the expression to look
+at. So they are counted instead: one line per effect saying how many of its parameters
+came across unread. Nothing is dropped, and one lone unreadable parameter still gets
+its name said, because there is nothing to drown it out.
+
 Anything After Effects knew that Lumit has no field for — its own item numbers, its
 renderer's name, a footage item's interpretation settings, a layer's stretch
 percentage — is parked in an **`ae` namespace** on whichever object it belonged to.
@@ -5755,6 +5800,64 @@ has.
 There is nothing to poll and nothing to drain. Every panel that shows a fact
 about a footage file already asks for it when it draws; the worker only decides
 whether that question costs a file open or a look-up.
+
+### A folder of stills that behaves like a clip (K-539)
+
+A 3D application does not hand you a movie. It hands you a folder — two thousand
+files called `Depth000000_depth.exr`, `Depth000001_depth.exr`, and so on — which
+between them are one shot. Lumit brings the whole run in as **one footage item**:
+you pick any single file out of the picker, and the item that lands is the run.
+
+Working out *which* run is `crates/lumit-media/src/sequence.rs`. It takes the file
+name apart at its number — the longest run of digits before the extension, so
+`shot_v2_0043.exr` is frame 43 of version 2 rather than frame 2 — and then looks
+in the folder for every other file with the same name either side of the same-width
+number. The run is the **unbroken block** around the one you picked. If frame 50 is
+missing and you picked frame 7, you get 1 to 49; pick frame 60 and you get 51 to
+100. That is a deliberate choice: refusing outright would let one deleted file
+reject a whole shot, and quietly closing the hole would show you the wrong picture
+at the wrong time without ever telling you.
+
+**Lumit does not decode a single one of those files itself.** FFmpeg has been able
+to read numbered runs for decades: hand it `Depth%06d_depth.exr`, a start number
+and a frame rate and it gives back a video stream, exactly as if you had handed it
+an `.mp4`. So the whole feature is a naming job. Once the pattern is worked out,
+the probe, the frame table, the decode, the decoded-frame cache, the read-ahead
+thread, the Project panel's thumbnail and the missing-media colour bars are all
+the same code a video file goes through — there is no second path to keep honest.
+
+Two things about a sequence are worth knowing.
+
+**The project stores almost nothing about it.** Just the frame rate. Where the run
+starts, how long it is and which files are in it are read off the folder every time
+it is opened, because the files on disk are the truth — drop ten more frames in
+overnight and the item is ten frames longer, with nothing to reconcile and nothing
+that can go stale. The rate is the exception, because stills have no rate of their
+own: a photograph does not know it is a twenty-fifth of a second. Somebody has to
+say, and the only one who can is the project. It defaults to 25, and there is not
+yet a control for changing it.
+
+**The item still points at a real file** — the run's first frame. The pattern with
+the `%06d` in it names nothing on disk, so it could not be fingerprinted, saved,
+rebased or checked for existence. Everything that stats a path stats the first
+frame; only the moment of opening the media uses the pattern. That is also what
+makes relinking work: point at any frame of the run in its new home and Lumit
+resolves it back to that run's first frame before doing anything else, which is
+what lets the rest of your footage come back in the same sweep (K-538).
+
+The frame table is arithmetic rather than a scan. For a video, Lumit walks every
+packet in the file to learn which frame sits at which timestamp. For a sequence
+that would mean *reading every file* — tens of gigabytes for a feature-length
+OpenEXR render — to produce a table it can work out exactly: every file is one
+frame, evenly spaced, and how many there are was already counted off the folder.
+Two files are read to learn where the clock starts and how far it steps, and the
+rest is multiplication.
+
+After Effects projects bring their sequences with them. A `.aep` marks one by
+having its file reference point at a **folder** rather than a file, so on import
+Lumit looks inside that folder for the first numbered file and starts the run
+there — skipping the `desktop.ini` a Windows folder collects, which would
+otherwise sort ahead of frame zero.
 
 ### The renderer only opens the files the picture needs
 
@@ -6524,6 +6627,54 @@ shows the newest frame the clock has reached, stops the sound after one late
 picture and restarts it after eight on-time ones. Stopping returns the playhead
 to where playback began (K-254); a scrub is the exception.
 
+### When a camera track stops part-way (K-540)
+
+Camera tracking works by following hundreds of small, distinctive specks of the
+picture from frame to frame, and then asking what camera motion would explain
+all of that sliding at once. Everything rests on the first half: a speck that is
+followed from frame 40 into frame 41 is what *ties those two frames together*.
+Take away every such speck at one boundary and the two halves of the shot become
+two unrelated shots — there is nothing left that appears in both, so there is
+nothing to work out how the camera moved between them.
+
+That happens in real footage. The frame whites out; the lens racks so fast that
+every patch smears; a cut lands in the middle of the clip; the shot goes through
+a tunnel. Lumit used to carry on regardless — it decoded the rest of the file,
+and placed a camera on frames it had followed nothing through, because the code
+that fills in a frame with no measurement of its own simply copies its
+neighbour. The result looked like a finished answer and was not one.
+
+Now the analysis **stops** at that boundary and solves the part that worked.
+Three things are worth knowing about how it decides.
+
+**What it counts is what crossed, not what is alive.** After every frame, some
+specks have died and the detector immediately goes looking for new ones in the
+gaps they left — that is what keeps a long shot dense, and it means the number
+of specks being followed is back to normal within a single frame however badly
+the shot failed. So the number that matters is not "how many am I following" but
+"how many of the ones I am following came here from the last frame", and it is
+the second one Lumit watches.
+
+**The number it stops at is not a preference.** Working out the geometry between
+two frames needs seven matched specks at the absolute minimum, and eight before
+there is one spare to check the answer with. Below eight the arithmetic does not
+exist — not "is poor", does not exist — so that is the line. It is deliberately
+a hard floor and nothing cleverer: a shot that degrades badly without ever
+crossing it still solves badly, and the average error already reported is what
+says so.
+
+**A partial answer is a real answer.** The span that was followed is solved
+properly, kept, and cached like any other, so re-opening the project does not
+re-analyse it. The effect's card shows a thin bar of how much of the clip
+carries a camera, with the line under it saying how far it got in words rather
+than quoting an accuracy over frames it never saw. A Camera layer pointed at a
+partial solve follows it inside that span and, past the end, holds the last
+pose it worked out — the same holding it already did for a camera that runs on
+past the end of its shot. What to do about it is a normal editing decision: mask
+out whatever ruined the shot and analyse again, try a higher feature density, or
+cut the shot where the track stops and treat the two halves as two shots, which
+is what they are.
+
 ### Why the picture goes soft while you drag a value (K-383)
 
 Some effects are expensive in a very particular way. Depth of field and Lens
@@ -6592,6 +6743,60 @@ Being pixels, the margin now shrinks with the preview exactly as the radius does
 half the radius at Half resolution wants half the margin — and it never falls below
 one pixel, so even a kernel that reads only its immediate neighbours still gets them
 at Quarter.
+
+### The one effect that makes the picture bigger (K-542)
+
+Every effect in Lumit has, until now, been handed a picture and asked for a
+picture the same size back. That is what makes a stack of them cheap to reason
+about: the layer's own rectangle goes in at the top, comes out at the bottom, and
+the compositor puts it where the layer's position and scale say it goes.
+
+Tile breaks that, on purpose, because the After Effects effect it matches does.
+Tile stamps a rectangle of the picture side by side across the frame, and it has a
+control called **Output width and height** that says how much area gets stamped.
+Set to 110 %, it means "keep going a little past the edges". That is not a
+decoration; it is the standard way to give a shot some spare material. If you are
+about to stabilise a shaky clip, the stabiliser has to push the picture around and
+will run off the edge of it — so you first tile the frame outwards by ten per cent
+with **Mirror edges** on, which folds the outer band back on itself and produces a
+seamless border that did not exist in the footage. The stabiliser now has
+something to eat into.
+
+That only works if the extra material is *really there* for whatever comes next.
+So when Output width or height goes above 100 %, Tile now hands back a **bigger
+picture than it was given** — the original frame sitting in the middle of a wider
+one, with the copies filling the margin. The effects below Tile in the stack run
+on that wider picture, so a warp or a directional blur finds tiled material where
+the layer's edge used to be nothing at all.
+
+Three small things had to follow from that, and they are worth knowing because
+they are where the surprises would be:
+
+- **Nothing moves.** The compositor places a layer by a rectangle with a pin in it
+  (the anchor point). When the picture grows, the rectangle grows by the same
+  amount and the pin slides to stay over the same pixel, so every pixel of the
+  original ends up exactly where it was before. Only the margin is new.
+- **A few places cannot grow, and crop instead.** An adjustment layer's effects
+  run against the composite underneath it, which is the size of the composition by
+  definition — there is no "underneath" outside the frame to grow into. The same
+  goes for a layer being used as a matte, or a layer another effect is reading as
+  a second input. On those, a Tile above 100 % behaves the way it always did.
+- **There is a ceiling.** The slider reaches 500 %, and five times a 4K frame in
+  each direction would be a third of a gigabyte of working texture asked for by a
+  drag of the mouse. The growth stops at 8 192 pixels a side, which is the largest
+  texture every graphics card is guaranteed to allow.
+
+While Tile was being fixed, its starting values changed too. A fresh Tile used to
+arrive as a 2×2 grid, on the principle that an effect should look like something
+the moment you drop it on. That principle is right for a blur, whose control means
+something on its own, and wrong for Tile, whose controls mean nothing until you
+have said where the picture is being repeated *to* — and a grid nobody asked for
+is a change nobody can undo by eye. A fresh Tile now changes nothing at all, which
+is also what After Effects does. "Nothing at all" is meant exactly: the code that
+would resample the picture one-for-one is skipped entirely, because a divide
+followed by the multiply that undoes it does not always come back to the same
+number in a computer, and "not quite the same picture" would be worse than either
+answer.
 
 ### Telling how long a frame is taking, and where the time went (K-276)
 
@@ -6887,6 +7092,122 @@ point with the Pen, but not afterwards, on any path. That is not an oversight
 waiting to be wired: the file format has no way to say "these two arms are
 linked" versus "this is a corner", so adding the gesture means adding that to
 the format first, and deciding what an older project means without it.
+
+### Trimming a shape's path
+
+A shape layer's art can be **cut back to a piece of itself**, and animated so the
+piece grows: the drawing draws itself on. Three numbers do it, on rows of their
+own under the item in the Timeline. **Trim start** and **Trim end** say where
+along the path the art begins and ends, as a percentage; **Trim offset** slides
+that piece along the path, in degrees, so 360 is a full lap of a closed shape.
+
+The percentage is of the path's **length**, not of how many points it has. That
+matters because points are not spread evenly: a circle drawn with four points and
+long curve handles has most of its length between them, so counting points would
+make the trim crawl along the straight bits and jump round the curved ones.
+Measuring length is what makes the growth look even, and it is the same
+measurement a paint stroke's write-on uses.
+
+Two things behave the way After Effects behaves, and are worth knowing because
+neither is obvious. The **fill** is trimmed too, not just the outline: the piece
+that survives is joined end to end and filled, so half a trimmed circle is a
+filled half-circle rather than a whole one with half an outline. And on a
+**closed** shape the piece **wraps** — slide it far enough with the offset and it
+runs through the point the shape starts at and carries on — while on an **open**
+path there is nothing to wrap through, so sliding it far enough simply runs it
+off the end and nothing is drawn.
+
+Setting the end below the start draws nothing at all. That is not an error: it is
+what the first frame of a write-on looks like.
+
+### Dashing a shape's outline
+
+An outlined shape carries **Dash**, **Gap** and **Dash offset** rows beneath it,
+in pixels. Dash is how long each mark is, Gap is the space after it, and the two
+repeat along the path for as long as the path lasts. Offset slides the whole
+pattern along, so keying it makes marching ants.
+
+The rows show up only on a shape that actually has an outline — a fill-only
+shape has nothing to dash — and both start at zero, which means solid. Typing a
+Dash is what turns the dashes on; there is no separate switch to find.
+
+One deliberate limit: if the dash and gap are so small that the path would be cut
+into thousands of pieces, the outline is simply drawn solid. At that size the
+dashes would be invisible anyway, and cutting them would cost a frame's worth of
+work to draw something you could not tell from a line.
+
+### Filling a shape with a gradient
+
+A shape item's first two rows are **Fill** — the colour inside its path, which you
+can now change long after the shape was drawn — and **Gradient**, which is Flat,
+Linear or Radial. Choose Linear or Radial and three more rows appear: the
+**Gradient colour** the ramp ends at, and the two points that aim it.
+
+Linear ramps along the line between the two points: everything before the first is
+the fill colour, everything past the second is the gradient colour, and in between
+the two mix. Radial ramps outwards from the first point, with the second sitting on
+the outer edge — so the middle is the fill and every direction fades away from it.
+Those are the same two readings the Gradient *effect* offers, and deliberately: one
+idea should not have two meanings in one application.
+
+Switching a ramp on aims it at the shape's own box for you — top to bottom for
+linear, middle to edge for radial — so you see a ramp immediately and move it from
+there. The two points are ordinary animatable numbers, so a gradient can sweep.
+
+Two things this is not. It is not a stop list: there are two colours, the fill's and
+the gradient's, and a ramp with five stops needs an editor of its own before it is
+worth storing. And the colours themselves do not animate — the points do. Both are
+places the feature can grow into without moving anything already saved.
+
+### Growing and shrinking a shape's outline
+
+**Offset path** is the first row under a shape item. It is one number in pixels:
+positive pushes the outline outwards, so the shape gets fatter; negative pulls it
+in, so it gets thinner. The shape keeps its character while it does — a rounded
+rectangle grown by ten is still a rounded rectangle, with rounder corners.
+
+That is the difference between an offset and a scale. Scaling a rounded rectangle
+makes its corners bigger in proportion; offsetting it adds the same margin all the
+way round, which is what you want for a border, a keyline or a thicker version of
+a logo. Corners come out **round**, which is the only kind of corner Lumit's shape
+outlines have.
+
+One honest limit: pull the outline in by more than the shape is thick anywhere and
+the outline crosses itself, leaving a small loop. Most of the time the fill rule
+swallows it and you see nothing; where you do see it, the cure is a smaller number.
+Cleaning that up properly means a whole polygon-clipping library, which is not
+worth carrying for a case a slider drag walks straight back out of.
+
+### Repeating a shape
+
+A shape item has a **Copies** row. Leave it at one and nothing changes; turn it
+up and the item is drawn that many times, each copy one more step along than the
+last. Nine more rows appear once there is a step to describe: how far a copy is
+moved (Repeater position x and y), turned (Repeater rotation) and scaled
+(Repeater scale) from the one before it, the point it turns and scales about
+(Repeater anchor x and y), and how opaque the first and the last copy are
+(Start opacity and End opacity) — the ones between fade evenly from one to the
+other.
+
+That is a whole family of motion-graphics staples from one row: a row of ticks
+is a position step, a clock face is a rotation step about an anchor, and a
+spiral is both at once with a scale under a hundred. **Copy offset** says which
+copy the original art is, so a negative one puts copies *behind* it — handy when
+you want the drawing to stay where you left it and the copies to grow the other
+way.
+
+A copy is a scaled *drawing*, not a scaled path: halve the scale and the
+outline halves with it, and so do the dashes, or a small copy would look like a
+different shape with a heavy border. The copies are drawn back to front, so the
+original stays on top of everything made from it.
+
+Two things worth knowing. The layer's box **grows to hold the copies** — it has
+to, or they would be drawn off the edge of the layer's own picture — and since
+the layer's position is pinned to that box's corner, a repeater animated to grow
+upwards or leftwards moves the art as it plays. Step down and to the right, or
+key the layer's position to compensate. And the count stops at a hundred: every
+copy is a full pass of the rasteriser, so an unbounded count would be an
+unbounded frame.
 
 ### What the lock switch does
 
@@ -8316,6 +8637,238 @@ as it did — this substitution applies to shapes alone, which are the only prop
 no value of their own.
 
 This is also what After Effects shows for a mask path, and for the same reason.
+
+### A soft edge that is soft in one place and sharp in another (K-545)
+
+A mask's **feather** is the width of the soft band across its edge, and until now it was one
+number for the whole shape. A sky replacement wants the opposite: crisp along the horizon,
+blending away at the corner. So a mask can now be given a width **per point** of its drawn
+shape, and the width runs smoothly from one point to the next along the curve between them.
+
+The interesting part is what that costs, because the answer is "almost nothing", and the
+reason is worth following.
+
+Lumit does not feather a mask by blurring it. It first works out, for every pixel in the
+frame, **how far that pixel is from the edge of the shape** — a positive number inside,
+negative outside. That map of distances is built once, and everything about the edge is read
+off it: growing or shrinking the shape (expansion) slides the point where the distance crosses
+zero, and the feather is simply the number the distance is *divided by* before it is turned
+into an opacity. Divide by 2 and the edge goes from solid to clear over two pixels; divide by
+60 and it takes sixty.
+
+Making the feather vary means that divisor stops being one number and becomes a second
+picture: a width at every pixel. And the honest width for a pixel is the width of the piece of
+edge it is nearest to — because the nearest piece of edge is exactly what its distance was
+measured against in the first place.
+
+Which sounds like a second, expensive search: for every pixel, find the closest point on the
+outline, then look up what width was written there. It is not, because the algorithm that
+computed the distances already knows the answer. The method Lumit uses (Felzenszwalb and
+Huttenlocher's) works by sliding a parabola outwards from every starting pixel and keeping,
+at each position, whichever parabola sits lowest — and *which* parabola won is the same thing
+as *which starting pixel is nearest*. It was being computed and thrown away. Writing it down
+costs one extra number per pixel, and it turns "how far to the edge" into "how far, and to
+which bit of edge" at no real extra cost. From there the width is a lookup.
+
+The starting pixels themselves come from walking the outline: the same walk that draws the
+shape also stamps, into each pixel it crosses, the width interpolated between the two points
+it is currently between.
+
+Two things follow, and both matter more than they sound. A mask whose widths happen to be all
+the same is spotted before any of this runs and takes the old single-number path, so an
+ordinary mask is not made slower by a feature it does not use — and switching the feature on
+without changing a width renders a frame identical to the one before. And the widths are
+absent from the saved file until somebody actually varies them, so every project ever saved
+still writes exactly the bytes it wrote yesterday, and every frame the cache has stored stays
+valid.
+
+The same change added the two mask combine modes that were missing, **Lighten** and
+**Darken**: where **Add** sums two overlapping masks and can saturate, Lighten simply keeps
+whichever of the two is more opaque, and Darken whichever is less.
+
+### The keyer's second half: tidying the matte as a picture (K-546)
+
+Everything the Matte key did until now decided one pixel at a time. It looked at a pixel's
+colour, worked out how much like the green screen it was, and turned that into how transparent
+the pixel should be — and then it was finished with that pixel and moved on. That is a fast,
+simple shape, and it is why the effect was one pass over the frame.
+
+The controls a colourist reaches for next cannot work that way, because every one of them is a
+question about a pixel's **neighbours**:
+
+- **Screen pre-blur** — "ignore the grain: judge this pixel by the average of the area around
+  it." The catch is that only the *judgement* is softened. What comes out is still the sharp
+  original picture; it has just been told its transparency by a blurry twin. Blurring the layer
+  and keying the result would be a different, worse thing.
+- **Screen shrink/grow** — "pull the whole edge of the cut-out in by a pixel and a half" (a
+  green fringe disappears), or push it out. Not a blur: the edge moves and stays crisp.
+- **Screen softness** — "blur the cut-out itself", so the join with the new background is a
+  gradient rather than a line. The picture keeps its own sharpness; only the transparency is
+  softened.
+- **Despot black / white** — "there is a single stray dot in the middle of a clean area, get
+  rid of it." A dark speck in the kept subject is a pinhole; a bright speck out in the
+  background is a fleck.
+- **Inside / Outside masks** — "never mind what the key thinks, *this* shape is always kept and
+  *that* shape is always cut." The rig in the corner of frame, the hole in the screen behind
+  the actor's shoulder.
+
+**How they are made to fit.** The trick is to stop treating the transparency as a number inside
+the colour loop and start treating it as a **picture of its own** — a greyscale image, white
+where the subject is kept and black where the screen was, exactly what the effect's Screen
+matte view already shows you. Once it is a picture, all five controls become ordinary picture
+operations, and the effect runs as a short assembly line:
+
+1. Soften the picture the key is judged from (if pre-blur asks).
+2. Work out the matte from it and draw it into its own greyscale image.
+3. March that image's edge in or out.
+4. Blur it.
+5. Remove its specks.
+6. Paint the garbage masks into it — white inside the Inside mask, black inside the Outside one.
+7. Only now, go back to the *original* sharp colour and spend the finished matte on it.
+
+There is a real saving in step 2 being a picture. The blur Lumit already has works on pictures,
+so steps 1 and 4 are that same blur, called twice on different things — no second blur was
+written, and the two paths (the plain-code reference and the graphics-card version) were
+already proven to agree. The matte is stored with the same grey in all four of its channels
+precisely so that any existing picture operation can be pointed at it without noticing that it
+is a matte rather than a photograph.
+
+**Shrinking without softening.** Growing a shape by a pixel is "take the brightest value in the
+little square around each pixel"; shrinking is "take the darkest". Do it once across and once
+down and you have moved the whole edge, and — unlike a blur — a pixel's answer is always one of
+its neighbours' actual values, so nothing in between gets invented and the edge stays hard.
+Because the control is a slider and not a whole number of pixels, the outermost ring of the
+square is faded in gradually, so dragging it is smooth rather than a series of jumps.
+
+**What counts as a speck.** A speck is a pixel that **every single one** of its eight
+neighbours disagrees with. That definition does the work: a dot alone in a clean area has no
+ally, so it is pulled to whatever its neighbours agree on, while a pixel sitting on the real
+edge of the subject always has neighbours on its own side and is left completely alone. It is
+why the control can be turned all the way up without eating the edges — and why it is a
+strength rather than a size. If a wider reach is ever wanted, it is built from the shrink/grow
+step, not from a bigger despot.
+
+**The garbage masks come from the mask you drew.** The two rows pick one of the layer's own
+masks — the same shapes you draw with the pen tool. What travels to the effect is not a picture
+of the shape but the shape itself: the list of straight pieces its outline is made of. The
+kernel then asks, for each pixel, "how many times does a ray from here cross the outline?" —
+odd means inside, even means outside — and how far the pixel is from the nearest piece, which
+is what lets the edge be soft. The softness is the mask's **own** feather, and the mask's own
+grow/shrink slides it, so a garbage mask fades exactly the way the shape it was drawn from
+fades. There is nothing extra to set, and nothing that can drift out of step.
+
+**And nothing changed for anybody who does not touch them.** Every one of these controls is off
+by default, and when they are all off the effect takes the old single pass — not "the new path
+with neutral settings", the *old path*, so an existing project keys the identical pixels it
+keyed before. That is checked by a test rather than promised: the two paths are run side by
+side at the defaults and compared for exact equality.
+
+### Painting on a precomp (K-547)
+
+Paint works by keeping the *gesture* rather than the pixels: the path your pointer took, in the
+layer's own coordinates, stamped afresh into the layer's picture every time the frame is drawn.
+That works because every kind of layer has a picture waiting on the processor before it goes to
+the graphics card — a decoded video frame, a flat solid, a line of type, a drawn shape. The
+brush stamps into those bytes and they are handed over painted.
+
+A **precomp** layer is the exception, and the reason is worth a sentence: a composition has no
+picture until it is rendered, and it is rendered on the graphics card. There were never any
+bytes for the brush to mark, so a stroke painted on a precomp made a Timeline row and no
+pixels at all.
+
+The fix is deliberately the boring one. Once the nested composition has been rendered, its
+picture is brought back from the graphics card, run through the **same** stamping code every
+other layer uses, and sent back. Not a second rasteriser written in the graphics card's own
+language — one rasteriser, one set of rules, and a stroke that lands identically wherever it is
+painted. The price is that the nested picture makes a round trip through the eight-bit form
+every video frame is painted in anyway, and only for a precomp somebody has actually painted
+on; an unpainted precomp does not pay a thing. Doing the stamping on the card is the upgrade
+if it ever shows up in a measurement, and nothing about what is *stored* would change when it
+arrives.
+
+### A square brush, and why that is one line of arithmetic (K-548)
+
+The brush had one shape: a circle. Adding a square one sounds like adding a second rasteriser,
+and it is not — it is a change to what the word *distance* means.
+
+Here is how a dab is stamped. Lumit walks the pixels near where the dab landed and asks each
+one "how far are you from the middle?". Inside a certain distance the pixel is fully painted;
+beyond the brush's radius it is untouched; in between it fades, and how wide that fading band
+is *is* the hardness control. Nothing else about a dab exists.
+
+So the shape is not a separate drawing routine, it is the answer to that one question. Measure
+the distance as the straight line to the middle and the fully-painted region is a circle.
+Measure it as *the larger of the two directions* — how far across plus how far up, whichever is
+bigger — and the same fully-painted region is a square. Every other part of the brush is
+written in terms of that number and needs no case of its own: the hardness ramp softens a
+square exactly as it softens a round, outwards from a flat-sided core; the spacing between dabs
+along a stroke is unchanged; even the box the stroke reserves in the picture is the same, since
+a square of a given width and a circle of the same width fit in the same box.
+
+Two shapes is the whole of it. There is no brush-tip system here — no imported tip images, no
+angle, no squashing a round tip into an ellipse — and deliberately no half-built room for one.
+And a stroke that is round says nothing about its shape in the saved file, so every project
+ever saved still writes exactly the bytes it wrote before and every frame the cache holds for
+it stays valid.
+
+### A stroke that draws itself on (K-549)
+
+Every paint stroke now has two numbers under it in the Timeline, **Start** and **End**, each a
+percentage of the stroke's own length. Leave them at 0 and 100 and the whole mark is drawn, as
+before. Hold Start at 0 and animate End from 0 to 100 across a second, and the stroke appears as
+if a hand were making it — a signature writing itself, an arrow growing across a diagram. That
+is the effect After Effects calls write-on, and it is why paint animates at all.
+
+The only subtlety worth explaining is what "half the stroke" means, because there are two
+plausible answers and one of them is wrong.
+
+A stroke is stored as the path the pointer took: a list of positions, sampled as the drag
+happened. Those samples are **not** evenly spaced. Move the mouse slowly and a hundred of them
+pile into one inch; whip it across and a single sample spans a foot. So "half the samples" is
+not half the drawing at all — a stroke trimmed that way would crawl through the part you drew
+carefully and leap through the part you drew fast, and the write-on would appear to speed up and
+slow down for no visible reason.
+
+The right answer is half the **distance**. Lumit walks the path adding up the length of each
+straight piece, works out how far along the total the cut should fall, finds the piece the cut
+lands in, and cuts that one piece at exactly the right fraction of the way across it. The result
+travels at a steady pace regardless of how the stroke was drawn — and because the same walk
+handles both ends, the mark can be trimmed from the front, from the back, or from both at once.
+
+Two small honesties. An End that has not passed Start yet draws nothing, which is exactly what
+the first frame of a write-on should look like rather than an error. And a stroke that is a
+single dab has no length to divide, so it appears whole the moment any of it is asked for. Both
+numbers are left out of the saved file until somebody moves them, so nothing changes for a
+project that has never used them.
+
+### A stroke that blends (K-550)
+
+Every layer has a **blend mode** — the list with Multiply, Screen, Overlay and the rest in it —
+which decides how its picture combines with everything underneath. A paint stroke now has one
+too, on its own row in the Timeline, chosen from the same list.
+
+What that means in practice: a Multiply stroke darkens what it is drawn over instead of covering
+it, so it reads as ink soaking into the picture rather than paint sitting on top. Screen does the
+opposite and only lightens, which is how a highlight is brushed on without flattening what was
+there. Overlay keeps the darks dark and the lights light and pushes the colour through the
+middle. They are the same words doing the same thing they do on a layer, which is the point:
+nobody should have to learn a second vocabulary because the mark happens to be a brush stroke.
+
+The part that mattered when building it is that a blend changes **what colour the mark is**, and
+never **how much of the pixel it covers**. Those are two separate things and it is easy to
+confuse them. The brush works out coverage first — how solidly this pixel is inside the mark,
+given the brush's size, its hardness and the stroke's opacity — and that number is untouched by
+the mode. Then the mode decides what colour to put there, by combining the brush's colour with
+the colour already on the layer. Finally that colour is laid down at the coverage worked out in
+step one, by exactly the same source-over the brush has always used. So a half-opacity Multiply
+stroke is genuinely half of the way to the multiplied result, and a soft edge is still a soft
+edge.
+
+None of the arithmetic is new. Lumit already had every one of these formulas written once, for
+the blend row on an effect, which itself matches the compositor's — so the stroke calls that
+same code rather than growing a third copy that could drift. And the eraser ignores the setting
+entirely, because an eraser has no colour to combine: it takes transparency away, and a mode
+there would only be a second way of saying nothing.
 
 ## 13. The two public web sites
 

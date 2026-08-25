@@ -159,6 +159,9 @@ pub enum Reason {
     /// An audio layer, which Lumit carries as an ordinary Footage layer
     /// (docs/01 §2 — the audio channel of footage).
     AudioLayerAsFootage,
+    /// After Effects rides a layer's two audio channels apart; Lumit has one
+    /// level, so the left channel is what arrives.
+    AudioLevelsDiffer { left: f64, right: f64 },
     /// "Preserve underlying transparency" has no Lumit switch yet.
     PreserveTransparencyNotSupported,
     /// Draft/wireframe layer quality: Lumit renders one quality.
@@ -204,9 +207,6 @@ pub enum Reason {
     ChunkUnreadable { chunk: String },
 
     // --- masks ---
-    /// Lighten and Darken mask modes are not built (docs/06 §2); imported as
-    /// Add.
-    MaskModeUnavailable { ae_mode: String },
     /// AE feathers a mask separately in x and y; Lumit has one width.
     MaskFeatherAxesDiffer { x: f64, y: f64 },
     /// A RotoBezier mask: AE computes its tangents rather than storing them,
@@ -217,6 +217,14 @@ pub enum Reason {
     /// No mapping for this match name yet, so the instance is inert and keeps
     /// its complete dump (docs/11 §6).
     EffectPlaceholder { match_name: String },
+    /// Several parameters of one placeholder instance that After Effects
+    /// itself could not read, counted rather than listed. A third-party
+    /// effect's dump is mostly blobs — Particular alone refuses dozens — and
+    /// one row per parameter buries every other row in the report. The
+    /// parameters are all kept in the instance's `ae` namespace either way; a
+    /// single refused parameter still names itself with
+    /// [`Self::PropertyUnreadable`].
+    EffectParamsUnreadable { count: usize },
     /// A mapped effect's control that Lumit has no counterpart for. The effect
     /// still imported (docs/11 §5's "reported rather than approximated"); this
     /// one dial did not come with it.
@@ -317,6 +325,11 @@ impl std::fmt::Display for Reason {
             Self::AudioLayerAsFootage => {
                 write!(f, "imported as a footage layer carrying its audio")
             }
+            Self::AudioLevelsDiffer { left, right } => write!(
+                f,
+                "audio levels {left} dB left and {right} dB right have one level in \
+                 Lumit — imported at the left"
+            ),
             Self::PreserveTransparencyNotSupported => write!(
                 f,
                 "preserve underlying transparency has no equivalent yet — not applied"
@@ -399,9 +412,6 @@ impl std::fmt::Display for Reason {
                 f,
                 "a record in the project file ({chunk}) could not be read and was skipped"
             ),
-            Self::MaskModeUnavailable { ae_mode } => {
-                write!(f, "mask mode {ae_mode} is not built yet — imported as Add")
-            }
             Self::MaskFeatherAxesDiffer { x, y } => write!(
                 f,
                 "feather {x} × {y} has one width in Lumit — imported at their average"
@@ -414,6 +424,10 @@ impl std::fmt::Display for Reason {
                 f,
                 "{match_name} imported as a placeholder — every parameter is kept and it renders \
                  nothing"
+            ),
+            Self::EffectParamsUnreadable { count } => write!(
+                f,
+                "{count} parameters could not be read — they are kept whole and import as nothing"
             ),
             Self::EffectParamNotCarried { effect, param } => write!(
                 f,
@@ -574,6 +588,33 @@ impl ImportReport {
             outcome,
             reason,
         });
+    }
+
+    /// Fold the `PropertyUnreadable` rows raised since `mark` — the length
+    /// [`Self::rows`] had before the effect's parameters were walked — into
+    /// one count row filed against the effect instance at `path`.
+    ///
+    /// A placeholder for a third-party effect keeps every parameter, and the
+    /// ones After Effects itself refused are a row each: Particular's forty-one
+    /// blobs, Sapphire's, Optical Flares' — thousands of rows in a real
+    /// project, which is a report nobody reads. One row per instance says the
+    /// same thing. Below two the rows are left alone, because a lone refused
+    /// parameter can afford to name itself.
+    pub fn fold_unreadable_since(&mut self, mark: usize, path: ItemPath) {
+        let unreadable = |row: &ReportRow| matches!(row.reason, Reason::PropertyUnreadable { .. });
+        let mut tail = self.rows.split_off(mark.min(self.rows.len()));
+        let count = tail.iter().filter(|row| unreadable(row)).count();
+        if count < 2 {
+            self.rows.append(&mut tail);
+            return;
+        }
+        tail.retain(|row| !unreadable(row));
+        self.rows.append(&mut tail);
+        self.row(
+            path,
+            Outcome::Skipped,
+            Reason::EffectParamsUnreadable { count },
+        );
     }
 
     /// The counts behind docs/11 §9's summary line.

@@ -91,18 +91,21 @@ journalled, and does not move the store's revision, because moving a panel is no
 work (`DocumentStore::set_ui_state`). The frontend writes it just before a save.
 
 A `ProjectItem` (the intended **Asset**) is one of the following. **v1 ships
-`Footage`, `Folder`, `Composition`, `Solid`**; the audio/still/sequence kinds
-are future (audio is currently only a footage layer's stream, §5.2):
+`Footage`, `Folder`, `Composition`, `Solid`**; the audio and still kinds are
+future (audio is currently only a footage layer's stream, §5.2):
 
 | Asset | v1? | Contents |
 |---|---|---|
-| `Footage` (`FootageItem`) | yes | Media reference (§3); interpretation and proxy state are future |
+| `Footage` (`FootageItem`) | yes | Media reference (§3), and — for an image sequence — its rate (§3.1); other interpretation and proxy state are future |
 | `AudioItem` | future | Audio-only media reference |
 | `StillItem` | future | Single image |
-| `SequenceItem` | future | Image sequence (pattern, fps) |
 | `Composition` | yes | §4 |
 | `Folder` | yes | Ordered children ids |
 | `Solid` (`SolidDef`) | yes | Shared solid definition (colour, size) — solids are items so they dedupe |
+
+An image sequence was to be a `SequenceItem` of its own; it is a flag on
+`FootageItem` instead (K-539, §3.1). A separate kind would have meant every
+`match` on `ProjectItem` growing an arm that said "treat it as footage".
 
 ### 3. Media references and interpretation
 
@@ -115,8 +118,42 @@ struct MediaRef {
 }
 ```
 
+### 3.1 Image sequences
+
+A folder of numbered stills — `Depth000000_depth.exr`, `Depth000001_depth.exr`, … — is **one
+footage item** whose frames are the files in numeric order (K-539):
+
+```rust
+struct FootageItem {
+    // ...
+    sequence: Option<SequenceRef>,  // Some = this item is a run of stills
+}
+
+struct SequenceRef {
+    frame_rate: FrameRate,          // stills carry none of their own; default 25
+}
+```
+
+The rate is the **only** thing stored. Where the run starts, how long it is and which files
+are in it are re-read from the folder every time it is opened, because the files on disk are
+the truth about a sequence — add ten frames overnight and the item is ten frames longer, with
+nothing to reconcile. `media` keeps pointing at **one real file**, the run's first, so
+fingerprinting, saving, rebasing and relink all work on a path that exists.
+
+The run one file belongs to is the unbroken block of numbers around it: **a gap ends the
+run**, on the side the picked file is on, and is never bridged (K-539). Only still-image
+formats are offered as sequences — a folder of numbered `.mp4`s is a folder of clips — and a
+numbered still with no numbered neighbours stays a single still.
+
+Everything downstream is unchanged: FFmpeg's `image2` demuxer reads the run as a video
+stream, so the probe, the frame index, the decode, the decoded-frame cache, the decode-ahead
+thread, the Project panel thumbnail (the run's first frame) and the missing-media slate are
+the same code a video file goes through.
+
 **Future** — not in v1 yet:
 
+- a **control for a sequence's frame rate**. The field is stored, saved and settable by the
+  importer; there is no interface for changing it yet, so an imported run plays at 25;
 - a `FootageInterpretation` (frame-rate override, alpha mode, colour-space tag, loop count,
   timecode policy) — v1 treats every source as sRGB with no per-item overrides.
 (The **missing**-footage state is built: the automatic resolver runs on open, a lost file
@@ -299,7 +336,7 @@ Invariants:
 | `Camera { zoom: Property, solve_link: Option<Uuid> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link (K-417); `None` — the usual case — is a camera the user drives by hand. |
 | `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. What *New adjustment layer* makes. **Any layer can behave this way** — that is the `adjustment` switch in §5.1 — and this kind is simply the one that was born with nothing else to show. Turning the switch off on one hands it a fresh comp-sized white solid and normalises it to `Solid`, because it has no picture to give back. |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only (K-206). |
-| `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art | §7.2 (K-237). Flat list; nested groups and modifiers are future (§9.2). |
+| `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art, its repeated copies included | §7.2 (K-237). Flat list, modifiers as fields (§7.2.1); nested groups are future (§9.2). |
 | `Light { light: Box<LightDef> }` | yes | §5.5 | A source of light other layers see (K-360). Draws no pixels of its own, like a Camera; its placement is the ordinary layer transform. |
 
 **There is no `Audio` kind (K-435).** An Audio layer — a layer whose source is an audio item,
@@ -601,8 +638,9 @@ struct Mask {
     path_keys: Vec<PathKeyframe>,     // empty = not animated (absent from the file)
     inverted: bool,
     opacity: Property,                // 0..100
-    mode: MaskMode,                   // None | Add | Subtract | Intersect | Difference
+    mode: MaskMode,                   // None | Add | Subtract | Intersect | Lighten | Darken | Difference
     feather: Property,                // layer px, total ramp width (0 = hard edge)
+    vertex_feather: Vec<Property>,    // layer px, one per vertex; empty = one width (K-545)
     expansion: Property,              // layer px, + grows the shape, − shrinks it
 }
 
@@ -627,12 +665,20 @@ raster: expansion moves the edge, feather sets the width of the ramp across it. 
 layer pixels and scale with preview resolution, so a soft edge keeps its real width at half
 resolution. A mask with neither takes a fast path and is used exactly as rasterised.
 
-`mode`, `feather`, `expansion` and `path_keys` are omitted from the file when they hold their
-defaults (`Add`, 0, 0, empty), so a project that predates them reads and writes
-byte-identically and keeps the frames its cache has already banked.
+`Lighten` and `Darken` are `max` and `min` against the running total, which is what After
+Effects means by them (K-545). `Lighten` starts a lone mask from an empty frame as `Add` does;
+`Darken` cuts a full one down as `Intersect` does. `Lighten` is not `Add` — Add saturates the
+overlap of two half-opacity masks and Lighten does not. `Darken` and `Intersect` do coincide
+today, because Lumit's `Intersect` is `min` where After Effects multiplies the two opacities;
+that reading of `Intersect` is unchanged and is noted so the coincidence is known.
 
-`opacity`, `feather` and `expansion` are `Property`s but **do not write themselves as one
-while they are still** (K-340): a static value writes as the bare number it always wrote,
+`mode`, `feather`, `vertex_feather`, `expansion` and `path_keys` are omitted from the file
+when they hold their defaults (`Add`, 0, empty, 0, empty), so a project that predates them
+reads and writes byte-identically and keeps the frames its cache has already banked.
+
+`opacity`, `feather`, `expansion` and each entry of `vertex_feather` are `Property`s but **do
+not write themselves as one while they are still** (K-340, K-545): a static value writes as
+the bare number it always wrote,
 and only a mask somebody has keyed writes the animation object. Reading takes either. The
 same promise, for the same reason — the frame key names a mask by the bytes its list
 serialises to, so an unkeyed mask must be byte-identical to what it was.
@@ -681,8 +727,26 @@ as it was.
 
 The op is still `SetLayerMasks`, the whole list, exactly invertible.
 
-**Future:** the `Lighten` / `Darken` modes, deliberately left out of the first mode set. Variable-width feather is later still; the model
-will reserve per-vertex feather data.
+### 7.0.1 A feather that varies along the path (K-545)
+
+`vertex_feather` holds one ramp width per **vertex**, in layer pixels, running straight-line
+along each segment between them. Empty — the ordinary mask — means `feather` all the way
+round; a list shorter than the path falls back to `feather` for the vertices it does not
+reach. Every entry animates exactly as `feather` does.
+
+The rasteriser turns those widths into a width at **every pixel**: the boundary walk stamps
+the interpolated width into the pixels it crosses, and every other pixel takes the width of
+the nearest stamped one, found by the feature half of the same distance transform that
+computes the distance. A pixel is therefore feathered by the width of the piece of edge it was
+measured against. Widths that are all equal — including all zero — are the single width, down
+to the byte, so switching this on and changing nothing renders identically and the ordinary
+mask never pays for the second transform.
+
+**The widths are matched to vertices by position**, so deleting a point shifts the widths
+after it, and an animated path whose keys hold different point counts is reconciled upward
+(§7.0) before the widths are read against it. Feather points anchored by arc length would
+dodge both, and are the shape to reach for if the Mask Feather Tool of After Effects is ever
+built.
 
 ### 7.1 Paint strokes (K-227)
 
@@ -728,6 +792,28 @@ struct ShapeItem {
     stroke: Option<LinearColour>,     // None, or a zero width, draws no outline
     stroke_width: f64,                // layer pixels
     opacity: f64,                     // 0..100
+    trim_start: Property,             // per cent of the path's own arc length
+    trim_end: Property,               // per cent; at or below start draws nothing
+    trim_offset: Property,            // degrees; 360 is once round a closed path
+    dashes: Vec<Property>,            // dash, gap, dash, gap … in layer pixels
+    dash_offset: Property,            // layer pixels
+    gradient: u32,                    // 0 flat, 1 linear, 2 radial
+    gradient_colour: Option<LinearColour>,  // the ramp's far end; None is black
+    gradient_start_x: Property,       // layer pixels — the art's own coordinates
+    gradient_start_y: Property,
+    gradient_end_x: Property,
+    gradient_end_y: Property,
+    offset_amount: Property,          // layer pixels; out of the path, negative is in
+    repeat_copies: Property,          // 1..MAX_COPIES; a still 1 is no repeater
+    repeat_offset: Property,          // which copy the original is; may be negative
+    repeat_anchor_x: Property,        // layer pixels; what a copy turns and scales about
+    repeat_anchor_y: Property,
+    repeat_position_x: Property,      // layer pixels, per copy
+    repeat_position_y: Property,
+    repeat_rotation: Property,        // degrees, per copy
+    repeat_scale: Property,           // per cent, per copy; 100 is the same size
+    repeat_start_opacity: Property,   // per cent, the first copy
+    repeat_end_opacity: Property,     // per cent, the last copy
 }
 ```
 
@@ -735,18 +821,88 @@ A shape layer's art **is** its picture: vector paths rasterised at whatever reso
 frame is rendered at, so they stay crisp at any scale. The path type is the mask's, deliberately
 — a shape's path and a mask's path differ in what they do, not in what they are.
 
-The list is **flat**: After Effects' nested groups exist to carry its shape modifiers (repeater,
-trim paths, wiggle), and none of those are built.
+The list is **flat**, and the **modifiers are fields on the item** (K-551). After Effects carries
+Trim Paths, the Repeater and the rest as entries in a nested group, where their position decides
+what they act on; Lumit's list has no positions to read, so each modifier is a property of the
+item it modifies and the order they apply in is fixed and written down (§7.2.1). Every modifier
+is absent from the file until it is used, so nothing here stands in the way of the
+`ShapeElement` tree §9.2 still plans.
 
 **The layer's natural size is the box its art fills**, bounding the curves by their control
 points, and it *changes as the art is edited* — the only layer kind whose size is not fixed by
-its source. Anything caching a layer's size must key on the document revision.
+its source. Anything caching a layer's size must key on the document revision. Since the
+repeater (K-553) the box holds the **copies** too, so it is measured at a time: a keyed repeater
+moves its copies as it plays, and a cache keyed on the revision alone would hand back a box the
+picture has left behind. The frontend measures a shape layer fresh for that reason.
 
 The op is `SetShapeContents` — the whole list, exactly invertible, like `SetLayerMasks` and
 `SetLayerPaint`.
 
-**Future:** nested groups and the shape modifiers, gradient fills, dashed strokes, joins and
-caps other than round, and animated paths.
+#### 7.2.1 The modifiers, and the order they apply in
+
+**Trim paths** (K-551) cut the item by its own **arc length**: `trim_start` and `trim_end` are a
+per cent of it, and `trim_offset` slides the pair along in degrees, 360 being once round. Per cent
+of length rather than of vertex count, for the reason a paint stroke's write-on gives (K-549) —
+the eye watches length. The trim cuts the **fill** as well as the outline: the piece that is left
+is closed to fill it, so a half-trimmed circle is a filled half circle, as After Effects draws it.
+A closed path **wraps** through its seam; an open one has no seam, so a window slid off either end
+simply runs out of path. An `end` at or below `start` draws nothing, which is what the first frame
+of a write-on looks like.
+
+An item whose trim is the whole path is rasterised **from its bezier**, not from a polyline of it,
+so the untrimmed case draws exactly the pixels it drew before there were modifiers.
+
+**Dashes** (K-552) cut the **outline** into pieces: `dashes` is a list of lengths in layer pixels,
+alternating dash, gap, dash, gap, and `dash_offset` says how far along the path the pattern starts.
+An empty list is a solid outline and is absent from the file. An odd-length list repeats itself to
+make an even one (the SVG rule) — the only reading that does not leave a dash with no gap after it.
+The pieces are cut by the same length measurement a trim uses, so the two agree about where "ten
+along" is, and each piece is drawn by the same brush run the whole outline is. A pattern so fine
+that the path would need more than 4096 pieces is drawn **solid**: at that density it is a solid
+line to the eye, and cutting it would cost a frame to draw something indistinguishable.
+
+**A gradient fill** (K-555) paints the same coverage with a colour that changes across it:
+`gradient` is 0 for the flat `fill`, 1 for a **linear** ramp and 2 for a **radial** one, running
+from `fill` to `gradient_colour` between the two points. Linear projects onto the line between
+them; radial measures out from the start with the end on the outer edge — the Gradient effect's
+two readings (docs/08 §3.35), including its one epsilon on the squared axis length, so a ramp with
+no axis is one flat colour rather than a division by zero. The points are in the art's own
+coordinates and animate; **what a ramp is does not**, which is why the kind is a choice rather than
+a `Property` — a number between linear and radial would have to mean something.
+
+Two stops, not a list. A stop list is the right long-term shape and nothing here stands in its way
+(the two colours become its ends), but it needs an editor of its own to be worth having, and two
+stops is what the Gradient effect beside it offers.
+
+**Offset paths** (K-554) push the outline **out** of the path by `offset_amount` layer pixels;
+negative pulls it in, and zero is the path itself and is absent from the file. "Out" is decided by
+the ring's own winding, so a positive amount grows the shape whichever way round its points were
+written; an open path has no inside, so it is simply moved to one side. The corners are **round**,
+which is the one join this crate draws. The offset does **not** unpick its own
+self-intersections: pulling in by more than a curve bends folds the outline back through itself,
+and the non-zero winding fill swallows most of what that produces. Unpicking it properly is a
+polygon-clipping library, and the failure is local and visible, which makes it a limit rather than
+a trap.
+
+**The repeater** (K-553) draws the item **more than once**: `repeat_copies` copies, each one more
+step of a transform than the last. The step moves by `repeat_position_*` layer pixels, turns by
+`repeat_rotation` degrees and scales by `repeat_scale` per cent, all about `repeat_anchor_*`;
+`repeat_offset` says which copy the original geometry is, so a negative offset puts copies
+*behind* it. The copies fade evenly from `repeat_start_opacity` to `repeat_end_opacity`.
+
+A copy is a scaled **drawing**, not a scaled path: its outline and its dashes grow with it. The
+copies are drawn last first, so the original sits on top of the copies made from it — After
+Effects' own default. A still count of one is no repeater at all and is absent from the file, and
+the count is held to `MAX_COPIES` (100) because every copy is a rasteriser pass over the whole
+layer.
+
+The gradient is part of the **art**, not of the layer, so a repeated copy carries its ramp with it.
+
+The order is **offset, then trim, then dash, then repeat**: the offset makes the outline, the trim
+cuts whatever outline there is by its length, the dashes run along whatever the trim left, and the
+repeater copies whatever the three of them drew.
+
+**Future:** nested groups, wiggle paths, joins and caps other than round, and animated paths.
 
 ## 8. Effects
 
@@ -822,10 +978,12 @@ with the styled-runs model.
 
 ### 9.2 Shape — how the shipped flat list grows
 
-`LayerKind::Shape` ships as §7.2's flat `Vec<ShapeItem>` (K-237). The intended growth is a
-`ShapeElement` tree: groups; parametric rectangle/ellipse/polystar; fill (solid, linear/radial
-gradient); stroke (width, caps, joins, dashes); trim paths. Repeater, offset, wiggle-path are
-tier 2 ([08-EFFECTS.md](08-EFFECTS.md) keeps the list).
+`LayerKind::Shape` ships as §7.2's flat `Vec<ShapeItem>` (K-237), with the modifiers as fields on
+the item (§7.2.1, K-551). The intended growth is a `ShapeElement` tree: groups; parametric
+rectangle/ellipse/polystar; fill (solid, linear/radial gradient); stroke (width, caps, joins,
+dashes); trim paths. Wiggle-path is tier 2 ([08-EFFECTS.md](08-EFFECTS.md) keeps the list). The
+tree is a **re-homing** of the fields §7.2 already stores, not a second way to say the same
+thing.
 
 ### 9.3 2.5D (K-023)
 
@@ -892,5 +1050,4 @@ migration (they are logged in 02-DECISIONS instead). A registry lands as 1.0 nea
   (AE allows 30000²) or cap and revisit?
 - Should `stretch` survive long-term, or is it sugar the UI lowers into Retime? (It rescales
   keyframes, which Retime deliberately does not — kept for AE compatibility for now.)
-- Per-vertex mask feather data reserved but unspecified — spec when variable-width feather lands.
 - Gradient model for text stroke/fill v1 or tier 2?

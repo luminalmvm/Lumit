@@ -18,12 +18,13 @@ Fast motion blur is a [Temporal](/effects/#temporal) effect.
 This effect measures where every pixel moved between one frame and the next, and
 smears each one along its own path. 
 
-:::caution[One flow measurement per layer]
-Measuring motion is expensive. A layer computes it once per frame and shares it,
-so where a layer carries both this and
-[Datamosh](/effects/distortion/datamosh/), whichever comes first in the stack
-gets the measurement and the other does nothing. Put them on separate layers if
-you need both.
+:::note[This and Datamosh can share a layer]
+Measuring motion is expensive, so a layer measures only what its effects
+actually ask for. This effect needs the motion looking *forwards*, to the next
+frame; [Datamosh](/effects/distortion/datamosh/) needs it looking *backwards*,
+to the previous one. A layer carrying both measures both, and each effect gets
+its own — so stacking them works. A layer carrying only one costs exactly what
+it always did.
 :::
 
 ## Parameters

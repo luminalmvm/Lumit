@@ -18,6 +18,14 @@
 //! own ([`lumit_track::solve_camera_cancellable`]). Progress is a value anyone
 //! can read, not a callback anyone has to hold.
 //!
+//! **It stops where the pictures stop carrying the answer.** Not every shot
+//! can be followed all the way to its end — the lens racks, the frame whites
+//! out, the camera whips — and when the specks stop crossing from one frame to
+//! the next there is nothing after that point to solve *against* anything
+//! before it. The run ends there, the span that worked is solved and kept, and
+//! the result says how far it got ([`Solved::is_partial`]). Half a shot
+//! honestly measured is worth having; a whole one with an invented tail is not.
+//!
 //! **It is not done twice.** The answer depends on the file's bytes and the
 //! analysis settings and on nothing else, so it is written to the `track/`
 //! sidecar under a name made of exactly those two things. The next session, the
@@ -250,6 +258,9 @@ pub enum AnalysisError {
 pub struct Solved {
     /// The media's own rate, which the solved frame numbers count at.
     pub fps: f64,
+    /// How many frames the **clip** has, against which the solved span is a
+    /// whole answer or a partial one. See [`Solved::is_partial`].
+    pub clip_frames: usize,
     pub first_frame: i64,
     pub last_frame: i64,
     /// One per frame from `first_frame`, in Lumit's camera terms.
@@ -260,16 +271,29 @@ pub struct Solved {
 }
 
 impl Solved {
-    fn new(fps: f64, solve: CameraSolve) -> Option<Self> {
+    fn new(fps: f64, clip_frames: usize, solve: CameraSolve) -> Option<Self> {
         let first = solve.poses.first()?.frame;
         let last = solve.poses.last()?.frame;
         Some(Solved {
             fps,
+            clip_frames,
             first_frame: first,
             last_frame: last,
             poses: solve.poses.iter().map(to_camera_pose).collect(),
             solve,
         })
+    }
+
+    /// Whether the clip runs on past what was solved — a run that stopped at a
+    /// tracking failure, or frames that stopped decoding.
+    ///
+    /// The span is a prefix by construction: the job tracks the source from its
+    /// first frame and can only ever stop early, never start late. So the one
+    /// comparison below is the whole test, and there is no second range to keep
+    /// in step with this one.
+    #[must_use]
+    pub fn is_partial(&self) -> bool {
+        self.last_frame + 1 < i64::try_from(self.clip_frames).unwrap_or(i64::MAX)
     }
 
     /// The converted pose at solved frame `frame`.
@@ -343,7 +367,11 @@ fn euler_of_transpose(r: &Mat3) -> (f64, f64, f64) {
 /// Bump when the record's meaning changes. Old files then hash to a different
 /// name and are simply never asked for, which is the same disposal the frame
 /// cache's algorithm version performs.
-const FORMAT_VERSION: u16 = 1;
+///
+/// **2** added the clip's own frame count, which is what makes a cached solve
+/// still able to say it is a partial one (a version 1 record could not, and a
+/// solve that read back as complete would be a lie the sidecar told).
+const FORMAT_VERSION: u16 = 2;
 
 /// `LUMTRK\0` — read before anything is deserialised, so a file that is not one
 /// of ours is refused rather than fed to a decoder.
@@ -356,6 +384,8 @@ struct Record {
     /// renamed file is caught rather than believed.
     key: [u8; 32],
     fps: f64,
+    /// The clip's own length, so a cache hit knows a partial solve is partial.
+    clip_frames: u64,
     solve: CameraSolve,
 }
 
@@ -365,10 +395,11 @@ struct Record {
 /// to say "this was written by a newer Lumit" without first parsing a shape it
 /// does not know, which is the same refuse-newer rule `manifest.json` follows
 /// (docs/10 §1).
-fn encode(key: AnalysisKey, fps: f64, solve: &CameraSolve) -> Option<Vec<u8>> {
+fn encode(key: AnalysisKey, fps: f64, clip_frames: usize, solve: &CameraSolve) -> Option<Vec<u8>> {
     let body = bincode::serialize(&Record {
         key: key.0,
         fps,
+        clip_frames: clip_frames as u64,
         solve: solve.clone(),
     })
     .ok()?;
@@ -382,7 +413,7 @@ fn encode(key: AnalysisKey, fps: f64, solve: &CameraSolve) -> Option<Vec<u8>> {
 /// The inverse, refusing anything it cannot vouch for: wrong magic, a version
 /// from the future, a body that will not parse, or a key that is not the one
 /// asked for. Every refusal costs a re-analysis and nothing else.
-fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, CameraSolve)> {
+fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, usize, CameraSolve)> {
     let (head, body) = bytes.split_at_checked(9)?;
     if head.get(..7)? != MAGIC {
         return None;
@@ -392,20 +423,21 @@ fn decode(bytes: &[u8], key: AnalysisKey) -> Option<(f64, CameraSolve)> {
         return None;
     }
     let record: Record = bincode::deserialize(body).ok()?;
-    (record.key == key.0).then_some((record.fps, record.solve))
+    let clip_frames = usize::try_from(record.clip_frames).unwrap_or(usize::MAX);
+    (record.key == key.0).then_some((record.fps, clip_frames, record.solve))
 }
 
 /// Read a solve out of the sidecar, or `None` for every way that can fail to
 /// happen — no folder, no file, an unreadable one, one written by a newer build.
-fn read_sidecar(dir: &Path, key: AnalysisKey) -> Option<(f64, CameraSolve)> {
+fn read_sidecar(dir: &Path, key: AnalysisKey) -> Option<(f64, usize, CameraSolve)> {
     let bytes = std::fs::read(dir.join(key.file_name())).ok()?;
     decode(&bytes, key)
 }
 
 /// Write one, best-effort. A cache that cannot be written costs the next session
 /// a re-analysis; it is never worth failing an answer that is already in hand.
-fn write_sidecar(dir: &Path, key: AnalysisKey, fps: f64, solve: &CameraSolve) {
-    let Some(bytes) = encode(key, fps, solve) else {
+fn write_sidecar(dir: &Path, key: AnalysisKey, fps: f64, clip_frames: usize, solve: &CameraSolve) {
+    let Some(bytes) = encode(key, fps, clip_frames, solve) else {
         return;
     };
     if std::fs::create_dir_all(dir).is_err() {
@@ -742,8 +774,8 @@ fn run(job: Job, cancel: &AtomicBool) {
     let key = job.key;
     let dir = cache_dir();
 
-    if let Some((fps, solve)) = dir.as_deref().and_then(|d| read_sidecar(d, key)) {
-        publish(media, fps, solve);
+    if let Some((fps, clip_frames, solve)) = dir.as_deref().and_then(|d| read_sidecar(d, key)) {
+        publish(media, fps, clip_frames, solve);
         finish(media, Some(Progress::Done));
         return;
     }
@@ -755,15 +787,18 @@ fn run(job: Job, cancel: &AtomicBool) {
     }
 
     match analyse(job, cancel, &|step| report(media, step)) {
-        Ok((fps, solve)) => {
+        Ok((fps, clip_frames, solve)) => {
             // Written before the store is filled, so a solve the interface can
             // see is a solve the next session will find (and never the other
             // way round). Cancellation writes nothing at all, which is what
-            // makes a stopped run leave no trace.
+            // makes a stopped run leave no trace. A **partial** solve is
+            // cached like any other: it is the honest answer for that file at
+            // those settings, and re-deriving it would only take the same
+            // minutes to stop in the same place.
             if let Some(dir) = dir.as_deref() {
-                write_sidecar(dir, key, fps, &solve);
+                write_sidecar(dir, key, fps, clip_frames, &solve);
             }
-            publish(media, fps, solve);
+            publish(media, fps, clip_frames, solve);
             finish(media, Some(Progress::Done));
         }
         Err(AnalysisError::Cancelled) => finish(media, Some(Progress::Cancelled)),
@@ -773,11 +808,15 @@ fn run(job: Job, cancel: &AtomicBool) {
 
 /// Put a solve in the store, converted.
 ///
+/// `clip_frames` is the **clip's** own length, which is what makes the solve
+/// able to say whether it covers all of it ([`Solved::is_partial`]); it is not
+/// derivable from the poses, which describe only the span that was solved.
+///
 /// Public because this is how a solve gets in and there is exactly one way: an
 /// analysis finishing, a sidecar being read back — and the bridge's own tests,
 /// which need a solve in the store without an encoder to make one out of.
-pub fn publish(media: Uuid, fps: f64, solve: CameraSolve) {
-    let Some(solved) = Solved::new(fps, solve) else {
+pub fn publish(media: Uuid, fps: f64, clip_frames: usize, solve: CameraSolve) {
+    let Some(solved) = Solved::new(fps, clip_frames, solve) else {
         return;
     };
     if let Ok(mut held) = solves().write() {
@@ -794,8 +833,8 @@ fn analyse(
     job: Job,
     cancel: &AtomicBool,
     report: &dyn Fn(Progress),
-) -> Result<(f64, CameraSolve), AnalysisError> {
-    let (fps, mut set) = track_frames(job, cancel, report)?;
+) -> Result<(f64, usize, CameraSolve), AnalysisError> {
+    let (fps, clip_frames, mut set) = track_frames(job, cancel, report)?;
 
     report(Progress::Solving);
     let stop = || cancel.load(Ordering::Relaxed);
@@ -807,8 +846,30 @@ fn analyse(
             SolveError::Cancelled => AnalysisError::Cancelled,
             other => AnalysisError::Solve(other),
         })?;
-    Ok((fps, solve))
+    Ok((fps, clip_frames, solve))
 }
+
+/// How many tracks must carry across a frame boundary for anything past it to
+/// be solvable at all.
+///
+/// **The solver's own minimum, not a taste.** Every later phase stands on
+/// two-view geometry between frames, and its minimal sample is seven
+/// correspondences (the 7-point fundamental); eight is the smallest set that
+/// can be *verified* rather than merely fitted, since a fit through exactly its
+/// minimal sample has nothing left over to disagree with it. Below that the
+/// chain of correspondence is **severed** at that frame: no geometry through it
+/// can be estimated, so no frame after it can be tied to any frame before it,
+/// however well the frames after it track among themselves. That is a
+/// statement about the arithmetic rather than a threshold anyone tuned, which
+/// is why it is the signal the job stops on.
+///
+/// ponytail: a hard geometric floor and nothing else. A shot that degrades
+/// badly without ever crossing it still solves badly, and says so through the
+/// mean reprojection error the status row already reports; a relative-collapse
+/// detector (carriage falling to a fraction of its own recent level) is the
+/// upgrade if real footage turns out to need one, and it would need a threshold
+/// somebody has to defend.
+const MIN_CARRIED: usize = 8;
 
 /// The decode-and-follow half: every frame of the clip through the tracker, one
 /// at a time, with the frame loop as the cancellation seam.
@@ -816,11 +877,21 @@ fn analyse(
 /// Separate from the solve because it is the half that reads pixels, and so the
 /// half whose claims — the mask exclusion, the progress readings — are about
 /// tracks rather than about cameras.
+///
+/// **It can stop before the end of the clip**, and the set it hands back then
+/// covers only the span that worked (`(fps, the clip's own frame count, the
+/// tracks)`). Two things end a run early and they are reported the same way,
+/// because they mean the same thing to everything downstream: the frames stop
+/// arriving ([`LumaFrames::luma`] answering `None`), or the tracking itself
+/// fails — fewer than [`MIN_CARRIED`] tracks carrying across a frame boundary.
+/// The frames after such a boundary are dropped rather than solved: they are
+/// not a poorer answer, they are no answer, and half a shot honestly measured
+/// is worth more than a whole one with an invented tail.
 fn track_frames(
     job: Job,
     cancel: &AtomicBool,
     report: &dyn Fn(Progress),
-) -> Result<(f64, lumit_track::TrackSet), AnalysisError> {
+) -> Result<(f64, usize, lumit_track::TrackSet), AnalysisError> {
     let mut frames = (job.open)().ok_or(AnalysisError::Unreadable)?;
     let (total, width, height, fps) = frames.info();
     if total == 0 || width == 0 || height == 0 || fps <= 0.0 || !fps.is_finite() {
@@ -830,6 +901,7 @@ fn track_frames(
 
     let mut tracker = Tracker::new(job.settings.tracker()).with_masks(job.masks);
     let mut pushed = 0usize;
+    let mut severed: Option<i64> = None;
     for n in 0..total {
         // The frame loop is the cancellation seam (docs/14 §1.4): one check per
         // frame, and the crate being driven owns no long uninterruptible run of
@@ -845,13 +917,26 @@ fn track_frames(
         tracker
             .push(n as i64, plane, None)
             .map_err(AnalysisError::Tracking)?;
+        // Nothing carries into the first frame, so there is nothing to judge
+        // until the second one.
+        if n > 0 && tracker.carried_count() < MIN_CARRIED {
+            severed = Some(n as i64);
+            break;
+        }
         pushed += 1;
     }
     report(Progress::Tracking {
         done: pushed,
         total,
     });
-    Ok((fps, tracker.finish()))
+    let mut set = tracker.finish();
+    if let Some(n) = severed {
+        // The failing frame itself is dropped with everything after it: the
+        // last frame anything is known about is the one before the boundary
+        // that nothing crossed.
+        set.truncate(n - 1);
+    }
+    Ok((fps, total, set))
 }
 
 // ---------------------------------------------------------------------------
@@ -1077,11 +1162,34 @@ mod tests {
     /// The scene, rendered on demand.
     struct Shot {
         frames: usize,
+        /// Frames from here on carry no picture to follow — a whiteout, a lens
+        /// cap, a clip running into blank. See [`Shot::degrading`].
+        good: usize,
     }
 
     impl Shot {
         fn new() -> Self {
-            Shot { frames: FRAMES }
+            Shot {
+                frames: FRAMES,
+                good: FRAMES,
+            }
+        }
+
+        /// The same shot, `FRAMES` of it followable and `tail` frames of
+        /// nothing after that.
+        ///
+        /// **Featureless rather than merely poor**, and that is the point: the
+        /// verification the tracker ends a track on is normalised correlation,
+        /// which is blind to gain and lift by construction, so a picture that
+        /// merely fades down in contrast is followed happily and *should* be. A
+        /// frame with no structure at all is what actually severs the chain —
+        /// the gradient normal matrix is singular, every KLT solve refuses, and
+        /// nothing carries across. It is also a real thing footage does.
+        fn degrading(tail: usize) -> Self {
+            Shot {
+                frames: FRAMES + tail,
+                good: FRAMES,
+            }
         }
 
         fn render(n: usize) -> Vec<f32> {
@@ -1137,7 +1245,14 @@ mod tests {
         }
 
         fn luma(&mut self, n: usize) -> Option<Vec<f32>> {
-            (n < self.frames).then(|| Shot::render(n))
+            if n >= self.frames {
+                return None;
+            }
+            Some(if n < self.good {
+                Shot::render(n)
+            } else {
+                vec![0.5f32; W * H]
+            })
         }
     }
 
@@ -1175,13 +1290,22 @@ mod tests {
         }
     }
 
+    /// [`job`], over a shot that stops carrying a picture after `FRAMES`.
+    fn degrading_job(media: Uuid, tag: &str, tail: usize) -> Job {
+        Job {
+            open: Box::new(move || Some(Box::new(Shot::degrading(tail)) as Box<dyn LumaFrames>)),
+            ..job(media, tag, Vec::new())
+        }
+    }
+
     /// Run one analysis here and now, keeping every progress reading it
     /// published — the deterministic half, so nothing has to race a thread to
     /// see what it did.
-    fn run_here(
-        job: Job,
-        cancel: &AtomicBool,
-    ) -> (Result<(f64, CameraSolve), AnalysisError>, Vec<Progress>) {
+    /// What one analysis answers: the media's rate, the clip's length, and the
+    /// solve. Named only so the pair it is half of is readable.
+    type Analysed = Result<(f64, usize, CameraSolve), AnalysisError>;
+
+    fn run_here(job: Job, cancel: &AtomicBool) -> (Analysed, Vec<Progress>) {
         let log = Mutex::new(Vec::new());
         let out = analyse(job, cancel, &|step| {
             if let Ok(mut held) = log.lock() {
@@ -1316,6 +1440,7 @@ mod tests {
         let mut doc = Document::new();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: media,
                 name: "shot.mov".into(),
                 media: lumit_core::model::MediaRef {
@@ -1370,7 +1495,8 @@ mod tests {
 
         let cancel = AtomicBool::new(false);
         let (out, steps) = run_here(job(media, "solve", Vec::new()), &cancel);
-        let (fps, solve) = out.expect("the synthetic shot solves");
+        let (fps, clip_frames, solve) = out.expect("the synthetic shot solves");
+        assert_eq!(clip_frames, FRAMES, "the whole clip was followed");
 
         // Progress is observable, and it is honest: it starts at nothing done,
         // reaches every frame, and only then says it is solving.
@@ -1412,7 +1538,11 @@ mod tests {
         );
 
         // The conversion, against the matrix that actually draws the frame.
-        let solved = Solved::new(fps, solve).expect("the solve has frames");
+        let solved = Solved::new(fps, FRAMES, solve).expect("the solve has frames");
+        assert!(
+            !solved.is_partial(),
+            "the whole clip was followed, so nothing is partial about it"
+        );
         let mut worst = 0.0f64;
         let mut compared = 0usize;
         for pose in &solved.solve.poses {
@@ -1433,7 +1563,7 @@ mod tests {
         );
 
         // Into the store, and out through the link.
-        publish(media, solved.fps, solved.solve.clone());
+        publish(media, solved.fps, solved.clip_frames, solved.solve.clone());
         let (doc, comp) = linked_document(media);
         let mut seen: Vec<CameraPose> = Vec::new();
         for n in 0..FRAMES {
@@ -1461,6 +1591,97 @@ mod tests {
         clear();
     }
 
+    /// A shot that stops being followable is solved as far as it went, and the
+    /// job stops there (K-540).
+    ///
+    /// Three claims, and they are one claim: the analysis does not decode the
+    /// frames it cannot use, the solve covers exactly the span that carried,
+    /// and the result says so — so a camera linked to it derives inside that
+    /// span and holds outside it, which is K-417's rule meeting a range that
+    /// now ends early.
+    #[test]
+    fn a_shot_that_stops_carrying_is_solved_as_far_as_it_went() {
+        let _serial = serially();
+        let dir = tempfile::tempdir().unwrap();
+        with_cache(dir.path());
+        let media = Uuid::now_v7();
+        const TAIL: usize = 6;
+
+        let cancel = AtomicBool::new(false);
+        let (out, steps) = run_here(degrading_job(media, "partial", TAIL), &cancel);
+        let (fps, clip_frames, solve) = out.expect("the followable part of the shot solves");
+
+        // It stopped: the analysis never reached the frames it could not use,
+        // and the last thing it said about the tracking says which ones it did.
+        assert_eq!(clip_frames, FRAMES + TAIL, "the clip's own length");
+        let tracked: Vec<&Progress> = steps
+            .iter()
+            .filter(|s| matches!(s, Progress::Tracking { .. }))
+            .collect();
+        assert_eq!(
+            tracked.last(),
+            Some(&&Progress::Tracking {
+                done: FRAMES,
+                total: FRAMES + TAIL
+            }),
+            "the run did not stop where the shot stopped carrying"
+        );
+        assert!(
+            !steps.contains(&Progress::Tracking {
+                done: FRAMES + TAIL - 1,
+                total: FRAMES + TAIL
+            }),
+            "the job carried on decoding frames nothing could be followed through"
+        );
+
+        // And it finalised rather than discarded: a pose for every frame of the
+        // span that worked, and none for any frame after it.
+        assert_eq!(
+            solve.poses.len(),
+            FRAMES,
+            "the solve does not cover the span that carried"
+        );
+        assert_eq!(solve.poses.first().map(|p| p.frame), Some(0));
+        assert_eq!(
+            solve.poses.last().map(|p| p.frame),
+            Some(FRAMES as i64 - 1),
+            "a frame past the failure was given a camera"
+        );
+        let focal = solve.segments.first().unwrap().focal_px;
+        assert!(
+            (focal - FOCAL).abs() / FOCAL < 0.08,
+            "the partial solve is still a solve: focal {focal} against a true {FOCAL}"
+        );
+
+        // The store says it is partial, and the range it hands the model is the
+        // span rather than the clip.
+        publish(media, fps, clip_frames, solve);
+        let solved = solved(media).expect("published");
+        assert!(solved.is_partial(), "a solve short of its clip is partial");
+        assert_eq!(solved.first_frame, 0);
+        assert_eq!(solved.last_frame, FRAMES as i64 - 1);
+
+        // The link derives inside the span and holds outside it — the same
+        // clamp K-417 already required, now against a range that ends early.
+        let (doc, comp) = linked_document(media);
+        let last = linked_pose(&doc, &comp, (FRAMES - 1) as f64 / FPS).expect("a camera");
+        assert_eq!(last.state, lumit_core::track::LinkState::Derived);
+        for n in FRAMES..FRAMES + TAIL {
+            let held = linked_pose(&doc, &comp, n as f64 / FPS).expect("a camera");
+            assert_eq!(
+                held.state,
+                lumit_core::track::LinkState::Held,
+                "frame {n} is past the solve and should be holding"
+            );
+            assert_eq!(
+                Some(held.pose),
+                solved.pose(solved.last_frame),
+                "the hold is the last derived motion, not some other frame"
+            );
+        }
+        clear();
+    }
+
     /// A solve landing renames the frames drawn with it. Without this the frames
     /// banked under the camera's *stored* transform would be served back after
     /// the link started deriving a different one, and the picture would silently
@@ -1484,8 +1705,8 @@ mod tests {
 
         let cancel = AtomicBool::new(false);
         let (out, _) = run_here(job(media, "key", Vec::new()), &cancel);
-        let (fps, solve) = out.expect("the synthetic shot solves");
-        publish(media, fps, solve);
+        let (fps, clip_frames, solve) = out.expect("the synthetic shot solves");
+        publish(media, fps, clip_frames, solve);
 
         assert_ne!(
             before,
@@ -1555,16 +1776,21 @@ mod tests {
 
         let mut first = job(media, "cache", Vec::new());
         first.key = key;
-        let (fps, solve) = run_here(first, &cancel).0.unwrap();
-        write_sidecar(dir.path(), key, fps, &solve);
+        let (fps, clip_frames, solve) = run_here(first, &cancel).0.unwrap();
+        write_sidecar(dir.path(), key, fps, clip_frames, &solve);
         let written = std::fs::read(dir.path().join(key.file_name())).unwrap();
 
         // Read back: the same solve, and the same file when written again.
-        let (read_fps, read_solve) = read_sidecar(dir.path(), key).expect("the sidecar is there");
+        let (read_fps, read_clip, read_solve) =
+            read_sidecar(dir.path(), key).expect("the sidecar is there");
         assert_eq!(read_fps, fps);
+        assert_eq!(
+            read_clip, clip_frames,
+            "the clip's own length did not survive the round trip, so a cached              partial solve would read back as a whole one"
+        );
         assert_eq!(read_solve, solve, "the round trip changed the solve");
         assert_eq!(
-            encode(key, read_fps, &read_solve).unwrap(),
+            encode(key, read_fps, read_clip, &read_solve).unwrap(),
             written,
             "re-encoding what was read gives different bytes"
         );
@@ -1573,10 +1799,10 @@ mod tests {
         // makes the cache safe to trust at all.
         let mut again = job(media, "cache", Vec::new());
         again.key = key;
-        let (fps_again, solve_again) = run_here(again, &cancel).0.unwrap();
+        let (fps_again, clip_again, solve_again) = run_here(again, &cancel).0.unwrap();
         assert_eq!(fps_again, fps);
         assert_eq!(
-            encode(key, fps_again, &solve_again).unwrap(),
+            encode(key, fps_again, clip_again, &solve_again).unwrap(),
             written,
             "a rebuild and a cache hit are not the same bits"
         );
@@ -1604,9 +1830,9 @@ mod tests {
         assert!(read_sidecar(dir.path(), key).is_none());
         let mut rebuilt = job(media, "cache", Vec::new());
         rebuilt.key = key;
-        let (fps_rebuilt, solve_rebuilt) = run_here(rebuilt, &cancel).0.unwrap();
+        let (fps_rebuilt, clip_rebuilt, solve_rebuilt) = run_here(rebuilt, &cancel).0.unwrap();
         assert_eq!(
-            encode(key, fps_rebuilt, &solve_rebuilt).unwrap(),
+            encode(key, fps_rebuilt, clip_rebuilt, &solve_rebuilt).unwrap(),
             written,
             "a rebuild after a delete is not what was deleted"
         );
@@ -1659,10 +1885,10 @@ mod tests {
         let media = Uuid::now_v7();
         let unmasked = track_frames(job(media, "unmasked", Vec::new()), &cancel, &|_| {})
             .unwrap()
-            .1;
+            .2;
         let masked = track_frames(job(media, "masked", masks.clone()), &cancel, &|_| {})
             .unwrap()
-            .1;
+            .2;
 
         assert!(
             inside(&unmasked, &masks[0]) > 0,

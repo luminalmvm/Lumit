@@ -157,6 +157,30 @@ pub struct PlanContext<'a> {
     pub held: Option<HeldNested<'a>>,
 }
 
+/// The decode source for one footage item: the file its pixels are read from
+/// (already resolved through the proxy rule, K-501) and — for a numbered run of
+/// stills — the rate to read the run at (K-539).
+///
+/// The rate rides only when the file *is* the item's own media. A proxy is one
+/// file standing in for the whole run, so reading it as a sequence would be
+/// reading files that are not there.
+fn media_source(
+    doc: &Document,
+    item: Uuid,
+    media: &lumit_core::model::MediaRef,
+) -> lumit_media::MediaSource {
+    let sequence_fps = match doc.item(item) {
+        Some(lumit_core::model::ProjectItem::Footage(f)) if std::ptr::eq(&f.media, media) => {
+            f.sequence_fps()
+        }
+        _ => None,
+    };
+    lumit_media::MediaSource {
+        path: PathBuf::from(&media.absolute_path),
+        sequence_fps,
+    }
+}
+
 /// Recursively collect the decode jobs comp `comp` needs at comp time `t`
 /// (docs/06-RENDER-PIPELINE.md: Precomp evaluation). Cycle-guarded through
 /// `visited`, which must already contain `comp.id`.
@@ -292,7 +316,7 @@ pub fn collect_comp_jobs(
                     jobs.push(CompJob {
                         layer: layer.id,
                         item,
-                        path: PathBuf::from(&media.absolute_path),
+                        source: media_source(doc, item, media),
                         source_frame,
                         target_width,
                         natural_w: nat_w,
@@ -303,7 +327,7 @@ pub fn collect_comp_jobs(
                         // refinement (clip-relative neighbour resolution);
                         // footage layers first.
                         temporal: Vec::new(),
-                        flow_neighbour: None,
+                        flow_neighbours: Vec::new(),
                         slate: false,
                     });
                 }
@@ -347,7 +371,7 @@ pub fn collect_comp_jobs(
                     jobs.push(CompJob {
                         layer: layer.id,
                         item: *item,
-                        path: PathBuf::from(&media.absolute_path),
+                        source: media_source(doc, *item, media),
                         source_frame: 0,
                         target_width: None,
                         natural_w: comp.width,
@@ -355,7 +379,7 @@ pub fn collect_comp_jobs(
                         blend: None,
                         flow: None,
                         temporal: Vec::new(),
-                        flow_neighbour: None,
+                        flow_neighbours: Vec::new(),
                         slate: true,
                     });
                     continue;
@@ -387,14 +411,14 @@ pub fn collect_comp_jobs(
                 let interp = &layer.interpolation;
                 let blend_on = matches!(interp, Interpolation::Blend) || flow.is_some();
                 let sample_fps = flow.as_ref().and_then(|p| p.input_fps_at(lt));
-                let flow_neighbour =
-                    lumit_core::fx::stack_flow_neighbour(&layer.effects, layer.switches.fx);
+                let flow_neighbours =
+                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
                 // A layer that needs flow decodes at its own width whatever the
                 // preview tier says (K-331): flow measured on a shrunk decode is
                 // a different measurement, not the same one smaller. Must match
                 // `Stamper::stamp`'s `native` exactly, or the frame's name lies
                 // about the width of the pixels in it.
-                let native = flow.is_some() || flow_neighbour.is_some();
+                let native = flow.is_some() || !flow_neighbours.is_empty();
                 let target_width = if native {
                     None
                 } else {
@@ -434,7 +458,7 @@ pub fn collect_comp_jobs(
                 jobs.push(CompJob {
                     layer: layer.id,
                     item: *item,
-                    path: PathBuf::from(&media.absolute_path),
+                    source: media_source(doc, *item, media),
                     source_frame,
                     target_width,
                     natural_w: nat_w,
@@ -444,8 +468,9 @@ pub fn collect_comp_jobs(
                     temporal,
                     // Flow motion blur / Datamosh measure motion between
                     // this frame and their requested neighbour (already
-                    // in `temporal`).
-                    flow_neighbour,
+                    // in `temporal`) — one entry each when both are live
+                    // (K-544), since they want opposite directions.
+                    flow_neighbours,
                     slate: false,
                 });
             }
@@ -509,7 +534,7 @@ pub fn same_decode(a: &[CompJob], b: &[CompJob]) -> bool {
                 && x.blend == y.blend
                 && x.flow == y.flow
                 && x.temporal == y.temporal
-                && x.flow_neighbour == y.flow_neighbour
+                && x.flow_neighbours == y.flow_neighbours
         })
 }
 
@@ -525,7 +550,12 @@ impl CompJob {
         let mut h = blake3::Hasher::new();
         h.update(b"decode/1/");
         h.update(self.item.as_bytes());
-        h.update(self.path.to_string_lossy().as_bytes());
+        h.update(self.source.path.to_string_lossy().as_bytes());
+        // A run of stills read at a different rate is a different picture at
+        // the same frame number, so the rate is part of the name (K-539).
+        let (num, den) = self.source.sequence_fps.unwrap_or((0, 0));
+        h.update(&num.to_le_bytes());
+        h.update(&den.to_le_bytes());
         h.update(&self.source_frame.to_le_bytes());
         h.update(&self.target_width.unwrap_or(u32::MAX).to_le_bytes());
         h.update(&[u8::from(self.slate)]);
@@ -541,7 +571,15 @@ impl CompJob {
             h.update(&offset.to_le_bytes());
             h.update(&frame.to_le_bytes());
         }
-        h.update(&self.flow_neighbour.unwrap_or(i32::MIN).to_le_bytes());
+        // `i32::MIN` is not a reachable offset, so "no flow consumer" cannot
+        // collide with a real one — and a stack with a single consumer keeps
+        // exactly the name it had before K-544 made this a list.
+        if self.flow_neighbours.is_empty() {
+            h.update(&i32::MIN.to_le_bytes());
+        }
+        for offset in &self.flow_neighbours {
+            h.update(&offset.to_le_bytes());
+        }
         let mut k = [0u8; 16];
         k.copy_from_slice(&h.finalize().as_bytes()[..16]);
         u128::from_le_bytes(k)
@@ -714,7 +752,7 @@ mod tests {
         CompJob {
             layer,
             item,
-            path: PathBuf::from("a.mp4"),
+            source: lumit_media::MediaSource::file("a.mp4"),
             source_frame,
             target_width: None,
             natural_w: 8,
@@ -722,7 +760,7 @@ mod tests {
             blend: None,
             flow: None,
             temporal: Vec::new(),
-            flow_neighbour: None,
+            flow_neighbours: Vec::new(),
             slate: false,
         }
     }
@@ -818,6 +856,7 @@ mod tests {
             let mut doc = Document::new();
             let item = Uuid::now_v7();
             doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
                 id: item,
                 name: "f".into(),
                 media: MediaRef {
@@ -950,6 +989,7 @@ mod tests {
             let mut doc = Document::new();
             let item = Uuid::now_v7();
             doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
                 id: item,
                 name: "f".into(),
                 media: MediaRef {
@@ -1077,6 +1117,7 @@ mod tests {
         let mut doc = Document::new();
         let item = Uuid::now_v7();
         doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
             id: item,
             name: "f".into(),
             media: MediaRef {

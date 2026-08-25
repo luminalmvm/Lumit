@@ -513,7 +513,7 @@ pub mod particulate {
                 h,
                 &ops,
                 &[],
-                None,
+                &[],
                 &[],
                 &[],
                 &[],

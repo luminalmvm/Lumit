@@ -18,6 +18,14 @@ to a layer and press **Analyse**. You can keep editing while it runs.
 The whole source clip is analysed, so every clip using that footage shares the one
 solve. Trimming, moving or retiming a clip doesn't track it again.
 
+A track can also cover only part of a clip. Where the shot stops being followable —
+a whiteout, a fast lens rack, a cut in the middle of the file — there is nothing
+after that point that can be tied to anything before it, so the analysis stops there
+and solves the part that worked. The bar above the status line shows how much of the
+clip carries a camera, and the line says how far it got. A camera linked to a partial
+track follows it inside that span and holds its last position past the end. Mask out
+whatever broke the shot and analyse again, or treat the two halves as two shots.
+
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}

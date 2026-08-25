@@ -2254,7 +2254,7 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
                   removeExpression();
                   close();
                 },
-                child: Text("Remove Expression"),
+                child: Text(l10n.removeExpression),
               )
             ];
           },

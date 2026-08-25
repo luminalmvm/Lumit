@@ -232,7 +232,7 @@ impl Realiser<'_> {
                         d.tex_h,
                         &d.fx,
                         &[],
-                        None,
+                        &[],
                         &luts,
                         &[],
                         &[],
@@ -254,6 +254,10 @@ impl Realiser<'_> {
                         None,
                     )
                 };
+                // Same boundary as the matte's (K-542): the referenced layer
+                // is placed by `d.tex_w × d.tex_h` just below, so its own stack
+                // is cropped back to that raster rather than growing it.
+                let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, d.tex_w, d.tex_h);
                 LayerInput::Texture(crate::fxops::render_layer_input(
                     self.compositor,
                     &self.ctx,
@@ -314,6 +318,50 @@ impl Realiser<'_> {
         let made = self.realise(camera, width, height, background, layers);
         self.fx_cache.borrow_mut().put_nested(key, made.clone());
         made
+    }
+
+    /// Stamp a Precomp layer's paint strokes into its realised picture
+    /// (K-547).
+    ///
+    /// Every other kind of layer is painted on the CPU, in the layer's own
+    /// 8-bit sRGB raster, before it is uploaded — a Precomp has no such
+    /// raster, because its picture is made on the graphics card. So the
+    /// picture comes back the way an export reads it (the neutral display
+    /// encode, never the Viewer's exposure), goes through the *same*
+    /// `apply_strokes` every other layer uses, and is uploaded again. One
+    /// rasteriser, one set of rules, and a stroke that lands identically
+    /// wherever it is painted.
+    ///
+    /// ponytail: an 8-bit round trip per painted Precomp per frame — the
+    /// nested picture is quantised to the depth every footage layer is
+    /// painted at anyway, and read back synchronously. A GPU stamping pass
+    /// (docs/impl/paint.md, "Not built") is the upgrade if a painted
+    /// Precomp ever shows in a profile; nothing stored changes when it
+    /// arrives. Costs exactly nothing on the Precomp layers — almost all of
+    /// them — that carry no paint.
+    fn paint_over(
+        &self,
+        tex: wgpu::Texture,
+        natural_w: f64,
+        natural_h: f64,
+        strokes: &[lumit_core::paint::PaintStroke],
+        t: f64,
+    ) -> wgpu::Texture {
+        if strokes.is_empty() {
+            return tex;
+        }
+        let (w, h) = (tex.width(), tex.height());
+        let display = self
+            .engine
+            .display(&self.ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL);
+        let Ok(mut rgba) = self.engine.readback8(&self.ctx, &display) else {
+            // The read failed (a lost device, a surface gone). The unpainted
+            // picture is the calm answer; engine crates do not panic.
+            return tex;
+        };
+        lumit_core::paint::apply_strokes(&mut rgba, w, h, natural_w, natural_h, strokes, t);
+        let src = self.engine.upload_srgb8(&self.ctx, &rgba, w, h);
+        self.engine.linearise(&self.ctx, &src)
     }
 
     /// As [`Self::realise`], but compositing only `region` of the composition
@@ -446,7 +494,7 @@ impl Realiser<'_> {
                 th,
                 &fx_ops,
                 &[],
-                None,
+                &[],
                 &luts,
                 &layer_inputs,
                 &flare_lens,
@@ -457,6 +505,12 @@ impl Realiser<'_> {
                 // The composite below carries no name in v1 (K-421).
                 None,
             );
+            // An adjustment layer's stack cannot grow the raster (K-542): what
+            // follows blends it against the composite beneath it, texel for
+            // texel, and there is no "beneath" outside the comp to grow into.
+            // A Tile above 100 % output on an adjustment layer therefore reads
+            // as the plain clipped tiling it always did.
+            let processed = lumit_gpu::fx::fit_centred(&self.ctx, processed, tw, th);
             let coverage = self.coverage_texture(camera, width, height, l);
             acc = Some(self.fx.adjust_blend(
                 &self.ctx,
@@ -630,6 +684,12 @@ impl Realiser<'_> {
         region: Option<lumit_gpu::Region>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
+        // How much wider and taller each layer's finished picture is than the
+        // source it started from (K-542). `(1.0, 1.0)` for every layer whose
+        // stack holds no Tile above 100 % output, which is every layer until one
+        // does — and multiplying a placement by 1.0 moves nothing, so the
+        // composite below is byte for byte what it was.
+        let mut grown: Vec<(f32, f32)> = Vec::with_capacity(layers.len());
         for l in layers {
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite
@@ -658,7 +718,19 @@ impl Realiser<'_> {
                     draws,
                     camera,
                     key,
-                } => self.realise_nested(*key, *camera, *width, *height, *background, draws),
+                    paint,
+                    paint_time,
+                } => {
+                    let nested =
+                        self.realise_nested(*key, *camera, *width, *height, *background, draws);
+                    self.paint_over(
+                        nested,
+                        f64::from(*width),
+                        f64::from(*height),
+                        paint,
+                        *paint_time,
+                    )
+                }
                 DrawSource::Adjust => {
                     // realise splits segments at every Adjust draw, so none
                     // reaches here; a transparent texel keeps the no-panic
@@ -667,6 +739,10 @@ impl Realiser<'_> {
                     self.engine.linearise(&self.ctx, &src)
                 }
             };
+            // The raster the stack starts from, kept because one effect can
+            // grow it (K-542) and the composite must then place a picture wider
+            // than the layer it came from.
+            let (source_w, source_h) = (tex.width(), tex.height());
             // The effect stack runs on the linear source, after masks and
             // before the transform (docs/08 §1.5; docs/06 render order).
             let mut tex = if l.fx.is_empty() {
@@ -683,13 +759,21 @@ impl Realiser<'_> {
                         (*offset, self.engine.linearise(&self.ctx, &src))
                     })
                     .collect();
-                // The dense motion field for Fast motion blur, uploaded as its
-                // own texture (only when it matches the layer's raster). The
-                // confidence rides in the .z channel (FX-19).
-                let flow = l.flow_field.as_ref().and_then(|(u, v, conf, fw, fh)| {
-                    (*fw == w && *fh == h)
-                        .then(|| lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h))
-                });
+                // The dense motion fields, one per offset a flow-consuming
+                // effect asked for (K-544), each uploaded as its own texture
+                // (only when it matches the layer's raster). The confidence
+                // rides in the .z channel (FX-19).
+                let flow: Vec<(i32, wgpu::Texture)> = l
+                    .flow_fields
+                    .iter()
+                    .filter(|(_, _, _, _, fw, fh)| *fw == w && *fh == h)
+                    .map(|(offset, u, v, conf, _, _)| {
+                        (
+                            *offset,
+                            lumit_gpu::fx::upload_flow_field(&self.ctx, u, v, conf, w, h),
+                        )
+                    })
+                    .collect();
                 // The parsed-and-uploaded `.cube` LUTs, 1:1 with the stack's
                 // `lut` ops (§3.11); the same load export uses (K-031).
                 let luts = self.load_luts(&l.lut_files);
@@ -722,7 +806,7 @@ impl Realiser<'_> {
                     h,
                     &fx_ops,
                     &neighbours,
-                    flow.as_ref(),
+                    &flow,
                     &luts,
                     &layer_inputs,
                     &flare_lens,
@@ -746,6 +830,10 @@ impl Realiser<'_> {
                     .lighting(&self.ctx, &tex, tex.width(), tex.height(), &op);
             }
             self.layer_done(l, started, fx_ms);
+            grown.push((
+                tex.width() as f32 / source_w as f32,
+                tex.height() as f32 / source_h as f32,
+            ));
             linear_textures.push(tex);
         }
         let cam_mat = camera.map(|pose| crate::export::camera_mat(width, height, pose));
@@ -757,15 +845,30 @@ impl Realiser<'_> {
         let mb_textures: Vec<Option<wgpu::Texture>> = linear_textures
             .iter()
             .zip(layers)
-            .map(|(tex, l)| {
+            .zip(&grown)
+            .map(|((tex, l), g)| {
                 (!l.mb.is_empty()).then(|| {
+                    // A grown picture is placed by the grown transform at every
+                    // sub-frame too (K-542), or the smear would be of a layer
+                    // in a different place from the one the composite draws.
+                    let mb: Vec<lumit_gpu::MbSample> = if *g == (1.0, 1.0) {
+                        Vec::new()
+                    } else {
+                        let (dx, dy) = grow_offset(l.natural_size, *g);
+                        l.mb.iter()
+                            .map(|smp| lumit_gpu::MbSample {
+                                anchor: (smp.anchor.0 + dx, smp.anchor.1 + dy),
+                                ..*smp
+                            })
+                            .collect()
+                    };
                     self.compositor.motion_blur_average(
                         &self.ctx,
                         width,
                         height,
                         tex,
-                        l.natural_size,
-                        &l.mb,
+                        grow_size(l.natural_size, *g),
+                        if mb.is_empty() { &l.mb } else { &mb },
                         l.three_d,
                         l.pre,
                         cam_mat,
@@ -778,10 +881,27 @@ impl Realiser<'_> {
         // Layer-space mask textures (Precomp masks — GPU mask pass).
         let mask_textures: Vec<Option<wgpu::Texture>> = layers
             .iter()
-            .map(|l| {
-                l.mask_cov
-                    .as_ref()
-                    .map(|(rgba, w, h)| self.engine.upload_srgb8(&self.ctx, rgba, *w, *h))
+            .zip(&grown)
+            .map(|(l, g)| {
+                l.mask_cov.as_ref().map(|(rgba, w, h)| {
+                    // A grown picture (K-542) is placed over a wider quad, and
+                    // the mask is sampled across that quad — so a mask left at
+                    // the layer's own size would stretch, and its edge would
+                    // move. Grown into the same margin with nothing in it: the
+                    // copies Tile put outside the layer are outside the mask,
+                    // which is what a mask means.
+                    let (mw, mh) = (
+                        ((*w as f32 * g.0).round() as u32).max(*w),
+                        ((*h as f32 * g.1).round() as u32).max(*h),
+                    );
+                    let src = self.engine.upload_srgb8(&self.ctx, rgba, *w, *h);
+                    if (mw, mh) == (*w, *h) {
+                        src
+                    } else {
+                        let linear = self.engine.linearise(&self.ctx, &src);
+                        lumit_gpu::fx::fit_centred(&self.ctx, linear, mw, mh)
+                    }
+                })
             })
             .collect();
         // Matte layers render alone into comp space (one texture per consumer;
@@ -828,7 +948,7 @@ impl Realiser<'_> {
                             m.tex_h,
                             &m.fx,
                             &[],
-                            None,
+                            &[],
                             &luts,
                             &[],
                             &[],
@@ -844,6 +964,11 @@ impl Realiser<'_> {
                             None,
                         )
                     };
+                    // A matte source's own stack cannot grow the raster
+                    // either (K-542): it is placed by `m.natural_size` below,
+                    // and a matte is a shape, not a picture that reaches
+                    // further. Cropped back to the size it was placed at.
+                    let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, m.tex_w, m.tex_h);
                     self.compositor.composite_with_camera(
                         &self.ctx,
                         width,
@@ -877,7 +1002,8 @@ impl Realiser<'_> {
             .zip(&matte_textures)
             .zip(&mask_textures)
             .zip(&mb_textures)
-            .map(|((((texture, l), matte_tex), mask_tex), mb_tex)| {
+            .zip(&grown)
+            .map(|(((((texture, l), matte_tex), mask_tex), mb_tex), g)| {
                 let matte = matte_tex.as_ref().map(|mt| lumit_gpu::MatteInput {
                     texture: mt,
                     luma: l.matte.as_ref().is_some_and(|m| m.luma),
@@ -906,9 +1032,17 @@ impl Realiser<'_> {
                     },
                     None => lumit_gpu::CompositeLayer {
                         texture,
-                        size: l.natural_size,
+                        // A picture its stack grew (K-542) covers more of layer
+                        // space than the layer's own rectangle, evenly on all
+                        // four sides — so the quad is that much bigger and the
+                        // anchor moves with it, which leaves every pixel of the
+                        // original exactly where it was.
+                        size: grow_size(l.natural_size, *g),
                         position: l.position,
-                        anchor: l.anchor,
+                        anchor: {
+                            let (dx, dy) = grow_offset(l.natural_size, *g);
+                            (l.anchor.0 + dx, l.anchor.1 + dy)
+                        },
                         scale: l.scale,
                         rotation_deg: l.rotation_deg,
                         opacity: l.opacity,
@@ -937,6 +1071,28 @@ impl Realiser<'_> {
             region,
         )
     }
+}
+
+/// The quad a grown picture needs (K-542, docs/08 §3.39).
+///
+/// **In plain terms.** Tile with Output width or height above 100 % hands back a
+/// picture wider than the layer it came from, grown evenly on all four sides.
+/// The layer's placement is expressed as a rectangle (`size`) with a pin in it
+/// (`anchor`); to draw the wider picture in the same place, the rectangle grows
+/// by the same factor and the pin slides to stay over the same pixel. Every
+/// layer whose stack grew nothing has a factor of exactly 1, and both functions
+/// then return what they were given, to the bit.
+fn grow_size(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
+    (natural.0 * grow.0, natural.1 * grow.1)
+}
+
+/// How far the pin slides: half the width the growth added, on each axis.
+/// See [`grow_size`].
+fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
+    (
+        natural.0 * (grow.0 - 1.0) * 0.5,
+        natural.1 * (grow.1 - 1.0) * 0.5,
+    )
 }
 
 /// The lighting pass's parameters for one draw (docs/06, K-361), or `None`

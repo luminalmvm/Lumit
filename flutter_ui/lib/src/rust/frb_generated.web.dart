@@ -286,6 +286,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeBezierSide dco_decode_bridge_bezier_side(dynamic raw);
 
   @protected
+  BridgeBrushShape dco_decode_bridge_brush_shape(dynamic raw);
+
+  @protected
   BridgeCacheLocation dco_decode_bridge_cache_location(dynamic raw);
 
   @protected
@@ -1193,6 +1196,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide sse_decode_bridge_bezier_side(SseDeserializer deserializer);
+
+  @protected
+  BridgeBrushShape sse_decode_bridge_brush_shape(SseDeserializer deserializer);
 
   @protected
   BridgeCacheLocation sse_decode_bridge_cache_location(
@@ -2211,6 +2217,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_brush_shape(
+      BridgeBrushShape self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_cache_location(

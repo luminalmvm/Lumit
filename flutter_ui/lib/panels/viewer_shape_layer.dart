@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:uuid/uuid.dart';
@@ -422,6 +423,33 @@ class _ViewerShapeLayerState extends State<ViewerShapeLayer> {
             stroke: tools.strokeWidth > 0 ? tools.strokeRgba : null,
             strokeWidth: tools.strokeWidth,
             opacity: 100,
+            // Whole, until somebody trims it (K-551).
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            // Solid, until somebody dashes it (K-552).
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            // A flat fill, until somebody ramps it (K-555).
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            // On the path itself, until somebody offsets it (K-554).
+            offsetAmount: const BridgeScalar.static_(0),
+            // Drawn once, until somebody repeats it (K-553).
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );

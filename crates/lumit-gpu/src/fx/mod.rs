@@ -73,6 +73,14 @@ pub struct FxEngine {
     saturation: wgpu::ComputePipeline,
     vibrancy: wgpu::ComputePipeline,
     matte_key: wgpu::ComputePipeline,
+    /// The spatial keyer's stages (K-546): the screen matte on its own, the
+    /// separable shrink/grow, the despot, one garbage mask, and the pass that
+    /// spends the finished matte on the original colour.
+    matte_key_screen: wgpu::ComputePipeline,
+    matte_key_combine: wgpu::ComputePipeline,
+    matte_morph: wgpu::ComputePipeline,
+    matte_despot: wgpu::ComputePipeline,
+    matte_mask: wgpu::ComputePipeline,
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
     /// The lighting pass (docs/06, K-361). Not an effect — the realiser calls
@@ -519,6 +527,82 @@ impl FxEngine {
         }
         drop(enc);
     }
+}
+
+/// Fit a working texture into an `nw × nh` raster, centred: a larger target is
+/// padded with transparent, a smaller one takes the middle out.
+///
+/// **In plain terms.** One effect — Tile (docs/08 §3.39, K-542) — can hand back
+/// a bigger picture than it was given. Everything downstream of it works texel
+/// by texel against pictures that must agree on their size, and a few places
+/// cannot take a bigger picture at all (an adjustment layer blends against the
+/// composite beneath it, which is comp-sized by definition). This is the one
+/// function both cases go through: it grows a picture into its new margin, or
+/// crops it back to the frame, and it costs *nothing at all* when the size
+/// already matches — which is every effect but that one.
+///
+/// A plain `copy_texture_to_texture` of the overlap, after a clearing render
+/// pass, so no pipeline and no sampling is involved: a pixel that survives is
+/// the same pixel, bit for bit.
+#[must_use]
+pub fn fit_centred(ctx: &GpuContext, tex: wgpu::Texture, nw: u32, nh: u32) -> wgpu::Texture {
+    if tex.width() == nw && tex.height() == nh {
+        return tex;
+    }
+    let out = work_texture(ctx, nw, nh, "fx-fit-centred");
+    let (cw, ch) = (tex.width().min(nw), tex.height().min(nh));
+    let src_origin = wgpu::Origin3d {
+        x: (tex.width() - cw) / 2,
+        y: (tex.height() - ch) / 2,
+        z: 0,
+    };
+    let dst_origin = wgpu::Origin3d {
+        x: (nw - cw) / 2,
+        y: (nh - ch) / 2,
+        z: 0,
+    };
+    let mut enc = ctx.encoder("fx-fit-centred");
+    {
+        // Clear first and explicitly: the copy below writes only the overlap,
+        // and a margin that was never written is a margin whose contents are
+        // the driver's business, not ours.
+        let view = out.create_view(&Default::default());
+        let _ = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("fx-fit-clear"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+    }
+    enc.copy_texture_to_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &tex,
+            mip_level: 0,
+            origin: src_origin,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyTextureInfo {
+            texture: &out,
+            mip_level: 0,
+            origin: dst_origin,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::Extent3d {
+            width: cw,
+            height: ch,
+            depth_or_array_layers: 1,
+        },
+    );
+    drop(enc);
+    out
 }
 
 fn work_texture(ctx: &GpuContext, w: u32, h: u32, label: &str) -> wgpu::Texture {

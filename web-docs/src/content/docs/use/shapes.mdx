@@ -24,12 +24,69 @@ hold `shift` while creating the shape.
 
 ## Fills and strokes
 
-Each shape group carries its own fill and stroke. Both can be animated.
+Each shape group carries its own fill and stroke, set from the toolbar when the shape
+is drawn. The fill's colour is editable afterwards from the Timeline, on the group's
+own **Fill** row.
 
-:::note[Not built yet]
-Shape modifiers (repeater, trim paths, offset), gradient fills, and dashed strokes
-are planned but not.
-:::
+## Gradient fills
+
+A shape group's first rows are **Fill**, the colour inside its path, and **Gradient**,
+which is Flat, Linear or Radial. Choose a ramp and three more rows appear: the
+**Gradient colour** it ends at, and the two points that aim it.
+
+Linear ramps along the line between the points; radial ramps outwards from the first,
+with the second on the outer edge. Switching a ramp on aims it at the shape's own box
+to start with, so there is always something to see. The points are animatable, so a
+gradient can sweep; the two colours are not, and there are two of them rather than a
+stop list.
+
+## Trim paths
+
+Twirl a shape group open in the Timeline and it carries **Trim start**, **Trim end**
+and **Trim offset**. Start and end are a percentage of the path's own length, so
+trimming a circle to 0–50% leaves half of it; offset slides that piece along the
+path in degrees, and 360 is one full lap of a closed shape.
+
+Key **Trim end** from 0 to 100 and the shape draws itself on. The fill is trimmed
+with the outline — a half-trimmed circle fills as a half circle — and an end below
+the start draws nothing, which is what the first frame of a write-on looks like.
+
+## Dashed outlines
+
+A shape with a stroke carries **Dash**, **Gap** and **Dash offset** rows, in pixels.
+Dash is the length of each mark, Gap the space after it, and the pair repeats along
+the path. Both start at zero — a solid outline — so typing a Dash is what turns the
+dashes on. Key the offset and the dashes march along the path.
+
+## Offset paths
+
+The first row under a shape group is **Offset path**, one number in pixels. Positive
+pushes the outline outwards and the shape gets fatter; negative pulls it in. Corners
+come out round, and the shape keeps its character — unlike scaling, which changes the
+proportions of everything at once.
+
+Pull the outline in by more than the shape is thick somewhere and it can cross itself,
+leaving a small loop. The fill rule hides most of that; where it shows, use a smaller
+number.
+
+## The repeater
+
+Every shape group carries a **Copies** row. Turn it above one and the group is drawn
+that many times, each copy one more step along than the last, and nine more rows
+appear to describe the step: **Repeater position x** and **y**, **Repeater rotation**,
+**Repeater scale**, the **Repeater anchor** the turn and the scale happen about, and
+**Start opacity** and **End opacity**, which the copies fade evenly between.
+
+A position step gives a row of ticks; a rotation step about an anchor gives a clock
+face; both together with a scale under 100% gives a spiral. **Copy offset** says which
+copy the original art is, so a negative number puts copies behind it. A copy is a
+scaled drawing, not a scaled path — halve the scale and the outline and the dashes
+halve with it.
+
+The layer's box grows to hold the copies, and the layer's position stays pinned to
+that box's corner, so a repeater keyed to grow upwards or leftwards moves the art as
+it plays. Step down and to the right, or key the layer's position to match. The count
+stops at 100 copies.
 
 ## Related
 

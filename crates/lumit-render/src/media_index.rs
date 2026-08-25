@@ -17,7 +17,7 @@
 //! itself, which is why the first preview frame after opening a project used to
 //! cost seconds that had already been paid.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// The frame index for `path`: read from the sidecar cache when one matches the
 /// file's current content, else built by a packet scan and written back.
@@ -26,9 +26,9 @@ use std::path::{Path, PathBuf};
 /// directory, an unwritable cache folder or a corrupt sidecar all still decode,
 /// they just scan. Only a file whose index cannot be built at all is an error.
 pub fn load_or_build_index(
-    path: &Path,
+    src: impl Into<lumit_media::MediaSource>,
 ) -> Result<lumit_media::FrameIndex, lumit_media::MediaError> {
-    lumit_media::index::load_or_build_index(path, cache_dir().as_deref())
+    lumit_media::index::load_or_build_index(src, cache_dir().as_deref())
 }
 
 /// The sidecar directory: Lumit's own media-index cache
@@ -60,7 +60,7 @@ fn test_cache_dir() -> Option<PathBuf> {
 
 /// Run `f` with the sidecar cache pointed at `dir` (tests only).
 #[cfg(test)]
-pub(crate) fn with_cache_dir<T>(dir: &Path, f: impl FnOnce() -> T) -> T {
+pub(crate) fn with_cache_dir<T>(dir: &std::path::Path, f: impl FnOnce() -> T) -> T {
     TEST_CACHE_DIR.with(|slot| *slot.borrow_mut() = Some(dir.to_path_buf()));
     let out = f();
     TEST_CACHE_DIR.with(|slot| *slot.borrow_mut() = None);

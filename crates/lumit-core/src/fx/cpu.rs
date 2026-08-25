@@ -474,98 +474,496 @@ fn matte_key_secref(c: [f32; 3], si: usize, sj: usize, balance: f32) -> f32 {
 /// matte as greyscale), or Status (a continuous heat of the matte). Mix 0 is the
 /// bit-exact identity (the blend collapses to the input) on every view.
 pub fn matte_key(rgba: &mut [f32], p: &MatteKeyParams) {
-    let key = [p.key[0], p.key[1], p.key[2]];
-    let (pi, si, sj) = matte_key_axis(key);
-    let bal = p.balance;
+    let k = MatteKeyConst::of(p);
+    for px in rgba.chunks_exact_mut(4) {
+        let u = unpremult(px);
+        let m = matte_key_matte(u, &k, p);
+        matte_key_shade(px, u, m, &k, p);
+    }
+}
 
-    // Alpha-bias neutral: subtracted from every screen difference, so a grey bias
-    // (its primary equals its secondary reference) contributes zero and the matte
-    // reduces to the plain colour difference.
-    let ab = [p.alpha_bias[0], p.alpha_bias[1], p.alpha_bias[2]];
-    let ab_off = ab[pi] - matte_key_secref(ab, si, sj, bal);
-    // The screen colour's own biased difference, floored so the divide is safe.
-    let sd = ((key[pi] - matte_key_secref(key, si, sj, bal)) - ab_off).max(1e-6);
-    // Despill-bias neutral: raises the target the primary is clamped down to.
-    let db = [p.despill_bias[0], p.despill_bias[1], p.despill_bias[2]];
-    let db_off = db[pi] - matte_key_secref(db, si, sj, bal);
+/// The numbers the keyer works out **once**, off the uniforms alone, before it
+/// looks at a single pixel (docs/08 §3.21).
+///
+/// A struct rather than four locals because two loops need them now: the
+/// pointwise keyer above, and the staged one the spatial controls run
+/// ([`matte_key_spatial`]). Both read this one derivation, so the fast path and
+/// the slow path cannot answer differently for the same settings — which is
+/// exactly what "the defaults are byte-identical to before" rests on.
+struct MatteKeyConst {
+    /// Primary (screen) channel index, and its two secondaries.
+    pi: usize,
+    si: usize,
+    sj: usize,
+    /// Secondary weighting, 0..1.
+    bal: f32,
+    /// The alpha bias's own neutral, subtracted from every screen difference.
+    ab_off: f32,
+    /// The screen colour's own biased difference, floored so the divide is safe.
+    sd: f32,
+    /// The despill bias's own neutral, raising the unspill target.
+    db_off: f32,
+    /// `clip_white − clip_black`, floored.
+    den: f32,
+}
 
+impl MatteKeyConst {
+    fn of(p: &MatteKeyParams) -> Self {
+        let key = [p.key[0], p.key[1], p.key[2]];
+        let (pi, si, sj) = matte_key_axis(key);
+        let bal = p.balance;
+        let ab = [p.alpha_bias[0], p.alpha_bias[1], p.alpha_bias[2]];
+        let ab_off = ab[pi] - matte_key_secref(ab, si, sj, bal);
+        let sd = ((key[pi] - matte_key_secref(key, si, sj, bal)) - ab_off).max(1e-6);
+        let db = [p.despill_bias[0], p.despill_bias[1], p.despill_bias[2]];
+        let db_off = db[pi] - matte_key_secref(db, si, sj, bal);
+        let den = (p.clip_white - p.clip_black).max(1e-6);
+        Self {
+            pi,
+            si,
+            sj,
+            bal,
+            ab_off,
+            sd,
+            db_off,
+            den,
+        }
+    }
+}
+
+/// The screen matte of one straight colour, clips and rollback included: 1 on
+/// the neutral, 0 on the screen colour (docs/08 §3.21).
+fn matte_key_matte(u: [f32; 3], k: &MatteKeyConst, p: &MatteKeyParams) -> f32 {
+    // Screen matte, before clips: 1 on the neutral, 0 on the screen colour.
+    let pd = (u[k.pi] - matte_key_secref(u, k.si, k.sj, k.bal)) - k.ab_off;
+    let raw = pd / k.sd;
+    let m0 = (1.0 - p.gain * raw).clamp(0.0, 1.0);
+    // Clip black/white, then rollback recovers detail toward the pre-clip matte.
+    let mc = ((m0 - p.clip_black) / k.den).clamp(0.0, 1.0);
+    mc + p.clip_rollback * (m0 - mc)
+}
+
+/// Everything the keyer does **after** the matte is settled: unspill, the
+/// Replace method, the View select, and the host Mix (docs/08 §3.21). `u` is
+/// the pixel's straight colour and `m` its matte, whether that matte came
+/// straight from [`matte_key_matte`] or through the spatial stages.
+fn matte_key_shade(px: &mut [f32], u: [f32; 3], m: f32, k: &MatteKeyConst, p: &MatteKeyParams) {
+    let a = px[3];
     let repl = [
         p.replace_colour[0],
         p.replace_colour[1],
         p.replace_colour[2],
     ];
-    let den = (p.clip_white - p.clip_black).max(1e-6);
 
-    for px in rgba.chunks_exact_mut(4) {
-        let a = px[3];
-        let u = unpremult(px);
+    // Unspill: pull the primary down toward the (bias-shifted) reference.
+    let target = matte_key_secref(u, k.si, k.sj, k.bal) + k.db_off;
+    let removed = (u[k.pi] - target).max(0.0);
+    let despill = p.spill * removed;
+    let mut despilled = u;
+    despilled[k.pi] = u[k.pi] - despill;
 
-        // Screen matte, before clips: 1 on the neutral, 0 on the screen colour.
-        let pd = (u[pi] - matte_key_secref(u, si, sj, bal)) - ab_off;
-        let raw = pd / sd;
-        let m0 = (1.0 - p.gain * raw).clamp(0.0, 1.0);
-        // Clip black/white, then rollback recovers detail toward the pre-clip matte.
-        let mc = ((m0 - p.clip_black) / den).clamp(0.0, 1.0);
-        let m = mc + p.clip_rollback * (m0 - mc);
+    // Replace method: recolour where spill was removed (`t_repl` = how much).
+    let t_repl = (despill / k.sd).clamp(0.0, 1.0);
+    let dl = despilled[0] * LUMA[0] + despilled[1] * LUMA[1] + despilled[2] * LUMA[2];
+    // The blends use the `a·(1−t) + b·t` form so they match WGSL `mix`
+    // op-for-op (§1.6).
+    let lerp3 = |a: [f32; 3], b: [f32; 3], t: f32| {
+        [
+            a[0] * (1.0 - t) + b[0] * t,
+            a[1] * (1.0 - t) + b[1] * t,
+            a[2] * (1.0 - t) + b[2] * t,
+        ]
+    };
+    let rgb = match p.replace_method {
+        0 => u,                              // Source: the original straight colour
+        1 => lerp3(despilled, repl, t_repl), // Hard colour
+        2 => lerp3(
+            despilled,
+            [repl[0] * dl, repl[1] * dl, repl[2] * dl],
+            t_repl,
+        ), // Soft colour
+        _ => despilled,                      // None
+    };
 
-        // Unspill: pull the primary down toward the (bias-shifted) reference.
-        let target = matte_key_secref(u, si, sj, bal) + db_off;
-        let removed = (u[pi] - target).max(0.0);
-        let despill = p.spill * removed;
-        let mut despilled = u;
-        despilled[pi] = u[pi] - despill;
-
-        // Replace method: recolour where spill was removed (`t_repl` = how much).
-        let t_repl = (despill / sd).clamp(0.0, 1.0);
-        let dl = despilled[0] * LUMA[0] + despilled[1] * LUMA[1] + despilled[2] * LUMA[2];
-        // The blends use the `a·(1−t) + b·t` form so they match WGSL `mix`
-        // op-for-op (§1.6).
-        let lerp3 = |a: [f32; 3], b: [f32; 3], t: f32| {
-            [
-                a[0] * (1.0 - t) + b[0] * t,
-                a[1] * (1.0 - t) + b[1] * t,
-                a[2] * (1.0 - t) + b[2] * t,
-            ]
-        };
-        let rgb = match p.replace_method {
-            0 => u,                              // Source: the original straight colour
-            1 => lerp3(despilled, repl, t_repl), // Hard colour
-            2 => lerp3(
-                despilled,
-                [repl[0] * dl, repl[1] * dl, repl[2] * dl],
-                t_repl,
-            ), // Soft colour
-            _ => despilled,                      // None
-        };
-
-        // View select (all continuous in `m`, so the oracle holds).
-        let (proc_rgb, proc_a) = match p.view {
-            1 => ([m, m, m], 1.0), // Screen matte
-            2 => {
-                // Status: greyscale matte tinted where the matte is uncertain
-                // (peaks at m = 0.5, zero at the fully-keyed/kept ends).
-                let warn = 4.0 * m * (1.0 - m) * 0.5;
-                (
-                    [
-                        m + warn * (1.0 - m),
-                        m + warn * (0.3 - m),
-                        m + warn * (0.3 - m),
-                    ],
-                    1.0,
-                )
-            }
-            _ => {
-                // Final: re-premultiply the keyed colour by the new alpha.
-                let out_a = a * m;
-                ([rgb[0] * out_a, rgb[1] * out_a, rgb[2] * out_a], out_a)
-            }
-        };
-
-        // Mix against the untouched premultiplied input; Mix 0 is the identity.
-        for c in 0..3 {
-            px[c] = px[c] * (1.0 - p.mix) + proc_rgb[c] * p.mix;
+    // View select (all continuous in `m`, so the oracle holds).
+    let (proc_rgb, proc_a) = match p.view {
+        1 => ([m, m, m], 1.0), // Screen matte
+        2 => {
+            // Status: greyscale matte tinted where the matte is uncertain
+            // (peaks at m = 0.5, zero at the fully-keyed/kept ends).
+            let warn = 4.0 * m * (1.0 - m) * 0.5;
+            (
+                [
+                    m + warn * (1.0 - m),
+                    m + warn * (0.3 - m),
+                    m + warn * (0.3 - m),
+                ],
+                1.0,
+            )
         }
-        px[3] = a * (1.0 - p.mix) + proc_a * p.mix;
+        _ => {
+            // Final: re-premultiply the keyed colour by the new alpha.
+            let out_a = a * m;
+            ([rgb[0] * out_a, rgb[1] * out_a, rgb[2] * out_a], out_a)
+        }
+    };
+
+    // Mix against the untouched premultiplied input; Mix 0 is the identity.
+    for c in 0..3 {
+        px[c] = px[c] * (1.0 - p.mix) + proc_rgb[c] * p.mix;
+    }
+    px[3] = a * (1.0 - p.mix) + proc_a * p.mix;
+}
+
+/// The most straight pieces one garbage mask's outline is walked as (K-546).
+///
+/// The same cap [`PATH_PRIMITIVES`] is, for the same reason — the outline rides
+/// in a uniform and a uniform is a fixed size — and the same degradation: past
+/// it the outline is **coarsened, not cut**, so the hold-out keeps its shape and
+/// loses only a little of its wobble (docs/14 §4).
+pub const MASK_FILL_SEGMENTS: usize = 512;
+
+/// One garbage mask, reduced to what both render paths read (K-546): a closed
+/// outline in raster pixels, and how soft its edge is.
+///
+/// # In plain terms
+///
+/// A garbage mask is a shape you draw round the bits of the shot the keyer
+/// should not be trusted with — a rig in frame, a hole in the screen. Telling
+/// the kernel "here is the shape" rather than "here is a picture of the shape"
+/// costs one small buffer instead of a whole extra texture, and lets the CPU
+/// reference and the WGSL kernel walk the identical numbers (§1.6).
+///
+/// A `count` of zero is the documented no-op: an unset row, a deleted mask, an
+/// open path, a shape too small to enclose anything. The mask then does not
+/// touch the matte at all.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MaskFillParams {
+    /// The outline, as `(ax, ay, bx, by)` in raster pixels, closed.
+    pub segments: [[f32; 4]; MASK_FILL_SEGMENTS],
+    /// How many of the above are real.
+    pub count: u32,
+    /// The width the coverage ramps across, raster pixels, never below one —
+    /// the mask's **own** feather, taken to this raster. One pixel is the
+    /// antialiased edge the mask rasteriser itself would have drawn, which is
+    /// why a hard-edged mask still lands here rather than on a jagged step.
+    pub ramp: f32,
+    /// The mask's own grow (+) / shrink (−), raster pixels: it slides where the
+    /// edge sits without changing how wide the ramp is, exactly as it does for
+    /// the mask's own coverage.
+    pub expansion: f32,
+}
+
+impl MaskFillParams {
+    /// A mask that holds nothing out — the no-op both rows default to.
+    ///
+    /// Not [`Default`], because an array of 512 does not derive one.
+    #[must_use]
+    pub fn blank() -> Self {
+        Self {
+            segments: [[0.0; 4]; MASK_FILL_SEGMENTS],
+            count: 0,
+            ramp: 1.0,
+            expansion: 0.0,
+        }
+    }
+}
+
+/// Build one garbage mask's outline from the polyline the K-408 carriage handed
+/// over, in raster pixels (K-546).
+///
+/// Only a **closed** path encloses anything, so an open one comes back blank
+/// rather than filled by guesswork. The flattened polyline of a closed path
+/// already repeats its first vertex at the end, so the closing edge is there;
+/// the last kept piece is nailed back to the first point regardless, because
+/// the coarsening above the cap could otherwise leave the ring one chord short.
+#[must_use]
+pub fn mask_fill_params(poly: &crate::mask::MaskPolyline, px_scale: f32) -> MaskFillParams {
+    let mut m = MaskFillParams::blank();
+    if !poly.closed || poly.points.len() < 3 {
+        return m;
+    }
+    let s = px_scale.max(1e-6);
+    let pts = &poly.points;
+    let edges = pts.len() - 1;
+    let stride = edges.div_ceil(MASK_FILL_SEGMENTS).max(1);
+    let kept = edges.div_ceil(stride);
+    let at = |k: usize| {
+        let i = (k * stride).min(pts.len() - 1);
+        [pts[i][0] * s, pts[i][1] * s]
+    };
+    let first = [pts[0][0] * s, pts[0][1] * s];
+    let mut n = 0usize;
+    for k in 0..kept {
+        let a = at(k);
+        let b = if k + 1 == kept { first } else { at(k + 1) };
+        if a != b {
+            m.segments[n] = [a[0], a[1], b[0], b[1]];
+            n += 1;
+        }
+        if n == MASK_FILL_SEGMENTS {
+            break;
+        }
+    }
+    // Fewer than three real pieces is a shape with no inside.
+    m.count = if n >= 3 { n as u32 } else { 0 };
+    m.ramp = (poly.feather * s).max(1.0);
+    m.expansion = poly.expansion * s;
+    m
+}
+
+/// How much of the pixel at (`px`, `py`) the garbage mask covers, 0..1 (K-546).
+///
+/// Even-odd inside/outside from a crossing count, and a signed distance to the
+/// nearest piece of the outline read through the mask's own feather ramp — the
+/// identical reading the mask's ordinary coverage is given, so a hold-out and
+/// the mask it was drawn from soften alike.
+///
+/// Continuous in position: the sign flips exactly where the distance is zero,
+/// and the ramp reads 0.5 there from either side. That is what keeps the §1.6
+/// ULP oracle valid over an operation whose *branch* is a hard one.
+#[must_use]
+pub fn mask_fill_at(px: f32, py: f32, m: &MaskFillParams) -> f32 {
+    // Not `f32::INFINITY`: WGSL has no infinity literal, and the two paths must
+    // start their reduction from the same number. Nothing on a raster is this
+    // far from an outline that is on it.
+    let mut d2 = 1e30f32;
+    let mut crossings = 0i32;
+    for i in 0..m.count as usize {
+        let s = m.segments[i];
+        let (ax, ay, bx, by) = (s[0], s[1], s[2], s[3]);
+        let (ex, ey) = (bx - ax, by - ay);
+        let len2 = ex * ex + ey * ey;
+        let t = if len2 > 0.0 {
+            (((px - ax) * ex + (py - ay) * ey) / len2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let (qx, qy) = (ax + ex * t - px, ay + ey * t - py);
+        d2 = d2.min(qx * qx + qy * qy);
+        // The half-open rule (`<=` one end, `>` the other) counts a vertex on
+        // the ray once, never twice — and guarantees `by != ay`, so the divide
+        // below is safe.
+        if (ay <= py) != (by <= py) {
+            let x = ax + (py - ay) / (by - ay) * (bx - ax);
+            if x > px {
+                crossings += 1;
+            }
+        }
+    }
+    let inside = crossings & 1 == 1;
+    let d = d2.sqrt() * if inside { 1.0 } else { -1.0 };
+    (0.5 + (d + m.expansion) / m.ramp).clamp(0.0, 1.0)
+}
+
+/// The farthest a shrink or grow may reach, raster pixels — the loop's own
+/// bound, well above the control's hard maximum at any sane preview scale, so a
+/// nonsense number can never turn one pass into a hang (docs/14 §4).
+pub const MATTE_MORPH_MAX_PX: f32 = 256.0;
+
+/// Shrink or grow the screen matte (K-546): a **morphological** min (shrink) or
+/// max (grow) over a square of `amount` raster pixels, run as two separable
+/// passes.
+///
+/// # In plain terms
+///
+/// Grow takes each pixel's brightest neighbour and shrink takes its darkest, so
+/// the matte's edge marches outward or inward without softening — which is the
+/// difference between this and the Softness blur underneath it. A fractional
+/// amount eases the outermost ring in rather than snapping a pixel at a time,
+/// so dragging the slider is smooth and the §1.6 oracle stays continuous.
+pub fn matte_morph(m: &mut [f32], w: u32, h: u32, amount: f32) {
+    let grow = amount > 0.0;
+    let r = amount.abs().min(MATTE_MORPH_MAX_PX);
+    let ri = r.floor() as i32;
+    let frac = r - ri as f32;
+    let mut tmp = m.to_vec();
+    matte_morph_pass(m, &mut tmp, w, h, 1, 0, ri, frac, grow);
+    let mut out = tmp.clone();
+    matte_morph_pass(&tmp, &mut out, w, h, 0, 1, ri, frac, grow);
+    m.copy_from_slice(&out);
+}
+
+/// One separable morphological pass; see [`matte_morph`]. Clamp-to-edge, the
+/// same edge policy the Softness blur beside it runs on.
+#[allow(clippy::too_many_arguments)]
+fn matte_morph_pass(
+    src: &[f32],
+    dst: &mut [f32],
+    w: u32,
+    h: u32,
+    dx: i32,
+    dy: i32,
+    ri: i32,
+    frac: f32,
+    grow: bool,
+) {
+    let (wi, hi) = (w as i32, h as i32);
+    let at = |x: i32, y: i32| -> f32 {
+        let sx = x.clamp(0, wi - 1);
+        let sy = y.clamp(0, hi - 1);
+        src[((sy * wi + sx) * 4) as usize]
+    };
+    let op = |a: f32, b: f32| if grow { a.max(b) } else { a.min(b) };
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut acc = at(x, y);
+            for k in 1..=ri {
+                acc = op(acc, at(x - k * dx, y - k * dy));
+                acc = op(acc, at(x + k * dx, y + k * dy));
+            }
+            // The outermost ring eases in with the fraction, so the control is
+            // continuous across a whole-pixel boundary.
+            let outer = op(
+                at(x - (ri + 1) * dx, y - (ri + 1) * dy),
+                at(x + (ri + 1) * dx, y + (ri + 1) * dy),
+            );
+            let v = acc + frac * (op(acc, outer) - acc);
+            let d = ((y * wi + x) * 4) as usize;
+            dst[d..d + 4].copy_from_slice(&[v; 4]);
+        }
+    }
+}
+
+/// Remove isolated specks from the screen matte (K-546): black ones (holes in
+/// the foreground) and white ones (flecks left in the background).
+///
+/// # In plain terms
+///
+/// A speck is a pixel that disagrees with **all** of its neighbours. So the
+/// test is exactly that: if every one of the eight around it is brighter, a
+/// black despot lifts it to the darkest of them; if every one is darker, a
+/// white despot drops it to the brightest. A pixel on a real edge always has a
+/// neighbour on its own side, so an edge is left alone — which is what
+/// separates this from a blur, and why it can run at full strength without
+/// eating the matte.
+///
+/// Both amounts are 0..1 blends, so the operation is continuous in its controls
+/// and 0 is the bit-exact identity.
+pub fn matte_despot(m: &mut [f32], w: u32, h: u32, black: f32, white: f32) {
+    let (wi, hi) = (w as i32, h as i32);
+    let src = m.to_vec();
+    let at = |x: i32, y: i32| -> f32 {
+        let sx = x.clamp(0, wi - 1);
+        let sy = y.clamp(0, hi - 1);
+        src[((sy * wi + sx) * 4) as usize]
+    };
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut mn = 1e30f32;
+            let mut mx = -1e30f32;
+            for oy in -1..=1 {
+                for ox in -1..=1 {
+                    if ox == 0 && oy == 0 {
+                        continue;
+                    }
+                    let v = at(x + ox, y + oy);
+                    mn = mn.min(v);
+                    mx = mx.max(v);
+                }
+            }
+            let m0 = at(x, y);
+            let filled = m0 + black * (m0.max(mn) - m0);
+            let v = filled + white * (filled.min(mx) - filled);
+            let d = ((y * wi + x) * 4) as usize;
+            m[d..d + 4].copy_from_slice(&[v; 4]);
+        }
+    }
+}
+
+/// Matte key with its **spatial** stages (docs/08 §3.21, K-546): the §1.6
+/// oracle the multi-pass WGSL path matches op-for-op.
+///
+/// # In plain terms
+///
+/// The pointwise keyer above judges every pixel on its own. These controls all
+/// judge a pixel by its neighbours, so they cannot live in that loop: the matte
+/// has to become a picture of its own, be tidied as a picture, and only then be
+/// spent on the colour. The order is Keylight's, and it is the order the panel
+/// lists them in:
+///
+/// 1. **Screen pre-blur** softens the picture the key is *judged from* — grain
+///    and compression noise stop being read as detail — while the colour that
+///    comes out is still the sharp original.
+/// 2. The **screen matte** itself, clips and rollback included, exactly as the
+///    pointwise keyer computes it.
+/// 3. **Shrink/grow** marches the matte's edge in or out (`matte_morph`).
+/// 4. **Softness** blurs the matte, and only the matte.
+/// 5. **Despot** black and white remove isolated specks (`matte_despot`).
+/// 6. The **garbage masks**: inside forces opaque, outside forces transparent.
+/// 7. The despill, Replace method, View and Mix, on the original colour.
+///
+/// **The defaults are the old picture, byte for byte**: with nothing spatial
+/// asked for and neither mask set, this hands straight over to [`matte_key`]
+/// and not one number is computed differently.
+pub fn matte_key_spatial(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    p: &MatteKeyParams,
+    inside: &MaskFillParams,
+    outside: &MaskFillParams,
+) {
+    if !p.spatial() && inside.count == 0 && outside.count == 0 {
+        matte_key(rgba, p);
+        return;
+    }
+    let k = MatteKeyConst::of(p);
+    let n = (w as usize) * (h as usize);
+    if rgba.len() < n * 4 {
+        return;
+    }
+
+    // 1. The picture the key is judged from — the original unless pre-blurred.
+    let mut src = rgba.to_vec();
+    if p.pre_blur > 0.0 {
+        blur_gaussian(&mut src, w, h, p.pre_blur, 1, 1.0);
+    }
+
+    // 2. The matte, carried as an ordinary four-channel picture with the same
+    // number in every channel. That is what lets stage 4 be the shared Gaussian
+    // blur rather than a second one written for one channel — and on the GPU it
+    // is one ordinary working texture, so the same is true there.
+    let mut m = vec![0.0f32; n * 4];
+    for (i, px) in src.chunks_exact(4).take(n).enumerate() {
+        let v = matte_key_matte(unpremult(px), &k, p);
+        m[i * 4..i * 4 + 4].copy_from_slice(&[v; 4]);
+    }
+
+    // 3..5. Tidy the matte as a picture.
+    if p.shrink_grow != 0.0 {
+        matte_morph(&mut m, w, h, p.shrink_grow);
+    }
+    if p.softness > 0.0 {
+        blur_gaussian(&mut m, w, h, p.softness, 1, 1.0);
+    }
+    if p.despot_black > 0.0 || p.despot_white > 0.0 {
+        matte_despot(&mut m, w, h, p.despot_black, p.despot_white);
+    }
+
+    // 6. The garbage masks, at pixel centres — the same coordinate the mask
+    // rasteriser samples on, so a hold-out lands where its mask is drawn.
+    if inside.count > 0 || outside.count > 0 {
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y as usize * w as usize + x as usize) * 4;
+                let (cx, cy) = (x as f32 + 0.5, y as f32 + 0.5);
+                let mut v = m[i];
+                if inside.count > 0 {
+                    v = v.max(mask_fill_at(cx, cy, inside));
+                }
+                if outside.count > 0 {
+                    v = v.min(1.0 - mask_fill_at(cx, cy, outside));
+                }
+                m[i] = v;
+            }
+        }
+    }
+
+    // 7. Spend the matte on the original colour.
+    for (i, px) in rgba.chunks_exact_mut(4).take(n).enumerate() {
+        let u = unpremult(px);
+        matte_key_shade(px, u, m[i * 4], &k, p);
     }
 }
 
@@ -1611,23 +2009,88 @@ pub struct TileParams {
     pub mix: f32,
 }
 
-/// Tile (docs/08 §3.39): one rectangle of the picture stamped across the frame.
-/// Outside the output window the result is transparent; inside, the pixel's
-/// position within its tile picks the sample, mirrored on odd tiles when Mirror
-/// edges is on. Mix 0 is the bit-exact identity, and so is a 100 % tile at the
-/// frame centre with no phase.
-pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
-    let original = rgba.to_vec();
+/// The biggest raster Tile will grow to, per side (K-542). Output width and
+/// height reach 500 %, which on a 4K comp would be a 19 200 × 10 800 working
+/// texture — a third of a gigabyte in fp16, allocated because a slider was
+/// dragged. The growth stops here instead, and the placement follows the raster
+/// that was actually made, so the picture stays put and only the extra copies
+/// are missing.
+///
+/// 8 192 is `wgpu`'s guaranteed `max_texture_dimension_2d`, so a raster this
+/// function allows is one every backend can allocate.
+pub const TILE_MAX_RASTER: u32 = 8192;
+
+/// The raster [`tile_into`] writes for an incoming `w × h` frame (K-542, docs/08
+/// §3.39).
+///
+/// Output width and height above 100 % put copies *outside* the frame, so the
+/// working picture grows to hold them and every effect after Tile in the stack
+/// sees those copies instead of transparency. At or below 100 % nothing grows:
+/// the window only clips, which needs no more room than the frame already has.
+#[must_use]
+pub fn tile_raster(w: u32, h: u32, p: &TileParams) -> (u32, u32) {
+    // Mix 0 is the identity, and an identity that reallocated the raster would
+    // not be one.
+    if p.mix <= 0.0 {
+        return (w, h);
+    }
+    let grow = |n: u32, frac: f32| {
+        if frac <= 1.0 {
+            n
+        } else {
+            ((n as f32 * frac).round() as u32).clamp(n, TILE_MAX_RASTER.max(n))
+        }
+    };
+    (grow(w, p.output_frac[0]), grow(h, p.output_frac[1]))
+}
+
+/// Tile (docs/08 §3.39): one rectangle of the picture stamped across the frame,
+/// into a raster that may be larger than the one it read.
+///
+/// `src` is the incoming `w × h` frame; `out` is the `ow × oh` raster
+/// [`tile_raster`] sized, with the frame sitting in the middle of it. Outside
+/// the output window the result is transparent; inside, the pixel's position
+/// within its tile picks the sample, mirrored on odd tiles when Mirror edges is
+/// on.
+///
+/// **The default is the identity** (§1.2, K-542): a whole-frame tile centred on
+/// the frame with no phase samples every pixel at its own centre — but the
+/// arithmetic that says so is a divide followed by the multiply that undoes it,
+/// and fp32 does not always answer that exactly. The identity is therefore
+/// stated once, here, and the WGSL twin states it with the same comparisons, so
+/// dropping Tile on a layer changes not one bit.
+pub fn tile_into(src: &[f32], w: u32, h: u32, out: &mut [f32], ow: u32, oh: u32, p: &TileParams) {
     let (fw, fh) = (w as f32, h as f32);
+    let (cx, cy) = (fw * 0.5, fh * 0.5);
+    if p.tile_frac == [1.0, 1.0]
+        && p.output_frac == [1.0, 1.0]
+        && p.phase == 0.0
+        && p.centre == [cx, cy]
+    {
+        out.copy_from_slice(src);
+        return;
+    }
     let tw = (fw * p.tile_frac[0]).max(1e-3);
     let th = (fh * p.tile_frac[1]).max(1e-3);
     let (half_w, half_h) = (fw * p.output_frac[0] * 0.5, fh * p.output_frac[1] * 0.5);
-    let (cx, cy) = (fw * 0.5, fh * 0.5);
-    for y in 0..h {
-        for x in 0..w {
-            let i = ((y * w + x) * 4) as usize;
-            let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
+    // Where the incoming frame's top-left sits in the output raster. Whole
+    // pixels deliberately: a pixel that passes through must be the same pixel
+    // and not a resample of it.
+    let (ox, oy) = ((ow as i64 - w as i64) / 2, (oh as i64 - h as i64) / 2);
+    for y in 0..oh {
+        for x in 0..ow {
+            let i = ((y * ow + x) * 4) as usize;
+            let (sx, sy) = (x as i64 - ox, y as i64 - oy);
+            let px = sx as f32 + 0.5;
+            let py = sy as f32 + 0.5;
+            // What was here before the effect: the frame's own pixel inside it,
+            // and nothing at all in the margin the growth added.
+            let o = if sx >= 0 && sy >= 0 && sx < w as i64 && sy < h as i64 {
+                let s = ((sy * w as i64 + sx) * 4) as usize;
+                [src[s], src[s + 1], src[s + 2], src[s + 3]]
+            } else {
+                [0.0f32; 4]
+            };
             let v = if (px - cx).abs() > half_w || (py - cy).abs() > half_h {
                 [0.0f32; 4]
             } else {
@@ -1658,7 +2121,7 @@ pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
                     }
                 }
                 bilinear_edge(
-                    &original,
+                    src,
                     w,
                     h,
                     p.centre[0] + (fu - 0.5) * tw,
@@ -1667,10 +2130,20 @@ pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
                 )
             };
             for c in 0..4 {
-                rgba[i + c] = original[i + c] * (1.0 - p.mix) + v[c] * p.mix;
+                out[i + c] = o[c] * (1.0 - p.mix) + v[c] * p.mix;
             }
         }
     }
+}
+
+/// [`tile_into`] into the raster it was handed — the frame-sized middle of the
+/// grown picture, which is all a single in-place buffer can hold. This is what
+/// [`apply_stack`] runs, and it is the whole answer whenever Output width and
+/// height stay at or below 100 %; the growing entry point above is the one the
+/// renderer calls.
+pub fn tile(rgba: &mut [f32], w: u32, h: u32, p: &TileParams) {
+    let src = rgba.to_vec();
+    tile_into(&src, w, h, rgba, w, h, p);
 }
 
 /// Wrap-addressed bilinear sample: the frame is a torus, so a tap that leaves

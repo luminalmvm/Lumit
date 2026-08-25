@@ -71,7 +71,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
-        flow_field: None,
+        flow_fields: Vec::new(),
         source_key: 0,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
@@ -245,6 +245,31 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
     );
     assert_eq!(draws.len(), 1);
     assert!(matches!(draws[0].source, DrawSource::Nested { .. }));
+
+    // Paint does the same, and the strokes ride the Nested draw so the
+    // realiser can stamp them into the picture it makes (K-547). Before
+    // this they were built, carried nowhere, and dropped: the brush left a
+    // Timeline row and no pixels.
+    let mut painted = parent.clone();
+    painted.layers[0]
+        .paint
+        .push(lumit_core::paint::PaintStroke::new(
+            "Brush 1",
+            vec![(5.0, 5.0)],
+        ));
+    let mut visited = vec![painted.id];
+    let draws = build_comp_draws(
+        &std::sync::Arc::new(doc.clone()),
+        &painted,
+        0.0,
+        &map,
+        &mut visited,
+    );
+    assert_eq!(draws.len(), 1);
+    let DrawSource::Nested { paint, .. } = &draws[0].source else {
+        panic!("paint forces the intermediate a stroke needs to land in");
+    };
+    assert_eq!(paint.len(), 1, "the stroke travels with the draw");
 }
 
 // The live value-drag preview renders a comp patched with the provisional
@@ -307,7 +332,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         natural_w: 1920,
         natural_h: 1080,
         temporal: Vec::new(),
-        flow_field: None,
+        flow_fields: Vec::new(),
         source_key: 0,
     };
     let mut map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
@@ -1019,15 +1044,25 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
     let drawn = draws.first().expect("one layer, one draw");
     // The consumption side's own rule, spelled out: `run_ops` advances its
     // path counter for exactly the ops whose schema declares a path row.
-    let want = drawn
+    let want: usize = drawn
         .fx
         .iter()
-        .filter(|op| op.def.schema().mask_path().is_some())
-        .count();
+        .map(|op| op.def.schema().mask_path_count())
+        .sum();
+    // The catalogue really does declare more than one row somewhere, or the
+    // count below would agree for the trivial reason (K-546).
+    assert!(
+        want > drawn
+            .fx
+            .iter()
+            .filter(|op| op.def.schema().mask_path().is_some())
+            .count(),
+        "no effect declares a second path row - the per-row rule is untested"
+    );
     assert_eq!(
         drawn.mask_paths.len(),
         want,
-        "one polyline per resolved op that declares a mask path — no more, no \
+        "one polyline per mask-path row of every resolved op — no more, no \
          fewer ({} ops in all)",
         drawn.fx.len()
     );

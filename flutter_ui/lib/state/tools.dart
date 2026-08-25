@@ -18,6 +18,7 @@
 import 'package:flutter/painting.dart' show Color;
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeBrushShape;
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
@@ -307,6 +308,16 @@ class ToolsState extends ChangeNotifier {
     final next = value.clamp(0.0, 100.0);
     if (_brushHardness == next) return;
     _brushHardness = next;
+    notifyListeners();
+  }
+
+  /// Which shape the brush stamps (K-548). Round is the brush everything was
+  /// painted with before there was a choice, and stays the default.
+  BridgeBrushShape _brushShape = BridgeBrushShape.round;
+  BridgeBrushShape get brushShape => _brushShape;
+  set brushShape(BridgeBrushShape value) {
+    if (_brushShape == value) return;
+    _brushShape = value;
     notifyListeners();
   }
 

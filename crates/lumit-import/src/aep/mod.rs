@@ -52,7 +52,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::capture::{
-    Capture, Comp, Item, Layer, Matte, MotionBlur, Project, Switches, Unreadable,
+    Capture, Comp, Item, Layer, Matte, MotionBlur, Project, Property, Switches, Unreadable,
 };
 use crate::{Bundle, BundleSource, ImportError, Manifest, Report, FORMAT};
 use rifx::{
@@ -152,9 +152,23 @@ pub fn parse_capture(bytes: &[u8]) -> Result<Parsed, AepError> {
         .filter_map(|(index, item)| item.id.map(|id| (id, index)))
         .collect();
 
+    // A precomp layer's "source size" is the size of the composition it points
+    // at, and a comp's item row does not carry one — the size lives in the
+    // comp's own `cdta`. So every comp's raster is read up front, before any
+    // layer is, because a layer can name a comp that has not been walked yet.
+    let by_comp_id: HashMap<i64, (f64, f64)> = comp_chunks
+        .iter()
+        .filter_map(|(id, chunk)| {
+            let settings = chunk.children().ok().find(|c| c.id == *b"cdta")?;
+            let width = u16_at(settings.body, 140)?;
+            let height = u16_at(settings.body, 142)?;
+            Some((*id, (f64::from(width), f64::from(height))))
+        })
+        .collect();
+
     let comps = comp_chunks
         .into_iter()
-        .map(|(id, chunk)| read_comp(id, &chunk, &items, &by_id, &mut skipped))
+        .map(|(id, chunk)| read_comp(id, &chunk, &items, &by_id, &by_comp_id, &mut skipped))
         .collect();
 
     Ok(Parsed {
@@ -340,6 +354,12 @@ fn read_folder<'a>(
 /// *missing* for an item that is not one, and the report says one thing rather
 /// than two about the same row.
 ///
+/// An **image sequence** says so in the same alias record (K-539): its
+/// `target_is_folder` is set, because what the item points at is the folder the
+/// numbered run lives in rather than any one file. Like the path beside it that
+/// is a field naming itself rather than a byte offset, which is why it can be
+/// read here.
+///
 /// The remaining interpretation fields (frame rate, alpha handling, fields,
 /// pulldown, loop) stay unread: Lumit has no field for any of them — they would
 /// ride in the `ae` namespace and nothing downstream would read them — and an
@@ -350,7 +370,43 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
     let within: Vec<Chunk<'_>> = pin.map(|p| p.children().ok().collect()).unwrap_or_default();
     let settings = within.iter().find(|chunk| chunk.id == *b"sspc");
     let asset = within.iter().find(|chunk| chunk.id == *b"opti");
-    let path = alias_path(&within);
+    let alias = alias_record(&within);
+    let path = alias
+        .as_ref()
+        .and_then(|alias| alias.get("fullpath")?.as_str().map(str::to_string))
+        .filter(|path| !path.is_empty());
+
+    // **An image sequence says so in the alias** (K-539): `target_is_folder`,
+    // because what the item points at is the folder the run lives in rather
+    // than any one file. Like the path beside it, that is a field naming
+    // itself and not a byte offset, which is why it can be read here while the
+    // rest of the interpretation still waits for a fixture.
+    //
+    // A sequence also carries its name either side of the frame number, as two
+    // extra `Utf8` chunks between the alias list and the asset record — a
+    // single file has none. Nothing needs them yet (the run is re-read from
+    // the folder), so they are recorded rather than acted on; they corroborate
+    // the flag above, and they are the only thing After Effects knows about the
+    // run that the folder itself does not say.
+    let is_sequence = alias
+        .as_ref()
+        .and_then(|alias| alias.get("target_is_folder")?.as_bool())
+        .unwrap_or(false);
+
+    let run_names: Vec<String> = match (
+        within.iter().position(|chunk| chunk.is_list(b"Als2")),
+        within.iter().position(|chunk| chunk.id == *b"opti"),
+    ) {
+        (Some(after), Some(before)) => within
+            .get(after + 1..before)
+            .unwrap_or_default()
+            .iter()
+            .filter(|chunk| chunk.id == *b"Utf8")
+            .map(Chunk::text)
+            .filter(|part| !part.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    };
 
     let solid = asset.filter(|chunk| chunk.body.get(..4) == Some(b"Soli"));
     // A placeholder's asset type is four NUL bytes and its type number is 2.
@@ -387,6 +443,10 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
             }),
             None,
         ),
+        // The file's own name, taken apart by hand rather than by `Path`: the
+        // path in the file is written in the separator of the machine that
+        // wrote it, and a Windows path handed to `Path::file_name` on macOS
+        // comes back whole.
         (None, None) => (
             "footage",
             name.or_else(|| path.as_deref().map(file_name).map(str::to_string)),
@@ -407,6 +467,9 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
         is_placeholder: placeholder.map(|_| true),
         is_missing: (kind == "footage" && placeholder.is_none()).then_some(missing),
         colour,
+        is_sequence: is_sequence.then_some(true),
+        sequence_prefix: run_names.first().cloned(),
+        sequence_suffix: run_names.get(1).cloned(),
         width: settings
             .and_then(|chunk| u16_at(chunk.body, 32))
             .map(u32::from),
@@ -417,13 +480,17 @@ fn read_footage(id: i64, parent_id: i64, name: Option<String>, inside: &[Chunk<'
     }
 }
 
-/// The absolute path inside a footage item's alias record, or `None` when the
-/// item has none (a solid, a placeholder, or a record this build cannot read).
+/// A footage item's alias record — `LIST Als2` ▸ `alas` — parsed, or `None`
+/// when the item has none (a solid, a placeholder, or a record this build
+/// cannot read).
 ///
 /// The record is JSON rather than a Mac alias blob on both platforms, so it is
-/// read as JSON: anything else in there — the ascend counts, the server name —
-/// is After Effects' own relative-path bookkeeping and Lumit does its own.
-fn alias_path(within: &[Chunk<'_>]) -> Option<String> {
+/// read as JSON: it names the file (`fullpath`) and whether the item points at
+/// a folder rather than a file (`target_is_folder`, which is how an image
+/// sequence says so). Anything else in there — the ascend counts, the server
+/// name — is After Effects' own relative-path bookkeeping and Lumit does its
+/// own.
+fn alias_record(within: &[Chunk<'_>]) -> Option<serde_json::Value> {
     let alias = within
         .iter()
         .find(|chunk| chunk.is_list(b"Als2"))?
@@ -431,9 +498,7 @@ fn alias_path(within: &[Chunk<'_>]) -> Option<String> {
         .ok()
         .find(|chunk| chunk.id == *b"alas")?
         .text();
-    let json: serde_json::Value = serde_json::from_str(&alias).ok()?;
-    let path = json.get("fullpath")?.as_str()?;
-    (!path.is_empty()).then(|| path.to_string())
+    serde_json::from_str(&alias).ok()
 }
 
 /// The last component of a path written on **either** platform's separator —
@@ -442,6 +507,16 @@ fn alias_path(within: &[Chunk<'_>]) -> Option<String> {
 /// the name.
 fn file_name(path: &str) -> &str {
     path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// The rasters a layer's property tree is read against: the composition the
+/// layer sits in, and every composition's own size — because a precomp layer's
+/// source size is the size of the comp it points at, and a comp's item row does
+/// not carry one.
+#[derive(Clone, Copy)]
+struct Rasters<'a> {
+    comp: (f64, f64),
+    by_comp_id: &'a HashMap<i64, (f64, f64)>,
 }
 
 /// A composition's settings and its layer stack.
@@ -456,6 +531,7 @@ fn read_comp(
     entry: &Chunk<'_>,
     items: &[Item],
     by_id: &HashMap<i64, usize>,
+    by_comp_id: &HashMap<i64, (f64, f64)>,
     skipped: &mut Vec<Unreadable>,
 ) -> Comp {
     let inside: Vec<Chunk<'_>> = entry.children().ok().collect();
@@ -514,10 +590,14 @@ fn read_comp(
         f64::from(comp.width.unwrap_or_default()),
         f64::from(comp.height.unwrap_or_default()),
     );
+    let rasters = Rasters {
+        comp: size,
+        by_comp_id,
+    };
 
     for (position, record) in records.iter().enumerate() {
         let index = u32::try_from(position).unwrap_or(0).saturating_add(1);
-        match read_layer(index, record, items, by_id, &indices, timebase, size) {
+        match read_layer(index, record, items, by_id, &indices, timebase, rasters) {
             Some((layer, mut rows)) => {
                 comp.layers.push(layer);
                 for row in &mut rows {
@@ -622,8 +702,9 @@ fn read_layer(
     by_id: &HashMap<i64, usize>,
     indices: &HashMap<u32, u32>,
     timebase: f64,
-    comp_size: (f64, f64),
+    rasters: Rasters<'_>,
 ) -> Option<(Layer, Vec<Unreadable>)> {
+    let comp_size = rasters.comp;
     let inside: Vec<Chunk<'_>> = record.children().ok().collect();
     let descriptor = inside.iter().find(|chunk| chunk.id == *b"ldta")?;
     let d = descriptor.body;
@@ -680,10 +761,12 @@ fn read_layer(
         .or_else(|| source.and_then(|item| item.name.clone()));
 
     // Stretch is stored as the ratio it is, not as the percentage scripting
-    // reports. The in and out points are stored *unstretched*: After Effects
-    // applies the stretch when it reports them, and at a negative stretch the
-    // two ends come back the other way round — which is a swap, not a repair
-    // (docs/impl/ae-import.md §5).
+    // reports. The in and out points are stored **on the layer's own clock and
+    // unstretched** — the same convention the keyframe times use ([`props`]'s
+    // `time_of`) — while scripting reports them on the comp's, so the layer's
+    // start is added rather than pivoted about: `start + raw × stretch`. At a
+    // negative stretch the two ends come back the other way round, which is a
+    // swap, not a repair (docs/impl/ae-import.md §7.1).
     let stretch_top = i32_at(d, 8).unwrap_or(1);
     let stretch_bottom = u32_at(d, 108).unwrap_or(1);
     let stretch = if stretch_bottom == 0 {
@@ -693,7 +776,7 @@ fn read_layer(
     };
     let start_time = rational_at(d, 12, 16).unwrap_or_default();
     let stretched = |dividend: usize, divisor: usize| {
-        rational_at(d, dividend, divisor).map(|raw| start_time + (raw - start_time) * stretch)
+        rational_at(d, dividend, divisor).map(|raw| start_time + raw * stretch)
     };
 
     let matte = if is_rig {
@@ -746,11 +829,16 @@ fn read_layer(
     // layer's source size, whether it has one at all, and where its clock
     // starts — is settled by now.
     let source_size = source
-        .map(|item| {
-            (
+        .map(|item| match item.kind.as_deref() {
+            // A comp's item row carries no size; its own settings record does.
+            Some("comp") => source_id
+                .and_then(|id| rasters.by_comp_id.get(&id))
+                .copied()
+                .unwrap_or(comp_size),
+            _ => (
                 f64::from(item.width.unwrap_or_default()),
                 f64::from(item.height.unwrap_or_default()),
-            )
+            ),
         })
         .unwrap_or(comp_size);
     let ctx = props::Ctx {
@@ -762,7 +850,7 @@ fn read_layer(
         start: start_time,
         in_effect: false,
     };
-    let (properties, markers, mut rows) = match inside.iter().find(|c| c.is_list(b"tdgp")) {
+    let (mut properties, markers, mut rows) = match inside.iter().find(|c| c.is_list(b"tdgp")) {
         Some(group) => {
             let read = props::read_group(group, ctx);
             (
@@ -773,6 +861,9 @@ fn read_layer(
         }
         None => (Vec::new(), Vec::new(), Vec::new()),
     };
+    if !is_rig {
+        place_at_defaults(&mut properties, ctx, kind != "null");
+    }
     let layer_name = name.clone().unwrap_or_else(|| format!("layer {index}"));
     for row in &mut rows {
         row.layer = Some(layer_name.clone());
@@ -814,6 +905,56 @@ fn read_layer(
         },
         rows,
     ))
+}
+
+/// The two placing properties After Effects does not default to zero, written
+/// in where the file left them out.
+///
+/// The module's opening rule — an `.aep` stores only what is *not* at its
+/// default — is harmless for everything whose default is zero, and quietly
+/// wrong for the two that place the layer: **Position starts at the centre of
+/// the composition and the Anchor Point at the centre of the layer's own
+/// source**. Read as (0, 0) instead, a layer nobody moved pins its top-left
+/// corner to the top-left of the frame, and every scale and rotation on it
+/// pivots from that corner. So the defaults are put back here, where the comp's
+/// size and the source's size are both already in hand, rather than guessed at
+/// downstream where neither is.
+///
+/// Three kinds of layer keep the **zero** anchor, which is After Effects' own
+/// default for them: a shape, a text layer, and a null. None of the three draws
+/// a source rectangle — a shape and a text layer are drawn around their own
+/// origin, and a null is a handle with nothing in it (the 100×100 solid behind
+/// it is plumbing, not a picture) — so there is nothing to centre on. A camera
+/// and a light are left alone entirely: the scripting DOM does not offer these
+/// two properties on a rig in this form.
+fn place_at_defaults(properties: &mut [Property], ctx: props::Ctx<'_>, centre_anchor: bool) {
+    let Some(group) = properties
+        .iter_mut()
+        .find(|node| node.match_name.as_deref() == Some("ADBE Transform Group"))
+        .and_then(|node| node.group.as_mut())
+    else {
+        return;
+    };
+    let mut centre = |match_name: &str, (width, height): (f64, f64)| {
+        if group
+            .iter()
+            .any(|node| node.match_name.as_deref() == Some(match_name))
+        {
+            return;
+        }
+        // Scripting reports both as three-dimensional whatever the layer's own
+        // 3D switch says, so the depth is present and zero.
+        group.push(Property {
+            match_name: Some(match_name.to_string()),
+            value_type: Some("point3".to_string()),
+            value: Some(serde_json::json!([width / 2.0, height / 2.0, 0.0])),
+            ..Property::default()
+        });
+    };
+    centre("ADBE Position", ctx.comp);
+    if ctx.has_source && centre_anchor {
+        centre("ADBE Anchor Point", ctx.layer);
+    }
 }
 
 /// Whether the layer's Time Remap is switched on.
@@ -1000,6 +1141,130 @@ mod tests {
         assert_eq!(parsed.capture.items[0].is_missing, Some(true));
     }
 
+    /// A layer descriptor: stretch 1, and the three rationals the timing is
+    /// read from, each given as dividend over `divisor`.
+    fn ldta(divisor: u32, start: i32, in_point: i32, out_point: i32) -> Vec<u8> {
+        let mut body = vec![0_u8; 164];
+        let mut put = |at: usize, value: i32| {
+            body.splice(at..at + 4, value.to_be_bytes());
+        };
+        put(8, 1); // stretch dividend
+        put(12, start);
+        put(16, divisor as i32);
+        put(20, in_point);
+        put(24, divisor as i32);
+        put(28, out_point);
+        put(32, divisor as i32);
+        put(108, 1); // stretch divisor
+        chunk(b"ldta", &body)
+    }
+
+    /// One comp holding the given layer records, with settings enough to read.
+    fn comp_with(id: u32, name: &[u8], layers: &[Vec<u8>]) -> Vec<u8> {
+        let mut comp = idta(ITEM_COMP_KIND, id);
+        comp.extend(chunk(b"Utf8", name));
+        comp.extend(chunk(b"cdta", &[0; 204]));
+        for layer in layers {
+            comp.extend(list(b"Layr", layer));
+        }
+        file(&list(b"Fold", &list(b"Item", &comp)))
+    }
+
+    /// **A layer dragged along the timeline keeps its place.**
+    ///
+    /// The file counts a layer's in and out points on the layer's *own* clock,
+    /// the same way it counts keyframe times, so the layer's start is what
+    /// puts them back on the comp's. Reading them as comp times instead puts
+    /// every dragged layer's bar at the origin — which is a project that opens
+    /// with its assembling comps transparent at almost every frame, because
+    /// each clip sits at 0 rather than where it was cut.
+    #[test]
+    fn a_layers_in_and_out_are_counted_from_its_own_start() {
+        // Start 2.4 s, a bar 2.48 s long on the layer's clock.
+        let bytes = comp_with(3, b"Clips", &[ldta(1000, 2400, 0, 2480)]);
+        let parsed = parse_capture(&bytes).expect("the walk survives");
+        let layer = &parsed.capture.comps[0].layers[0];
+        assert_eq!(layer.start_time, Some(2.4));
+        assert_eq!(layer.in_point, Some(2.4), "the bar begins where it was cut");
+        assert_eq!(layer.out_point, Some(4.88));
+    }
+
+    /// **And the stretch multiplies the layer-local time, not a pivot about
+    /// the start.**
+    ///
+    /// A layer stretched to 50 % is half as long on the comp's clock; its
+    /// start does not move, because the start *is* where its own clock begins.
+    #[test]
+    fn a_stretched_layer_is_stretched_from_its_start() {
+        let mut record = ldta(1000, 4000, 0, 10_000);
+        // Stretch 1/2: dividend at 8, divisor at 108, inside the `ldta` body,
+        // which the chunk header offsets by eight.
+        record.splice(8 + 8..8 + 12, 1_i32.to_be_bytes());
+        record.splice(8 + 108..8 + 112, 2_u32.to_be_bytes());
+        let bytes = comp_with(3, b"Clips", &[record]);
+
+        let layer = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .comps[0]
+            .layers[0];
+        assert_eq!(layer.stretch, Some(50.0));
+        assert_eq!(layer.in_point, Some(4.0));
+        assert_eq!(layer.out_point, Some(9.0));
+    }
+
+    /// **An image sequence is read from the two things After Effects says
+    /// about it, and a single file from neither** (K-539).
+    ///
+    /// Both signals here were taken off a real project (the golden fixture has
+    /// no file footage in it, which is why the rest of the interpretation is
+    /// still owed one): the alias targets a folder, and two `Utf8` chunks
+    /// carrying the name either side of the frame number sit between the alias
+    /// list and the asset record. A single file's `Pin ` has neither, which is
+    /// what the second half of this asserts — a plain clip must not come in as
+    /// a sequence pointing at its own folder.
+    #[test]
+    fn a_folder_targeting_alias_and_its_two_names_make_an_image_sequence() {
+        let alias = br#"{"fullpath":"C:\\Clips\\Cine3\\Depth","target_is_folder":true}"#;
+        let mut pin = chunk(b"sspc", &[0; 222]);
+        pin.extend(chunk(b"Utf8", b""));
+        pin.extend(list(b"Als2", &chunk(b"alas", alias)));
+        pin.extend(chunk(b"Utf8", b"Depth"));
+        pin.extend(chunk(b"Utf8", b"_depth.exr"));
+        pin.extend(chunk(b"opti", b"oEXR"));
+        let mut item = idta(ITEM_FOOTAGE_KIND, 11);
+        item.extend(chunk(b"Utf8", b""));
+        item.extend(list(b"Pin ", &pin));
+        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
+
+        let item = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .items[0];
+        assert_eq!(item.is_sequence, Some(true));
+        assert_eq!(item.sequence_prefix.as_deref(), Some("Depth"));
+        assert_eq!(item.sequence_suffix.as_deref(), Some("_depth.exr"));
+        assert_eq!(item.path.as_deref(), Some(r"C:\Clips\Cine3\Depth"));
+
+        // The same shape without either signal: one file, as before.
+        let alias = br#"{"fullpath":"C:\\Clips\\Cine3\\World.avi"}"#;
+        let mut pin = chunk(b"sspc", &[0; 222]);
+        pin.extend(chunk(b"Utf8", b""));
+        pin.extend(list(b"Als2", &chunk(b"alas", alias)));
+        pin.extend(chunk(b"opti", b"AVIV"));
+        let mut item = idta(ITEM_FOOTAGE_KIND, 12);
+        item.extend(chunk(b"Utf8", b""));
+        item.extend(list(b"Pin ", &pin));
+        let bytes = file(&list(b"Fold", &list(b"Item", &item)));
+
+        let item = &parse_capture(&bytes)
+            .expect("the walk survives")
+            .capture
+            .items[0];
+        assert_eq!(item.is_sequence, None);
+        assert_eq!(item.sequence_prefix, None);
+    }
+
     /// **A project with no item tree is refused, not half-imported.**
     ///
     /// The one structural failure that is worth failing on: a container that
@@ -1088,5 +1353,6 @@ mod tests {
     }
 
     const ITEM_FOLDER_KIND: u16 = enums::ITEM_FOLDER;
+    const ITEM_FOOTAGE_KIND: u16 = enums::ITEM_FOOTAGE;
     const ITEM_COMP_KIND: u16 = enums::ITEM_COMP;
 }

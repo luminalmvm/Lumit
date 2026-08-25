@@ -82,11 +82,47 @@ map, so it must not see premultiplied values; unpremult → look up → repremul
 the same discipline the affine grades (saturation, colour balance) use, i.e.
 `premultiplied: false` in the traits.
 
-REVIEW (owner): most creative `.cube` LUTs are authored for display- or
-log-encoded input, whereas Lumit works scene-linear. For v1 the LUT is applied
-in the working space as-is (no implicit input transfer), documented in §3.11; a
-colour-managed "LUT input space" control is a recorded follow-up. Flag this when
-the effect lands so it can be logged as a K-decision.
+### 3a. Input space (closed, K-543)
+
+The review above is answered. Most creative `.cube` LUTs are authored for
+display-encoded input while Lumit works scene-linear, so the effect carries an
+**Input space** row: `lumit_core::lut::LutSpace`, three options.
+
+```
+Linear   identity both ways (default)
+sRGB     E = 12.92·L                     (L <= 0.0031308)
+         E = 1.055·max(L,0)^(1/2.4) - 0.055   otherwise
+Rec. 709 E = 4.5·L                       (L <  0.018)
+         E = 1.099·max(L,0)^0.45 - 0.099      otherwise
+```
+
+with the exact inverses on the way back (`0.04045` and `0.081` as the decode
+knees). **Only what the pipeline already defines**: sRGB is the curve
+`pixels::srgb_encode` and `composite.wgsl` already use, Rec. 709 is its ITU-R
+sibling, and there is deliberately **no Log option** — Lumit defines no log
+transfer function, and inventing one here would put a made-up curve in the
+render path. Log arrives with colour management.
+
+Three things this pins:
+
+- **The order is unpremultiply → to space → look up → to linear → re-premultiply.**
+  A transfer function is a statement about colour, not about coverage, so it sits
+  inside the premult pair with the lookup, not around it.
+- **`max(v, 0)` inside every power, on both paths.** A scene-linear value may be
+  negative (out of gamut). The CPU branches, but WGSL's `select` evaluates both
+  arms, so an unguarded `pow` of a negative would compute NaN in the arm that is
+  about to be discarded — and on some backends that NaN survives the select. The
+  guard is what makes the two op-for-op.
+- **Linear is arithmetic-free.** `LutSpace::Linear` returns its argument by
+  identity and the shader's `to_space`/`to_linear` return `c`, so a LUT saved
+  before this row renders the bits it always did (K-258) — the oracle test's
+  Linear cases are the pre-K-543 cases unchanged.
+
+The oracle is now `Lut3d::sample_in(space, rgb)` rather than `sample`; the GPU
+test runs every space against the same corpus and also asserts that each space
+renders a *different* picture from Linear, since an oracle alone would be
+equally satisfied by a shader that ignored the row and a reference that ignored
+it too.
 
 Status (closed, K-271): the domain gap is gone. `LutParams` carries the six
 domain floats (as two padded `vec4`s — a uniform `vec3` is 16-byte aligned
@@ -147,7 +183,8 @@ no-op), never a panic.
 - **Oracle** `wgsl_lut_matches_the_cpu_oracle`: over random RGBA inputs
   (including partial alpha) and several LUTs — identity, a per-channel gamma, a
   saturating "film" curve — the WGSL manual-trilinear output matches
-  `Lut3d::sample` to the shared fp16 ULP tolerance.
+  `Lut3d::sample_in` to the shared fp16 ULP tolerance, **once per Input space**
+  (§3a), with a "this space is not Linear" assertion beside it.
 - **Identity is a no-op**: an identity cube leaves every pixel within tolerance
   (a strong end-to-end check that ordering, domain and premult are all right).
 - **Cache**: two evaluations at the same path parse once; touching the file's

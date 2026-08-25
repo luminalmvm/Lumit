@@ -935,11 +935,15 @@ impl CompositionReference {
             return Err(BridgeError::EmptyPath);
         }
         let comp = self.composition()?;
-        let items: Vec<lumit_core::shape::ShapeItem> =
-            contents.iter().map(|i| i.write_item()).collect();
+        // A fresh layer starts at the head of the comp, so its own clock is
+        // the composition's: no offset to carry.
+        let items: Vec<lumit_core::shape::ShapeItem> = contents
+            .iter()
+            .map(|i| i.write_item(lumit_core::time::Rational::ZERO))
+            .collect::<Result<_, _>>()?;
         // The art's own box: the layer's natural size, and where it sits.
         let (x0, y0, _x1, _y1) =
-            lumit_core::shape::contents_bounds(&items).ok_or(BridgeError::EmptyPath)?;
+            lumit_core::shape::contents_bounds(&items, 0.0).ok_or(BridgeError::EmptyPath)?;
 
         let layer = crate::edits::base_layer(
             name,
@@ -1442,10 +1446,10 @@ impl CompositionReference {
     fn has_picture(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
         #[cfg(feature = "media")]
         {
-            let Some(path) = FootageReference::resolve_path(state, footage) else {
+            let Some(src) = FootageReference::resolve_source(state, footage) else {
                 return true;
             };
-            let Some(info) = crate::probe::ensure_probed(&path) else {
+            let Some(info) = crate::probe::ensure_probed(&src) else {
                 return true;
             };
             info.has_picture()
@@ -1462,7 +1466,7 @@ impl CompositionReference {
     fn runs_as_video(state: &LumitBridgeState, footage: &lumit_core::model::FootageItem) -> bool {
         #[cfg(feature = "media")]
         {
-            let Some(path) = FootageReference::resolve_path(state, footage) else {
+            let Some(src) = FootageReference::resolve_source(state, footage) else {
                 return false;
             };
             // `ensure_probed`, not the prober: the file was queued for the
@@ -1470,7 +1474,7 @@ impl CompositionReference {
             // probes here and now when it is not, because `add_footage_layer`
             // is synchronous and must answer with what the file actually is
             // rather than with a guess it would have to revise.
-            let Some(info) = crate::probe::ensure_probed(&path) else {
+            let Some(info) = crate::probe::ensure_probed(&src) else {
                 return false;
             };
             // The rule itself lives on the probe result (K-451), so the Project
@@ -1501,10 +1505,10 @@ impl CompositionReference {
 
         #[cfg(feature = "media")]
         {
-            let Some(path) = FootageReference::resolve_path(state, footage) else {
+            let Some(src) = FootageReference::resolve_source(state, footage) else {
                 return fallback;
             };
-            let Some(info) = crate::probe::ensure_probed(&path) else {
+            let Some(info) = crate::probe::ensure_probed(&src) else {
                 return fallback;
             };
             let frames = (info.duration_seconds * comp.frame_rate.fps()).round() as i64;

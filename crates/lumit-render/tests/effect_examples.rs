@@ -358,6 +358,7 @@ fn oval_mask(mode: MaskMode) -> Mask {
         opacity: Property::fixed(100.0),
         mode,
         feather: Property::zero(),
+        vertex_feather: Vec::new(),
         expansion: Property::zero(),
         extra: serde_json::Map::new(),
     }
@@ -537,6 +538,7 @@ fn example_doc(
     let mut footage = |name: &str, path: &std::path::Path| {
         let item = id(name);
         doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
             id: item,
             name: name.into(),
             media: MediaRef {

@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -108,7 +109,7 @@ final class FoldMaskRow extends LayerFoldRow {
 ///
 /// [path] is the shape itself: a value with no number, so its row carries a
 /// stopwatch and diamonds but no field (K-339).
-enum MaskValue { path, opacity, feather, expansion }
+enum MaskValue { path, opacity, feather, expansion, vertexFeather }
 
 /// One of a mask's values — its shape, opacity, feather or expansion — on a
 /// row of its own under the mask (K-222, K-340).
@@ -120,7 +121,13 @@ enum MaskValue { path, opacity, feather, expansion }
 final class FoldMaskValueRow extends LayerFoldRow {
   final BridgeMask mask;
   final MaskValue value;
-  const FoldMaskValueRow(this.mask, this.value, {required int depth})
+
+  /// Which vertex's own feather this row carries, for
+  /// [MaskValue.vertexFeather] (K-545). `-1` on every other row, which have
+  /// one value each and no point to belong to.
+  final int vertex;
+  const FoldMaskValueRow(this.mask, this.value,
+      {required int depth, this.vertex = -1})
       : super(depth);
 }
 
@@ -131,11 +138,152 @@ final class FoldShapeRow extends LayerFoldRow {
   const FoldShapeRow(this.item, {required int depth}) : super(depth);
 }
 
+/// Which of a shape item's animatable numbers a [FoldShapeValueRow] carries
+/// (K-551). The trim's three are the first of them.
+/// [dash] and [gap] are the first pair of the item's dash list (K-552), which
+/// is where a dashed outline is set from: writing either into an item that has
+/// no list makes one. The repeater's ten (K-553) are the count, which copy the
+/// original is, and the step every copy is one more of. [offsetPath] (K-554) is
+/// first because it applies first: it makes the outline the rest work on.
+enum ShapeValue {
+  gradientStartX,
+  gradientStartY,
+  gradientEndX,
+  gradientEndY,
+  offsetPath,
+  trimStart,
+  trimEnd,
+  trimOffset,
+  dash,
+  gap,
+  dashOffset,
+  repeatCopies,
+  repeatOffset,
+  repeatAnchorX,
+  repeatAnchorY,
+  repeatPositionX,
+  repeatPositionY,
+  repeatRotation,
+  repeatScale,
+  repeatStartOpacity,
+  repeatEndOpacity,
+}
+
+/// Which of a shape item's numbers are the dashes' — shown only under an item
+/// that actually has an outline to dash.
+bool isDashValue(ShapeValue value) => switch (value) {
+      ShapeValue.dash || ShapeValue.gap || ShapeValue.dashOffset => true,
+      _ => false,
+    };
+
+/// The most copies the engine draws of one repeated item — `MAX_COPIES` in
+/// `lumit-core`'s `shape.rs` (K-553). The row stops where the engine does, so
+/// a slider dragged to its end asks for a frame that arrives.
+const double maxShapeCopies = 100;
+
+/// Which of a shape item's numbers aim its **gradient** (K-555) — shown only
+/// where there is a ramp to aim.
+bool isGradientValue(ShapeValue value) => switch (value) {
+      ShapeValue.gradientStartX ||
+      ShapeValue.gradientStartY ||
+      ShapeValue.gradientEndX ||
+      ShapeValue.gradientEndY =>
+        true,
+      _ => false,
+    };
+
+/// Which of a shape item's numbers describe the **step** the repeater takes
+/// (K-553) — everything but the count itself, which is the row that turns the
+/// repeater on and so is always there to find.
+bool isRepeatStepValue(ShapeValue value) => switch (value) {
+      ShapeValue.gradientStartX ||
+      ShapeValue.gradientStartY ||
+      ShapeValue.gradientEndX ||
+      ShapeValue.gradientEndY ||
+      ShapeValue.offsetPath ||
+      ShapeValue.trimStart ||
+      ShapeValue.trimEnd ||
+      ShapeValue.trimOffset ||
+      ShapeValue.dash ||
+      ShapeValue.gap ||
+      ShapeValue.dashOffset ||
+      ShapeValue.repeatCopies =>
+        false,
+      _ => true,
+    };
+
+/// True once the item is drawn more than once — a still count of one is no
+/// repeater at all, which is what every shape is until somebody asks for more.
+bool isRepeated(BridgeShapeItem item) => switch (item.repeatCopies) {
+      BridgeScalar_Static(:final field0) => field0 > 1,
+      // Keyed, or driven by an expression: the count is more than one
+      // somewhere in the animation, so the rows that shape it belong on
+      // screen.
+      _ => true,
+    };
+
+/// Which of a shape item's **colours and choices** a [FoldShapePaintRow]
+/// carries (K-555). None of the three is a number, so none of them keys, which
+/// is why they are a row kind of their own rather than more [ShapeValue]s.
+enum ShapePaint {
+  /// The colour inside the path — and, where there is a ramp, the colour the
+  /// ramp starts at.
+  fill,
+
+  /// Flat, linear or radial.
+  gradient,
+
+  /// The colour the ramp ends at.
+  gradientColour,
+}
+
+/// A shape item's fill colour, its gradient choice, or its gradient's second
+/// colour, on a row of its own (K-555).
+final class FoldShapePaintRow extends LayerFoldRow {
+  final BridgeShapeItem item;
+  final ShapePaint which;
+  const FoldShapePaintRow(this.item, this.which, {required int depth})
+      : super(depth);
+}
+
+/// What a shape item's paint row is called.
+String shapePaintLabel(ShapePaint which) => switch (which) {
+      ShapePaint.fill => l10n.shapeFill,
+      ShapePaint.gradient => l10n.shapeGradient,
+      ShapePaint.gradientColour => l10n.shapeGradientColour,
+    };
+
+/// One of a shape item's numbers on a row of its own under it (K-551). A row
+/// rather than another control on the item's own row, for the reason
+/// [FoldMaskValueRow] gives: a property without a row has nowhere to put the
+/// stopwatch that animates it.
+final class FoldShapeValueRow extends LayerFoldRow {
+  final BridgeShapeItem item;
+  final ShapeValue value;
+  const FoldShapeValueRow(this.item, this.value, {required int depth})
+      : super(depth);
+}
+
 /// One paint stroke on the layer (K-227): its name, so a stroke can be found,
 /// renamed and deleted after it was painted.
 final class FoldStrokeRow extends LayerFoldRow {
   final BridgeStroke stroke;
   const FoldStrokeRow(this.stroke, {required int depth}) : super(depth);
+}
+
+/// Which of a stroke's animatable values a [FoldStrokeValueRow] carries
+/// (K-549). Both are a per cent of the stroke's own length.
+enum StrokeValue { start, end }
+
+/// A stroke's Start or End on a row of its own under it (K-549) — the pair
+/// that makes a stroke draw itself on. A row rather than another number on the
+/// stroke's own row, for the reason [FoldMaskValueRow] gives: a property
+/// without a row has nowhere to put the stopwatch that animates it.
+final class FoldStrokeValueRow extends LayerFoldRow {
+  final BridgeStroke stroke;
+  final StrokeValue value;
+  const FoldStrokeValueRow(this.stroke, this.value, {required int depth})
+      : super(depth);
 }
 
 /// One control of a footage layer's Flow group (K-088, K-331). Which control
@@ -223,12 +371,18 @@ List<BridgeKeyframe> laneKeysOf(LayerFoldRow row) => switch (row) {
       // paths, and those keys carry their own eases and a counted-up value
       // (K-344), so the lane draws their diamonds and the graph can draw the
       // rate the shape is changing at.
-      FoldMaskValueRow(:final mask, :final value) => value == MaskValue.path
-          ? mask.pathKeys
-          : switch (maskScalarOf(mask, value)) {
-              BridgeScalar_Keyframed(:final field0) => field0,
-              _ => const [],
-            },
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        value == MaskValue.path
+            ? mask.pathKeys
+            : switch (maskScalarOf(mask, value, vertex)) {
+                BridgeScalar_Keyframed(:final field0) => field0,
+                _ => const [],
+              },
+      FoldStrokeValueRow(:final stroke, :final value) =>
+        switch (strokeScalarOf(stroke, value)) {
+          BridgeScalar_Keyframed(:final field0) => field0,
+          _ => const [],
+        },
       _ => const [],
     };
 
@@ -266,24 +420,34 @@ const Set<String> everyFoldPath = _EveryPath();
 
 /// What a mask's value row is called — shared by the row, the graph channel
 /// and anything else that has to name one.
-String maskValueLabel(MaskValue value) => switch (value) {
+String maskValueLabel(MaskValue value, [int vertex = -1]) => switch (value) {
       MaskValue.path => l10n.maskPath,
       MaskValue.opacity => l10n.maskOpacity,
       MaskValue.feather => l10n.maskFeather,
       MaskValue.expansion => l10n.maskExpansion,
+      // Counted from one, as the person drawing counts points.
+      MaskValue.vertexFeather => l10n.maskVertexFeather(vertex + 1),
     };
 
 /// Which of a mask's animatable numbers [value] names. The shape is not one of
-/// them — it has no number — and asks for the still zero nobody reads.
-BridgeScalar maskScalarOf(BridgeMask mask, MaskValue value) => switch (value) {
+/// them — it has no number — and asks for the still zero nobody reads, as does
+/// a per-point feather naming a point the mask no longer has.
+BridgeScalar maskScalarOf(BridgeMask mask, MaskValue value,
+        [int vertex = -1]) =>
+    switch (value) {
       MaskValue.opacity => mask.opacity,
       MaskValue.feather => mask.feather,
       MaskValue.expansion => mask.expansion,
+      MaskValue.vertexFeather =>
+        vertex >= 0 && vertex < mask.vertexFeather.length
+            ? mask.vertexFeather[vertex]
+            : const BridgeScalar.static_(0),
       MaskValue.path => const BridgeScalar.static_(0),
     };
 
 /// [mask] with the one number [value] names replaced.
-BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to) =>
+BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to,
+        [int vertex = -1]) =>
     BridgeMask(
       id: mask.id,
       name: mask.name,
@@ -293,6 +457,12 @@ BridgeMask maskWithScalar(BridgeMask mask, MaskValue value, BridgeScalar to) =>
       opacity: value == MaskValue.opacity ? to : mask.opacity,
       mode: mask.mode,
       feather: value == MaskValue.feather ? to : mask.feather,
+      vertexFeather: value == MaskValue.vertexFeather
+          ? [
+              for (var i = 0; i < mask.vertexFeather.length; i++)
+                i == vertex ? to : mask.vertexFeather[i]
+            ]
+          : mask.vertexFeather,
       expansion: value == MaskValue.expansion ? to : mask.expansion,
       pathKeys: mask.pathKeys,
     );
@@ -346,6 +516,171 @@ List<BridgeKeyframe> layerKeys({
       ))
         ...laneKeysOf(row),
     ];
+
+/// What a stroke's value row is called — shared by the row and the graph
+/// channel, exactly as [maskValueLabel] is.
+String strokeValueLabel(StrokeValue value) => switch (value) {
+      StrokeValue.start => l10n.strokeStart,
+      StrokeValue.end => l10n.strokeEnd,
+    };
+
+/// Which of a stroke's two animatable numbers [value] names (K-549).
+BridgeScalar strokeScalarOf(BridgeStroke stroke, StrokeValue value) =>
+    switch (value) {
+      StrokeValue.start => stroke.start,
+      StrokeValue.end => stroke.end,
+    };
+
+/// [stroke] with the one number [value] names replaced.
+BridgeStroke strokeWithScalar(
+        BridgeStroke stroke, StrokeValue value, BridgeScalar to) =>
+    BridgeStroke(
+      id: stroke.id,
+      name: stroke.name,
+      points: stroke.points,
+      colour: stroke.colour,
+      width: stroke.width,
+      hardness: stroke.hardness,
+      shape: stroke.shape,
+      opacity: stroke.opacity,
+      start: value == StrokeValue.start ? to : stroke.start,
+      end: value == StrokeValue.end ? to : stroke.end,
+      mode: stroke.mode,
+      blend: stroke.blend,
+      cloneOffsetX: stroke.cloneOffsetX,
+      cloneOffsetY: stroke.cloneOffsetY,
+    );
+
+/// What a shape item's value row is called — shared by the row and the graph
+/// channel, exactly as [maskValueLabel] is.
+String shapeValueLabel(ShapeValue value) => switch (value) {
+      ShapeValue.gradientStartX => l10n.shapeGradientStartX,
+      ShapeValue.gradientStartY => l10n.shapeGradientStartY,
+      ShapeValue.gradientEndX => l10n.shapeGradientEndX,
+      ShapeValue.gradientEndY => l10n.shapeGradientEndY,
+      ShapeValue.offsetPath => l10n.shapeOffsetPath,
+      ShapeValue.trimStart => l10n.shapeTrimStart,
+      ShapeValue.trimEnd => l10n.shapeTrimEnd,
+      ShapeValue.trimOffset => l10n.shapeTrimOffset,
+      ShapeValue.dash => l10n.shapeDash,
+      ShapeValue.gap => l10n.shapeGap,
+      ShapeValue.dashOffset => l10n.shapeDashOffset,
+      ShapeValue.repeatCopies => l10n.shapeRepeatCopies,
+      ShapeValue.repeatOffset => l10n.shapeRepeatOffset,
+      ShapeValue.repeatAnchorX => l10n.shapeRepeatAnchorX,
+      ShapeValue.repeatAnchorY => l10n.shapeRepeatAnchorY,
+      ShapeValue.repeatPositionX => l10n.shapeRepeatPositionX,
+      ShapeValue.repeatPositionY => l10n.shapeRepeatPositionY,
+      ShapeValue.repeatRotation => l10n.shapeRepeatRotation,
+      ShapeValue.repeatScale => l10n.shapeRepeatScale,
+      ShapeValue.repeatStartOpacity => l10n.shapeRepeatStartOpacity,
+      ShapeValue.repeatEndOpacity => l10n.shapeRepeatEndOpacity,
+    };
+
+/// The first pair of an item's dash list, or a still zero where it has none —
+/// which is what a solid outline reads as.
+BridgeScalar _dashAt(BridgeShapeItem item, int index) =>
+    index < item.dashes.length
+        ? item.dashes[index]
+        : const BridgeScalar.static_(0);
+
+/// Which of a shape item's animatable numbers [value] names (K-551).
+BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value) =>
+    switch (value) {
+      ShapeValue.gradientStartX => item.gradientStartX,
+      ShapeValue.gradientStartY => item.gradientStartY,
+      ShapeValue.gradientEndX => item.gradientEndX,
+      ShapeValue.gradientEndY => item.gradientEndY,
+      ShapeValue.offsetPath => item.offsetAmount,
+      ShapeValue.trimStart => item.trimStart,
+      ShapeValue.trimEnd => item.trimEnd,
+      ShapeValue.trimOffset => item.trimOffset,
+      ShapeValue.dash => _dashAt(item, 0),
+      ShapeValue.gap => _dashAt(item, 1),
+      ShapeValue.dashOffset => item.dashOffset,
+      ShapeValue.repeatCopies => item.repeatCopies,
+      ShapeValue.repeatOffset => item.repeatOffset,
+      ShapeValue.repeatAnchorX => item.repeatAnchorX,
+      ShapeValue.repeatAnchorY => item.repeatAnchorY,
+      ShapeValue.repeatPositionX => item.repeatPositionX,
+      ShapeValue.repeatPositionY => item.repeatPositionY,
+      ShapeValue.repeatRotation => item.repeatRotation,
+      ShapeValue.repeatScale => item.repeatScale,
+      ShapeValue.repeatStartOpacity => item.repeatStartOpacity,
+      ShapeValue.repeatEndOpacity => item.repeatEndOpacity,
+    };
+
+/// [item] with whatever is named replaced and everything else carried over.
+///
+/// The **one** place that lists a shape item's fields. Four gestures copy an
+/// item — a value row, a rename, an opacity drag and a point drag — and a
+/// modifier added to three of them and forgotten in the fourth would be a
+/// setting that quietly reset itself when you dragged something else.
+BridgeShapeItem shapeItemWith(
+  BridgeShapeItem item, {
+  String? name,
+  List<BridgeVertex>? vertices,
+  double? opacity,
+  ShapeValue? value,
+  BridgeScalar? to,
+  BridgeColourRgba? fill,
+  int? gradient,
+  BridgeColourRgba? gradientColour,
+  BridgeScalar? gradientStartX,
+  BridgeScalar? gradientStartY,
+  BridgeScalar? gradientEndX,
+  BridgeScalar? gradientEndY,
+}) {
+  BridgeScalar at(ShapeValue which, BridgeScalar was) =>
+      value == which ? to! : was;
+  return BridgeShapeItem(
+    id: item.id,
+    name: name ?? item.name,
+    vertices: vertices ?? item.vertices,
+    closed: item.closed,
+    fill: fill ?? item.fill,
+    stroke: item.stroke,
+    strokeWidth: item.strokeWidth,
+    opacity: opacity ?? item.opacity,
+    gradient: gradient ?? item.gradient,
+    gradientColour: gradientColour ?? item.gradientColour,
+    gradientStartX:
+        gradientStartX ?? at(ShapeValue.gradientStartX, item.gradientStartX),
+    gradientStartY:
+        gradientStartY ?? at(ShapeValue.gradientStartY, item.gradientStartY),
+    gradientEndX: gradientEndX ?? at(ShapeValue.gradientEndX, item.gradientEndX),
+    gradientEndY: gradientEndY ?? at(ShapeValue.gradientEndY, item.gradientEndY),
+    offsetAmount: at(ShapeValue.offsetPath, item.offsetAmount),
+    trimStart: at(ShapeValue.trimStart, item.trimStart),
+    trimEnd: at(ShapeValue.trimEnd, item.trimEnd),
+    trimOffset: at(ShapeValue.trimOffset, item.trimOffset),
+    // Writing a dash or a gap into an item that has neither makes the pair:
+    // there is no separate "add dashes" gesture, and a list of one would only
+    // be read as a pair anyway.
+    dashes: switch (value) {
+      ShapeValue.dash => [to!, _dashAt(item, 1)],
+      ShapeValue.gap => [_dashAt(item, 0), to!],
+      _ => item.dashes,
+    },
+    dashOffset: at(ShapeValue.dashOffset, item.dashOffset),
+    repeatCopies: at(ShapeValue.repeatCopies, item.repeatCopies),
+    repeatOffset: at(ShapeValue.repeatOffset, item.repeatOffset),
+    repeatAnchorX: at(ShapeValue.repeatAnchorX, item.repeatAnchorX),
+    repeatAnchorY: at(ShapeValue.repeatAnchorY, item.repeatAnchorY),
+    repeatPositionX: at(ShapeValue.repeatPositionX, item.repeatPositionX),
+    repeatPositionY: at(ShapeValue.repeatPositionY, item.repeatPositionY),
+    repeatRotation: at(ShapeValue.repeatRotation, item.repeatRotation),
+    repeatScale: at(ShapeValue.repeatScale, item.repeatScale),
+    repeatStartOpacity:
+        at(ShapeValue.repeatStartOpacity, item.repeatStartOpacity),
+    repeatEndOpacity: at(ShapeValue.repeatEndOpacity, item.repeatEndOpacity),
+  );
+}
+
+/// [item] with the one number [value] names replaced.
+BridgeShapeItem shapeWithScalar(
+        BridgeShapeItem item, ShapeValue value, BridgeScalar to) =>
+    shapeItemWith(item, value: value, to: to);
 
 /// A key's position on the comp's frame axis, computed Dart-side from its
 /// exact time and the comp's rate so a paint never crosses the bridge for it.
@@ -500,7 +835,7 @@ bool moveLaneKeys({
       entry.layer.setRetimeProperty(value: BridgeScalar.keyframed(next));
       return true;
 
-    case FoldMaskValueRow(:final mask, :final value):
+    case FoldMaskValueRow(:final mask, :final value, :final vertex):
       if (value == MaskValue.path) {
         // A path key is a whole shape, so a *single* move goes to the engine
         // rather than the frontend rebuilding a list of them (K-340). Several
@@ -520,13 +855,23 @@ bool moveLaneKeys({
         if (next == null) return false;
         return entry.layer.setMaskPathKeys(id: mask.id, keys: next);
       }
-      final scalar = maskScalarOf(mask, value);
+      final scalar = maskScalarOf(mask, value, vertex);
       if (scalar is! BridgeScalar_Keyframed) return false;
       final next = moved(scalar.field0);
       if (next == null) return false;
       entry.layer.setMask(
-        mask: maskWithScalar(mask, value, BridgeScalar.keyframed(next)),
+        mask: maskWithScalar(mask, value, BridgeScalar.keyframed(next), vertex),
         at: null,
+      );
+      return true;
+
+    case FoldStrokeValueRow(:final stroke, :final value):
+      final scalar = strokeScalarOf(stroke, value);
+      if (scalar is! BridgeScalar_Keyframed) return false;
+      final next = moved(scalar.field0);
+      if (next == null) return false;
+      entry.layer.setStroke(
+        stroke: strokeWithScalar(stroke, value, BridgeScalar.keyframed(next)),
       );
       return true;
 
@@ -552,10 +897,17 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
       FoldMaskRow(:final mask) => '${masksPath(layerId)}/${mask.id}',
-      FoldMaskValueRow(:final mask, :final value) =>
-        '${masksPath(layerId)}/${mask.id}/${value.name}',
+      FoldMaskValueRow(:final mask, :final value, :final vertex) =>
+        '${masksPath(layerId)}/${mask.id}/${value.name}'
+            '${vertex < 0 ? '' : '/$vertex'}',
       FoldStrokeRow(:final stroke) => '${paintPath(layerId)}/${stroke.id}',
+      FoldStrokeValueRow(:final stroke, :final value) =>
+        '${paintPath(layerId)}/${stroke.id}/${value.name}',
       FoldShapeRow(:final item) => '${contentsPath(layerId)}/${item.id}',
+      FoldShapeValueRow(:final item, :final value) =>
+        '${contentsPath(layerId)}/${item.id}/${value.name}',
+      FoldShapePaintRow(:final item, :final which) =>
+        '${contentsPath(layerId)}/${item.id}/${which.name}',
     };
 
 /// Whether [path] sits under [ancestor] — a property under its group, a
@@ -717,6 +1069,34 @@ List<LayerFoldRow> layerFoldRows({
     if (contentsOpen) {
       for (final item in info.shapeContents) {
         rows.add(FoldShapeRow(item, depth: 2));
+        // What the inside of the path is painted with comes first, because it
+        // is what the rest of the rows modify (K-555). A shape with no fill
+        // has no colour to show and nothing to ramp.
+        if (item.fill != null) {
+          rows.add(FoldShapePaintRow(item, ShapePaint.fill, depth: 3));
+          rows.add(FoldShapePaintRow(item, ShapePaint.gradient, depth: 3));
+          if (item.gradient != 0) {
+            rows.add(
+                FoldShapePaintRow(item, ShapePaint.gradientColour, depth: 3));
+          }
+        }
+        // Its numbers sit under it, the way a stroke's trim sits under the
+        // stroke (K-549, K-551), and in the order they read: where the art
+        // begins, where it ends, and how far the pair is slid along.
+        for (final value in ShapeValue.values) {
+          // The dashes' rows belong to the outline, so they appear only where
+          // there is one to dash — three dead rows on a fill-only shape would
+          // be three promises the item cannot keep.
+          if (isDashValue(value) && item.stroke == null) continue;
+          // The repeater's step is nine rows of nothing until there is more
+          // than one copy to step between, so Copies is the row that opens
+          // them (K-553).
+          if (isRepeatStepValue(value) && !isRepeated(item)) continue;
+          // The gradient's two points aim a ramp; with no ramp there is
+          // nothing for them to aim (K-555).
+          if (isGradientValue(value) && item.gradient == 0) continue;
+          rows.add(FoldShapeValueRow(item, value, depth: 3));
+        }
       }
     }
   }
@@ -741,7 +1121,15 @@ List<LayerFoldRow> layerFoldRows({
         // the effect — shape first, because it is what the mask *is*, then the
         // numbers in the order they apply.
         for (final value in MaskValue.values) {
+          if (value == MaskValue.vertexFeather) continue;
           rows.add(FoldMaskValueRow(mask, value, depth: 3));
+        }
+        // The per-point widths, under the one width they vary from (K-545),
+        // and only once the mask actually carries them: a mask feathered the
+        // ordinary way shows the four rows it always did.
+        for (var i = 0; i < mask.vertexFeather.length; i++) {
+          rows.add(FoldMaskValueRow(mask, MaskValue.vertexFeather,
+              depth: 3, vertex: i));
         }
       }
     }
@@ -761,6 +1149,12 @@ List<LayerFoldRow> layerFoldRows({
     if (paintOpen) {
       for (final stroke in info.paint) {
         rows.add(FoldStrokeRow(stroke, depth: 2));
+        // Its two trim values sit under it, the way a mask's numbers sit under
+        // the mask (K-549) — and in the order they read: where the mark
+        // begins, then where it ends.
+        for (final value in StrokeValue.values) {
+          rows.add(FoldStrokeValueRow(stroke, value, depth: 3));
+        }
       }
     }
   }

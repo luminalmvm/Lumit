@@ -17,8 +17,19 @@ from the plan and are worth knowing:
   points, not by the curve. That is now written down in both places and tested on
   both sides.
 
-Not built: nested groups and the shape modifiers, gradient fills, dashed strokes,
-joins and caps other than round, and animated paths. Dragging a shape's points on
+**The modifiers arrived as fields, not as a tree (K-551).** After Effects keeps
+Trim Paths, the Repeater and the rest as entries in a nested group, and their
+*position* in that group is what decides what they act on. Lumit's list is flat
+and has no positions to read, so each modifier is a property of the item it
+modifies and the order they apply in is fixed and written down
+([../03-DATA-MODEL.md](../03-DATA-MODEL.md) §7.2.1). The cost is that you cannot
+trim two items as one; the gain is that a modifier is a `Property` beside every
+other `Property`, so it keys, undoes, previews and crosses the bridge with no new
+machinery at all. Every modifier is left out of the file until it is used, so the
+tree §9.2 still plans re-homes these fields rather than replacing them.
+
+Not built: nested groups, wiggle paths, joins and caps other than round, and
+animated paths. Dragging a shape's points on
 the picture **is** built (K-307): the gesture K-224 gave mask points serves shape
 contents too, since both hold the same `BezierPath`. Mind the coordinates: a shape
 item's vertices are in the *art's* space, and the layer's pixels start at the art's
@@ -75,6 +86,93 @@ show. A shape layer is a path that **is** the picture. The geometry is the same
 - **Nothing is dressed up as a shape layer until there is one.** Until the kind
   exists the tools say so (K-222). A solid with a mask would be a lie in the
   layer list.
+
+## The modifiers, one at a time
+
+**Trim paths.** The hard part was already written: a paint stroke's write-on
+(K-549) cuts a polyline by arc length, and that is exactly what a trim is. The
+shape side flattens the bezier, cuts with the same function, and hands the piece
+back. Three things were decided rather than derived:
+
+* **The fill is cut too.** After Effects closes the surviving piece and fills
+  that, so a half-trimmed circle is a filled half circle rather than a
+  half-outlined whole one. A polyline is a `BezierPath` with every handle at
+  zero, so the piece goes through the *same* fill rasteriser the whole path does.
+* **The offset moves the seam, not the window.** For a closed path, sliding the
+  trimmed piece round can put it astride the point the path starts at, which
+  would be two pieces to draw. Re-starting the polyline `offset` per cent along
+  instead makes it one contiguous piece again, and the ordinary trim then cuts
+  it. An open path has no seam, so it gets the window shifted and clamped: slide
+  it far enough and it runs off the end, which is the honest answer.
+* **An untrimmed item never sees a polyline.** `trims_at` is the guard: with the
+  trim at 0..100 and no offset the item is rasterised from its curve exactly as
+  it always was, so the identity case is byte-for-byte what it was before there
+  were modifiers.
+
+The layer's **natural size is still the untrimmed box**, for the reason a paint
+stroke's bounds give: a box that shrank as a write-on played would make the layer
+breathe, and every cache keyed on its size would churn.
+
+**Dashes.** The same cut again: the outline is already a polyline being handed
+to the paint rasteriser, so dashing it is walking the pattern along its length
+and handing over several runs instead of one. Two things worth knowing:
+
+* **The ceiling is deliberate.** A dash pattern is a length, and a path can be a
+  million units long, so the piece count is unbounded in principle. Past 4096
+  pieces the outline is drawn **solid** rather than truncated — at that density
+  it is a solid line to the eye, so the wrong answer nobody can see beats the
+  wrong answer that stops half way along.
+* **There is no "add dashes" gesture.** Writing Dash or Gap on an item that has
+  no list makes the pair. The alternative was a menu item whose only job was to
+  put two zeros in a list, and a row that reads zero until you type in it says
+  the same thing with nothing to find.
+
+**The repeater.** The third modifier is the first that puts art where the path
+is not, and that is the whole of its difficulty. Three things fell out of it:
+
+* **The layer's box had to learn a clock.** A trim only ever takes art away, so
+  the box could stay the untrimmed one; a repeater *adds* art outside the path,
+  so the box has to hold the copies, and a keyed repeater moves them every
+  frame. `bounds` and `contents_bounds` take a time now, and the frontend
+  measures a shape layer fresh rather than from the revision-keyed cache. The
+  price is named in [../02-DECISIONS.md](../02-DECISIONS.md) K-553 and is real:
+  a repeater keyed to grow up or left slides the art, because a shape layer's
+  position is pinned to the box's corner.
+* **The transform is six numbers here, not a matrix type.** This is the only
+  place in `lumit-core` that composes transforms in the art's own space; a
+  dependency for six multiplications would be a dependency for six
+  multiplications. The frontend carries the same six for the wireframe, and the
+  two are tested to agree.
+* **The ceiling is the rasteriser, not the format.** Every copy is a scanline
+  pass over the whole layer, so a hundred copies is a hundred passes. A count
+  past `MAX_COPIES` is *held* rather than refused — the number is a slider —
+  and lifting the ceiling means teaching the mask rasteriser to work in one
+  copy's own box, which is a change over there rather than here.
+
+**Gradient fills.** The ramp is the Gradient effect's arithmetic, written again
+rather than called: `cpu::gradient` fills a whole f32 raster and replaces what
+was there, so reusing it would have meant an f32 buffer the size of the layer
+*per drawn copy* to composite back through coverage. What is shared is the
+*reading* — the linear projection, the radial distance, the single epsilon on
+the squared axis length — and the doc comments point at each other so the two
+cannot drift without somebody noticing. The colours are mixed in **linear** and
+encoded after, through a 256-entry table built once per drawn copy: a
+transcendental per pixel done honestly is the alternative, and the table is
+finer than an 8-bit result can show.
+
+The gradient's points are in the art's own coordinates and are placed through
+the *copy's* transform, which is what makes a repeated copy carry its ramp
+rather than sample the original's.
+
+**Offset paths.** Thirty lines, and the temptation was to make it three hundred.
+The polyline is offset segment by segment, the corners that open are filled with
+a round join, and the corners that close are joined straight — which is where the
+self-intersections come from. The alternatives were a proper polygon-clipping
+library (a dependency and a determinism question, for a case a slider walks back
+out of) or a miter join with a limit (a second join style, when the crate draws
+exactly one). Neither earned its keep. The **winding** is read from the shoelace
+area so a positive amount grows a path written either way round; that is one loop
+and it removes the only way the feature could be silently backwards.
 
 ## The trap to expect
 

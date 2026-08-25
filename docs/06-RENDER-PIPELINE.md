@@ -62,7 +62,9 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
    [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2) has no asset at all: its contents are rasterised
    into their own bounding box, which is also the layer's natural size — the one kind whose size
    moves when it is edited. Each item is filled through the mask rasteriser and then outlined
-   through the paint rasteriser, in list order.
+   through the paint rasteriser, in list order, each after its **modifiers** have had its geometry
+   ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2.1) — read, like the layer's masks and paint, on the
+   **layer's** own clock (K-213), so a keyed trim travels with the layer.
 2. **Retime** — for a Footage layer, the retime map converts layer time to source time and the
    layer's frame-interpolation policy (nearest / blend / flow) synthesises non-integer source
    frames ([04-RETIMING.md](04-RETIMING.md)). Overrun holds the boundary frame. Retime affects
@@ -92,8 +94,10 @@ For a visual layer at comp time `t`, the compiled subgraph is, in order:
    about whether the output depends on the coordinate, and Gradient, Vignette, Lightning and
    Scribble are all `Roi::Exact` and all positional.
 3. **Masks** — bezier paths combined top-to-bottom by mode (none, add, subtract, intersect,
-   difference; lighten and darken are not built yet), each with feather, expansion, opacity,
-   inversion — applied to a mask in that order, before it folds into the stack
+   lighten, darken, difference — the last two being max and min against the running total,
+   K-545), each with feather, expansion, opacity, inversion — applied to a mask in that order,
+   before it folds into the stack. A mask's feather is one width, or a width per vertex
+   interpolated along the path (K-545)
    ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7). Masks gate the layer's alpha before any effect
    runs, so effects see the masked image.
 4. **Effect stack** — top-to-bottom ([08-EFFECTS.md](08-EFFECTS.md)). Each effect sees the

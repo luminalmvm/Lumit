@@ -972,6 +972,10 @@ class _Stage extends StatelessWidget {
       );
     }
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
+    // Where the playhead is in seconds, which is the clock a shape item's keys
+    // cross the bridge on: a keyed repeater's copies are part of the layer's
+    // box, so the wireframe has to be measured at the frame on screen (K-553).
+    final playheadSeconds = uiState.playheadFrame.value / model.heldFps;
     double? still(BridgeScalar s) => s is BridgeScalar_Static ? s.field0 : null;
 
     final out = <LayerBox>[];
@@ -1011,8 +1015,8 @@ class _Stage extends StatelessWidget {
         // document holds the old one until the edit ends, so a box measured
         // from it would not grow with the words.
         bounds: live == null
-            ? uiState.layerBounds
-                .boundsOf(entry, compSize: compSize, revision: revision)
+            ? uiState.layerBounds.boundsOf(entry,
+                compSize: compSize, revision: revision, t: playheadSeconds)
             : textLayerBounds(live.text, live.size),
         draggable: true,
         scalable: sx != null && sy != null && rotation != null,
@@ -1030,8 +1034,10 @@ class _Stage extends StatelessWidget {
         shapeContents: entry.info.shapeContents,
         // Where the art's box starts, which is where the layer's pixels do
         // (K-308) — without it every drawn point sat a box away from its art.
-        artOrigin:
-            shapeContentsRect(entry.info.shapeContents)?.topLeft ?? Offset.zero,
+        artOrigin: shapeContentsRect(entry.info.shapeContents,
+                    t: playheadSeconds)
+                ?.topLeft ??
+            Offset.zero,
       ));
     }
     return out;

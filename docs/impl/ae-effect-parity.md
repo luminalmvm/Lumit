@@ -555,9 +555,14 @@ roadmap item of its own), Rotobrush (models — plugin era, K-390's rule).
   *sample position*, and where the two paths contract a multiply-add differently the
   position moves in its last bits, which a hard edge magnifies into a whole pixel of
   colour. Offset alone kept the ULP metric: its arithmetic has no expression to fuse. Both are recorded as K-399.
-  Two deliberate divergences from AE, both recorded in docs/08: **Turbulent displace's
-  Amount is a length in px@comp** (§3.38 decision 5, §3.37 decision 1's reasoning again),
-  and **Tile's default tiles** (§3.39) where AE's is the identity, per §1.2.
+  One deliberate divergence from AE survives: **Turbulent displace's Amount is a length in
+  px@comp** (§3.38 decision 5, §3.37 decision 1's reasoning again). The second, **Tile's
+  default tiles** (§3.39), was **withdrawn by K-542**: §1.2 asks that an effect look right
+  when it lands, and for an effect whose whole subject is *where the picture is repeated to*
+  the answer is that it looks unchanged — AE's own default, and §3.5's Transform reasoning.
+  K-542 also fills in the half of Motion Tile that was missing: Output width and height
+  above 100 % grow the working raster, so the copies land past the layer's edges and the
+  effects after Tile in the stack see them.
 - **Generate batch (2026-08-20)** — Fill (§3.34), Gradient (§3.35), Noise (§3.36) and
   Fractal noise (§3.37), with their WGSL kernels, CPU oracles (worst 1 fp16 ULP measured
   across the whole sweep, the noise core included), manual pages and docs/11 seed-table

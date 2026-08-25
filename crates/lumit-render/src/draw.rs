@@ -157,6 +157,19 @@ pub enum DrawSource {
         /// keyer — realises it every time. A collapsed Precomp never reaches
         /// here: its inner draws are spliced into the parent's list.
         key: Option<u128>,
+        /// The Precomp layer's own paint strokes (K-547), stamped into the
+        /// nested picture once it has been realised. Every other kind of
+        /// layer has its strokes baked into `Pixels` by `build`'s
+        /// `pixels_for`; a Precomp has no pixels until it is rendered, so
+        /// they travel with the draw and are applied on the other side.
+        /// Empty on the overwhelming majority of Precomp layers, which is
+        /// the case that costs nothing.
+        paint: Vec<lumit_core::paint::PaintStroke>,
+        /// The layer time `paint`'s keyed Start and End are read at (K-549),
+        /// which is the same clock every other animated value on this layer
+        /// is read at (K-213). Meaningless — and unread — when `paint` is
+        /// empty.
+        paint_time: f64,
     },
     /// An adjustment layer's staging point (docs/06 §1.5): no pixels of its
     /// own — the draw's `fx` runs on the composite of every draw before it,
@@ -254,13 +267,15 @@ pub struct CompLayerDraw {
     /// keyed by frame offset — same sRGB8 form and decoded size as a Pixels
     /// source. Empty unless the stack is temporal.
     pub neighbours: Vec<(i32, Vec<u8>, u32, u32)>,
-    /// The layer's dense forward flow field `(u, v, conf, w, h)` for Fast
-    /// motion blur (docs/08 §3.2), carried from its decode job — `w × h` matches
-    /// the decoded source. `conf` is the per-pixel confidence in 0..1 (FX-19)
-    /// that tapers the streak; Datamosh reads only `(u, v)`. None unless the
-    /// stack wants one.
+    /// The layer's dense forward flow fields `(offset, u, v, conf, w, h)`, one
+    /// per neighbour offset a flow-consuming effect asked for (K-544) — Fast
+    /// motion blur (docs/08 §3.2) reads `+1`, Datamosh (§3.12) reads `-1`, and a
+    /// stack with both carries both rather than one of them silently doing
+    /// nothing. Carried from the decode job; `w × h` matches the decoded source.
+    /// `conf` is the per-pixel confidence in 0..1 (FX-19) that tapers the
+    /// streak; Datamosh reads only `(u, v)`. Empty unless the stack wants one.
     #[allow(clippy::type_complexity)]
-    pub flow_field: Option<(Vec<f32>, Vec<f32>, Vec<f32>, u32, u32)>,
+    pub flow_fields: Vec<(i32, Vec<f32>, Vec<f32>, Vec<f32>, u32, u32)>,
     /// The ordered file paths of the layer's enabled built-in `lut` effects
     /// (docs/08 §3.11; None = unset). Because `resolve_stack` keeps the same
     /// filter and order and a `lut` effect always resolves to exactly one
@@ -291,8 +306,9 @@ pub struct CompLayerDraw {
     /// `MatteRole` answers both — so nothing here needs to know.
     pub mattes: Vec<LayerInputDraw>,
     /// **Every path op's mask** (K-408, docs/08 §1.2): one flattened polyline
-    /// per op whose effect declares a [`ParamKind::MaskPath`](lumit_core::fx::
-    /// ParamKind::MaskPath) row, 1:1 and in stack order with them — the same
+    /// per [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) **row**
+    /// of every op that declares any (K-546: the Matte key declares two), in
+    /// stack order and then declaration order within an op — the same
     /// one-predicate, one-order rule [`Self::mattes`] follows, with its own
     /// counter because its predicate is a different one (most effects take a
     /// matte; almost none takes a path).

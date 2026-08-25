@@ -8,8 +8,8 @@
 //! smooth, not stair-stepped. Several masks combine top to bottom by their
 //! mode (add, subtract, intersect, difference), and each can be softened
 //! (feather) or grown/shrunk (expansion) before it joins the stack. The path
-//! can be **keyframed** (see [`PathKeyframe`]); still out of scope is feather
-//! that varies along the path.
+//! can be **keyframed** (see [`PathKeyframe`]), and the feather can be given a
+//! width **per vertex** rather than one width all the way round (K-545).
 
 use std::borrow::Cow;
 
@@ -56,7 +56,6 @@ pub struct PathKeyframe {
 }
 
 /// How a mask joins the stack above it (docs/06-RENDER-PIPELINE.md §2, step 3).
-/// Lighten and Darken are deliberately not here yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum MaskMode {
     /// Geometry only: the path is drawn and editable but gates nothing.
@@ -65,12 +64,23 @@ pub enum MaskMode {
     Add,
     Subtract,
     Intersect,
+    /// The greater of this mask and what the stack holds (K-545).
+    Lighten,
+    /// The lesser of the two (K-545).
+    Darken,
     Difference,
 }
 
 impl MaskMode {
     fn is_add(&self) -> bool {
         matches!(self, MaskMode::Add)
+    }
+
+    /// Whether a lone mask in this mode should build up from an empty frame
+    /// rather than cut into a full one. Add and Lighten both take the mask's
+    /// own shape from nothing; every other mode needs a picture to work on.
+    fn starts_empty(self) -> bool {
+        matches!(self, MaskMode::Add | MaskMode::Lighten)
     }
 }
 
@@ -95,7 +105,7 @@ fn is_static_zero(p: &Property) -> bool {
 /// grows the object. Reading accepts either, so a project written by any build
 /// opens here, and one written by this build opens in an older one as long as
 /// nobody keyed the mask.
-mod still_or_keyed {
+pub(crate) mod still_or_keyed {
     use super::{Animation, Property};
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -117,6 +127,41 @@ mod still_or_keyed {
             Either::Still(v) => Property::fixed(v),
             Either::Keyed(p) => p,
         })
+    }
+}
+
+/// The same bare-number-while-still encoding as [`still_or_keyed`], for the
+/// per-vertex feather list (K-545). A list of plain numbers is what a mask
+/// nobody has keyed writes, so a `.lum` stays readable by eye.
+pub(crate) mod still_or_keyed_vec {
+    use super::{Animation, Property};
+    use serde::{ser::SerializeSeq, Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &[Property], s: S) -> Result<S::Ok, S::Error> {
+        let mut seq = s.serialize_seq(Some(v.len()))?;
+        for p in v {
+            match (&p.animation, p.extra.is_empty()) {
+                (Animation::Static(x), true) => seq.serialize_element(x)?,
+                _ => seq.serialize_element(p)?,
+            }
+        }
+        seq.end()
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<Property>, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Either {
+            Still(f64),
+            Keyed(Property),
+        }
+        Ok(Vec::<Either>::deserialize(d)?
+            .into_iter()
+            .map(|e| match e {
+                Either::Still(v) => Property::fixed(v),
+                Either::Keyed(p) => p,
+            })
+            .collect())
     }
 }
 
@@ -150,6 +195,18 @@ pub struct Mask {
         skip_serializing_if = "is_static_zero"
     )]
     pub feather: Property,
+    /// A width of its own for each **vertex** of the path, in layer pixels,
+    /// running linearly along each segment between them (K-545). Empty — the
+    /// ordinary mask — means [`Self::feather`] all the way round, and is
+    /// absent from the file, so a mask nobody has varied writes exactly the
+    /// bytes it always did. An entry short of the path's vertex count falls
+    /// back to [`Self::feather`] for the vertices it does not reach.
+    #[serde(
+        default,
+        with = "still_or_keyed_vec",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub vertex_feather: Vec<Property>,
     /// Grow (+) or shrink (−) the shape, in layer pixels. Animatable (K-340).
     #[serde(
         default = "Property::zero",
@@ -178,6 +235,41 @@ impl Mask {
         self.mode != MaskMode::None && self.opacity.value_at(t) > 0.0
     }
 
+    /// The feather this mask asks for at `t`, in layer pixels: one width, and
+    /// the per-vertex widths **only when they actually differ** (K-545).
+    ///
+    /// `n` is the vertex count of the path being drawn, which is not always
+    /// [`Self::path`]'s: an animated path whose keys hold different point
+    /// counts is reconciled upward by [`resample`] before it is rasterised, and
+    /// the widths are read against the reconciled vertices. Vertices the list
+    /// does not reach take the uniform width.
+    ///
+    /// Answering "they are all the same" is what keeps the ordinary mask on the
+    /// cheap path: a varying feather costs a second distance transform, and a
+    /// mask whose widths happen to be equal should not pay for one.
+    fn feather_widths_at(&self, n: usize, t: f64) -> (f64, Option<Vec<f64>>) {
+        let finite = |v: f64| if v.is_finite() { v } else { 0.0 };
+        let uniform = finite(self.feather.value_at(t)).max(0.0);
+        if self.vertex_feather.is_empty() || n == 0 {
+            return (uniform, None);
+        }
+        let widths: Vec<f64> = (0..n)
+            .map(|i| {
+                self.vertex_feather
+                    .get(i)
+                    .map_or(uniform, |p| finite(p.value_at(t)).max(0.0))
+            })
+            .collect();
+        let Some(&first) = widths.first() else {
+            return (uniform, None);
+        };
+        if widths.iter().all(|w| *w == first) {
+            (first, None)
+        } else {
+            (uniform, Some(widths))
+        }
+    }
+
     /// A fresh, default-switched mask around `path`: Add mode, full opacity,
     /// hard-edged, unanimated.
     fn from_path(name: &str, path: BezierPath) -> Self {
@@ -190,6 +282,7 @@ impl Mask {
             opacity: Property::fixed(100.0),
             mode: MaskMode::Add,
             feather: Property::zero(),
+            vertex_feather: Vec::new(),
             expansion: Property::zero(),
             extra: serde_json::Map::new(),
         }
@@ -536,14 +629,16 @@ pub fn rasterise(path: &BezierPath, w: u32, h: u32, sx: f64, sy: f64) -> Vec<u8>
 /// same amount in both directions, and the two differ only when a decode is
 /// non-square.
 fn mask_coverage(mask: &Mask, w: u32, h: u32, sx: f64, sy: f64, t: f64) -> Vec<u8> {
-    let cov = rasterise(&mask.path_at(t), w, h, sx, sy);
+    let path = mask.path_at(t);
+    let cov = rasterise(&path, w, h, sx, sy);
     let scale = (sx + sy) * 0.5;
     let finite = |v: f64| if v.is_finite() { v } else { 0.0 };
-    let feather = (finite(mask.feather.value_at(t)).max(0.0) * scale) as f32;
+    let (uniform, varying) = mask.feather_widths_at(path.vertices.len(), t);
+    let feather = (uniform * scale) as f32;
     let expansion = (finite(mask.expansion.value_at(t)) * scale) as f32;
     // Fast path: the overwhelmingly common mask is hard-edged and unexpanded,
     // and must come back byte for byte as the rasteriser drew it.
-    if feather == 0.0 && expansion == 0.0 {
+    if feather == 0.0 && expansion == 0.0 && varying.is_none() {
         return cov;
     }
 
@@ -553,11 +648,140 @@ fn mask_coverage(mask: &Mask, w: u32, h: u32, sx: f64, sy: f64, t: f64) -> Vec<u
     // edge, falling linearly over the pixel it crosses), so expanding alone
     // slides a smooth edge rather than stamping a jagged one.
     let ramp = feather.max(1.0);
+    let widths = varying.map(|at| feather_map(&path, &at, w, h, sx, sy, scale));
     let mut out = cov;
-    for (o, d) in out.iter_mut().zip(dist) {
+    for (i, (o, d)) in out.iter_mut().zip(dist).enumerate() {
+        // A pixel the boundary walk never reached - a path entirely off the
+        // raster - has no nearest width, and takes the uniform one.
+        let ramp = match widths.as_ref().and_then(|m| m.get(i)) {
+            Some(v) if v.is_finite() => v.max(1.0),
+            _ => ramp,
+        };
         *o = (((0.5 + (d + expansion) / ramp).clamp(0.0, 1.0)) * 255.0).round() as u8;
     }
     out
+}
+
+/// The feather width, in **raster** pixels, at every pixel of a mask whose
+/// vertices carry widths of their own (K-545).
+///
+/// In plain terms: the soft edge can be wide in one place and narrow in
+/// another, so "how wide is the ramp here" stops being one number and becomes
+/// a picture. This builds that picture.
+///
+/// Widths live at the vertices and run straight-line along each segment
+/// between them. The same fixed flattening [`rasterise`] uses walks the
+/// boundary and stamps the interpolated width into whichever pixel it lands
+/// in; every other pixel then takes the width of the **nearest** stamped one
+/// ([`spread_seeds`]). That pairing is the point: the distance field measures
+/// each pixel against the nearest piece of edge, so the width it is scaled by
+/// should come from that same piece.
+fn feather_map(
+    path: &BezierPath,
+    widths: &[f64],
+    w: u32,
+    h: u32,
+    sx: f64,
+    sy: f64,
+    scale: f64,
+) -> Vec<f32> {
+    const SEGS: usize = 24;
+    let mut seed = vec![f32::NAN; (w * h) as usize];
+    let n = path.vertices.len();
+    for i in 0..n {
+        let (Some(a), Some(b)) = (path.vertices.get(i), path.vertices.get((i + 1) % n)) else {
+            continue;
+        };
+        let wa = widths.get(i).copied().unwrap_or(0.0);
+        let wb = widths.get((i + 1) % n).copied().unwrap_or(0.0);
+        let p0 = (a.pos.0 * sx, a.pos.1 * sy);
+        let p1 = ((a.pos.0 + a.tan_out.0) * sx, (a.pos.1 + a.tan_out.1) * sy);
+        let p2 = ((b.pos.0 + b.tan_in.0) * sx, (b.pos.1 + b.tan_in.1) * sy);
+        let p3 = (b.pos.0 * sx, b.pos.1 * sy);
+        // `..=SEGS` so the segment's far end is stamped too: the next segment
+        // starts there and stamps it again with the same width, and an open
+        // run would otherwise leave its final vertex bare.
+        for step in 0..=SEGS {
+            let t = step as f64 / SEGS as f64;
+            let u = 1.0 - t;
+            let x = u * u * u * p0.0
+                + 3.0 * u * u * t * p1.0
+                + 3.0 * u * t * t * p2.0
+                + t * t * t * p3.0;
+            let y = u * u * u * p0.1
+                + 3.0 * u * u * t * p1.1
+                + 3.0 * u * t * t * p2.1
+                + t * t * t * p3.1;
+            if !(x >= 0.0 && y >= 0.0 && x < f64::from(w) && y < f64::from(h)) {
+                continue;
+            }
+            if let Some(cell) = seed.get_mut(y as usize * w as usize + x as usize) {
+                *cell = ((wa + (wb - wa) * t) * scale) as f32;
+            }
+        }
+    }
+    spread_seeds(&seed, w as usize, h as usize)
+}
+
+/// Give every pixel the value of the nearest seeded one. `NaN` marks a pixel
+/// with no seed, on the way in and - when nothing was seeded at all - on the
+/// way out.
+///
+/// The **feature** half of the same Felzenszwalb and Huttenlocher transform
+/// [`signed_distance`] uses for the distance: the column pass records which row
+/// of each column holds its nearest seed, and the row pass records which column
+/// won, so the two together name the seeding pixel and not merely how far away
+/// it is.
+fn spread_seeds(seed: &[f32], w: usize, h: usize) -> Vec<f32> {
+    const FAR: f32 = 1e20;
+    if w == 0 || h == 0 || seed.len() < w * h {
+        return seed.to_vec();
+    }
+    let mut f: Vec<f32> = seed
+        .iter()
+        .map(|v| if v.is_nan() { FAR } else { 0.0 })
+        .collect();
+    let n = w.max(h);
+    let mut line = vec![0.0f32; n];
+    let mut out = vec![0.0f32; n];
+    let mut arg = vec![0u32; n];
+    let mut v = vec![0usize; n];
+    let mut z = vec![0.0f32; n + 1];
+    let mut src_y = vec![0u32; w * h];
+    for x in 0..w {
+        for y in 0..h {
+            line[y] = f[y * w + x];
+        }
+        edt_1d(
+            &line[..h],
+            &mut out[..h],
+            &mut arg[..h],
+            &mut v[..h],
+            &mut z[..=h],
+        );
+        for y in 0..h {
+            f[y * w + x] = out[y];
+            src_y[y * w + x] = arg[y];
+        }
+    }
+    let mut vals = vec![f32::NAN; w * h];
+    for y in 0..h {
+        let row = y * w;
+        line[..w].copy_from_slice(&f[row..row + w]);
+        edt_1d(
+            &line[..w],
+            &mut out[..w],
+            &mut arg[..w],
+            &mut v[..w],
+            &mut z[..=w],
+        );
+        for x in 0..w {
+            let sx = (arg[x] as usize).min(w - 1);
+            let sy = (src_y[row + sx] as usize).min(h - 1);
+            vals[row + x] = seed[sy * w + sx];
+        }
+    }
+    vals
 }
 
 /// Signed distance in pixels from each pixel centre to the mask edge —
@@ -623,11 +847,19 @@ fn signed_distance(cov: &[u8], w: usize, h: usize) -> Vec<f32> {
     let mut out = vec![0.0f32; n];
     let mut v = vec![0usize; n];
     let mut z = vec![0.0f32; n + 1];
+    // Which parabola won is [`spread_seeds`]'s business, not this one's.
+    let mut arg = vec![0u32; n];
     for x in 0..w {
         for y in 0..h {
             line[y] = f[y * w + x];
         }
-        edt_1d(&line[..h], &mut out[..h], &mut v[..h], &mut z[..=h]);
+        edt_1d(
+            &line[..h],
+            &mut out[..h],
+            &mut arg[..h],
+            &mut v[..h],
+            &mut z[..=h],
+        );
         for y in 0..h {
             f[y * w + x] = out[y];
         }
@@ -635,7 +867,13 @@ fn signed_distance(cov: &[u8], w: usize, h: usize) -> Vec<f32> {
     for y in 0..h {
         let row = y * w;
         line[..w].copy_from_slice(&f[row..row + w]);
-        edt_1d(&line[..w], &mut out[..w], &mut v[..w], &mut z[..=w]);
+        edt_1d(
+            &line[..w],
+            &mut out[..w],
+            &mut arg[..w],
+            &mut v[..w],
+            &mut z[..=w],
+        );
         f[row..row + w].copy_from_slice(&out[..w]);
     }
 
@@ -647,11 +885,16 @@ fn signed_distance(cov: &[u8], w: usize, h: usize) -> Vec<f32> {
 }
 
 /// The 1D squared distance transform of a sampled function: `out[q]` is the
-/// lowest `f[p] + (q − p)²` over all `p`. `v` and `z` are scratch (the indices
-/// of the parabolas forming the lower envelope, and where they cross).
-fn edt_1d(f: &[f32], out: &mut [f32], v: &mut [usize], z: &mut [f32]) {
+/// lowest `f[p] + (q − p)²` over all `p`, and `arg[q]` is the `p` that won it.
+/// `v` and `z` are scratch (the indices of the parabolas forming the lower
+/// envelope, and where they cross).
+///
+/// The `arg` half costs one store per sample and is what [`spread_seeds`] needs
+/// to carry a *value* out from the nearest seed rather than only a distance;
+/// [`signed_distance`] hands it a scratch buffer and ignores it.
+fn edt_1d(f: &[f32], out: &mut [f32], arg: &mut [u32], v: &mut [usize], z: &mut [f32]) {
     let n = f.len();
-    if n == 0 || out.len() < n || v.len() < n || z.len() < n + 1 {
+    if n == 0 || out.len() < n || arg.len() < n || v.len() < n || z.len() < n + 1 {
         return;
     }
     let sq = |i: usize| (i as f32) * (i as f32);
@@ -682,6 +925,7 @@ fn edt_1d(f: &[f32], out: &mut [f32], v: &mut [usize], z: &mut [f32]) {
         }
         let p = v[k];
         *o = (q as f32 - p as f32).powi(2) + f[p];
+        arg[q] = p as u32;
     }
 }
 
@@ -741,7 +985,7 @@ pub fn combined_coverage(
         .find(|m| m.does_something_at(t))
         .map(|m| m.mode)
     {
-        Some(MaskMode::Add) => 0,
+        Some(mode) if mode.starts_empty() => 0,
         // Including `None`: no mask does anything, so nothing is masked and the
         // layer is whole. Starting at zero here would hide a layer because it
         // carries one switched-off mask, which reads as the mask doing the
@@ -767,6 +1011,10 @@ pub fn combined_coverage(
                 MaskMode::Add => (*t + c).min(255),
                 MaskMode::Subtract => t.saturating_sub(c),
                 MaskMode::Intersect => (*t).min(c),
+                // Max and min against what the stack holds, which is what
+                // After Effects means by these two (K-545).
+                MaskMode::Lighten => (*t).max(c),
+                MaskMode::Darken => (*t).min(c),
                 MaskMode::Difference => t.abs_diff(c),
             };
         }
@@ -832,6 +1080,21 @@ pub struct MaskPolyline {
     /// point is the first one repeated, so the final `arc` entry is the full
     /// perimeter and a consumer never has to special-case the join.
     pub closed: bool,
+    /// The mask's own soft-edge width at this frame, px@comp — total width,
+    /// half either side of the curve, exactly as the mask itself draws it
+    /// (K-546). Zero for a hard edge, and for every way of naming nothing.
+    ///
+    /// It rides here because an effect that *fills* the shape has to feather
+    /// its fill the way the mask feathers its coverage; an effect that merely
+    /// walks the curve ignores it. One number, not the K-545 per-vertex
+    /// widths: a varying width would have to ride per segment, and the only
+    /// consumer so far is a garbage matte, where the mask's own uniform width
+    /// is what the eye is comparing against.
+    pub feather: f32,
+    /// The mask's own grow (+) / shrink (−) at this frame, px@comp — where the
+    /// edge sits relative to the drawn curve (K-546). Zero for an unexpanded
+    /// mask.
+    pub expansion: f32,
 }
 
 impl MaskPolyline {
@@ -958,6 +1221,10 @@ pub fn flatten_path(path: &BezierPath, tolerance_px: f64) -> MaskPolyline {
         points,
         arc,
         closed: path.closed,
+        // The curve alone. Whoever knows which *mask* this came from fills the
+        // widths in (see `mask_path_at`); flattening a bare path does not.
+        feather: 0.0,
+        expansion: 0.0,
     }
 }
 
@@ -1003,7 +1270,19 @@ pub fn mask_path_at(
     t: f64,
 ) -> MaskPolyline {
     match mask_index_for_path_param(masks, named, self_default).and_then(|i| masks.get(i)) {
-        Some(mask) => flatten_path(&mask.path_at(t), MASK_PATH_TOLERANCE_PX),
+        Some(mask) => {
+            let path = mask.path_at(t);
+            let mut poly = flatten_path(&path, MASK_PATH_TOLERANCE_PX);
+            // The soft edge and the expansion travel with the curve (K-546):
+            // an effect filling the shape has to soften and slide its fill
+            // exactly where the mask itself would. Read through the same
+            // accessors `mask_coverage` reads, so a garbage matte and the
+            // mask's own coverage never disagree about how wide the edge is.
+            let finite = |v: f64| if v.is_finite() { v } else { 0.0 };
+            poly.feather = mask.feather_widths_at(path.vertices.len(), t).0 as f32;
+            poly.expansion = finite(mask.expansion.value_at(t)) as f32;
+            poly
+        }
         None => MaskPolyline::default(),
     }
 }
@@ -1394,6 +1673,200 @@ mod tests {
             soft >= 8,
             "a 12px feather should span several pixels: {soft}"
         );
+    }
+
+    /// **Lighten and Darken are max and min against what the stack holds**
+    /// (K-545). Read at half opacity, where they are visibly not Add and not
+    /// Subtract: Add would saturate the overlap and Lighten must not.
+    #[test]
+    fn lighten_and_darken_take_the_greater_and_the_lesser() {
+        // A at 50 %, B at 80 %, overlapping down the middle as `overlapping`
+        // lays them out: x=2 is A only, x=8 is both, x=12 is B only.
+        let combine = |mode: MaskMode| {
+            let mut a = Mask::rectangle(0.0, 0.0, 10.0, 16.0);
+            a.opacity = Property::fixed(50.0);
+            let mut b = Mask::rectangle(6.0, 0.0, 10.0, 16.0);
+            b.opacity = Property::fixed(80.0);
+            b.mode = mode;
+            combined_coverage(&[a, b], 16, 16, 16.0, 16.0, 0.0)
+        };
+        let (half, most) = (127u8, 204u8);
+        let near = |got: u8, want: u8| (i16::from(got) - i16::from(want)).abs() <= 2;
+
+        let light = combine(MaskMode::Lighten);
+        assert!(near(at(&light, 2), half), "A alone {}", at(&light, 2));
+        assert!(
+            near(at(&light, 8), most),
+            "the greater of the two, not their sum: {}",
+            at(&light, 8)
+        );
+        assert!(near(at(&light, 12), most), "B alone {}", at(&light, 12));
+
+        let dark = combine(MaskMode::Darken);
+        assert_eq!(at(&dark, 2), 0, "outside B, the lesser is nothing");
+        assert!(
+            near(at(&dark, 8), half),
+            "the lesser of the two: {}",
+            at(&dark, 8)
+        );
+        assert_eq!(at(&dark, 12), 0, "outside A, the lesser is nothing");
+
+        // Add saturates the overlap; Lighten is the mode that does not, which
+        // is the whole reason it exists beside Add.
+        let added = combine(MaskMode::Add);
+        assert!(at(&added, 8) > at(&light, 8), "Add did not add");
+    }
+
+    /// A lone mask has to build from somewhere, and Lighten builds from
+    /// nothing exactly as Add does — max against a full frame would leave the
+    /// layer untouched, which is a mask doing the opposite of anything.
+    #[test]
+    fn a_lone_lighten_mask_shows_its_own_shape() {
+        let mut m = Mask::rectangle(0.0, 0.0, 8.0, 16.0);
+        m.mode = MaskMode::Lighten;
+        let cov = combined_coverage(std::slice::from_ref(&m), 16, 16, 16.0, 16.0, 0.0);
+        assert_eq!(at(&cov, 4), 255, "inside the shape");
+        assert_eq!(at(&cov, 12), 0, "outside it");
+
+        // Darken is the other way round: it cuts a full frame down to itself.
+        let mut d = m.clone();
+        d.mode = MaskMode::Darken;
+        let cov = combined_coverage(std::slice::from_ref(&d), 16, 16, 16.0, 16.0, 0.0);
+        assert_eq!(at(&cov, 4), 255);
+        assert_eq!(at(&cov, 12), 0);
+    }
+
+    /// **The soft edge is as wide as the vertices near it say** (K-545): a
+    /// rectangle sharp along its left edge and soft along its right one.
+    ///
+    /// Measured as the count of partly covered pixels on a row, which is what
+    /// "how wide is the ramp here" means in a raster.
+    #[test]
+    fn feather_varies_along_the_path() {
+        // 100 tall, x from 20 to 80. Vertices run (20,20) (80,20) (80,80)
+        // (20,80), so 1 and 2 are the right-hand edge.
+        let mut m = Mask::rectangle(20.0, 20.0, 60.0, 60.0);
+        m.vertex_feather = vec![
+            Property::fixed(0.0),
+            Property::fixed(20.0),
+            Property::fixed(20.0),
+            Property::fixed(0.0),
+        ];
+        let cov = mask_coverage(&m, 100, 100, 1.0, 1.0, 0.0);
+        let row: Vec<u8> = (0..100).map(|x| cov[50 * 100 + x]).collect();
+        let soft = |from: usize, to: usize| {
+            row[from..to]
+                .iter()
+                .filter(|c| **c > 0 && **c < 255)
+                .count()
+        };
+        let (left, right) = (soft(0, 50), soft(50, 100));
+        assert!(
+            right >= 12,
+            "a 20 px feather should span most of a dozen pixels: {right}"
+        );
+        assert!(
+            left <= 2,
+            "the sharp edge softened too: {left} soft pixels, row {row:?}"
+        );
+        assert!(right > left * 4, "{right} vs {left}");
+
+        // And it is still a ramp, not a staircase: monotone out of the shape.
+        assert!(
+            row[50..].windows(2).all(|w| w[0] >= w[1]),
+            "the soft edge goes back up: {:?}",
+            &row[50..]
+        );
+    }
+
+    /// A per-vertex list whose widths are all the same is the uniform feather,
+    /// down to the byte — otherwise switching the feature on and changing
+    /// nothing would quietly re-render every frame a project has banked.
+    #[test]
+    fn equal_vertex_feathers_are_the_uniform_feather() {
+        let mut plain = Mask::rectangle(20.0, 20.0, 60.0, 60.0);
+        plain.feather = Property::fixed(9.0);
+        let mut listed = plain.clone();
+        listed.vertex_feather = vec![Property::fixed(9.0); 4];
+        assert_eq!(
+            mask_coverage(&plain, 100, 100, 1.0, 1.0, 0.0),
+            mask_coverage(&listed, 100, 100, 1.0, 1.0, 0.0),
+        );
+
+        // Including all-zero, which must still take the untouched-raster fast
+        // path the ordinary hard-edged mask takes.
+        let hard = Mask::rectangle(20.0, 20.0, 60.0, 60.0);
+        let mut listed_zero = hard.clone();
+        listed_zero.vertex_feather = vec![Property::zero(); 4];
+        assert_eq!(
+            mask_coverage(&listed_zero, 100, 100, 1.0, 1.0, 0.0),
+            rasterise(&hard.path, 100, 100, 1.0, 1.0),
+        );
+    }
+
+    /// A list shorter than the path falls back to the uniform width for the
+    /// vertices it does not reach, rather than treating them as zero — a
+    /// half-filled list is what a path with a point added to it leaves behind.
+    #[test]
+    fn a_short_vertex_feather_list_falls_back_to_the_uniform_width() {
+        let mut m = Mask::rectangle(20.0, 20.0, 60.0, 60.0);
+        m.feather = Property::fixed(16.0);
+        // Only the first vertex named, and named sharp.
+        m.vertex_feather = vec![Property::fixed(0.0)];
+        let (uniform, widths) = m.feather_widths_at(4, 0.0);
+        assert_eq!(uniform, 16.0);
+        assert_eq!(widths, Some(vec![0.0, 16.0, 16.0, 16.0]));
+    }
+
+    /// The widths keyframe like the uniform feather does.
+    #[test]
+    fn a_vertex_feather_animates() {
+        let mut m = Mask::rectangle(20.0, 20.0, 60.0, 60.0);
+        m.vertex_feather = vec![
+            Property::zero(),
+            Property {
+                animation: Animation::Keyframed(vec![
+                    Keyframe {
+                        time: Rational::new(0, 1).expect("0"),
+                        value: 0.0,
+                        interp_in: SideInterp::Linear,
+                        interp_out: SideInterp::Linear,
+                    },
+                    Keyframe {
+                        time: Rational::new(1, 1).expect("1"),
+                        value: 24.0,
+                        interp_in: SideInterp::Linear,
+                        interp_out: SideInterp::Linear,
+                    },
+                ]),
+                extra: serde_json::Map::new(),
+            },
+            Property::zero(),
+            Property::zero(),
+        ];
+        assert_eq!(m.feather_widths_at(4, 0.0).1, None, "still sharp at 0 s");
+        let at_half = m.feather_widths_at(4, 0.5).1.expect("varying by now");
+        assert!((at_half[1] - 12.0).abs() < 1e-9, "{at_half:?}");
+    }
+
+    /// The list is absent from the file until somebody uses it, so every mask
+    /// ever saved writes the bytes it always did — which is what keeps the
+    /// frame cache's banked frames (K-338's promise, kept).
+    #[test]
+    fn an_unvaried_mask_serialises_as_it_always_did() {
+        let m = Mask::rectangle(0.0, 0.0, 8.0, 8.0);
+        let json = serde_json::to_string(&m).expect("a mask serialises");
+        assert!(!json.contains("vertex_feather"), "{json}");
+
+        let mut varied = m.clone();
+        varied.vertex_feather = vec![Property::fixed(3.0), Property::fixed(7.5)];
+        let json = serde_json::to_string(&varied).expect("a mask serialises");
+        assert!(
+            json.contains("\"vertex_feather\":[3.0,7.5]"),
+            "still widths write as bare numbers: {json}"
+        );
+        let back: Mask = serde_json::from_str(&json).expect("and reads back");
+        assert_eq!(back, varied);
     }
 
     #[test]

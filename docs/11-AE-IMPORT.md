@@ -200,12 +200,25 @@ The `.aep` route reads that absolute path out of the item's alias record
 (`LIST Als2 ▸ alas`, JSON, `fullpath` — K-536); the Bridge route gets it from the DOM.
 An item with no path at all is a placeholder or a solid, not a lost file.
 
-**Today only the second step runs** (docs/TODO.md). There is no collected `footage/` to
-check, so a file is found where After Effects recorded it and nowhere else: the capture
-carries an absolute path, and an absolute path re-rooted against the folder the bundle or
-the `.aep` sits in is still itself. An import on the machine the project was made on
-therefore relinks everything; one carried to another machine imports every item offline,
-with a row apiece — which is the promised outcome, reached by fewer routes than this list.
+**Today the second and fourth steps run** (docs/TODO.md). There is no collected `footage/`
+to check, and the third step is a no-op by construction — the capture carries an absolute
+path, and an absolute path re-rooted against the folder the bundle or the `.aep` sits in is
+still itself — so an import on the machine the project was made on relinks everything from
+the recorded path alone. An import **carried to another machine** falls to the fourth step,
+which needs no user direction on import because the folder to search is known: the one the
+`.aep` was picked from, walked recursively and matched by file name
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2 step 3b). A project copied across with its media
+beside it therefore comes up linked; anything genuinely absent imports offline with a row
+apiece, and hash verification waits on the fingerprints a save has not written yet.
+
+**An image sequence resolves to a frame, not to its folder** (K-539). A sequence footage item
+in a `.aep` points at the *folder* the run lives in — its file alias sets `target_is_folder`,
+and `fullpath` is the folder — so before any of the steps above run, a sequence item's path
+is looked inside for the first **numbered** file, which becomes the run's reference. Numbered
+rather than merely first, because the `desktop.ini` or `readme.txt` that a real render folder
+picks up sorts ahead of frame zero. A folder that is not there falls through to the ordinary
+steps and the item imports offline, where one relink onto any frame of the run brings it back
+([10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2).
 
 ---
 
@@ -252,6 +265,7 @@ The centrepiece. Four grades:
 | AE feature | Grade | Notes |
 |---|---|---|
 | Project folder tree, footage items, interpretation | lossless | Loop count, alpha mode, fps override all carried |
+| Image sequences | mapped | Carried as one footage item (K-539, [03-DATA-MODEL.md](03-DATA-MODEL.md) §3.1). AE conforms a sequence by an application *preference* rather than by anything the project file holds, so the rate imports as Lumit's 25 default; the run's length and start come from the folder |
 | Comp settings (size, fps, duration, background) | lossless | |
 | Layer stack, in/out, start, label, switches | lossless | |
 | Transforms + temporal/spatial keyframes | lossless | K-025; includes hold, roving, separated dimensions |
@@ -259,7 +273,7 @@ The centrepiece. Four grades:
 | "Time stretch" | mapped | → the equivalent Retime while the engine has no Stretch field, including negative (reversed) values; reported, and lossless in what it evaluates to |
 | "Time remapping" | lossless | → Retime segments; hold keys → freezes; extended bars → overrun |
 | Frame blending ("Frame Mix"/"Pixel Motion") | mapped | → blend/flow frame interpolation; flow output differs (different optical-flow engine) |
-| Masks (path, feather, opacity, expansion, modes) | lossless | Variable-width feather: mapped — approximated until Lumit ships it. Two exceptions, both reported: the **Lighten** and **Darken** modes are not built ([06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §2) and import as Add, and AE's separate x/y feather averages into Lumit's single width. A **RotoBezier** mask's tangents are computed by AE rather than stored, so it imports as the polygon through its vertices |
+| Masks (path, feather, opacity, expansion, modes) | lossless | All seven modes map, **Lighten** and **Darken** included (K-545). Two exceptions, both reported: AE's separate x/y feather averages into Lumit's single width, and a **RotoBezier** mask's tangents are computed by AE rather than stored, so it imports as the polygon through its vertices. AE's **variable-width feather** — feather points with positions and radii of their own — is not mapped: Lumit's per-vertex widths (K-545) are a different anchoring and no fixture proves AE's layout, so the single averaged width stands |
 | "Track mattes" (legacy + 23.0 selectable) | lossless | → matte |
 | Blend modes — standard 25 | lossless | Normal, Darken, Multiply, Color Burn, Linear Burn, Darker Color, Add, Lighten, Screen, Color Dodge, Linear Dodge, Lighter Color, Overlay, Soft/Hard/Linear/Vivid/Pin Light, Hard Mix, Difference, Exclusion, Subtract, Divide, Hue, Saturation, Color, Luminosity |
 | Blend modes — "Classic" variants | mapped | Import as the modern counterpart; AE 4.x maths not reproduced |
@@ -316,7 +330,7 @@ conversion. Seeded with the montage staples:
 | "Gradient Ramp" (`ADBE Ramp`) | **Gradient** (built, docs/08 §3.35) — direct: the two points, the two colours, Ramp Scatter and "Blend with original" all have counterparts. Mapped in one respect: Lumit interpolates in scene-linear light (§2.1), so a long ramp's midpoint sits where the light says rather than where AE's display range put it |
 | "Noise" (`ADBE Noise`) | **Noise** (built, docs/08 §3.36) — Amount and "Use colour noise" map directly; AE's "Clip result values" has no counterpart, because scene-linear has headroom and nothing needs clipping (reported as a mapped conversion) |
 | "Transform" (`ADBE Geometry2`) | Transform effect |
-| "Motion Tile" (`ADBE Tile`) | **Tile** (built, docs/08 §3.39) — direct: Tile Center, the four Tile/Output per cents, Mirror Edges, Phase and Horizontal Phase Shift all have counterparts. AE's *default* is the identity and Lumit's is a 2×2 repeat (§1.2), which changes nothing on import because the import writes the values |
+| "Motion Tile" (`ADBE Tile`) | **Tile** (built, docs/08 §3.39) — direct: Tile Center, the four Tile/Output per cents, Mirror Edges, Phase and Horizontal Phase Shift all have counterparts. both defaults are now the identity (K-542), and Output width and height above 100 % grow the layer past its own edges on this side too, so an imported 110 % mirrored tile does what it did in AE |
 | "Offset" (`ADBE Offset`) | **Offset** (built, docs/08 §3.40) — mapped: AE's "Shift Center To" is a destination point and Lumit stores the shift, so the import subtracts the frame centre; "Blend With Original" maps to Mix |
 | "Mirror" (`ADBE Mirror`) | **Mirror** (built, docs/08 §3.41) — direct: Reflection Center and Reflection Angle convert one for one |
 | "Optics Compensation" (`ADBE Optics Compensation`) | **Lens distort** (built, docs/08 §3.42) — direct on the controls that carry the look: Field of View, Reverse Lens Distortion, FOV Orientation and View Center all have counterparts, and Lumit's Field of view has AE's meaning (the frame's rectilinear field of view across the chosen half-extent). AE's Optimal Pixels / Resize has no equivalent and is reported — Lumit renders effects at the frame's raster (docs/08 §2.3) and has no per-effect resize |
@@ -517,6 +531,10 @@ Every import ends with the report — a panel listing per-item outcomes, in the 
   the File menu; it is also written next to what was imported as `import-report.json` for
   tooling.
   **Not built** (docs/TODO.md): the report lives as long as its window does.
+- **Refusals are counted per effect instance** (K-556): a placeholder for a third-party effect
+  holds parameters After Effects itself could not read, dozens of them each, so they arrive as one
+  row — "Particular: 41 parameters could not be read" — rather than one row apiece. Every parameter
+  is kept whole regardless (§6); a single refused parameter still names itself.
 - Expressions disabled at import are their own filter, so a user can work through them.
   The filter is by outcome today; a reason-level filter comes with the persistence work.
 

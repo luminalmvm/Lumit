@@ -885,10 +885,30 @@ impl EffectSchema {
 
     #[must_use]
     pub fn mask_path(&self) -> Option<(&'static str, bool)> {
-        self.params.iter().find_map(|p| match p.kind {
+        self.mask_paths().next()
+    }
+
+    /// **Every** [`ParamKind::MaskPath`] row this effect declares, in
+    /// declaration order — id and `self_default` apiece (K-408, K-546).
+    ///
+    /// [`Self::mask_path`] answers the first, which is the whole story for the
+    /// three effects that walk one line. The Matte key takes two (an inside
+    /// hold-out and an outside one), so the carriage counts rows rather than
+    /// ops: `build.rs` flattens one polyline per row this yields and
+    /// `fxops::run_ops` consumes one per row, in this order. One predicate,
+    /// one order — the K-387 rule, now over rows instead of effects.
+    pub fn mask_paths(&self) -> impl Iterator<Item = (&'static str, bool)> + '_ {
+        self.params.iter().filter_map(|p| match p.kind {
             ParamKind::MaskPath { self_default } => Some((p.id, self_default)),
             _ => None,
         })
+    }
+
+    /// How many polylines this effect's slot in the carriage holds — zero for
+    /// the effects that take no path at all.
+    #[must_use]
+    pub fn mask_path_count(&self) -> usize {
+        self.mask_paths().count()
     }
 
     /// The **auxiliary layer** this effect samples beside its own input

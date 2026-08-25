@@ -294,6 +294,7 @@ mod tests {
         let item = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: item,
                 name: "clip.mp4".into(),
                 media: MediaRef {
@@ -506,8 +507,12 @@ mod tests {
             colour: lumit_core::model::LinearColour([1.0, 0.0, 0.0, 1.0]),
             width,
             hardness: 1.0,
+            shape: lumit_core::paint::BrushShape::Round,
             opacity: 100.0,
+            start: lumit_core::anim::Property::zero(),
+            end: lumit_core::anim::Property::fixed(100.0),
             mode: PaintMode::Paint,
+            blend: lumit_core::model::BlendMode::Normal,
             clone_offset: (0.0, 0.0),
             extra: serde_json::Map::new(),
         };
@@ -566,6 +571,28 @@ mod tests {
             stroke: None,
             stroke_width: 0.0,
             opacity: 100.0,
+            trim_start: lumit_core::anim::Property::zero(),
+            trim_end: lumit_core::anim::Property::fixed(100.0),
+            trim_offset: lumit_core::anim::Property::zero(),
+            dashes: Vec::new(),
+            dash_offset: lumit_core::anim::Property::zero(),
+            gradient: 0,
+            gradient_colour: None,
+            gradient_start_x: lumit_core::anim::Property::zero(),
+            gradient_start_y: lumit_core::anim::Property::zero(),
+            gradient_end_x: lumit_core::anim::Property::zero(),
+            gradient_end_y: lumit_core::anim::Property::zero(),
+            offset_amount: lumit_core::anim::Property::zero(),
+            repeat_copies: lumit_core::anim::Property::fixed(1.0),
+            repeat_offset: lumit_core::anim::Property::zero(),
+            repeat_anchor_x: lumit_core::anim::Property::zero(),
+            repeat_anchor_y: lumit_core::anim::Property::zero(),
+            repeat_position_x: lumit_core::anim::Property::zero(),
+            repeat_position_y: lumit_core::anim::Property::zero(),
+            repeat_rotation: lumit_core::anim::Property::zero(),
+            repeat_scale: lumit_core::anim::Property::fixed(100.0),
+            repeat_start_opacity: lumit_core::anim::Property::fixed(100.0),
+            repeat_end_opacity: lumit_core::anim::Property::fixed(100.0),
             extra: serde_json::Map::new(),
         };
 

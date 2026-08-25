@@ -9,14 +9,14 @@ const shots = [
   {
     src: "/shots/timeline.webp",
     alt: "Lumit's timeline: four layers with their modes, mattes, blends and keyframes",
-    h: "Familiar by design.",
-    p: "Layers stack. Keyframes interpolate. The timeline works the way you already know, and the viewer answers as fast as you can move.",
+    h: "Intuitively designed.",
+    p: "Bring your knowledge directly into Lumit. We know time matters,so you can work without interuption.",
   },
   {
     src: "/shots/welcome.webp",
     alt: "Lumit's welcome window, listing recent projects on disk",
-    h: "Yours to keep.",
-    p: "A native Rust engine and a real desktop application, released under the GPL. Your projects, your plug-ins, your machine.",
+    h: "Dynamic effects.",
+    p: "Effects can be driven by expressions, altered in the node graph, or simply in the effect controls. You decide.",
   },
 ];
 
@@ -129,32 +129,24 @@ const roadmap = [
 
 <Base
   title="Lumit"
-  description="A native compositing and motion-graphics editor. GPU-first, open source, and built to stay responsive with thousands of layers."
+  description="A native compositing and motion-graphics editor."
 >
-  {/* ---------- hero: half height, the wordmark animation, one download ---------- */}
-  {/* Half the window, and never more than the drawing's 520 however tall the
-      screen is - the hero is a band, not a page. */}
-  {/* The field is a sibling of the band's content, not a child of it, because it
-      is taller than the band: it runs on past the hero's bottom edge and fades
-      out behind the section below, so the hero has no edge of its own. */}
+  {/* ---------- hero ---------- */}
   <div class="relative -mt-16">
     <HeroField />
     <section class="relative flex min-h-[clamp(420px,54vh,560px)] flex-col items-center justify-center px-5 pt-24 pb-16 text-center">
 
       <h1 class="relative mb-0 w-[min(440px,78vw)]">
         <Wordmark />
-        <span class="sr-only">Lumit - compositing, your way.</span>
+        <span class="sr-only">Lumit - Compositing that adapts to your workflow.</span>
       </h1>
 
       <p class="relative mt-1 max-w-[640px] text-[17px] leading-[1.4] text-fg/80">
-        Compositing, your way. A native motion-graphics editor built for editors:
-        GPU-first, open source, and responsive in projects with thousands of layers.
+        Compositing that adapts to your workflow. Built by editors, for editors. 
+        With an application that always remains responsive.
       </p>
 
       <div class="relative mt-7 flex flex-wrap items-center justify-center gap-3">
-        {/* White, not the line token every other outline uses: this is the one
-            action on the page, and the field behind it is bright enough that a
-            12% white border disappears into it. */}
         <a class="btn border-white" href="/download" data-dl>
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M8 2v9M4 7l4 4 4-4M2 13h12"></path>
@@ -204,12 +196,13 @@ const roadmap = [
   {/* ---------- the product, in pictures ---------- */}
   <section id="features" class="wrap flex flex-col gap-10 pt-24 pb-20 sm:pt-[120px]">
     <div class="flex flex-col gap-3.5">
-      <p class="kicker">Introducing Lumit</p>
+      <p class="kicker">Welcome to Lumit</p>
       <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
-        Everything you know, <span class="text-fg">on an engine that keeps up.</span>
+        <span class="text-fg">Composite the way you know</span>
       </h2>
     </div>
 
+    {/* THIS IMG SHOULD BE A VIDEO I MAKE QUICKLY SHOWING THE BIG UI FEATURES */}
     <img
       class="w-full rounded-card border border-line bg-ink-2"
       src="/shots/workspace.webp"

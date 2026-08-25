@@ -169,6 +169,7 @@ fn main() {
     // --- 3. Footage comp: first pass decodes, second pass hits the cache. ---
     let item_id = Uuid::now_v7();
     let footage = ProjectItem::Footage(FootageItem {
+        sequence: None,
         id: item_id,
         name: "test1080p60.mp4".into(),
         media: MediaRef {

@@ -1981,7 +1981,7 @@ mod tests {
         }
         enc.finish().unwrap();
 
-        let input = crate::probe::open_input(&path).unwrap();
+        let input = crate::probe::open_input(&crate::MediaSource::file(&path)).unwrap();
         let dict = input.metadata().expect("the file carries metadata");
         let got = |key: &str| {
             dict.get(&CString::new(key).unwrap(), None, 0)
@@ -2059,7 +2059,7 @@ mod tests {
             assert!(!written.is_empty(), "{name} has bytes");
             // Probe it back through our own reader: a 16-bit still decodes,
             // and its dimensions survive.
-            let probe = crate::probe::probe(&sequence_frame_path(&path, 1)).unwrap();
+            let probe = crate::probe::probe(sequence_frame_path(&path, 1)).unwrap();
             let video = probe.video.expect("a still is a one-frame video");
             assert_eq!((video.width, video.height), (w, h), "{name}");
         }

@@ -121,11 +121,57 @@ pub struct BridgeShapeItem {
     pub stroke_width: f64,
     /// 0..100.
     pub opacity: f64,
+    /// **Trim paths** (K-551): where along the path's own length the art begins
+    /// and ends, as a per cent, and how far the pair is slid along it in
+    /// degrees. Animatable on the layer's own clock (K-213), exactly as a
+    /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
+    /// the same diamonds.
+    pub trim_start: BridgeScalar,
+    pub trim_end: BridgeScalar,
+    pub trim_offset: BridgeScalar,
+    /// **Dashes** (K-552): the outline's dash and gap lengths in layer pixels,
+    /// alternating — dash, gap, dash, gap. Empty is a solid outline.
+    /// `dash_offset` is how far along the path the pattern starts, in the same
+    /// pixels.
+    pub dashes: Vec<BridgeScalar>,
+    pub dash_offset: BridgeScalar,
+    /// **A gradient fill** (K-555): 0 is the flat [`fill`](Self::fill), 1 ramps
+    /// from it linearly to `gradient_colour` and 2 ramps radially, the end
+    /// point sitting on the outer edge. The two points are in layer pixels —
+    /// the art's own coordinates — and animate; what a ramp *is* does not.
+    pub gradient: u32,
+    pub gradient_colour: Option<crate::api::assets::BridgeColourRgba>,
+    pub gradient_start_x: BridgeScalar,
+    pub gradient_start_y: BridgeScalar,
+    pub gradient_end_x: BridgeScalar,
+    pub gradient_end_y: BridgeScalar,
+    /// **Offset paths** (K-554): how far the outline is pushed out of the path,
+    /// in layer pixels; negative pulls it in and zero is the path itself.
+    pub offset_amount: BridgeScalar,
+    /// **The repeater** (K-553): how many copies of the item are drawn, which
+    /// copy the original is (`repeat_offset`), and the transform each copy is
+    /// one more step of — moved by `repeat_position_*` layer pixels, turned by
+    /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
+    /// about `repeat_anchor_*`. The copies fade evenly from
+    /// `repeat_start_opacity` to `repeat_end_opacity`.
+    ///
+    /// A still count of one is no repeater at all, which is what every shape is
+    /// until somebody asks for more.
+    pub repeat_copies: BridgeScalar,
+    pub repeat_offset: BridgeScalar,
+    pub repeat_anchor_x: BridgeScalar,
+    pub repeat_anchor_y: BridgeScalar,
+    pub repeat_position_x: BridgeScalar,
+    pub repeat_position_y: BridgeScalar,
+    pub repeat_rotation: BridgeScalar,
+    pub repeat_scale: BridgeScalar,
+    pub repeat_start_opacity: BridgeScalar,
+    pub repeat_end_opacity: BridgeScalar,
 }
 
 impl BridgeShapeItem {
     #[frb(ignore)]
-    fn read(item: &lumit_core::shape::ShapeItem) -> Self {
+    fn read_at(item: &lumit_core::shape::ShapeItem, offset: Rational) -> Self {
         Self {
             id: item.id,
             name: item.name.clone(),
@@ -135,14 +181,43 @@ impl BridgeShapeItem {
             stroke: item.stroke.map(crate::api::assets::colour_of),
             stroke_width: item.stroke_width,
             opacity: item.opacity,
+            trim_start: BridgeScalar::read_at(&item.trim_start, offset),
+            trim_end: BridgeScalar::read_at(&item.trim_end, offset),
+            trim_offset: BridgeScalar::read_at(&item.trim_offset, offset),
+            dashes: item
+                .dashes
+                .iter()
+                .map(|d| BridgeScalar::read_at(d, offset))
+                .collect(),
+            dash_offset: BridgeScalar::read_at(&item.dash_offset, offset),
+            gradient: item.gradient,
+            gradient_colour: item.gradient_colour.map(crate::api::assets::colour_of),
+            gradient_start_x: BridgeScalar::read_at(&item.gradient_start_x, offset),
+            gradient_start_y: BridgeScalar::read_at(&item.gradient_start_y, offset),
+            gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
+            gradient_end_y: BridgeScalar::read_at(&item.gradient_end_y, offset),
+            offset_amount: BridgeScalar::read_at(&item.offset_amount, offset),
+            repeat_copies: BridgeScalar::read_at(&item.repeat_copies, offset),
+            repeat_offset: BridgeScalar::read_at(&item.repeat_offset, offset),
+            repeat_anchor_x: BridgeScalar::read_at(&item.repeat_anchor_x, offset),
+            repeat_anchor_y: BridgeScalar::read_at(&item.repeat_anchor_y, offset),
+            repeat_position_x: BridgeScalar::read_at(&item.repeat_position_x, offset),
+            repeat_position_y: BridgeScalar::read_at(&item.repeat_position_y, offset),
+            repeat_rotation: BridgeScalar::read_at(&item.repeat_rotation, offset),
+            repeat_scale: BridgeScalar::read_at(&item.repeat_scale, offset),
+            repeat_start_opacity: BridgeScalar::read_at(&item.repeat_start_opacity, offset),
+            repeat_end_opacity: BridgeScalar::read_at(&item.repeat_end_opacity, offset),
         }
     }
 
     /// The engine's item this describes. Public to the crate because the
     /// composition builds a whole layer out of a list of them.
     #[frb(ignore)]
-    pub(crate) fn write_item(&self) -> lumit_core::shape::ShapeItem {
-        lumit_core::shape::ShapeItem {
+    pub(crate) fn write_item(
+        &self,
+        offset: Rational,
+    ) -> Result<lumit_core::shape::ShapeItem, BridgeError> {
+        Ok(lumit_core::shape::ShapeItem {
             id: self.id,
             name: self.name.clone(),
             path: lumit_core::mask::BezierPath {
@@ -153,8 +228,97 @@ impl BridgeShapeItem {
             stroke: self.stroke.map(crate::api::assets::linear_of),
             stroke_width: self.stroke_width.clamp(0.0, 10_000.0),
             opacity: self.opacity.clamp(0.0, 100.0),
+            // Per cent of the path's own length, so anything outside 0..100 is
+            // a number that could only ever draw wrongly — clamped here, every
+            // key of it, exactly as a stroke's trim is (K-549). The offset is
+            // degrees and wraps, so it is left alone.
+            trim_start: clamped_property(&self.trim_start, offset, 0.0, 100.0)?,
+            trim_end: clamped_property(&self.trim_end, offset, 0.0, 100.0)?,
+            trim_offset: clamped_property(&self.trim_offset, offset, -360_000.0, 360_000.0)?,
+            // Lengths in layer pixels: a negative dash is not a shorter dash,
+            // it is a number with no meaning, so zero is where it lands. The
+            // offset may be negative — it slides both ways.
+            dashes: self
+                .dashes
+                .iter()
+                .map(|d| clamped_property(d, offset, 0.0, 100_000.0))
+                .collect::<Result<_, _>>()?,
+            dash_offset: clamped_property(&self.dash_offset, offset, -100_000.0, 100_000.0)?,
+            // Two readings and no third: a number naming neither is the flat
+            // fill, which is the answer that draws something.
+            gradient: if self.gradient <= 2 { self.gradient } else { 0 },
+            gradient_colour: self.gradient_colour.map(crate::api::assets::linear_of),
+            // The art's own coordinates, held to the same reach a vertex has.
+            gradient_start_x: clamped_property(
+                &self.gradient_start_x,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            gradient_start_y: clamped_property(
+                &self.gradient_start_y,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            gradient_end_x: clamped_property(&self.gradient_end_x, offset, -100_000.0, 100_000.0)?,
+            gradient_end_y: clamped_property(&self.gradient_end_y, offset, -100_000.0, 100_000.0)?,
+            // Layer pixels, out or in: both directions mean something, so only
+            // the far ends are held.
+            offset_amount: clamped_property(&self.offset_amount, offset, -100_000.0, 100_000.0)?,
+            // The count is what the engine holds to 1..MAX_COPIES as it draws,
+            // so the clamp here only keeps a wild number out of the document;
+            // the offset is a copy index and may be negative, which is what
+            // puts copies behind the original.
+            repeat_copies: clamped_property(
+                &self.repeat_copies,
+                offset,
+                1.0,
+                lumit_core::shape::MAX_COPIES as f64,
+            )?,
+            repeat_offset: clamped_property(
+                &self.repeat_offset,
+                offset,
+                -(lumit_core::shape::MAX_COPIES as f64),
+                lumit_core::shape::MAX_COPIES as f64,
+            )?,
+            repeat_anchor_x: clamped_property(
+                &self.repeat_anchor_x,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            repeat_anchor_y: clamped_property(
+                &self.repeat_anchor_y,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            repeat_position_x: clamped_property(
+                &self.repeat_position_x,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            repeat_position_y: clamped_property(
+                &self.repeat_position_y,
+                offset,
+                -100_000.0,
+                100_000.0,
+            )?,
+            // Degrees, which wrap; a scale of zero collapses a copy to nothing
+            // and a negative one mirrors it, both of which are drawings.
+            repeat_rotation: clamped_property(
+                &self.repeat_rotation,
+                offset,
+                -360_000.0,
+                360_000.0,
+            )?,
+            repeat_scale: clamped_property(&self.repeat_scale, offset, -10_000.0, 10_000.0)?,
+            repeat_start_opacity: clamped_property(&self.repeat_start_opacity, offset, 0.0, 100.0)?,
+            repeat_end_opacity: clamped_property(&self.repeat_end_opacity, offset, 0.0, 100.0)?,
             extra: serde_json::Map::new(),
-        }
+        })
     }
 }
 
@@ -168,6 +332,18 @@ pub enum BridgePaintMode {
     Erase,
     /// Copy from elsewhere on the same layer, by the stroke's clone offset.
     Clone,
+}
+
+/// The shape one dab of the brush leaves (K-548). Not a brush-tip system:
+/// two shapes, both measured from the dab's centre out to half the stroke's
+/// width and both softened by the same hardness ramp.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeBrushShape {
+    /// A circle — the brush every stroke had before there was a choice.
+    Round,
+    /// A square with flat sides and square corners.
+    Square,
 }
 
 /// One point of a stroke's path, in layer pixels.
@@ -198,11 +374,24 @@ pub struct BridgeStroke {
     pub colour: crate::api::assets::BridgeColourRgba,
     /// The brush's diameter in layer pixels.
     pub width: f64,
-    /// 0 fully soft, 1 a hard edge.
+    /// 0 fully soft, 1 a hard edge. The same ramp whatever the shape is.
     pub hardness: f64,
+    pub shape: BridgeBrushShape,
     /// 0..100.
     pub opacity: f64,
+    /// Where along the path the mark begins and ends, as a per cent of the
+    /// stroke's own length (K-549). Animatable exactly as a mask's opacity is,
+    /// on the layer's own clock (K-213), so the Timeline row carries the same
+    /// stopwatch and the same diamonds. Hold Start at 0 and key End 0 → 100
+    /// and the stroke draws itself on.
+    pub start: BridgeScalar,
+    pub end: BridgeScalar,
     pub mode: BridgePaintMode,
+    /// How the mark combines with what is already on the layer (K-550), as an
+    /// index into [`list_blend_modes`] — the same list and the same convention
+    /// a layer's own blend crosses on. Ignored by an eraser, which takes alpha
+    /// away and never touches colour.
+    pub blend: u32,
     /// Where a clone's pixels are copied from, as an offset in layer pixels.
     pub clone_offset_x: f64,
     pub clone_offset_y: f64,
@@ -210,7 +399,7 @@ pub struct BridgeStroke {
 
 impl BridgeStroke {
     #[frb(ignore)]
-    fn read(stroke: &lumit_core::paint::PaintStroke) -> Self {
+    fn read_at(stroke: &lumit_core::paint::PaintStroke, offset: Rational) -> Self {
         Self {
             id: stroke.id,
             name: stroke.name.clone(),
@@ -222,12 +411,22 @@ impl BridgeStroke {
             colour: crate::api::assets::colour_of(stroke.colour),
             width: stroke.width,
             hardness: stroke.hardness,
+            shape: match stroke.shape {
+                lumit_core::paint::BrushShape::Round => BridgeBrushShape::Round,
+                lumit_core::paint::BrushShape::Square => BridgeBrushShape::Square,
+            },
             opacity: stroke.opacity,
+            start: BridgeScalar::read_at(&stroke.start, offset),
+            end: BridgeScalar::read_at(&stroke.end, offset),
             mode: match stroke.mode {
                 lumit_core::paint::PaintMode::Paint => BridgePaintMode::Paint,
                 lumit_core::paint::PaintMode::Erase => BridgePaintMode::Erase,
                 lumit_core::paint::PaintMode::Clone => BridgePaintMode::Clone,
             },
+            blend: lumit_core::model::BlendMode::ALL
+                .iter()
+                .position(|b| *b == stroke.blend)
+                .unwrap_or(0) as u32,
             clone_offset_x: stroke.clone_offset.0,
             clone_offset_y: stroke.clone_offset.1,
         }
@@ -237,23 +436,42 @@ impl BridgeStroke {
     /// wrongly for ever after is clamped here rather than trusted, exactly as
     /// a mask's opacity is.
     #[frb(ignore)]
-    pub(crate) fn write(&self) -> lumit_core::paint::PaintStroke {
-        lumit_core::paint::PaintStroke {
+    pub(crate) fn write_at(
+        &self,
+        offset: Rational,
+    ) -> Result<lumit_core::paint::PaintStroke, BridgeError> {
+        Ok(lumit_core::paint::PaintStroke {
             id: self.id,
             name: self.name.clone(),
             points: self.points.iter().map(|p| (p.x, p.y)).collect(),
             colour: crate::api::assets::linear_of(self.colour),
             width: self.width.clamp(0.0, 10_000.0),
             hardness: self.hardness.clamp(0.0, 1.0),
+            shape: match self.shape {
+                BridgeBrushShape::Round => lumit_core::paint::BrushShape::Round,
+                BridgeBrushShape::Square => lumit_core::paint::BrushShape::Square,
+            },
             opacity: self.opacity.clamp(0.0, 100.0),
+            // Per cent of the stroke's own length, so anything outside 0..100
+            // is a number that could only ever render wrongly — clamped here,
+            // every key of it, exactly as a mask's opacity is (K-549).
+            start: clamped_property(&self.start, offset, 0.0, 100.0)?,
+            end: clamped_property(&self.end, offset, 0.0, 100.0)?,
             mode: match self.mode {
                 BridgePaintMode::Paint => lumit_core::paint::PaintMode::Paint,
                 BridgePaintMode::Erase => lumit_core::paint::PaintMode::Erase,
                 BridgePaintMode::Clone => lumit_core::paint::PaintMode::Clone,
             },
+            // An index past the end of the list is Normal rather than an
+            // error: it is a frontend that has fallen behind, and a stroke
+            // that lays its colour down is the honest reading of one.
+            blend: lumit_core::model::BlendMode::ALL
+                .get(self.blend as usize)
+                .copied()
+                .unwrap_or_default(),
             clone_offset: (self.clone_offset_x, self.clone_offset_y),
             extra: serde_json::Map::new(),
-        }
+        })
     }
 }
 
@@ -281,6 +499,15 @@ pub struct BridgeMask {
     pub mode: BridgeMaskMode,
     /// Width of the soft edge in layer pixels; 0 is the hard antialiased edge.
     pub feather: BridgeScalar,
+    /// A width of its own for each **vertex**, in layer pixels (K-545), each
+    /// animatable exactly as [`Self::feather`] is. Empty — the ordinary mask —
+    /// means one width all the way round, and is what the Timeline shows no
+    /// per-point rows for.
+    ///
+    /// Positional: entry *i* belongs to vertex *i* of [`Self::vertices`], so a
+    /// caller changing the shape and the widths in one write must send the two
+    /// lists agreeing with each other.
+    pub vertex_feather: Vec<BridgeScalar>,
     /// Grow (+) or shrink (−) the shape, in layer pixels.
     pub expansion: BridgeScalar,
     /// This mask's **shape** keys — empty when the path does not animate.
@@ -346,6 +573,10 @@ pub enum BridgeMaskMode {
     Add,
     Subtract,
     Intersect,
+    /// The greater of this mask and the stack below it (K-545).
+    Lighten,
+    /// The lesser of the two (K-545).
+    Darken,
     Difference,
 }
 
@@ -357,6 +588,8 @@ impl BridgeMaskMode {
             lumit_core::mask::MaskMode::Add => Self::Add,
             lumit_core::mask::MaskMode::Subtract => Self::Subtract,
             lumit_core::mask::MaskMode::Intersect => Self::Intersect,
+            lumit_core::mask::MaskMode::Lighten => Self::Lighten,
+            lumit_core::mask::MaskMode::Darken => Self::Darken,
             lumit_core::mask::MaskMode::Difference => Self::Difference,
         }
     }
@@ -368,6 +601,8 @@ impl BridgeMaskMode {
             Self::Add => lumit_core::mask::MaskMode::Add,
             Self::Subtract => lumit_core::mask::MaskMode::Subtract,
             Self::Intersect => lumit_core::mask::MaskMode::Intersect,
+            Self::Lighten => lumit_core::mask::MaskMode::Lighten,
+            Self::Darken => lumit_core::mask::MaskMode::Darken,
             Self::Difference => lumit_core::mask::MaskMode::Difference,
         }
     }
@@ -385,6 +620,11 @@ impl BridgeMask {
             opacity: BridgeScalar::read_at(&mask.opacity, offset),
             mode: BridgeMaskMode::read(mask.mode),
             feather: BridgeScalar::read_at(&mask.feather, offset),
+            vertex_feather: mask
+                .vertex_feather
+                .iter()
+                .map(|p| BridgeScalar::read_at(p, offset))
+                .collect(),
             expansion: BridgeScalar::read_at(&mask.expansion, offset),
             path_keys: mask
                 .path_keys
@@ -434,6 +674,13 @@ impl BridgeMask {
             // size of a continent. The ceiling is generous: 5000 layer pixels
             // is wider than any comp anyone is masking.
             feather: clamped_property(&self.feather, offset, 0.0, 5000.0)?,
+            // Each per-vertex width is bounded exactly as the one width is,
+            // and for the same reason (K-545).
+            vertex_feather: self
+                .vertex_feather
+                .iter()
+                .map(|s| clamped_property(s, offset, 0.0, 5000.0))
+                .collect::<Result<Vec<_>, _>>()?,
             expansion: clamped_property(&self.expansion, offset, -5000.0, 5000.0)?,
         })
     }
@@ -909,7 +1156,11 @@ pub(crate) fn read_layer_info(
             .iter()
             .map(|m| BridgeMask::read_at(m, layer.start_offset.0))
             .collect(),
-        paint: layer.paint.iter().map(BridgeStroke::read).collect(),
+        paint: layer
+            .paint
+            .iter()
+            .map(|s| BridgeStroke::read_at(s, layer.start_offset.0))
+            .collect(),
         markers: layer
             .markers
             .iter()
@@ -929,9 +1180,10 @@ pub(crate) fn read_layer_info(
             })
             .collect(),
         shape_contents: match &layer.kind {
-            lumit_core::model::LayerKind::Shape { contents } => {
-                contents.iter().map(BridgeShapeItem::read).collect()
-            }
+            lumit_core::model::LayerKind::Shape { contents } => contents
+                .iter()
+                .map(|i| BridgeShapeItem::read_at(i, layer.start_offset.0))
+                .collect(),
             _ => Vec::new(),
         },
         flow: matches!(
@@ -1695,7 +1947,13 @@ impl LayerReference {
     /// This layer's paint strokes, oldest first (K-227).
     #[frb(sync)]
     pub fn get_paint(&self) -> Result<Vec<BridgeStroke>, BridgeError> {
-        Ok(self.item()?.paint.iter().map(BridgeStroke::read).collect())
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        Ok(layer
+            .paint
+            .iter()
+            .map(|s| BridgeStroke::read_at(s, offset))
+            .collect())
     }
 
     /// Add `stroke` on top of this layer's paint.
@@ -1711,8 +1969,10 @@ impl LayerReference {
         if stroke.points.is_empty() {
             return Err(BridgeError::EmptyStroke);
         }
-        let mut strokes = self.item()?.paint;
-        strokes.push(stroke.write());
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let mut strokes = layer.paint;
+        strokes.push(stroke.write_at(offset)?);
         self.commit_paint(strokes)
     }
 
@@ -1724,12 +1984,14 @@ impl LayerReference {
         if stroke.points.is_empty() {
             return Err(BridgeError::EmptyStroke);
         }
-        let mut strokes = self.item()?.paint;
+        let layer = self.item()?;
+        let offset = layer.start_offset.0;
+        let mut strokes = layer.paint;
         let at = strokes
             .iter()
             .position(|s| s.id == stroke.id)
             .ok_or(BridgeError::NoSuchStroke)?;
-        strokes[at] = stroke.write();
+        strokes[at] = stroke.write_at(offset)?;
         self.commit_paint(strokes)
     }
 
@@ -1777,7 +2039,11 @@ impl LayerReference {
         let lumit_core::model::LayerKind::Shape { contents } = self.item()?.kind else {
             return Ok(Vec::new());
         };
-        Ok(contents.iter().map(BridgeShapeItem::read).collect())
+        let offset = self.item()?.start_offset.0;
+        Ok(contents
+            .iter()
+            .map(|i| BridgeShapeItem::read_at(i, offset))
+            .collect())
     }
 
     /// Replace this shape layer's whole contents.
@@ -1804,11 +2070,16 @@ impl LayerReference {
         if contents.iter().any(|i| i.vertices.len() < 2) {
             return Err(BridgeError::EmptyPath);
         }
-        let items: Vec<lumit_core::shape::ShapeItem> =
-            contents.iter().map(BridgeShapeItem::write_item).collect();
+        let offset = layer.start_offset.0;
+        let items: Vec<lumit_core::shape::ShapeItem> = contents
+            .iter()
+            .map(|i| i.write_item(offset))
+            .collect::<Result<_, _>>()?;
+        // Both boxes on the same clock — the head of the layer — so the delta
+        // is the edit's own, not the repeater's animation moving underneath it.
         let shift = match (
-            lumit_core::shape::contents_bounds(before),
-            lumit_core::shape::contents_bounds(&items),
+            lumit_core::shape::contents_bounds(before, 0.0),
+            lumit_core::shape::contents_bounds(&items, 0.0),
         ) {
             (Some((x0, y0, _, _)), Some((x1, y1, _, _))) => (x1 - x0, y1 - y0),
             // Art appearing or going away entirely leaves the layer where it
@@ -2121,30 +2392,30 @@ impl LayerReference {
             // video frame is slow enough that holding the project across it
             // stalls every other reader, and the render worker is one of them
             // (docs/14 §3). The lock comes back only to store the result.
-            let (path, at, cached) = {
+            let (src, at, cached) = {
                 let proj = project.read().map_err(|_| BridgeError::ReadFailed)?;
                 let doc = proj.store.snapshot();
                 let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
                     return Ok(None);
                 };
-                let Some(path) = crate::api::footage::FootageReference::resolve_path(&proj, f)
+                let Some(src) = crate::api::footage::FootageReference::resolve_source(&proj, f)
                 else {
                     return Ok(None);
                 };
                 // The media's own rate turns its seconds into its frames.
-                let fps = crate::probe::ensure_probed(&path)
+                let fps = crate::probe::ensure_probed(&src)
                     .and_then(|i| i.video.as_ref().map(|v| v.fps()))
                     .filter(|fps| *fps > 0.0)
                     .unwrap_or(1.0);
                 let at = (opens_at * fps).round() as i64;
                 let cached = crate::media::thumb_cached(&proj.media, item, max_edge, at);
-                (path, at, cached)
+                (src, at, cached)
             };
 
             let thumb = match cached {
                 Some(hit) => hit,
                 None => {
-                    let Some(decoded) = crate::media::thumb_decode(&path, max_edge, at) else {
+                    let Some(decoded) = crate::media::thumb_decode(&src, max_edge, at) else {
                         return Ok(None);
                     };
                     if let Ok(mut proj) = project.write() {
@@ -3231,11 +3502,11 @@ impl LayerReference {
 
         #[cfg(feature = "media")]
         {
-            let Some(path) = crate::api::footage::FootageReference::resolve_path(&proj, footage)
+            let Some(src) = crate::api::footage::FootageReference::resolve_source(&proj, footage)
             else {
                 return Ok(false);
             };
-            Ok(crate::probe::ensure_probed(&path)
+            Ok(crate::probe::ensure_probed(&src)
                 .map(|p| p.video.is_some())
                 .unwrap_or(false))
         }
@@ -3276,11 +3547,11 @@ impl LayerReference {
 
         #[cfg(feature = "media")]
         {
-            let Some(path) = crate::api::footage::FootageReference::resolve_path(&proj, footage)
+            let Some(src) = crate::api::footage::FootageReference::resolve_source(&proj, footage)
             else {
                 return Ok(false);
             };
-            Ok(crate::probe::ensure_probed(&path)
+            Ok(crate::probe::ensure_probed(&src)
                 .map(|p| p.audio.is_some())
                 .unwrap_or(false))
         }
@@ -3428,8 +3699,8 @@ impl LayerReference {
                 let Some(lumit_core::model::ProjectItem::Footage(footage)) = doc.item(item) else {
                     return None;
                 };
-                let path = crate::api::footage::FootageReference::resolve_path(&proj, footage)?;
-                let info = crate::probe::ensure_probed(&path)?;
+                let src = crate::api::footage::FootageReference::resolve_source(&proj, footage)?;
+                let info = crate::probe::ensure_probed(&src)?;
                 // The one sanctioned route back from the container's floating
                 // point duration is an explicit grid (docs/impl/rational-time.md
                 // §4) — the same millisecond grid `media_info` reports on.

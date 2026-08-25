@@ -24,6 +24,8 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/panels/graph_maths.dart' show evaluateScalar;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show maxShapeCopies;
 import 'package:uuid/uuid.dart';
 
 /// A Null layer's box, in layer pixels.
@@ -74,20 +76,46 @@ Size textLayerBounds(String text, double size) => Size(
 /// box's top-left corner — a vertex at art (x, y) is at layer pixel
 /// (x − left, y − top). [shapeContentsBounds] answers the size, which is all a
 /// wireframe box needs; anything drawing the *points* needs the corner too.
-Rect? shapeContentsRect(List<BridgeShapeItem> contents) {
+/// **The repeater's copies are part of the box** (K-553), so it is measured at
+/// a time: a keyed repeater puts its copies somewhere new each frame. [t] is
+/// seconds on the composition's clock, which is the clock the bridge already
+/// hands a shape item's keys over on.
+Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
   double? minX, minY, maxX, maxY;
   for (final item in contents) {
-    final half = item.stroke != null ? item.strokeWidth / 2 : 0.0;
+    // Half the outline sits outside the path, and an outline pushed *out* of
+    // it (K-554) sits further out still. Pulled in it never needs more room.
+    final half = (item.stroke != null ? item.strokeWidth / 2 : 0.0) +
+        math.max(0.0, evaluateScalar(item.offsetAmount, t));
+    double? ix0, iy0, ix1, iy1;
     for (final v in item.vertices) {
       for (final (x, y) in [
         (v.x, v.y),
         (v.x + v.tanInX, v.y + v.tanInY),
         (v.x + v.tanOutX, v.y + v.tanOutY),
       ]) {
-        minX = minX == null ? x - half : math.min(minX, x - half);
-        minY = minY == null ? y - half : math.min(minY, y - half);
-        maxX = maxX == null ? x + half : math.max(maxX, x + half);
-        maxY = maxY == null ? y + half : math.max(maxY, y + half);
+        ix0 = ix0 == null ? x - half : math.min(ix0, x - half);
+        iy0 = iy0 == null ? y - half : math.min(iy0, y - half);
+        ix1 = ix1 == null ? x + half : math.max(ix1, x + half);
+        iy1 = iy1 == null ? y + half : math.max(iy1, y + half);
+      }
+    }
+    if (ix0 == null || iy0 == null || ix1 == null || iy1 == null) continue;
+    // Every copy's box, unioned. One copy and the identity — every shape
+    // nobody has repeated — is exactly the box above.
+    for (final m in shapeCopyTransforms(item, t)) {
+      for (final (x, y) in [
+        (ix0, iy0),
+        (ix1, iy0),
+        (ix1, iy1),
+        (ix0, iy1),
+      ]) {
+        final px = m[0] * x + m[2] * y + m[4];
+        final py = m[1] * x + m[3] * y + m[5];
+        minX = minX == null ? px : math.min(minX, px);
+        minY = minY == null ? py : math.min(minY, py);
+        maxX = maxX == null ? px : math.max(maxX, px);
+        maxY = maxY == null ? py : math.max(maxY, py);
       }
     }
   }
@@ -97,10 +125,85 @@ Rect? shapeContentsRect(List<BridgeShapeItem> contents) {
 
 /// The size of that box, floored at a pixel each way so a straight line still
 /// has a layer to be drawn on.
-Size? shapeContentsBounds(List<BridgeShapeItem> contents) {
-  final rect = shapeContentsRect(contents);
+Size? shapeContentsBounds(List<BridgeShapeItem> contents, {double t = 0}) {
+  final rect = shapeContentsRect(contents, t: t);
   if (rect == null) return null;
   return Size(math.max(rect.width, 1), math.max(rect.height, 1));
+}
+
+/// The transform each of [item]'s repeated copies is drawn with at [t], as
+/// `[a, b, c, d, e, f]` mapping `(x, y)` to `(ax + cy + e, bx + dy + f)`
+/// (K-553).
+///
+/// The engine's `ShapeItem::copies_at` in the same six numbers, and it has to
+/// stay that way: the engine sizes the raster from its version and the
+/// wireframe is drawn from this one. A single identity — one copy, no repeater
+/// — is what every shape answers until somebody asks for more.
+List<List<double>> shapeCopyTransforms(BridgeShapeItem item, double t) {
+  final copies = evaluateScalar(item.repeatCopies, t)
+      .round()
+      .clamp(1, maxShapeCopies.toInt());
+  if (copies <= 1) return const [identityTransform];
+  final offset = evaluateScalar(item.repeatOffset, t)
+      .round()
+      .clamp(-maxShapeCopies.toInt(), maxShapeCopies.toInt());
+
+  final rotation = evaluateScalar(item.repeatRotation, t) * math.pi / 180;
+  final scale = evaluateScalar(item.repeatScale, t) / 100;
+  final ax = evaluateScalar(item.repeatAnchorX, t);
+  final ay = evaluateScalar(item.repeatAnchorY, t);
+  final a = math.cos(rotation) * scale;
+  final b = math.sin(rotation) * scale;
+  final c = -math.sin(rotation) * scale;
+  final d = math.cos(rotation) * scale;
+  // Move to the anchor, turn and scale there, move back, then translate.
+  final step = <double>[
+    a,
+    b,
+    c,
+    d,
+    ax - (a * ax + c * ay) + evaluateScalar(item.repeatPositionX, t),
+    ay - (b * ax + d * ay) + evaluateScalar(item.repeatPositionY, t),
+  ];
+  final back = _inverse(step);
+
+  var m = identityTransform.toList();
+  for (var i = 0; i < offset.abs(); i++) {
+    m = _then(m, offset >= 0 ? step : back);
+  }
+  final out = <List<double>>[];
+  for (var j = 0; j < copies; j++) {
+    out.add(m);
+    m = _then(m, step);
+  }
+  return out;
+}
+
+/// The transform that changes nothing.
+const List<double> identityTransform = [1, 0, 0, 1, 0, 0];
+
+/// [m] followed by [n].
+List<double> _then(List<double> m, List<double> n) => [
+      m[0] * n[0] + m[1] * n[2],
+      m[0] * n[1] + m[1] * n[3],
+      m[2] * n[0] + m[3] * n[2],
+      m[2] * n[1] + m[3] * n[3],
+      m[4] * n[0] + m[5] * n[2] + n[4],
+      m[4] * n[1] + m[5] * n[3] + n[5],
+    ];
+
+/// The transform that undoes [m], or the identity where it cannot be undone -
+/// a copy scaled to nothing has no way back, and an identity is the answer
+/// that draws something rather than dividing by zero.
+List<double> _inverse(List<double> m) {
+  final det = m[0] * m[3] - m[1] * m[2];
+  if (det.abs() < 1e-12) return identityTransform.toList();
+  final inv = 1 / det;
+  final a = m[3] * inv;
+  final b = -m[1] * inv;
+  final c = -m[2] * inv;
+  final d = m[0] * inv;
+  return [a, b, c, d, -(m[4] * a + m[5] * c), -(m[4] * b + m[5] * d)];
 }
 
 /// Every layer's own size, answered from the document and remembered.
@@ -140,12 +243,21 @@ class LayerBoundsCache extends ChangeNotifier {
     BridgeLayerEntry entry, {
     required BridgeCompSize compSize,
     required BigInt? revision,
+    double t = 0,
   }) {
     _atRevision(revision);
     final id = entry.layer.internallayerId;
+    // A shape layer is measured fresh every time: since K-553 its box can move
+    // with the *playhead* as well as with the document, and a cache keyed on
+    // the revision alone would hand back yesterday's box while a keyed
+    // repeater played. Measuring one is a walk over its own points, which is
+    // what this cache exists to keep media probes out of, not arithmetic.
+    if (entry.info.kind == BridgeLayerKind.shape) {
+      return _measure(entry, compSize, t);
+    }
     final held = _byLayer[id];
     if (held != null) return held;
-    final measured = _measure(entry, compSize);
+    final measured = _measure(entry, compSize, t);
     _byLayer[id] = measured;
     return measured;
   }
@@ -153,7 +265,7 @@ class LayerBoundsCache extends ChangeNotifier {
   Size _compSize(BridgeCompSize s) =>
       Size(s.width.toDouble(), s.height.toDouble());
 
-  Size _measure(BridgeLayerEntry entry, BridgeCompSize compSize) {
+  Size _measure(BridgeLayerEntry entry, BridgeCompSize compSize, double t) {
     // A Null never draws, so its box is the convention above rather than
     // anything read from the document.
     if (entry.info.kind == BridgeLayerKind.nullLayer) return nullLayerBounds;
@@ -164,7 +276,7 @@ class LayerBoundsCache extends ChangeNotifier {
     // is here because the rest of this file was written when "a layer's size"
     // was a constant.
     if (entry.info.kind == BridgeLayerKind.shape) {
-      final art = shapeContentsBounds(entry.info.shapeContents);
+      final art = shapeContentsBounds(entry.info.shapeContents, t: t);
       return art ?? _compSize(compSize);
     }
 

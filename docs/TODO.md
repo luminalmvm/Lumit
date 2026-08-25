@@ -146,10 +146,11 @@ These are v1-scope surfaces it does not yet match.
 **Toolbar tools ([07-UI-SPEC.md](07-UI-SPEC.md) §1.7):** what is armed is a
 *tool*; what each tool then does is the backlog.
 - **Razor** - a Sequence layer's eased ramps refuse a cut (`UncuttableClip`).
-- **Shape layers** ([impl/shape-layers.md](impl/shape-layers.md)) - owed: nested
-    groups and the shape **modifiers** (repeater, trim paths, wiggle, offset
-    paths), gradient fills, dashed strokes, joins and caps other than round, and
-    animated paths.
+- **Shape layers** ([impl/shape-layers.md](impl/shape-layers.md)) - trim paths
+    (K-451), dashed strokes (K-452), the repeater (K-453), offset paths (K-454)
+    and gradient fills (K-455) have landed. Owed: nested groups, the **wiggle**
+    modifier, gradient **stop lists** (there are two stops), joins and caps
+    other than round, and animated paths.
 - **Path editing on the picture** - mask and shape-layer points drag (K-224,
     K-307). Still owed: a **paint stroke's** points, which are a stored gesture
     rather than a path and so are their own piece of work; no path's bezier
@@ -161,19 +162,18 @@ These are v1-scope surfaces it does not yet match.
     whole path by a segment.
 - **Mask paths have no per-key op.** `SetLayerMasks` rewrites the whole list for
     every keyframe drag, so one drag is one undo step only because the drag is
-    staged - a per-key op would make it so by construction (K-344). **Lighten**
-    and **Darken** are the two mask modes still unbuilt, and feather is uniform:
-    the variable-width, per-vertex kind is a model change
-    ([03-DATA-MODEL.md](03-DATA-MODEL.md) §7).
-- **Variable-width mask feather** (K-338) - After Effects has had this since CS6:
-    the **Mask Feather Tool** (`G` cycles onto it, under the Pen) drops *feather
-    points* along an existing mask path, each dragging its own radius in or out,
-    so one edge of a mask can be razor-sharp and another 200 px soft. It is what
-    a sky replacement wants - crisp along the horizon, blending away at the
-    corner. It needs a second point set on the path, its own tool, and a
-    rasteriser that varies the ramp width along the boundary rather than using
-    one number. `ToolMode.penMaskFeather` already exists in the toolbar as a stub
-    with an icon and a string and nothing behind it.
+    staged - a per-key op would make it so by construction (K-344).
+- **The Mask Feather Tool** (K-445 built the half under it) - a mask's feather
+    can now be a width **per vertex**, keyed and dragged from its own Timeline
+    rows, and switched on from the mask row's menu. What is still owed is After
+    Effects' *tool*: `ToolMode.penMaskFeather` (`G` cycles onto it, under the
+    Pen) remains a stub with an icon and a string and nothing behind it, so the
+    widths cannot yet be dragged on the picture. Doing that properly wants
+    feather points anchored by **arc length** rather than by vertex index, which
+    would also close K-445's two recorded limits: deleting a point shifts the
+    widths after it, and a path whose keys hold different point counts reads its
+    widths against the reconciled vertices. AE's own variable feather is
+    therefore still not imported ([11-AE-IMPORT.md](11-AE-IMPORT.md)).
 - **Type** - vertical type (needs `lumit-text` to lay a line downwards); true
     glyph metrics across the bridge (the caret, the anchor and the gizmo all use
     the same half-an-em estimate, and one measured advance width would replace
@@ -181,14 +181,13 @@ These are v1-scope surfaces it does not yet match.
     alignment - the document is one styled run, [03-DATA-MODEL.md](03-DATA-MODEL.md)
     §9.1); per-character and per-word animators.
 - **Paint** (brush/clone stamp/eraser, [impl/paint.md](impl/paint.md)) - owed:
-    **pressure and tilt** from a tablet, **brush shapes** other than round,
-    **spacing** and **scatter**; **write-on** (a stroke's own start and end times,
-    which is what makes paint animate in After Effects - nothing in the model
-    yet); **per-stroke blending modes**; painting in **Layer view** rather than on
-    the composite; **a GPU stamping path** (the rasteriser is a CPU loop beside
-    the mask one, and it changes the rasteriser, not the stored stroke); and
-    **paint on a Precomp layer's nested pixels**, which never come back to the
-    CPU, so a stroke on one currently marks nothing.
+    **pressure and tilt** from a tablet, **spacing** and **scatter**; a keyed
+    Start/End's **curve in the graph editor** (the Timeline lane draws and drags
+    its diamonds, but `graphChannels` walks transform, effect and mask paths only
+    - K-449); painting in **Layer view** rather than on the composite; and **a GPU
+    stamping path** (the rasteriser is a CPU loop beside the mask one, and it
+    changes the rasteriser, not the stored stroke - it is also what would retire
+    the 8-bit read-back a painted Precomp pays, K-447).
 - **Camera** - a separate point of interest (AE's two-node camera) is an engine
     change; the Unified Camera tool; depth-of-field handles on the picture; a
     keyframed camera cannot be dragged (no single value to add to); a drag
@@ -694,6 +693,23 @@ project saved with no Viewer up gets no picture. The better shape, when wanted: 
 worker's private `render_preview` already produces the RGBA; only the capture function
 in `viewer_panel_frb.dart` would change.
 
+**A control for an image sequence's frame rate** (K-539). The rate is stored,
+saved and read by everything that opens the run, but nothing can change it: an
+imported sequence plays at the 25 default. It wants a row in the Project panel's
+item menu beside *Relink…* — a rate field, one op, one undo step — plus its arb
+strings. The engine side is a `SetSequenceRate` op and a bridge setter; the model
+already carries the field (`FootageItem::sequence`).
+
+**Tracking a sequence** (K-415, K-539). `lumit_render::track` still opens footage
+by bare path, so a camera track over a run of stills analyses its first frame
+alone. It wants the same `MediaSource` the Viewer's decode already takes;
+`crates/lumit-bridge/src/api/track.rs` resolves the path it hands over.
+
+**A relinked run keeps its old name.** The Project panel names a sequence for its
+span — `frame[0001-0050].png` — and relinking rewrites the media reference but not
+the name, so a run that gained or lost frames while it was away shows a stale
+span. It wants the relink to rename a sequence item in the same batch.
+
 **Camera tracking, phase 4 stage 3** (K-417, docs/impl/tracking.md §5a–§5b).
 Stage 1 landed the model half — `ParamKind::Action`, the Camera track effect, the
 solve link and Convert to keyframes, all against an injected solve. Stage 2 landed
@@ -1124,14 +1140,14 @@ project does not contain).
    cross as a stable id plus their facts and are written in
    `l10n/engine_labels.dart` (K-303), gated by `engine_labels_test.dart` reading the
    `Reason` enum. Three things are owed:
-   - **Footage is found only where After Effects left it.** Of docs/11 §2.5's four
-     relink steps only the absolute path runs: there is no collected `footage/`
-     to check, the mapper stores the AE absolute path as the *relative* one too,
-     and an absolute path re-rooted against the bundle's folder is still itself.
-     A bundle imported on the machine that wrote it relinks; one carried to
-     another machine imports wholly offline. Both later steps want the collected
-     copy first — write that, store a genuinely relative path beside it, and the
-     re-rooting and fingerprint searches start paying.
+   - **The collected `footage/` copy is still owed.** Of docs/11 §2.5's four relink
+     steps, the absolute path and the search-folder sweep both run (K-438, 2026-08-24:
+     whatever the first three resolver steps leave lost is looked for by file name
+     under the folder the `.aep` or bundle was picked from, one walk for all of them),
+     so a project copied across with its media beside it now comes up linked. What is
+     left is the collected copy and the hash verification that wants it: write the
+     `footage/` folder, store a genuinely relative path beside it, and the re-rooting
+     and fingerprint steps start paying too.
    - **A report row does not lead anywhere** (docs/11 §9's navigation): a row names
      its comp ▸ layer ▸ property and double-clicking it does nothing. It needs the
      row to carry an id, not just a path, which means the bridge row carrying one.
@@ -1151,8 +1167,10 @@ parses `fixture.aep` and compares the project block, all 22 items, both comps'
 settings, all 24 layers and every property tree against
 `fixture.lum-bundle/capture.json` - AE's own account of the same file - field for
 field; §7.1 and §7.2 are the proved layout maps.
- - **Recovery, asserted in CI** (§7.2 has the table): 646 static property values
-   exact with none wrong and none invented, 27 of 27 keyframes with their ease and
+ - **Recovery, asserted in CI** (§7.2 has the table): 684 static property values
+   exact with none wrong and none invented - the 646 the file stores, plus the 38
+   Position and Anchor Point defaults the parser writes in for the records After
+   Effects leaves out, each asserted against AE's own number - 27 of 27 keyframes with their ease and
    spatial tangents, 2 expressions, 13 effect instances, 2 masks with their paths,
    4 markers, 1 separated-dimension property, and the 3 `CUSTOM_VALUE` blobs as raw
    bytes - which the Bridge cannot get at all. `map_capture` on the parsed capture
@@ -1222,11 +1240,18 @@ field; §7.1 and §7.2 are the proved layout maps.
    offsets could be checked against AE. One more sitting with real footage in the
    project unblocks the group, and the differential test asserts the fixture still has
    none so the exemption cannot rot.
- - **An image sequence imports as its folder, and reports as media not found.** The
-   alias record says `target_is_folder`; Lumit has no `SequenceItem` yet (docs/03
-   §2), so the item arrives named after the folder and the report says the media
-   could not be found. A reason of its own ("this is an image sequence") is owed with
-   the sequence item, not before it.
+ - **A dragged layer is owed too, and cannot be forged.** Every layer in `fixture.aep`
+   starts at zero, so `ldta`'s start offset - what puts in and out points, keyframe times
+   and a stretch's reach back on the comp's clock - is measured against AE at one value
+   only, and the 50 % layer sitting at zero cannot tell stretch-about-the-start from
+   stretch-about-the-origin. The fixture is authored *by* After Effects
+   (`make-fixture.jsx` inside a running AE), so hand-written bytes would be this parser's
+   guess compared against this parser: owed is a sitting with a layer dragged along the
+   timeline and a second both dragged and stretched. Standing in meanwhile:
+   `a_layers_in_and_out_are_counted_from_its_own_start` and
+   `a_stretched_layer_is_stretched_from_its_start` in `aep::tests`, which prove the parser
+   reads the field it was handed and not that the field is where AE puts it. The
+   differential test asserts every start is still zero, so the exemption cannot rot.
  - **A reflected layer's ends are one frame loose.** At −100% stretch AE reports its
    two ends 1/3000 s further out than the file's arithmetic gives, as if it reflects
    inclusive indices on an internal grid; with one sample the grid cannot be proved,
@@ -1356,8 +1381,8 @@ Grouped by the phase they belong to in [16-ROADMAP.md](16-ROADMAP.md). A pointer
 list, not a re-statement of the roadmap.
 
 - **Media engine ([05-ARCHITECTURE.md](05-ARCHITECTURE.md) §6).** The one-copy
-    D3D11→DX12 interop and VideoToolbox (K-033); proxy generation; image-sequence
-    footage; the resource governor; ProRes/DNxHR intermediate export (v1 is
+    D3D11→DX12 interop and VideoToolbox (K-033); proxy generation; the resource
+    governor; ProRes/DNxHR intermediate export (v1 is
     H.264/HEVC only); the 8-/32-bpc working-depth switch (v1 is fp16 only); OCIO
     v2 colour management and its UI.
 - **Audio - the largest gap** ([07-UI-SPEC.md](07-UI-SPEC.md) §10,
@@ -1434,6 +1459,20 @@ the per-frame error. Forty-three tests, all synthetic, no assets.
      decision entry.
    - **2D track exports** (docs/08 §7's Tracker row): keyframed transform and
      corner-pin data from a track group, riding the same store.
+ - **A zoom inside a moving shot is not detected, and a multi-frame rack can
+   never be a cut** (note's Open questions, measured 2026-08-24 from a real
+   7135-frame train POV that went wrong the moment the shot scoped in).
+   `detect_zoom` merges every adjacent "hot" pair into one run and only calls an
+   **isolated** hot pair a cut, so (a) a lens rack over several frames is always
+   a `Ramp`, and (b) forward camera motion — which grows every patch in the
+   frame every frame — makes the whole clip one run, inside which a genuine
+   1.4x scope-in is one sample in a median of thousands and vanishes. The shot
+   then gets one focal for two lens settings and the camera path is wrong from
+   the rack onwards, with nothing said. Ordered behind the focal-curve item
+   below, because finding the boundary is only half the answer: a multi-frame
+   rack is a ramp whichever way it is detected. The cheap partial answer
+   meanwhile is to **surface `SolveNote`** — `ZoomRamp` is already produced and
+   already right, and nothing carries it across the bridge.
  - **The zoom ramp is one focal, not a curve** (note §4's deviation 7). A
    segment containing a detected zoom ramp is flagged and reported as
    `SolveNote::ZoomRamp`, and its focal is a single number over the whole run

@@ -56,6 +56,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
     let mut doc = Document::new();
     let item = Uuid::now_v7();
     doc.items.push(ProjectItem::Footage(FootageItem {
+        sequence: None,
         id: item,
         name: "shot".into(),
         media: media("shot.mp4", ORIGINAL),
@@ -150,7 +151,7 @@ fn plan_and_key(
     let job = &jobs[0];
     let key = lumit_render::cache::frame_key(doc, composition, 30, quality, probes);
     (
-        job.path.to_string_lossy().into_owned(),
+        job.source.path.to_string_lossy().into_owned(),
         (job.natural_w, job.natural_h),
         job.target_width,
         key,
@@ -299,7 +300,7 @@ fn a_missing_original_slates_even_with_a_good_proxy() {
     );
     assert_eq!(jobs.len(), 1);
     assert!(jobs[0].slate, "the slate is what a missing original draws");
-    assert_eq!(jobs[0].path.to_string_lossy(), ORIGINAL);
+    assert_eq!(jobs[0].source.path.to_string_lossy(), ORIGINAL);
 }
 
 /// K-031 with proxies on: an export delivers what the export was asked for, not

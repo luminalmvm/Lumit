@@ -450,6 +450,11 @@ pub fn build_comp_draws_at(
         if layer.is_adjustment() {
             return None;
         }
+        // The layer's own clock, the same one its transform, its masks and its
+        // paint are read at (K-213) — a keyframed shape modifier travels with
+        // the layer exactly as a keyframed mask does.
+        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+
         let raw = match &layer.kind {
             // Neither kind has pixels of its own. An Adjustment layer is a
             // pass-through until its effect stack exists; a Null never draws at
@@ -537,7 +542,7 @@ pub fn build_comp_draws_at(
             // (K-237). Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
-                .then(|| lumit_core::shape::contents_bounds(contents))
+                .then(|| lumit_core::shape::contents_bounds(contents, lt))
                 .flatten()
                 .map(|(x0, y0, x1, y1)| {
                     let natural_w = (x1 - x0).max(1.0);
@@ -548,7 +553,7 @@ pub fn build_comp_draws_at(
                     let w = natural_w.round().max(1.0) as u32;
                     let h = natural_h.round().max(1.0) as u32;
                     (
-                        lumit_core::shape::rasterise_contents(contents, w, h, x0, y0, x1, y1),
+                        lumit_core::shape::rasterise_contents(contents, w, h, x0, y0, x1, y1, lt),
                         w,
                         h,
                         (natural_w as f32, natural_h as f32),
@@ -561,10 +566,6 @@ pub fn build_comp_draws_at(
             // `Composition::lights_at`, not from the draw list.
             LayerKind::Light { .. } => None,
         };
-        // The layer's own clock, the same one its transform and effects are
-        // read at (K-213) — a keyframed mask on a layer dragged along the
-        // timeline travels with the layer.
-        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
         raw.map(|(mut rgba, w, h, natural)| {
             // Paint first, masks second: a stroke is part of the layer's
             // picture, and a mask gates the picture (K-227, docs/06 render
@@ -577,6 +578,9 @@ pub fn build_comp_draws_at(
                 f64::from(natural.0),
                 f64::from(natural.1),
                 &layer.paint,
+                // The layer's own clock, as a mask's keys are read on (K-213):
+                // a stroke keyed to draw itself on travels with the layer.
+                lt,
             );
             lumit_core::mask::apply_masks(
                 &mut rgba,
@@ -835,11 +839,13 @@ pub fn build_comp_draws_at(
             .collect()
     };
 
-    // **The mask paths — the geometry carriage** (K-408, docs/08 §1.2). One
-    // polyline per enabled built-in whose declaration names a MaskPath row AND
-    // resolves to an op at all — the same two conditions `mattes_for` applies,
-    // so this list stays 1:1 with the ops `run_ops` walks, with its own counter
-    // there because the predicate is a different one.
+    // **The mask paths — the geometry carriage** (K-408, K-546, docs/08 §1.2).
+    // One polyline per MaskPath **row** of every enabled built-in that resolves
+    // to an op at all — the same two conditions `mattes_for` applies, so this
+    // list stays in step with the ops `run_ops` walks, with its own counter
+    // there because the predicate is a different one. Per row, not per op: the
+    // Matte key declares two (an inside hold-out and an outside one), and
+    // `EffectSchema::mask_paths` is the one enumeration both sides run.
     //
     // The masks are the *layer's own*: a mask belongs to the layer it is drawn
     // on, and an effect walking another layer's shape is a question nobody has
@@ -856,8 +862,13 @@ pub fn build_comp_draws_at(
             .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
             .filter_map(|e| {
                 let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
-                let (param, self_default) = def.schema().mask_path()?;
-                def.is_image_op().then_some((e, param, self_default))
+                def.is_image_op().then_some((e, def))
+            })
+            .flat_map(|(e, def)| {
+                def.schema()
+                    .mask_paths()
+                    .map(move |(param, self_default)| (e, param, self_default))
+                    .collect::<Vec<_>>()
             })
             .map(|(e, param, self_default)| {
                 // A row the panel does not show, or shows greyed, is a row
@@ -1102,6 +1113,16 @@ pub fn build_comp_draws_at(
                         // flick grid already (`layer_time`), so a Precomp
                         // layer moved by whole frames keeps its names.
                         key: keys.and_then(|k| k.nested_key(nested, lt)),
+                        // Paint on a Precomp (K-547): stamped into the nested
+                        // picture by the realiser, because a comp has no
+                        // pixels until it is rendered. Collapse is already
+                        // forced off by any paint (`collapse_state`), so the
+                        // strokes always have an intermediate to land in.
+                        paint: layer.paint.clone(),
+                        // The layer's own clock, so a keyed Start/End on a
+                        // Precomp's paint reads where every other keyed value
+                        // on that layer reads (K-213, K-549).
+                        paint_time: lt,
                     },
                     (nested.width as f32, nested.height as f32),
                 )
@@ -1241,9 +1262,9 @@ pub fn build_comp_draws_at(
                     fx,
                     fx_ids,
                     // Adjustment layers process the composite below, not
-                    // footage frames — no neighbours or flow field here.
+                    // footage frames — no neighbours or flow fields here.
                     neighbours: Vec::new(),
-                    flow_field: None,
+                    flow_fields: Vec::new(),
                     // Ordered file paths of the enabled built-in `lut` effects,
                     // 1:1 with the stack's `lut` ops (docs/08 §3.11);
                     // the same `lt` resolve_stack used above.
@@ -1455,13 +1476,27 @@ pub fn build_comp_draws_at(
                     .collect()
             })
             .unwrap_or_default();
-        // The dense motion field for Fast motion blur, carried from the same
-        // decode job (its `(u, v, conf)` are at the layer's decoded size).
-        let flow_field = pixels_by_layer.get(&layer.id).and_then(|lp| {
-            lp.flow_field
-                .as_ref()
-                .map(|(u, v, conf)| (u.clone(), v.clone(), conf.clone(), lp.width, lp.height))
-        });
+        // The dense motion fields, one per offset a flow-consuming effect
+        // asked for (K-544), carried from the same decode job (their
+        // `(u, v, conf)` are at the layer's decoded size).
+        let flow_fields = pixels_by_layer
+            .get(&layer.id)
+            .map(|lp| {
+                lp.flow_fields
+                    .iter()
+                    .map(|(offset, (u, v, conf))| {
+                        (
+                            *offset,
+                            u.clone(),
+                            v.clone(),
+                            conf.clone(),
+                            lp.width,
+                            lp.height,
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
 
         draws.push(CompLayerDraw {
             layer: layer.id,
@@ -1509,7 +1544,7 @@ pub fn build_comp_draws_at(
             fx,
             fx_ids,
             neighbours,
-            flow_field,
+            flow_fields,
             // Ordered file paths of the enabled built-in `lut` effects, 1:1
             // with the stack's `lut` ops (docs/08 §3.11); the same `lt`
             // resolve_stack used for `fx`.
@@ -1837,7 +1872,7 @@ pub fn accumulation_mb_below(
 fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     for d in draws.iter_mut() {
         d.neighbours = Vec::new();
-        d.flow_field = None;
+        d.flow_fields = Vec::new();
         if let DrawSource::Nested { draws: inner, .. } = &mut d.source {
             strip_temporal_inputs(inner);
         }

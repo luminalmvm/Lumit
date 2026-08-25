@@ -128,6 +128,7 @@ pub fn stress_document(p: &StressParams) -> Document {
                     fingerprint: None,
                     extra: serde_json::Map::new(),
                 },
+                sequence: None,
                 extra: serde_json::Map::new(),
                 colour_space: None,
             }));

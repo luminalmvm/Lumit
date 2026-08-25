@@ -132,6 +132,8 @@ Depth map
 Depth of field
 Despill amount
 Despill bias
+Despot black
+Despot white
 Detail
 Detect edge threshold
 Diagonal
@@ -287,8 +289,10 @@ Initial speed
 Inner radius
 Input
 Input black
+Input space
 Input white
 Inside colour
+Inside mask
 Intensity
 Interlace offset
 Interpolation
@@ -410,6 +414,7 @@ Output height
 Output white
 Output width
 Outside colour
+Outside mask
 Overlay
 PAL
 Paint style
@@ -452,6 +457,7 @@ Ramp
 Random
 Randomness
 Rate
+Rec. 709
 Rectangle
 Rectangular to polar
 Red
@@ -484,6 +490,7 @@ Rise
 Roll speed
 Rotation
 Rotation amount
+Rotation frequency
 Rotation jitter
 Roughen
 Roughen edges
@@ -505,6 +512,9 @@ Screen balance
 Screen colour
 Screen gain
 Screen matte
+Screen pre-blur
+Screen shrink/grow
+Screen softness
 Scribble
 Seed
 Segment length
@@ -682,3 +692,4 @@ Yellows
 Z amount
 Z frequency
 Zoom
+sRGB

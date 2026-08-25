@@ -15040,3 +15040,1015 @@ so the `.ico` and `.icns` files follow without being edited.
 palette), K-092 (the hover-shift rule), K-439 (the accent's closed job list), K-465 (the
 one-click swatches), K-480 (the shipped wordmark), K-251 (the icon generator), K-309 (the
 macOS icon) and K-279 (the two sites).*
+## K-538 — Media is looked for by name beside the project, and a relink rewrites the longest prefix
+
+**DECIDED 2026-08-24.** Two additions to the relink resolver of
+[10-FILE-FORMAT.md](10-FILE-FORMAT.md) §2, both of them the same observation from two ends:
+**a path that is wrong is still evidence.**
+
+**Step 3b — by file name, under the project's own folder.** After steps 1 to 3 have run,
+whatever is still lost is looked for by its file name anywhere below the project's folder.
+It is the weakest match, so it goes last and only over what nothing else found, and the tree
+is walked **once** for all the missing items rather than once each. What it answers is the
+case none of the other three can: an After Effects import on a second computer. Such a
+project carries the paths of the machine it was made on and has **no fingerprints at all**,
+because nothing has ever been saved — so steps 1 to 3 come back empty even when every clip
+is sitting in a subfolder beside the `.aep`. Where two files share a name the first in walk
+order answers for both; that ambiguity is real, and the fingerprint search above resolves it
+once the project has been saved once.
+
+**The sibling relink rewrites the longest prefix, not the parent folder.** `path_mapping`
+used to answer the *directory* the relinked file moved between, which relinks only the
+siblings that lived in that one folder. It now answers the longest rewrite the move supports:
+everything the old path and the new one share at the end did not move, and the prefix in
+front of it did. An edit's footage is forty-eight clips in forty-eight different subfolders
+under one root, and the root is what moves — under the old mapping, relinking one clip found
+none of the others, because none of them was in that folder.
+
+**Why not make either of these a search the user configures.** They both use a folder that is
+already known and already meaningful — the one the project or the `.aep` was picked from, and
+the one the user just pointed at in the relink dialogue. A preference would be a question
+asked in place of an answer that was already there. User-configured search roots stay what
+they are: step 3's, for the fingerprint search.
+
+Regression tests: "what nothing else found is looked for by name beside the project" and
+"path mapping relinks siblings under the same move" (`lumit-project`), and "relinking one
+clip rewrites the prefix for every other lost clip" (`lumit-bridge`).
+
+## K-539 — A folder of numbered stills is one footage item, at a rate the project sets
+
+**DECIDED 2026-08-24.** Image sequences, listed as future in
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §2 as a `SequenceItem`, land instead as a flag on
+`FootageItem` — which is what [01-GLOSSARY.md](01-GLOSSARY.md) already promised ("an asset
+referencing a media file on disk (video, image, image sequence)"). A separate item kind would
+have meant every `match` on `ProjectItem` growing an arm, and every one of them saying the
+same thing: treat it as footage. A sequence *is* footage; the only fact that distinguishes it
+is that its frames come from many files.
+
+**FFmpeg reads the run.** Its `image2` demuxer takes a printf pattern — `Depth%06d_depth.exr`
+— a start number and a frame rate, and hands back a video stream. So the whole feature is a
+naming question: turn one picked file into a pattern, a start and a length, and the existing
+probe, frame index, decode, decode cache, prefetch, thumbnail and slate paths carry it
+unchanged. Nothing in Lumit opens a still.
+
+**What the project stores is only the rate.** Where the run starts, how long it is and which
+files are in it are re-read from the folder on every open, because the files on disk are the
+truth about a sequence and a saved copy of them would only ever be a stale one — add ten
+frames overnight and the item is ten frames longer, with nothing to reconcile. The rate is
+the exception: stills carry no frame rate of their own, so somebody has to say, and the
+project is the only one who can. `FootageItem.media` keeps pointing at one real file (the
+run's first), so fingerprinting, saving, rebasing, `is_file` and relink all work on a path
+that exists — the pattern names nothing.
+
+**The default rate is 25.** Nothing in the specification said, and there was no better answer
+available: After Effects conforms a sequence by an application *preference*, not by anything
+the `.aep` carries, so any number read out of an imported project would be a guess. 25 is
+`FrameRate::FPS_25`, the project's own can't-fail fallback, and it is also `image2`'s own
+default — three reasons pointing one way. It is per item and settable; **the control for it
+is not built yet**, which is the one gap this entry knowingly leaves.
+
+**A gap ends the run; it is never bridged.** Given `0001…0100` with `0050` missing, picking
+`0007` imports `0001…0049` and picking `0060` imports `0051…0100`. Refusing outright would
+let one deleted frame reject a whole shot, and silently closing the hole would show the wrong
+picture at the wrong time without ever saying so. Clamping is the only one of the three that
+cannot lie about which frame you are looking at.
+
+**What is offered as a sequence, and what is not.** Only still-image extensions — a folder of
+`clip0001.mp4`…`clip0100.mp4` is a hundred clips, and gluing them together would be a
+destructive guess. A numbered still with no numbered neighbours stays the single still it is.
+The frame number is the *longest* digit run in the file stem, so `shot_v2_0043.exr` is frame
+43 of version 2 rather than frame 2, and a differently-padded neighbour is a different run,
+because `%04d` does not name `frame7.png`. A `%` anywhere in the path refuses the run
+outright: `image2` would read it as a field of its own.
+
+**The index is arithmetic, not a scan.** Every file is one packet and one keyframe, evenly
+spaced, and the count came off the directory — so two packet reads give where the clock
+starts and how far it steps, and the table is written from there. The usual packet scan would
+read every file's bytes: tens of gigabytes for a feature-length OpenEXR render, to produce a
+table this gives exactly. For the same reason a sequence's index is never written to the
+sidecar cache: it costs nothing to rebuild, and the sidecar is named after one file's
+fingerprint, which could not tell a run of 300 frames from the same run with 400 in it.
+
+**Relink resolves the picked file to its run's first frame before anything else reads it.** A
+picker opened on a folder of two thousand stills gives back whichever one was clicked, and
+the sibling sweep of K-538 works by asking what the old path and the new one share at the
+end — `frame0001.png` against `frame0042.png` share `.png` and nothing more, so "the folder
+moved" would come out as "everything up to half a frame number moved".
+
+**After Effects' own sequences map straight across.** The `.aep`'s file alias carries
+`target_is_folder`, and its `fullpath` is then the folder the run lives in; two extra `Utf8`
+chunks beside it carry the name either side of the frame number. Both name themselves rather
+than sitting at a byte offset, which is why they can be read while the rest of the
+interpretation still waits for a fixture with real footage in it ([11-AE-IMPORT.md](11-AE-IMPORT.md)
+§2.5). Because a folder is not a file, resolution gains one step for sequence items: look
+inside for the first *numbered* file, which skips the `desktop.ini` and `readme.txt` that
+would otherwise sort ahead of frame zero.
+
+Regression tests: detection, the gap clamp, the padding rule, the `%` refusal, decode order
+and the export/import round trip (`lumit-media`); the save round trip (`lumit-project`);
+import-once-per-run and relink-by-any-frame (`lumit-bridge`); the alias signals and the
+mapping (`lumit-import`); the folder-to-first-frame resolution (`lumit-project`).
+
+## K-540 — A track that stops being followable is solved as far as it went, and says so
+
+**DECIDED 2026-08-24.** A camera track can stop part-way — the lens racks, the frame whites
+out, a cut lands mid-clip — and until now the analysis carried on regardless: it decoded the
+rest of the shot, placed cameras on frames nothing had been followed through, and reported
+the result as a whole answer. Three rulings, and they are one ruling from three ends.
+
+**The job stops where the chain of correspondence is severed.** The signal is the number of
+tracks that *carry across* a frame boundary — the survivors of the step into the frame just
+pushed, read before re-detection refills the emptied buckets. It is deliberately not the live
+count: the detector seeds fresh features into whatever buckets emptied and its quality floor
+is relative to each frame's own best, so the live count recovers within one frame however
+completely a shot fails. Live count says how many specks are being followed; carried count
+says how many of them tie this frame to the last one. The floor is **eight**, which is the
+solver's own minimum rather than a tuned threshold: the minimal sample for the 7-point
+fundamental is seven, and eight is the smallest set that can be *verified* rather than merely
+fitted. Below it no two-view geometry through that frame exists, so no frame after it can be
+related to any frame before it, however well the rest of the clip tracks among itself.
+
+**It finalises the span that worked rather than discarding it.** The tracks are cut at the
+last frame that carried and the whole of phases 2 and 3 run over that span exactly as over a
+whole clip. Cutting rather than leaving the tail in is load-bearing: keyframe selection
+returns a short final pair rather than leaving a gap, so a set running past the failure would
+have the solve stand on a pair nothing spans. Half a shot honestly measured is worth having;
+a whole one with an invented tail is not.
+
+**What makes it partial is the clip's length, not a flag on the solve.** After the cut the
+`CameraSolve` is a complete answer *about its span*. The partiality is the relation between
+that span and the clip, so the store and the sidecar record (now format version 2) carry the
+clip's own frame count and "partial" is one comparison. The span is always a prefix — the job
+follows the source from its first frame and can only stop early — so those two numbers are
+also the whole of what the interface draws. The two ways a run can end early, frames that
+stop decoding and tracking that fails, are reported identically, because they mean the same
+thing to the store, to the link and to the panel.
+
+**A partial solve is `Done`, not a failure**, and is cached like any other. A refusal is a
+shot with no answer in it; this one has an answer, and the status row's job is to say how far
+it reaches. The sidecar keeps it under the same key because it *is* the honest answer for
+that file at those settings, and re-deriving it would take the same minutes to stop in the
+same place.
+
+**The bar above the status line is not the progress bar [07-UI-SPEC.md](07-UI-SPEC.md) §2.5
+reserves.** A thin bar shows the analysed span against the rest of the clip in theme colours,
+and the line says how far it got in words in place of the point count and error. It appears
+only once the work is *over*, it does not move, and it measures the answer's extent rather
+than the work's completeness — recorded in 07 §6 so the two are not confused later.
+
+**The hold needed no new mechanism**, and that was worth verifying rather than assuming.
+K-417's hold is a clamp into the store's solved range, and the range now ends where the track
+does, so a camera linked to a partial solve derives inside the span and holds the last derived
+pose outside it with nothing changed. It is asserted in the engine over a real analysis and
+across the bridge over a written-down one.
+
+**Not decided here, and deliberately:** why a shot that is *moving forward* loses a zoom
+entirely. Measured while investigating a 7135-frame train POV that went wrong the moment it
+scoped in, and written up in [impl/tracking.md](impl/tracking.md)'s Open questions and
+docs/TODO.md: `detect_zoom` merges adjacent hot pairs into one run and only calls an isolated
+hot pair a cut, so a multi-frame lens rack is always a ramp, and forward motion makes every
+pair hot and swallows the whole clip into one run in which a genuine scope-in disappears into
+a median. The shot then gets one focal for two lens settings. Fixing it properly is the focal
+*curve* this note already owes plus a detector that can judge a pair against its neighbours,
+which is not a change to make alongside this one.
+
+Regression tests: the carried count against the live count, and a truncated set's invariants
+(`lumit-track`); a synthetic shot running into featureless frames — the run stopping where
+the carrying stops, the solve covering exactly the span that worked, the store reading
+partial, and the linked camera holding through the tail (`lumit-render`); the span and the
+clip crossing the seam with the badge derived inside and held outside (`lumit-bridge`); and
+the partial sentence and the bar's two weights (Flutter).
+
+## K-541 — The Shake's twist gets a rate of its own
+
+**DECIDED 2026-08-24** (allocated on the safe-lane branch). Shake's per-axis wobble group
+(K-146) gave x, y and z each an amount *and* a frequency multiplier on the master
+Frequency. Rotation was left with an amount alone and read its noise channel at the master
+rate flat, so the one thing a handheld shot actually does — a slow translational sway
+carrying a faster shudder of twist — could not be dialled: raising the Frequency sped the
+twist up together with everything it was meant to differ from. **Rotation frequency** is
+that missing multiplier, a `×0–4` slider defaulting to 1, sitting beside Rotation amount
+rather than inside the per-axis group, because the twist is a master-level control in this
+effect's shape and the group is where the x/y/z biases live.
+
+**The default is exactly one, and that is the whole compatibility story.** The multiplier
+enters as `base × rot_freq` in the noise sample, and multiplying an `f64` by 1.0 is exact,
+so a shake made before this row renders the bits it always did. A project saved without the
+row reads the same 1.0 through the resolver's `unwrap_or`, so no file migration and no
+schema version bump are involved.
+
+**No parity work.** The noise is sampled host-side and handed to both paths as derived
+numbers (K-385/K-388), so the CPU reference and the WGSL kernel consume the same four
+floats and cannot disagree; nothing in the shaders changed.
+
+**Not done here:** rotation as three independent x/y/z twists. Shake resamples through the
+2D Transform kernel, whose affine carries exactly one rotation; separate pitch/yaw/roll
+dials would need a perspective warp and a different kernel, which is a new effect's worth
+of work rather than a dial.
+
+Regression tests: the default resolving bit-for-bit to the old wobble, doubling the rate
+reading the twist at twice the time, and x, y and z staying untouched while it moves
+(`lumit-core`).
+
+## K-542 — Tile is the identity when it lands, and grows the raster when it is asked to
+
+**DECIDED 2026-08-24** (allocated on safe-lane). Two changes to Tile (docs/08 §3.39), which
+together make it AE's Motion Tile rather than a lookalike.
+
+**1. A fresh Tile changes nothing.** Tile width and height default to **100**, not 50, and
+Tile centre is filled by `instantiate_for_raster` with the comp's own middle rather than
+the schema's nominal 960, 540. This **supersedes §3.39's "the default tiles" note**, which
+had cited §1.2 ("drop it on and it already looks right") for a 2×2 repeat.
+
+*Why that reading of §1.2 was wrong here.* §1.2 asks that an effect look right when it
+lands, and for a blur or a glow "right" is a visible amount, because the control means
+something on its own. Tile's controls do not: a tiling is a statement about where the
+picture is being repeated *to*, and until the user has made it, any grid the effect chooses
+is a guess. A 2×2 repeat nobody asked for is also a picture nobody can undo by eye — the
+way back is to know that 100 is the neutral, which is exactly the knowledge the default was
+meant to save. §3.5's Transform is the precedent after all: an effect whose whole subject
+is a placement starts at the placement that changes nothing.
+
+The identity is exact, not approximate. The mapping at a whole-frame tile is
+`px ÷ W · W`, a divide followed by the multiply that undoes it, which fp32 does not always
+answer to the bit — so `cpu::tile_into` and `fx_tile.wgsl` both test for the identity
+(tile 100 %, output 100 %, phase 0, centre at the frame's middle) with the same four
+comparisons and copy instead of resampling. §3.42's short-circuit is the precedent.
+
+Two consequential edits elsewhere in docs/08: §3.40's "unlike §3.39" aside, and §3.71's
+Completion default, which cited §3.39 as its precedent and now cites §1.2 directly. The
+Completion divergence itself stands — a wipe's control does mean something the moment it is
+dragged.
+
+**2. Output width and height above 100 % grow the working raster.** This is the half of the
+effect that was missing. AE's Motion Tile at 110 % output with Mirror edges is how a shot
+is given material for a stabiliser or a warp to eat into; that only works if the copies
+land *outside* the layer's own rectangle and the effects after it can see them. Until now
+Output above 100 % did nothing at all: the window was already covering the frame, and the
+frame was all there was.
+
+**The shape (the honest minimal version).** No tiling scheduler and no ROI negotiation:
+
+- `cpu::tile_raster(w, h, params)` is the single sizing rule — the frame grown by Output
+  width and height where those exceed 100 %, rounded, capped at `TILE_MAX_RASTER` (8 192,
+  `wgpu`'s guaranteed `max_texture_dimension_2d`), and never grown at Mix 0. lumit-gpu does
+  not depend on lumit-core outside its tests, so the host fills `TileOp::out_raster` from
+  it and the kernel is told; one rule in one place rather than two copies that drift.
+- The kernel reads a `w × h` source and writes the grown raster with the frame in the
+  middle of it, at a whole-pixel origin. Every coordinate inside is still in the incoming
+  frame's own pixels, so the tiling arithmetic is unchanged and the pixels inside the frame
+  are the pixels the ungrown kernel produced.
+- `fxops::run_ops` carries `(w, h)` as a *running* pair instead of a fixed one. Every effect
+  but this one returns the raster it was handed, so the pair never moves and the walk is
+  what it was. When it does move, the companions that are compared texel by texel — the
+  Blend row's input, the generic matte's input, the matte texture itself, a Light wrap's
+  background plate — are grown into the same margin by `lumit_gpu::fx::fit_centred`, which
+  returns its argument untouched when the size already matches. A cache hit restores the
+  raster the held picture was made at, since it may be a grown one.
+- The composite places the wider picture by the layer's own transform: the quad is
+  `natural_size · grow` and the anchor slides by half the width the growth added, which
+  leaves `(q − anchor)·scale + position` unchanged for every original pixel. Per-layer
+  motion blur offsets each sub-frame's anchor the same way. A layer mask is grown into the
+  margin with nothing in it — a mask clips, and the copies are outside it.
+- **Three places crop back instead of growing**, through the same `fit_centred`: an
+  adjustment layer's stack (`adjust_blend` reads it against the composite beneath, which is
+  comp-sized by definition), a matte source's own stack, and a referenced layer's own stack.
+  All three are placed at a size the builder decided before the stack ran. A Tile above
+  100 % output on one of them reads as the plain clipped tiling.
+
+**What this is not.** It is not a general growing-raster contract. One effect grows, the
+seam follows it, and the ROI paddings of K-433 are untouched — nothing consumes those yet
+and this does not start. If a second effect ever wants to grow (a drop shadow that keeps
+its own offset, a glow that keeps its halo), the honest next step is a declared output
+rectangle on the schema rather than a second special case; `fit_centred` and the running
+`(w, h)` are the half of that which already exists.
+
+**AE parity.** `docs/impl/ae-effect-parity.md` recorded "Tile's default tiles" as one of the
+distort batch's two deliberate divergences; that divergence is withdrawn. Turbulent
+displace's Amount in px@comp stands. `docs/11-AE-IMPORT.md` §5's Motion Tile row is direct
+either way — the import writes the values — but its aside about the differing defaults is
+no longer true and is corrected.
+
+Regression tests: `a_fresh_tile_changes_not_one_bit` and
+`tile_grows_the_raster_only_above_a_hundred_per_cent` (lumit-core `fx/tests.rs`),
+`wgsl_tile_matches_the_cpu_oracle` extended with an identity case, a grown case and the
+raster assertion (lumit-gpu `fx/tests.rs`),
+`the_ops_after_a_growing_one_run_on_the_wider_raster` (lumit-render `fxops.rs`) and
+`a_tile_past_full_output_extends_the_layer_past_its_edges` (lumit-render `headless.rs`, the
+end-to-end one — an 8×8 solid in a 32×32 comp covering twenty-four pixels instead of
+eight, with the original eight unmoved). `fx-reference.json` regenerated: the two changed
+defaults are the whole diff. No new user-facing strings — every label already existed.
+
+## K-543 — The LUT is told what kind of numbers it is being handed
+
+**DECIDED 2026-08-24** (allocated on safe-lane). The LUT effect (docs/08 §3.11) applied the
+cube to the scene-linear working picture as-is. §3.11 had specced an **Input space** row from
+the start and K-114 shipped without it, with `docs/impl/lut.md` §3 carrying a REVIEW note
+asking that it be raised as a decision when the effect landed. This is that decision.
+
+**Why it is not cosmetic.** Lumit composites scene-linear, where mid-grey is 0.18. Almost
+every creative `.cube` is baked in a display-referred grading application, where mid-grey is
+around 0.5. Handing such a table linear numbers does not shade the grade slightly wrong — it
+reads the wrong cells of the cube, which is why a correct LUT came out crushed. The
+conversion is the whole difference between the effect being usable with the files people
+actually have and not.
+
+**Three options, and no invented curve.** `lumit_core::lut::LutSpace` is
+**Linear** (default) / **sRGB** / **Rec. 709**. sRGB is the transfer function
+`pixels::srgb_encode` and `composite.wgsl` already carry; Rec. 709 is its ITU-R sibling
+(`4.5·L` under the knee, `1.099·L^0.45 − 0.099` over it). **There is deliberately no Log
+option.** The colour pipeline defines no log transfer function, and adding one here would put
+a curve nothing else in the engine agrees with into the render path — the wrong place to
+introduce colour management. Log arrives with OCIO (K-031's post-v1 note).
+
+**Default Linear is byte-identical to today (K-258).** `LutSpace::Linear` returns its
+argument by identity on the CPU and the shader's `to_space`/`to_linear` return `c`, so the
+default path is not "a conversion that happens to cancel" but no arithmetic at all. A project
+saved before this row reads 0 through the resolver's `unwrap_or` — no migration, no schema
+version bump.
+
+**The transfer sits inside the premultiply pair**, between the unpremultiply and the lookup
+and again between the lookup and the re-premultiply: a transfer function is a statement about
+colour, not about coverage. And **every power is guarded by `max(v, 0)` on both paths** — a
+scene-linear value may legitimately be negative, the CPU branches around it but WGSL's
+`select` evaluates both arms, so an unguarded `pow` would compute a NaN in the arm about to
+be discarded. That guard is what makes the two op-for-op (§1.6) rather than merely close.
+
+Regression tests: `input_space_linear_is_the_identity_and_the_curves_invert` (lumit-core —
+Linear adds no arithmetic, `sample_in(Linear, ·) == sample(·)` exactly, both curves invert,
+negatives stay finite, and the wire codes round-trip with an unknown one degrading to
+Linear), and six new cases in `wgsl_lut_matches_the_cpu_oracle` (lumit-gpu) covering each
+space against the same corpus — plus assertions that each space renders a *different* picture
+from Linear, since an oracle alone would be equally satisfied by a shader and a reference
+that both ignored the row. `fx-labels.txt` and `fx-reference.json` regenerated; the manual's
+`lut.mdx` caution block, which stated the missing conversion as a limitation, is rewritten as
+guidance. **New arb keys: `fxInputSpace`, `fxRec709`, `fxSrgb`** (Crowdin upload owed).
+
+## K-544 — Both flow consumers on a layer get their own measurement
+
+**DECIDED 2026-08-24** (allocated on safe-lane). **Supersedes K-104's one-flow-field-per-layer
+rule.** A layer carried a single measured motion field, and `stack_flow_neighbour` returned
+the first flow-consuming effect's offset in stack order. So a layer with both **Fast motion
+blur** (docs/08 §3.2) and **Datamosh** (§3.12) served whichever came first and the other read
+nothing, silently rendering its missing-field passthrough — no badge, no warning, an effect
+that appeared to be on and did nothing.
+
+**They cannot share a field, and that is the point.** The measurement is not a shared resource
+that happened to be scarce: Fast motion blur wants the flow from this frame **forward** to
+`+1`, Datamosh wants it **back** to `-1`. Different frame pairs, different answers. The
+settings are identical (`divisor: 2`, defaults — a flow-consuming effect has no flow
+parameters of its own), so the difference is entirely which neighbour is measured against, and
+the honest answer is one measurement per offset asked for.
+
+**The shape.** `stack_flow_neighbour -> Option<i32>` becomes `stack_flow_neighbours -> Vec<i32>`
+(sorted, deduplicated, empty for a stack that consumes none), and the offset a single effect
+wants is factored out as `effect_flow_neighbour(match_name)`. That one table is read in **two**
+places — the decode worker, which measures, and `run_ops`, which binds a field to an op — so
+the field an effect is handed is by construction the one it asked to have measured, rather than
+two lists that could drift. `CompJob::flow_neighbour`, `CompLayerPixels::flow_field`,
+`CompLayerDraw::flow_field` and `run_ops`'s `flow_field` all become their plural, offset-keyed
+selves; an offset whose neighbour did not decode is simply absent, which is that consumer's
+existing passthrough.
+
+**Cost.** A stack with one of the two measures once, exactly as before — the list has one
+entry. Only the stack that was already broken pays for a second measurement, and it pays it to
+get the picture it asked for. The two land as separate entries in the existing flow cache,
+which is already keyed by `(item, frame_a, frame_b, settings)`, so a scrub re-uses both. The
+decode content name keeps its old bytes for the one-consumer and no-consumer cases, so no
+cache is invalidated by the change itself.
+
+Regression tests: `motion_blur_and_datamosh_together_ask_for_both_measurements` (lumit-core —
+the list is `[-1, 1]` either way round, deduplicated, and still empty with the fx switch off)
+and `both_flow_consumers_on_one_layer_read_their_own_measurement` (lumit-render, through
+`run_ops` — a stack carrying both, rendered with both fields bound, with only the `+1`, and
+with only the `-1`; the full run must differ from both one-field runs, which is exactly the
+comparison that was an equality before). No new user-facing strings. The manual's two
+"One flow measurement per layer" note blocks (`datamosh.mdx`, `fast-motion-blur.mdx`) stated
+the old behaviour as advice and are rewritten.
+
+## K-545 — A mask's feather can be a width per point, and Lighten and Darken join the modes
+
+**DECIDED 2026-08-24.** Allocated on safe-lane. Closes the two gaps K-338 left open and
+03-DATA-MODEL §7 has carried as "Future" ever since: the `Lighten` and `Darken` mask modes,
+and a feather that is not one number all the way round the shape.
+
+**The modes are the easy half, and they are max and min.** `MaskMode` gains `Lighten` and
+`Darken`; the fold that combines a mask into the running total gains `max` and `min` against
+what the stack holds, which is what After Effects means by the two. The starting value follows
+the same rule K-338 set: a lone `Lighten` builds from an empty frame exactly as `Add` does
+(max against a full frame would leave the layer untouched, which is a mask doing the opposite
+of nothing), and a lone `Darken` cuts a full one down to its own shape as `Intersect` does.
+`Lighten` is genuinely not `Add` — Add saturates the overlap of two half-opacity masks and
+Lighten does not — which is the whole reason it exists. **`Darken` and `Intersect` do coincide
+today**, because Lumit's `Intersect` is `min` where After Effects multiplies the two
+opacities; that is a pre-existing reading of `Intersect` this entry does not change, and it is
+recorded here so the coincidence is a known one rather than a surprise. Changing `Intersect`
+to multiply would re-render every project that uses it and wants a decision of its own.
+
+The AE importer stops apologising for the two: `Reason::MaskModeUnavailable` had exactly one
+producer and, with all seven of `PF_MaskMode` now mapped, no reachable case at all, so the
+variant and its string are deleted rather than left as dead code.
+
+**Per-vertex widths, not feather points, and this is the choice worth recording.** After
+Effects' Mask Feather Tool drops *feather points* along the path: each has a position measured
+in path parameter, an inner and an outer radius, and a tension. That is a second point set
+with its own tool, its own editing gestures and its own interpolation — and none of it is
+implementable well against the rasteriser Lumit actually has. So the honest minimal version
+the model supports properly is a width **per vertex**, running straight-line along each
+segment between them: `Mask::vertex_feather: Vec<Property>`, positionally matched to the
+path's own vertices, each animatable exactly as the single `feather` is. Empty — the ordinary
+mask — means one width all the way round.
+
+**Why per vertex is what the rasteriser can carry with quality.** Feather in Lumit is not a
+blur: it is a reading of a signed distance field (K-338), where the ramp width is the number
+the distance is divided by. Making the feather vary therefore means turning that one number
+into a *picture* — a width at every pixel — and the honest picture is "the width of the piece
+of edge this pixel is nearest to", because the nearest piece of edge is exactly what the
+distance field measured it against. That is a **feature transform**, and Felzenszwalb and
+Huttenlocher's transform — already in the file, already computing the distance — yields it for
+one extra store per sample: the parabola that won at each position *is* the nearest seed.
+`edt_1d` grows an argmin output; `spread_seeds` runs the two passes and carries the seeding
+pixel's value out; `feather_map` seeds it by walking the same fixed flattening the rasteriser
+uses and stamping the interpolated width. A per-edge value — one number for the whole segment
+— was the alternative and was rejected: it is no cheaper to render, and it steps at every
+vertex where a drawn shape should be smooth.
+
+**The ordinary mask pays nothing.** `feather_widths_at` answers "one width" whenever the list
+is empty *or* every width in it is equal, so a hard-edged mask still takes the fast path that
+returns the rasteriser's own bytes untouched, an evenly feathered one still takes the single
+distance transform, and switching the feature on without changing a width renders identically.
+Only a mask whose widths actually differ pays for the second transform.
+
+**The file does not change until somebody uses it.** `vertex_feather` is `default`/
+`skip_serializing_if = "Vec::is_empty"`, and its still values write as bare numbers exactly as
+`opacity`, `feather` and `expansion` do (K-340). An untouched mask therefore serialises to the
+bytes it always did, which is what keeps every frame the cache has banked — the same promise
+K-338 and K-339 made, kept for the same reason.
+
+**Two limits, both deliberate.** The widths are matched to vertices **by position**, so
+deleting a point shifts the widths after it, and an animated path whose keys hold different
+point counts is reconciled upward (`resample`) before the widths are read against it — a list
+shorter than the reconciled path falls back to the single width for the vertices it does not
+reach. Feather points anchored by arc length would dodge both, and are the shape to reach for
+if the Mask Feather Tool is ever built. And the AE importer does **not** map AE's variable
+feather: no fixture proves the layout of that property, and guessing one would draw a shape
+nobody asked for, so the single averaged width stands as it always has.
+
+**The frontend.** `BridgeMask` carries the list, each entry clamped into `0..5000` layer
+pixels exactly as the one width is. The Timeline shows a **Point *n* feather** row per width,
+under the mask's own Feather row and only once the mask carries them, each with the same
+stopwatch, navigator, lane diamonds and graph channel every other mask value has. They are
+switched on from the mask row's own menu — **Feather per point** gives every point the width
+the mask already had, so turning it on does not move the picture, and **One feather width**
+drops them again. The Viewer's mask overlay grows a pair of dimmer lines half a feather either
+side of the path, which is the only way a varying width can be *seen* before the frame is
+drawn; they are drawn from still widths only, because evaluating a keyframed one is the
+engine's job and the Viewer does not ask it while it paints (K-184).
+
+Regression tests: in `lumit-core`, `lighten_and_darken_take_the_greater_and_the_lesser`,
+`a_lone_lighten_mask_shows_its_own_shape`, `feather_varies_along_the_path`,
+`equal_vertex_feathers_are_the_uniform_feather`,
+`a_short_vertex_feather_list_falls_back_to_the_uniform_width`, `a_vertex_feather_animates` and
+`an_unvaried_mask_serialises_as_it_always_did`; in `lumit-bridge`,
+`a_masks_per_point_feather_crosses_and_is_clamped`; in `lumit-import`,
+`every_mask_mode_maps_and_the_animated_path_survives` (was
+`an_unbuilt_mask_mode_falls_back_...`); in Flutter, `a mask gains a feather row per point, and
+gives them back`. New strings: `maskModeLighten`, `maskModeDarken`, `maskVertexFeather`,
+`maskFeatherPerPoint`, `maskFeatherOneWidth`; `aeMaskModeUnavailable` is deleted with its
+reason.
+
+## K-546 — The keyer gains the half of Keylight that needs neighbours
+
+**DECIDED 2026-08-24.** Allocated on safe-lane. Closes the "deferred to a follow-up (K-155)"
+list 08 §3.21 has carried since the keyer landed, for its spatial half: **Screen pre-blur**,
+**Screen shrink/grow**, **Screen softness**, **Despot black** and **Despot white**, and the
+**Inside/Outside garbage masks**. The Colour correction twirls and the Source crops stay
+deferred; they are pointwise and need no pipeline.
+
+**Why they were deferred and what changed.** Every control the keyer had judged a pixel on its
+own, which is why it was one pointwise pass and `roi = Exact`. Each of these judges a pixel by
+its neighbours, so the matte has to stop being a number computed inside the colour loop and
+become a **picture of its own** for the length of the effect. That is the whole of the
+landing: `cpu::matte_key_spatial` computes the matte into a buffer, tidies it as a picture,
+and only then spends it on the colour, and the WGSL side does the same in as many as seven
+passes. `cost` becomes `moderate` and `roi` becomes `PaddedPx(251)` — 100 px pre-blur + 50 px
+shrink/grow + 100 px softness + the despot's one pixel, each control's own hard maximum,
+exactly as the Gaussian blur sizes its padding from its Radius' (K-433).
+
+**The defaults are byte-identical, and that is a branch rather than a promise.** With nothing
+spatial asked for and neither mask bound, `matte_key_spatial` hands straight over to the
+pointwise `matte_key` and the GPU dispatches the single fused kernel it always did. Not "the
+neutral settings happen to come out the same" — the staged path is *not taken*, so there is no
+fp16 intermediate to round differently. `matte_key` was split into `MatteKeyConst`,
+`matte_key_matte` and `matte_key_shade` so both paths read one derivation of the screen axis
+and one shading step; the fused kernel is those three called in a row.
+
+**The matte travels as an ordinary four-channel picture**, the same number in every channel.
+That is the decision that keeps the landing small: Screen softness is then the **shared**
+Gaussian blur — CPU and WGSL, already written and already parity-tested — rather than a second
+blur written for one channel, and on the GPU the matte is an ordinary working texture that
+every existing pass can take. Screen pre-blur is the same blur again, on the picture the key is
+judged from rather than on the matte.
+
+**Shrink/grow is morphological and separable; softness is the blur.** Two passes of a min
+(shrink) or max (grow) over a square, with the outermost ring eased in by the fractional part
+of the radius so the control is continuous and the §1.6 ULP oracle still holds over it. Keeping
+the two controls distinct is the point: a grow that softened would be a blur with a level shift,
+and a colourist reaches for shrink precisely when the edge must stay hard.
+
+**Despot is an amount, not a size, and the test is "disagrees with all eight".** Keylight's
+despots are sizes; Lumit's are per cent, and they reach exactly one pixel. A speck is a pixel
+every one of whose eight neighbours is on the other side of it, so black despot lifts such a
+pixel to the *darkest* of its neighbours and white despot drops it to the *brightest*, both
+blended by the amount. A pixel on a real edge always has a neighbour on its own side and is
+left alone — which is what lets the control run at 100 % without eating the matte, and what a
+radius would have taken away. A larger reach, if it is ever wanted, is an opening and a closing
+built from the shrink/grow pass already here.
+
+**The garbage masks are two `ParamKind::MaskPath` rows (K-408), not a layer holdout.** §3.21's
+own deferral guessed at "a layer-input holdout, reusing the DoF layer-reference pattern"; this
+entry supersedes that. A garbage matte is a shape drawn *on this layer*, which is exactly what
+the K-408 carriage delivers, and it costs no extra texture: the outline arrives as geometry —
+a closed polyline in raster pixels, built host-side by `cpu::mask_fill_params`, the very
+function the oracle calls — and the kernel answers inside/outside with an even-odd crossing
+count and softens with a signed distance to the nearest piece. Inside forces the matte opaque
+(a max), Outside forces it transparent (a min against the complement). Both rows are
+`self_default = false`: an unset garbage matte must be no garbage matte, where a line-drawing
+effect's single row sensibly means "the first mask".
+
+**The soft edge comes from the mask, not from a control of its own.** `MaskPolyline` gains
+`feather` and `expansion`, filled by `mask_path_at` from the mask's own values at that frame
+and read through the same ramp `mask_coverage` reads — so a hold-out and the mask it was drawn
+from soften and slide alike, and there are no two numbers to keep in step. The K-545 per-vertex
+widths are deliberately **not** carried: a varying width would have to ride per segment, and
+one width is what the eye is comparing a hold-out against.
+
+**The carriage now counts rows, not effects.** `EffectSchema::mask_paths` enumerates every
+path row an effect declares and `mask_path_count` says how many; `build.rs` flattens one
+polyline per row and `fxops::run_ops` consumes one per row, in that order — the K-387 rule
+unchanged, applied one level down. `AuxSlot::mask_path` still answers the first row for the
+three effects that walk one line; `mask_path_n` answers the rest. The frame key hashes each
+row's chosen mask *and* the feather and expansion that now ride with the curve, and asks
+`self_default` of **that row** rather than of the effect's first one.
+
+Regression tests: in `lumit-core`, `the_keyers_defaults_are_the_pointwise_keyer_byte_for_byte`,
+`the_screen_pre_blur_judges_a_soft_picture_and_returns_a_sharp_one`,
+`the_screen_shrink_and_grow_march_the_mattes_edge`, `the_screen_softness_ramps_the_mattes_edge`,
+`the_despots_take_specks_and_leave_edges`, `the_garbage_masks_hold_the_matte_open_and_shut`,
+`a_mask_path_carries_its_own_feather_and_expansion`, and the extended
+`a_mask_path_row_declares_itself_and_defaults_to_the_first_mask` and
+`every_parameter_declares_a_unit`; in `lumit-gpu`,
+`wgsl_matte_key_spatial_matches_the_cpu_oracle` (one case per control, the two masks, all of
+them at once, Mix 0, and the default pinned against the pointwise kernel); in `lumit-render`,
+the extended `the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path`. New strings:
+`fxScreenPreBlur`, `fxScreenShrinkGrow`, `fxScreenSoftness`, `fxDespotBlack`, `fxDespotWhite`,
+`fxInsideMask`, `fxOutsideMask`.
+
+## K-547 — Paint lands on a Precomp too, through the one rasteriser
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. A paint stroke on a Precomp layer now
+reaches the picture. It never did: `build`'s `pixels_for` answers `None` for a Precomp
+because a composition has no pixels until it is rendered, so the strokes were stored, listed
+in the Timeline, and dropped on the floor. Every other kind of layer — footage, a Sequence
+clip, a solid, text, a shape — was already painted by the shared tail of `pixels_for`, which
+is why the manual's note named only Precomps.
+
+**One rasteriser, not two.** `DrawSource::Nested` carries the Precomp layer's `paint`, and
+`Realiser::paint_over` stamps it after the nested comp has been realised: the picture comes
+back through the neutral display encode (`ColourEngine::display` with `DisplayParams::NEUTRAL`
+— never the Viewer's own exposure, so preview equals export, K-031), through the **same**
+`lumit_core::paint::apply_strokes` every other layer goes through, and up again via
+`upload_srgb8` + `linearise`. Writing a second stamping kernel in WGSL would have meant two
+descriptions of one behaviour and a parity suite to keep them honest, for a feature nobody
+paints on hot paths.
+
+**What that costs, said plainly.** One synchronous read-back per *painted* Precomp per frame,
+and the nested picture quantised to the eight-bit sRGB depth every footage layer is painted at
+anyway. A Precomp with no strokes — nearly all of them — takes the early return and is byte
+for byte what it was. A GPU stamping pass is the named upgrade (docs/impl/paint.md, "Not
+built"); it changes the rasteriser and nothing that is stored, which is why the storage was
+settled first.
+
+**Collapse already knew.** `collapse_state` has forced the nested intermediate for any painted
+Precomp since K-227, so the strokes always have a raster to land in; that rule is now load
+bearing rather than defensive. A Precomp used as a **matte** or as a layer input still renders
+unpainted — the same v1 boundary its own effects take (K-266) — because those paths build a
+`NestedInputDraw`, not a layer draw.
+
+Regression tests: in `lumit-render`,
+`headless::tests::a_paint_stroke_on_a_precomp_layer_reaches_the_picture` (a red dab on a white
+precomp, end to end on a real device) and the extended
+`collapsed_precomp_splices_inner_draws_with_parent_placement`, which holds the draw-side half
+on a machine with no adapter. No new strings.
+
+## K-548 — The brush gets a square, and the shape is one substitution
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. `PaintStroke` gains `shape`
+(`BrushShape::Round | Square`), picked in the paint tool options and committed with the
+stroke like its width, hardness and opacity.
+
+**Not a brush-tip system, and no room left for one.** No bitmap tip, no angle, no roundness,
+no spacing or scatter. The shape is a single substitution: `Dab::distance` answers "how far is
+this pixel from the dab's centre" — the straight line for Round, `max(|dx|, |dy|)` for Square —
+and *every* number downstream is already written in terms of that answer. The radius, the
+hardness ramp, the stroke's bounding box and the dab spacing are untouched, so a square softens
+exactly as a round does and there is no second case anywhere in the rasteriser. A square of a
+given width and a circle of the same width occupy the same box, so `PaintStroke::bounds` did
+not move either.
+
+**Hardness was already the soft/hard control** and stays one ramp for both shapes:
+`feather = radius × (1 − hardness)`, floored at half a pixel. Nothing was added for it; the
+toolbar field has driven it since K-227.
+
+**Old projects write the bytes they wrote.** `shape` is `#[serde(default,
+skip_serializing_if = "BrushShape::is_round")]`, so a round stroke is absent from the file
+(the K-545 habit) and every frame the cache has banked for an unre-shaped project stays valid.
+`shape` is not editable on a stroke's Timeline row, for the same reason width and hardness are
+not: it is a property of the mark that was made, set before the drag.
+
+Regression tests: in `lumit-core`, `a_square_brush_marks_its_corners_and_a_round_one_does_not`,
+`a_soft_square_fades_at_its_flat_edge`, `a_round_brush_is_absent_from_the_file`; in Flutter,
+`the brush commits the shape chosen in the tool options`. New strings: `toolShape`,
+`tipBrushShape`, `brushShapeRound`, `brushShapeSquare` — English only until Crowdin is fed.
+
+## K-549 — A stroke can draw itself on, and the trim is measured in length
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. `PaintStroke` gains `start` and `end`, each a
+`Property` holding a per cent of the stroke's own length and animatable like any other value
+(K-340's shape, on the layer's own clock, K-213). Start held at 0 with End keyed 0 → 100 is
+write-on — the reason paint animates at all — and the pair also trims a stroke back at either
+end without repainting it.
+
+**Per cent of arc length, never of the samples.** A stroke is a record of a gesture, so its
+points bunch up wherever the hand slowed down. Trimming by sample count would make a write-on
+crawl through the carefully drawn parts and leap through the fast ones. `trimmed` walks the
+polyline accumulating segment lengths, finds the segment each cut falls in, and interpolates
+that one segment at the exact fraction — the same small walk shape layers' trim paths need, and
+deliberately duplicated in `paint.rs` rather than shared through a seam that does not exist yet:
+it is nine lines, and a stroke is a polyline while a shape item is a bezier.
+
+**Where it happens.** In `fill_coverage`, before anything else: `drawn_at(t)` is measured for
+the bounding box *and* walked for the dabs, so a write-on reserves only the pixels it has
+actually drawn rather than the whole stroke's rectangle from the first frame. `apply_strokes`
+and `coverage_of` therefore take a time, threaded from `build.rs` as `lt` — the same clock the
+layer's masks and transform read at — and carried to a Precomp's paint on `DrawSource::Nested`
+as `paint_time` (K-547).
+
+**Two honesties.** An `end` at or below `start` draws nothing, because that is a write-on's
+first frame and not an error. A path with no length (a single dab, or one sample repeated) has
+nothing to cut and is drawn whole as soon as any of it is asked for.
+
+**Old projects are untouched.** Both are `#[serde(default, skip_serializing_if = ...)]` at 0 and
+100 with mask.rs's `still_or_keyed` bare-number encoding (now `pub(crate)`), so an untrimmed
+stroke writes exactly the bytes it wrote and every banked frame stays valid.
+
+**In the Timeline**, each stroke grows two rows under it — `FoldStrokeValueRow`, built the way
+`FoldMaskValueRow` is — with the stopwatch, the diamonds, the staged-and-previewed drag and the
+lane-key drag every other animatable row has. What they do **not** have yet is a curve in the
+graph editor: `graphChannels` walks transform, effect and mask paths by path prefix and a
+stroke's path is not one of them. The lane is the v1 surface; the graph is a follow-up.
+
+Regression tests: in `lumit-core`, `start_and_end_trim_the_stroke_by_its_length`,
+`the_trim_measures_length_and_not_samples`, `a_dab_has_no_length_to_trim`,
+`an_untrimmed_stroke_is_absent_from_the_file`; in the bridge,
+`a_strokes_trim_round_trips_and_is_clamped` (every key clamped to 0..100, not just the first);
+in Flutter, `a stroke grows Start and End rows that write through`. New strings: `strokeStart`,
+`strokeEnd`.
+
+## K-550 — A stroke blends by the layer list, through the one blend kernel
+
+**DECIDED** (allocated on safe-lane) — 2026-08-24. `PaintStroke` gains `blend:
+lumit_core::model::BlendMode` — the layer list, the same words in the same order, chosen from a
+dropdown on the stroke's own Timeline row and carried across the seam as an index into
+`list_blend_modes`, exactly as a layer's own blend is.
+
+**No third copy of the arithmetic.** The composite calls `fx::cpu::blend_pixel`, the kernel the
+effect Blend row already uses (K-425) and the CPU twin of `fx_blend_mix.wgsl`, whose domains
+follow the compositor's (docs/06 §blend domains): Add, Multiply, Lighten, Darken and Subtract
+per channel in linear light, everything else encoded to sRGB, W3C formula, decoded. A second set
+of formulas written for paint would be a third description of one behaviour and a parity suite
+to keep three things honest.
+
+**A blend is a colour, never a coverage.** Coverage — brush size, hardness, stroke opacity — is
+worked out exactly as before and is untouched by the mode. The mode decides what colour the mark
+lays down; that colour is then composited by the same source-over the rasteriser has always run.
+So a half-opacity Multiply is genuinely half of the way to the multiplied result and a soft edge
+is still soft, rather than the mode quietly re-shaping the mark.
+
+**Erase ignores it**, having no colour to combine — a mode there would be a second way of saying
+nothing. **Clone honours it**, blending the sampled colour.
+
+**Normal takes an early exit** — the per-pixel path is the untouched `over` — and `blend` is
+`#[serde(default, skip_serializing_if)]` at Normal, so an unblended stroke renders and writes
+byte for byte what it always did. An index past the end of the list reads back as Normal rather
+than erroring: that is a frontend behind the engine, and a mark that lays its colour down is the
+honest reading of one.
+
+Regression tests: in `lumit-core`, `a_strokes_blend_combines_it_with_what_is_under_it`,
+`a_blend_changes_the_colour_and_not_the_coverage`, `a_blend_on_an_erase_changes_nothing`,
+`an_unblended_stroke_is_absent_from_the_file`; in the bridge,
+`a_strokes_blend_round_trips_by_index`; in Flutter, `a stroke row picks a blend mode from the
+layer list`. No new strings — the mode names come from the engine's own table, which a layer's
+picker already shows and `engine_labels.dart` already covers.
+
+## K-551 — A shape layer's modifiers are fields on the item, and the first of them is Trim paths
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Amends
+[03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 (which gains §7.2.1), §9.2,
+[06-RENDER-PIPELINE.md](06-RENDER-PIPELINE.md) §1.2 step 1,
+[07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+**The shape of it.** After Effects carries a shape's modifiers — Trim Paths, the Repeater,
+Offset Paths and the rest — as entries in a nested group, and their *position* in that group is
+what decides which paths they act on. Lumit's contents list is flat (K-237) and has no positions
+to read. Two ways out: build the tree first and then the modifiers, or make each modifier a
+**property of the item it modifies** and write the order down. This is the second.
+
+The order is fixed: **trim, then the rest as they land.** It is in one place, in
+`shape::rasterise_contents`, and in §7.2.1.
+
+**Why not the tree.** The tree is still the right long-term shape and §9.2 still says so. But a
+modifier that is a `Property` beside `opacity` needs no new machinery whatsoever: it keys with the
+same keyframe controls, undoes through the same whole-list `SetShapeContents` op, previews through
+the same `renderFrameWithShapePreview` door, and crosses the bridge as the `BridgeScalar` every
+other animatable number crosses as. A tree would need a new op family, a new read model, a new
+Timeline row hierarchy and a new file shape before a single path could be trimmed. The cost of
+this choice is real and named: **you cannot trim two items as one**, because there is no group to
+put the trim on. When the tree lands it re-homes these fields rather than replacing them, because
+every one of them is absent from the file until it is used.
+
+**Trim paths.** `trim_start`, `trim_end` (per cent of the path's own **arc length**) and
+`trim_offset` (degrees; 360 is once round). Arc length, not vertex count, for the reason K-549
+gives for a paint stroke's write-on: the samples of a path are not evenly spread, and the eye
+watches length. The cutting is K-549's own `trimmed`, widened to the crate rather than written a
+second time — one description of "cut a polyline by length".
+
+Three sub-decisions, each of which could have gone the other way:
+
+**The fill is trimmed too**, as After Effects trims it: the surviving piece is closed and filled,
+so a half-trimmed circle is a filled half circle. A polyline is a `BezierPath` with every handle
+at zero, so the piece goes through the *same* fill rasteriser the whole path does — no second
+rasteriser, and no second answer about which pixels are inside.
+
+**The offset moves the seam, not the window.** Sliding a trimmed piece round a closed path can
+leave it astride the path's own start, which is two pieces to draw. Re-starting the polyline
+`offset` per cent along makes it one contiguous piece again and the ordinary trim then cuts it.
+An **open** path has no seam to run through, so it gets the window shifted and clamped: slid far
+enough, it runs off the end and draws nothing.
+
+**An untrimmed item never sees a polyline.** With the trim at 0..100 and no offset, the item is
+rasterised from its **bezier** exactly as before, so every frame already cached for an untrimmed
+shape stays valid and the identity case is byte for byte what it was.
+
+**The layer's natural size is still the untrimmed box.** A box that shrank as a write-on played
+would make the layer breathe and churn every cache keyed on its size — the same reasoning K-549
+gives for a stroke's bounds being the whole stroke.
+
+Regression tests: in `lumit-core`, `an_untrimmed_shape_is_drawn_from_its_curve_and_not_a_polyline_of_it`,
+`a_trim_cuts_the_path_by_its_own_length`, `a_trimmed_fill_closes_the_piece_that_is_left`,
+`an_end_at_or_below_the_start_draws_nothing`,
+`the_offset_slides_the_piece_round_a_closed_path_without_shortening_it`,
+`an_open_paths_offset_runs_the_window_off_the_end_rather_than_wrapping`,
+`a_keyed_trim_is_read_on_the_layers_clock`, `an_untrimmed_item_is_absent_from_the_file`; in the
+bridge, `a_shapes_trim_round_trips_and_is_clamped`; in Flutter, the Contents twirl-down test.
+New strings: `shapeTrimStart`, `shapeTrimEnd`, `shapeTrimOffset`.
+
+## K-552 — A shape's outline dashes by length, and a pattern too fine to see is drawn solid
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-551, whose shape it
+takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and
+§7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+`dashes: Vec<Property>` is a list of lengths in **layer pixels**, alternating dash, gap, dash,
+gap; `dash_offset: Property` says how far along the path the pattern starts. Empty is a solid
+outline and is absent from the file, so an undashed shape writes the bytes it always wrote and
+every frame cached for one stays valid.
+
+**A list, not a pair.** After Effects allows several dash/gap pairs and so does SVG, and an
+importer will meet both. Storing the list costs nothing — it is the same `Vec<Property>` a mask's
+per-vertex feather is (K-545) — where storing a pair would have to grow into one later.
+
+**An odd list repeats itself**, the SVG rule: `[10]` is ten on, ten off. The alternative readings
+are a dash with nothing said about the gap after it, or an error for a file that has a perfectly
+clear meaning.
+
+**A pattern too fine to see is drawn solid.** The piece count is length over cycle, which is
+unbounded: a path a million units long with a one-unit dash is half a million brush runs and a lost
+frame. Past 4096 pieces the outline is drawn as **one** piece. Truncating instead — drawing the
+first 4096 and stopping — would leave an outline that visibly stops half way along; at that density
+solid is a wrong answer nobody can see, which is the better of the two.
+
+**The dashes run along whatever the trim left**: the order is trim, then dash (§7.2.1). The cutting
+is K-549's `trimmed` again, so a dash and a trim cannot disagree about where "ten along" is, and
+each surviving piece is drawn by the same paint-rasteriser brush run the whole outline is — one
+widened-path implementation, still.
+
+**There is no "add dashes" gesture.** The Dash and Gap rows appear under any item that has an
+outline, read zero while there is no list, and writing either one makes the pair. A menu item whose
+whole job was to put two zeros in a list would be a thing to find where a row that reads zero says
+the same thing in the open. The rows are hidden on a fill-only item, because three rows that
+cannot affect the picture are three promises the item cannot keep.
+
+Regression tests: in `lumit-core`, `a_dashed_outline_leaves_gaps_in_itself`,
+`a_dash_of_nothing_is_a_solid_outline`, `an_odd_dash_list_repeats_itself`,
+`the_dashes_are_cut_by_length_and_the_offset_slides_them`,
+`a_pattern_too_fine_to_see_is_drawn_solid_rather_than_cut_to_pieces`,
+`a_keyed_dash_is_read_on_the_layers_clock`, `an_undashed_item_is_absent_from_the_file`; in the
+bridge, `a_shapes_dashes_round_trip_and_are_clamped`; in Flutter, `a stroked shape item carries
+the dash rows`. New strings: `shapeDash`, `shapeGap`, `shapeDashOffset`.
+
+## K-553 — A shape item repeats itself, and the layer's box learns a clock to hold the copies
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-551 and K-552, whose
+shape it takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md)
+§7.2 and §7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and
+[impl/shape-layers.md](impl/shape-layers.md).
+
+Ten `Property` fields: `repeat_copies`, `repeat_offset`, `repeat_anchor_x/y`,
+`repeat_position_x/y`, `repeat_rotation`, `repeat_scale`, `repeat_start_opacity` and
+`repeat_end_opacity`. Copy *j* is drawn with the step transform raised to the power *j + offset* —
+move, turn and scale about the anchor — so the offset decides which copy the original geometry is
+and a negative one puts copies **behind** it. A still count of one is no repeater at all, is
+absent from the file, and draws byte-for-byte the pixels a shape drew before there was a repeater.
+
+**The layer's box now takes a time.** This is the change worth arguing about. K-551 kept the box
+the *untrimmed* one, because a trim only ever takes art away and a box that breathed as a write-on
+played would churn every cache keyed on it. A repeater is the opposite: it puts art **outside** the
+path, so a box that ignored it would draw the copies off the edge of the layer's own picture.
+`ShapeItem::bounds` and `contents_bounds` therefore take `t`, and the frontend measures a shape
+layer fresh rather than out of its revision-keyed cache.
+
+**The price is named rather than hidden.** A shape layer's position is pinned to its art box's
+corner (K-308), so a repeater *keyed* to grow up or left moves the box's corner and the art
+appears to slide. Stepping down and to the right — which is what a row of things or a clock face
+does — never moves the corner, and the alternative was a static box computed from the extremes of
+every keyed channel, which is not a bound under bezier overshoot and would clip at the very moment
+the animation is most visible. A wrong answer you can see and correct beat a wrong answer that
+looks like a rendering bug. The manual and GUIDE.md both say so.
+
+**A copy is a scaled drawing, not a scaled path.** The outline width and the dash lengths are
+multiplied by the copy's scale, or a copy at half size would carry an outline twice as heavy for
+its art and read as a different shape.
+
+**The copies are drawn last first**, so the original sits on top of everything made from it —
+After Effects' default composite, and the only order in which turning the count up does not hide
+the shape you already had. A Composite choice of its own is not built; nothing here stands in the
+way of one.
+
+**The ceiling is 100 copies**, and it is the rasteriser's, not the format's: every copy is a
+scanline pass over the whole layer, so an unbounded count is an unbounded frame. A count past it is
+**held** rather than refused, because the number is a slider and a slider that stops is kinder than
+a frame that does not arrive. Lifting it means teaching the mask rasteriser to work inside one
+copy's own box.
+
+**The order is trim, then dash, then repeat** (§7.2.1): the repeater copies whatever the other two
+drew.
+
+**Copies is the row that opens the rest.** The other nine appear only once there is more than one
+copy to step between — ten rows describing a step that does not exist would be ten promises the
+item cannot keep, which is K-552's rule for the dash rows applied again.
+
+Regression tests: in `lumit-core`, `a_repeater_draws_a_copy_at_every_step`,
+`the_box_grows_to_hold_the_copies`, `one_copy_is_no_repeater_at_all`,
+`the_copies_fade_from_the_first_to_the_last`, `a_scaled_copy_carries_a_scaled_outline`,
+`a_rotated_copy_turns_about_the_anchor`,
+`the_copy_count_is_held_at_the_ceiling_and_never_fractional`,
+`a_keyed_repeater_is_read_on_the_layers_clock`, `an_unrepeated_item_is_absent_from_the_file`; in
+the bridge, `a_shapes_repeater_round_trips_and_is_clamped`; in Flutter, `a repeated shape's box
+holds every copy` and `a repeated shape item carries the repeater rows`. New strings:
+`shapeRepeatCopies`, `shapeRepeatOffset`, `shapeRepeatAnchorX`, `shapeRepeatAnchorY`,
+`shapeRepeatPositionX`, `shapeRepeatPositionY`, `shapeRepeatRotation`, `shapeRepeatScale`,
+`shapeRepeatStartOpacity`, `shapeRepeatEndOpacity`.
+
+## K-554 — A shape's outline can be pushed out of its path, with round corners and its own loops left in
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-551, whose shape it
+takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and
+§7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+`offset_amount: Property` is one length in **layer pixels**: positive pushes the outline out of the
+path, negative pulls it in, zero is the path itself and is absent from the file. The item's box
+grows by the outward half, because an outline outside the path is art outside the path.
+
+**Which way is out is read from the path, not assumed.** The shoelace area of the flattened ring
+gives its winding, and the offset's sign follows it, so a positive amount grows a shape whichever
+way round its points were written. That is one loop, and it removes the only way this feature could
+have been silently backwards on half the paths in a document. An open path has no inside, so it is
+moved to the side its own direction puts on the left.
+
+**The joins are round, and there is no miter limit.** This crate draws one join — a stroke is a
+round brush run along a path (K-237) — so an offset with a mitre would be the *only* square corner
+in the renderer, and would arrive with a limit parameter to keep its spikes in check. Round corners
+are what an offset outline gets until joins and caps are a feature in their own right.
+
+**Self-intersections are left in.** Offsetting inwards by more than a curve bends folds the outline
+back through itself. The honest fixes are a polygon-clipping library — a dependency, and a
+determinism question (docs/14) — or several hundred lines of segment-intersection work, and both
+are being carried for a case a slider drag walks straight back out of. The non-zero winding fill
+swallows most of what a fold produces, and the rest is local and visible rather than a wrong answer
+that hides. Written down here rather than discovered later.
+
+**The order is offset, then trim, then dash, then repeat** (§7.2.1). The offset makes the outline
+and everything after it works on the outline there is: a trim measures the *grown* path's length,
+which is longer than the path it came from, and that is the reading that matches what the eye
+watches.
+
+**The row is first**, for the same reason: an item's rows read in the order they apply.
+
+Regression tests: in `lumit-core`, `an_offset_path_grows_the_shape_and_a_negative_one_shrinks_it`,
+`an_offset_corner_is_rounded_rather_than_mitred`, `an_offset_grows_a_path_written_either_way_round`,
+`the_box_holds_the_grown_outline`, `an_offset_of_nothing_is_the_path_itself`,
+`the_trim_cuts_the_offset_outline_and_not_the_path`, `a_keyed_offset_is_read_on_the_layers_clock`,
+`an_unoffset_item_is_absent_from_the_file`; in the bridge,
+`a_shapes_offset_round_trips_both_ways`; in Flutter, `an offset outline grows the box, and pulling
+it in does not` and the Offset path row's write-through in `a shape layer grows a Contents heading
+in its twirl-down`. New string: `shapeOffsetPath`.
+
+## K-555 — A shape's fill can be a ramp, with two stops and a kind that does not tween
+
+**DECIDED 2026-08-24.** Number allocated on the safe-lane branch. Follows K-551, whose shape it
+takes: a modifier is a field on the item. Amends [03-DATA-MODEL.md](03-DATA-MODEL.md) §7.2 and
+§7.2.1, [07-UI-SPEC.md](07-UI-SPEC.md) §2.3.1 and [impl/shape-layers.md](impl/shape-layers.md).
+
+`gradient: u32` is 0 for the flat fill, 1 for a **linear** ramp and 2 for a **radial** one, running
+from the item's own `fill` to `gradient_colour` between two points held as `Property` in the art's
+own coordinates. Zero is absent from the file, and a flat-filled item draws byte-for-byte what it
+drew before there were gradients.
+
+**The kind is a choice, not a `Property`.** Every other modifier on a shape item animates, and this
+one deliberately does not: a number between linear and radial would have to mean something, and
+nothing sensible is on offer. The *points* animate, which is where a gradient's motion actually
+lives.
+
+**Two stops, not a stop list.** A list is the right long-term shape and nothing stored here stands
+in its way — its two ends are these two colours. It is not built because a list is worth having
+only with a stop editor to drive it, and that is a piece of interface work rather than a data
+change. The Gradient effect beside it offers two colours for the same reason.
+
+**The reading is the Gradient effect's** (docs/08 §3.35): linear projects onto the axis, radial
+measures out from the start with the end on the outer edge, and one epsilon floors the squared
+axis length so both degenerate at exactly the same point — a ramp with no axis is one flat colour
+rather than a division by zero (docs/14 §4). The **arithmetic is written again rather than called**:
+`cpu::gradient` fills a whole f32 raster and replaces what was there, so calling it would have cost
+an f32 buffer the size of the layer per drawn copy to composite back through the coverage. The doc
+comments on both sides point at each other.
+
+**The colours mix in linear and are encoded after**, through a 256-entry table built once per drawn
+copy. A shape's colours are scene-linear and the buffer is 8-bit; mixing the encoded bytes would be
+the wrong ramp, and a transcendental per pixel is the honest alternative the table replaces at a
+resolution finer than the result can show.
+
+**The gradient belongs to the art**, so a repeated copy carries its ramp: the points are placed
+through the copy's own transform (K-553) rather than sampled from where the original sits.
+
+**Switching a ramp on aims it at the art's box** — top to bottom for linear, middle to edge for
+radial — and only when nobody has aimed it yet. A ramp that read as one flat colour the moment it
+was chosen would look broken rather than unaimed.
+
+**A Fill row arrives with it.** A shape's fill colour had no row at all: it came from the toolbar
+when the art was drawn and could not be changed afterwards, which the manual already claimed it
+could. A gradient whose first colour cannot be picked is half a feature, so the row that fixes both
+lands here. The three paint rows carry no stopwatch, because a colour and a choice have no curve.
+The swatch itself is now `ColourSwatchButton` in `widgets/colour_picker.dart`: four panels had each
+drawn their own, and this is the one the fifth uses.
+
+Regression tests: in `lumit-core`, `a_linear_gradient_ramps_across_the_fill`,
+`a_radial_gradient_ramps_out_from_its_start`, `a_repeated_copy_carries_its_gradient_with_it`,
+`a_flat_fill_is_untouched_by_the_gradient_machinery`,
+`a_gradient_with_no_axis_draws_one_flat_colour_and_never_panics`,
+`a_keyed_gradient_point_is_read_on_the_layers_clock`, `a_flat_filled_item_is_absent_from_the_file`;
+in the bridge, `a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat`; in Flutter, `a filled
+shape item carries the gradient rows`. New strings: `shapeFill`, `shapeGradient`,
+`shapeGradientColour`, `shapeGradientFlat`, `shapeGradientLinear`, `shapeGradientRadial`,
+`shapeGradientStartX`, `shapeGradientStartY`, `shapeGradientEndX`, `shapeGradientEndY`.
+
+## K-556 — A placeholder's refused parameters are counted, not listed
+
+**DECIDED 2026-08-24.** Allocated on safe-lane. Amends [11-AE-IMPORT.md](11-AE-IMPORT.md) §9 and
+[impl/ae-import.md](impl/ae-import.md).
+
+A third-party effect imports as a placeholder holding every parameter (K-060, docs/11 §6), and
+After Effects' own scripting cannot read most of them: they are `CUSTOM_VALUE` blobs. Each refusal
+raised its own `PropertyUnreadable` row, so a project carrying Particular, Sapphire and Optical
+Flares opened its report on some two and a half thousand rows saying the same thing — burying the
+blend mode that fell back and the expression that needs looking at, which are the rows the report
+exists for.
+
+**One row per effect instance now**, `Reason::EffectParamsUnreadable { count }`, filed against the
+instance's own path so the row reads "Edges ▸ Third party ▸ Particular: 41 parameters could not be
+read". Nothing is dropped: every refused parameter is still kept whole in the instance's `ae`
+namespace exactly as before, and the capture's own `report.unreadables` list is untouched. This is
+what the reader is told, not what is stored.
+
+**Two or more, or nothing.** A single refused parameter keeps its own row and its match name —
+Curves' point list is one property and naming it is the whole point of that row. Folding starts
+at two, where the name has stopped being information and the count has started.
+
+**Only the placeholder road folds.** A mapped effect's rows are per-parameter still: there the
+refusal names a dial Lumit has and did not get, which is a different fact.
+
+Regression tests: `a_placeholders_refused_parameters_are_counted_in_one_row` in
+`crates/lumit-import/tests/mapping.rs`, over an `edges.lum-bundle` instance built to refuse three;
+the golden fixture's Curves keeps its own named row in
+`the_report_counts_what_it_says_and_names_both_placeholders`. New string:
+`aeEffectParamsUnreadable`.

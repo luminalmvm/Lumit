@@ -314,38 +314,51 @@ pub fn stack_is_temporal(effects: &[EffectInstance], fx_on: bool) -> bool {
             })
 }
 
-/// The neighbour offset a live effect wants a dense **flow field** measured
-/// against (per-pixel motion vectors between the current source frame and
-/// that neighbour), computed in the decode worker and handed to the kernel
-/// as a texture — the gate mirroring [`stack_is_temporal`] that the render/
-/// decode paths check before doing any flow work. Flow motion blur (docs/08
-/// §3.2) wants `1` (the +1 neighbour); Datamosh (§3.12, K-107) wants `-1` —
-/// both purely static reads of the schema's own match name now (K-107
-/// dropped the dynamic per-instance check a combined Glitch effect used to
-/// need). Both effects are also temporal (their windows reach that same
-/// offset), so the neighbour machinery already fetches the source frame the
-/// flow is measured against.
+/// The neighbour offset **one effect** wants a dense flow field measured
+/// against, by match name — the single table both the decode worker (which
+/// measures) and the render (which binds a field to an op) read, so the two
+/// cannot disagree about which field belongs to whom.
 ///
-/// A layer can carry only one flow field per frame in v1
-/// ([`crate`]-external callers store it in a single `Option` slot) — if a
-/// stack somehow has both a live Motion blur and a live Datamosh, the first
-/// one encountered in stack order wins and the other's flow-dependent
-/// behaviour degrades to its own missing-field passthrough (never a fault;
-/// pinned by test, K-104).
-pub fn stack_flow_neighbour(effects: &[EffectInstance], fx_on: bool) -> Option<i32> {
-    if !fx_on {
-        return None;
+/// Flow motion blur (docs/08 §3.2) wants `1` (the +1 neighbour); Datamosh
+/// (§3.12, K-107) wants `-1`. Both are purely static reads of the schema's own
+/// match name (K-107 dropped the dynamic per-instance check a combined Glitch
+/// effect used to need), and both are also temporal — their windows reach that
+/// same offset — so the neighbour machinery already fetches the source frame the
+/// flow is measured against.
+pub fn effect_flow_neighbour(match_name: &str) -> Option<i32> {
+    match match_name {
+        "motion_blur" => Some(1),
+        "datamosh" => Some(-1),
+        _ => None,
     }
-    for e in effects
-        .iter()
-        .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-    {
-        if e.effect.match_name == "motion_blur" {
-            return Some(1);
-        }
-        if e.effect.match_name == "datamosh" {
-            return Some(-1);
-        }
-    }
-    None
+}
+
+/// Every neighbour offset a live effect in the stack wants a dense **flow
+/// field** measured against (per-pixel motion vectors between the current
+/// source frame and that neighbour), computed in the decode worker and handed
+/// to the kernels as textures — the gate mirroring [`stack_is_temporal`] that
+/// the render/decode paths check before doing any flow work. Sorted and
+/// deduplicated; empty when the stack wants none, so a plain layer pays nothing.
+///
+/// **One offset per consumer, not one per layer (K-544).** Until this, the
+/// layer carried a single field and the first flow-consuming effect in stack
+/// order took it, leaving the other silently doing nothing. The two want
+/// *different measurements* — forward to the next frame versus back to the
+/// previous — so there was never one field to share; measuring both is the only
+/// honest answer. They are separate entries in the same flow cache, keyed by the
+/// frame pair they were measured over, so a stack with one of them costs exactly
+/// what it always did.
+pub fn stack_flow_neighbours(effects: &[EffectInstance], fx_on: bool) -> Vec<i32> {
+    let mut offsets: Vec<i32> = if fx_on {
+        effects
+            .iter()
+            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter_map(|e| effect_flow_neighbour(&e.effect.match_name))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    offsets.sort_unstable();
+    offsets.dedup();
+    offsets
 }

@@ -32,6 +32,18 @@ deterministic ([05-ARCHITECTURE.md](../05-ARCHITECTURE.md)).
   the true pts table retained for an opt-out. Surface a badge on the footage item.
 - Audio gets a coarser index (packet pts every ~250 ms) — sample-accurate positioning comes
   from decode + skip within a packet.
+- **An image sequence's index is arithmetic, and is never cached** (K-539,
+  [03-DATA-MODEL.md](../03-DATA-MODEL.md) §3.1). A run of numbered stills is opened through
+  FFmpeg's `image2` demuxer (pattern + `start_number` + `framerate`), so every file is one
+  packet and one keyframe, evenly spaced, and how many there are was already counted off the
+  directory. Read the first two packets for where the clock starts and how far it steps, then
+  write the table out — the packet scan above would read *every file's bytes*, tens of
+  gigabytes for a feature-length OpenEXR render, to produce a table this gives exactly. No
+  sidecar either: it costs nothing to rebuild, and the sidecar is keyed by one file's
+  fingerprint, which cannot tell a 300-frame run from the same run with 400 frames in it.
+  Read the timebase and the step rather than assuming them — `image2` sets the stream's
+  timebase from the rate it was given, but `avformat_find_stream_info` may refine both, and
+  two file reads is a cheap way not to depend on it.
 
 ## 3. Seeking exactly
 
@@ -132,3 +144,9 @@ shader on GPU → readback 8-bit/10-bit NV12 → encoder. Muxing: mp4 with `+fas
 4. Colour golden: synthetic NV12 ramps → known linear values within 1 LSB of 16-bit.
 5. Throughput gate: 4K60 H.264 sustained decode ≥ 60 fps on reference hardware via the
    baseline path (hw decode, CPU copy) — proves v1 is viable even if interop slips.
+6. Image sequences (K-539): frame N of a run decodes file N, out of order as well as
+   forward; the run detected from any file of it is the same run; a gap ends it and the
+   frames past the gap are unreachable rather than shifted into place; and what Lumit's own
+   image-sequence export writes reads back as the run it is. Built with Netpbm fixtures —
+   the one still format writable in three lines, so "does file N arrive as frame N" is
+   answered without an image encoder in the test.

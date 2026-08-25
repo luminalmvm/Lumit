@@ -252,7 +252,18 @@ class BridgeTrackStatus {
   /// points and frames it holds. Zero until there is a solve to describe.
   final double meanError;
   final int points;
+
+  /// How many frames of the clip carry a solved camera. The span always
+  /// starts at the clip's first frame — the analysis tracks the source from
+  /// its beginning and can only stop early, never start late — so this and
+  /// `clip_frames` are the whole of the bar the panel draws.
   final int frames;
+
+  /// How many frames the clip has. `frames < clip_frames` is a **partial**
+  /// track: the shot could not be followed all the way through, and what was
+  /// solved is the part before it stopped carrying
+  /// ([`lumit_render::track::Solved::is_partial`]).
+  final int clipFrames;
 
   const BridgeTrackStatus({
     required this.stage,
@@ -262,6 +273,7 @@ class BridgeTrackStatus {
     required this.meanError,
     required this.points,
     required this.frames,
+    required this.clipFrames,
   });
 
   @override
@@ -272,7 +284,8 @@ class BridgeTrackStatus {
       failure.hashCode ^
       meanError.hashCode ^
       points.hashCode ^
-      frames.hashCode;
+      frames.hashCode ^
+      clipFrames.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -285,5 +298,6 @@ class BridgeTrackStatus {
           failure == other.failure &&
           meanError == other.meanError &&
           points == other.points &&
-          frames == other.frames;
+          frames == other.frames &&
+          clipFrames == other.clipFrames;
 }

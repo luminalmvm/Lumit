@@ -207,6 +207,27 @@ reads `keyRoving` correctly and there is nothing to import), and a 3D layer's
 has nowhere to put — the one place in the mapping that loses something without
 a report row.
 
+**What the fixture cannot be given without After Effects** (2026-08-24). `fixture.aep`
+is *authored by After Effects*: `make-fixture.jsx` builds the project through the
+scripting DOM inside a running AE and saves it, and the golden capture beside it is
+AE's own account of that same file from the same sitting. So the fixture cannot be
+extended by hand — bytes written into an `.aep` would be this parser's guess about the
+format compared against this parser, which is the one thing the differential test
+exists not to be. Three rows are owed from the next sitting, and each has a synthetic
+stand-in until then:
+
+| Owed of the fixture | Why it matters | Standing in, and its limit |
+| --- | --- | --- |
+| **A layer dragged along the timeline** (non-zero `start_time`) | Every layer in the project starts at zero, so `ldta`'s start offset is measured against AE at that one value — and the start is what puts in and out points, keyframe times and a stretch's reach back on the comp's clock. Read wrong, an assembling comp opens with every clip at the origin. | `a_layers_in_and_out_are_counted_from_its_own_start` in `aep::tests`, on a synthetic `ldta` |
+| **A layer both stretched and moved** | The one 50 % layer sits at zero, so stretch-about-the-start and stretch-about-the-origin are indistinguishable in the fixture. | `a_stretched_layer_is_stretched_from_its_start`, likewise synthetic |
+| **One real footage item with a name and a path** | The project is solids and comps; the whole footage interpretation group (§7.1) stays unread for want of anything to check it against, and `path`/`name` are read but unmeasured against AE. | `a_footage_item_is_named_and_pathed_from_its_file` and the two sequence tests beside it |
+
+The limit is the same in all three: a synthetic chunk proves the parser reads the field
+it was handed, not that the field is where After Effects puts it. Only a project AE
+wrote can prove the second, which is why these stay owed rather than closed.
+`tests/aep_differential.rs` asserts the fixture still has neither a dragged layer nor a
+footage item, so both exemptions fail loudly the day a sitting supplies one.
+
 ## 6. Phases
 
 1. **The walker and the reader** — `tools/ae-bridge/` + `lumit-import`'s capture
@@ -368,7 +389,7 @@ comp, none of them a layer.
 | `ldta` (164) | 0 (u32) | layer id — what `parent_id` and the matte reference point at |
 | | 4 (u16) | quality: 0 wireframe, 1 draft, 2 best |
 | | 8 (s32) with 108 (u32) | stretch as dividend/divisor; the capture's percentage is ×100 |
-| | 12/16, 20/24, 28/32 | start time, in point, out point (rationals, **unstretched**) |
+| | 12/16, 20/24, 28/32 | start time (comp clock), in point, out point (rationals, **on the layer's own clock and unstretched**) |
 | | 37 (u8) | bit 4 chars-toward-camera, 3 per-character 3D, 2 frame-blend *kind* (1 = pixel motion), 1 guide layer, 0 name-was-set |
 | | 38 (u8) | bit 7 null, 6 point-of-interest auto-orient (camera/light), 5 camera auto-orient, 3 solo, 2 3D, 1 adjustment, 0 auto-orient along path |
 | | 39 (u8) | bit 7 collapse, 6 shy, 5 locked, 4 frame blending on, 3 motion blur, 2 effects active, 1 audio, 0 enabled |
@@ -393,15 +414,32 @@ project that opens and is wrong:
   the fixture's layers have an empty name chunk.
 - **A null and an adjustment layer are backed by a solid item** (§5 again): the
   layer's own bits at `ldta`+38 decide, never the source.
-- **In and out points are stored unstretched.** Scripting reports
-  `start + (raw − start) × stretch`. At a negative stretch the two ends come
-  back the other way round — a swap, not a repair.
+- **In and out points are counted from the layer's own start, unstretched.**
+  The same convention the keyframe times use (§7.2's `time_of`), so scripting
+  reports `start + raw × stretch` — the start is *added*, not pivoted about.
+  Reading them as comp times instead drags every moved layer's bar back to the
+  origin, which is an assembling comp that is transparent at almost every
+  frame. At a negative stretch the two ends come back the other way round — a
+  swap, not a repair.
 - **Camera and light layers have no blend mode, transparency flag, matte block
   or `timeRemapEnabled`**, and only five of the thirteen switches, because the
   scripting DOM does not offer the rest on a rig. The capture must be absent
   there, not `NORMAL`.
 - **"Is somebody's matte" is a fact about the other layer.** `is_track_matte` is
   filled in after the whole stack is read, from who points at whom.
+
+- **Two defaults are not zero, and absent-means-default makes them the parser's
+  to write in.** After Effects starts a layer's **Position at the centre of the
+  composition** and its **Anchor Point at the centre of the layer's source**, so
+  a layer nobody moved has no record for either and reading the absence as
+  (0, 0) pins its top-left corner to the top-left of the frame and pivots every
+  scale and rotation from that corner. `place_at_defaults` writes both in, where
+  the two rasters are already in hand. Three layer kinds keep the zero anchor
+  because that *is* AE's default for them — shape, text and null, none of which
+  draws a source rectangle — and a camera or a light gets neither, the DOM not
+  offering them on a rig. Both properties are reported three-dimensional
+  whatever the layer's 3D switch says. All of it is asserted against After
+  Effects' own numbers in the differential test.
 
 **Owed, and honest about it.** (1) The **footage interpretation** fields —
 frame rate, alpha, fields, pulldown, loop — are not read: Lumit has no field for
@@ -414,9 +452,10 @@ is read (K-536), measured against a real production project and the layouts
 `forticheprod/py-aep` documents; an item whose name the user never changed has an
 empty name chunk, so its file's name is its name.
 
-An **image sequence** points at its folder rather than at a file (the alias record
-says `target_is_folder`), so it imports named after the folder and reports as
-media that could not be found — Lumit has no sequence item yet (docs/03 §2).
+An **image sequence** points at its folder rather than at a file: its alias record
+sets `target_is_folder`, and the two `Utf8` chunks either side of the frame number
+name the run. Both are read, so the item imports as a Lumit image sequence and the
+folder resolves to the run's first numbered frame on open (K-539, docs/11 §2.5).
 (2) A **reflected layer's** ends land 1/3000 s further out in AE's arithmetic
 than in the file's (`−0.000333` / `−10.000333` rather than `−0` / `−10`), as if
 AE reflects inclusive indices on an internal grid — one sample is not enough to
@@ -446,7 +485,7 @@ After Effects did not report*.
 
 | Category | Recovered | Notes |
 |---|---|---|
-| Static property values | **646 exact**, 0 wrong, 0 invented | of 652 leaves the file stores |
+| Static property values | **684 exact**, 0 wrong, 0 invented | 646 of the 652 leaves the file stores, plus the 38 Position and Anchor Point defaults written in for the records After Effects leaves out — each asserted against AE's own number, which is what makes them recovered rather than guessed |
 | Keyframes | **27 of 27** (11 properties) | time, value, per-side interpolation, ease, spatial tangents |
 | Expressions | **2 of 2** | source text and the on/off flag, one of each |
 | Effect instances | **13 of 13** | match name, display name (`fnam`), on/off switch |
@@ -533,7 +572,10 @@ golden capture and each producing a plausible-looking wrong project if missed:
   it in the file's own order and the alpha lands in the red channel.
 - **An effect's two-dimensional point is a fraction of the composition.**
 - **An anchor point is a fraction of the layer's *source*** — but only when the
-  layer has one. A shape, text or null layer stores it in raw pixels.
+  layer has one. A shape, text or null layer stores it in raw pixels. A precomp
+  layer's "source" is the composition it points at, whose size lives in *that*
+  comp's `cdta` and not in its item row, so every comp's raster is read before
+  any layer is.
 - **A mask path is normalised twice**: to its own `shph` bounding box, and that
   box to the layer's size. Mask space is the *layer's*, not the comp's.
 - **A linear or held key's ease is all zeros in the file.** After Effects works

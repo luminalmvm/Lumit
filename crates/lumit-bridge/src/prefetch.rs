@@ -82,10 +82,10 @@ fn run(jobs: Receiver<PrefetchWant>, done: Sender<Done>) {
                 // decoder open: a decode-ahead thread that re-scanned the file
                 // would spend the first seconds of playback doing work the
                 // probe had already done.
-                let Ok(index) = lumit_render::media_index::load_or_build_index(&want.path) else {
+                let Ok(index) = lumit_render::media_index::load_or_build_index(&want.source) else {
                     continue;
                 };
-                let Ok(dec) = lumit_media::VideoDecoder::open(&want.path, index) else {
+                let Ok(dec) = lumit_media::VideoDecoder::open(&want.source, index) else {
                     continue;
                 };
                 e.insert(dec)

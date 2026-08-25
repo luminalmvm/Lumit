@@ -29,6 +29,14 @@
   "@armRazor": {
     "description": "Menu item: pick up the blade that cuts a layer where you click."
   },
+  "brushShapeRound": "Round",
+  "@brushShapeRound": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a circular brush tip."
+  },
+  "brushShapeSquare": "Square",
+  "@brushShapeSquare": {
+    "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a square brush tip."
+  },
   "bringForward": "Bring forward",
   "@bringForward": {
     "description": "Context-menu item: move a layer one place up the stack."
@@ -364,6 +372,10 @@
   "@fxInsideColour": {
     "description": "Effect controls — a control on Beam: the colour of the beam's core."
   },
+  "fxInsideMask": "Inside mask",
+  "@fxInsideMask": {
+    "description": "Effect controls — a control on Matte key: a mask of this layer's whose inside is forced opaque."
+  },
   "fxInterpolation": "Interpolation",
   "@fxInterpolation": {
     "description": "Effect controls — a control on Polar coordinates."
@@ -460,6 +472,10 @@
   "@fxOutsideColour": {
     "description": "Effect controls — a control on Beam: the colour of the beam's rim."
   },
+  "fxOutsideMask": "Outside mask",
+  "@fxOutsideMask": {
+    "description": "Effect controls — a control on Matte key: a mask of this layer's whose inside is forced transparent."
+  },
   "fxPaintStyle": "Paint style",
   "@fxPaintStyle": {
     "description": "Effect controls — a control on Stroke: what the brush is painted onto."
@@ -496,6 +512,10 @@
   "@fxRandomness": {
     "description": "Effect controls — a control on Card wipe: how far the order of the flips is shuffled."
   },
+  "fxRec709": "Rec. 709",
+  "@fxRec709": {
+    "description": "Effect controls — an Input space option on LUT: the ITU-R BT.709 transfer function."
+  },
   "fxRectangularToPolar": "Rectangular to polar",
   "@fxRectangularToPolar": {
     "description": "Effect controls — a Conversion option on Polar coordinates."
@@ -531,6 +551,10 @@
   "fxSpherize": "Spherize",
   "@fxSpherize": {
     "description": "Effect name in the Add effect menu — a glass ball held over the picture."
+  },
+  "fxSrgb": "sRGB",
+  "@fxSrgb": {
+    "description": "Effect controls — an Input space option on LUT: the sRGB transfer function."
   },
   "fxStar": "Star",
   "@fxStar": {
@@ -1569,6 +1593,14 @@
   "@fxDespillBias": {
     "description": "Effect controls — a control on Matte key."
   },
+  "fxDespotBlack": "Despot black",
+  "@fxDespotBlack": {
+    "description": "Effect controls — a control on Matte key."
+  },
+  "fxDespotWhite": "Despot white",
+  "@fxDespotWhite": {
+    "description": "Effect controls — a control on Matte key."
+  },
   "fxDetail": "Detail",
   "@fxDetail": {
     "description": "Effect controls — a control on Lens flare."
@@ -2285,6 +2317,10 @@
   "@fxRotationJitter": {
     "description": "Effect controls — a control on Particulate: how much particle rotations differ from one another, in degrees."
   },
+  "fxRotationFrequency": "Rotation frequency",
+  "@fxRotationFrequency": {
+    "description": "Effect controls — a control on Shake."
+  },
   "fxRotationDeg": "Rotation °",
   "@fxRotationDeg": {
     "description": "Effect controls — a control on Transform."
@@ -2352,6 +2388,18 @@
   "fxScreenMatte": "Screen matte",
   "@fxScreenMatte": {
     "description": "Effect controls — a control on Posterize time."
+  },
+  "fxScreenPreBlur": "Screen pre-blur",
+  "@fxScreenPreBlur": {
+    "description": "Effect controls — a control on Matte key: how far the picture the key is judged from is softened before the matte is measured."
+  },
+  "fxScreenShrinkGrow": "Screen shrink/grow",
+  "@fxScreenShrinkGrow": {
+    "description": "Effect controls — a control on Matte key: marches the matte's edge outward (positive) or inward (negative)."
+  },
+  "fxScreenSoftness": "Screen softness",
+  "@fxScreenSoftness": {
+    "description": "Effect controls — a control on Matte key: how far the matte itself is blurred."
   },
   "fxSeed": "Seed",
   "@fxSeed": {
@@ -2464,6 +2512,10 @@
   "fxInputBlack": "Input black",
   "@fxInputBlack": {
     "description": "Effect controls — a control on Levels."
+  },
+  "fxInputSpace": "Input space",
+  "@fxInputSpace": {
+    "description": "Effect controls — a control on LUT: the transfer function the .cube file was authored for."
   },
   "fxInputWhite": "Input white",
   "@fxInputWhite": {
@@ -3353,6 +3405,14 @@
   "@maskFeather": {
     "description": "Row label under a mask: the width of its soft edge, in layer pixels."
   },
+  "maskFeatherOneWidth": "One feather width",
+  "@maskFeatherOneWidth": {
+    "description": "Item in a mask row's right-click menu: go back to a single feather width all the way round the shape, dropping the per-point widths."
+  },
+  "maskFeatherPerPoint": "Feather per point",
+  "@maskFeatherPerPoint": {
+    "description": "Item in a mask row's right-click menu: give every point of the shape a feather width of its own, so one edge can be sharp and another soft."
+  },
   "maskInvertMark": "Inv",
   "@maskInvertMark": {
     "description": "Very short marker on a mask row meaning it is inverted. Abbreviate in your language too — the cell is about three characters wide."
@@ -3361,6 +3421,10 @@
   "@maskModeAdd": {
     "description": "Mask mode: this mask adds its shape to what the masks above it let through."
   },
+  "maskModeDarken": "Darken",
+  "@maskModeDarken": {
+    "description": "Mask mode: keeps the lesser of this mask's opacity and what the masks above it let through."
+  },
   "maskModeDifference": "Difference",
   "@maskModeDifference": {
     "description": "Mask mode: what one of this mask and the masks above it cover, but not both."
@@ -3368,6 +3432,10 @@
   "maskModeIntersect": "Intersect",
   "@maskModeIntersect": {
     "description": "Mask mode: only where this mask and the masks above it overlap."
+  },
+  "maskModeLighten": "Lighten",
+  "@maskModeLighten": {
+    "description": "Mask mode: keeps the greater of this mask's opacity and what the masks above it let through."
   },
   "maskModeNone": "None",
   "@maskModeNone": {
@@ -3393,6 +3461,15 @@
   "maskPath": "Path",
   "@maskPath": {
     "description": "The name of a mask's shape row in the Timeline fold-out — the row that keyframes the drawn shape itself."
+  },
+  "maskVertexFeather": "Point {point} feather",
+  "@maskVertexFeather": {
+    "description": "Row label under a mask, one per point of its shape: that point's own soft-edge width, in layer pixels. {point} counts up from 1.",
+    "placeholders": {
+      "point": {
+        "type": "int"
+      }
+    }
   },
   "menu3dLayer": "3D layer",
   "@menu3dLayer": {
@@ -4208,6 +4285,10 @@
   "removeEffect": "Remove effect",
   "@removeEffect": {
     "description": "Context-menu item: delete an effect from the layer."
+  },
+  "removeExpression": "Remove expression",
+  "@removeExpression": {
+    "description": "Context-menu item on a property's expression editor: go back to a plain value, keeping the number the expression was showing."
   },
   "rename": "Rename",
   "@rename": {
@@ -5203,6 +5284,10 @@
   "@tipEdgeHardness": {
     "description": "Tooltip. Keep it to the control's name — under five words."
   },
+  "tipBrushShape": "Brush shape",
+  "@tipBrushShape": {
+    "description": "Tooltip. Keep it to the control's name — under five words."
+  },
   "tipEnable": "Enable",
   "@tipEnable": {
     "description": "Tooltip on the checkbox that switches an effect on. Under five words."
@@ -5835,6 +5920,126 @@
   "toolHand": "Hand",
   "@toolHand": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
+  },
+  "shapeDash": "Dash",
+  "@shapeDash": {
+    "description": "Timeline row under a shape layer's art: how long each dash of its outline is, in pixels."
+  },
+  "shapeDashOffset": "Dash offset",
+  "@shapeDashOffset": {
+    "description": "Timeline row under a shape layer's art: how far along the path the dash pattern starts, in pixels."
+  },
+  "shapeGap": "Gap",
+  "@shapeGap": {
+    "description": "Timeline row under a shape layer's art: how long the space between two dashes of its outline is, in pixels."
+  },
+  "shapeFill": "Fill",
+  "@shapeFill": {
+    "description": "Timeline row under a shape layer's art: the colour inside its path."
+  },
+  "shapeGradient": "Gradient",
+  "@shapeGradient": {
+    "description": "Timeline row under a shape layer's art: whether its fill is a flat colour or a ramp, and which kind of ramp."
+  },
+  "shapeGradientColour": "Gradient colour",
+  "@shapeGradientColour": {
+    "description": "Timeline row under a shape layer's art: the colour at the far end of its gradient fill."
+  },
+  "shapeGradientEndX": "Gradient end x",
+  "@shapeGradientEndX": {
+    "description": "Timeline row under a shape layer's art: the x the gradient ends at, in pixels."
+  },
+  "shapeGradientEndY": "Gradient end y",
+  "@shapeGradientEndY": {
+    "description": "Timeline row under a shape layer's art: the y the gradient ends at, in pixels."
+  },
+  "shapeGradientFlat": "Flat",
+  "@shapeGradientFlat": {
+    "description": "One choice on a shape layer's Gradient row: no ramp, the fill is one colour."
+  },
+  "shapeGradientLinear": "Linear",
+  "@shapeGradientLinear": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps along a line."
+  },
+  "shapeGradientRadial": "Radial",
+  "@shapeGradientRadial": {
+    "description": "One choice on a shape layer's Gradient row: the fill ramps outwards from a point."
+  },
+  "shapeGradientStartX": "Gradient start x",
+  "@shapeGradientStartX": {
+    "description": "Timeline row under a shape layer's art: the x the gradient starts at, in pixels."
+  },
+  "shapeGradientStartY": "Gradient start y",
+  "@shapeGradientStartY": {
+    "description": "Timeline row under a shape layer's art: the y the gradient starts at, in pixels."
+  },
+  "shapeOffsetPath": "Offset path",
+  "@shapeOffsetPath": {
+    "description": "Timeline row under a shape layer's art: how far its outline is pushed out of the path, in pixels. Negative pulls it in."
+  },
+  "shapeRepeatAnchorX": "Repeater anchor x",
+  "@shapeRepeatAnchorX": {
+    "description": "Timeline row under a shape layer's art: the x of the point each repeated copy is turned and scaled about, in pixels."
+  },
+  "shapeRepeatAnchorY": "Repeater anchor y",
+  "@shapeRepeatAnchorY": {
+    "description": "Timeline row under a shape layer's art: the y of the point each repeated copy is turned and scaled about, in pixels."
+  },
+  "shapeRepeatCopies": "Copies",
+  "@shapeRepeatCopies": {
+    "description": "Timeline row under a shape layer's art: how many copies of it are drawn. One is no repeater at all."
+  },
+  "shapeRepeatEndOpacity": "End opacity",
+  "@shapeRepeatEndOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the last repeated copy is, as a percentage."
+  },
+  "shapeRepeatOffset": "Copy offset",
+  "@shapeRepeatOffset": {
+    "description": "Timeline row under a shape layer's art: which copy the original art is, so a negative number puts copies behind it."
+  },
+  "shapeRepeatPositionX": "Repeater position x",
+  "@shapeRepeatPositionX": {
+    "description": "Timeline row under a shape layer's art: how far along x one repeated copy is moved from the one before it, in pixels."
+  },
+  "shapeRepeatPositionY": "Repeater position y",
+  "@shapeRepeatPositionY": {
+    "description": "Timeline row under a shape layer's art: how far along y one repeated copy is moved from the one before it, in pixels."
+  },
+  "shapeRepeatRotation": "Repeater rotation",
+  "@shapeRepeatRotation": {
+    "description": "Timeline row under a shape layer's art: how far one repeated copy is turned from the one before it, in degrees."
+  },
+  "shapeRepeatScale": "Repeater scale",
+  "@shapeRepeatScale": {
+    "description": "Timeline row under a shape layer's art: how much one repeated copy is scaled from the one before it, as a percentage."
+  },
+  "shapeRepeatStartOpacity": "Start opacity",
+  "@shapeRepeatStartOpacity": {
+    "description": "Timeline row under a shape layer's art: how opaque the first repeated copy is, as a percentage."
+  },
+  "shapeTrimStart": "Trim start",
+  "@shapeTrimStart": {
+    "description": "Timeline row under a shape layer's art: how far along the path's own length the art begins, as a percentage."
+  },
+  "shapeTrimEnd": "Trim end",
+  "@shapeTrimEnd": {
+    "description": "Timeline row under a shape layer's art: how far along the path's own length the art ends, as a percentage."
+  },
+  "shapeTrimOffset": "Trim offset",
+  "@shapeTrimOffset": {
+    "description": "Timeline row under a shape layer's art: how far the trimmed piece is slid along the path, in degrees."
+  },
+  "strokeStart": "Start",
+  "@strokeStart": {
+    "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark begins, as a percentage."
+  },
+  "strokeEnd": "End",
+  "@strokeEnd": {
+    "description": "Timeline row under a paint stroke: how far along the stroke's own length the mark ends, as a percentage."
+  },
+  "toolShape": "Shape",
+  "@toolShape": {
+    "description": "Toolbar options strip — label beside the brush shape picker."
   },
   "toolHardness": "Hardness",
   "@toolHardness": {
@@ -7227,6 +7432,11 @@
   "@aeAudioLayerAsFootage": {
     "description": "Import report row reason, lower case. Lumit has no separate audio layer kind for this case."
   },
+  "aeAudioLevelsDiffer": "audio levels {left} dB left and {right} dB right have one level in Lumit — imported at the left",
+  "@aeAudioLevelsDiffer": {
+    "description": "Import report row reason, lower case. After Effects sets a layer's two audio channels to different levels; Lumit has one level per layer.",
+    "placeholders": { "left": { "type": "String" }, "right": { "type": "String" } }
+  },
   "aeGuideLayerNotSupported": "guide layers have no equivalent — imported visible",
   "@aeGuideLayerNotSupported": {
     "description": "Import report row reason, lower case. An After Effects guide layer shows while editing and never exports; Lumit has no such switch."
@@ -7374,6 +7584,11 @@
       }
     }
   },
+  "aeEffectParamsUnreadable": "{count} parameters could not be read — they are kept whole and import as nothing",
+  "@aeEffectParamsUnreadable": {
+    "description": "Import report row reason, lower case. Shown against one placeholder effect instance whose parameters After Effects itself could not read; the placeholder is how many of them there were (always two or more).",
+    "placeholders": { "count": { "type": "String" } }
+  },
   "aeEffectParamNotCarried": "{effect}'s {param} has no equivalent — the effect imported without it",
   "@aeEffectParamNotCarried": {
     "description": "Import report row reason, lower case. Names an effect and one of its controls.",
@@ -7488,6 +7703,11 @@
         "type": "String"
       }
     }
+  },
+  "trackSolvedPartial": "Analysed {frames} of {total} frames — the shot could not be followed further",
+  "@trackSolvedPartial": {
+    "description": "Camera track status line when the analysis stopped part-way through the clip: the first {frames} frames carry a solved camera and the rest of the clip does not. Both numbers are frame counts.",
+    "placeholders": { "frames": { "type": "int" }, "total": { "type": "int" } }
   },
   "trackFailedUnreadable": "The media could not be read",
   "@trackFailedUnreadable": {

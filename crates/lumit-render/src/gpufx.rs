@@ -74,7 +74,7 @@ pub struct AuxSlot<'a> {
     data: AuxData<'a>,
     matte: Option<&'a Tex>,
     layer: Option<&'a Tex>,
-    path: Option<&'a lumit_core::mask::MaskPolyline>,
+    paths: &'a [lumit_core::mask::MaskPolyline],
     schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
 }
 
@@ -117,14 +117,14 @@ impl<'a> AuxSlot<'a> {
         data: AuxData<'a>,
         matte: Option<&'a Tex>,
         layer: Option<&'a Tex>,
-        path: Option<&'a lumit_core::mask::MaskPolyline>,
+        paths: &'a [lumit_core::mask::MaskPolyline],
         schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
     ) -> Self {
         Self {
             data,
             matte,
             layer,
-            path,
+            paths,
             schedule,
         }
     }
@@ -165,7 +165,18 @@ impl<'a> AuxSlot<'a> {
     /// own layout, since a kernel that walks a curve and a kernel that builds a
     /// distance field over one want different things in the buffer.
     pub fn mask_path(self) -> Option<&'a lumit_core::mask::MaskPolyline> {
-        self.path
+        self.paths.first()
+    }
+
+    /// This op's **n-th** mask path (K-546), in the order the effect declares
+    /// its [`ParamKind::MaskPath`](lumit_core::fx::ParamKind::MaskPath) rows.
+    ///
+    /// Three effects walk one line and answer with [`Self::mask_path`]; the
+    /// Matte key takes two, an inside hold-out and an outside one, so the slot
+    /// is a slice. Past the end is `None`, which is the same no-op an unset row
+    /// already is.
+    pub fn mask_path_n(self, i: usize) -> Option<&'a lumit_core::mask::MaskPolyline> {
+        self.paths.get(i)
     }
 
     /// **This op's Matte** (K-395), already resolved against the picture the
@@ -1248,6 +1259,10 @@ impl GpuEffect for Tile {
                 mirror_edges: t.mirror_edges,
                 horizontal_phase_shift: t.horizontal_phase_shift,
                 mix: t.mix,
+                // The oracle sizes the raster (K-542): lumit-gpu has no
+                // lumit-core to ask, and one rule in one place is what keeps the
+                // two paths making the same picture.
+                out_raster: lumit_core::fx::cpu::tile_raster(w, h, &t),
             },
         )
     }
@@ -2020,7 +2035,7 @@ impl GpuEffect for Lut {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let mix = effects::lut::Lut::read(p).packed();
+        let (mix, space) = effects::lut::Lut::read(p).packed();
         // An empty slot — unset, missing, 1D or unreadable file — is the
         // labelled no-op, exactly as the old arm's `if let Some` was; the
         // texture handle is an `Arc`, so passing it back costs nothing.
@@ -2033,6 +2048,7 @@ impl GpuEffect for Lut {
                 &l.texture,
                 l.size,
                 mix,
+                space.code(),
                 l.domain_min,
                 l.domain_max,
             ),
@@ -2782,6 +2798,19 @@ impl GpuEffect for MotionBlur {
     }
 }
 
+/// One garbage mask's outline, as the kernel takes it (K-546): the CPU builds
+/// the geometry — the same function the oracle calls — and this only re-labels
+/// the fields for the GPU crate, exactly as `path_draw_op` does for the three
+/// line-drawing effects.
+fn mask_fill_op(built: &lumit_core::fx::cpu::MaskFillParams) -> lumit_gpu::fx::MaskFillOp {
+    lumit_gpu::fx::MaskFillOp {
+        segments: built.segments,
+        count: built.count,
+        ramp: built.ramp,
+        expansion: built.expansion,
+    }
+}
+
 struct MatteKey;
 impl GpuEffect for MatteKey {
     fn match_name(&self) -> &'static str {
@@ -2795,9 +2824,18 @@ impl GpuEffect for MatteKey {
         w: u32,
         h: u32,
         p: Params<'_>,
-        _aux: AuxSlot<'_>,
+        aux: AuxSlot<'_>,
     ) -> Tex {
         let k = effects::matte_key::MatteKey::read(p).packed();
+        // The two garbage masks, in declaration order: inside then outside.
+        // Built here, host-side, exactly once a frame and by the very function
+        // the §1.6 oracle calls — neither path generates geometry, so neither
+        // can generate it differently (K-408's rule, K-546's second row).
+        let px_scale = effects::matte_key::MatteKey::px_scale_of(p);
+        let unset = lumit_core::mask::MaskPolyline::default();
+        let fill = |i: usize| {
+            lumit_core::fx::cpu::mask_fill_params(aux.mask_path_n(i).unwrap_or(&unset), px_scale)
+        };
         fx.matte_key(
             ctx,
             tex,
@@ -2816,8 +2854,15 @@ impl GpuEffect for MatteKey {
                 clip_rollback: k.clip_rollback,
                 replace_method: k.replace_method,
                 replace_colour: k.replace_colour,
+                pre_blur: k.pre_blur,
+                shrink_grow: k.shrink_grow,
+                softness: k.softness,
+                despot_black: k.despot_black,
+                despot_white: k.despot_white,
                 mix: k.mix,
             },
+            &mask_fill_op(&fill(0)),
+            &mask_fill_op(&fill(1)),
         )
     }
 }
@@ -4415,7 +4460,7 @@ mod tests {
             h,
             &ops,
             &[],
-            None,
+            &[],
             &[],
             &[],
             &[],
@@ -4664,7 +4709,7 @@ mod tests {
             h,
             &ops,
             &[],
-            None,
+            &[],
             &[],
             &[],
             &[],
@@ -4754,7 +4799,7 @@ mod tests {
                 h,
                 ops,
                 &[],
-                None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -4853,7 +4898,7 @@ mod tests {
             h,
             &ops,
             &[],
-            None,
+            &[],
             // Slot 0 empty, slot 1 the grade: only the *second* op grades.
             &[None, Some(kill_green)],
             &[],
@@ -4950,7 +4995,7 @@ mod tests {
             h,
             &ops,
             &[],
-            None,
+            &[],
             &[],
             // The layer-input list carries Light wrap's Background plate and
             // nothing else: one consuming op, one slot, at index 0.
@@ -5029,7 +5074,7 @@ mod tests {
             h,
             &ops,
             &neighbours,
-            None,
+            &[],
             &[],
             &[],
             &[],
@@ -5126,7 +5171,7 @@ mod tests {
                 h,
                 ops,
                 &[],
-                None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -5222,7 +5267,7 @@ mod tests {
                 h,
                 &ops,
                 &[],
-                None,
+                &[],
                 &[],
                 layers,
                 &[],
@@ -5320,7 +5365,7 @@ mod tests {
                 h,
                 &ops,
                 &[],
-                None,
+                &[],
                 &[],
                 layers,
                 &[],
@@ -5354,6 +5399,120 @@ mod tests {
             (at(mid) - at(mid + 3)).abs() > 1e-3,
             "the edge did not spread along the vector"
         );
+    }
+
+    /// **Both flow consumers on one layer are served** (K-544).
+    ///
+    /// Fast motion blur measures forward to the next frame, Datamosh measures
+    /// back to the previous one. The layer used to carry a single field and the
+    /// first of the two in stack order took it, so the other read nothing and
+    /// silently rendered its passthrough. They are separate measurements now,
+    /// keyed by the offset each asked for.
+    ///
+    /// The proof is a stack carrying both, run three ways over the same picture:
+    /// with both fields bound, with only the `+1` field, and with only the `-1`
+    /// field. If each effect is reading its own measurement, the full run
+    /// differs from *both* one-field runs — the missing one having degraded that
+    /// effect to a passthrough. Under the old single-slot routing one of those
+    /// comparisons was an equality, because the second effect never saw a field
+    /// whichever way round it was asked.
+    #[test]
+    fn both_flow_consumers_on_one_layer_read_their_own_measurement() {
+        let Ok(ctx) = GpuContext::headless() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let fx = FxEngine::new(&ctx);
+        let (w, h) = (32u32, 16u32);
+        let n = (w * h) as usize;
+        // A hard vertical edge: a sideways smear or a melt is unmistakable.
+        let source: Vec<f32> = (0..n)
+            .flat_map(|i| {
+                let lit = f32::from(i as u32 % w < w / 2);
+                [lit, lit, lit, 1.0]
+            })
+            .collect();
+        // The -1 neighbour Datamosh drags along its field: the same edge shifted,
+        // so dragging it in is visible.
+        let prev: Vec<f32> = (0..n)
+            .flat_map(|i| {
+                let lit = f32::from((i as u32 % w + 6) < w / 2);
+                [0.2 * lit, lit, 0.2 * lit, 1.0]
+            })
+            .collect();
+        let neighbours = vec![(-1i32, lumit_gpu::fx::upload_linear_f32(&ctx, &prev, w, h))];
+
+        // Two different measurements, one per offset. Sideways for the +1
+        // (forward) field, downwards for the -1 (backward) one, so a field
+        // handed to the wrong consumer would not merely be wrong, it would move
+        // the picture the wrong way.
+        let field = |u: f32, v: f32| {
+            lumit_gpu::fx::upload_flow_field(&ctx, &vec![u; n], &vec![v; n], &vec![1.0f32; n], w, h)
+        };
+
+        let mb = lumit_core::fx::instantiate("motion_blur").expect("a built-in");
+        let dm = lumit_core::fx::instantiate("datamosh").expect("a built-in");
+        assert_eq!(
+            lumit_core::fx::stack_flow_neighbours(&[mb.clone(), dm.clone()], true),
+            vec![-1, 1],
+            "the stack must ask for both measurements"
+        );
+        // Datamosh first, then the blur: at Intensity 1 the melt replaces the
+        // picture outright, so with it on top nothing upstream of it could show
+        // and the test would prove nothing about the blur.
+        let ops = lumit_core::fx::resolve_stack(
+            &[dm, mb],
+            0.0,
+            ((w * w + h * h) as f32).sqrt(),
+            1.0,
+            &lumit_core::fx::MarkerContext::NONE,
+            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
+        );
+
+        let rendered = |fields: &[(i32, wgpu::Texture)]| {
+            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
+            let out = crate::fxops::run_ops(
+                &fx,
+                &ctx,
+                tex,
+                w,
+                h,
+                &ops,
+                &neighbours,
+                fields,
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                &[],
+                None,
+                None,
+            );
+            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
+        };
+
+        let both = rendered(&[(-1, field(0.0, 5.0)), (1, field(7.0, 0.0))]);
+        let blur_only = rendered(&[(1, field(7.0, 0.0))]);
+        let mosh_only = rendered(&[(-1, field(0.0, 5.0))]);
+
+        assert_ne!(
+            both, source,
+            "the stack must do something to the picture at all"
+        );
+        assert_ne!(
+            both, blur_only,
+            "Datamosh must read its own -1 field, not silently do nothing              because Fast motion blur was asked first"
+        );
+        assert_ne!(
+            both, mosh_only,
+            "Fast motion blur must read its own +1 field, not silently do              nothing because Datamosh was asked first"
+        );
+        // Neither one-field run is the passthrough either: each effect on its
+        // own field really is changing the picture, so the comparisons above
+        // are about routing rather than about one of them being inert.
+        assert_ne!(blur_only, source, "the +1 field alone must still blur");
+        assert_ne!(mosh_only, source, "the -1 field alone must still melt");
     }
 
     /// **An override's matte is spent ONCE** (K-395).
@@ -5418,7 +5577,7 @@ mod tests {
                 h,
                 &ops,
                 &[],
-                None,
+                &[],
                 &[],
                 &[],
                 &[],
@@ -5518,7 +5677,7 @@ mod tests {
             h,
             &ops,
             &[],
-            None,
+            &[],
             &[],
             &[],
             &[],

@@ -17,11 +17,6 @@ Lumit's keyer. It changes a pixel's transparency where a pixel matches a chosen
 **screen colour**, so a subject shot against green or blue can be composited
 over something else.
 
-:::note[Spatial controls are not here yet]
-Screen pre-blur, shrink and grow, screen softness and despot removal are
-specified but not yet built, as are the inside and outside garbage masks.
-:::
-
 ## Parameters
 
 {/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
@@ -35,9 +30,16 @@ specified but not yet built, as are the inside and outside garbage masks.
 | **Despill bias** | Colour | Each channel 0 to 4, scene-linear | 0.5, 0.5, 0.5, 1 | - |
 | **Alpha bias** | Colour | Each channel 0 to 4, scene-linear | 0.5, 0.5, 0.5, 1 | - |
 | **Despill amount** | Slider | 0 to 100 | 100 | Per cent |
+| **Screen pre-blur** | Slider | 0 to 20; up to 100 | 0 | Pixels at composition size |
 | **Clip black** | Slider | 0 to 100 | 0 | Per cent |
 | **Clip white** | Slider | 0 to 100 | 100 | Per cent |
 | **Clip rollback** | Slider | 0 to 100 | 0 | Per cent |
+| **Screen shrink/grow** | Slider | -10 to 10; down to -50 and up to 50 | 0 | Pixels at composition size |
+| **Screen softness** | Slider | 0 to 20; up to 100 | 0 | Pixels at composition size |
+| **Despot black** | Slider | 0 to 100 | 0 | Per cent |
+| **Despot white** | Slider | 0 to 100 | 0 | Per cent |
+| **Inside mask** | Masks | This layer's masks | None | - |
+| **Outside mask** | Masks | This layer's masks | None | - |
 | **Replace method** | Dropdown | Source · Hard colour · Soft colour · None | Soft colour | - |
 | **Replace colour** | Colour | Each channel 0 to 4, scene-linear | 0.5, 0.5, 0.5, 1 | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
@@ -45,7 +47,7 @@ specified but not yet built, as are the inside and outside garbage masks.
 
 In the Effect Controls panel:
 
-- **Screen matte** groups **Clip black**, **Clip white**, **Clip rollback**, **Replace method**, **Replace colour**, and starts closed.
+- **Screen matte** groups **Screen pre-blur**, **Clip black**, **Clip white**, **Clip rollback**, **Screen shrink/grow**, **Screen softness**, **Despot black**, **Despot white**, **Inside mask**, **Outside mask**, **Replace method**, **Replace colour**, and starts closed.
 
 {/* END GENERATED */}
 

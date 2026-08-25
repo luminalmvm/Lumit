@@ -588,6 +588,26 @@ opening a second viewport. Clicking it again goes back.
   the art was drawn and MUST become the selection, so the next drag masks it.
 - A shape layer's art lists in its Timeline twirl-down under a **Contents** heading, above Masks
   and Effects: the art is the picture, the masks gate it, the effects process it.
+- Each item's **animatable numbers get a row each** under it, as a mask's and a stroke's do
+  (K-551): Trim start, Trim end and Trim offset. A row rather than another control on the item's
+  own row, because a property without a row has nowhere to put the stopwatch that animates it.
+- **Fill** and **Gradient** head an item's rows, on any item that has a fill (K-555): a colour
+  swatch and a Flat / Linear / Radial choice. **Gradient colour** and the ramp's two points appear
+  once the choice is not Flat. Switching a ramp on **aims it at the art's own box** — down it for
+  linear, out from its middle for radial — because a ramp that read as one flat colour the moment
+  it was chosen would look broken rather than unaimed. None of the three keys: a colour and a
+  choice have no curve, so they carry no stopwatch.
+- **Offset path** is the first of an item's rows, because it applies first (K-554): one length in
+  layer pixels, out of the path or — negative — into it.
+- **Dash, Gap and Dash offset** appear under an item that has an **outline**, and only then
+  (K-552): three dead rows on a fill-only shape would be three promises the item cannot keep.
+  Writing either Dash or Gap on an item with no dash list makes the pair, so there is no separate
+  "add dashes" gesture to find.
+- **Copies** appears under every item, and the repeater's other nine rows — Copy offset,
+  Repeater anchor x and y, Repeater position x and y, Repeater rotation, Repeater scale, Start
+  opacity and End opacity — appear only once there is more than one copy to step between
+  (K-553). Copies is the row that opens them, so there is no separate "add a repeater" gesture,
+  and an item drawn once carries one row rather than ten that describe nothing.
 - **All five shape tools drag out** between two opposite corners of the shape's box —
   whichever way round the drag went — with `Shift` keeping the box square. Rectangle and
   rounded rectangle fill the box; ellipse is inscribed in it; polygon and star are the regular
@@ -636,6 +656,14 @@ opening a second viewport. Clicking it again goes back.
   and each with its value in the same column an effect parameter's value sits in. Path is
   the shape itself: it has no number, so its row has no field and its lane shows diamonds
   without a curve (K-339).
+- **A feather can be a width per point** (K-545), and then a **Point *n* feather** row joins
+  them for each point of the shape — the same stopwatch, navigator, diamonds and graph
+  channel. The rows appear only once the mask carries the widths, and the mask row's own menu
+  is where they are switched on: **Feather per point** gives every point the width the mask
+  already had, so turning it on does not move the picture, and **One feather width** drops
+  them again. The Viewer draws a dimmer line half a feather either side of the path, which is
+  how a varying width is seen before the frame is; a keyframed width has no line, because the
+  Viewer does not evaluate one while it paints (K-184).
 - **A mask (and a shape item) is renamed in place.** A shape drawn with a tool is named
   after that tool, which is right until two ellipses need telling apart, so the name is
   editable: **double-click** it, or pick **Rename** from the row's menu. `Enter` or a click
@@ -937,6 +965,15 @@ The library of assets: footage items, audio items, comps, folders.
   into it would clip the very thing that was asked for. Pressing Create makes the comp and
   places every dropped item in it as a layer.
 
+**An image sequence imports as one row** (K-539, [03-DATA-MODEL.md](03-DATA-MODEL.md) §3.1).
+The file dialogue offers files, not folders, so picking any single still out of a folder of
+numbered ones imports the whole run — named for its span, `frame[0001-0050].png`, so the row
+says both that it is a run and where it stops. Picking more of the same run (which is what
+selecting a whole folder does) adds nothing further: the item that is already there is the
+answer. A numbered still with no numbered neighbours stays a single still, and a folder of
+numbered `.mp4`s stays a folder of clips. **Shipped**, apart from the rate control: a
+sequence plays at 25 until §3.2's dialogue exists to change it.
+
 ### 3.2 Interpretation dialogue
 
 Per footage item (context menu → *Interpret footage…*), stored in the project, never
@@ -951,6 +988,10 @@ touching the file (K-024):
   then the loaded configuration's own names — and that submenu is replaced when the dialogue
   lands.
 - **Loop**: loop count for stills/sequences and short loops.
+- **Sequence frame rate** (K-539): for an image sequence this is not an *override* — stills
+  carry no rate of their own, so the item's rate is the only rate there is. It defaults to 25
+  and is where an imported sequence's speed gets corrected. This is the one part of a
+  sequence the project stores; the run's start and length are re-read from the folder.
 - **Fields/pulldown**: deliberately out of scope for v1 (gaming footage is progressive);
   the dialogue reserves space for it.
 
@@ -1825,6 +1866,15 @@ Shows the **effect stack** of the selected layer (tab per recently viewed layer,
   refusal is a plain sentence in the same line, and nothing about the shot has changed. The
   line is *sampled* while the job moves and left alone when it does not; it is never a
   progress bar, because the Viewer's is the one progress bar (§2.5).
+
+  **A finished answer that covers part of its clip draws the part it covers** (K-540). Where
+  a job's answer is about a *span* of the media rather than the whole of it — today, a camera
+  track that stopped where the shot stopped being followable — a thin bar sits **above** that
+  line and shows the analysed span against the rest of the clip, in theme colours, with the
+  line saying how far it got in words. This is not the progress bar §2.5 reserves and does
+  not contradict it: it appears only once the work is *over*, it does not move, and what it
+  measures is the answer's extent rather than the work's completeness. A whole answer fills
+  it, which is what makes a partial one legible without reading anything.
 
   **Two parameters can share one row.** Two conventions fold, and both exist because the
   pair is one idea and reads worse split in half: an `_x`/`_y` Float neighbour pair draws as

@@ -42,6 +42,7 @@ fn project_with_folder() -> (
     let project = LumitBridgeState::new_project(None).expect("a new project");
 
     let filed = FootageItem {
+        sequence: None,
         id: Uuid::now_v7(),
         name: "filed.mp4".into(),
         media: MediaRef {
@@ -54,6 +55,7 @@ fn project_with_folder() -> (
         colour_space: None,
     };
     let loose = FootageItem {
+        sequence: None,
         id: Uuid::now_v7(),
         name: "loose.mp4".into(),
         media: MediaRef {
@@ -254,6 +256,200 @@ fn relink_refuses_a_blank_or_useless_path() {
     std::fs::remove_file(&picked).ok();
 }
 
+/// **Relinking one clip deep inside a moved tree brings the rest of the tree
+/// with it.**
+///
+/// The shape this exists for is an edit's footage: forty-eight clips in
+/// forty-eight different subfolders under one root, and the root is what moved.
+/// Matching siblings by file name in the folder the user picked finds none of
+/// them, because none of them is in that folder. What the move actually says is
+/// a prefix rewrite — the tail the two paths share did not move, everything in
+/// front of it did — and applying that to every other lost item is one gesture
+/// instead of forty-eight.
+#[test]
+fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path();
+    for (folder, file) in [("Cine1", "Depth.avi"), ("Cine5", "World.avi")] {
+        std::fs::create_dir_all(root.join("Clips").join(folder)).expect("tree");
+        std::fs::write(root.join("Clips").join(folder).join(file), b"clip").expect("clip");
+    }
+
+    // Where the project says they were: another root entirely, as an import
+    // from another machine leaves them.
+    let old_root = std::path::Path::new("/nowhere/Set Me Free Edit");
+    let footage = |name: &str, folder: &str| FootageItem {
+        colour_space: None,
+        sequence: None,
+        id: Uuid::now_v7(),
+        name: name.into(),
+        media: MediaRef {
+            relative_path: name.into(),
+            absolute_path: old_root
+                .join("Clips")
+                .join(folder)
+                .join(name)
+                .to_string_lossy()
+                .into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+    };
+    let picked_item = footage("Depth.avi", "Cine1");
+    let sibling = footage("World.avi", "Cine5");
+    let (picked_id, sibling_id) = (picked_item.id, sibling.id);
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        for (index, item) in [
+            ProjectItem::Footage(picked_item),
+            ProjectItem::Footage(sibling),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            state
+                .store
+                .commit(Op::AddItem {
+                    index,
+                    item: Box::new(item),
+                })
+                .expect("seeded");
+        }
+    }
+
+    let new_path = root.join("Clips").join("Cine1").join("Depth.avi");
+    FootageReference::new(project.id, picked_id)
+        .relink(new_path.to_string_lossy().into_owned())
+        .expect("relinked");
+
+    let state = project.state().expect("state");
+    let state = state.read().expect("read");
+    let doc = state.store.snapshot();
+    let media_of = |id: Uuid| match doc.item(id) {
+        Some(ProjectItem::Footage(f)) => f.media.absolute_path.clone(),
+        _ => panic!("the footage is still there"),
+    };
+    assert_eq!(media_of(picked_id), new_path.to_string_lossy());
+    assert_eq!(
+        media_of(sibling_id),
+        root.join("Clips")
+            .join("Cine5")
+            .join("World.avi")
+            .to_string_lossy(),
+        "the sibling four folders away moved with the root, not with the folder"
+    );
+}
+
+/// **Picking any frame of a moved run relinks the run** (K-539), and takes the
+/// ordinary clips beside it along in the same sweep.
+///
+/// The failure this pins is quiet: the item points at frame 1, the user picks
+/// frame 42, and the path rewrite compares `frame0001.png` with `frame0042.png`
+/// — all they share at the end is `.png`, so "the folder moved" comes out as
+/// "everything up to half a frame number moved", and the sibling is swept to a
+/// path that does not exist.
+#[test]
+fn relinking_a_sequence_by_any_of_its_frames_finds_the_run_and_its_neighbours() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let new_root = dir.path().join("moved");
+    std::fs::create_dir_all(new_root.join("frames")).expect("tree");
+    for n in 1..=50u32 {
+        std::fs::write(
+            new_root.join("frames").join(format!("frame{n:04}.png")),
+            b"f",
+        )
+        .expect("frame");
+    }
+    std::fs::write(new_root.join("music.wav"), b"w").expect("sound");
+
+    let old_root = std::path::Path::new("/nowhere/edit");
+    let run = FootageItem {
+        colour_space: None,
+        sequence: Some(lumit_core::model::SequenceRef::default()),
+        id: Uuid::now_v7(),
+        name: "frame[0001-0050].png".into(),
+        media: MediaRef {
+            relative_path: "frame0001.png".into(),
+            absolute_path: old_root
+                .join("frames")
+                .join("frame0001.png")
+                .to_string_lossy()
+                .into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+    };
+    let sibling = FootageItem {
+        colour_space: None,
+        sequence: None,
+        id: Uuid::now_v7(),
+        name: "music.wav".into(),
+        media: MediaRef {
+            relative_path: "music.wav".into(),
+            absolute_path: old_root.join("music.wav").to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        },
+        extra: serde_json::Map::new(),
+    };
+    let (run_id, sibling_id) = (run.id, sibling.id);
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        for (index, item) in [ProjectItem::Footage(run), ProjectItem::Footage(sibling)]
+            .into_iter()
+            .enumerate()
+        {
+            state
+                .store
+                .commit(Op::AddItem {
+                    index,
+                    item: Box::new(item),
+                })
+                .expect("seeded");
+        }
+    }
+
+    // The middle of the run, which is what a picker started at the folder gives.
+    FootageReference::new(project.id, run_id)
+        .relink(
+            new_root
+                .join("frames")
+                .join("frame0042.png")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("relinked");
+
+    let state = project.state().expect("state");
+    let state = state.read().expect("read");
+    let doc = state.store.snapshot();
+    let media_of = |id: Uuid| match doc.item(id) {
+        Some(ProjectItem::Footage(f)) => f.media.absolute_path.clone(),
+        _ => panic!("the footage is still there"),
+    };
+    assert_eq!(
+        media_of(run_id),
+        new_root
+            .join("frames")
+            .join("frame0001.png")
+            .to_string_lossy(),
+        "the run is pointed at its first frame, not at the one that was picked"
+    );
+    assert_eq!(
+        media_of(sibling_id),
+        new_root.join("music.wav").to_string_lossy(),
+        "the sound file beside it moved the same way and came back too"
+    );
+}
+
 /// A placed clip must land in the composition; the span/size fallbacks are what
 /// let a *missing* file still place, so the user can relink rather than being
 /// unable to add it at all.
@@ -400,6 +596,99 @@ fn a_work_area_is_clamped_to_the_composition() {
     assert!(comp.set_work_area(Some(span(-80, -40))).is_err());
     let still = comp.get_work_area().expect("read").expect("a span");
     assert_eq!(comp.frame_at_time(still.in_point).expect("frame"), 0);
+}
+
+/// **A folder of numbered stills is one item, not two thousand** (K-539).
+///
+/// The front door's whole promise: pick any file of a run and the run comes in,
+/// named for its span, pointed at its first frame — and picking the rest of the
+/// files afterwards (which is what selecting the whole folder does) hands back
+/// the item that is already there rather than filing it again.
+#[test]
+fn a_run_of_numbered_stills_imports_once_whichever_file_is_picked() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    for n in 1..=5u32 {
+        std::fs::write(
+            dir.path().join(format!("frame{n:04}.png")),
+            b"not really a png",
+        )
+        .expect("write");
+    }
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    let first = project
+        .import_footage(
+            dir.path()
+                .join("frame0003.png")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("imported");
+    let roots = project.get_items().expect("roots");
+    assert_eq!(
+        roots.first().map(|i| i.name().expect("name")),
+        Some("frame[0001-0005].png".to_owned()),
+        "the panel says what the run is and where it stops"
+    );
+
+    for n in 1..=5u32 {
+        let again = project
+            .import_footage(
+                dir.path()
+                    .join(format!("frame{n:04}.png"))
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+            .expect("imported");
+        assert_eq!(again.id(), first.id(), "file {n} is the same item");
+    }
+    assert_eq!(project.get_items().expect("roots").len(), 1);
+}
+
+/// A numbered file with no numbered neighbours is a still, and a folder of
+/// numbered *clips* is a folder of clips — neither becomes a sequence (K-539).
+#[test]
+fn a_lone_still_and_a_run_of_clips_import_as_they_always_did() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(dir.path().join("poster0001.png"), b"x").expect("write");
+    for n in 1..=3u32 {
+        std::fs::write(dir.path().join(format!("take{n:04}.mp4")), b"x").expect("write");
+    }
+
+    let project = LumitBridgeState::new_project(None).expect("project");
+    project
+        .import_footage(
+            dir.path()
+                .join("poster0001.png")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .expect("imported");
+    assert_eq!(
+        project
+            .get_items()
+            .expect("roots")
+            .first()
+            .map(|i| i.name().expect("name")),
+        Some("poster0001.png".to_owned()),
+        "a still with no neighbours keeps its own file name"
+    );
+
+    for n in 1..=3u32 {
+        project
+            .import_footage(
+                dir.path()
+                    .join(format!("take{n:04}.mp4"))
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+            .expect("imported");
+    }
+    assert_eq!(
+        project.get_items().expect("roots").len(),
+        4,
+        "three clips and the still, each its own item"
+    );
 }
 
 #[test]
@@ -3507,6 +3796,28 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         stroke: None,
         stroke_width: 0.0,
         opacity: 100.0,
+        trim_start: BridgeScalar::Static(0.0),
+        trim_end: BridgeScalar::Static(100.0),
+        trim_offset: BridgeScalar::Static(0.0),
+        dashes: Vec::new(),
+        dash_offset: BridgeScalar::Static(0.0),
+        gradient: 0,
+        gradient_colour: None,
+        gradient_start_x: BridgeScalar::Static(0.0),
+        gradient_start_y: BridgeScalar::Static(0.0),
+        gradient_end_x: BridgeScalar::Static(0.0),
+        gradient_end_y: BridgeScalar::Static(0.0),
+        offset_amount: BridgeScalar::Static(0.0),
+        repeat_copies: BridgeScalar::Static(1.0),
+        repeat_offset: BridgeScalar::Static(0.0),
+        repeat_anchor_x: BridgeScalar::Static(0.0),
+        repeat_anchor_y: BridgeScalar::Static(0.0),
+        repeat_position_x: BridgeScalar::Static(0.0),
+        repeat_position_y: BridgeScalar::Static(0.0),
+        repeat_rotation: BridgeScalar::Static(0.0),
+        repeat_scale: BridgeScalar::Static(100.0),
+        repeat_start_opacity: BridgeScalar::Static(100.0),
+        repeat_end_opacity: BridgeScalar::Static(100.0),
     }
 }
 
@@ -3567,6 +3878,178 @@ fn shape_contents_are_replaced_as_a_whole_and_undone_in_one_step() {
     );
 }
 
+/// A shape item's Trim start, end and offset round trip, animate, and are
+/// clamped to the 0..100 they mean — every key of them (K-551).
+#[test]
+fn a_shapes_trim_round_trips_and_is_clamped() {
+    use crate::api::effect::{BridgeKeyframe, BridgeSideInterp};
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].trim_start = BridgeScalar::Static(-40.0);
+    contents[0].trim_offset = BridgeScalar::Static(180.0);
+    contents[0].trim_end = BridgeScalar::Keyframed(vec![
+        BridgeKeyframe {
+            time: BridgeRational { num: 0, den: 1 },
+            value: -10.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+        BridgeKeyframe {
+            time: BridgeRational { num: 1, den: 1 },
+            value: 400.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+    ]);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        got.trim_start,
+        BridgeScalar::Static(0.0),
+        "a Start below zero could only ever draw wrongly"
+    );
+    assert_eq!(
+        got.trim_offset,
+        BridgeScalar::Static(180.0),
+        "the offset is degrees, and degrees wrap"
+    );
+    let BridgeScalar::Keyframed(keys) = &got.trim_end else {
+        panic!("End keeps its keys");
+    };
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[0].value, 0.0);
+    assert_eq!(
+        keys[1].value, 100.0,
+        "and every key is clamped, not just one"
+    );
+}
+
+/// A dashed outline crosses as a list of lengths, and a negative length is a
+/// number with no meaning rather than a shorter dash (K-552).
+#[test]
+fn a_shapes_dashes_round_trip_and_are_clamped() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].dashes = vec![BridgeScalar::Static(8.0), BridgeScalar::Static(-4.0)];
+    contents[0].dash_offset = BridgeScalar::Static(-3.0);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        got.dashes,
+        vec![BridgeScalar::Static(8.0), BridgeScalar::Static(0.0)],
+        "the dash keeps its length and the negative gap lands at zero"
+    );
+    assert_eq!(
+        got.dash_offset,
+        BridgeScalar::Static(-3.0),
+        "the offset slides both ways"
+    );
+}
+
+/// The repeater crosses as its count and the one step every copy is another of
+/// (K-553). A count below one is not a shape drawn fewer times, it is a number
+/// with no meaning; the copy offset may be negative, which is what puts copies
+/// behind the original.
+#[test]
+fn a_shapes_repeater_round_trips_and_is_clamped() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].repeat_copies = BridgeScalar::Static(-2.0);
+    contents[0].repeat_offset = BridgeScalar::Static(-1.0);
+    contents[0].repeat_position_x = BridgeScalar::Static(24.0);
+    contents[0].repeat_rotation = BridgeScalar::Static(15.0);
+    contents[0].repeat_end_opacity = BridgeScalar::Static(140.0);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(
+        got.repeat_copies,
+        BridgeScalar::Static(1.0),
+        "fewer than one copy is no drawing at all, so one is where it lands"
+    );
+    assert_eq!(got.repeat_offset, BridgeScalar::Static(-1.0));
+    assert_eq!(got.repeat_position_x, BridgeScalar::Static(24.0));
+    assert_eq!(got.repeat_rotation, BridgeScalar::Static(15.0));
+    assert_eq!(
+        got.repeat_end_opacity,
+        BridgeScalar::Static(100.0),
+        "and an opacity is a per cent"
+    );
+}
+
+/// A gradient fill crosses as a choice, a second colour and two points (K-555).
+/// A choice naming neither reading is the flat fill, which draws something.
+#[test]
+fn a_shapes_gradient_round_trips_and_an_unknown_kind_is_flat() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].gradient = 2;
+    contents[0].gradient_colour = Some(crate::api::assets::BridgeColourRgba {
+        r: 0.0,
+        g: 0.0,
+        b: 1.0,
+        a: 1.0,
+    });
+    contents[0].gradient_end_x = BridgeScalar::Static(10.0);
+    shape.set_shape_contents(contents).expect("set");
+
+    let got = &shape.get_shape_contents().expect("contents")[0];
+    assert_eq!(got.gradient, 2);
+    assert_eq!(got.gradient_end_x, BridgeScalar::Static(10.0));
+    assert_eq!(got.gradient_colour.map(|c| c.b), Some(1.0));
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].gradient = 7;
+    shape.set_shape_contents(contents).expect("set");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0].gradient,
+        0,
+        "a reading nobody has is the flat fill"
+    );
+}
+
+/// The offset crosses as one length in layer pixels, out or in (K-554).
+#[test]
+fn a_shapes_offset_round_trips_both_ways() {
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let shape = comp
+        .add_shape_layer("Art".into(), vec![shape_item("Rectangle", 0.0, 0.0, 10.0)])
+        .expect("a shape layer");
+
+    let mut contents = shape.get_shape_contents().expect("contents");
+    contents[0].offset_amount = BridgeScalar::Static(-2.5);
+    shape.set_shape_contents(contents).expect("set");
+    assert_eq!(
+        shape.get_shape_contents().expect("contents")[0].offset_amount,
+        BridgeScalar::Static(-2.5),
+        "pulling the outline in is as meant as pushing it out"
+    );
+}
+
 /// Dragging the left-most point left grows the art's box leftwards, and the
 /// layer's origin **is** that box's corner — so without the position following
 /// it, every point nobody touched would slide the other way (K-308).
@@ -3589,8 +4072,14 @@ fn moving_a_point_past_the_arts_edge_leaves_the_rest_of_it_where_it_was() {
     // into the art's box.
     let drawn_at = |index: usize| {
         let contents = shape.get_shape_contents().expect("contents");
-        let items: Vec<_> = contents.iter().map(|i| i.write_item()).collect();
-        let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&items).expect("a box");
+        let items: Vec<_> = contents
+            .iter()
+            .map(|i| {
+                i.write_item(lumit_core::time::Rational::ZERO)
+                    .expect("an item")
+            })
+            .collect();
+        let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&items, 0.0).expect("a box");
         let tf = shape.get_transform().expect("transform");
         let v = &contents[0].vertices[index];
         (
@@ -3695,8 +4184,12 @@ fn stroke(name: &str, points: &[(f64, f64)]) -> crate::api::layer::BridgeStroke 
         },
         width: 12.0,
         hardness: 0.8,
+        shape: crate::api::layer::BridgeBrushShape::Round,
         opacity: 100.0,
+        start: crate::api::effect::BridgeScalar::Static(0.0),
+        end: crate::api::effect::BridgeScalar::Static(100.0),
         mode: BridgePaintMode::Paint,
+        blend: 0,
         clone_offset_x: 0.0,
         clone_offset_y: 0.0,
     }
@@ -3856,6 +4349,91 @@ fn every_paint_mode_round_trips() {
     assert_eq!(strokes[2].mode, BridgePaintMode::Clone);
     assert_eq!(strokes[2].clone_offset_x, -20.0);
     assert_eq!(strokes[2].clone_offset_y, 7.5);
+}
+
+/// Both brush shapes survive the crossing, and Round is what a stroke that
+/// says nothing comes back as (K-548).
+#[test]
+fn both_brush_shapes_round_trip() {
+    use crate::api::layer::BridgeBrushShape;
+
+    let (_project, layer) = project_with_layer();
+    layer
+        .add_stroke(stroke("Round", &[(1.0, 1.0)]))
+        .expect("added");
+    let mut square = stroke("Square", &[(2.0, 2.0)]);
+    square.shape = BridgeBrushShape::Square;
+    layer.add_stroke(square).expect("added");
+
+    let strokes = layer.get_paint().expect("paint");
+    assert_eq!(strokes[0].shape, BridgeBrushShape::Round);
+    assert_eq!(strokes[1].shape, BridgeBrushShape::Square);
+}
+
+/// A stroke's blend crosses as an index into the same list a layer's does, and
+/// an index nobody has heard of reads back as Normal rather than erroring
+/// (K-550).
+#[test]
+fn a_strokes_blend_round_trips_by_index() {
+    let (_project, layer) = project_with_layer();
+    let screen = lumit_core::model::BlendMode::ALL
+        .iter()
+        .position(|b| *b == lumit_core::model::BlendMode::Screen)
+        .expect("Screen is in the list") as u32;
+
+    let mut blended = stroke("Screened", &[(1.0, 1.0)]);
+    blended.blend = screen;
+    layer.add_stroke(blended).expect("added");
+
+    let mut wild = stroke("Wild", &[(2.0, 2.0)]);
+    wild.blend = 9_999;
+    layer.add_stroke(wild).expect("added");
+
+    let strokes = layer.get_paint().expect("paint");
+    assert_eq!(strokes[0].blend, screen);
+    assert_eq!(strokes[1].blend, 0, "a mode nobody has is Normal");
+}
+
+/// A stroke's Start and End round trip, animate, and are clamped to the
+/// 0..100 they mean — every key of them (K-549).
+#[test]
+fn a_strokes_trim_round_trips_and_is_clamped() {
+    use crate::api::effect::{BridgeKeyframe, BridgeScalar, BridgeSideInterp};
+
+    let (_project, layer) = project_with_layer();
+    let mut written = stroke("Write-on", &[(0.0, 0.0), (50.0, 0.0)]);
+    written.start = BridgeScalar::Static(-40.0);
+    written.end = BridgeScalar::Keyframed(vec![
+        BridgeKeyframe {
+            time: BridgeRational { num: 0, den: 1 },
+            value: -10.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+        BridgeKeyframe {
+            time: BridgeRational { num: 1, den: 1 },
+            value: 400.0,
+            interp_in: BridgeSideInterp::Linear,
+            interp_out: BridgeSideInterp::Linear,
+        },
+    ]);
+    layer.add_stroke(written).expect("added");
+
+    let got = &layer.get_paint().expect("paint")[0];
+    assert_eq!(
+        got.start,
+        BridgeScalar::Static(0.0),
+        "a Start below zero could only ever render wrongly"
+    );
+    let BridgeScalar::Keyframed(keys) = &got.end else {
+        panic!("End keeps its keys");
+    };
+    assert_eq!(keys.len(), 2);
+    assert_eq!(keys[0].value, 0.0);
+    assert_eq!(
+        keys[1].value, 100.0,
+        "and every key is clamped, not just one"
+    );
 }
 
 // --- Assets: what a layer is made of --------------------------------------
@@ -5870,6 +6448,8 @@ fn enabling_retime_keys_the_layer_where_it_sits() {
 ///
 /// The regression this pins: `BridgeMask::write` rebuilds the engine's mask
 /// field by field, so `set_mask` used to replace the stored mask outright.
+/// See also [`a_masks_per_point_feather_crosses_and_is_clamped`], which pins
+/// the same field-by-field rebuild for the per-point widths.
 /// Dragging a mask's opacity therefore deleted its animation, and dropped
 /// exactly the unknown fields docs/10 §1.1 makes it mandatory to round-trip.
 #[test]
@@ -5912,6 +6492,7 @@ fn editing_a_mask_keeps_what_the_bridge_cannot_describe() {
         opacity: BridgeScalar::Static(100.0),
         mode: BridgeMaskMode::Add,
         feather: BridgeScalar::Static(0.0),
+        vertex_feather: Vec::new(),
         expansion: BridgeScalar::Static(0.0),
         path_keys: Vec::new(),
     };
@@ -6261,7 +6842,9 @@ fn a_tracked_layer() -> (
         notes: Vec::new(),
     };
     let media = footage.id();
-    lumit_render::track::publish(media, 25.0, solve);
+    // Fifty frames solved out of a fifty-frame clip: a whole track, so the
+    // partial reading below has something honest to be measured against.
+    lumit_render::track::publish(media, 25.0, 50, solve);
     (project, comp, layer, media)
 }
 
@@ -7675,6 +8258,7 @@ fn the_proxy_path_is_named_beside_the_original() {
             .commit(Op::AddItem {
                 index: 0,
                 item: Box::new(ProjectItem::Footage(FootageItem {
+                    sequence: None,
                     id,
                     name: "probe.mp4".into(),
                     media: MediaRef {
@@ -7773,6 +8357,7 @@ fn project_with_footage() -> (ProjectReference, FootageReference, tempfile::Temp
             .commit(Op::AddItem {
                 index: 0,
                 item: Box::new(ProjectItem::Footage(FootageItem {
+                    sequence: None,
                     id,
                     name: "shot.mov".into(),
                     media: MediaRef {
@@ -8130,5 +8715,164 @@ fn relinking_leaves_an_item_whose_file_is_still_there_alone() {
         std::path::PathBuf::from(&f.media.absolute_path),
         old.join("healthy.mov"),
         "an item that resolves is never repointed"
+    );
+}
+
+/// A **partial** track crosses as the span it solved against the clip it did
+/// not finish, and a camera linked to it holds past the end of that span
+/// (K-417's hold, K-540).
+///
+/// The two claims belong together: the range the status row draws is the same
+/// range the link clamps into, and a test that checked only one of them would
+/// let them drift apart.
+#[test]
+fn a_partial_track_reports_its_span_and_the_camera_holds_past_it() {
+    use crate::api::track::{
+        add_solved_camera, camera_link, track_status, BridgeLinkState, BridgeTrackStage,
+    };
+    use lumit_track::{CameraSolve, PoseSource, ScenePoint, SolveSegment, SolvedPose};
+
+    let (_project, _comp, layer, media) = a_tracked_layer();
+
+    // The same shot, but followed only as far as frame nineteen of fifty — what
+    // the job publishes when the tracking fails part-way (docs/impl/tracking.md
+    // §5d).
+    let solve = CameraSolve {
+        poses: (0..20)
+            .map(|frame| SolvedPose {
+                frame,
+                rotation: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+                position: [frame as f64, 0.0, 0.0],
+                segment: 0,
+                focal_px: 100.0,
+                mean_reprojection_px: 0.1,
+                source: PoseSource::Keyframe,
+            })
+            .collect(),
+        segments: vec![SolveSegment {
+            first_frame: 0,
+            last_frame: 19,
+            focal_px: 100.0,
+            ramp: false,
+        }],
+        points: vec![ScenePoint {
+            track: 7,
+            position: [10.0, 20.0, 100.0],
+        }],
+        keyframes: vec![0, 19],
+        mean_reprojection_px: 0.25,
+        notes: Vec::new(),
+    };
+    lumit_render::track::publish(media, 25.0, 50, solve);
+
+    let status = track_status(layer);
+    assert_eq!(
+        status.stage,
+        BridgeTrackStage::Done,
+        "a partial solve is a solve"
+    );
+    assert_eq!(status.frames, 20, "the span that carries a camera");
+    assert_eq!(
+        status.clip_frames, 50,
+        "against the clip that was not finished"
+    );
+
+    // The bar and the badge read the same range. Inside it the camera is
+    // derived; past it the last derived motion is held, which is K-417's rule
+    // meeting a range that now ends early.
+    let camera = add_solved_camera(layer).expect("a linked camera");
+    assert_eq!(camera_link(camera, 0).state, BridgeLinkState::Derived);
+    assert_eq!(camera_link(camera, 19).state, BridgeLinkState::Derived);
+    assert_eq!(
+        camera_link(camera, 20).state,
+        BridgeLinkState::Held,
+        "one frame past the solved span is already held"
+    );
+    assert_eq!(camera_link(camera, 49).state, BridgeLinkState::Held);
+}
+
+/// **A mask's per-point feather widths cross the bridge, and each is clamped
+/// exactly as the one width is** (K-545).
+///
+/// The clamp is the half worth pinning: `BridgeMask::write` rebuilds the mask
+/// field by field, so a list arriving with a negative width — or one wide
+/// enough to ask for a distance field the size of a continent — would be
+/// written straight into the document and render wrongly for ever after.
+#[test]
+fn a_masks_per_point_feather_crosses_and_is_clamped() {
+    use crate::api::layer::{BridgeMask, BridgeMaskMode, BridgeVertex};
+
+    let (_project, layer) = project_with_layer();
+    let corner = |x: f64, y: f64| BridgeVertex {
+        x,
+        y,
+        tan_in_x: 0.0,
+        tan_in_y: 0.0,
+        tan_out_x: 0.0,
+        tan_out_y: 0.0,
+    };
+    let mask = BridgeMask {
+        id: uuid::Uuid::now_v7(),
+        name: "Rectangle".into(),
+        vertices: vec![
+            corner(0.0, 0.0),
+            corner(10.0, 0.0),
+            corner(10.0, 10.0),
+            corner(0.0, 10.0),
+        ],
+        closed: true,
+        inverted: false,
+        opacity: BridgeScalar::Static(100.0),
+        mode: BridgeMaskMode::Lighten,
+        feather: BridgeScalar::Static(4.0),
+        vertex_feather: vec![
+            BridgeScalar::Static(0.0),
+            BridgeScalar::Static(30.0),
+            // Both ends of the clamp, in one list.
+            BridgeScalar::Static(-5.0),
+            BridgeScalar::Static(9_999_999.0),
+        ],
+        expansion: BridgeScalar::Static(0.0),
+        path_keys: Vec::new(),
+    };
+    layer.add_mask(mask.clone()).expect("added");
+
+    let stored = layer.get_masks().expect("read back");
+    let stored = stored.first().expect("the mask");
+    assert_eq!(
+        stored.mode,
+        BridgeMaskMode::Lighten,
+        "the mode came back as itself"
+    );
+    let widths: Vec<f64> = stored
+        .vertex_feather
+        .iter()
+        .map(|s| match s {
+            BridgeScalar::Static(v) => *v,
+            other => panic!("a still width read back as {other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        widths,
+        vec![0.0, 30.0, 0.0, 5000.0],
+        "a width below zero and one past the ceiling are both brought inside"
+    );
+
+    // And an ordinary edit does not lose them, for the same reason an opacity
+    // drag must not lose the path keys.
+    layer
+        .set_mask(
+            BridgeMask {
+                opacity: BridgeScalar::Static(40.0),
+                ..stored.clone()
+            },
+            None,
+        )
+        .expect("edited");
+    let after = layer.get_masks().expect("read back");
+    assert_eq!(
+        after.first().map(|m| m.vertex_feather.len()),
+        Some(4),
+        "an opacity edit dropped the per-point widths"
     );
 }

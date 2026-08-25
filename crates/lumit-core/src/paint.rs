@@ -27,15 +27,31 @@
 //! makes "mask off the part I painted" and "blur what I painted" both mean the
 //! obvious thing.
 //!
-//! **What is deliberately not here.** Pressure, tilt, spacing curves, brush
-//! shapes other than round, stroke start/end times (After Effects' write-on) and
-//! any GPU path. Each is a real feature; none of them changes the shape of what
-//! is stored, which is what this first cut is for.
+//! **A stroke blends.** `blend` is the layer blend list (K-550) — the same
+//! words on the same maths, through the one shared kernel — deciding what
+//! colour the mark lays down. It never changes how the mark *covers*, and an
+//! eraser ignores it, having no colour to combine.
+//!
+//! **What is deliberately not here.** Pressure, tilt, spacing curves and any
+//! GPU path. Each is a real feature; none of them changes the shape of what is
+//! stored, which is what this first cut is for.
+//!
+//! **A stroke can draw itself on.** `start` and `end` (K-549) are a per cent of
+//! the stroke's own length, animatable like any other property: hold Start at 0,
+//! key End from 0 to 100, and the mark appears as if it were being made. The
+//! trim is a walk along the polyline by arc length — per cent of *length*, not
+//! of the samples, so a write-on runs at an even speed whatever the hand that
+//! drew it was doing.
+//!
+//! The brush tip itself is round or square ([`BrushShape`], K-548) and softens
+//! by one hardness ramp either way. That is deliberately not a brush-*tip*
+//! system: no bitmap, no angle, no roundness, and no room made for one.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::model::LinearColour;
+use crate::anim::{Animation, Property};
+use crate::model::{BlendMode, LinearColour};
 use crate::pixels::over;
 
 /// What a stroke does to the pixels under it.
@@ -48,6 +64,58 @@ pub enum PaintMode {
     Erase,
     /// Copy from elsewhere on the same layer, by [`PaintStroke::clone_offset`].
     Clone,
+}
+
+/// The shape one dab of the brush leaves.
+///
+/// Not a brush-tip system — there is no bitmap, no angle and no roundness, and
+/// there is deliberately no room for one here. Two shapes, both measured from
+/// the dab's centre out to [`PaintStroke::width`] ÷ 2, and both softened by the
+/// same [`PaintStroke::hardness`] ramp: what changes is only *how the distance
+/// to the centre is measured*.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum BrushShape {
+    /// The usual brush: distance is the straight line to the centre, so the
+    /// mark is a circle.
+    #[default]
+    Round,
+    /// Distance is the greater of the two axes, so the mark is a square with
+    /// flat sides and square corners — the chisel that draws a clean rectangular
+    /// patch, and the tip a clone stamp wants when it is copying architecture.
+    Square,
+}
+
+impl BrushShape {
+    /// True for the shape every stroke had before there was a choice — the one
+    /// left out of the file entirely, so a project nobody has re-shaped writes
+    /// exactly the bytes it wrote yesterday.
+    fn is_round(&self) -> bool {
+        matches!(self, BrushShape::Round)
+    }
+}
+
+/// True for the blend every stroke had before there was a choice — left out of
+/// the file entirely, so an unblended stroke writes the bytes it always wrote.
+fn is_normal(mode: &BlendMode) -> bool {
+    matches!(mode, BlendMode::Normal)
+}
+
+/// serde default for [`PaintStroke::end`] and for a shape item's Trim end
+/// ([`crate::shape::ShapeItem`]): the whole path.
+pub(crate) fn full() -> Property {
+    Property::fixed(100.0)
+}
+
+/// True for a still 0 — [`PaintStroke::start`]'s default, and so the thing left
+/// out of the file entirely. Shape items' trims default the same way.
+pub(crate) fn is_static_zero(p: &Property) -> bool {
+    matches!(p.animation, Animation::Static(v) if v == 0.0) && p.extra.is_empty()
+}
+
+/// True for a still 100 — [`PaintStroke::end`]'s default, left out for the same
+/// reason: a stroke nobody has trimmed writes the bytes it always wrote.
+pub(crate) fn is_static_full(p: &Property) -> bool {
+    matches!(p.animation, Animation::Static(v) if v == 100.0) && p.extra.is_empty()
 }
 
 /// One stroke: the path the pointer took and how it was painted.
@@ -66,11 +134,42 @@ pub struct PaintStroke {
     /// The brush's **diameter** in layer pixels.
     pub width: f64,
     /// 0 = fully soft (fades from the centre out), 1 = a hard edge with only
-    /// enough falloff left to keep it from stair-stepping.
+    /// enough falloff left to keep it from stair-stepping. The same ramp
+    /// whatever the [`shape`](Self::shape) is.
     pub hardness: f64,
+    /// Round (the default, and what every stroke was before K-548) or square.
+    #[serde(default, skip_serializing_if = "BrushShape::is_round")]
+    pub shape: BrushShape,
     /// 0..100, like every other opacity in the document.
     pub opacity: f64,
+    /// Where along the path the mark **begins**, as a per cent of the stroke's
+    /// own length, and where it **ends** (K-549). Animatable, and the pair is
+    /// the whole of write-on: hold `start` at 0, key `end` from 0 to 100, and
+    /// the stroke draws itself on. `end` at or below `start` is a stroke that
+    /// is not there yet, which is what a write-on's first frame looks like.
+    #[serde(
+        default = "Property::zero",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_zero"
+    )]
+    pub start: Property,
+    #[serde(
+        default = "full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "is_static_full"
+    )]
+    pub end: Property,
     pub mode: PaintMode,
+    /// How the mark combines with what is already on the layer (K-550) — the
+    /// layer blend list, the same words on the same maths. `Normal` is
+    /// source-over, which is what every stroke did before there was a choice
+    /// and what the rasteriser still runs byte for byte.
+    ///
+    /// Meaningless on [`PaintMode::Erase`], which takes alpha away and never
+    /// touches colour; it is ignored there rather than being a second way to
+    /// say nothing.
+    #[serde(default, skip_serializing_if = "is_normal")]
+    pub blend: BlendMode,
     /// For [`PaintMode::Clone`]: where the copied pixels come from, as an offset
     /// in layer pixels from the point being painted.
     #[serde(default)]
@@ -92,8 +191,12 @@ impl PaintStroke {
             colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
             width: 20.0,
             hardness: 0.8,
+            shape: BrushShape::default(),
             opacity: 100.0,
+            start: Property::zero(),
+            end: full(),
             mode: PaintMode::Paint,
+            blend: BlendMode::Normal,
             clone_offset: (0.0, 0.0),
             extra: serde_json::Map::new(),
         }
@@ -102,18 +205,88 @@ impl PaintStroke {
     /// The stroke's bounding box in layer coordinates, brush width included, or
     /// `None` when it has no points. Used to skip strokes that cannot touch the
     /// raster being drawn.
+    ///
+    /// The **whole** path, untrimmed: this answers "where could this stroke
+    /// ever be", which is what a caller asking about a stroke wants. The
+    /// rasteriser measures the trimmed piece itself (K-549).
     pub fn bounds(&self) -> Option<(f64, f64, f64, f64)> {
-        let first = *self.points.first()?;
-        let r = self.width.max(0.0) / 2.0;
-        let mut b = (first.0, first.1, first.0, first.1);
-        for &(x, y) in &self.points {
-            b.0 = b.0.min(x);
-            b.1 = b.1.min(y);
-            b.2 = b.2.max(x);
-            b.3 = b.3.max(y);
-        }
-        Some((b.0 - r, b.1 - r, b.2 + r, b.3 + r))
+        bounds_of(&self.points, self.width)
     }
+
+    /// The piece of the path drawn at `t`, in the order it was painted — the
+    /// whole path when Start is 0 and End is 100, which is nearly always.
+    pub fn drawn_at(&self, t: f64) -> Vec<(f64, f64)> {
+        trimmed(&self.points, self.start.value_at(t), self.end.value_at(t))
+    }
+}
+
+/// The box `points` occupy with a brush of `width` run along them, or `None`
+/// for no points.
+fn bounds_of(points: &[(f64, f64)], width: f64) -> Option<(f64, f64, f64, f64)> {
+    let first = *points.first()?;
+    let r = width.max(0.0) / 2.0;
+    let mut b = (first.0, first.1, first.0, first.1);
+    for &(x, y) in points {
+        b.0 = b.0.min(x);
+        b.1 = b.1.min(y);
+        b.2 = b.2.max(x);
+        b.3 = b.3.max(y);
+    }
+    Some((b.0 - r, b.1 - r, b.2 + r, b.3 + r))
+}
+
+/// The piece of `points` between `start` and `end` per cent of the path's own
+/// **arc length** (K-549) — a straight walk along the polyline, cutting the two
+/// segments the ends land in at exactly the right fraction.
+///
+/// Per cent of *length*, not of the point count: the samples of a gesture are
+/// as far apart as the pointer was moving fast, so counting them would make a
+/// write-on speed up and slow down with the hand that drew it. Length is what
+/// the eye is watching.
+///
+/// An `end` at or below `start` draws nothing at all — that is the first frame
+/// of a write-on, not an error. A path with no length (a single dab, or one
+/// sample repeated) has nothing to cut, so it is drawn whole whenever anything
+/// of it is asked for.
+pub(crate) fn trimmed(points: &[(f64, f64)], start: f64, end: f64) -> Vec<(f64, f64)> {
+    let from_pct = start.clamp(0.0, 100.0);
+    let to_pct = end.clamp(0.0, 100.0);
+    if to_pct <= from_pct {
+        return Vec::new();
+    }
+    if from_pct <= 0.0 && to_pct >= 100.0 {
+        return points.to_vec();
+    }
+    let seg_len = |a: (f64, f64), b: (f64, f64)| ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+    let total: f64 = points.windows(2).map(|p| seg_len(p[0], p[1])).sum();
+    if total <= 0.0 {
+        return points.to_vec();
+    }
+    let (from, to) = (total * from_pct / 100.0, total * to_pct / 100.0);
+    let at = |a: (f64, f64), b: (f64, f64), t: f64| (a.0 + (b.0 - a.0) * t, a.1 + (b.1 - a.1) * t);
+
+    let mut out: Vec<(f64, f64)> = Vec::new();
+    let mut walked = 0.0;
+    for pair in points.windows(2) {
+        let (p0, p1) = (pair[0], pair[1]);
+        let length = seg_len(p0, p1);
+        if length <= 0.0 {
+            continue;
+        }
+        let (s0, s1) = (walked, walked + length);
+        walked = s1;
+        // Wholly before the cut, or wholly after it.
+        if s1 < from || s0 > to {
+            continue;
+        }
+        let t0 = ((from - s0) / length).clamp(0.0, 1.0);
+        let t1 = ((to - s0) / length).clamp(0.0, 1.0);
+        if out.is_empty() {
+            out.push(at(p0, p1, t0));
+        }
+        out.push(at(p0, p1, t1));
+    }
+    out
 }
 
 /// How far apart, as a fraction of the brush's radius, the dabs along a segment
@@ -146,6 +319,7 @@ pub fn apply_strokes(
     natural_w: f64,
     natural_h: f64,
     strokes: &[PaintStroke],
+    t: f64,
 ) {
     if strokes.is_empty() || w == 0 || h == 0 {
         return;
@@ -171,7 +345,7 @@ pub fn apply_strokes(
     // and writes only its own bounds rectangle.
     let mut coverage = vec![0u8; (w as usize) * (h as usize)];
     for stroke in strokes {
-        let Some(rect) = fill_coverage(&mut coverage, stroke, w, h, sx, sy) else {
+        let Some(rect) = fill_coverage(&mut coverage, stroke, w, h, sx, sy, t) else {
             continue;
         };
         composite(rgba, source.as_deref(), w, sx, sy, stroke, &coverage, rect);
@@ -183,9 +357,16 @@ pub fn apply_strokes(
 ///
 /// Public because the same numbers answer "did this stroke mark this pixel",
 /// which is what the tests ask and what a GPU path would upload.
-pub fn coverage_of(stroke: &PaintStroke, w: u32, h: u32, sx: f64, sy: f64) -> Option<Vec<u8>> {
+pub fn coverage_of(
+    stroke: &PaintStroke,
+    w: u32,
+    h: u32,
+    sx: f64,
+    sy: f64,
+    t: f64,
+) -> Option<Vec<u8>> {
     let mut coverage = vec![0u8; (w as usize) * (h as usize)];
-    fill_coverage(&mut coverage, stroke, w, h, sx, sy)?;
+    fill_coverage(&mut coverage, stroke, w, h, sx, sy, t)?;
     Some(coverage)
 }
 
@@ -193,6 +374,7 @@ pub fn coverage_of(stroke: &PaintStroke, w: u32, h: u32, sx: f64, sy: f64) -> Op
 /// rectangle and stamps into it, returning that rectangle as inclusive raster
 /// coordinates `(x0, y0, x1, y1)` so the composite can visit only the pixels
 /// the stroke can have touched. `coverage` must be `w × h`.
+#[allow(clippy::too_many_arguments)]
 fn fill_coverage(
     coverage: &mut [u8],
     stroke: &PaintStroke,
@@ -200,11 +382,16 @@ fn fill_coverage(
     h: u32,
     sx: f64,
     sy: f64,
+    t: f64,
 ) -> Option<(u32, u32, u32, u32)> {
     if stroke.points.is_empty() || stroke.width <= 0.0 || stroke.opacity <= 0.0 {
         return None;
     }
-    let (min_x, min_y, max_x, max_y) = stroke.bounds()?;
+    // The piece drawn at this frame (K-549). Measured and dabbed from the
+    // trimmed path, so a write-on's box grows with it rather than reserving
+    // the whole stroke from the first frame.
+    let points = stroke.drawn_at(t);
+    let (min_x, min_y, max_x, max_y) = bounds_of(&points, stroke.width)?;
     if max_x * sx < 0.0
         || max_y * sy < 0.0
         || min_x * sx > f64::from(w)
@@ -233,10 +420,22 @@ fn fill_coverage(
         let row = (y as usize) * (w as usize);
         coverage[row + x0 as usize..=row + x1 as usize].fill(0);
     }
-    for (cx, cy) in dabs(&stroke.points, radius) {
+    for (cx, cy) in dabs(&points, radius) {
         let px = cx * sx;
         let py = cy * sy;
-        stamp(coverage, w, h, px, py, radius, solid, feather);
+        stamp(
+            coverage,
+            w,
+            h,
+            px,
+            py,
+            Dab {
+                radius,
+                solid,
+                feather,
+                shape: stroke.shape,
+            },
+        );
     }
     Some((x0, y0, x1, y1))
 }
@@ -277,23 +476,52 @@ fn dabs(points: &[(f64, f64)], radius_px: f64) -> Vec<(f64, f64)> {
     out
 }
 
-/// One round dab into the coverage buffer, taking the greatest coverage at each
+/// One dab's measurements: everything about the brush that does not move as it
+/// is walked along the stroke. Worked out once per stroke rather than passed as
+/// four more arguments per dab.
+#[derive(Debug, Clone, Copy)]
+struct Dab {
+    /// Half the brush's width on the raster being drawn, in pixels.
+    radius: f64,
+    /// Inside this distance the coverage is full.
+    solid: f64,
+    /// The width of the ramp from full to nothing: `radius - solid`, never less
+    /// than [`MIN_FEATHER`].
+    feather: f64,
+    shape: BrushShape,
+}
+
+impl Dab {
+    /// How far a pixel at `(dx, dy)` from the dab's centre counts as being,
+    /// **in the brush's own idea of distance** — a straight line for a round
+    /// brush, the greater of the two axes for a square one.
+    ///
+    /// That one substitution is the whole of the shape: everything downstream —
+    /// the radius, the hardness ramp, the bounding box, the dab spacing — is
+    /// written in terms of this number and needs no case of its own. A square
+    /// brush therefore softens exactly as a round one does, outwards from a
+    /// flat-sided core rather than a circular one.
+    fn distance(&self, dx: f64, dy: f64) -> f64 {
+        match self.shape {
+            BrushShape::Round => (dx * dx + dy * dy).sqrt(),
+            BrushShape::Square => dx.abs().max(dy.abs()),
+        }
+    }
+}
+
+/// One dab into the coverage buffer, taking the greatest coverage at each
 /// pixel rather than adding.
 ///
 /// Greatest, not sum: the dabs along a stroke overlap heavily by design, and
 /// adding them would make the middle of a slow stroke opaque and its ends thin.
 /// A stroke's *own* opacity is applied once, when it is composited.
-#[allow(clippy::too_many_arguments)]
-fn stamp(
-    coverage: &mut [u8],
-    w: u32,
-    h: u32,
-    cx: f64,
-    cy: f64,
-    radius: f64,
-    solid: f64,
-    feather: f64,
-) {
+fn stamp(coverage: &mut [u8], w: u32, h: u32, cx: f64, cy: f64, dab: Dab) {
+    let Dab {
+        radius,
+        solid,
+        feather,
+        ..
+    } = dab;
     let x0 = ((cx - radius).floor()).max(0.0) as u32;
     let y0 = ((cy - radius).floor()).max(0.0) as u32;
     let x1 = ((cx + radius).ceil()).min(f64::from(w) - 1.0);
@@ -308,7 +536,7 @@ fn stamp(
             // The pixel's centre, which is what a round brush is measured to.
             let dx = f64::from(x) + 0.5 - cx;
             let dy = f64::from(y) + 0.5 - cy;
-            let d = (dx * dx + dy * dy).sqrt();
+            let d = dab.distance(dx, dy);
             let a = if d <= solid {
                 1.0
             } else if d >= radius {
@@ -350,6 +578,44 @@ fn composite(
     // The clone source is the same raster, so its height is implied by its
     // length and the shared width.
     let h = rgba.len() / 4 / (w as usize).max(1);
+    // The blend, as the index into `BlendMode::ALL` the shared kernel takes.
+    // Worked out once per stroke; `None` for Normal, which is the early exit
+    // that keeps every unblended stroke byte for byte what it was (K-550).
+    let blend = (stroke.blend != BlendMode::Normal).then(|| {
+        BlendMode::ALL
+            .iter()
+            .position(|m| *m == stroke.blend)
+            .unwrap_or(0) as u32
+    });
+    // Lay `rgb` down on `px` at coverage-alpha `a`, by the stroke's blend.
+    //
+    // The blend runs in the domains the compositor and the effect Blend run in
+    // (docs/06 §blend domains), through the one shared kernel — decode both
+    // sides to linear light, `blend_pixel`, encode the answer back. What comes
+    // out is a *colour*, which is then laid down by exactly the source-over the
+    // rasteriser has always used, so a mode changes what the mark is, never how
+    // it covers.
+    let marked = |px: &[u8], rgb: [u8; 3]| -> [u8; 3] {
+        let Some(mode) = blend else { return rgb };
+        let d = [
+            crate::pixels::srgb_decode(px[0]),
+            crate::pixels::srgb_decode(px[1]),
+            crate::pixels::srgb_decode(px[2]),
+            1.0,
+        ];
+        let src = [
+            crate::pixels::srgb_decode(rgb[0]),
+            crate::pixels::srgb_decode(rgb[1]),
+            crate::pixels::srgb_decode(rgb[2]),
+            1.0,
+        ];
+        let b = crate::fx::cpu::blend_pixel(mode, d, src);
+        [
+            crate::pixels::srgb_encode(b[0]),
+            crate::pixels::srgb_encode(b[1]),
+            crate::pixels::srgb_encode(b[2]),
+        ]
+    };
 
     for y in y0..=y1 {
         let row = (y as usize) * (w as usize);
@@ -363,9 +629,12 @@ fn composite(
             match stroke.mode {
                 PaintMode::Paint => {
                     let a = c * opacity * colour_alpha;
-                    over(px, [colour[0], colour[1], colour[2]], a);
+                    let rgb = marked(px, [colour[0], colour[1], colour[2]]);
+                    over(px, rgb, a);
                 }
                 PaintMode::Erase => {
+                    // No colour to blend: an erase takes alpha away, which is
+                    // what makes it reversible by lowering its opacity later.
                     let keep = 1.0 - c * opacity;
                     px[3] = (f32::from(px[3]) * keep).round().clamp(0.0, 255.0) as u8;
                 }
@@ -381,7 +650,8 @@ fn composite(
                     let j = (oy as usize) * (w as usize) + (ox as usize);
                     let src = &source[j * 4..j * 4 + 4];
                     let a = c * opacity * (f32::from(src[3]) / 255.0);
-                    over(px, [src[0], src[1], src[2]], a);
+                    let rgb = marked(px, [src[0], src[1], src[2]]);
+                    over(px, rgb, a);
                 }
             }
         }
@@ -412,7 +682,7 @@ mod tests {
         let mut rgba = raster(40, 40, [0, 0, 0, 0]);
         let mut stroke = PaintStroke::new("Dab", vec![(20.0, 20.0)]);
         stroke.width = 10.0;
-        apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke]);
+        apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke], 0.0);
 
         assert_eq!(alpha_at(&rgba, 40, 20, 20), 255, "the middle of the dab");
         assert_eq!(alpha_at(&rgba, 40, 20, 30), 0, "well outside its radius");
@@ -424,7 +694,7 @@ mod tests {
         let mut rgba = raster(80, 20, [0, 0, 0, 0]);
         let mut stroke = PaintStroke::new("Line", vec![(5.0, 10.0), (75.0, 10.0)]);
         stroke.width = 6.0;
-        apply_strokes(&mut rgba, 80, 20, 80.0, 20.0, &[stroke]);
+        apply_strokes(&mut rgba, 80, 20, 80.0, 20.0, &[stroke], 0.0);
 
         // Every pixel along the line is marked: a gap here is the dab spacing
         // being wrong, which is what a dotted stroke looks like.
@@ -445,7 +715,7 @@ mod tests {
             let mut stroke = PaintStroke::new("Dab", vec![(20.0, 20.0)]);
             stroke.width = 20.0;
             stroke.hardness = hardness;
-            apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke]);
+            apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke], 0.0);
             // Halfway out from the middle.
             alpha_at(&rgba, 40, 25, 20)
         };
@@ -458,13 +728,299 @@ mod tests {
         assert!(dab(0.0) > 0, "but has not vanished");
     }
 
+    /// A square brush fills its corners; a round one does not. Same width, same
+    /// hardness, same place — the only difference is how the distance to the
+    /// centre is measured (K-548).
+    #[test]
+    fn a_square_brush_marks_its_corners_and_a_round_one_does_not() {
+        let dab = |shape: BrushShape| {
+            let mut rgba = raster(40, 40, [0, 0, 0, 0]);
+            let mut stroke = PaintStroke::new("Dab", vec![(20.0, 20.0)]);
+            stroke.width = 20.0;
+            stroke.hardness = 1.0;
+            stroke.shape = shape;
+            apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke], 0.0);
+            rgba
+        };
+        let round = dab(BrushShape::Round);
+        let square = dab(BrushShape::Square);
+        // Just inside the corner of the 20×20 box, which is 14 px from the
+        // centre in a straight line — outside a radius-10 circle, inside a
+        // half-width-10 square.
+        assert_eq!(
+            alpha_at(&round, 40, 28, 28),
+            0,
+            "a round brush leaves its corners alone"
+        );
+        assert_eq!(
+            alpha_at(&square, 40, 28, 28),
+            255,
+            "a square one fills them"
+        );
+        // And the two agree straight out from the middle, where the two ways
+        // of measuring distance give the same answer.
+        assert_eq!(alpha_at(&round, 40, 25, 20), alpha_at(&square, 40, 25, 20));
+        assert_eq!(
+            alpha_at(&square, 40, 20, 32),
+            0,
+            "the square stops at its own edge rather than growing"
+        );
+    }
+
+    /// Hardness is one ramp, and it softens a square exactly as it softens a
+    /// round (K-548): the shape decides what "distance from the centre" means
+    /// and nothing else.
+    #[test]
+    fn a_soft_square_fades_at_its_flat_edge() {
+        let dab = |hardness: f64| {
+            let mut rgba = raster(40, 40, [0, 0, 0, 0]);
+            let mut stroke = PaintStroke::new("Dab", vec![(20.0, 20.0)]);
+            stroke.width = 20.0;
+            stroke.hardness = hardness;
+            stroke.shape = BrushShape::Square;
+            apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[stroke], 0.0);
+            alpha_at(&rgba, 40, 25, 20)
+        };
+        assert_eq!(dab(1.0), 255, "a hard square is solid to its edge");
+        assert!(
+            dab(0.0) < 200,
+            "a soft one has faded by halfway: {}",
+            dab(0.0)
+        );
+        assert!(dab(0.0) > 0, "but has not vanished");
+    }
+
+    /// The shape is left out of the file until somebody picks the other one, so
+    /// every project ever saved writes exactly the bytes it wrote before — and
+    /// one written before there was a choice reads back as Round.
+    #[test]
+    fn a_round_brush_is_absent_from_the_file() {
+        let stroke = PaintStroke::new("Dab", vec![(1.0, 2.0)]);
+        let json = serde_json::to_string(&stroke).expect("serialise");
+        assert!(
+            !json.contains("shape"),
+            "a round brush writes nothing: {json}"
+        );
+
+        let mut square = stroke.clone();
+        square.shape = BrushShape::Square;
+        let json = serde_json::to_string(&square).expect("serialise");
+        assert!(json.contains("Square"), "a square one does: {json}");
+        let back: PaintStroke = serde_json::from_str(&json).expect("read back");
+        assert_eq!(back.shape, BrushShape::Square);
+    }
+
+    /// Start and End trim the path by **arc length** (K-549): the write-on
+    /// that makes a stroke draw itself on.
+    #[test]
+    fn start_and_end_trim_the_stroke_by_its_length() {
+        // A straight 70-pixel line, painted left to right.
+        let line = |start: f64, end: f64| {
+            let mut rgba = raster(80, 20, [0, 0, 0, 0]);
+            let mut stroke = PaintStroke::new("Line", vec![(5.0, 10.0), (75.0, 10.0)]);
+            stroke.width = 6.0;
+            stroke.start = Property::fixed(start);
+            stroke.end = Property::fixed(end);
+            apply_strokes(&mut rgba, 80, 20, 80.0, 20.0, &[stroke], 0.0);
+            rgba
+        };
+        // Half drawn: the left half is marked and the right half is not. The
+        // cut is at 5 + 35 = 40, and the brush is 6 wide, so 36 is inside and
+        // 46 is clear of it.
+        let half = line(0.0, 50.0);
+        assert!(alpha_at(&half, 80, 36, 10) > 200, "the drawn half");
+        assert_eq!(alpha_at(&half, 80, 46, 10), 0, "and nothing past the cut");
+
+        // The other end, by the same measure.
+        let tail = line(50.0, 100.0);
+        assert_eq!(alpha_at(&tail, 80, 34, 10), 0, "nothing before the cut");
+        assert!(alpha_at(&tail, 80, 44, 10) > 200, "and the tail is drawn");
+
+        // Nothing yet: the first frame of a write-on.
+        let none = line(0.0, 0.0);
+        assert!(none.iter().all(|&b| b == 0), "End at 0 draws nothing");
+        // And End below Start is the same answer rather than a stroke drawn
+        // backwards.
+        let crossed = line(80.0, 20.0);
+        assert!(crossed.iter().all(|&b| b == 0));
+
+        // Untouched is the whole thing, byte for byte what it always was.
+        let all = line(0.0, 100.0);
+        let mut plain = raster(80, 20, [0, 0, 0, 0]);
+        let mut stroke = PaintStroke::new("Line", vec![(5.0, 10.0), (75.0, 10.0)]);
+        stroke.width = 6.0;
+        apply_strokes(&mut plain, 80, 20, 80.0, 20.0, &[stroke], 0.0);
+        assert_eq!(all, plain);
+    }
+
+    /// Length, not point count: a gesture's samples bunch up where the hand
+    /// slowed down, so counting them would make a write-on speed up and slow
+    /// down with the drawing (K-549).
+    #[test]
+    fn the_trim_measures_length_and_not_samples() {
+        // Two arms of 40 pixels each. The first is sampled once, the second
+        // ten times — the same shape, drawn at two speeds.
+        let mut points = vec![(0.0, 0.0), (40.0, 0.0)];
+        for i in 1..=10 {
+            points.push((40.0, 40.0 * f64::from(i) / 10.0));
+        }
+        let drawn = trimmed(&points, 0.0, 50.0);
+        let walked: f64 = drawn
+            .windows(2)
+            .map(|p| ((p[1].0 - p[0].0).powi(2) + (p[1].1 - p[0].1).powi(2)).sqrt())
+            .sum();
+        assert!(
+            (walked - 40.0).abs() < 1e-9,
+            "half of 80 pixels is 40, whatever the samples do: {walked}"
+        );
+        assert_eq!(
+            *drawn.last().expect("a piece"),
+            (40.0, 0.0),
+            "and half lands exactly at the corner"
+        );
+    }
+
+    /// A single dab has no length to cut, so it is drawn whole as soon as
+    /// anything of it is asked for — and not at all before that.
+    #[test]
+    fn a_dab_has_no_length_to_trim() {
+        assert_eq!(trimmed(&[(3.0, 4.0)], 0.0, 1.0), vec![(3.0, 4.0)]);
+        assert_eq!(trimmed(&[(3.0, 4.0)], 25.0, 75.0), vec![(3.0, 4.0)]);
+        assert!(trimmed(&[(3.0, 4.0)], 40.0, 40.0).is_empty());
+    }
+
+    /// An untrimmed stroke says nothing about Start or End in the file, so
+    /// every project ever saved writes the bytes it wrote before.
+    #[test]
+    fn an_untrimmed_stroke_is_absent_from_the_file() {
+        let stroke = PaintStroke::new("Line", vec![(1.0, 2.0), (3.0, 4.0)]);
+        let json = serde_json::to_string(&stroke).expect("serialise");
+        assert!(!json.contains("start"), "nothing about start: {json}");
+        assert!(!json.contains("\"end\""), "nor end: {json}");
+
+        let mut written = stroke.clone();
+        written.end = Property::fixed(40.0);
+        let json = serde_json::to_string(&written).expect("serialise");
+        let back: PaintStroke = serde_json::from_str(&json).expect("read back");
+        assert_eq!(back.end.value_at(0.0), 40.0);
+        assert_eq!(back.start.value_at(0.0), 0.0, "the default comes back");
+    }
+
+    /// A stroke's blend is the layer blend list on the layer blend maths
+    /// (K-550), run through the one shared kernel.
+    #[test]
+    fn a_strokes_blend_combines_it_with_what_is_under_it() {
+        let dab = |blend: BlendMode, colour: LinearColour| {
+            // A mid-grey layer to mark. Opaque, so the source-over that lays
+            // the blended colour down is the blended colour.
+            let mut rgba = raster(20, 20, [128, 128, 128, 255]);
+            let mut stroke = PaintStroke::new("Dab", vec![(10.0, 10.0)]);
+            stroke.width = 8.0;
+            stroke.hardness = 1.0;
+            stroke.colour = colour;
+            stroke.blend = blend;
+            apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
+            rgb_at(&rgba, 20, 10, 10)
+        };
+        let white = LinearColour([1.0, 1.0, 1.0, 1.0]);
+        let black = LinearColour([0.0, 0.0, 0.0, 1.0]);
+
+        assert_eq!(dab(BlendMode::Normal, white), [255, 255, 255], "over");
+        assert_eq!(
+            dab(BlendMode::Multiply, white),
+            [128, 128, 128],
+            "white multiplied into grey leaves the grey"
+        );
+        assert_eq!(
+            dab(BlendMode::Multiply, black),
+            [0, 0, 0],
+            "and black takes it to black"
+        );
+        assert_eq!(
+            dab(BlendMode::Lighten, black),
+            [128, 128, 128],
+            "the lighter of black and grey is the grey"
+        );
+        assert_eq!(
+            dab(BlendMode::Darken, white),
+            [128, 128, 128],
+            "and the darker of white and grey is the grey"
+        );
+        // Difference against itself is black, whatever the grey happens to be.
+        let grey = LinearColour([
+            crate::pixels::srgb_decode(128),
+            crate::pixels::srgb_decode(128),
+            crate::pixels::srgb_decode(128),
+            1.0,
+        ]);
+        let diff = dab(BlendMode::Difference, grey);
+        assert!(
+            diff.iter().all(|&c| c <= 1),
+            "a colour differenced with itself is black, got {diff:?}"
+        );
+    }
+
+    /// A blend does not change how the mark *covers*, only what colour it
+    /// lays down — so half opacity is still half the way there (K-550).
+    #[test]
+    fn a_blend_changes_the_colour_and_not_the_coverage() {
+        let mut rgba = raster(20, 20, [128, 128, 128, 255]);
+        let mut stroke = PaintStroke::new("Dab", vec![(10.0, 10.0)]);
+        stroke.width = 8.0;
+        stroke.hardness = 1.0;
+        stroke.opacity = 50.0;
+        stroke.colour = LinearColour([0.0, 0.0, 0.0, 1.0]);
+        stroke.blend = BlendMode::Multiply;
+        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
+        // Black multiplied into grey is black; laid down at half coverage that
+        // is halfway between the grey and black, in the encoded domain the
+        // rasteriser has always composited in.
+        let got = rgb_at(&rgba, 20, 10, 10);
+        assert!(
+            (62..=66).contains(&got[0]),
+            "half of the way to black, got {got:?}"
+        );
+        assert_eq!(alpha_at(&rgba, 20, 10, 10), 255, "and the layer is opaque");
+    }
+
+    /// An erase has no colour to blend, so a mode on one is ignored rather
+    /// than being a second way of saying nothing (K-550).
+    #[test]
+    fn a_blend_on_an_erase_changes_nothing() {
+        let rub = |blend: BlendMode| {
+            let mut rgba = raster(20, 20, [200, 100, 50, 255]);
+            let mut stroke = PaintStroke::new("Rub", vec![(10.0, 10.0)]);
+            stroke.width = 8.0;
+            stroke.mode = PaintMode::Erase;
+            stroke.blend = blend;
+            apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
+            rgba
+        };
+        assert_eq!(rub(BlendMode::Normal), rub(BlendMode::Difference));
+    }
+
+    /// Normal is left out of the file, so an unblended stroke writes exactly
+    /// the bytes it wrote before there was a choice.
+    #[test]
+    fn an_unblended_stroke_is_absent_from_the_file() {
+        let stroke = PaintStroke::new("Dab", vec![(1.0, 2.0)]);
+        let json = serde_json::to_string(&stroke).expect("serialise");
+        assert!(!json.contains("blend"), "nothing about blend: {json}");
+
+        let mut screened = stroke.clone();
+        screened.blend = BlendMode::Screen;
+        let json = serde_json::to_string(&screened).expect("serialise");
+        let back: PaintStroke = serde_json::from_str(&json).expect("read back");
+        assert_eq!(back.blend, BlendMode::Screen);
+    }
+
     #[test]
     fn opacity_scales_the_mark() {
         let mut rgba = raster(20, 20, [0, 0, 0, 0]);
         let mut stroke = PaintStroke::new("Dab", vec![(10.0, 10.0)]);
         stroke.width = 8.0;
         stroke.opacity = 50.0;
-        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke]);
+        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
         let a = alpha_at(&rgba, 20, 10, 10);
         assert!((120..=136).contains(&a), "half-opaque, got {a}");
     }
@@ -478,7 +1034,7 @@ mod tests {
         let mut stroke = PaintStroke::new("Dab", vec![(20.0, 20.0)]);
         stroke.width = 20.0;
         // The layer is 40×40 in its own coordinates, rendered into 20×20.
-        apply_strokes(&mut half, 20, 20, 40.0, 40.0, &[stroke.clone()]);
+        apply_strokes(&mut half, 20, 20, 40.0, 40.0, &[stroke.clone()], 0.0);
         assert_eq!(
             alpha_at(&half, 20, 10, 10),
             255,
@@ -497,7 +1053,7 @@ mod tests {
         let mut stroke = PaintStroke::new("Rub", vec![(10.0, 10.0)]);
         stroke.width = 8.0;
         stroke.mode = PaintMode::Erase;
-        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke]);
+        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
 
         assert_eq!(alpha_at(&rgba, 20, 10, 10), 0, "rubbed through");
         assert_eq!(
@@ -523,7 +1079,7 @@ mod tests {
         stroke.mode = PaintMode::Clone;
         // Take from ten pixels to the left, which is the red half.
         stroke.clone_offset = (-10.0, 0.0);
-        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke]);
+        apply_strokes(&mut rgba, 20, 20, 20.0, 20.0, &[stroke], 0.0);
 
         assert_eq!(
             rgb_at(&rgba, 20, 15, 10),
@@ -549,7 +1105,7 @@ mod tests {
         clone.mode = PaintMode::Clone;
         clone.clone_offset = (-20.0, 0.0);
 
-        apply_strokes(&mut rgba, 40, 10, 40.0, 10.0, &[paint, clone]);
+        apply_strokes(&mut rgba, 40, 10, 40.0, 10.0, &[paint, clone], 0.0);
 
         assert!(alpha_at(&rgba, 40, 5, 5) > 0, "the paint landed");
         assert_eq!(
@@ -569,7 +1125,7 @@ mod tests {
         zero.width = 0.0;
         let mut clear = PaintStroke::new("Clear", vec![(4.0, 4.0)]);
         clear.opacity = 0.0;
-        apply_strokes(&mut rgba, 8, 8, 8.0, 8.0, &[empty, zero, clear]);
+        apply_strokes(&mut rgba, 8, 8, 8.0, 8.0, &[empty, zero, clear], 0.0);
         assert_eq!(rgba, before);
     }
 
@@ -578,7 +1134,7 @@ mod tests {
         let mut rgba = raster(8, 8, [0, 0, 0, 0]);
         let mut stroke = PaintStroke::new("Away", vec![(500.0, 500.0)]);
         stroke.width = 4.0;
-        apply_strokes(&mut rgba, 8, 8, 8.0, 8.0, &[stroke]);
+        apply_strokes(&mut rgba, 8, 8, 8.0, 8.0, &[stroke], 0.0);
         assert!(rgba.iter().all(|&b| b == 0));
     }
 
@@ -598,7 +1154,7 @@ mod tests {
         let mut short = vec![0u8; 10];
         let mut stroke = PaintStroke::new("Dab", vec![(4.0, 4.0)]);
         stroke.width = 4.0;
-        apply_strokes(&mut short, 8, 8, 8.0, 8.0, &[stroke]);
+        apply_strokes(&mut short, 8, 8, 8.0, 8.0, &[stroke], 0.0);
         assert!(short.iter().all(|&b| b == 0));
     }
 
@@ -617,7 +1173,7 @@ mod tests {
         let mut blue = PaintStroke::new("Blue", vec![(24.0, 24.0)]);
         blue.width = 24.0;
         blue.colour = crate::model::LinearColour([0.0, 0.0, 1.0, 1.0]);
-        apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[red, blue]);
+        apply_strokes(&mut rgba, 40, 40, 40.0, 40.0, &[red, blue], 0.0);
 
         assert_eq!(rgb_at(&rgba, 40, 10, 10), [255, 0, 0], "red stays red");
         assert_eq!(rgb_at(&rgba, 40, 24, 24), [0, 0, 255], "blue landed");
@@ -634,8 +1190,8 @@ mod tests {
         ];
         let mut once = raster(20, 20, [0, 0, 0, 0]);
         let mut twice = raster(20, 20, [0, 0, 0, 0]);
-        apply_strokes(&mut once, 20, 20, 20.0, 20.0, &strokes);
-        apply_strokes(&mut twice, 20, 20, 20.0, 20.0, &strokes);
+        apply_strokes(&mut once, 20, 20, 20.0, 20.0, &strokes, 0.0);
+        apply_strokes(&mut twice, 20, 20, 20.0, 20.0, &strokes, 0.0);
         assert_eq!(once, twice);
     }
 }

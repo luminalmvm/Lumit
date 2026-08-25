@@ -576,6 +576,7 @@ void main() {
           opacity: const BridgeScalar.static_(100),
           mode: BridgeMaskMode.add,
           feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
           expansion: const BridgeScalar.static_(0),
           pathKeys: const [],
         ),
@@ -618,6 +619,7 @@ void main() {
           opacity: const BridgeScalar.static_(100),
           mode: BridgeMaskMode.add,
           feather: const BridgeScalar.static_(0),
+          vertexFeather: const [],
           expansion: const BridgeScalar.static_(0),
           pathKeys: const [],
         ),
@@ -887,7 +889,10 @@ void main() {
       // Every one of the four rows picks itself when its name is clicked —
       // the same as a transform or an effect parameter row.
       final masks = masksPath(layer.internallayerId.toString());
+      // Not the per-point feather (K-545): this mask has one width, so it
+      // has no per-point rows to click.
       for (final value in MaskValue.values) {
+        if (value == MaskValue.vertexFeather) continue;
         await tester.tap(find.text(maskValueLabel(value)));
         await tester.pump();
         expect(p.uiState.selectedProperties.value, ['$masks/$id/${value.name}'],
@@ -926,7 +931,10 @@ void main() {
       final id = layer.getMasks().single.id;
       final masks = masksPath(layer.internallayerId.toString());
 
+      // Not the per-point feather (K-545): this mask has one width, so it
+      // has no per-point rows to click.
       for (final value in MaskValue.values) {
+        if (value == MaskValue.vertexFeather) continue;
         final gesture = await tester
             .startGesture(tester.getCenter(find.text(maskValueLabel(value))));
         await tester.pump();
@@ -1180,6 +1188,64 @@ void main() {
       expect(layer.getMasks().single.name, 'Vignette');
     });
 
+    /// **A feather per point is switched on from the mask's own menu, and
+    /// gives every point a row** (K-545).
+    ///
+    /// Switching it on must not move the picture: each point starts at the
+    /// width the mask already had, so the change is an offer of control and
+    /// not an edit of the shape. The rows that appear key like any other
+    /// number, which is what makes one edge animatable soft and another sharp.
+    testWidgets('a mask gains a feather row per point, and gives them back',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await openMaskRow(tester, p, layer, 'Ellipse');
+      layer.setMask(
+          mask: maskWith(layer.getMasks().single,
+              feather: const BridgeScalar.static_(12)));
+      p.uiState.model.refresh();
+      await tester.pumpAndSettle();
+      final id = layer.getMasks().single.id;
+
+      expect(find.text('Point 1 feather'), findsNothing,
+          reason: 'an ordinary mask shows the four rows it always did');
+
+      Future<void> toggleFromMenu() async {
+        await tester.tapAt(
+            tester.getCenter(find.byKey(ValueKey<String>('tl-mask-name-$id'))),
+            buttons: kSecondaryButton);
+        await tester.pumpAndSettle();
+        await tester
+            .tap(find.byKey(ValueKey<String>('tl-mask-vary-feather-$id')));
+        await tester.pumpAndSettle();
+      }
+
+      await toggleFromMenu();
+      final varied = layer.getMasks().single;
+      expect(varied.vertexFeather.length, varied.vertices.length,
+          reason: 'one width per point of the shape');
+      expect(varied.vertexFeather.map(stillValue), everyElement(12),
+          reason: 'each point starts at the width the mask already had, so '
+              'switching this on does not move the picture');
+      expect(find.text('Point 1 feather'), findsOneWidget);
+      expect(find.text('Point 3 feather'), findsOneWidget);
+
+      // A per-point row is a value row like any other: its field writes
+      // through to that point alone.
+      await dragLeft(
+          tester, find.byKey(ValueKey<String>('tl-mask-vertexFeather-$id-0')), 20);
+      final dragged = layer.getMasks().single;
+      expect(stillValue(dragged.vertexFeather[0]), lessThan(12),
+          reason: 'the drag reached point 1');
+      expect(stillValue(dragged.vertexFeather[1]), 12,
+          reason: 'and nothing else');
+
+      await toggleFromMenu();
+      expect(layer.getMasks().single.vertexFeather, isEmpty,
+          reason: 'switching it off puts the one width back');
+      expect(find.text('Point 1 feather'), findsNothing);
+    });
+
     /// Paint strokes list under their own heading, between Masks and Effects —
     /// the order the picture is built in (K-227).
     testWidgets('a painted layer grows a Paint heading in its twirl-down',
@@ -1207,8 +1273,12 @@ void main() {
           colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
           width: 20,
           hardness: 0.8,
+          shape: BridgeBrushShape.round,
           opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
+          blend: 0,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
         ),
@@ -1234,6 +1304,101 @@ void main() {
       expect(layer.getPaint().single.opacity, 40);
     });
 
+    /// A stroke's Start and End (K-549) get rows of their own under it, and
+    /// both write through — the pair that makes a stroke draw itself on.
+    testWidgets('a stroke grows Start and End rows that write through',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.addStroke(
+        stroke: BridgeStroke(
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: 'Brush 1',
+          points: const [
+            BridgeStrokePoint(x: 10, y: 10),
+            BridgeStrokePoint(x: 40, y: 25),
+          ],
+          colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+          width: 20,
+          hardness: 0.8,
+          shape: BridgeBrushShape.round,
+          opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
+          mode: BridgePaintMode.paint,
+          blend: 0,
+          cloneOffsetX: 0,
+          cloneOffsetY: 0,
+        ),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'paint', settle: true);
+
+      expect(find.text('Start'), findsOneWidget);
+      expect(find.text('End'), findsOneWidget);
+
+      final id = layer.getPaint().single.id;
+      final end = find.byKey(ValueKey<String>('tl-stroke-end-$id'));
+      await tester.tap(end);
+      await tester.pumpAndSettle();
+      await tester.enterText(end, '40');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      final written = layer.getPaint().single.end;
+      expect(written, isA<BridgeScalar_Static>());
+      expect((written as BridgeScalar_Static).field0, 40);
+      expect(layer.getPaint().single.start,
+          isA<BridgeScalar_Static>(),
+          reason: 'and Start is left where it was');
+    });
+
+    /// A stroke's blend mode is the layer blend list, on its own row (K-550).
+    testWidgets('a stroke row picks a blend mode from the layer list',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.addStroke(
+        stroke: BridgeStroke(
+          id: UuidValue.fromString(const Uuid().v4()),
+          name: 'Brush 1',
+          points: const [
+            BridgeStrokePoint(x: 10, y: 10),
+            BridgeStrokePoint(x: 40, y: 25),
+          ],
+          colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+          width: 20,
+          hardness: 0.8,
+          shape: BridgeBrushShape.round,
+          opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
+          mode: BridgePaintMode.paint,
+          blend: 0,
+          cloneOffsetX: 0,
+          cloneOffsetY: 0,
+        ),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'paint', settle: true);
+
+      final id = layer.getPaint().single.id;
+      final picker = find.byKey(ValueKey<String>('tl-stroke-blend-$id'));
+      expect(picker, findsOneWidget);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      // The same words the layer's own picker offers, from the engine's table.
+      await tester.tap(find.text('Multiply').last);
+      await tester.pumpAndSettle();
+
+      final modes = listBlendModes();
+      expect(layer.getPaint().single.blend, modes.indexOf('Multiply'));
+    });
+
     /// **A stroke's opacity was not undoable.** The same fault the mask row had
     /// under K-234, and for the same reason: the row was written from the mask
     /// row as it stood *before* that fix, so it committed on every tick of the
@@ -1253,8 +1418,12 @@ void main() {
           colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
           width: 20,
           hardness: 0.8,
+          shape: BridgeBrushShape.round,
           opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
+          blend: 0,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
         ),
@@ -1304,8 +1473,12 @@ void main() {
           colour: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
           width: 20,
           hardness: 0.8,
+          shape: BridgeBrushShape.round,
           opacity: 100,
+          start: const BridgeScalar.static_(0),
+          end: const BridgeScalar.static_(100),
           mode: BridgePaintMode.paint,
+          blend: 0,
           cloneOffsetX: 0,
           cloneOffsetY: 0,
         ),
@@ -1364,6 +1537,28 @@ void main() {
             stroke: null,
             strokeWidth: 0,
             opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );
@@ -1388,6 +1583,257 @@ void main() {
       await tester.testTextInput.receiveAction(TextInputAction.done);
       await tester.pumpAndSettle();
       expect(layer.getShapeContents().single.opacity, 30);
+
+      // The trim's three rows sit under the item, and each writes through.
+      expect(find.text('Trim start'), findsOneWidget);
+      expect(find.text('Trim end'), findsOneWidget);
+      expect(find.text('Trim offset'), findsOneWidget);
+      final field = find.byKey(ValueKey<String>('tl-shape-trimEnd-${item.id}'));
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '40');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.trimEnd,
+          const BridgeScalar.static_(40));
+
+      // This item has no outline, so it has no dashes to set.
+      expect(find.text('Dash'), findsNothing);
+
+      // The offset applies before the trim, and reads as one length (K-554).
+      expect(find.text('Offset path'), findsOneWidget);
+      final offset =
+          find.byKey(ValueKey<String>('tl-shape-offsetPath-${item.id}'));
+      await tester.tap(offset);
+      await tester.pumpAndSettle();
+      await tester.enterText(offset, '-4');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.offsetAmount,
+          const BridgeScalar.static_(-4));
+    });
+
+    /// The dashes belong to the outline: their rows appear under an item that
+    /// has one, and writing either half makes the pair (K-552).
+    testWidgets('a stroked shape item carries the dash rows', (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      final layer = p.comp.addShapeLayer(
+        name: 'Outline',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Outline',
+            vertices: [
+              corner(0, 0),
+              corner(60, 0),
+              corner(60, 40),
+              corner(0, 40),
+            ],
+            closed: true,
+            fill: null,
+            stroke: const BridgeColourRgba(r: 0, g: 1, b: 0, a: 1),
+            strokeWidth: 3,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      expect(find.text('Dash'), findsOneWidget);
+      expect(find.text('Gap'), findsOneWidget);
+      expect(find.text('Dash offset'), findsOneWidget);
+
+      final item = layer.getShapeContents().single;
+      expect(item.dashes, isEmpty, reason: 'solid until it is dashed');
+      final field = find.byKey(ValueKey<String>('tl-shape-dash-${item.id}'));
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '8');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.dashes,
+          const [BridgeScalar.static_(8), BridgeScalar.static_(0)],
+          reason: 'writing one half makes the pair');
+    });
+
+    /// A gradient fill is a choice, a second colour and two points, and none of
+    /// them is on screen until there is a fill to ramp (K-555).
+    testWidgets('a filled shape item carries the gradient rows',
+        (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      final layer = p.comp.addShapeLayer(
+        name: 'Panel',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Panel',
+            vertices: [
+              corner(0, 0),
+              corner(60, 0),
+              corner(60, 40),
+              corner(0, 40),
+            ],
+            closed: true,
+            fill: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+            stroke: null,
+            strokeWidth: 0,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      // Flat: the fill's colour and the choice, and nothing to aim.
+      expect(find.text('Fill'), findsOneWidget);
+      expect(find.text('Gradient'), findsOneWidget);
+      expect(find.text('Gradient colour'), findsNothing);
+      expect(find.text('Gradient start x'), findsNothing);
+
+      final item = layer.getShapeContents().single;
+      final dropdown =
+          find.byKey(ValueKey<String>('tl-shape-gradient-${item.id}'));
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Linear').last);
+      await tester.pumpAndSettle();
+
+      final ramped = layer.getShapeContents().single;
+      expect(ramped.gradient, 1);
+      // Switched on unaimed, it aims itself down the art's own box — a ramp
+      // that read as one flat colour would look broken rather than unaimed.
+      expect(ramped.gradientStartY, const BridgeScalar.static_(0));
+      expect(ramped.gradientEndY, const BridgeScalar.static_(40));
+      expect(find.text('Gradient colour'), findsOneWidget);
+      expect(find.text('Gradient start x'), findsOneWidget);
+    });
+
+    /// The repeater's step is nine rows of nothing until there is more than
+    /// one copy to step between, so Copies is the row that opens them (K-553).
+    testWidgets('a repeated shape item carries the repeater rows',
+        (tester) async {
+      final p = withComp();
+      BridgeVertex corner(double x, double y) => BridgeVertex(
+          x: x, y: y, tanInX: 0, tanInY: 0, tanOutX: 0, tanOutY: 0);
+      final layer = p.comp.addShapeLayer(
+        name: 'Tick',
+        contents: [
+          BridgeShapeItem(
+            id: UuidValue.fromString(const Uuid().v4()),
+            name: 'Tick',
+            vertices: [
+              corner(0, 0),
+              corner(10, 0),
+              corner(10, 40),
+              corner(0, 40),
+            ],
+            closed: true,
+            fill: const BridgeColourRgba(r: 1, g: 0, b: 0, a: 1),
+            stroke: null,
+            strokeWidth: 0,
+            opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
+          ),
+        ],
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      await openFold(tester, layer.internallayerId,
+          groupPath: 'contents', settle: true);
+
+      // Drawn once: the count is there to find, and nothing else is.
+      expect(find.text('Copies'), findsOneWidget);
+      expect(find.text('Repeater rotation'), findsNothing);
+
+      final item = layer.getShapeContents().single;
+      final field =
+          find.byKey(ValueKey<String>('tl-shape-repeatCopies-${item.id}'));
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '5');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(layer.getShapeContents().single.repeatCopies,
+          const BridgeScalar.static_(5));
+
+      // And now there is a step to describe.
+      expect(find.text('Repeater rotation'), findsOneWidget);
+      expect(find.text('Repeater position x'), findsOneWidget);
+      expect(find.text('Start opacity'), findsOneWidget);
     });
 
     /// A shape layer's art gets the same rename as a mask: it too arrives named
@@ -1410,6 +1856,28 @@ void main() {
             stroke: null,
             strokeWidth: 0,
             opacity: 100,
+            trimStart: const BridgeScalar.static_(0),
+            trimEnd: const BridgeScalar.static_(100),
+            trimOffset: const BridgeScalar.static_(0),
+            dashes: const [],
+            dashOffset: const BridgeScalar.static_(0),
+            gradient: 0,
+            gradientColour: null,
+            gradientStartX: const BridgeScalar.static_(0),
+            gradientStartY: const BridgeScalar.static_(0),
+            gradientEndX: const BridgeScalar.static_(0),
+            gradientEndY: const BridgeScalar.static_(0),
+            offsetAmount: const BridgeScalar.static_(0),
+            repeatCopies: const BridgeScalar.static_(1),
+            repeatOffset: const BridgeScalar.static_(0),
+            repeatAnchorX: const BridgeScalar.static_(0),
+            repeatAnchorY: const BridgeScalar.static_(0),
+            repeatPositionX: const BridgeScalar.static_(0),
+            repeatPositionY: const BridgeScalar.static_(0),
+            repeatRotation: const BridgeScalar.static_(0),
+            repeatScale: const BridgeScalar.static_(100),
+            repeatStartOpacity: const BridgeScalar.static_(100),
+            repeatEndOpacity: const BridgeScalar.static_(100),
           ),
         ],
       );

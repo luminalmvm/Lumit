@@ -907,6 +907,11 @@ pub fn scale_path(poly: &MaskPolyline, px_scale: f32) -> MaskPolyline {
         points: poly.points.iter().map(|p| [p[0] * k, p[1] * k]).collect(),
         arc: poly.arc.iter().map(|a| a * k).collect(),
         closed: poly.closed,
+        // Both are px@comp distances like the points themselves, so they take
+        // the same factor — a scaled path whose feather stayed put would soften
+        // by a different amount at every preview divisor.
+        feather: poly.feather * k,
+        expansion: poly.expansion * k,
     }
 }
 

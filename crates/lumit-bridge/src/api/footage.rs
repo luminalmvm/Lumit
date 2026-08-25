@@ -129,8 +129,28 @@ impl FootageReference {
         Some(dir.join(&f.media.relative_path))
     }
 
+    /// [`Self::resolve_path`] together with what kind of media the item says it
+    /// is: one file, or the numbered run that file belongs to (K-539).
+    ///
+    /// Everything that probes, indexes or decodes footage asks for this rather
+    /// than the bare path, because for an image sequence the two are different
+    /// questions — the path is the file that gets stat-ed and relinked, the run
+    /// is what actually plays.
+    pub(crate) fn resolve_source(
+        p: &LumitBridgeState,
+        f: &FootageItem,
+    ) -> Option<lumit_media::MediaSource> {
+        Some(lumit_media::MediaSource {
+            path: Self::resolve_path(p, f)?,
+            sequence_fps: f
+                .sequence
+                .as_ref()
+                .map(|s| (s.frame_rate.num(), s.frame_rate.den())),
+        })
+    }
+
     /// Point this footage item at `path`, and fix every *other* missing item
-    /// whose file name turns up in the same folder — one undo step for the lot.
+    /// that moved the same way — one undo step for the lot.
     ///
     /// The sibling sweep is the behaviour that makes relinking a moved project
     /// bearable: footage almost always moves as a folder, so relinking one clip
@@ -153,14 +173,14 @@ impl FootageReference {
         if path.trim().is_empty() {
             return Err(BridgeError::MediaPathUnresolved);
         }
-        let picked = PathBuf::from(&path);
+        let mut picked = PathBuf::from(&path);
         let proj = self.project()?;
 
-        // The files this relink points at, so the probe worker can be reading
-        // them while the user is still looking at the picker's afterglow: the
+        // The media this relink points at, so the probe worker can be reading
+        // it while the user is still looking at the picker's afterglow: the
         // panel asks every repointed item for its status the moment the change
         // lands.
-        let mut repointed: Vec<PathBuf> = Vec::new();
+        let mut repointed: Vec<lumit_media::MediaSource> = Vec::new();
 
         let ops = {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -170,6 +190,23 @@ impl FootageReference {
             match doc.item(self.id).ok_or(BridgeError::InvalidItem)? {
                 lumit_core::model::ProjectItem::Footage(_) => {}
                 _ => return Err(BridgeError::InvalidItem),
+            }
+
+            // **Relinking an image sequence by any of its files relinks the
+            // run** (K-539). A sequence item points at the run's *first* file,
+            // so a user who picks frame 42 out of the picker is answered with
+            // frame 1 of the run that frame 42 is in — before anything else
+            // reads `picked`. Without this the path rewrite below would compare
+            // `frame0001.png` against `frame0042.png`, find `.png` as all they
+            // share, and sweep every sibling to a prefix built out of half a
+            // frame number.
+            if matches!(
+                doc.item(self.id),
+                Some(lumit_core::model::ProjectItem::Footage(f)) if f.sequence.is_some()
+            ) {
+                if let Some(run) = lumit_media::sequence::detect(&picked) {
+                    picked = run.first;
+                }
             }
 
             let folder = picked.parent().map(std::path::Path::to_path_buf);
@@ -208,10 +245,10 @@ impl FootageReference {
                         .zip(Self::stored_path(&p, other))
                         .and_then(|(mapping, old)| lumit_project::apply_mapping(mapping, &old));
                     let beside = folder.as_ref().map(|folder| {
-                        let name = std::path::Path::new(&other.media.relative_path)
-                            .file_name()
-                            .map(std::ffi::OsString::from)
-                            .unwrap_or_else(|| std::ffi::OsString::from(&other.name));
+                        // Split on both separators: a path written on the other
+                        // sort of machine comes back whole from `file_name`.
+                        let name = lumit_project::file_name_of(&other.media.relative_path)
+                            .unwrap_or(other.name.as_str());
                         folder.join(name)
                     });
                     let Some(candidate) = moved
@@ -232,7 +269,10 @@ impl FootageReference {
                     }
                 }
                 media.fingerprint = lumit_project::fingerprint_path(&candidate).ok();
-                repointed.push(candidate);
+                repointed.push(lumit_media::MediaSource {
+                    path: candidate,
+                    sequence_fps: other.sequence_fps(),
+                });
                 ops.push(lumit_core::Op::SetMediaRef {
                     id: other.id,
                     media: Box::new(media),
@@ -256,8 +296,8 @@ impl FootageReference {
 
         // After the commit and outside the lock: queueing is a channel send,
         // but the rule is the rule (docs/14 §3).
-        for path in &repointed {
-            crate::probe::request(path);
+        for src in &repointed {
+            crate::probe::request(src);
         }
         Ok(())
     }
@@ -292,11 +332,11 @@ impl FootageReference {
         let proj = self.project()?;
         let mut proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
 
-        let Some(path) = ({
+        let Some(src) = ({
             let snapshot = proj.store.snapshot();
             match snapshot.item(self.id) {
                 Some(lumit_core::model::ProjectItem::Footage(footage)) => {
-                    Self::resolve_path(&proj, footage)
+                    Self::resolve_source(&proj, footage)
                 }
                 _ => None,
             }
@@ -306,7 +346,7 @@ impl FootageReference {
 
         let id = self.id;
         Ok(
-            crate::media::thumbnail_from_path(&mut proj.media, id, max_edge, &path, 0).map(
+            crate::media::thumbnail_from_path(&mut proj.media, id, max_edge, &src, 0).map(
                 |(width, height, rgba)| BridgeRenderedFrame {
                     // A thumbnail is of the media's own first frame, not of a
                     // composition — there is no playhead behind it to report.
@@ -340,10 +380,10 @@ impl FootageReference {
         let Some(lumit_core::model::ProjectItem::Footage(footage)) = snapshot.item(self.id) else {
             return Err(BridgeError::InvalidItem);
         };
-        let Some(path) = Self::resolve_path(&proj, footage) else {
+        let Some(src) = Self::resolve_source(&proj, footage) else {
             return Ok(None);
         };
-        let Some(info) = crate::probe::ensure_probed(&path) else {
+        let Some(info) = crate::probe::ensure_probed(&src) else {
             return Ok(None);
         };
 
@@ -413,9 +453,10 @@ impl FootageReference {
             lumit_core::model::ProjectItem::Footage(footage_item) => {
                 // An unresolvable path is missing media, same as one that
                 // resolves but no longer decodes.
-                let Some(path) = Self::resolve_path(&proj, footage_item) else {
+                let Some(src) = Self::resolve_source(&proj, footage_item) else {
                     return Ok(LumitMediaStatus::Missing);
                 };
+                let path = src.path.clone();
                 // Whether a file is *there* is not a question for the decoder,
                 // and a media-less build used to answer "ready" for a path that
                 // plainly was not on disk (K-273). Asking the filesystem costs
@@ -437,7 +478,7 @@ impl FootageReference {
                 #[cfg(not(feature = "media"))]
                 let probed = true;
                 #[cfg(feature = "media")]
-                let probed = crate::probe::ensure_probed(&path).is_some();
+                let probed = crate::probe::ensure_probed(&src).is_some();
 
                 if probed {
                     Ok(LumitMediaStatus::Ready)

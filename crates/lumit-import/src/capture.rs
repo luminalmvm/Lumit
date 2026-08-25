@@ -118,6 +118,17 @@ pub struct Item {
     /// AE's pulldown phase, stringified.
     pub remove_pulldown: Option<String>,
     pub is_still: Option<bool>,
+    /// The footage is a folder of numbered stills read as one item, not a
+    /// single file (K-539). After Effects says so in the file alias, which
+    /// targets a *folder* rather than a file — a field that names itself,
+    /// not a byte offset. [`Item::path`] is then that folder.
+    pub is_sequence: Option<bool>,
+    /// A sequence's file name up to its number (`Depth`) and from the end of
+    /// its number (`_depth.exr`). Recorded because they are the only thing
+    /// After Effects knows about the run that the folder itself does not say;
+    /// nothing reads them yet.
+    pub sequence_prefix: Option<String>,
+    pub sequence_suffix: Option<String>,
     pub is_placeholder: Option<bool>,
     pub is_missing: Option<bool>,
 

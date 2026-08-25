@@ -2572,6 +2572,19 @@
           "file_filter_name": "Cube LUT"
         },
         {
+          "id": "input_space",
+          "label": "Input space",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Linear",
+            "sRGB",
+            "Rec. 709"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",
@@ -3508,6 +3521,16 @@
           "hard_max": 360.0
         },
         {
+          "id": "rot_freq",
+          "label": "Rotation frequency",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "x_amp",
           "label": "X amount",
           "kind": "float",
@@ -4378,7 +4401,7 @@
           "label": "Tile width",
           "kind": "float",
           "unit": "percent",
-          "default": 50.0,
+          "default": 100.0,
           "slider_min": 1.0,
           "slider_max": 500.0,
           "hard_min": 1.0
@@ -4388,7 +4411,7 @@
           "label": "Tile height",
           "kind": "float",
           "unit": "percent",
-          "default": 50.0,
+          "default": 100.0,
           "slider_min": 1.0,
           "slider_max": 500.0,
           "hard_min": 1.0
@@ -9857,6 +9880,17 @@
           "hard_max": 100.0
         },
         {
+          "id": "pre_blur",
+          "label": "Screen pre-blur",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
           "id": "clip_black",
           "label": "Clip black",
           "kind": "float",
@@ -9888,6 +9922,64 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "shrink_grow",
+          "label": "Screen shrink/grow",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": -10.0,
+          "slider_max": 10.0,
+          "hard_min": -50.0,
+          "hard_max": 50.0
+        },
+        {
+          "id": "softness",
+          "label": "Screen softness",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 20.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "despot_black",
+          "label": "Despot black",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "despot_white",
+          "label": "Despot white",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "inside_mask",
+          "label": "Inside mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "outside_mask",
+          "label": "Outside mask",
+          "kind": "mask_path",
+          "unit": "raw",
+          "self_default": false
         },
         {
           "id": "replace_method",
@@ -9969,9 +10061,16 @@
         {
           "label": "Screen matte",
           "params": [
+            "pre_blur",
             "clip_black",
             "clip_white",
             "clip_rollback",
+            "shrink_grow",
+            "softness",
+            "despot_black",
+            "despot_white",
+            "inside_mask",
+            "outside_mask",
             "replace_method",
             "replace_colour"
           ],

@@ -291,28 +291,57 @@ impl ProjectReference {
     ///
     /// The bare file name becomes the relative path; saving rebases it against the
     /// project folder (K-173).
+    ///
+    /// **A still that has numbered neighbours imports as one image sequence**
+    /// (K-539), not as one item per file: picking `frames0001.png` out of a
+    /// folder of two thousand brings in the whole run, named for its span and
+    /// pointed at its first file. Two guards keep that from surprising anyone —
+    /// only still-image formats are considered at all (a folder of numbered mp4s
+    /// is a folder of clips), and a numbered file with no numbered neighbours
+    /// stays the single still it is. Picking a *second* file of a run that is
+    /// already in the project hands back the item that is already there, so
+    /// selecting the whole folder still imports it once.
     #[frb(sync)]
     pub fn import_footage(&self, path: String) -> Result<FootageReference, BridgeError> {
-        use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
+        use lumit_core::model::{FootageItem, MediaRef, ProjectItem, SequenceRef};
 
         if path.trim().is_empty() {
             return Err(BridgeError::MediaPathUnresolved);
         }
-        let file = std::path::PathBuf::from(&path);
-        let name = file
+        let picked = std::path::PathBuf::from(&path);
+
+        // A run of one is a still, and a still is not a sequence: it decodes,
+        // saves and relinks exactly as it did before this existed.
+        let run = lumit_media::sequence::is_still(&picked)
+            .then(|| lumit_media::sequence::detect(&picked))
+            .flatten()
+            .filter(|run| run.count > 1);
+
+        let (file, name) = match &run {
+            Some(run) => (run.first.clone(), run.display_name()),
+            None => (
+                picked,
+                std::path::Path::new(&path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "footage".into()),
+            ),
+        };
+        let on_disk = file
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "footage".into());
+            .unwrap_or_else(|| name.clone());
 
         let item = FootageItem {
             id: Uuid::now_v7(),
-            name: name.clone(),
+            name,
             media: MediaRef {
-                relative_path: name,
+                relative_path: on_disk,
                 absolute_path: file.to_string_lossy().into_owned(),
                 fingerprint: None,
                 extra: serde_json::Map::new(),
             },
+            sequence: run.as_ref().map(|_| SequenceRef::default()),
             extra: serde_json::Map::new(),
             colour_space: None,
         };
@@ -321,7 +350,26 @@ impl ProjectReference {
         let state = self.state()?;
         {
             let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
-            let index = state.store.snapshot().items.len();
+            let doc = state.store.snapshot();
+
+            // Selecting a whole folder calls this once per file. Every call
+            // after the first finds the run already imported and returns it,
+            // rather than filing two thousand items that all mean one shot.
+            if run.is_some() {
+                if let Some(existing) = doc.items.iter().find_map(|i| match i {
+                    ProjectItem::Footage(f)
+                        if f.sequence.is_some()
+                            && std::path::Path::new(&f.media.absolute_path) == file =>
+                    {
+                        Some(f.id)
+                    }
+                    _ => None,
+                }) {
+                    return Ok(FootageReference::new(self.id, existing));
+                }
+            }
+
+            let index = doc.items.len();
             state
                 .store
                 .commit(Op::AddItem {
@@ -333,7 +381,13 @@ impl ProjectReference {
 
         // Outside the lock, and after the item exists: start reading the file
         // now so the first question about it is a look-up.
-        crate::probe::request(&file);
+        crate::probe::request(lumit_media::MediaSource {
+            path: file,
+            sequence_fps: run.map(|_| {
+                let r = SequenceRef::default().frame_rate;
+                (r.num(), r.den())
+            }),
+        });
 
         Ok(FootageReference::new(self.id, item_id))
     }

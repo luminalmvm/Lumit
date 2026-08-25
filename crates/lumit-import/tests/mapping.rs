@@ -459,6 +459,32 @@ fn a_time_stretch_becomes_the_equivalent_retime() {
     )));
 }
 
+/// **A layer's audio level comes across, and an unbalanced pair says so.**
+///
+/// After Effects gives a layer one level per channel and Lumit gives it one,
+/// so a mix that rides the two apart cannot arrive whole — the left channel
+/// does, and the row carries what the right one was. What this really guards
+/// is the flat case underneath it: a level read as 0 dB plays a song mixed
+/// twenty decibels down at full.
+#[test]
+fn a_layers_audio_level_comes_across_and_an_unbalanced_pair_is_reported() {
+    let (doc, report) = mapped("synthetic.lum-bundle");
+    let clip = layer(comp(&doc, "Main"), "clip.mp4");
+    assert!(
+        (clip.volume_db.value_at(0.0) - -6.0).abs() < 1e-9,
+        "the left channel's level, not a flat nought"
+    );
+    assert!(reported(&report, |r| matches!(
+        r,
+        Reason::AudioLevelsDiffer { left, right }
+            if (left - -6.0).abs() < 1e-9 && (right - -12.0).abs() < 1e-9
+    )));
+
+    // A layer After Effects said nothing about stays at unity.
+    let solid = layer(comp(&doc, "Main"), "Black Solid 1");
+    assert_eq!(solid.volume_db.value_at(0.0), 0.0);
+}
+
 /// **An effect the table does not know imports as a placeholder that keeps
 /// everything, and one it does know imports as the Lumit effect.**
 ///
@@ -554,6 +580,54 @@ fn a_placeholders_parameters_animate_and_nothing_is_dropped() {
         r,
         Reason::PropertyUnreadable { match_name } if match_name == "RE:Vision Twixtor-0003"
     )));
+}
+
+/// **A placeholder that refused a dozen parameters is one row, not a dozen.**
+///
+/// The report's readability, which is the only reason it exists (docs/11 §9).
+/// A third-party effect keeps every parameter and After Effects itself can
+/// read almost none of them: Particular alone refuses dozens, and a real
+/// project full of them buried every other row under thousands of
+/// "could not be read". The parameters are kept whole either way — this is
+/// about what the reader is told. One refusal still names itself, which is why
+/// Twixtor's blob keeps its own row in the test above.
+#[test]
+fn a_placeholders_refused_parameters_are_counted_in_one_row() {
+    let (doc, report) = mapped("edges.lum-bundle");
+    let third = layer(comp(&doc, "Edges"), "Third party");
+    let particular = &third.effects[1];
+    assert_eq!(particular.effect.match_name, "Trapcode Particular");
+
+    let counted: Vec<_> = report
+        .rows
+        .iter()
+        .filter(|row| matches!(row.reason, Reason::EffectParamsUnreadable { .. }))
+        .collect();
+    assert_eq!(counted.len(), 1, "one row for the instance");
+    assert_eq!(
+        counted[0].reason,
+        Reason::EffectParamsUnreadable { count: 3 }
+    );
+    assert_eq!(counted[0].path.property.as_deref(), Some("Particular"));
+    assert_eq!(counted[0].outcome, Outcome::Skipped);
+
+    // Not one of the three is named on its own, and the readable parameter
+    // and the refused ones are all still in the instance.
+    assert!(!reported(&report, |r| matches!(
+        r,
+        Reason::PropertyUnreadable { match_name } if match_name.starts_with("Trapcode")
+    )));
+    assert!(matches!(
+        particular.param("Trapcode Particular-0004"),
+        Some(EffectValue::Float(_))
+    ));
+    let carried = particular
+        .extra
+        .get("ae")
+        .and_then(|ae| ae.get("params"))
+        .and_then(|p| p.as_array())
+        .expect("the refused leaves are kept whole");
+    assert_eq!(carried.len(), 3);
 }
 
 // ---------------------------------------------------------------------------
@@ -682,22 +756,19 @@ fn key_times_are_measured_from_the_layers_own_start() {
     assert_eq!(shifted.transform.rotation.value_at(1.0), 90.0);
 }
 
-/// **An unbuilt mask mode falls back to Add, and an animated path keeps its
-/// keys.**
+/// **Every mask mode comes across, and an animated path keeps its keys.**
 ///
-/// Lighten and Darken are not built (docs/06 §2). Everything else about the
-/// mask — feather, opacity, expansion, the animated shape — comes across, and
-/// AE's two feather axes average into Lumit's one width with a row saying so.
+/// Lighten was the mode this fixture was picked for: it used to arrive as Add
+/// with a row apologising, and since K-545 it arrives as itself. Everything
+/// else about the mask — feather, opacity, expansion, the animated shape —
+/// comes across too, and AE's two feather axes average into Lumit's one width
+/// with a row saying so.
 #[test]
-fn an_unbuilt_mask_mode_falls_back_and_the_animated_path_survives() {
+fn every_mask_mode_maps_and_the_animated_path_survives() {
     let (doc, report) = mapped("edges.lum-bundle");
     let mask = &layer(comp(&doc, "Edges"), "Lighten mask").masks[0];
 
-    assert_eq!(mask.mode, MaskMode::Add);
-    assert!(reported(&report, |r| matches!(
-        r,
-        Reason::MaskModeUnavailable { ae_mode } if ae_mode == "LIGHTEN"
-    )));
+    assert_eq!(mask.mode, MaskMode::Lighten);
 
     assert_eq!(mask.feather.value_at(0.0), 7.0, "10 and 4 average to 7");
     assert!(reported(&report, |r| matches!(
@@ -1052,4 +1123,63 @@ fn an_item_with_no_name_of_its_own_is_labelled_rather_than_left_blank() {
     // save (docs/10 §2).
     assert_eq!(footage.media.absolute_path, r"C:\Shoot\clip.mov");
     assert_eq!(footage.media.relative_path, r"C:\Shoot\clip.mov");
+}
+
+/// **An After Effects image sequence becomes a Lumit image sequence** (K-539).
+///
+/// The mapping is small but load-bearing in two directions. It has to carry
+/// the fact through — a run of stills that imports as a single still shows one
+/// frame for a shot that is a thousand — and it has to carry the *folder*, not
+/// a file, because the folder is all the .aep names. Turning that folder into
+/// the run's first frame is resolution's job, and it happens on open.
+#[test]
+fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
+    let mut capture = lumit_import::Capture::default();
+    capture.items.push(lumit_import::capture::Item {
+        id: Some(1),
+        name: Some("Depth".into()),
+        kind: Some("footage".into()),
+        path: Some("/media/Cine3/Depth".into()),
+        is_sequence: Some(true),
+        sequence_prefix: Some("Depth".into()),
+        sequence_suffix: Some("_depth.exr".into()),
+        ..Default::default()
+    });
+    capture.items.push(lumit_import::capture::Item {
+        id: Some(2),
+        name: Some("World.avi".into()),
+        kind: Some("footage".into()),
+        path: Some("/media/Cine3/World.avi".into()),
+        ..Default::default()
+    });
+
+    let (doc, _) = lumit_import::map_capture(&capture);
+    let footage = |name: &str| match doc.item(item_id(&doc, name)) {
+        Some(ProjectItem::Footage(f)) => f.clone(),
+        other => panic!("expected footage, got {other:?}"),
+    };
+
+    let run = footage("Depth");
+    assert_eq!(
+        run.sequence_fps(),
+        Some((25, 1)),
+        "stills carry no rate, and the .aep's conform rate is a preference \
+         rather than a fact in the file — so it is the default (K-539)"
+    );
+    assert_eq!(
+        run.media.relative_path, "/media/Cine3/Depth",
+        "the folder the run lives in, which is what the alias names"
+    );
+    let ae = run.extra.get("ae").expect("an ae namespace");
+    assert_eq!(ae.get("sequence_prefix"), Some(&serde_json::json!("Depth")));
+    assert_eq!(
+        ae.get("sequence_suffix"),
+        Some(&serde_json::json!("_depth.exr"))
+    );
+
+    assert_eq!(
+        footage("World.avi").sequence,
+        None,
+        "a clip in the same folder is still one file"
+    );
 }

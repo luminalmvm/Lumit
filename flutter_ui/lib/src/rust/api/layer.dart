@@ -18,8 +18,8 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// One window of a source's waveform, summarised to exactly the buckets the
@@ -84,6 +84,18 @@ class BridgeAudioPeaks {
           bands == other.bands &&
           buckets == other.buckets &&
           values == other.values;
+}
+
+/// The shape one dab of the brush leaves (K-548). Not a brush-tip system:
+/// two shapes, both measured from the dab's centre out to half the stroke's
+/// width and both softened by the same hardness ramp.
+enum BridgeBrushShape {
+  /// A circle — the brush every stroke had before there was a choice.
+  round,
+
+  /// A square with flat sides and square corners.
+  square,
+  ;
 }
 
 /// One clip on a Sequence layer, as the Timeline needs to draw it: where it
@@ -559,6 +571,16 @@ class BridgeMask {
   /// Width of the soft edge in layer pixels; 0 is the hard antialiased edge.
   final BridgeScalar feather;
 
+  /// A width of its own for each **vertex**, in layer pixels (K-545), each
+  /// animatable exactly as [`Self::feather`] is. Empty — the ordinary mask —
+  /// means one width all the way round, and is what the Timeline shows no
+  /// per-point rows for.
+  ///
+  /// Positional: entry *i* belongs to vertex *i* of [`Self::vertices`], so a
+  /// caller changing the shape and the widths in one write must send the two
+  /// lists agreeing with each other.
+  final List<BridgeScalar> vertexFeather;
+
   /// Grow (+) or shrink (−) the shape, in layer pixels.
   final BridgeScalar expansion;
 
@@ -587,6 +609,7 @@ class BridgeMask {
     required this.opacity,
     required this.mode,
     required this.feather,
+    required this.vertexFeather,
     required this.expansion,
     required this.pathKeys,
   });
@@ -601,6 +624,7 @@ class BridgeMask {
       opacity.hashCode ^
       mode.hashCode ^
       feather.hashCode ^
+      vertexFeather.hashCode ^
       expansion.hashCode ^
       pathKeys.hashCode;
 
@@ -617,6 +641,7 @@ class BridgeMask {
           opacity == other.opacity &&
           mode == other.mode &&
           feather == other.feather &&
+          vertexFeather == other.vertexFeather &&
           expansion == other.expansion &&
           pathKeys == other.pathKeys;
 }
@@ -630,6 +655,12 @@ enum BridgeMaskMode {
   add,
   subtract,
   intersect,
+
+  /// The greater of this mask and the stack below it (K-545).
+  lighten,
+
+  /// The lesser of the two (K-545).
+  darken,
   difference,
   ;
 
@@ -752,6 +783,57 @@ class BridgeShapeItem {
   /// 0..100.
   final double opacity;
 
+  /// **Trim paths** (K-551): where along the path's own length the art begins
+  /// and ends, as a per cent, and how far the pair is slid along it in
+  /// degrees. Animatable on the layer's own clock (K-213), exactly as a
+  /// stroke's write-on is, so the Timeline rows carry the same stopwatch and
+  /// the same diamonds.
+  final BridgeScalar trimStart;
+  final BridgeScalar trimEnd;
+  final BridgeScalar trimOffset;
+
+  /// **Dashes** (K-552): the outline's dash and gap lengths in layer pixels,
+  /// alternating — dash, gap, dash, gap. Empty is a solid outline.
+  /// `dash_offset` is how far along the path the pattern starts, in the same
+  /// pixels.
+  final List<BridgeScalar> dashes;
+  final BridgeScalar dashOffset;
+
+  /// **A gradient fill** (K-555): 0 is the flat [`fill`](Self::fill), 1 ramps
+  /// from it linearly to `gradient_colour` and 2 ramps radially, the end
+  /// point sitting on the outer edge. The two points are in layer pixels —
+  /// the art's own coordinates — and animate; what a ramp *is* does not.
+  final int gradient;
+  final BridgeColourRgba? gradientColour;
+  final BridgeScalar gradientStartX;
+  final BridgeScalar gradientStartY;
+  final BridgeScalar gradientEndX;
+  final BridgeScalar gradientEndY;
+
+  /// **Offset paths** (K-554): how far the outline is pushed out of the path,
+  /// in layer pixels; negative pulls it in and zero is the path itself.
+  final BridgeScalar offsetAmount;
+
+  /// **The repeater** (K-553): how many copies of the item are drawn, which
+  /// copy the original is (`repeat_offset`), and the transform each copy is
+  /// one more step of — moved by `repeat_position_*` layer pixels, turned by
+  /// `repeat_rotation` degrees and scaled by `repeat_scale` per cent, all
+  /// about `repeat_anchor_*`. The copies fade evenly from
+  /// `repeat_start_opacity` to `repeat_end_opacity`.
+  ///
+  /// A still count of one is no repeater at all, which is what every shape is
+  /// until somebody asks for more.
+  final BridgeScalar repeatCopies;
+  final BridgeScalar repeatOffset;
+  final BridgeScalar repeatAnchorX;
+  final BridgeScalar repeatAnchorY;
+  final BridgeScalar repeatPositionX;
+  final BridgeScalar repeatPositionY;
+  final BridgeScalar repeatRotation;
+  final BridgeScalar repeatScale;
+  final BridgeScalar repeatStartOpacity;
+  final BridgeScalar repeatEndOpacity;
+
   const BridgeShapeItem({
     required this.id,
     required this.name,
@@ -761,6 +843,28 @@ class BridgeShapeItem {
     this.stroke,
     required this.strokeWidth,
     required this.opacity,
+    required this.trimStart,
+    required this.trimEnd,
+    required this.trimOffset,
+    required this.dashes,
+    required this.dashOffset,
+    required this.gradient,
+    this.gradientColour,
+    required this.gradientStartX,
+    required this.gradientStartY,
+    required this.gradientEndX,
+    required this.gradientEndY,
+    required this.offsetAmount,
+    required this.repeatCopies,
+    required this.repeatOffset,
+    required this.repeatAnchorX,
+    required this.repeatAnchorY,
+    required this.repeatPositionX,
+    required this.repeatPositionY,
+    required this.repeatRotation,
+    required this.repeatScale,
+    required this.repeatStartOpacity,
+    required this.repeatEndOpacity,
   });
 
   @override
@@ -772,7 +876,29 @@ class BridgeShapeItem {
       fill.hashCode ^
       stroke.hashCode ^
       strokeWidth.hashCode ^
-      opacity.hashCode;
+      opacity.hashCode ^
+      trimStart.hashCode ^
+      trimEnd.hashCode ^
+      trimOffset.hashCode ^
+      dashes.hashCode ^
+      dashOffset.hashCode ^
+      gradient.hashCode ^
+      gradientColour.hashCode ^
+      gradientStartX.hashCode ^
+      gradientStartY.hashCode ^
+      gradientEndX.hashCode ^
+      gradientEndY.hashCode ^
+      offsetAmount.hashCode ^
+      repeatCopies.hashCode ^
+      repeatOffset.hashCode ^
+      repeatAnchorX.hashCode ^
+      repeatAnchorY.hashCode ^
+      repeatPositionX.hashCode ^
+      repeatPositionY.hashCode ^
+      repeatRotation.hashCode ^
+      repeatScale.hashCode ^
+      repeatStartOpacity.hashCode ^
+      repeatEndOpacity.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -786,7 +912,29 @@ class BridgeShapeItem {
           fill == other.fill &&
           stroke == other.stroke &&
           strokeWidth == other.strokeWidth &&
-          opacity == other.opacity;
+          opacity == other.opacity &&
+          trimStart == other.trimStart &&
+          trimEnd == other.trimEnd &&
+          trimOffset == other.trimOffset &&
+          dashes == other.dashes &&
+          dashOffset == other.dashOffset &&
+          gradient == other.gradient &&
+          gradientColour == other.gradientColour &&
+          gradientStartX == other.gradientStartX &&
+          gradientStartY == other.gradientStartY &&
+          gradientEndX == other.gradientEndX &&
+          gradientEndY == other.gradientEndY &&
+          offsetAmount == other.offsetAmount &&
+          repeatCopies == other.repeatCopies &&
+          repeatOffset == other.repeatOffset &&
+          repeatAnchorX == other.repeatAnchorX &&
+          repeatAnchorY == other.repeatAnchorY &&
+          repeatPositionX == other.repeatPositionX &&
+          repeatPositionY == other.repeatPositionY &&
+          repeatRotation == other.repeatRotation &&
+          repeatScale == other.repeatScale &&
+          repeatStartOpacity == other.repeatStartOpacity &&
+          repeatEndOpacity == other.repeatEndOpacity;
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.
@@ -836,12 +984,27 @@ class BridgeStroke {
   /// The brush's diameter in layer pixels.
   final double width;
 
-  /// 0 fully soft, 1 a hard edge.
+  /// 0 fully soft, 1 a hard edge. The same ramp whatever the shape is.
   final double hardness;
+  final BridgeBrushShape shape;
 
   /// 0..100.
   final double opacity;
+
+  /// Where along the path the mark begins and ends, as a per cent of the
+  /// stroke's own length (K-549). Animatable exactly as a mask's opacity is,
+  /// on the layer's own clock (K-213), so the Timeline row carries the same
+  /// stopwatch and the same diamonds. Hold Start at 0 and key End 0 → 100
+  /// and the stroke draws itself on.
+  final BridgeScalar start;
+  final BridgeScalar end;
   final BridgePaintMode mode;
+
+  /// How the mark combines with what is already on the layer (K-550), as an
+  /// index into [`list_blend_modes`] — the same list and the same convention
+  /// a layer's own blend crosses on. Ignored by an eraser, which takes alpha
+  /// away and never touches colour.
+  final int blend;
 
   /// Where a clone's pixels are copied from, as an offset in layer pixels.
   final double cloneOffsetX;
@@ -854,8 +1017,12 @@ class BridgeStroke {
     required this.colour,
     required this.width,
     required this.hardness,
+    required this.shape,
     required this.opacity,
+    required this.start,
+    required this.end,
     required this.mode,
+    required this.blend,
     required this.cloneOffsetX,
     required this.cloneOffsetY,
   });
@@ -868,8 +1035,12 @@ class BridgeStroke {
       colour.hashCode ^
       width.hashCode ^
       hardness.hashCode ^
+      shape.hashCode ^
       opacity.hashCode ^
+      start.hashCode ^
+      end.hashCode ^
       mode.hashCode ^
+      blend.hashCode ^
       cloneOffsetX.hashCode ^
       cloneOffsetY.hashCode;
 
@@ -884,8 +1055,12 @@ class BridgeStroke {
           colour == other.colour &&
           width == other.width &&
           hardness == other.hardness &&
+          shape == other.shape &&
           opacity == other.opacity &&
+          start == other.start &&
+          end == other.end &&
           mode == other.mode &&
+          blend == other.blend &&
           cloneOffsetX == other.cloneOffsetX &&
           cloneOffsetY == other.cloneOffsetY;
 }

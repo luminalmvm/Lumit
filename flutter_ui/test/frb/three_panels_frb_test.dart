@@ -94,6 +94,31 @@ void main() {
       expect(p.layer.getEffects().single.name(), 'blur');
     });
 
+    testWidgets('double-clicking applies to every selected layer',
+        (tester) async {
+      // The Effect menu and the effects console both apply to the whole
+      // selection (K-217); this panel reached for the primary layer alone, so
+      // the same effect on the same selection landed on three layers from the
+      // menu and on one from here.
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final first = comp.addAdjustmentLayer();
+      final second = comp.addAdjustmentLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([first, second]);
+      await mount(tester, p);
+
+      final row = find.byKey(const ValueKey('fx-item-blur'));
+      await tester.tap(row);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(first.getEffects(), hasLength(1));
+      expect(second.getEffects(), hasLength(1),
+          reason: 'the second selected layer must get the effect too');
+    });
+
     testWidgets('effect rows are draggable, carrying EffectDragData',
         (tester) async {
       final p = withLayer();

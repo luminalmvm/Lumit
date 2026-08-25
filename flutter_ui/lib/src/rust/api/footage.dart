@@ -12,7 +12,7 @@ import 'package:uuid/uuid.dart';
 import 'state.dart';
 part 'footage.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `source_path`, `stored_path`
+// These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `resolve_source`, `source_path`, `stored_path`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -262,7 +262,7 @@ class FootageReference {
       );
 
   /// Point this footage item at `path`, and fix every *other* missing item
-  /// whose file name turns up in the same folder — one undo step for the lot.
+  /// that moved the same way — one undo step for the lot.
   ///
   /// The sibling sweep is the behaviour that makes relinking a moved project
   /// bearable: footage almost always moves as a folder, so relinking one clip

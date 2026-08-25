@@ -479,7 +479,7 @@ impl lumit_cache::ByteSized for FrameTexture {
 /// under [`HeadlessRenderer::preload_decoded`] makes that render a cache hit.
 pub struct PrefetchWant {
     pub item: Uuid,
-    pub path: PathBuf,
+    pub source: lumit_media::MediaSource,
     pub frame: usize,
     pub target_width: Option<u32>,
 }
@@ -1400,7 +1400,7 @@ impl HeadlessRenderer {
             let mut want = |frame: usize| {
                 wants.push(PrefetchWant {
                     item: job.item,
-                    path: job.path.clone(),
+                    source: job.source.clone(),
                     frame,
                     target_width: job.target_width,
                 });
@@ -2288,7 +2288,10 @@ impl HeadlessRenderer {
                 match self.proxy_probes.get(&f.id) {
                     Some((cached, _)) if *cached == path => {}
                     _ => {
-                        let probe = probe_item(&path);
+                        // A proxy is one file, never a numbered run: it stands
+                        // in for the whole of the original, however many files
+                        // that was.
+                        let probe = probe_item(&lumit_media::MediaSource::file(path.clone()));
                         self.proxy_probes.insert(f.id, (path, probe));
                     }
                 }
@@ -2298,13 +2301,13 @@ impl HeadlessRenderer {
             let probe = self
                 .probe_cache
                 .entry(f.id)
-                .or_insert_with(|| probe_item(&footage_path(f)));
+                .or_insert_with(|| probe_item(&footage_source(f)));
             match probe {
                 Probe::Ok { fps, frames, .. } => {
                     self.items.insert(
                         f.id,
                         ItemInfo {
-                            path: footage_path(f),
+                            source: footage_source(f),
                             fps: *fps,
                             frames: *frames,
                             missing: None,
@@ -2320,7 +2323,7 @@ impl HeadlessRenderer {
                     self.items.insert(
                         f.id,
                         ItemInfo {
-                            path: footage_path(f),
+                            source: footage_source(f),
                             fps: 1.0,
                             frames: 1,
                             missing: Some(slate),
@@ -2505,6 +2508,15 @@ pub(crate) fn media_path(m: &lumit_core::model::MediaRef) -> PathBuf {
     }
 }
 
+/// [`footage_path`] together with what the item says it is: one file, or the
+/// numbered run of stills that file belongs to (K-539).
+fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
+    lumit_media::MediaSource {
+        path: footage_path(f),
+        sequence_fps: f.sequence_fps(),
+    }
+}
+
 /// Probe one footage path into a [`Probe`]. A path that is not a file, an
 /// unreadable file, or one whose frame index will not build falls to
 /// [`Probe::Slate`] — none of them is an error, they are the states the slate
@@ -2513,17 +2525,17 @@ pub(crate) fn media_path(m: &lumit_core::model::MediaRef) -> PathBuf {
 /// no slate, no picture at all, since flagging a valid audio-only source as
 /// "missing" would be actively wrong. A clean video caches its exact rate and
 /// frame count, warming the on-disk frame index so the decoder open reuses it.
-fn probe_item(path: &Path) -> Probe {
-    if !path.is_file() {
+fn probe_item(src: &lumit_media::MediaSource) -> Probe {
+    if !src.on_disk().is_file() {
         return Probe::Slate;
     }
-    let Ok(probe) = lumit_media::probe::probe(path) else {
+    let Ok(probe) = lumit_media::probe::probe(src) else {
         return Probe::Slate;
     };
     let Some(video) = probe.video.as_ref() else {
         return Probe::NoVideo;
     };
-    let Ok(index) = crate::media_index::load_or_build_index(path) else {
+    let Ok(index) = crate::media_index::load_or_build_index(src) else {
         return Probe::Slate;
     };
     Probe::Ok {
@@ -2704,6 +2716,7 @@ mod tests {
         let b = uuid::Uuid::now_v7();
         for (id, name) in [(a, "a.mov"), (b, "b.mov")] {
             doc.items.push(ProjectItem::Footage(FootageItem {
+                sequence: None,
                 id,
                 name: name.into(),
                 media: MediaRef {
@@ -2907,6 +2920,7 @@ mod tests {
         let id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id,
                 name: name.into(),
                 media: lumit_core::model::MediaRef {
@@ -2972,6 +2986,133 @@ mod tests {
             extra: serde_json::Map::new(),
         }));
         id
+    }
+
+    /// **Tile above 100 % output reaches past the layer's own edges** (docs/08
+    /// §3.39, K-542), and the composite puts the wider picture in the same place.
+    ///
+    /// An 8×8 solid in a 32×32 comp covers the middle eight pixels and nothing
+    /// else. Give it a Tile at 300 % output and it covers twenty-four: the
+    /// effect stack grew its working raster, the copies landed in the margin,
+    /// and the layer transform placed the result so that not one of the original
+    /// pixels moved. Without the growth the margin is still the comp background,
+    /// which is what this test fails on.
+    #[test]
+    fn a_tile_past_full_output_extends_the_layer_past_its_edges() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let comp_with_tile = |output_pct: f64| {
+            let mut doc = Document::new();
+            let solid_id = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid_id,
+                name: "Solid".into(),
+                colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+                width: 8,
+                height: 8,
+                extra: serde_json::Map::new(),
+            }));
+            let mut tile = lumit_core::fx::instantiate_for_raster("tile", 8.0, 8.0)
+                .expect("tile is a builtin");
+            for p in &mut tile.params {
+                if p.id == "output_width" || p.id == "output_height" {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(output_pct));
+                }
+            }
+            let comp_id = Uuid::now_v7();
+            let layer = lumit_core::model::Layer {
+                adjustment: false,
+                graph: Default::default(),
+                markers: Vec::new(),
+                id: Uuid::now_v7(),
+                name: "Solid".into(),
+                kind: LayerKind::Solid { def: solid_id },
+                in_point: CompTime(Rational::new(0, 1).unwrap()),
+                out_point: CompTime(Rational::new(5, 1).unwrap()),
+                start_offset: CompTime(Rational::new(0, 1).unwrap()),
+                // The 8×8 layer pinned at its own middle, in the middle of a
+                // 32×32 comp: the original picture is the pixels 12..20.
+                transform: TransformGroup {
+                    anchor_x: Property::fixed(4.0),
+                    anchor_y: Property::fixed(4.0),
+                    position_x: Property::fixed(16.0),
+                    position_y: Property::fixed(16.0),
+                    ..Default::default()
+                },
+                matte: None,
+                parent: None,
+                label: 0,
+                volume_db: Property::zero(),
+                audio_only: false,
+                retime: None,
+                interpolation: Default::default(),
+                parked_flow: None,
+                blend: Default::default(),
+                masks: Vec::new(),
+                paint: Vec::new(),
+                effects: vec![tile],
+                switches: Switches::default(),
+                extra: serde_json::Map::new(),
+            };
+            doc.items.push(ProjectItem::Composition(Composition {
+                id: comp_id,
+                name: "Scene".into(),
+                width: 32,
+                height: 32,
+                frame_rate: FrameRate::new(30, 1).unwrap(),
+                duration: Duration(Rational::new(5, 1).unwrap()),
+                background: LinearColour::BLACK,
+                work_area: None,
+                layers: vec![layer],
+                markers: Vec::new(),
+                motion_blur: lumit_core::model::MotionBlur::default(),
+                extra: serde_json::Map::new(),
+            }));
+            (DocumentStore::new(doc), comp_id)
+        };
+
+        let red_at = |rgba: &[u8], x: u32, y: u32| rgba[((y * 32 + x) * 4) as usize];
+
+        // 100 %: the identity. The layer is its own eight pixels and no more.
+        let (store, comp_id) = comp_with_tile(100.0);
+        let (flat, w, h) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert_eq!((w, h), (32, 32));
+        assert!(red_at(&flat, 16, 16) > 200, "the solid itself is red");
+        assert!(
+            red_at(&flat, 6, 16) < 40,
+            "at 100 % output nothing reaches outside the layer"
+        );
+
+        // 300 %: the copies land in the margin and the margin is inside the comp.
+        let (store, comp_id) = comp_with_tile(300.0);
+        let (grown, _, _) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert!(
+            red_at(&grown, 6, 16) > 200,
+            "a later pass must find picture past the layer's edge, not background"
+        );
+        assert!(
+            red_at(&grown, 1, 16) < 40,
+            "and it must stop at 300 %, not fill the comp"
+        );
+        // Nothing the layer already covered moved.
+        for y in 12..20 {
+            for x in 12..20 {
+                assert_eq!(
+                    red_at(&grown, x, y),
+                    red_at(&flat, x, y),
+                    "the original picture moved at ({x}, {y})"
+                );
+            }
+        }
     }
 
     /// A full-frame red solid composites to red in the centre pixel — the GPU
@@ -3485,6 +3626,7 @@ mod tests {
         let item_id = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: item_id,
                 name: "gone.mp4".into(),
                 media: lumit_core::model::MediaRef {
@@ -3537,6 +3679,60 @@ mod tests {
         // probe directly, but the cached map must not grow).
         assert!(builder.audio_jobs(&doc, &comp).is_empty());
         assert_eq!(builder.has_audio.len(), 1);
+    }
+
+    /// **Sound inside a precomp reaches the comp that holds it.** A song sits
+    /// in comp A; comp B places A two seconds in. Rendering B's audio must find
+    /// the song, mapped into B's own time and carrying the Precomp layer's
+    /// Volume, because that is how a music bed usually arrives: laid down once
+    /// in a comp of its own and then placed, rather than dropped straight into
+    /// the comp being exported.
+    ///
+    /// The walk recurses, so this is a guard rather than a repair — but a
+    /// silent export is the kind of fault nobody notices until the file is
+    /// somewhere else, and the mapping (not merely the presence) is what a
+    /// nested placement gets wrong.
+    ///
+    /// No media fixture: the has-audio probe is a cache, so seeding it says
+    /// "this item has sound" without a file on disk.
+    #[test]
+    fn audio_inside_a_precomp_reaches_the_comp_that_holds_it() {
+        let mut doc = Document::new();
+        let song = push_footage_item(&mut doc, "song.wav");
+        let inner = push_comp(&mut doc, "A", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        let outer = push_comp(&mut doc, "B", 32, 32);
+        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
+        // B places A two seconds in, at −6 dB.
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
+            let layer = &mut c.layers[0];
+            layer.start_offset = CompTime(Rational::new(2, 1).unwrap());
+            layer.volume_db = lumit_core::anim::Property::fixed(-6.0);
+        }
+
+        let mut builder = AudioJobsBuilder::new();
+        builder.has_audio.insert(song, true);
+        let comp = doc.comp(outer).unwrap().clone();
+        let jobs = builder.audio_jobs(&doc, &comp);
+
+        assert_eq!(jobs.len(), 1, "the song inside the precomp must be heard");
+        let job = &jobs[0];
+        assert_eq!(job.item, song);
+        // A's layer spans 0..5 in A's time, which is 2..7 in B's — clipped to
+        // where the Precomp layer itself plays, 0..5.
+        assert!((job.in_s - 2.0).abs() < 1e-9, "in_s was {}", job.in_s);
+        assert!((job.out_s - 5.0).abs() < 1e-9, "out_s was {}", job.out_s);
+        assert!(
+            (job.offset_s - 2.0).abs() < 1e-9,
+            "the source starts where A was placed, got {}",
+            job.offset_s
+        );
+        assert_eq!(
+            job.carriers.len(),
+            1,
+            "the Precomp layer's Volume rides on the job"
+        );
+        assert!((job.carriers[0].0.value_at(0.0) - -6.0).abs() < 1e-9);
     }
 
     /// **The export contract for the deferred flare bake (K-350).** A fresh
@@ -4362,6 +4558,7 @@ surfaces:
         // The music: sound and no picture.
         let item = Uuid::now_v7();
         doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
             id: item,
             name: "tone.flac".into(),
             media: lumit_core::model::MediaRef {
@@ -4547,6 +4744,7 @@ surfaces:
                 let mut doc = Document::new();
                 let item = Uuid::now_v7();
                 doc.items.push(ProjectItem::Footage(FootageItem {
+                    sequence: None,
                     id: item,
                     name: "fixture.mp4".into(),
                     media: lumit_core::model::MediaRef {
@@ -5062,6 +5260,7 @@ surfaces:
             let item = Uuid::now_v7();
             doc.items
                 .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                    sequence: None,
                     id: item,
                     name: "fixture.mp4".into(),
                     media: lumit_core::model::MediaRef {
@@ -5176,6 +5375,7 @@ surfaces:
             let item = Uuid::now_v7();
             doc.items
                 .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                    sequence: None,
                     id: item,
                     name: "fixture.mp4".into(),
                     media: lumit_core::model::MediaRef {
@@ -6139,6 +6339,7 @@ surfaces:
         let item = Uuid::now_v7();
         doc.items
             .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
                 id: item,
                 name: "fixture.mp4".into(),
                 media: lumit_core::model::MediaRef {
@@ -6399,6 +6600,64 @@ surfaces:
             rr < 30 && rg < 30 && rb < 30,
             "outside the precomp matte the layer must be gated out, got {:?}",
             (rr, rg, rb)
+        );
+    }
+
+    /// **A paint stroke on a Precomp layer must reach the picture** (K-547).
+    ///
+    /// Every other kind of layer is painted in its own raster before it is
+    /// uploaded; a Precomp has no raster until it is rendered, so its strokes
+    /// were built into the draw list, carried nowhere, and quietly dropped —
+    /// the brush drew a Timeline row and no pixels. The realiser now stamps
+    /// them into the nested picture with the same `apply_strokes` every other
+    /// layer goes through.
+    ///
+    /// The scene: a 32×32 precomp of solid white inside a black comp, with one
+    /// fat red dab in the middle of the precomp layer. The middle is red; a
+    /// corner of the precomp is still white.
+    #[test]
+    fn a_paint_stroke_on_a_precomp_layer_reaches_the_picture() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 32u32);
+        let white = LinearColour([1.0, 1.0, 1.0, 1.0]);
+        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.0, 0.0, 0.0, 1.0]));
+        let (child_doc, child_id, _) = matrix_base(cw, ch, white);
+        for item in child_doc.items {
+            doc.items.push(item);
+        }
+        let mut pre = matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, cw, ch);
+        let mut stroke = lumit_core::paint::PaintStroke::new("Brush 1", vec![(16.0, 16.0)]);
+        stroke.width = 12.0;
+        stroke.hardness = 1.0;
+        stroke.colour = LinearColour([1.0, 0.0, 0.0, 1.0]);
+        pre.paint.push(stroke);
+        // Index 0 is the top of the stack, over the black base.
+        doc.comp_mut(comp_id).unwrap().layers.insert(0, pre);
+
+        let (rgba, w, _h) = r
+            .render_rgba(&std::sync::Arc::new(doc.clone()), comp_id, 0, 1.0)
+            .expect("render");
+        let at = |x: u32, y: u32| {
+            let i = ((y * w + x) * 4) as usize;
+            (rgba[i], rgba[i + 1], rgba[i + 2])
+        };
+        let (mr, mg, mb) = at(16, 16);
+        assert!(
+            mr > 200 && mg < 60 && mb < 60,
+            "the dab must land on the precomp's picture, got {:?}",
+            (mr, mg, mb)
+        );
+        let (cr, cg, cb) = at(2, 2);
+        assert!(
+            cr > 200 && cg > 200 && cb > 200,
+            "and only under the brush — the corner stays white, got {:?}",
+            (cr, cg, cb)
         );
     }
 
