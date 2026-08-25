@@ -205,7 +205,7 @@ void main() {
         expect(outcomeLabel(grade), isNotEmpty);
       }
 
-      await tester.tap(find.text(l10n.close));
+      await tester.tap(find.text(l10n.close.toUpperCase()));
       await tester.pump();
       expect(find.text(l10n.aeReportTitle), findsNothing);
     });
@@ -238,7 +238,7 @@ void main() {
       expect(find.text(l10n.aeSummary(62, 52, 2, 1)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
 
-      await tester.tap(find.text(l10n.close));
+      await tester.tap(find.text(l10n.close.toUpperCase()));
       await tester.pump();
       expect(find.text(l10n.aeReportTitle), findsNothing);
     });
