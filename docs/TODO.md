@@ -56,9 +56,6 @@ settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
   (`gridValues`). The seam that could let an infinity into a value or a tangent speed
   in the first place is still open: `parseNumberField` accepts "Infinity" and "NaN",
   and only the callers' clamps stand between that and the document.
-- The dropper's banked-frame lookup names its frame with `frame_key_presynced` without
-  presyncing (worker_thread.rs, `sample_pixels`) - harmless while the Viewer has just
-  rendered the same comp, a full composite per pointer move when it has not.
 - Work-area end handles: thicker, darker, capped a little below the time labels,
   near-rectangles with a tiny corner radius (owner overrules the drawing here).
 

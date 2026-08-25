@@ -3546,10 +3546,14 @@ fn trace_scope(
 /// for a 1080p frame (K-183's reason for deleting the read-back transport).
 ///
 /// The picture comes from the same places a trace's does, in the same order:
-/// the frame already banked in RAM — read **in place**, never cloned, since
-/// cutting a window out of eight megabytes by copying all eight is the cost
-/// this is here to avoid — else a render of it, banked so the next read of the
-/// same frame is free. A **layer** read is the one that can reuse neither: it
+/// the frame **held on the card**, which on a zero-copy build is where the one
+/// the Viewer is showing lives and the only place it lives; else the frame
+/// banked in RAM — read **in place**, never cloned, since cutting a window out
+/// of eight megabytes by copying all eight is the cost this is here to avoid —
+/// else a render of it, banked so the next read of the same frame is free. The
+/// dropper reads what is on screen, so taking it from the frame that IS on
+/// screen is both the cheap answer and the true one. A **layer** read is the
+/// one that can reuse neither: it
 /// needs that layer alone, which is not what the composite shows, so it renders
 /// the composition with the layer soloed and keeps the result in
 /// `layer_sample`.
@@ -3578,25 +3582,30 @@ fn sample_pixels(
         Some(layer) => sample_layer_alone(&document, revision, layer.layer_id, &req, state)
             .and_then(|(w, h, rgba)| cut_patch(&rgba, w, h, u, v, req.window).map(|p| (p, w, h))),
         None => {
-            // In place, under the cache lock: a bounded copy of the window's
-            // own pixels, not of the frame around them. A frame that came down
-            // off the card is BGRA on two of the three platforms, thus the
-            // window — and only the window — is put right after the cut.
-            // Stale entries are passed over here for the same reason as in
-            // `trace_scope` (K-330): a dropper reading the picture frame 12
-            // used to show is a wrong number, not a stale one.
-            let still_current = |key: u128, quality: lumit_render::Quality| {
-                state
-                    .renderer
-                    .frame_key_presynced(&document, req.comp.id, req.frame, quality)
-                    == Some(key)
-            };
-            let held = crate::framecache::with_best_frame(
-                req.comp.id,
-                req.frame,
-                still_current,
-                |bytes, w, h, bgra| {
-                    cut_patch(bytes, w, h, u, v, req.window).map(|mut p| {
+            // **The frame the Viewer is showing, wherever it is being kept.**
+            // The dropper reads what is on screen, so the ladder is the same
+            // one `trace_scope` walks, and in the same order — and naming the
+            // frame here is what makes the rest of it honest. `frame_key`
+            // probes; `frame_key_presynced` below does not, and is only
+            // correct after something has. Nothing had, so a banked frame was
+            // judged against a `None` name, thrown away as stale, and the
+            // picture composited a second time for every window read.
+            let quality = quality_for(req.scale);
+            let name = state
+                .renderer
+                .frame_key(&document, req.comp.id, req.frame, quality);
+
+            // The card first: on a zero-copy build the frame the Viewer shows
+            // lives in VRAM and is banked in RAM nowhere at all, so the bank
+            // below could never answer and every read of a few pixels cost a
+            // whole composite. The window is cut out of the read-back before
+            // any of it is put right, so this copies 129 pixels a side and not
+            // the frame.
+            let bgra = zero_copy_wants_bgra();
+            let on_card = name
+                .and_then(|key| state.renderer.read_back_frame_texture(key, bgra))
+                .and_then(|(w, h, bytes)| {
+                    cut_patch(&bytes, w, h, u, v, req.window).map(|mut p| {
                         if bgra {
                             for px in p.rgba.chunks_exact_mut(4) {
                                 px.swap(0, 2);
@@ -3604,20 +3613,45 @@ fn sample_pixels(
                         }
                         (p, w, h)
                     })
-                },
-            )
-            .flatten();
+                });
+
+            // Then the RAM bank, in place under the cache lock: a bounded copy
+            // of the window's own pixels, not of the frame around them. A frame
+            // that came down off the card is BGRA on two of the three
+            // platforms, thus the window — and only the window — is put right
+            // after the cut. Stale entries are passed over here for the same
+            // reason as in `trace_scope` (K-330): a dropper reading the picture
+            // frame 12 used to show is a wrong number, not a stale one.
+            let still_current = |key: u128, quality: lumit_render::Quality| {
+                state
+                    .renderer
+                    .frame_key_presynced(&document, req.comp.id, req.frame, quality)
+                    == Some(key)
+            };
+            let held = on_card.or_else(|| {
+                crate::framecache::with_best_frame(
+                    req.comp.id,
+                    req.frame,
+                    still_current,
+                    |bytes, w, h, bgra| {
+                        cut_patch(bytes, w, h, u, v, req.window).map(|mut p| {
+                            if bgra {
+                                for px in p.rgba.chunks_exact_mut(4) {
+                                    px.swap(0, 2);
+                                }
+                            }
+                            (p, w, h)
+                        })
+                    },
+                )
+                .flatten()
+            });
             match held {
                 Some(cut) => Some(cut),
-                // Nothing banked for this frame: render it once (banked under
-                // the frame's content name, so a re-read of the same frame is
-                // free) and cut from that.
+                // Nothing held for this frame anywhere: render it once (banked
+                // under the frame's content name, so a re-read of the same
+                // frame is free) and cut from that.
                 None => {
-                    let quality = quality_for(req.scale);
-                    let name = state
-                        .renderer
-                        .frame_key(&document, req.comp.id, req.frame, quality);
-
                     // A frame that cannot be named yet (its footage is still
                     // being probed, or a flare bake is being made) is rendered
                     // and not banked: an entry under a name the renderer did

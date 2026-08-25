@@ -29,8 +29,10 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
+import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:uuid/uuid.dart';
@@ -949,6 +951,82 @@ void main() {
         counter.total,
         lessThan(12),
         reason: 'a pan re-read the composition:\n${counter.ranking()}',
+      );
+    });
+
+    /// **Nor must a pick drag** (docs/07 §6.1). A window is 129 pixels a side
+    /// and the magnifier's 9×9 is cut out of it in Dart, so a sweep across the
+    /// picture is meant to cost the engine *nothing at all* until the pointer
+    /// nears the window's edge. That is the whole reason a window is read
+    /// rather than a pixel: on the far side of `sample_pixels` a read that
+    /// misses everything held composites the picture, and a composite per
+    /// pointer move is what the window exists to prevent.
+    testWidgets('a pick drag reads nothing while its window covers it',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp.addSolidLayer();
+      p.uiState.setSelectedComp(comp);
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      final picked = <DropperSample>[];
+      p.uiState.armDropper(DropperArm(
+        id: 'test',
+        reads: DropperReads.colour,
+        label: 'Key colour',
+        onPick: picked.add,
+      ));
+      // A window centred on a raster smaller than itself, so it answers for
+      // anywhere the pointer can go and no read is due on any of the moves
+      // below. The pixels do not matter; the covering does.
+      p.uiState.dropperPatch.value = BridgeSampledPixels(
+        window: dropperWindow,
+        rgba: Uint8List(dropperWindow * dropperWindow * 4),
+        width: 40,
+        height: 30,
+        x: 20,
+        y: 15,
+        frame: BigInt.zero,
+        layerAlone: false,
+      );
+      await tester.pump();
+
+      final centre = tester.getCenter(find.byType(ViewerPanelFrb));
+      final gesture = await tester.startGesture(centre);
+      await settleFrb(tester, minRounds: 4);
+
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await gesture.moveBy(const Offset(3, 2));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      await gesture.up();
+      await tester.pump();
+
+      expect(picked.length, 1,
+          reason: 'the gesture really was a pick on the picture');
+      // ignore: avoid_print
+      print('PICK DRAG COST ${counter.total} calls\n${counter.ranking()}');
+      expect(
+        counter.calls['composition_reference_sample_pixels'] ?? 0,
+        0,
+        reason: 'the drag re-read pixels it already held:\n'
+            '${counter.ranking()}',
+      );
+      expect(
+        counter.total,
+        lessThan(12),
+        reason: 'a pick drag asked the engine things:\n${counter.ranking()}',
       );
     });
 

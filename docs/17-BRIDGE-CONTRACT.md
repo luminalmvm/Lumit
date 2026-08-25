@@ -446,6 +446,10 @@ Nothing here does the work; this is the doorway.
   composition frame and severs the link, as **one** undoable batch;
   `add_layer_at_points(tracked, tracks, frame, solid)` drops a 3D Null or Solid at the mean
   solved position of the named tracks, turned to face the camera at that frame.
+  `clear_camera_corrections(camera)` puts a nudged camera's own properties back to the pose
+  the link was made at (K-578), leaving the link itself alone, as one undoable batch —
+  refused when there is no link or nothing in the lane, so the command is never offered on a
+  heading where it would do nothing.
 - **Up, and polled** — `track_status(layer)` is one `BridgeTrackStatus`: a stage
   (idle/queued/tracking/solving/done/cancelled/failed), the frames done and total, the
   solve's mean reprojection error, its point count, the frames it covers **and the frames the
@@ -469,6 +473,12 @@ Nothing here does the work; this is the doorway.
   the budget test is the gate.
 - **The badge** — `camera_link(camera, frame)` answers the `BridgeLinkState`
   (unlinked/derived/held/unresolved) and the tracked layer's id, once per frame change.
+- **Edited since track is not a call** — `BridgeLayerInfo.track_corrected` (K-578) says a
+  solve-linked camera carries a correction, and on a *tracked* layer says a camera following
+  it does. Both rows that draw the dot — the camera's Transform heading and the Camera
+  track's status row — are rebuilt on every document revision, and a correction is a
+  document edit, so this rides in the read model rather than being asked for per repaint
+  (K-184).
 - **What is not a call**: which layer of a composition is the tracked one. The read model
   (K-184) already carries every layer's every effect, so the interface finds the layer whose
   stack holds an enabled Camera track with Show points on, from data it is already holding.
@@ -722,6 +732,14 @@ path, documented beside the types in
     trace and a patch are three different questions, and none may supersede
     another — only its own kind, where the newest wins (a pointer that has
     moved on makes the previous position worthless; so does a playhead).
+
+    **A patch is cut from the frame that is on screen, not from a new one.** A
+    dropper read walks the same ladder a trace does, in the same order — the
+    frame held on the card, then the one banked in memory, and a composite only
+    if neither has it. A window is a question about a few pixels of the picture
+    the user is looking at; answering it by compositing that picture again is
+    both slower and less true, and on a zero-copy build (where the shown frame
+    lives in VRAM and nowhere else) it is what every read used to do.
 - **Instrumentation rides it too (K-276).** Two further messages come back on the
     same stream, both small and both about a frame rather than being one:
     `WorkerResponse::RenderProgress` (`BridgeRenderProgress`: frame, stage code,
