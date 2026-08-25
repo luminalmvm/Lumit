@@ -12,6 +12,7 @@
 //    sockets of different types never reaches the engine, because both types
 //    are in the read model already (docs/17, "The layer graph").
 
+import 'package:flutter/gestures.dart' show kDoubleTapMinTime;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -466,6 +467,159 @@ void main() {
       expect(p.layer.getGraphDrivers().single.enabled(), isFalse);
     });
 
+    // --- The points wire (K-492, K-494, points-stream.md §4.3) -------------
+    //
+    // The first wire whose *source* is a stack effect. Everything else on this
+    // canvas was already true of it — teal came from `PortColours` in WP1, the
+    // type rule is the one every other drop takes — so what these hold is the
+    // arm that was missing and the two states the wire can be in.
+
+    /// A layer carrying Particulate, with a Points sample driver beside it.
+    ({
+      LumitState state,
+      LumitUiState uiState,
+      LayerReference layer,
+      UuidValue sample
+    }) withPoints() {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp.addSolidLayer();
+      final layer = comp.getLayers().single;
+      layer.addEffect(name: 'particulate');
+      p.uiState.selectedLayer.value = layer;
+      final sample = seedDriver(layer, 'points_sample', const Offset(30, 300));
+      p.uiState.model.refresh();
+      return (state: p.state, uiState: p.uiState, layer: layer, sample: sample);
+    }
+
+    String particulateKey(LayerReference layer) => graphNodeKey(layer
+        .getGraph()
+        .nodes
+        .firstWhere((n) => n.matchName == 'particulate')
+        .node);
+
+    /// **A wire-only socket is always drawn** — there is no row anywhere else
+    /// to reach it from, which is what separates it from a parameter socket
+    /// the `E` badge folds away.
+    testWidgets('the Points sockets are drawn without exposing anything',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+
+      expect(socket(particulateKey(p.layer), 'points'), findsOneWidget,
+          reason: 'the effect declares a data output; it has no row');
+      expect(socket('driver:${p.sample}', 'points'), findsOneWidget);
+      // The driver's two numbers are its whole purpose, so the box shows them
+      // as ports — a driver draws every socket it has.
+      expect(socket('driver:${p.sample}', 'count'), findsOneWidget);
+      expect(socket('driver:${p.sample}', 'nearest_distance'), findsOneWidget);
+      expect(socket(particulateKey(p.layer), 'emit_rate'), findsNothing,
+          reason: 'a parameter socket still waits for the E badge');
+    });
+
+    testWidgets('Particulate\'s Points output wires into the driver, once',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+      final key = particulateKey(p.layer);
+
+      final from = tester.getCenter(socket(key, 'points'));
+      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      final edges = p.layer.getGraph().wiring.edges;
+      expect(edges, hasLength(1));
+      expect(
+        edges.single.from,
+        isA<BridgeOutputRef_EffectData>()
+            .having((e) => e.port, 'port', 'points'),
+        reason: 'the source is the stack effect itself (K-492)',
+      );
+      expect(edges.single.to,
+          isA<BridgeInputRef_Param>().having((e) => e.port, 'port', 'points'));
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, isEmpty,
+          reason: 'one gesture, one undo step');
+    });
+
+    /// The Tab search's filter answers from the catalogue (PS3), so a teal
+    /// wire in hand offers the entries that declare a Points input — which in
+    /// v1 is Points sample and nothing else.
+    testWidgets('the Tab search offers Points sample to a teal wire',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+
+      await tester.dragFrom(
+          tester.getCenter(socket(particulateKey(p.layer), 'points')),
+          const Offset(200, 120));
+      await tester.pump();
+
+      expect(
+          find.byKey(const ValueKey<String>('graph-search')), findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('graph-search-points_sample')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('graph-search-wiggle')),
+          findsNothing,
+          reason: 'a wiggle has nothing a points stream could land on');
+    });
+
+    /// **The loop is declined before it is committed.** Particulate feeding a
+    /// sample whose Count feeds Particulate's Emit rate is the one genuine
+    /// cycle v1 makes constructible (points-stream.md §1.2). The engine
+    /// refuses it with the `Cycle` sentence and that is the backstop; a
+    /// refusal the panel swallows would look like a gesture that did nothing,
+    /// so the second drop never leaves the panel.
+    testWidgets('a wire that would close a loop is declined here',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+      final key = particulateKey(p.layer);
+
+      final from = tester.getCenter(socket(key, 'points'));
+      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.edges, hasLength(1));
+
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-$key')));
+      await tester.pump();
+      final back = tester.getCenter(socket('driver:${p.sample}', 'count'));
+      final onto = tester.getCenter(socket(key, 'emit_rate'));
+      await tester.dragFrom(back, onto - back);
+      await tester.pump();
+
+      expect(p.layer.getGraph().wiring.edges, hasLength(1),
+          reason: 'the stream would depend on the parameter it feeds');
+    });
+
+    /// **The hazard, made visible** (K-509). A Points sample with nothing
+    /// wired in answers its documented no-op — a distance so large it pins
+    /// whatever it drives at the far end of the range — so the box says so
+    /// until a stream reaches it.
+    testWidgets('a sample with no stream wears the warning mark',
+        (tester) async {
+      final p = withPoints();
+      await mount(tester, p);
+      final mark =
+          find.byKey(ValueKey<String>('graph-no-stream-driver:${p.sample}'));
+      expect(mark, findsOneWidget);
+
+      final key = particulateKey(p.layer);
+      final from = tester.getCenter(socket(key, 'points'));
+      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
+      await tester.dragFrom(from, to - from);
+      await tester.pump();
+
+      expect(mark, findsNothing, reason: 'the stream arrived');
+      expect(find.byKey(ValueKey<String>('graph-no-stream-$key')), findsNothing,
+          reason: 'the producer reads no stream of its own');
+    });
+
     /// A box's position is document data: it persists, it travels, and a drag
     /// stages it and commits once (K-344).
     testWidgets('dragging a box commits its position once', (tester) async {
@@ -484,6 +638,97 @@ void main() {
           .firstWhere((l) => l.node == BridgeNodeRef.driver(wiggle));
       expect(placed.x, 70);
       expect(placed.y, 320);
+    });
+
+    /// **A box is renamed by double-clicking its name** (owner, desk test).
+    /// Both kinds commit the way their bypass does — a driver through
+    /// `setGraph`, a stack effect through the staged `setEffects` — so each is
+    /// one op and one undo step, and no call was added to the bridge for it:
+    /// `set_custom_name` is already on the instance handle both lists hand out.
+    Future<void> doubleTapName(WidgetTester tester, String key) async {
+      final name = find.byKey(ValueKey<String>('graph-node-name-$key'));
+      await tester.tap(name);
+      await tester.pump(kDoubleTapMinTime);
+      await tester.tap(name);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> renameBox(WidgetTester tester, String key, String to) async {
+      await doubleTapName(tester, key);
+      final field = find.byKey(ValueKey<String>('graph-node-rename-$key'));
+      expect(field, findsOneWidget, reason: 'the double-click opened it');
+      await tester.enterText(field, to);
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+    }
+
+    String? customNameOf(LayerReference layer, String key) => layer
+        .getGraph()
+        .nodes
+        .firstWhere((n) => graphNodeKey(n.node) == key)
+        .customName;
+
+    testWidgets('renaming an effect box round-trips in one undo',
+        (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+
+      await renameBox(tester, key, 'Soften the sign');
+      expect(customNameOf(p.layer, key), 'Soften the sign');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(customNameOf(p.layer, key), isNull,
+          reason: 'one gesture, one undo step');
+    });
+
+    testWidgets('renaming a driver box round-trips in one undo',
+        (tester) async {
+      final p = withBlur();
+      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
+      await mount(tester, p);
+      final key = 'driver:$wiggle';
+
+      await renameBox(tester, key, 'Camera shake');
+      expect(customNameOf(p.layer, key), 'Camera shake');
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(customNameOf(p.layer, key), isNull,
+          reason: 'a driver commits through setGraph, and once');
+    });
+
+    /// An empty name is a real answer: it clears the custom name and the card
+    /// goes back to the box's own label.
+    testWidgets('an empty name clears back to the effect\'s own label',
+        (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+      final key = effectKey(p.layer);
+
+      await renameBox(tester, key, 'Soften the sign');
+      expect(customNameOf(p.layer, key), 'Soften the sign');
+      expect(find.text('Soften the sign'), findsOneWidget);
+
+      await renameBox(tester, key, '   ');
+      expect(customNameOf(p.layer, key), isNull,
+          reason: 'whitespace is no name at all');
+      expect(find.text('Soften the sign'), findsNothing,
+          reason: 'the card shows the box\'s own label again');
+    });
+
+    /// The Source and Layer out boxes have no name of their own to give: the
+    /// Source shows the layer's name, the Out is the layer's own end.
+    testWidgets('the derived boxes cannot be renamed', (tester) async {
+      final p = withBlur();
+      await mount(tester, p);
+
+      await doubleTapName(tester, 'source');
+      expect(find.byKey(const ValueKey<String>('graph-node-rename-source')),
+          findsNothing);
     });
   });
 }

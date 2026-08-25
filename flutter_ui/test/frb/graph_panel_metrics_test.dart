@@ -205,6 +205,38 @@ void main() {
           findsNothing);
     });
 
+    /// 5b. **A name runs the whole width the badges leave** (owner, desk
+    /// test): they cut short with half the header standing empty beside them.
+    /// The header was a `Flexible` name next to a `Spacer`, and a `Spacer` is
+    /// an `Expanded` of flex 1 — so the two split the free space half each and
+    /// the name ellipsised at half a card.
+    testWidgets('a node name takes the header\'s whole remaining width',
+        (tester) async {
+      final p = withBlur();
+      p.layer.rename(
+          name: 'A layer named far past anything a 152px card could hold');
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      // The Source box wears no badges, so its name has the header entire:
+      // the card less its 1px border either side and the header's 8 of inset.
+      final card = at(tester, 'graph-node-source');
+      final name = at(tester, 'graph-node-name-source');
+      expect(name.width, card.width - 2 - 16,
+          reason: 'the drawing\'s 152 card, less its border and its insets');
+
+      // And on a box that does wear them, the badges are still hard right —
+      // the name gets the remainder, not a share of it.
+      final key = effectKey(p.layer);
+      final badge = at(tester, 'graph-badge-B-$key');
+      final effect = at(tester, 'graph-node-$key');
+      expect(badge.right, closeTo(effect.right - 1 - 8, 0.01),
+          reason: 'the last badge ends at the header\'s own inset');
+      expect(at(tester, 'graph-node-name-$key').left,
+          closeTo(effect.left + 1 + 8, 0.01),
+          reason: 'and the name starts at the other one');
+    });
+
     /// 6. **A node's name is a kicker**, primary while the box is live and
     /// muted while it is bypassed — the drawing's own reading.
     testWidgets('a node header is set in the kicker', (tester) async {

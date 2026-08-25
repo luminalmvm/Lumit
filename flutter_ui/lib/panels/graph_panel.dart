@@ -264,11 +264,29 @@ class _Layout {
       ];
 }
 
-/// Sockets the picture's own path owns, always drawn whether wired or not.
+/// Sockets that are always drawn, wired or not: the picture's own path, and
+/// every **wire-only** port beside it.
+///
+/// A wire-only port has no stored value and therefore no panel row anywhere
+/// (points-stream.md §2.2) — a matte's, an audio stream's, a points stream's.
+/// The socket is the only way to reach it, so hiding it behind the `E` badge
+/// would hide the whole port. A *parameter* socket is different: the row is
+/// still there in Effect controls, so the canvas may keep it folded away.
 bool _alwaysDrawn(BridgePortType type) =>
     type == BridgePortType.image ||
     type == BridgePortType.matte ||
-    type == BridgePortType.audio;
+    type == BridgePortType.audio ||
+    type == BridgePortType.points;
+
+/// A box that consumes a points stream with **nothing wired into it**.
+///
+/// Structural, not per-frame: the read model says whether the socket carries a
+/// wire, and the engine's contract says what an empty stream answers — Count
+/// nought and Nearest distance "nothing is anywhere near" (points-stream.md
+/// §2.2). So the panel can say so without asking for a value, which is what
+/// K-509 asks of it and what keeps this off the rebuild path (K-183).
+bool graphNoStream(BridgeGraphNode node) =>
+    node.inputs.any((p) => p.portType == BridgePortType.points && !p.wired);
 
 /// A wire being dragged: where it left, and where the pointer is now.
 class _InFlight {
@@ -325,6 +343,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _selectedNode = node;
     _ui?.graphNode.value = node;
   }
+
+  /// The box whose name is an inline editor, by node key (K-321). A
+  /// double-click on a card's name opens it — the canvas reads its pointers
+  /// through a raw `Listener`, so the card's own double-tap costs the
+  /// selection nothing: a press still picks the box the instant it lands.
+  String? _renamingNode;
 
   Offset _pan = Offset.zero;
   double _zoom = 1;
@@ -498,9 +522,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           ? const BridgeOutputRef.sourceMatte()
           : null;
     }
-    final driver = _driverIdOf(socket.node);
-    if (driver == null) return null;
-    return BridgeOutputRef.driver(node: driver, port: socket.port.id);
+    if (_driverIdOf(socket.node) case final driver?) {
+      return BridgeOutputRef.driver(node: driver, port: socket.port.id);
+    }
+    // A **stack effect's** declared data output — the first wire whose source
+    // is the effect list itself (K-492). The picture's own `output` port never
+    // reaches here: a chain socket takes no drag at all.
+    if (_effectIdOf(socket.node) case final effect?) {
+      return BridgeOutputRef.effectData(effect: effect, port: socket.port.id);
+    }
+    return null;
   }
 
   BridgeInputRef? _inputRef(_Socket socket) {
@@ -528,8 +559,51 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // The Layer out box's Audio socket is drawn, unfilled and honest: audio
     // comes only from a footage layer's own stream in this phase (K-435).
     if (into.node is BridgeNodeRef_Out) return false;
-    return out.port.portType == into.port.portType;
+    if (out.port.portType != into.port.portType) return false;
+    return !_wouldLoop(out.node, into.node);
   }
+
+  /// Whether joining [from] to [into] would close a loop.
+  ///
+  /// v1 makes one constructible for the first time (points-stream.md §1.2):
+  /// Points sample reads Particulate's stream and its Count drives
+  /// Particulate's Emit rate — the stream depending on the parameters and the
+  /// parameters on the stream. The engine refuses it at commit with the
+  /// `Cycle` sentence and that refusal is the backstop, but a refusal the
+  /// panel swallows looks to the user like a gesture that did nothing. So the
+  /// drop is declined *here*, from the edges the panel is already holding, and
+  /// nothing crosses the bridge.
+  ///
+  /// The walk is over the stored wires only, exactly as the engine's is: the
+  /// image chain is the effect list and cannot loop.
+  bool _wouldLoop(BridgeNodeRef from, BridgeNodeRef into) {
+    final target = graphNodeKey(from);
+    final seen = <String>{};
+    final queue = <String>[graphNodeKey(into)];
+    while (queue.isNotEmpty) {
+      final at = queue.removeLast();
+      if (at == target) return true;
+      if (!seen.add(at)) continue;
+      for (final edge in _graph!.wiring.edges) {
+        if (_sourceKey(edge) == at) queue.add(_destKey(edge));
+      }
+    }
+    return false;
+  }
+
+  String _sourceKey(BridgeGraphEdge edge) => switch (edge.from) {
+        BridgeOutputRef_Driver(:final node) =>
+          graphNodeKey(BridgeNodeRef.driver(node)),
+        BridgeOutputRef_SourceMatte() => 'source',
+        BridgeOutputRef_EffectData(:final effect) =>
+          graphNodeKey(BridgeNodeRef.effect(effect)),
+      };
+
+  String _destKey(BridgeGraphEdge edge) => switch (edge.to) {
+        BridgeInputRef_Param(:final node) => graphNodeKey(node),
+        BridgeInputRef_Matte(:final effect) =>
+          graphNodeKey(BridgeNodeRef.effect(effect)),
+      };
 
   // --- Node gestures ------------------------------------------------------
 
@@ -564,6 +638,51 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         for (final instance in layer.getEffects()) {
           if (instance.id() == effect) {
             layer.setEffectEnabled(effect: instance, enabled: !node.enabled);
+            break;
+          }
+        }
+      }
+    } catch (_) {
+      // The stack or the graph moved under us; re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  /// The user's own name for a box (K-321), committed the way its bypass is:
+  /// a driver stages on the graph's driver list and commits `setGraph`, an
+  /// effect stages on the stack and commits `setEffects`. One op, one undo
+  /// step, either way — and no new call across the bridge: `set_custom_name`
+  /// is already on `BridgeEffectInstance`, which is the handle both lists hand
+  /// out.
+  ///
+  /// An empty name clears back to the box's own label; the engine's own
+  /// `set_custom_name` trims and does that, so nothing here has to.
+  void _renameNode(BridgeGraphNode node, String name) {
+    setState(() => _renamingNode = null);
+    final layer = _layer;
+    if (layer == null) return;
+    final driver = _driverIdOf(node.node);
+    try {
+      if (driver != null) {
+        final staged = layer.getGraphDrivers();
+        for (final instance in staged) {
+          if (instance.id() == driver) {
+            instance.setCustomName(name: name);
+            layer.setGraph(drivers: staged, wiring: _wiringNow());
+            break;
+          }
+        }
+      } else if (_effectIdOf(node.node) case final effect?) {
+        // The whole stack is staged and committed together, exactly as the
+        // Effect controls card's own rename does it: `setEffectEnabled` has a
+        // committing op of its own but a custom name has not, so the staged
+        // copy is what carries it home.
+        final stack = layer.getEffects();
+        for (final instance in stack) {
+          if (instance.id() == effect) {
+            instance.setCustomName(name: name);
+            layer.setEffects(effects: stack);
             break;
           }
         }
@@ -633,19 +752,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   bool _touches(BridgeGraphEdge edge, BridgeNodeRef node) {
     final key = graphNodeKey(node);
-    final from = switch (edge.from) {
-      BridgeOutputRef_Driver(:final node) =>
-        graphNodeKey(BridgeNodeRef.driver(node)),
-      BridgeOutputRef_SourceMatte() => 'source',
-      BridgeOutputRef_EffectData(:final effect) =>
-        graphNodeKey(BridgeNodeRef.effect(effect)),
-    };
-    final to = switch (edge.to) {
-      BridgeInputRef_Param(:final node) => graphNodeKey(node),
-      BridgeInputRef_Matte(:final effect) =>
-        graphNodeKey(BridgeNodeRef.effect(effect)),
-    };
-    return from == key || to == key;
+    return _sourceKey(edge) == key || _destKey(edge) == key;
   }
 
   // --- The Tab search -----------------------------------------------------
@@ -1042,6 +1149,17 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                                       graphNodeKey(box.node.node)),
                                   onExpose: () => _toggleExposed(box.node.node),
                                   onBypass: () => _toggleBypass(box.node),
+                                  renaming: _renamingNode ==
+                                      graphNodeKey(box.node.node),
+                                  onStartRename: () => setState(() =>
+                                      _renamingNode =
+                                          graphNodeKey(box.node.node)),
+                                  onRenamed: (name) =>
+                                      _renameNode(box.node, name),
+                                  // Escape: shut the editor, rename nothing
+                                  // (K-323).
+                                  onRenameCancelled: () =>
+                                      setState(() => _renamingNode = null),
                                 ),
                               ),
                           ],
@@ -1215,6 +1333,15 @@ class _NodeCard extends StatelessWidget {
   final VoidCallback onExpose;
   final VoidCallback onBypass;
 
+  /// The name is an inline editor rather than a label (K-321), its commit —
+  /// empty clears back to the box's own label — and the Escape that throws the
+  /// edit away instead (K-323). The same contract the Effect controls heading
+  /// has, because it is the same rename.
+  final bool renaming;
+  final VoidCallback onStartRename;
+  final ValueChanged<String> onRenamed;
+  final VoidCallback onRenameCancelled;
+
   const _NodeCard({
     required this.box,
     required this.title,
@@ -1222,6 +1349,10 @@ class _NodeCard extends StatelessWidget {
     required this.exposed,
     required this.onExpose,
     required this.onBypass,
+    required this.renaming,
+    required this.onStartRename,
+    required this.onRenamed,
+    required this.onRenameCancelled,
   });
 
   bool get _derived =>
@@ -1277,9 +1408,62 @@ class _NodeCard extends StatelessWidget {
         ),
         child: Row(
           children: [
+            // **The name takes every pixel the badges leave** (owner, desk
+            // test). It used to be a `Flexible` name beside a `Spacer`, and a
+            // `Spacer` is an `Expanded` of flex 1: the two shared the header's
+            // free space half each, so a name ellipsised with half the strip
+            // standing empty beside it. One `Expanded` holding the names puts
+            // the whole remainder at their disposal — the badges are
+            // fixed-width and still sit hard right — so a name cuts only when
+            // it is genuinely out of room.
+            Expanded(child: renaming ? _editor(t) : _names(t)),
+            // **Nothing wired in** (K-509). A driver that reads a stream and
+            // has none answers its documented no-op — a distance so large it
+            // pins whatever it drives at the far end of the range — and the
+            // box is the one place that can say so before the wire is drawn.
+            if (graphNoStream(box.node)) ...[
+              LumitTooltip(
+                message: l10n.graphNoStream,
+                child: Container(
+                  key: ValueKey<String>(
+                      'graph-no-stream-${graphNodeKey(box.node.node)}'),
+                  width: graphBadgeSize,
+                  height: graphBadgeSize,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                    border: Border.all(color: t.warning),
+                  ),
+                  child: Text('!',
+                      style: t.mono.copyWith(fontSize: 8, color: t.warning)),
+                ),
+              ),
+              const SizedBox(width: 4),
+            ],
+            if (!_derived) ...[
+              _badge(t, 'E', exposed, onExpose, t.textPrimary),
+              const SizedBox(width: 4),
+              _badge(t, 'B', !box.node.enabled, onBypass, t.error),
+            ],
+          ],
+        ),
+      );
+
+  /// The box's type name and, where the user has given it one, their own name
+  /// beside it. **Double-click either to rename the box** (owner, desk test):
+  /// the derived boxes are left out, since the Source shows the layer's name
+  /// and the Out is the layer's own end — neither is a thing with a name of
+  /// its own to give.
+  Widget _names(LumitTheme t) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onDoubleTap: _derived ? null : onStartRename,
+        child: Row(
+          children: [
             Flexible(
               child: Text(
                 title,
+                key: ValueKey<String>(
+                    'graph-node-name-${graphNodeKey(box.node.node)}'),
                 style: box.node.enabled ? t.kickerOn : t.kicker,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -1295,14 +1479,20 @@ class _NodeCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis),
               ),
             ],
-            const Spacer(),
-            if (!_derived) ...[
-              _badge(t, 'E', exposed, onExpose, t.textPrimary),
-              const SizedBox(width: 4),
-              _badge(t, 'B', !box.node.enabled, onBypass, t.error),
-            ],
           ],
         ),
+      );
+
+  /// The inline rename, opened with the current name selected and committing
+  /// on Enter or on clicking away — the contract every inline rename in the
+  /// application has (K-243), and the one the Effect controls heading's own
+  /// editor keeps.
+  Widget _editor(LumitTheme t) => _NodeNameField(
+        key: ValueKey<String>(
+            'graph-node-rename-${graphNodeKey(box.node.node)}'),
+        initial: box.node.customName ?? '',
+        onDone: onRenamed,
+        onCancel: onRenameCancelled,
       );
 
   /// The `E` and `B` marks. `B` on is the one place the error family appears
@@ -1602,4 +1792,51 @@ class _GraphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GraphPainter old) => true;
+}
+
+/// A node card's inline rename field: the box's current custom name, selected
+/// on open because a name is retyped far more often than amended, committed on
+/// Enter or on clicking away (K-243) and thrown away on Escape (K-323).
+///
+/// Empty is a real answer — it clears the custom name and the card goes back to
+/// showing the box's own label — so an empty field is committed like any other.
+class _NodeNameField extends StatefulWidget {
+  final String initial;
+  final ValueChanged<String> onDone;
+  final VoidCallback onCancel;
+
+  const _NodeNameField({
+    super.key,
+    required this.initial,
+    required this.onDone,
+    required this.onCancel,
+  });
+
+  @override
+  State<_NodeNameField> createState() => _NodeNameFieldState();
+}
+
+class _NodeNameFieldState extends State<_NodeNameField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  )..selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: widget.initial.length,
+    );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => HouseTextField(
+        controller: _controller,
+        width: double.infinity,
+        autofocus: true,
+        submitOnLostFocus: true,
+        onSubmitted: widget.onDone,
+        onCancelled: widget.onCancel,
+      );
 }
