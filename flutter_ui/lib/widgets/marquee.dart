@@ -11,6 +11,11 @@ import 'package:flutter/widgets.dart';
 
 import 'controls.dart';
 
+/// How strongly the box washes what it is about to catch — the drawings' 12%,
+/// faint enough that the keys under it stay readable while it is drawn over
+/// them.
+const double marqueeWashAlpha = 0.12;
+
 class MarqueeSelect extends StatefulWidget {
   /// The finished box, in this widget's own coordinates, and whether the drag
   /// was **additive** — `Shift` or `Ctrl` held when it started (K-500 §2.1).
@@ -101,8 +106,15 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
-                  color: t.accent.withValues(alpha: 0.12),
-                  border: Border.all(color: t.accent, width: 1),
+                  // **What is selected is one colour, and it is not the
+                  // accent** (K-439, docs/impl/timeline-interaction.md P4):
+                  // the box that says what is about to be selected draws in
+                  // the same `text_primary` the selection it makes will, over
+                  // the drawings' 12% wash. The accent's list is closed — the
+                  // playhead, one filled button, the active tab's tick — and a
+                  // box in it read as a second playhead being dragged out.
+                  color: t.textPrimary.withValues(alpha: marqueeWashAlpha),
+                  border: Border.all(color: t.textPrimary, width: 1),
                 ),
               ),
             ),

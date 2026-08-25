@@ -8730,5 +8730,13 @@
   "keyMenuEase": "Ease…",
   "@keyMenuEase": {
     "description": "Timeline lanes: the row of a keyframe's right-click menu that opens the Ease popover on the selected keyframes. The ellipsis says it opens something."
+  },
+  "timelineStretchHint": "f{first}–f{last}",
+  "@timelineStretchHint": {
+    "description": "Timeline lanes: the small readout pill beside the handle while a block of keyframes is being stretched, saying which frames the block now reaches from and to. Very small mono type; an en dash between the two.",
+    "placeholders": {
+      "first": { "type": "int" },
+      "last": { "type": "int" }
+    }
   }
 }

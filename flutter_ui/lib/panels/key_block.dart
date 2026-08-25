@@ -103,7 +103,15 @@ class KeyStretch {
   /// drag of one landed on a whole one would be two rules for one act.
   double frameOf(double frame, {required bool whole}) {
     final moved = anchor + (frame - anchor) * scale;
-    return whole ? moved.roundToDouble() : moved;
+    if (!whole) return moved;
+    // **The dragged end lands exactly where the drag put it.** [to] is the
+    // handle's own answer, and the handle snaps to the shared targets — a
+    // marker, the playhead, another row's key — which need not sit on a whole
+    // frame. Rounding it as well would pull the end back off the target it had
+    // just been caught by, so the snap would show and then not stick.
+    // Everything between still rounds, exactly as one key's drag does.
+    if ((moved - to).abs() < 1e-9) return moved;
+    return moved.roundToDouble();
   }
 }
 

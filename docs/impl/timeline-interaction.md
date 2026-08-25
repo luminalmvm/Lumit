@@ -94,13 +94,16 @@ One model for Layers mode lanes, Keys mode and the graph. Each sentence is testa
 - **Right-clicking a lane key** opens the same menu the graph key has — Linear / Ease /
   Hold / Delete key — plus *Ease…* (the popover on the current selection). A right-click
   on an unselected key selects it first; on a selected one it acts on the whole selection.
-  **Except on a block's outermost keys.** A block's two stretch handles stand exactly over
-  the first and last key of the selection, and a handle is opaque and drag-only: while a
-  block is up, its end keys take neither a click nor a right-click, and only the keys
-  between them answer. That is the carve-out above read literally — a handle *is* a control
-  that uses the drag — but it costs a selected key the ordinary gestures, which P5 forbids.
-  Recorded rather than fixed in TI-1, because the handle belongs to the block tools:
-  **TI-2** gives it a tap that falls through to the key beneath.
+  **A block's outermost keys answer through their handle.** A block's two stretch handles
+  stand exactly over the first and last key of the selection, and a handle is opaque and
+  drag-only, so those two keys once took neither a click nor a right-click — the carve-out
+  above read literally, at the cost of the ordinary gestures P5 promises. Closed in TI-2:
+  the handle carries a tap and a secondary tap of its own and **passes both to the key it
+  is standing over** (`_keyUnderHandle`, the block overlay), so a click selects that key
+  alone and a right-click opens its menu. A handle that answers a tap has a tap recogniser
+  beside its drag one, so the drag is taken **from the down** rather than from the slop
+  (`dragStartBehavior: DragStartBehavior.down`) — otherwise the mark would sit a pointer's
+  width behind the cursor for the rest of the gesture.
 - `Ctrl`+click on empty lane space of a **keyed** row plants a key at that time on that
   property (docs/07 §4.3's sentence; the graph shipped it first). The new key takes the
   value its own curve already reads there, so planting one moves nothing — it is a place to
@@ -210,13 +213,15 @@ K-208's both-halves slide, selection on the raw down). Additions:
   §5**; its grab is the shipped 12px slot at full lane height.
 - Cursor over a key: `resizeLeftRight` (shipped) — it is a horizontal-only drag.
 - A key drag selects on the down, moves in time, snaps with target indication, commits
-  once (all shipped); **Escape reverts** (new, P3).
+  once (all shipped); **Escape reverts** (TI-2, P3 — the shared `DragEscape`).
 - A hovered key brightens to `text_primary` at half strength — the pre-selection hint —
   and its time/value appear nowhere until the drag starts (P1).
 - **While a key drag or block stretch runs, a badge under the pointer reads
   `f<frame> · <value>`** (frame only for a multi-key stretch: `f<first>–f<last>`), in the
   block badge's own 8px mono on `surface_4`. This is the drawing's value-hint pill and the
-  study's "live readout"; it vanishes on release. The value is the one the lane's **own
+  study's "live readout"; it vanishes on release. Both halves shipped: the key drag's
+  `f<frame> · <value>` and, from TI-2, the stretch's `f<first>–f<last>` beside the handle
+  in hand. The value is the one the lane's **own
   keys** carry — a multi-axis row reads its lead axis, exactly as its diamonds do
   (`laneKeysOf`) — rather than the row's sampled reading: sampling crosses the bridge, and
   a drag would cross it on every pointer move (K-184). The pill flips to the key's other
@@ -230,16 +235,20 @@ Shipped: the box, the 3×6 end marks in 11px targets, the badge opening the Ease
 whole-frame stretch, one undo step, Reverse / Copy / Paste-at-playhead in the Keys strip.
 Corrections and additions:
 
-- **The keys must travel with the stretch.** They do not: `_KeyLaneState._frameOf`
-  compares the stretch's key set against the **escaped literal** `'\${widget.rowId}#\$i'`
-  (timeline_panel_frb.dart:8503) — backslashed dollars, so the string is never
-  interpolated, the `contains` never matches, and every diamond sits still until release
-  while the box moves. The fix is the two backslashes; the regression test drags a handle
-  and asserts a covered key's drawn frame moved before release.
-- The stretch handle snaps its dragged end to the shared targets (today: whole frames
-  only), same capture line, `Ctrl` suspends.
-- The badge count/span updates live through the stretch (shipped) and the whole gesture
-  reverts on Escape (new).
+- **The keys travel with the stretch** (TI-2). They did not: `_KeyLaneState._frameOf`
+  compared the stretch's key set against the **escaped literal** `'\${widget.rowId}#\$i'`
+  — backslashed dollars, so the string was never interpolated, the `contains` never
+  matched, and every diamond sat still until release while the box moved. The fix was the
+  two backslashes; the regression test drags a handle and asserts a covered key's drawn
+  frame moved before release (`timeline_block_test.dart`).
+- The stretch handle **snaps its dragged end to the shared targets** (TI-2), not only to
+  whole frames: the same capture line, `Ctrl` suspends. The pointer's own answer is kept
+  unsnapped and the snap taken from it on every move, or a caught end could not be pulled
+  off the target again; the dragged end alone is exempt from the whole-frame rounding,
+  since a target (another row's key) need not sit on a frame, and every key between it and
+  the anchor still rounds.
+- The badge count/span updates live through the stretch (TI-2 — it measured the resting
+  selection until then) and the whole gesture reverts on Escape (TI-2).
 - The box, marks and badge follow the selection into **Layers mode** identically (shipped
   — one `_LayerArea` draws both modes).
 
@@ -247,14 +256,14 @@ Corrections and additions:
 
 - Start conditions per §2.1 — any ground, including Keys-mode bands and bar rows off the
   bar. Additive with `Shift`/`Ctrl` held at drag start.
-- The box draws a `text_primary` hairline with a faint wash — **not the accent**
-  (`widgets/marquee.dart` draws `t.accent` today; P4). The graph's marquee restyles the
-  same way, one widget.
-- The catch walk must step by each layer's **real block height**: `_keysIn` and
-  `_selectedKeyPlaces` (timeline_panel_frb.dart, in `_LayerArea`) advance by `rowHeight`
-  per row and ignore `sequenceExtra`, so below an open Sequence view the box catches keys
-  offset by the view's extra height. Walk `row.height` per block, as the drag-slot maths
-  already does.
+- The box draws a `text_primary` hairline with a faint wash — **not the accent** (P4).
+  Landed in TI-2 (`widgets/marquee.dart`, `marqueeWashAlpha`); the graph's marquee is the
+  same widget, so it restyled with it, and `chrome_primitives_test.dart` holds the pair.
+- The catch walk steps by each layer's **real block height**: `_keysIn` and
+  `_selectedKeyPlaces` (timeline_panel_frb.dart, in `_LayerArea`) advanced by `rowHeight`
+  per row and ignored `sequenceExtra`, so below an open Sequence view the box caught keys
+  offset by the view's extra height. Landed in **TI-1**, not TI-2, with its regression
+  test in `timeline_selection_test.dart`.
 
 ### 4.5 Snapping (completing docs/07 §4.5)
 
@@ -393,9 +402,8 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 ### Bugs
 
 1. **[bug] Lane keys do not travel with a block stretch.** Escaped string literal
-   `'\${widget.rowId}#\$i'` in `_KeyLaneState._frameOf` —
-   `flutter_ui/lib/panels/timeline_panel_frb.dart:8503`. Source: K-458; the file's own
-   comment promises the live travel. (§4.3)
+   `'\${widget.rowId}#\$i'` in `_KeyLaneState._frameOf`. Source: K-458; the file's own
+   comment promises the live travel. (§4.3) — **landed, TI-2.**
 2. **[bug] Every keyframe mark draws a centre seam**, same-shape pairs included: two
    anti-aliased `drawPath` calls per mark in `_LaneKeysPainter.paint`
    (timeline_panel_frb.dart ~9013, geometry at `keyHalfPath` :159). Source: owner finding
@@ -412,6 +420,7 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 5. **[bug] Marquee and block box misalign below an open Sequence view**: `_keysIn` /
    `_selectedKeyPlaces` step by `rowHeight` and ignore `sequenceExtra`
    (timeline_panel_frb.dart, `_LayerArea`). Source: K-248 heights vs K-458 walk. (§4.4)
+   — **landed, TI-1.**
 6. **[bug] Selection colours off-token**: graph selected key in `t.accent`
    (graph_editor_frb.dart ~2668); marquee box in `t.accent` (`widgets/marquee.dart`);
    handle lines/dots in `t.warning` (~3017, ~3090). Source: K-439/§3.1's closed accent
@@ -442,15 +451,18 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     selects the property only). (§2.1)
 18. **[missing] Snapping for bar drags, work-area handles, marker drags and the block
     stretch**, each with the capture line (docs/07 §4.5's own still-to-build;
-    timeline_extras_frb.dart work/marker drags commit unsnapped). (§4.5, §7)
-19. **[missing] Escape reverts any drag in flight** (study §2.2; P3) — bar, lane key,
-    stretch, marker, work-area, graph drags all lack it.
+    timeline_extras_frb.dart work/marker drags commit unsnapped). (§4.5, §7) — **the
+    block stretch landed in TI-2**; bar, work-area and marker drags stay with TI-9.
+19. **[missing] Escape reverts any drag in flight** (study §2.2; P3). **Landed in TI-2**
+    for the bar, the lane key and the block stretch, on one shared `DragEscape`
+    (`widgets/drag_escape.dart`); the marker and work-area drags adopt it in TI-9 and the
+    graph's in TI-7 — a line each, now the mechanism exists.
 20. **[missing] Double-click resets the work area / creates a marker** (docs/07 §4.1;
     ruler has no double-tap, timeline_extras_frb.dart ~1253).
 21. **[missing] `B`/`N` work-area keymap actions** (docs/07 §4.1; no such actions in the
     keymap). Each needs its engine label + arb pair (K-303).
-22. **[missing] Value labels in a fixed right-hand gutter** (§12A.2; painter pins left,
-    graph_editor_frb.dart ~2466). (§6.3)
+22. ~~**[missing] Value labels in a fixed right-hand gutter**~~ — **landed, TI-6**
+    (§12A.2). (§6.3)
 23. **[missing] Edge-follow scrolling during playback; `=`/`-`/`\` zoom keys**
     (docs/07 §4.6 still-to-build).
 24. **[missing] Acceleration lens, auto view, beat-marker lines in the graph, waveform
@@ -472,7 +484,7 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
     boxed (study §2.2, PLAN A2). Shared with Effect controls; listed here because the
     fold rows scrub too.
 28. **[polish] Marquee/block visuals to the drawings** — `text_primary` hairline box, the
-    12% wash (see bug 6).
+    12% wash (see bug 6). — **landed, TI-2.**
 
 ---
 

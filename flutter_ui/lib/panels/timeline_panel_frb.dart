@@ -50,6 +50,7 @@ import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/drag_escape.dart';
 import '../widgets/marquee.dart';
 import '../widgets/time_readout.dart';
 // The ruler helpers moved with the ruler (shared with the graph editor); the
@@ -8122,6 +8123,25 @@ class _LayerArea extends StatelessWidget {
     if (planted) onChanged();
   }
 
+  /// One key picked: alone, or toggled in and out when [additive] (K-500 §2.1).
+  ///
+  /// One implementation, because a click has more than one way in now: the
+  /// diamond's own gesture, and a click on the block handle standing over it
+  /// (§2.1's carve-out, closed here).
+  void _selectKey(String id, bool additive) {
+    // A copy, never the live set: `onKeysSelected` clears it before it reads
+    // what it was handed.
+    final next = <String>{...selectedKeys};
+    if (additive) {
+      if (!next.remove(id)) next.add(id);
+    } else {
+      next
+        ..clear()
+        ..add(id);
+    }
+    onKeysSelected(next);
+  }
+
   /// Every **selected** key, with where it sits: the one walk the block box,
   /// its badge, the stretch commit, Reverse and Stagger all read.
   ///
@@ -8574,11 +8594,14 @@ class _LayerArea extends StatelessWidget {
                               axis: axis,
                               stretch: stretch,
                               magnet: magnet,
+                              snapTargets: snap,
                               fpsNum: fpsNum,
                               fpsDen: fpsDen,
                               project: project,
                               onEase: onEase,
                               onChanged: onChanged,
+                              onSelectKey: _selectKey,
+                              onKeyMenu: onKeyMenu,
                             )),
                           ],
                         ),
@@ -8689,20 +8712,7 @@ class _LayerArea extends StatelessWidget {
       selectedKeys: selectedKeys,
       stretch: stretch,
       onKeyMenu: (index, position) => onKeyMenu('$rowId#$index', position),
-      onSelectKey: (index, additive) {
-        final id = '$rowId#$index';
-        // A copy, never the live set: `onKeysSelected` clears it before it
-        // reads what it was handed.
-        final next = <String>{...selectedKeys};
-        if (additive) {
-          if (!next.remove(id)) next.add(id);
-        } else {
-          next
-            ..clear()
-            ..add(id);
-        }
-        onKeysSelected(next);
-      },
+      onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
       onChanged: onChanged,
     );
   }
@@ -8857,6 +8867,17 @@ class _KeyLaneState extends State<_KeyLane> {
   /// without it a key that jumps reads as a fault rather than a service.
   SnapTarget? _caught;
 
+  /// `Escape` while the button is down puts the key back and writes nothing
+  /// (P3). The drag was staged in Dart and had written nothing yet, so the way
+  /// out costs no undo step — it simply never becomes one.
+  final DragEscape _escape = DragEscape();
+
+  @override
+  void dispose() {
+    _escape.dispose();
+    super.dispose();
+  }
+
   /// Where key [i] draws — its own time, plus whichever gesture has hold of
   /// it: this lane's own drag, or the block stretch running across every lane.
   double _frameOf(int i) {
@@ -8865,7 +8886,12 @@ class _KeyLaneState extends State<_KeyLane> {
     // handle and the diamond are two gestures on one pointer — so the stretch
     // is answered first and answered whole.
     final held = widget.stretch.value;
-    if (held != null && held.keys.contains('\${widget.rowId}#\$i')) {
+    // **Interpolated, not escaped.** This read `'\${widget.rowId}#\$i'` — a
+    // literal dollar sign and a literal `i` — so the set never held a matching
+    // id, the test never passed, and every diamond sat still while the box
+    // moved over it until the release put them somewhere they had not been
+    // seen to travel (§4.3).
+    if (held != null && held.keys.contains('${widget.rowId}#$i')) {
       return held.frameOf(
         base,
         whole: widget.magnet &&
@@ -8896,6 +8922,17 @@ class _KeyLaneState extends State<_KeyLane> {
     );
     _caught = snapped.caught;
     return snapped.frame;
+  }
+
+  /// Put the key back where the drag found it, leaving nothing behind — what
+  /// `Escape` does, and what a cancelled gesture does.
+  void _abandon() {
+    if (!mounted) return;
+    setState(() {
+      _dragging = null;
+      _deltaPx = 0;
+      _caught = null;
+    });
   }
 
   void _commit(int index) {
@@ -9022,14 +9059,22 @@ class _KeyLaneState extends State<_KeyLane> {
                     _dragging = i;
                     _deltaPx = 0;
                   });
+                  _escape.begin(_abandon);
                 },
-                onHorizontalDragUpdate: (d) =>
-                    setState(() => _deltaPx += d.delta.dx),
-                onHorizontalDragEnd: (_) => _commit(i),
-                onHorizontalDragCancel: () => setState(() {
-                  _dragging = null;
-                  _deltaPx = 0;
-                }),
+                // Ignored once `Escape` has taken the drag: the pointer keeps
+                // travelling after it, and a key that started following again
+                // would make the way out look like a stutter.
+                onHorizontalDragUpdate: (d) {
+                  if (!_escape.running) return;
+                  setState(() => _deltaPx += d.delta.dx);
+                },
+                onHorizontalDragEnd: (_) {
+                  if (_escape.end()) _commit(i);
+                },
+                onHorizontalDragCancel: () {
+                  _escape.end();
+                  _abandon();
+                },
               ),
             ),
           ),
@@ -9145,28 +9190,44 @@ class _RowDividerPainter extends CustomPainter {
 /// **Shared, not Keys-only.** It is drawn by the lane area, which is the same
 /// widget in Layers mode and in Keys mode, so Layers gains the block tools by
 /// the same code rather than by a second copy of it (K-441, K-458).
-class _KeyBlockOverlay extends StatelessWidget {
+class _KeyBlockOverlay extends StatefulWidget {
   /// The selected keys, top to bottom, from the area's one walk.
   final List<_SelectedKey> places;
   final TimelineAxis axis;
   final ValueNotifier<KeyStretch?> stretch;
   final bool magnet;
+
+  /// Everything the stretched end can land on — the area's one gathered list,
+  /// the same one a lane key's drag snaps against (§4.3, docs/07 §4.5). A
+  /// handle used to reach whole frames and nothing else, so a block could not
+  /// be pulled onto the marker or the playhead it was being aligned to.
+  final List<SnapTarget> snapTargets;
   final int fpsNum;
   final int fpsDen;
   final ProjectReference? project;
   final ValueChanged<Offset> onEase;
   final VoidCallback onChanged;
 
+  /// A click on a handle falls through to the key beneath it: a handle stands
+  /// exactly over the block's first and last key, and a control that took the
+  /// click and did nothing with it would cost those two keys the ordinary
+  /// gestures every other key answers (P5, §2.1).
+  final void Function(String id, bool additive) onSelectKey;
+  final void Function(String id, Offset position) onKeyMenu;
+
   const _KeyBlockOverlay({
     required this.places,
     required this.axis,
     required this.stretch,
     required this.magnet,
+    required this.snapTargets,
     required this.fpsNum,
     required this.fpsDen,
     required this.project,
     required this.onEase,
     required this.onChanged,
+    required this.onSelectKey,
+    required this.onKeyMenu,
   });
 
   /// What the selection measures. Null when there is no block — fewer than two
@@ -9182,10 +9243,45 @@ class _KeyBlockOverlay extends StatelessWidget {
     return KeyBlock(first: first, last: last, count: places.length);
   }
 
+  @override
+  State<_KeyBlockOverlay> createState() => _KeyBlockOverlayState();
+}
+
+class _KeyBlockOverlayState extends State<_KeyBlockOverlay> {
+  /// Where the pointer has put the dragged end, in frames, **before the snap**.
+  ///
+  /// Kept apart from the stretch's own `to` for the reason every drag here
+  /// keeps a running total: adding each event's travel to the *snapped* answer
+  /// would make the snap sticky — a caught end would drag the next event's
+  /// delta out of the target it had just landed on and back into it, so a
+  /// block could not be pulled off a target it had passed.
+  double _rawTo = 0;
+
+  /// What the stretch last landed on, so the capture can be drawn — the same
+  /// indication a lane key's drag gives (docs/07 §4.5).
+  SnapTarget? _caught;
+
+  /// The frames the block's own keys sit on, gathered when the handle was
+  /// taken hold of: they all move, so none of them is a place to land.
+  Set<double> _moving = const {};
+
+  /// Which end is in hand, so the live readout rides beside it.
+  bool _draggingStart = false;
+
+  /// `Escape` abandons the stretch: the box goes back over the keys it started
+  /// on and nothing is written (P3, §4.3).
+  final DragEscape _escape = DragEscape();
+
+  @override
+  void dispose() {
+    _escape.dispose();
+    super.dispose();
+  }
+
   /// Whether a drag lands on whole frames — the magnet, suspended while Ctrl
   /// is held, exactly as a single key's drag reads it (docs/07 §4.5).
   bool get _whole =>
-      magnet &&
+      widget.magnet &&
       !snapSuspended(
           controlPressed: HardwareKeyboard.instance.isControlPressed);
 
@@ -9197,50 +9293,94 @@ class _KeyBlockOverlay extends StatelessWidget {
   /// list rather than one key at a time.
   void commit(KeyStretch moved) {
     final byRow = <String, (_SelectedKey, Map<int, BridgeRational>)>{};
-    for (final place in places) {
+    for (final place in widget.places) {
       if (!moved.keys.contains('${place.rowId}#${place.index}')) continue;
       final frame = moved.frameOf(place.frame, whole: _whole);
       (byRow[place.rowId] ??= (place, {})).$2[place.index] =
-          timeOfSubframe(frame, fpsNum, fpsDen);
+          timeOfSubframe(frame, widget.fpsNum, widget.fpsDen);
     }
     if (byRow.isEmpty) return;
     var changed = false;
-    asOneUndoStep(project, () {
+    asOneUndoStep(widget.project, () {
       for (final (place, times) in byRow.values) {
         if (moveLaneKeys(entry: place.entry, row: place.row, times: times)) {
           changed = true;
         }
       }
     });
-    if (changed) onChanged();
+    if (changed) widget.onChanged();
+  }
+
+  /// Put the block back where the stretch found it and write nothing.
+  void _abandon() {
+    widget.stretch.value = null;
+    if (!mounted) return;
+    setState(() => _caught = null);
+  }
+
+  /// The id of the key the handle at the block's [start] (or last) end is
+  /// standing over at [areaY] — what a click on the handle falls through to.
+  ///
+  /// Null where the handle covers a row with no selected key at that frame,
+  /// which is every row the block merely spans: the box reaches from the top
+  /// row to the bottom one whether or not the rows between it hold anything
+  /// at that end. The block's resting frames, not the box's live ones — a tap
+  /// is a gesture that never became a stretch.
+  String? _keyUnderHandle({required bool start, required double areaY}) {
+    final block = _KeyBlockOverlay.blockOf(widget.places);
+    if (block == null) return null;
+    final frame = start ? block.first : block.last;
+    for (final p in widget.places) {
+      if (areaY < p.top || areaY >= p.top + p.height) continue;
+      if ((p.frame - frame).abs() > 1e-9) continue;
+      return '${p.rowId}#${p.index}';
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    if (blockOf(places) == null) return const SizedBox.shrink();
+    if (_KeyBlockOverlay.blockOf(widget.places) == null) {
+      return const SizedBox.shrink();
+    }
     return ValueListenableBuilder<KeyStretch?>(
-      valueListenable: stretch,
+      valueListenable: widget.stretch,
       builder: (context, live, _) {
-        final block = blockOf(places);
+        final block = _KeyBlockOverlay.blockOf(widget.places);
         if (block == null) return const SizedBox.shrink();
         // While a stretch is in flight the box follows it, so the badge counts
         // the span the release will actually write rather than the one the
         // gesture started from.
         double frameOf(double f) =>
             live == null ? f : live.frameOf(f, whole: _whole);
-        var top = places.first.top;
-        var bottom = places.first.top + places.first.height;
-        for (final p in places) {
+        var top = widget.places.first.top;
+        var bottom = widget.places.first.top + widget.places.first.height;
+        for (final p in widget.places) {
           if (p.top < top) top = p.top;
           if (p.top + p.height > bottom) bottom = p.top + p.height;
         }
-        final left = axis.xOf(frameOf(block.first));
-        final right = axis.xOf(frameOf(block.last));
+        final first = frameOf(block.first);
+        final last = frameOf(block.last);
+        final left = widget.axis.xOf(first);
+        final right = widget.axis.xOf(last);
         final boxTop = top + _blockBoxInset;
         final boxBottom = bottom - _blockBoxInset;
+        final caught = _caught;
         return Stack(
           children: [
+            // What the stretch landed on, marked while it holds it — the same
+            // capture a lane key's drag draws, because it is the same service
+            // (docs/07 §4.5).
+            if (live != null && caught != null)
+              Positioned(
+                key: const ValueKey('tl-block-snap-caught'),
+                left: widget.axis.xOf(caught.frame) - 0.5,
+                top: boxTop,
+                height: boxBottom - boxTop,
+                width: 1,
+                child: IgnorePointer(child: ColoredBox(color: t.accent)),
+              ),
             // The box ignores pointers: it covers the very keys it holds, and
             // one that ate their clicks would make a selected key the one key
             // that cannot be picked up again.
@@ -9260,7 +9400,16 @@ class _KeyBlockOverlay extends StatelessWidget {
             ),
             _handle(t, x: left, top: boxTop, bottom: boxBottom, start: true),
             _handle(t, x: right, top: boxTop, bottom: boxBottom, start: false),
-            _badge(t, block, right: right, top: boxTop),
+            // Measured from where the box is *now*, so the span it reports is
+            // the one the release will write rather than the one the gesture
+            // started from.
+            _badge(t, KeyBlock(first: first, last: last, count: block.count),
+                right: right, top: boxTop),
+            // The stretch's own live readout, under the hand and gone on
+            // release (§4.2, P1).
+            if (live != null)
+              _stretchHint(first, last,
+                  left: left, right: right, bottom: boxBottom),
           ],
         );
       },
@@ -9291,33 +9440,92 @@ class _KeyBlockOverlay extends StatelessWidget {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             supportedDevices: dragDevices,
+            // **From the down, not from the slop.** A handle that also answers
+            // a tap has a tap recogniser beside its drag one, and a drag that
+            // has to out-wait a competitor starts where the slop was passed —
+            // which leaves the mark a pointer's width behind the cursor for the
+            // rest of the gesture. Taken from the down, the mark stays exactly
+            // under the hand, which is what a precision handle is for.
+            dragStartBehavior: DragStartBehavior.down,
+            // **The click falls through to the key beneath** (§2.1). The
+            // handle stands exactly over the block's end key and is opaque, so
+            // without this the two keys a block cares about most were the only
+            // two that could not be clicked or right-clicked at all.
+            onTapUp: (d) {
+              final id = _keyUnderHandle(
+                  start: start, areaY: top + d.localPosition.dy);
+              if (id == null) return;
+              final keys = HardwareKeyboard.instance;
+              widget.onSelectKey(
+                  id,
+                  keys.isShiftPressed ||
+                      keys.isControlPressed ||
+                      keys.isMetaPressed);
+            },
+            onSecondaryTapUp: (d) {
+              final id = _keyUnderHandle(
+                  start: start, areaY: top + d.localPosition.dy);
+              if (id != null) widget.onKeyMenu(id, d.globalPosition);
+            },
             onHorizontalDragStart: (_) {
-              final block = blockOf(places);
+              final block = _KeyBlockOverlay.blockOf(widget.places);
               if (block == null) return;
               final from = start ? block.first : block.last;
               final anchor = start ? block.last : block.first;
-              stretch.value = KeyStretch(
-                keys: {for (final p in places) '${p.rowId}#${p.index}'},
+              _rawTo = from;
+              _draggingStart = start;
+              // Every key in hand moves, so none of them is a place to land.
+              _moving = {for (final p in widget.places) p.frame};
+              widget.stretch.value = KeyStretch(
+                keys: {for (final p in widget.places) '${p.rowId}#${p.index}'},
                 anchor: anchor,
                 from: from,
                 to: from,
               );
+              _escape.begin(_abandon);
             },
             onHorizontalDragUpdate: (d) {
-              final held = stretch.value;
-              if (held == null || axis.perFrame <= 0) return;
-              stretch.value = held.movedTo(clampStretch(
+              final held = widget.stretch.value;
+              if (held == null ||
+                  widget.axis.perFrame <= 0 ||
+                  !_escape.running) {
+                return;
+              }
+              // The pointer's own answer first, held inside the block's bounds,
+              // and the snap taken from that — so a caught end lets go again as
+              // soon as the pointer has travelled past the target.
+              _rawTo = clampStretch(
                 anchor: held.anchor,
                 from: held.from,
-                to: held.to + d.delta.dx / axis.perFrame,
+                to: _rawTo + d.delta.dx / widget.axis.perFrame,
+              );
+              final snapped = snapFrame(
+                frame: _rawTo,
+                targets: widget.snapTargets.where((s) =>
+                    s.kind != SnapKind.keyframe || !_moving.contains(s.frame)),
+                perFrame: widget.axis.perFrame,
+                magnet: _whole,
+              );
+              setState(() => _caught = snapped.caught);
+              widget.stretch.value = held.movedTo(clampStretch(
+                anchor: held.anchor,
+                from: held.from,
+                to: snapped.frame,
               ));
             },
             onHorizontalDragEnd: (_) {
-              final held = stretch.value;
-              stretch.value = null;
-              if (held != null) commit(held);
+              final held = widget.stretch.value;
+              widget.stretch.value = null;
+              if (mounted) setState(() => _caught = null);
+              // Nothing to commit when `Escape` already took the gesture: it
+              // put the block back, and put back is put back whatever the
+              // pointer did afterwards.
+              if (_escape.end() && held != null) commit(held);
             },
-            onHorizontalDragCancel: () => stretch.value = null,
+            onHorizontalDragCancel: () {
+              _escape.end();
+              _abandon();
+            },
             child: Center(
               child: SizedBox(
                 width: _blockHandleWidth,
@@ -9352,7 +9560,7 @@ class _KeyBlockOverlay extends StatelessWidget {
               onTap: () {
                 final box = badgeContext.findRenderObject() as RenderBox?;
                 if (box == null) return;
-                onEase(box.localToGlobal(Offset.zero));
+                widget.onEase(box.localToGlobal(Offset.zero));
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -9372,6 +9580,33 @@ class _KeyBlockOverlay extends StatelessWidget {
           ),
         ),
       );
+
+  /// The live readout a stretch summons: where the block's two ends have
+  /// reached, under the hand and gone on release (§4.2, P1).
+  ///
+  /// Frames only — the badge above says how many keys and how wide, and a
+  /// block of many keys has no one value to report. It rides at the *dragged*
+  /// end, below the box, which is where the pointer is and clear of the badge
+  /// at the top right.
+  Widget _stretchHint(
+    double first,
+    double last, {
+    required double left,
+    required double right,
+    required double bottom,
+  }) {
+    final x = _draggingStart ? left : right;
+    // Beside the handle, or on its other side where the axis has run out.
+    const pill = 76.0;
+    return Positioned(
+      key: const ValueKey('tl-block-stretch-hint'),
+      left: x + 8 + pill > widget.axis.width ? x - 8 - pill : x + 8,
+      top: bottom + 2,
+      child: HintPill(
+        text: l10n.timelineStretchHint(first.round(), last.round()),
+      ),
+    );
+  }
 }
 
 /// A lane's keyframe diamonds: one per key, in `animated` (§3.1) — the token
@@ -10034,6 +10269,28 @@ class _BarState extends State<_Bar> {
   double _deltaPx = 0;
   BarGrab? _grab;
 
+  /// `Escape` while the button is down puts the bar back and writes nothing
+  /// (P3, §4.1). The gesture stages in Dart and commits one `set_span` on
+  /// release, so abandoning it is simply not making that call.
+  final DragEscape _escape = DragEscape();
+
+  @override
+  void dispose() {
+    _escape.dispose();
+    super.dispose();
+  }
+
+  /// Put the bar back where the drag found it, preview and all.
+  void _abandon() {
+    if (!mounted) return;
+    setState(() {
+      _delta = 0;
+      _deltaPx = 0;
+      _grab = null;
+      widget.dragPreview.value = null;
+    });
+  }
+
   /// Where the pointer went DOWN, deciding edge-trim versus move. Down, not
   /// drag-start: a drag's start position is where the slop was exceeded,
   /// which read a fast edge grab as a grab of the middle.
@@ -10177,14 +10434,22 @@ class _BarState extends State<_Bar> {
                     ? null
                     // No select here: every drag begins with the down, and the
                     // down already selected.
-                    : (d) => setState(() {
+                    : (d) {
+                        setState(() {
                           _delta = 0;
                           _deltaPx = 0;
                           _grab = barGrabAt(_downDx, width);
-                        }),
+                        });
+                        _escape.begin(_abandon);
+                      },
                 onHorizontalDragUpdate: widget.razor || held
                     ? null
-                    : (d) => setState(() {
+                    // Nothing moves once `Escape` has taken the drag, though
+                    // the pointer carries on: the bar is back where it started
+                    // and stays there until the button comes up.
+                    : (d) {
+                        if (!_escape.running) return;
+                        setState(() {
                           _deltaPx += d.delta.dx;
                           // The pointer keeps travelling; the bar does not.
                           // Held against the source's ends (K-211) and against
@@ -10201,18 +10466,19 @@ class _BarState extends State<_Bar> {
                             bounds: widget.bounds,
                           );
                           _publishPreview();
-                        }),
+                        });
+                      },
                 onHorizontalDragEnd: widget.razor || held
                     ? null
-                    : (_) => _commit(inFrame, outFrame),
+                    : (_) {
+                        if (_escape.end()) _commit(inFrame, outFrame);
+                      },
                 onHorizontalDragCancel: widget.razor || held
                     ? null
-                    : () => setState(() {
-                          _delta = 0;
-                          _deltaPx = 0;
-                          _grab = null;
-                          widget.dragPreview.value = null;
-                        }),
+                    : () {
+                        _escape.end();
+                        _abandon();
+                      },
                 child: Container(
                   key: ValueKey<String>(
                       'tl-bar-fill-${widget.entry.layer.internallayerId}'),

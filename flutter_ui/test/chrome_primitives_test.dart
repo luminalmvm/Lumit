@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
+import 'package:lumit_flutter/widgets/marquee.dart';
 
 void main() {
   final t = LumitTheme.dark();
@@ -289,5 +290,40 @@ void main() {
           reason: '$face: an unconstrained button is still its label\'s own '
               'height');
     }
+  });
+
+  /// **What is selected is one colour, and it is not the accent** (K-439,
+  /// docs/impl/timeline-interaction.md P4). The marquee is shared by the
+  /// Timeline's lanes and the graph, and it drew its box in `accent` — where
+  /// the closed list is the playhead, the one filled button and the active
+  /// tab's tick, and a box in it read as a second playhead being dragged out.
+  testWidgets('the marquee box is text_primary over a faint wash',
+      (tester) async {
+    await tester.pumpWidget(host(SizedBox(
+      width: 200,
+      height: 200,
+      child: MarqueeSelect(onSelect: (_, __) {}, onClear: () {}),
+    )));
+    await tester.pump();
+
+    final from =
+        tester.getTopLeft(find.byType(MarqueeSelect)) + const Offset(20, 20);
+    final gesture = await tester.startGesture(from);
+    await tester.pump(const Duration(milliseconds: 60));
+    await gesture.moveBy(const Offset(40, 40));
+    await tester.pump();
+    await gesture.moveBy(const Offset(40, 40));
+    await tester.pump();
+
+    final d = tester
+        .widget<Container>(find.descendant(
+          of: find.byType(MarqueeSelect),
+          matching: find.byType(Container),
+        ))
+        .decoration! as BoxDecoration;
+    expect((d.border! as Border).top.color, t.textPrimary);
+    expect(d.color, t.textPrimary.withValues(alpha: marqueeWashAlpha));
+    await gesture.up();
+    await tester.pumpAndSettle();
   });
 }

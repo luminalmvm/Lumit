@@ -8615,6 +8615,29 @@ and reads worse. And the two calls have to be paired, so the Flutter side always
 one in a `finally` (`asOneUndoStep` in `flutter_ui/lib/panels/layer_fold_frb.dart`): a
 group left open would quietly stop recording history at all.
 
+### Letting go of a drag half way: Escape
+
+Everything in the Timeline that you drag — a layer's bar, a keyframe, the handle at the
+end of a block — works the same way underneath. Nothing is written to the document while
+the button is down. The panel remembers how far the pointer has travelled, draws the thing
+where that puts it, and makes exactly one edit when you let go. That is what makes a drag
+one undo step, and it is also what gives a drag a way *out*: if nothing has been written
+yet, then abandoning the gesture costs nothing at all — there is no edit to take back,
+because there was never an edit.
+
+So pressing `Escape` while the button is still down puts everything back where the drag
+found it and writes nothing. The pointer carries on moving, and nothing follows it any
+more; letting go afterwards does nothing either. This is the behaviour the study found in
+Caddis and the reason it feels safe to try a drag there: a gesture you have started is
+never a gesture you are committed to.
+
+The mechanism is one small object, `DragEscape` (`flutter_ui/lib/widgets/drag_escape.dart`),
+which each draggable thing keeps one of. It is told at the start of a gesture how to put
+things back, it listens for `Escape` only while the gesture runs, and at the release it
+answers one question: is there anything to commit? A drag that was escaped answers no.
+Sharing it is the point — a way out that only some drags had would be worse than none,
+because the one time it is wanted is the time you cannot remember which drags have it.
+
 
 ## 18. The Viewer's two strips, in plain terms
 
