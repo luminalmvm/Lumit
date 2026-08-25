@@ -112,6 +112,32 @@
       );
     }
 
+    // A hash that is still random at screen coordinates, and the value noise
+    // built on it. The hash above feeds its input straight to sin(), and the
+    // dot of two pixel coordinates comes to a few hundred thousand - a number
+    // whose sine a 32-bit float can no longer tell you anything useful about.
+    // What comes back is not noise but wide, soft bands, which is precisely the
+    // artifacting that appeared across the field whenever the grain was built
+    // on it. The field itself never noticed, because its own coordinates never
+    // leave single figures. This one folds its input down with fract() before
+    // it does anything else, so the size of the input cannot matter.
+    float phash(vec2 p) {
+      vec3 q = fract(vec3(p.xyx) * 0.1031);
+      q += dot(q, q.yzx + 33.33);
+      return fract((q.x + q.y) * q.z);
+    }
+
+    float pnoise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(phash(i), phash(i + vec2(1.0, 0.0)), u.x),
+        mix(phash(i + vec2(0.0, 1.0)), phash(i + vec2(1.0, 1.0)), u.x),
+        u.y
+      );
+    }
+
     // Interleaved gradient noise. Plain random noise clumps - by chance it puts
     // eight lit pixels in one place and none in the next, which the eye reads
     // as blotches rather than as an even scatter. This spreads its values out
@@ -177,7 +203,7 @@
       // too, drawn now instead of repeated. It goes on the field's own colour,
       // so it thins out with the field and never lands on the page's black.
       vec2 gp = gl_FragCoord.xy;
-      float g = noise(gp * 0.8) * 0.62 + noise(gp * 1.9) * 0.38;
+      float g = pnoise(gp * 0.8) * 0.62 + pnoise(gp * 1.9) * 0.38;
       col += (g - 0.5) * 0.05;
 
       // One level of dither underneath it, well below anything the eye reads
