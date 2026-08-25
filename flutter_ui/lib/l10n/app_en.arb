@@ -9057,11 +9057,11 @@
   "@projectColourWorkingSpaceValue": {
     "description": "Project settings, Colour group: the value of the working-space row. Rec. 709 is a standard's number and stays as it is; linear describes the arithmetic."
   },
-  "tipExportColourManagedBy": "Chosen in File ▸ Project settings",
+  "tipExportColourManagedBy": "Set in Project settings",
   "@tipExportColourManagedBy": {
     "description": "Export dialog, Colour section: the hover reason on the Managed by row, which shows the project's colour configuration but does not change it. File and Project settings are the menu and the window of those names."
   },
-  "tipExportColourSpaceUnavailable": "This project's colour configuration cannot deliver this space",
+  "tipExportColourSpaceUnavailable": "Not in this configuration",
   "@tipExportColourSpaceUnavailable": {
     "description": "Export dialog, Colour section: the hover reason on a colour-space row that is listed but cannot be chosen, because the configuration cannot work out the transform it would need."
   },
