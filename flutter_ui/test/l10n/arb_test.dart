@@ -19,7 +19,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// withdrawn: a tooltip is a name, so the same limit holds for every one of
 /// them. A string that will not fit belongs in a settings row's own line, in an
 /// empty state, or nowhere.
-const _tooltipWordLimit = 5;
+///
+/// The limit is **two**, which is what docs/07-UI-SPEC.md §13.2 and
+/// docs/15-DESIGN.md have said since K-440 — "one or two words, never more".
+/// It stood at five here for as long as the copy did, so the gate agreed with
+/// the older rule and let a sentence through as long as it was a short one.
+/// A shortcut no longer fits beside the name; the keymap teaches those, and
+/// the toolbar still appends the live chord to the tool's own label, which is
+/// composed in code and not a string in this file.
+const _tooltipWordLimit = 2;
 
 /// docs/01-GLOSSARY.md §9, as it applies to what the user reads. `render` is
 /// missing on purpose: it is banned only for writing a file, and the Timeline's
@@ -85,9 +93,9 @@ void main() {
     expect(
       long,
       isEmpty,
-      reason: 'tooltips are the control\'s name and its shortcut '
-          '(docs/07-UI-SPEC.md §13.2, K-482) — one or two words where two will '
-          'do, and never more than $_tooltipWordLimit. Shorten these; there is '
+      reason: 'a tooltip is the control\'s name '
+          '(docs/07-UI-SPEC.md §13.2, K-482) — one word where one will do, and '
+          'never more than $_tooltipWordLimit. Shorten these; there is '
           'no exception list to add them to.',
     );
   });

@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "@@x-notes": "Lumit's user-facing text, British English (K-005), the single source translation works from (K-303). Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): under five words, two where two will do.",
+  "@@x-notes": "Lumit's user-facing text, British English (K-005), the single source translation works from (K-303). Edit this file; every other app_*.arb in this folder comes back from Crowdin and is overwritten by the next sync. Voice: sentence case, calm, no exclamation marks, no emoji, glossary terms exactly (docs/01-GLOSSARY.md section 9 - layer not track, speed not velocity, Retime not time remap, export not render, playhead not CTI). Tooltips are the control's name, not a sentence about it (docs/07-UI-SPEC.md section 13.2): one or two words, never more.",
   "aboutBlurb": "A motion-graphics and compositing editor. Free software under the GNU General Public Licence, version 3.",
   "@aboutBlurb": {
     "description": "About window: what Lumit is, and its licence. The licence name is a proper noun — keep it recognisable, and do not translate \"GNU\"."
@@ -1549,7 +1549,7 @@
   "@fxConsoleNothingSelected": {
     "description": "Shown in the middle of the FX console’s radial menu when nothing is selected."
   },
-  "fxConsoleSnapshotTip": "Save a snapshot of this frame",
+  "fxConsoleSnapshotTip": "Save snapshot",
   "@fxConsoleSnapshotTip": {
     "description": "Tooltip on the FX console’s snapshot button."
   },
@@ -4971,7 +4971,7 @@
   "@swatchForget": {
     "description": "Row of the right-click menu on a colour kept on the project's shelf, inside the colour picker. Takes the colour off the shelf."
   },
-  "swatchKeep": "Keep this colour",
+  "swatchKeep": "Keep colour",
   "@swatchKeep": {
     "description": "Tooltip on the plus at the end of the project colour shelf, inside the colour picker. Adds the colour being edited to the project's shelf."
   },
@@ -5201,76 +5201,76 @@
   },
   "tipAddKeyframe": "Add keyframe",
   "@tipAddKeyframe": {
-    "description": "Tooltip. Under five words."
+    "description": "Tooltip. One or two words."
   },
-  "tipAdjustmentOff": "Adjustment layer off",
+  "tipAdjustmentOff": "Adjustment off",
   "@tipAdjustmentOff": {
-    "description": "Tooltip on the adjustment switch in the Timeline's Modes column, on a layer that is not acting as an adjustment layer — clicking it switches it on. Under five words."
+    "description": "Tooltip on the adjustment switch in the Timeline's Modes column, on a layer that is not acting as an adjustment layer — clicking it switches it on. One or two words."
   },
-  "tipAdjustmentOn": "Adjustment layer on",
+  "tipAdjustmentOn": "Adjustment on",
   "@tipAdjustmentOn": {
-    "description": "Tooltip on the adjustment switch in the Timeline's Modes column, on a layer that is acting as an adjustment layer — clicking it switches it off and the layer is itself again. Under five words."
+    "description": "Tooltip on the adjustment switch in the Timeline's Modes column, on a layer that is acting as an adjustment layer — clicking it switches it off and the layer is itself again. One or two words."
   },
   "tipAlphaMatte": "Alpha matte",
   "@tipAlphaMatte": {
-    "description": "Tooltip: the matte uses the other layer's transparency. Under five words."
+    "description": "Tooltip: the matte uses the other layer's transparency. One or two words."
   },
   "tipAnimate": "Animate",
   "@tipAnimate": {
-    "description": "Tooltip on the stopwatch that starts animating a property. Under five words."
+    "description": "Tooltip on the stopwatch that starts animating a property. One or two words."
   },
-  "tipAnimatedOnly": "Show animated only",
+  "tipAnimatedOnly": "Animated only",
   "@tipAnimatedOnly": {
-    "description": "Tooltip on the Timeline’s Animated filter while it is off: turning it on lists only keyframed properties. Under five words."
+    "description": "Tooltip on the Timeline’s Animated filter while it is off: turning it on lists only keyframed properties. One or two words."
   },
-  "tipAnimatedShowing": "Showing animated only",
+  "tipAnimatedShowing": "Showing animated",
   "@tipAnimatedShowing": {
-    "description": "Tooltip on the Timeline’s Animated filter while it is on. Under five words."
+    "description": "Tooltip on the Timeline’s Animated filter while it is on. One or two words."
   },
   "tipAspectLocked": "Aspect locked",
   "@tipAspectLocked": {
-    "description": "Tooltip on the padlock beside width and height, when the ratio is kept. Under five words."
+    "description": "Tooltip on the padlock beside width and height, when the ratio is kept. One or two words."
   },
   "tipAspectUnlocked": "Aspect unlocked",
   "@tipAspectUnlocked": {
-    "description": "Tooltip on the padlock beside width and height, when the ratio is free. Under five words."
+    "description": "Tooltip on the padlock beside width and height, when the ratio is free. One or two words."
   },
-  "tipAutoFitOff": "Auto fit off",
+  "tipAutoFitOff": "Auto-fit off",
   "@tipAutoFitOff": {
-    "description": "Tooltip on the graph editor's Auto fit button, when it is off. Under five words."
+    "description": "Tooltip on the graph editor's Auto fit button, when it is off. One or two words."
   },
-  "tipAutoFitOn": "Auto fit on",
+  "tipAutoFitOn": "Auto-fit on",
   "@tipAutoFitOn": {
-    "description": "Tooltip on the graph editor's Auto fit button, when it is on. Under five words."
+    "description": "Tooltip on the graph editor's Auto fit button, when it is on. One or two words."
   },
   "tipBlendMode": "Blend mode",
   "@tipBlendMode": {
-    "description": "Tooltip on the blend cell. Under five words."
+    "description": "Tooltip on the blend cell. One or two words."
   },
   "tipBrushSize": "Brush size",
   "@tipBrushSize": {
-    "description": "Tooltip. Keep it to the control's name — under five words."
+    "description": "Tooltip. Keep it to the control's name — one or two words."
   },
-  "tipCacheDisk": "Parked in {path}",
+  "tipCacheDisk": "{path}",
   "@tipCacheDisk": {
-    "description": "Tooltip on the disk cache meter. {path} is the folder frames are parked in. A tooltip is a name, never more than five words (K-482).",
+    "description": "Tooltip on the disk cache meter, which is the folder frames are parked in and nothing else. {path} is that folder and is not translated. A tooltip is a name, never more than two words (K-482).",
     "placeholders": {
       "path": {
         "type": "String"
       }
     }
   },
-  "tipCacheDiskNone": "Nowhere to park frames",
+  "tipCacheDiskNone": "No folder",
   "@tipCacheDiskNone": {
     "description": "Tooltip on the disk cache meter when the machine offers no cache folder."
   },
-  "tipCacheEmpty": "Nothing cached yet",
+  "tipCacheEmpty": "Nothing cached",
   "@tipCacheEmpty": {
-    "description": "Tooltip on the memory cache meter before anything has been rendered. A tooltip is a name, never more than five words (K-482)."
+    "description": "Tooltip on the memory cache meter before anything has been rendered. A tooltip is a name, never more than two words (K-482)."
   },
-  "tipCacheRam": "{hits} hit, {misses} missed",
+  "tipCacheRam": "{hits}/{misses} hits/misses",
   "@tipCacheRam": {
-    "description": "Tooltip on the memory cache meter. {hits} and {misses} are whole numbers. A tooltip is a name, never more than five words (K-482).",
+    "description": "Tooltip on the memory cache meter, reading as \"1024/56 hits/misses\". {hits} and {misses} are whole numbers. A tooltip is a name, never more than two words (K-482).",
     "placeholders": {
       "hits": {
         "type": "String"
@@ -5282,43 +5282,43 @@
   },
   "tipCacheVram": "Graphics-card cache",
   "@tipCacheVram": {
-    "description": "Tooltip on the VRAM cache meter. A tooltip is a name, never more than five words (K-482)."
+    "description": "Tooltip on the VRAM cache meter. A tooltip is a name, never more than two words (K-482)."
   },
   "tipChooseCacheFolder": "Choose folder",
   "@tipChooseCacheFolder": {
-    "description": "Tooltip on the button that picks where parked frames go. Under five words."
+    "description": "Tooltip on the button that picks where parked frames go. One or two words."
   },
   "tipCollapseTransformations": "Collapse transformations",
   "@tipCollapseTransformations": {
-    "description": "Tooltip on the Flow switch. Under five words."
+    "description": "Tooltip on the Flow switch. One or two words."
   },
   "tipDisable": "Disable",
   "@tipDisable": {
-    "description": "Tooltip on the checkbox that switches an effect off. Under five words."
+    "description": "Tooltip on the checkbox that switches an effect off. One or two words."
   },
   "tipDisplayTransform": "Display transform",
   "@tipDisplayTransform": {
-    "description": "Tooltip on the Viewer bar's colour-management badge, which reads the display transform the picture is shown through. Under five words."
+    "description": "Tooltip on the Viewer bar's colour-management badge, which reads the display transform the picture is shown through. One or two words."
   },
   "tipEasingEditor": "Easing editor",
   "@tipEasingEditor": {
-    "description": "Tooltip on the graph editor's Easing button, which opens the curve editor. Under five words."
+    "description": "Tooltip on the graph editor's Easing button, which opens the curve editor. One or two words."
   },
-  "tipEasyEase": "Easy ease (F9)",
+  "tipEasyEase": "Easy ease",
   "@tipEasyEase": {
-    "description": "Tooltip on the graph editor's Bezier button. F9 is a key name and stays as it is."
+    "description": "Tooltip on the graph editor's Bezier button, naming the easing it applies. The F9 shortcut is not quoted here; the keymap teaches it."
   },
   "tipEdgeHardness": "Edge hardness",
   "@tipEdgeHardness": {
-    "description": "Tooltip. Keep it to the control's name — under five words."
+    "description": "Tooltip. Keep it to the control's name — one or two words."
   },
   "tipBrushShape": "Brush shape",
   "@tipBrushShape": {
-    "description": "Tooltip. Keep it to the control's name — under five words."
+    "description": "Tooltip. Keep it to the control's name — one or two words."
   },
   "tipEnable": "Enable",
   "@tipEnable": {
-    "description": "Tooltip on the checkbox that switches an effect on. Under five words."
+    "description": "Tooltip on the checkbox that switches an effect on. One or two words."
   },
   "tipFlowOff": "Flow off",
   "@tipFlowOff": {
@@ -5330,85 +5330,85 @@
   },
   "tipFrameNumber": "Frame number",
   "@tipFrameNumber": {
-    "description": "Tooltip on the Timeline's frame readout. Under five words."
+    "description": "Tooltip on the Timeline's frame readout. One or two words."
   },
-  "tipFrameOnScreen": "Frame on screen",
+  "tipFrameOnScreen": "Frame shown",
   "@tipFrameOnScreen": {
-    "description": "Tooltip on the Viewer's time readout. Under five words."
+    "description": "Tooltip on the Viewer's time readout. One or two words."
   },
   "tipGraphView": "Graph view",
   "@tipGraphView": {
-    "description": "Tooltip: show the selected property's curve. Under five words."
+    "description": "Tooltip: show the selected property's curve. One or two words."
   },
   "tipHideProperties": "Hide properties",
   "@tipHideProperties": {
-    "description": "Tooltip on the twirl when the properties are already open. Under five words."
+    "description": "Tooltip on the twirl when the properties are already open. One or two words."
   },
-  "tipHideShy": "Hide shy layers",
+  "tipHideShy": "Hide shy",
   "@tipHideShy": {
-    "description": "Tooltip on the shy filter when it is off. Under five words."
+    "description": "Tooltip on the shy filter when it is off. One or two words."
   },
   "tipHoldKeyframes": "Hold keyframes",
   "@tipHoldKeyframes": {
-    "description": "Tooltip on the graph editor's Hold button. Under five words."
+    "description": "Tooltip on the graph editor's Hold button. One or two words."
   },
   "tipInvert": "Invert",
   "@tipInvert": {
-    "description": "Tooltip on the button that flips a mask. Under five words."
+    "description": "Tooltip on the button that flips a mask. One or two words."
   },
   "tipInverted": "Inverted",
   "@tipInverted": {
-    "description": "Tooltip: the matte is the other way round. Under five words."
+    "description": "Tooltip: the matte is the other way round. One or two words."
   },
   "tipLabelColour": "Label colour",
   "@tipLabelColour": {
-    "description": "Tooltip on a layer's colour swatch in the Timeline, and on the glyph heading that column. Under five words."
+    "description": "Tooltip on a layer's colour swatch in the Timeline, and on the glyph heading that column. One or two words."
   },
-  "tipLabelInherit": "Inherit from folder",
+  "tipLabelInherit": "Inherit",
   "@tipLabelInherit": {
-    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when the item sits in a folder that has a colour: picking it hands the item back to the folder's colour. Under five words."
+    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when the item sits in a folder that has a colour: picking it hands the item back to the folder's colour. One or two words."
   },
   "tipLabelNoColour": "No colour",
   "@tipLabelNoColour": {
-    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when no folder above the item has a colour: picking it leaves the item untagged. Under five words."
+    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when no folder above the item has a colour: picking it leaves the item untagged. One or two words."
   },
   "tipLaneView": "Lane view",
   "@tipLaneView": {
-    "description": "Tooltip: show layers as bars against time. Under five words."
+    "description": "Tooltip: show layers as bars against time. One or two words."
   },
   "tipLinearKeyframes": "Linear keyframes",
   "@tipLinearKeyframes": {
-    "description": "Tooltip on the graph editor's Linear button. Under five words."
+    "description": "Tooltip on the graph editor's Linear button. One or two words."
   },
   "tipLumaMatte": "Luma matte",
   "@tipLumaMatte": {
-    "description": "Tooltip: the matte uses the other layer's brightness. Under five words."
+    "description": "Tooltip: the matte uses the other layer's brightness. One or two words."
   },
   "tipMarkOpacity": "Mark opacity",
   "@tipMarkOpacity": {
-    "description": "Tooltip. Keep it to the control's name — under five words."
+    "description": "Tooltip. Keep it to the control's name — one or two words."
   },
   "tipMaskMode": "Mask mode",
   "@tipMaskMode": {
-    "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. Under five words."
+    "description": "Tooltip on the picker choosing how a mask combines with the ones above it — Add, Subtract, Intersect, Difference. One or two words."
   },
-  "tipMasterMotionBlurOff": "Master motion blur off",
+  "tipMasterMotionBlurOff": "Blur off",
   "@tipMasterMotionBlurOff": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is off. Under five words."
+    "description": "Tooltip on the composition's motion-blur switch, when it is off. One or two words."
   },
-  "tipMasterMotionBlurOn": "Master motion blur on",
+  "tipMasterMotionBlurOn": "Blur on",
   "@tipMasterMotionBlurOn": {
-    "description": "Tooltip on the composition's motion-blur switch, when it is on. Under five words."
+    "description": "Tooltip on the composition's motion-blur switch, when it is on. One or two words."
   },
   "tipMatte": "Matte",
   "@tipMatte": {
-    "description": "Tooltip on the matte cell. Under five words."
+    "description": "Tooltip on the matte cell. One or two words."
   },
-  "tipMeasureRenderTimes": "Measure render times",
+  "tipMeasureRenderTimes": "Measure times",
   "@tipMeasureRenderTimes": {
-    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is off. Under five words."
+    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is off. One or two words."
   },
-  "tipFilterByLabel": "Show only this colour",
+  "tipFilterByLabel": "This colour",
   "@tipFilterByLabel": {
     "description": "Tooltip on one of the colour chips beside the Project panel's search field: narrows the list to items tagged that colour.",
     "type": "text"
@@ -5423,47 +5423,47 @@
     "description": "Tooltip on the chain between an effect point's x and y fields while they are tied together. Clicking lets each move on its own again.",
     "type": "text"
   },
-  "tipMissingOnly": "Missing footage only",
+  "tipMissingOnly": "Missing only",
   "@tipMissingOnly": {
-    "description": "Tooltip on the Project panel's filter when it is off. Under five words."
+    "description": "Tooltip on the Project panel's filter when it is off. One or two words."
   },
-  "tipMoreInGroup": "Hold for more",
+  "tipMoreInGroup": "Hold",
   "@tipMoreInGroup": {
-    "description": "Tooltip suffix on a toolbar button that hides other tools behind a press-and-hold. Under five words."
+    "description": "Tooltip suffix on a toolbar button that hides other tools behind a press-and-hold. One or two words."
   },
   "tipMovePanel": "Move panel",
   "@tipMovePanel": {
-    "description": "Tooltip on a panel's drag handle. Under five words."
+    "description": "Tooltip on a panel's drag handle. One or two words."
   },
-  "tipNotBuiltYet": "Not built yet",
+  "tipNotBuiltYet": "Not built",
   "@tipNotBuiltYet": {
-    "description": "Tooltip suffix on a tool that can be selected but does nothing yet. Under five words."
+    "description": "Tooltip suffix on a tool that can be selected but does nothing yet. One or two words."
   },
   "tipNotInverted": "Not inverted",
   "@tipNotInverted": {
-    "description": "Tooltip: the matte is the right way round. Under five words."
+    "description": "Tooltip: the matte is the right way round. One or two words."
   },
   "tipOutlineWidth": "Outline width",
   "@tipOutlineWidth": {
-    "description": "Tooltip. Keep it to the control's name — under five words."
+    "description": "Tooltip. Keep it to the control's name — one or two words."
   },
   "tipPanelLayout": "Panel layout",
   "@tipPanelLayout": {
-    "description": "Tooltip on the workspace preset buttons. Under five words."
+    "description": "Tooltip on the workspace preset buttons. One or two words."
   },
   "tipParent": "Parent",
   "@tipParent": {
-    "description": "Tooltip on the parent cell. Under five words."
+    "description": "Tooltip on the parent cell. One or two words."
   },
-  "tipPickFocalPoint": "Pick focal point",
+  "tipPickFocalPoint": "Focal point",
   "@tipPickFocalPoint": {
-    "description": "Tooltip on the eyedropper that reads a focus distance off the picture. Under five words."
+    "description": "Tooltip on the eyedropper that reads a focus distance off the picture. One or two words."
   },
-  "tipPickOnViewer": "Pick on Viewer",
+  "tipPickOnViewer": "Pick",
   "@tipPickOnViewer": {
-    "description": "Tooltip on the eyedropper that reads a position off the picture. Under five words."
+    "description": "Tooltip on the eyedropper that reads a position off the picture. One or two words."
   },
-  "tipPlaybackAdaptive": "Adaptive · {transport}",
+  "tipPlaybackAdaptive": "Adaptive ({transport})",
   "@tipPlaybackAdaptive": {
     "description": "Tooltip on the playback-mode button, naming the mode. {transport} is a technical route name such as 'shared texture' and is not translated.",
     "placeholders": {
@@ -5472,7 +5472,7 @@
       }
     }
   },
-  "tipPlaybackEveryFrame": "Every frame · {transport}",
+  "tipPlaybackEveryFrame": "Every-frame ({transport})",
   "@tipPlaybackEveryFrame": {
     "description": "Tooltip on the playback-mode button, naming the mode. {transport} is a technical route name and is not translated.",
     "placeholders": {
@@ -5483,51 +5483,51 @@
   },
   "tipPlayheadTime": "Playhead time",
   "@tipPlayheadTime": {
-    "description": "Tooltip on the Timeline's time readout. Under five words."
+    "description": "Tooltip on the Timeline's time readout. One or two words."
   },
   "tipPreviewResolution": "Preview resolution",
   "@tipPreviewResolution": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). Under five words."
+    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). One or two words."
   },
-  "tipPreviewResolutionAdaptive": "Adaptive playback chooses the resolution",
+  "tipPreviewResolutionAdaptive": "Adaptive picks",
   "@tipPreviewResolutionAdaptive": {
     "description": "Tooltip on the Viewer bar's resolution dropdown while it is disabled because adaptive playback picks the resolution automatically."
   },
   "tipProperties": "Properties",
   "@tipProperties": {
-    "description": "Tooltip on the twirl that opens a layer's properties. Under five words."
+    "description": "Tooltip on the twirl that opens a layer's properties. One or two words."
   },
-  "tipRecoverAll": "Every change since saving",
+  "tipRecoverAll": "All changes",
   "@tipRecoverAll": {
-    "description": "Tooltip on the recovery dialogue's filled button, saying what it recovers. Under five words."
+    "description": "Tooltip on the recovery dialogue's filled button, saying what it recovers. One or two words."
   },
-  "tipRecoverAutosave": "The last timed copy",
+  "tipRecoverAutosave": "Last autosave",
   "@tipRecoverAutosave": {
-    "description": "Tooltip on the recovery dialogue's autosave button, saying what it opens. Under five words."
+    "description": "Tooltip on the recovery dialogue's autosave button, saying what it opens. One or two words."
   },
-  "tipRecoverNone": "Open the saved file",
+  "tipRecoverNone": "Saved file",
   "@tipRecoverNone": {
-    "description": "Tooltip on the recovery dialogue's leftmost button, saying what it opens. Nothing is deleted. Under five words."
+    "description": "Tooltip on the recovery dialogue's leftmost button, saying what it opens. Nothing is deleted. One or two words."
   },
   "tipRemove": "Remove",
   "@tipRemove": {
-    "description": "Tooltip on the cross that deletes an effect from the stack. Under five words."
+    "description": "Tooltip on the cross that deletes an effect from the stack. One or two words."
   },
   "tipRemoveKeyframe": "Remove keyframe",
   "@tipRemoveKeyframe": {
-    "description": "Tooltip. Under five words."
+    "description": "Tooltip. One or two words."
   },
   "tipRenderTime": "Render time",
   "@tipRenderTime": {
-    "description": "Tooltip on the Timeline's render-time column. Under five words."
+    "description": "Tooltip on the Timeline's render-time column. One or two words."
   },
-  "tipResetCurve": "Reset this curve",
+  "tipResetCurve": "Reset curve",
   "@tipResetCurve": {
-    "description": "Tooltip on the reset action above the Curves effect's curve editor. It restores only the channel showing, not the whole effect. Under five words."
+    "description": "Tooltip on the reset action above the Curves effect's curve editor. It restores only the channel showing, not the whole effect. One or two words."
   },
   "tipCurveGraphSize": "Graph size",
   "@tipCurveGraphSize": {
-    "description": "Tooltip on the graph-size button above the Curves effect's curve editor, in the Effect controls panel. Pressing it steps the plot through small, medium and large. Under five words."
+    "description": "Tooltip on the graph-size button above the Curves effect's curve editor, in the Effect controls panel. Pressing it steps the plot through small, medium and large. One or two words."
   },
   "curveGraphSizeSmall": "Small",
   "@curveGraphSizeSmall": {
@@ -5541,45 +5541,45 @@
   "@curveGraphSizeLarge": {
     "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its largest. One word."
   },
-  "tipResetParameters": "Reset all parameters",
+  "tipResetParameters": "Reset parameters",
   "@tipResetParameters": {
-    "description": "Tooltip on the effect's Reset button. Under five words."
+    "description": "Tooltip on the effect's Reset button. One or two words."
   },
-  "tipResetQualityTier": "Reset quality tier",
+  "tipResetQualityTier": "Reset quality",
   "@tipResetQualityTier": {
-    "description": "Tooltip on the button that restarts the quality controller. Under five words."
+    "description": "Tooltip on the button that restarts the quality controller. One or two words."
   },
-  "tipSampleFromViewer": "Sample from Viewer",
+  "tipSampleFromViewer": "Sample colour",
   "@tipSampleFromViewer": {
-    "description": "Tooltip on the eyedropper that reads a colour off the picture. Under five words."
+    "description": "Tooltip on the eyedropper that reads a colour off the picture. One or two words."
   },
   "tipShowEverything": "Show everything",
   "@tipShowEverything": {
-    "description": "Tooltip on the Project panel's filter when it is showing only missing footage. Under five words."
+    "description": "Tooltip on the Project panel's filter when it is showing only missing footage. One or two words."
   },
-  "tipShyHidden": "Shy layers hidden",
+  "tipShyHidden": "Shy hidden",
   "@tipShyHidden": {
-    "description": "Tooltip on the shy filter when it is on. Under five words."
+    "description": "Tooltip on the shy filter when it is on. One or two words."
   },
   "tipSnapOff": "Snapping off",
   "@tipSnapOff": {
-    "description": "Tooltip on the magnet: keyframes may sit between frames. Under five words."
+    "description": "Tooltip on the magnet: keyframes may sit between frames. One or two words."
   },
   "tipSnapOn": "Snapping on",
   "@tipSnapOn": {
-    "description": "Tooltip on the magnet: dragged keyframes land on whole frames. Under five words."
+    "description": "Tooltip on the magnet: dragged keyframes land on whole frames. One or two words."
   },
   "tipSpeedGraph": "Speed graph",
   "@tipSpeedGraph": {
-    "description": "Tooltip: show how fast the value changes. Under five words."
+    "description": "Tooltip: show how fast the value changes. One or two words."
   },
   "tipStopAnimating": "Stop animating",
   "@tipStopAnimating": {
-    "description": "Tooltip on the stopwatch when the property is already animated. Under five words."
+    "description": "Tooltip on the stopwatch when the property is already animated. One or two words."
   },
   "tipStopMeasuring": "Stop measuring",
   "@tipStopMeasuring": {
-    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is on. Under five words."
+    "description": "Tooltip on the stopwatch in the bottom strip, when measuring is on. One or two words."
   },
   "tipSwatchColour": "{label} colour",
   "@tipSwatchColour": {
@@ -5592,9 +5592,9 @@
   },
   "tipTextSize": "Text size",
   "@tipTextSize": {
-    "description": "Tooltip. Keep it to the control's name — under five words."
+    "description": "Tooltip. Keep it to the control's name — one or two words."
   },
-  "tipToggleColumns": "Show or hide {column}",
+  "tipToggleColumns": "{column} column",
   "@tipToggleColumns": {
     "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading — Switches, Modes, or Parent.",
     "placeholders": {
@@ -5605,25 +5605,25 @@
   },
   "tipTransparencyGrid": "Transparency grid",
   "@tipTransparencyGrid": {
-    "description": "Tooltip on the Viewer's grid button. Under five words."
+    "description": "Tooltip on the Viewer's grid button. One or two words."
   },
   "tipValueGraph": "Value graph",
   "@tipValueGraph": {
-    "description": "Tooltip: show value against time. Under five words."
+    "description": "Tooltip: show value against time. One or two words."
   },
   "tipViewerChannel": "Channel view",
   "@tipViewerChannel": {
     "description": "Tooltip on the Viewer bar's channel dropdown, which shows a tinted mark and no words, so this is the only name it has. It chooses whether the picture is shown in full colour or as one channel on its own."
   },
-  "tipViewerExposure": "Exposure — preview only",
+  "tipViewerExposure": "Exposure",
   "@tipViewerExposure": {
-    "description": "Tooltip on the Viewer's exposure box. It brightens or darkens the picture on screen and never the export. \"Stop\" is the photographic unit — one stop is a doubling of light."
+    "description": "Tooltip on the Viewer's exposure box, naming it and nothing else. That exposure is a preview and never touches the export is said by the colour badge beside it, which reads \"Preview only\" whenever exposure or tone mapping is in force."
   },
   "tipViewerExposureReset": "Reset exposure",
   "@tipViewerExposureReset": {
     "description": "Tooltip on the small mark to the left of the Viewer bar's exposure number. It appears only while the exposure is not zero, and clicking it puts the exposure back to zero."
   },
-  "tipViewerGuides": "Grid and guides",
+  "tipViewerGuides": "Guides",
   "@tipViewerGuides": {
     "description": "Tooltip on the Viewer bar's grid-and-guides menu button, which shows an icon and no words. The menu turns on marks drawn over the picture: a grid, and the title/action safe rectangles."
   },
@@ -5633,11 +5633,11 @@
   },
   "tipViewerSnapshotTake": "Take snapshot",
   "@tipViewerSnapshotTake": {
-    "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. Under five words."
+    "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. One or two words."
   },
-  "tipViewerToneMap": "Tone mapping — preview only",
+  "tipViewerToneMap": "Tone mapping",
   "@tipViewerToneMap": {
-    "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this sentence is the only description of it. \"The knee\" is where the rolloff starts; \"what is up there\" means detail brighter than the display can show. Preview only."
+    "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this names it. Tone mapping rolls off detail brighter than the display can show; it is a preview, which the colour badge beside it says by reading \"Preview only\" while it is on."
   },
   "tipZoomIn": "Zoom in",
   "@tipZoomIn": {
@@ -5647,7 +5647,7 @@
   "@tipZoomOut": {
     "description": "Tooltip on the small landscape glyph at the left end of the Timeline's zoom slider. Clicking it zooms one step out."
   },
-  "tipZoomPercent": "Zoom — {percent}%",
+  "tipZoomPercent": "Zoom {percent}%",
   "@tipZoomPercent": {
     "description": "Tooltip on the Timeline's zoom slider. {percent} is a whole number.",
     "placeholders": {
@@ -7841,7 +7841,7 @@
   "@trackCreateCamera": {
     "description": "Button beside the Camera track's status: adds a Camera layer that follows the solved shot."
   },
-  "tipTrackCreateCamera": "Camera from the solve",
+  "tipTrackCreateCamera": "Create camera",
   "@tipTrackCreateCamera": {
     "description": "Tooltip on the Create camera button in the Camera track's status row."
   },
@@ -7849,7 +7849,7 @@
   "@trackConvertToKeyframes": {
     "description": "Button in the Transform heading of a solve-linked Camera layer: bakes the derived motion into one keyframe per frame and ends the link."
   },
-  "tipTrackConvert": "Bake the derived motion",
+  "tipTrackConvert": "Bake motion",
   "@tipTrackConvert": {
     "description": "Tooltip on the Convert to keyframes button in a linked Camera layer's Transform heading."
   },
@@ -7885,7 +7885,7 @@
       }
     }
   },
-  "tipEaseTheBlock": "Ease the selected keyframes",
+  "tipEaseTheBlock": "Ease keyframes",
   "@tipEaseTheBlock": {
     "description": "Timeline: hover hint on the badge beside a block of selected keyframes, and on the bottom bar's Ease word. Pressing either opens the Ease popover."
   },
@@ -7934,15 +7934,15 @@
   "@keysPasteAtPlayhead": {
     "description": "Timeline, Keys mode bottom bar: pastes the copied keyframes so that the first of them lands on the playhead. Drawn in capitals."
   },
-  "tipReverseKeys": "Reverse the selected keyframes",
+  "tipReverseKeys": "Reverse keyframes",
   "@tipReverseKeys": {
     "description": "Timeline, Keys mode bottom bar: hover hint on Reverse. The keys swap places within the span they already occupy; each keeps its own value."
   },
-  "tipCopyKeys": "Copy the selected keyframes",
+  "tipCopyKeys": "Copy keyframes",
   "@tipCopyKeys": {
     "description": "Timeline, Keys mode bottom bar: hover hint on Copy."
   },
-  "tipPasteKeysAtPlayhead": "Paste at the playhead",
+  "tipPasteKeysAtPlayhead": "Paste keyframes",
   "@tipPasteKeysAtPlayhead": {
     "description": "Timeline, Keys mode bottom bar: hover hint on Paste at playhead."
   },
@@ -7982,7 +7982,7 @@
   "@welcomeNoRecent": {
     "description": "Welcome screen: the single line inside the recents list when nothing has been opened yet, or after Clear."
   },
-  "welcomeForgetProject": "Remove from recent",
+  "welcomeForgetProject": "Forget project",
   "@welcomeForgetProject": {
     "description": "Welcome screen: hover hint on the small cross at the end of a recent project's row, which takes that one row off the list. The file is not deleted."
   },
@@ -8093,7 +8093,7 @@
   "@surroundThemeColour": {
     "description": "One choice for the Viewer's surround: the theme's own surface colour rather than the neutral grey."
   },
-  "tipTransportEnd": "Go to end",
+  "tipTransportEnd": "To end",
   "@tipTransportEnd": {
     "description": "Tooltip on the Viewer transport's last button, an icon with no words: it takes the playhead to the composition's last frame."
   },
@@ -8113,7 +8113,7 @@
   "@tipTransportPrevious": {
     "description": "Tooltip on the Viewer transport's step-back button, an icon with no words: it moves the playhead back by one frame."
   },
-  "tipTransportStart": "Go to start",
+  "tipTransportStart": "To start",
   "@tipTransportStart": {
     "description": "Tooltip on the Viewer transport's first button, an icon with no words: it takes the playhead to the composition's first frame."
   },
@@ -8837,7 +8837,7 @@
   "@metadataCreated": {
     "description": "Export dialog, Metadata section: the creation time written into the file."
   },
-  "tipExportAfterV1": "After version one",
+  "tipExportAfterV1": "After v1",
   "@tipExportAfterV1": {
     "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
   },
@@ -8946,11 +8946,11 @@
   "@projectFooterProxies": {
     "description": "Project panel bottom bar, the project-wide switch: whether every preview reads from proxies where there are any. Displayed in capitals by the panel."
   },
-  "tipUseProxiesOn": "Reading from proxies",
+  "tipUseProxiesOn": "Using proxies",
   "@tipUseProxiesOn": {
     "description": "Tooltip on the Project panel's project-wide proxies switch while it is on."
   },
-  "tipUseProxiesOff": "Reading from originals",
+  "tipUseProxiesOff": "Using originals",
   "@tipUseProxiesOff": {
     "description": "Tooltip on the Project panel's project-wide proxies switch while it is off."
   },
@@ -9097,7 +9097,7 @@
   "@tipTangentAuto": {
     "description": "Timeline, Graph mode: the tooltip on the Auto tangent button."
   },
-  "tipTangentClamp": "Automatic tangents, no overshoot",
+  "tipTangentClamp": "Clamped tangents",
   "@tipTangentClamp": {
     "description": "Timeline, Graph mode: the tooltip on the Clamp tangent button. 'Overshoot' is the curve swinging past the values of the keyframes on either side."
   },
@@ -9412,11 +9412,11 @@
   "@projectColourWorkingSpaceValue": {
     "description": "Project settings, Colour group: the value of the working-space row. Rec. 709 is a standard's number and stays as it is; linear describes the arithmetic."
   },
-  "tipExportColourManagedBy": "Set in Project settings",
+  "tipExportColourManagedBy": "Project settings",
   "@tipExportColourManagedBy": {
     "description": "Export dialog, Colour section: the hover reason on the Managed by row, which shows the project's colour configuration but does not change it. File and Project settings are the menu and the window of those names."
   },
-  "tipExportColourSpaceUnavailable": "Not in this configuration",
+  "tipExportColourSpaceUnavailable": "Not available",
   "@tipExportColourSpaceUnavailable": {
     "description": "Export dialog, Colour section: the hover reason on a colour-space row that is listed but cannot be chosen, because the configuration cannot work out the transform it would need."
   },
@@ -9436,9 +9436,9 @@
   "@popOutPanel": {
     "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
   },
-  "popOutPanelBlocked": "A panel in its own window needs multi-window support Flutter has not released yet.",
+  "popOutPanelBlocked": "Not available",
   "@popOutPanelBlocked": {
-    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu. It says honestly why the row cannot be pressed: separate operating-system windows are not available in the toolkit Lumit is built on."
+    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu, saying only that the row cannot be pressed. Why is an implementation detail the user cannot act on: separate operating-system windows are not available in the toolkit Lumit is built on."
   },
   "settingsEffectGraphsUseThemeColour": "Effect graphs use theme colour",
   "@settingsEffectGraphsUseThemeColour": {
@@ -9452,15 +9452,15 @@
   "@favourites": {
     "description": "The heading above the starred effects and presets, at the top of the Effects & presets panel."
   },
-  "tipFavourite": "Add to favourites",
+  "tipFavourite": "Favourite",
   "@tipFavourite": {
     "description": "Hover text on the star beside an effect or preset that is not starred yet. Pressing it puts the row under the Favourites heading."
   },
-  "tipUnfavourite": "Remove from favourites",
+  "tipUnfavourite": "Remove favourite",
   "@tipUnfavourite": {
     "description": "Hover text on the star beside an effect or preset that is already starred. Pressing it takes the row out of the Favourites heading."
   },
-  "tipViewerMoreControls": "More viewer controls",
+  "tipViewerMoreControls": "More controls",
   "@tipViewerMoreControls": {
     "description": "Hover text on the overflow mark at the left of the Viewer's bottom bar. It appears only when the Viewer is docked too narrow for the bar to hold the transparency grid, guides, channel, exposure and snapshot controls, and opens all of them in a small floating strip."
   },
@@ -9497,17 +9497,17 @@
       }
     }
   },
-  "tipViewerAtEffect": "Picture at this effect",
+  "tipViewerAtEffect": "Picture here",
   "@tipViewerAtEffect": {
-    "description": "Tooltip on the Viewer's 'at effect' chip: clicking it shows the composition with that layer's effects stopping there, and clicking again returns the finished picture. Under five words."
+    "description": "Tooltip on the Viewer's 'at effect' chip: clicking it shows the composition with that layer's effects stopping there, and clicking again returns the finished picture. One or two words."
   },
-  "tipViewerSnapshotShow": "Show snapshot — hold",
+  "tipViewerSnapshotShow": "Snapshot (hold)",
   "@tipViewerSnapshotShow": {
-    "description": "Tooltip on the Viewer bar's show-snapshot mark, the second of the snapshot pair. The stored picture is shown over the live one for as long as the button is held down, and goes when it is let go. Under five words."
+    "description": "Tooltip on the Viewer bar's show-snapshot mark, the second of the snapshot pair. The stored picture is shown over the live one for as long as the button is held down, and goes when it is let go. One or two words."
   },
-  "tipViewerSnapshotNone": "No snapshot yet",
+  "tipViewerSnapshotNone": "No snapshot",
   "@tipViewerSnapshotNone": {
-    "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. Under five words."
+    "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. One or two words."
   },
   "fileTypeWorkspace": "Lumit workspace",
   "@fileTypeWorkspace": {
