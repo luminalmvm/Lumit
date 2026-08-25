@@ -841,21 +841,22 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 
 ### 12A.1 Timeline (K-441)
 
-- **Modes are Layers, Keys and Graph** (K-455, K-458). Keys is the dope sheet built to the
-  approved Keys drawing — the whole of it, editing tools included (K-458): the
-  block-selection box with stretch handles and its `n keys · n f` badge, the Ease
-  popover, and the bottom bar's Interpolation / Reverse / Copy / Paste-at-playhead
-  strip. Layers mode carries an **Animated
-  filter** (`U`): on, the outline shows only keyframed properties across all layers; All
-  restores the full twirl-down lists. Block selection, end-handle stretch and the Ease
-  popover are Layers behaviours, not a mode of their own.
+- **Modes are Layers and Graph** (K-529, superseding K-455 and K-458's second half). Keys —
+  the dope sheet — was withdrawn after desktop testing; §12A.1a is kept as frozen history
+  and describes nothing the editor draws. Layers mode carries an **Animated filter** (`U`):
+  on, the outline shows only keyframed properties across all layers; All restores the full
+  twirl-down lists. Block selection, end-handle stretch and the Ease popover are Layers
+  behaviours, and so is the **Interpolation / Reverse / Copy / Paste-at-playhead strip**,
+  which came to the Layers bottom bar when Keys went (K-529).
 - **Composition tabs run the full width of the panel header**, between the panel's own
   `TIMELINE` kicker at the far left and **one filled `EXPORT`** at the far right — the
   single filled action a surface is allowed (§3.1), running the File menu's own Export
   command rather than a second route to the same dialog. The row above the outline
-  puts the timecode and frame count at its far left and the Layers / Keys / Graph mode tabs at its
-  far right. **The frame count says how far through**: the frame in hand, then the comp's
-  whole length after it — `F48 / 250`, the total quieter again than the number it follows.
+  puts the timecode and frame count at its far left and the Layers / Graph mode tabs at its
+  far right, with the **search well stretched between them at `outlineGap` either side**
+  (K-529). **The frame count says how far through**: the frame in hand, then the comp's
+  whole length after it — `F48 /250`, with **no space after the stroke** (K-529: the stroke
+  binds to the count it introduces), the total quieter again than the number it follows.
 - **Both readouts sit in value wells** (K-460) — the inset face of §2.1, which is what says
   they can be typed into. The frame count rests as `F48` and **edits as `48`**: the `f`
   names the clock rather than counting in it, and it is worn again on commit. The total
@@ -937,9 +938,13 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   across its waist. A **labelled** tick crosses that waist and carries on the same
   distance below it — 7px each way — which is what ties the clock to the markers where the
   seam used to hold them apart; minor ticks still hang above the waist only. The
-  **work-area highlight and its two drag handles run the ruler's whole height**, not its
-  lower half: an edge you can see for the whole ruler and grab for half of it is a handle
-  that is half a lie. The **double-click that gives the whole comp back** is the one
+  **work-area highlight sits on the ruler's second row**, and its **two drag handles run
+  the ruler's whole height** (K-529, reversing that half of K-513): a wash over the clock
+  makes the numbers harder to read and says nothing the lower row was not already saying,
+  while a handle is a thing to take hold of and should stand where the hand is. Each handle
+  is **drawn**, as a small vertical rounded tab in the band's own colour a step stronger
+  than its edge, with another step under the pointer — derived from the band, never a second
+  hex. The **double-click that gives the whole comp back** is the one
   gesture the waist still divides — below it clears the work area, above it makes a
   marker — because a comp nobody has narrowed has a work area of the whole comp, and a
   band-wide double-click would leave nowhere on the ruler to make a marker. A marker is an upward triangle sitting on the cache bar, half
@@ -970,8 +975,21 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 - **Keyframe diamonds on layer rows draw at half the row scale.**
 - **The panel's bottom bar carries a toggle for the switches / modes / parent columns**
   (K-448), so the outline pares down to names and bars when the columns are not in use.
+  **Each toggle hides the columns its own word names** (K-529): the parent picker is a
+  cluster of its own, so *Parent* hides the parent column and neither the matte nor the
+  blend, which answer to no toggle. The three draw as the icon set's own glyphs by default
+  and as words under `Chrome labels ▸ Words` (K-530, K-440's setting consuming for the
+  first time); a tooltip carries the word either way.
+- **The zoom slider and the magnet lead the lane bottom bar in every view** (K-529): they
+  are the one run it carries whatever the panel shows, so they sit at the left edge of the
+  lane area in Layers and in Graph alike, and each mode's own commands follow them.
 
-### 12A.1a Keys mode — the dope sheet (K-455)
+### 12A.1a Keys mode — the dope sheet (K-455) — **withdrawn (K-529)**
+
+> **Frozen.** Keys mode was withdrawn after desktop testing and its surfaces are deleted;
+> nothing below describes anything the editor draws. It is kept because K-529 records *why*
+> it went and what was declined with it, and this is the drawing it went by. The editing
+> strip is the one part that survives, on the Layers bottom bar.
 
 - Keys keeps the **same double-height ruler, cache bar, work area, markers, playhead and
   zoom bar** as Layers mode, so all three views scroll the same range and nothing jumps on
@@ -1033,14 +1051,17 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
 
 - Graph mode keeps the **same double-height ruler, work area, cache bar and playhead** as
   Layers mode, so the two modes scroll the same range and nothing jumps on switch.
-- The outline is the **filtered animated list** (Animated, the default, or All — there is no
-  Selected), each row carrying a **tick in its curve's colour**. A setting restores an
-  outline identical to Layers mode for those who want one shape everywhere.
-- The filter row also carries **Normalise** at its far right: every shown curve scaled to
-  its own min–max, so unlike units share the pane. A view setting, never data — a drag
-  under it writes what it would write without it. **Shipped:** as a range per curve rather
-  than a scaling of values, which is what keeps that promise; the shared scale then reads
-  0–100 per cent, there being no single value axis left to label.
+- The outline is **the Layers outline, identical** (K-529, superseding this entry's
+  filtered animated list): the same twirls, the same columns, the same rows, so a property
+  is found the same way in either view. The colour-ticked list, its Show filter and its
+  per-row tick are gone — a property's curves are on the pane when its row is selected —
+  and so is the setting that used to switch between the two outlines. A curve is tied to
+  its row by the lane tick the fold row draws in the curve's colour.
+- **Normalise is gone** (K-529): the owner finds it opaque. Every curve was scaled to its
+  own min–max so unlike units could share the pane, with the axis reading in per cent of
+  each curve's own span. **The per-curve ranges die with it** — the curves share one value
+  scale again, and a rotation in degrees beside an opacity in per cent is once more one
+  flat line under another.
 - A **Key readout row** sits at the foot of the outline while exactly one key is selected:
   the frame, the value with its unit, and the two influences in editable per-cent wells
   that write the same ease a tangent handle drags. Two or more keys are a block, whose

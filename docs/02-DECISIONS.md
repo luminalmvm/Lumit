@@ -14590,3 +14590,171 @@ That rule is general and outlives this entry.
 
 **If a live second viewport is ever wanted** — two pictures on screen at once, at different
 points in the chain — that is a new thing to decide, not a quiet return of this one.
+
+## K-529 — The Timeline after desktop testing: Keys goes, one outline serves both views, and a batch of chrome corrections
+
+**DECIDED 2026-08-25.** The owner's rulings from a session spent working in the real editor
+rather than reading its drawings. They are one entry because they are one sitting, and
+because several of them reverse things this programme decided a day or two earlier: the
+drawings are the plan (K-458), and a plan tried on a real composition is the test the plan
+is for.
+
+### Keys mode is withdrawn, "for now"
+
+**The dope sheet goes**, and the KEYS tab with it. The Timeline's modes are **Layers and
+Graph**. This supersedes **K-455** (which brought Keys back after K-441 had withdrawn it),
+**K-458**'s second half, **K-499**, **K-515**, and the Keys halves of §12A.1 and §12A.1a.
+
+The mode's own surfaces are **deleted, not left dormant**: the filter row, the flat outline,
+the layer band and its ghost bar, the flat-sheet twirl set, and the row model that built the
+sheet. The shared machinery stays untouched, because it never was the sheet's — Layers uses
+every part of it: the lane keys, the marquee, the block box with its stretch handles and its
+`n keys · n f` badge, the Ease popover, the key menu.
+
+**What was genuinely lost, and the owner's ruling on each.** Two readings existed only in the
+sheet, and both are declined rather than folded in anywhere:
+
+- **The flat cross-layer property list** — every keyed property of every layer on one level,
+  named by the group it came out of, with no twirls above it. *"I am fine with pressing U or
+  twirling; it was the same number of clicks."* The per-layer property counts beside each
+  layer's name go with it: *"nice but not needed."*
+- **The band-density overview** — a comp's keyframes read as bands of activity, which said at
+  a glance where the work is. *"Layers view is already very high density."*
+
+Neither is owed. Recorded so that nobody re-derives the dope sheet later without first
+reading why it went.
+
+**The one thing that was kept is the editing strip**, which is what the owner valued about
+the mode: Interpolation (Linear / Hold / Ease / Bezier), then a rule, then Reverse, Copy and
+Paste at playhead. It moves to the **Layers bottom bar** and is there from the moment the
+panel is. It never depended on the mode — every one of the seven acts on the key selection,
+which is the same selection in every view.
+
+### The Graph outline is the Layers outline, identical
+
+**Supersedes K-442's filtered variant.** Graph mode drew its own outline — the animated list
+under a Show filter, one row per property, each with a tick that put its curves on the pane
+and a swatch in the curve's colour. It is gone. The graph shows **exactly the Layers
+outline**: the same twirls, the same columns, the same rows, so a property is found the same
+way wherever the panel is being looked at, and switching mode changes what is drawn against
+time and nothing else.
+
+- **The tick goes** with it. A property's curves are on the pane when its row is selected,
+  which was always the other way in and is now the only one.
+- **The Show filter goes** with it. Layers has the Animated filter (`U`) already.
+- **Normalise goes** — the owner finds it opaque. Every curve was scaled to its own min-max
+  so that unlike units could share the pane, and the axis then read in per cent of each
+  curve's own span rather than in values. **The per-curve ranges die with it**: the curves
+  share one value scale again, and a rotation in degrees beside an opacity in per cent is
+  once more one flat line under another. That is the trade, taken knowingly.
+- **The curve-colour association stays legible** through the lane tick a Layers fold row
+  already draws in its curve's colour; where a row has none, a curve is identified the way it
+  was before the filtered outline existed — by being the selected one.
+- **The Layers-outline setting is dead and removed.** `Settings ▸ Interface ▸ Panels ▸ Graph
+  mode keeps the Layers outline` existed to switch the thing that has now gone, so the
+  setting, its string and its stored field are deleted rather than left as a switch with one
+  answer.
+
+**The Key readout row stays** (§3.3): it is the graph's, not the filtered outline's, and it
+still appears at the outline's foot while exactly one key is in hand.
+
+### The chrome corrections, in the order the owner listed them
+
+- **The layer-search well gains `outlineGap` of air at each side.** It had the chrome row's
+  2 — the gap between two chips of one segmented run — where a well stretched between a
+  counter and a set of tabs is not a chip in a run, and at 2 it read as wedged between them.
+- **The Parent column toggle hides Parent alone.** The bug: the three compositing pickers
+  were one draggable cluster labelled by its last column, so the toggle named *Parent* hid
+  the matte and the blend with it. **The parent picker becomes a cluster of its own**, and
+  the rule is written down: a bottom-bar toggle hides the columns its own word names.
+  Matte and Blend answer to no toggle — the mockup's bottom bar carries three words and
+  they are not among them.
+- **The frame counter reads `F48 /250`, with no space after the stroke.** The mockup writes
+  one; on a real composition the phrase then broke into three marks where it is one reading.
+- **A dragged column header's tag rides the cursor.** Flutter anchors a drag feedback where
+  the pointer sat inside the *child*, and the child is a header a couple of hundred pixels
+  wide — so a header grabbed anywhere but its left edge drew its own name back at the
+  header's x, which reads as the drag having been dropped.
+- **The work-area highlight returns to the ruler's second row.** This reverses that half of
+  **K-513**, which the owner ruled a day earlier and has now reversed on themselves after
+  living with it: a wash over the clock makes the numbers harder to read and says nothing
+  the lower row was not already saying. **The two drag handles keep the whole height** —
+  that half of K-513 stands, because a handle is a thing to take hold of and it should
+  stand where the hand is. They are now **drawn**, as a small vertical rounded tab, in the
+  band's own colour one step stronger than its edge, with another step under the pointer;
+  derived from the band's colour and never a second hex.
+- **Hovering a keyframe in the graph changes nothing about the cursor.** Crossing a curve
+  full of keys made the pointer flicker between two shapes on the way to wherever the hand
+  was going. The mark already brightens to say a key is there. The **drag** cursors stay: a
+  handle swings up and down, a box edge scales, and those are gestures with one direction to
+  promise.
+- **The zoom slider and the magnet sit at the left edge of the lane area in every view.**
+  They are the one run the bottom bar carries whatever the panel is showing; in graph view
+  they sat behind four runs of graph commands, which put the same two controls in a
+  different place depending on which mode was up.
+
+### Three lags, and what each of them actually was
+
+- **The column-seam drag.** Column widths are pure view state and no write ever reached the
+  document; the lag was the *panel* rebuilding whole on every pointer move — every outline
+  row, every picker, every lane, every bar, for one hairline moving a pixel. The gesture now
+  stages its own total and draws its own line, and the columns move once, on release. That
+  is the rule every other drag in the panel already follows. Pinned at **no bridge calls at
+  all** for a sixty-move drag.
+- **The graph handle drag.** An ease changes the values *between* two keys and nothing
+  outside them, so with the playhead outside that span every preview render came back with
+  the frame already on screen. The preview is now asked for **only where the picture can
+  differ**; the throttle (`PreviewThrottle`) keeps the rate bounded where it can. A
+  sixty-move drag is pinned at **≤12 calls with the playhead outside the span** and **≤80
+  with it inside** — what must never come back is a count that scales with the moves.
+- **Keyframe Copy and Paste-at-playhead, which did nothing.** Two faults, one root. Copy and
+  Paste resolved their channels from the *picked properties* while every other key command —
+  Reverse, the interpolation words, the tangent modes, the Ease popover — resolved them from
+  the **key selection**, which in the lane views speaks in row paths. The two answers agree
+  until anything re-aims the property selection without touching the key selection, and part
+  ways after. Worse, `copySelectedKeys` returned nothing at all, so a copy that captured
+  nothing **claimed the chord anyway** — `Ctrl+C` swallowed, and the *previous* copy left on
+  the clipboard for the next paste to put down. Copy and Paste now resolve channels the way
+  the rest of the strip does, and a copy that took nothing says so and falls through.
+  `Ctrl+C` / `Ctrl+V` for keys are proved end to end in **both** remaining views.
+
+### Owed, and not done here
+
+**Tab-hop between value wells** (§12A.3: *Tab hops values, pre-selected*) is unimplemented —
+tabbing into a well leaves its text unselected, and the hop does not wrap from a row's last
+well to the next row's first. The fix belongs in `DragValueField`, which is the one place
+every well's focus is decided; it is not in this batch because that file was another hand's
+during this session. §12A.3's bullet stands as the specification.
+
+## K-530 — Chrome labels finally consumes, and it ships as Icons
+
+**DECIDED 2026-08-25.** **K-440**'s three-way *Chrome labels* setting has had nothing to
+change since it was decided: the icon set was drawn and embedded, but no surface read a
+labels mode, and **K-465** recorded the row as confirmed-but-not-drawn on the Appearance
+page's Interface section, to arrive "with Phase 1's own work, in the place this entry
+names". It arrives here, in that place.
+
+**The first consumer** is the Timeline's bottom-bar column toggles — *Switches*, *Modes*,
+*Parent* — whose glyphs the set already carries. They draw as words under **Words** and as
+glyphs under either icon mode, and the tooltip carries the word in every mode, which is
+what makes a glyph readable at all (K-440's rule, unchanged). The glyph takes the word's own
+two strengths: muted while the column is hidden, foreground while it is drawn.
+
+**The shipped default becomes Icons.** This supersedes K-440's *Words (default)* on the
+owner's ruling after desktop testing: seeing the three words in a real bottom bar, the
+answer was that a row of three short words is a sentence to read where three marks are a
+thing to aim at. A settings file written before the field existed adopts Icons, deliberately
+— the ruling is about what the editor should look like, not about who asked first, and Words
+is one click away.
+
+**The setting is stored by name, not by index** (`chrome_labels`), like every other enum in
+the settings file: a reordered enum must not silently change what the chrome says. An
+unknown name — an older file with none, or a newer build's — is the shipped default.
+
+**Held, not looked up per widget.** The Timeline reads the mode once per build of the panel
+and hands it down. The column toggles rebuild on every hover in that bar, and a settings
+lookup per toggle per hover is exactly the pattern K-184 keeps out of the paint path.
+
+**Everything else in the chrome still speaks words**, and will keep doing so until each
+surface is converted deliberately. This entry opens the trail; it does not iconify the
+application.

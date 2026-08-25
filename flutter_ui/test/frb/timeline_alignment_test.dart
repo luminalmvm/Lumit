@@ -34,6 +34,7 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
+import 'timeline_panel_frb_test.dart' show openFold;
 
 void main() {
   setUpAll(initEngineForTests);
@@ -368,12 +369,15 @@ void main() {
 
     /// 6b. **The ruler is one band, the height of the outline's two chrome
     /// rows** (docs/15 §12A.1, K-513). The clock's labels sit near its top and
-    /// the markers stand on its floor, but nothing is ruled off any more: the
-    /// work-area highlight and its two drag handles run the ruler's **whole
-    /// height**, which is the owner's ruling from desktop testing. Until then
-    /// the band and the handles lived in the lower half alone, under a drawn
-    /// seam across the waist.
-    testWidgets('the ruler is one band, highlight and handles full height',
+    /// the markers stand on its floor, and nothing is ruled off between them.
+    ///
+    /// **The highlight is the second row's; the handles are both rows'**
+    /// (K-529). K-513 gave the highlight the whole height too, and the owner
+    /// reversed that half after living with it: a wash over the clock makes
+    /// the numbers harder to read and says nothing the lower row was not
+    /// already saying. The handles keep the full reach, because a handle is a
+    /// thing to take hold of and it should stand where the hand is.
+    testWidgets('the highlight is the ruler\'s second row, the handles both',
         (tester) async {
       final p = withComp();
       p.comp.addAdjustmentLayer();
@@ -393,12 +397,13 @@ void main() {
       final waist = ruler.top + ruler.height / 2;
 
       final band = tester.getRect(find.byKey(const ValueKey('tl-work-area')));
-      expect(band.top, closeTo(ruler.top, 0.5),
-          reason: 'the highlight starts at the top of the ruler (K-513)');
+      expect(band.top, closeTo(waist, 0.5),
+          reason: 'the highlight starts at the waist (K-529)');
       expect(band.bottom, closeTo(ruler.bottom, 0.5),
           reason: 'and reaches its floor, which the cache bar is drawn on');
 
-      // Both handles are grabbable for the whole of the band they belong to.
+      // Both handles reach — and are grabbable for — the whole ruler, which
+      // is the half of K-513 that stands.
       for (final end in const ['start', 'end']) {
         final handle =
             tester.getRect(find.byKey(ValueKey<String>('tl-work-$end')));
@@ -406,13 +411,32 @@ void main() {
             reason: 'the $end handle can be taken hold of from the top');
         expect(handle.bottom, closeTo(ruler.bottom, 0.5),
             reason: 'and all the way to the floor');
+        expect(handle.top, lessThan(band.top),
+            reason: 'the $end handle stands above the highlight it moves');
       }
+
+      // The tab is drawn, and it is the band's own colour a step stronger —
+      // derived, never a second hex (K-529, the owner's reference image).
+      final tab = tester.widget<DecoratedBox>(find.descendant(
+          of: find.byKey(const ValueKey('tl-work-start')),
+          matching: find.byType(DecoratedBox)));
+      final t = LumitTheme.dark();
+      expect((tab.decoration as BoxDecoration).color,
+          workAreaHandleColour(t, hovered: false));
+      expect(workAreaHandleColour(t, hovered: false).a,
+          greaterThan(workAreaEdgeColour(t).a),
+          reason: 'a step stronger than the band\'s edge, in the same hue');
+      expect(workAreaHandleColour(t, hovered: true).a,
+          greaterThan(workAreaHandleColour(t, hovered: false).a),
+          reason: 'and one more step under the pointer');
+      expect(workAreaHandleColour(t, hovered: false).r, t.animated.r,
+          reason: 'derived from the band\'s own colour, not a new one');
 
       // The cache bar is *on* the band's row, at the ruler's floor — not a
       // strip of its own beneath it (§12A.1).
       final cache = tester.getRect(find.byType(TimelineCacheBar).first);
       expect(cache.bottom, closeTo(ruler.bottom, 0.5));
-      expect(cache.top, greaterThan(band.top),
+      expect(cache.top, greaterThanOrEqualTo(band.top),
           reason: 'the band paints behind it');
 
       final flag = tester.getRect(find
@@ -819,12 +843,38 @@ void main() {
       expect(tester.getRect(find.byKey(const ValueKey('tl-search'))).height,
           closeTo(grown, 0.5),
           reason: 'Regular\'s taller row grows the well with it');
-      expect(tester.getRect(find.byKey(const ValueKey('tl-view-keys'))).height,
+      expect(tester.getRect(find.byKey(const ValueKey('tl-graph'))).height,
           closeTo(grown, 0.5),
           reason: 'and the mode tabs the owner named, to the same number');
       expect(tester.getRect(find.byKey(const ValueKey('tl-timecode'))).height,
           closeTo(grown, 0.5),
           reason: 'and the clock, so the whole row stands level');
+    });
+
+    /// 10c-bis. **The search well has [outlineGap] of air at each side**
+    /// (K-529, the owner after desktop testing). It had the chrome row's 2 —
+    /// the gap between two chips of one segmented run — which is not what a
+    /// well stretched between a counter and a set of tabs is, and at 2 it read
+    /// as wedged between them. The 8 is the rhythm the compose boxes keep
+    /// from one another in the rows below, so the panel breathes the same
+    /// number everywhere.
+    testWidgets('the layer search keeps the outline gap at each side',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final well = tester.getRect(find.byKey(const ValueKey('tl-search')));
+      final counter = tester.getRect(find.text('/${p.comp.durationFrames()}'));
+      final tabs = tester.getRect(find.byKey(const ValueKey('tl-view-lanes')));
+
+      expect(well.left - counter.right, closeTo(outlineGap, 0.5),
+          reason: 'the gap after the frame counter');
+      expect(tabs.left - well.right, closeTo(outlineGap, 0.5),
+          reason: 'and the gap before the mode tabs');
+      expect(outlineGap, cellGap,
+          reason: 'the same number the compose boxes keep between them');
     });
 
     /// 10d. **Compact is the same panel, a pixel tighter** (K-454, §12A.6's
@@ -928,11 +978,17 @@ void main() {
 
       expect((matteFaceWidth, blendCellWidth, parentCellWidth), (84.0, 84, 64),
           reason: 'the drawing\'s dropdown faces');
-      expect(composeGroupWidth, 84 + cellGap + 84 + cellGap + 64,
-          reason: 'and the group at rest is the three of them and the gaps '
-              'between — no room held back for toggles nobody has asked for');
-      expect(composeGroupWidth, lessThan(334),
-          reason: 'which is narrower than the 334 that shipped');
+      expect(composeGroupWidth, 84 + cellGap + 84,
+          reason: 'the compose group at rest is the matte and the blend and '
+              'the gap between — no room held back for toggles nobody has '
+              'asked for');
+      expect(parentGroupWidth, 64,
+          reason: 'and the parent picker is a cluster of its own (K-529), so '
+              "the bottom bar's Parent toggle hides it and nothing else");
+      expect(composeGroupWidth + groupDividerWidth + parentGroupWidth,
+          lessThan(334),
+          reason: 'the three faces together are narrower than the 334 that '
+              'shipped');
 
       // **The faces themselves are 84 / 84 / 64** (owner, 2026-08-24): a
       // dropdown never swells past the width the drawing gives it.
@@ -1235,12 +1291,11 @@ void main() {
       }
     });
 
-    /// 10e. **Keys mode is the same table** (K-455): the dope sheet swaps the
-    /// body under the shared ruler, so its rows take the density's lane row
-    /// on both sides and its own filter row stands exactly where the column
-    /// header did. Measured under Compact, because a mode that derived its
-    /// own heights would drift here first.
-    testWidgets('the Keys sheet follows the density like every other row',
+    /// 10e. **A fold-out row follows the density like every other row.**
+    /// Measured under Compact, because a row that derived its own height
+    /// would drift here first, and against the ruler opposite it, because the
+    /// two halves are one table.
+    testWidgets('a property row follows the density like every other row',
         (tester) async {
       final p = withComp();
       final layer = p.comp.addSolidLayer();
@@ -1260,75 +1315,26 @@ void main() {
       await mount(tester, p, density: DensityTokens.compact);
       const d = DensityTokens.compact;
 
-      // Keys mode opens with every layer twirled down (K-500 §2.3), so the
-      // property rows are on screen the moment the mode is.
-      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
+      // Twirled open onto Transform, which is how a keyed property's row is
+      // reached (K-529: the dope sheet used to open every layer for you).
+      await openFold(tester, layer.internallayerId, group: 'Transform');
       await tester.pumpAndSettle();
 
       final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
-      final row = tester
-          .getRect(find.byKey(ValueKey<String>('tl-keys-row-${idOf(layer)}')));
-      final lane = tester.getRect(
-          find.byKey(ValueKey<String>('tl-keys-layer-${idOf(layer)}')));
+      final row =
+          tester.getRect(find.byKey(ValueKey<String>('tl-row-${idOf(layer)}')));
       final prop = tester.getRect(find.byKey(
           ValueKey<String>('tl-keys-prop-${idOf(layer)}/transform/opacity')));
+      final lane =
+          tester.getRect(find.byKey(ValueKey<String>('tl-bar-${idOf(layer)}')));
 
       expect(row.height, closeTo(d.laneRow, 0.5));
       expect(prop.height, closeTo(d.laneRow, 0.5));
       expect(row.top - ruler.top, closeTo(d.ruler, 0.5),
-          reason: 'the timecode row and the filter row stand above the first '
-              'layer, exactly the ruler opposite them');
+          reason: 'the timecode row and the column header stand above the '
+              'first layer, exactly the ruler opposite them');
       expect(lane.top, closeTo(row.top, 0.5),
-          reason: 'the dope sheet\'s halves are level too');
-      expect(lane.height, closeTo(row.height, 0.5));
-    });
-
-    /// 10e. **Keys mode shows each layer's bar through its keys** (K-515, the
-    /// owner's ruling): the dope sheet could say when a layer's keys were and
-    /// never how long the layer itself was, so a key past the end of its own
-    /// layer looked no different from one inside it.
-    ///
-    /// The ghost is the Layers-mode bar with everything that made it a handle
-    /// taken off — same place, same 16 inside the row, no leading edge, no
-    /// name, no end marks and no gestures — drawn at [keysGhostBarAlpha] of
-    /// the layer's label colour. The alpha is pinned here because it is the
-    /// whole of the disabled treatment: brighter and it competes with the
-    /// keys in front of it, fainter and it is not there.
-    testWidgets('a Keys layer band draws its bar as a disabled ghost',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
-      await tester.pumpAndSettle();
-
-      final ghost =
-          find.byKey(ValueKey<String>('tl-keys-ghost-${idOf(layer)}'));
-      expect(ghost, findsOneWidget);
-      final box = tester.getRect(ghost);
-      final band = tester.getRect(
-          find.byKey(ValueKey<String>('tl-keys-layer-${idOf(layer)}')));
-      expect(box.height, closeTo(clipBarHeight, 0.5),
-          reason: 'a bar\'s own 16, the same as in Layers mode');
-      expect(box.center.dy, closeTo(band.center.dy, 0.5),
-          reason: 'centred in the band, ground above and below');
-
-      final decoration = tester
-          .widget<DecoratedBox>(
-              find.descendant(of: ghost, matching: find.byType(DecoratedBox)))
-          .decoration as BoxDecoration;
-      expect(decoration.color!.a, closeTo(keysGhostBarAlpha, 0.001),
-          reason: 'the disabled treatment, and the number is the treatment');
-      expect(keysGhostBarAlpha, lessThan(clipFillAlpha),
-          reason: 'quieter than the bar it is a ghost of');
-
-      // Nothing about it is a handle: the whole band ignores the pointer, so
-      // a drag started on the ghost is the marquee's, not a trim's.
-      expect(find.byKey(ValueKey<String>('tl-bar-name-${idOf(layer)}')),
-          findsNothing);
-      expect(find.byKey(ValueKey<String>('tl-bar-ends-${idOf(layer)}')),
-          findsNothing);
+          reason: 'the two halves are level in Compact too');
     });
 
     /// 11. **Neither column of switches ever stretches** (§12A.1, K-448; Modes
@@ -1380,7 +1386,7 @@ void main() {
       await mount(tester, p);
 
       final bar =
-          tester.getRect(find.byKey(const ValueKey('tl-column-compose')));
+          tester.getRect(find.byKey(const ValueKey('tl-column-parent')));
       for (final key in ['tl-hide-shy', 'tl-mb-master', 'tl-more']) {
         final found = tester.getRect(find.byKey(ValueKey<String>(key)));
         expect(found.center.dy, closeTo(bar.center.dy, 1),

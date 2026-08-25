@@ -3134,8 +3134,8 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   for eased (bezier), a **square** block for a hold. A key that eases in and holds out is
   therefore half hourglass and half square, which is the truth about it and is not
   something one shape could ever have said. All three stand the same height, so a lane of
-  mixed keys still reads as one even row of marks. The same marks at the same size in
-  Layers mode and in Keys mode — one painter draws both.
+  mixed keys still reads as one even row of marks. The same marks at the same size on a
+  property's own lane and on a shut layer's summary — one painter draws them all.
   **The diamonds on the lane are live, not just a picture (notes 2.1/2.6).** Click a keyframe
   diamond to select it — it wears a ring — and **drag it left or right to change its time**;
   while the **magnet** (the bottom-bar toggle, on by default) is lit it snaps to the nearest
@@ -8647,32 +8647,27 @@ running, appears next to what the gesture is doing, and leaves no trace behind. 
 also why it floats *above* everything rather than sitting inside the row — a hint that
 made room for itself would push the panel about every time you touched a number.
 
-## 17. The Timeline's three views, in plain terms
+## 17. The Timeline's two views, in plain terms
 
-The Timeline shows the same composition three ways, and a row of three words at the top
-right of the panel — **Layers**, **Keys**, **Graph** — says which one is up.
+The Timeline shows the same composition two ways, and a pair of words at the top right of
+the panel — **Layers** and **Graph** — says which one is up.
 
 **Layers** is the one you already know: one bar per layer, laid along time, and twirl a
 layer open to see its properties with their keyframes on lanes beside them. It is where
 you cut, trim, reorder and key.
 
-**Keys** is the dope sheet. Instead of bars it lists what is *keyed* — every animated
-property of every layer, brought up to one flat level, so a whole composition's timing is
-one screen rather than a dozen twirls. A property that lived three levels down as
-Effects → Glow → Intensity appears here as one row reading `Glow · Intensity`, with what
-it holds at the playhead beside it. Nothing about it is a new way of editing: the marks on
-its lanes are the same keyframes, at the same places, dragged with the same hand — this is
-a way of *looking*. Two words in the row under the tabs decide how much it lists: **All**
-shows every property a layer has, **Animated** (the default, and the same reading the `U`
-key gives you) shows only the ones with keyframes on them. It always covers the whole
-composition — there is nothing to narrow it to a selection, because the outline beside it
-and the wash on a picked lane already say what you have in hand.
+**Graph** replaces the bars with the curves themselves — the same keyframes, drawn as the
+shape of the movement between them, so you can see a value speed up and slow down instead
+of only seeing when it changed. Its left-hand list is **exactly the Layers list**: the same
+twirls, the same columns, the same rows. Whichever properties you have picked there are the
+curves on the pane, and switching between the two views changes what is drawn against time
+and nothing else about where things are.
 
-Behind each layer's own band the sheet draws that layer's **bar**, greyed right down. It
-is the bar from Layers mode, in the same place and at the same height, with everything
-that made it a handle taken away — no name on it, no ends to trim, nothing that answers a
-drag. It is there for one reason: keys tell you *when*, and without the bar behind them
-there was no way to see that a key sat past the end of the layer it belonged to.
+There used to be a third, **Keys** — a dope sheet that listed every animated property of
+every layer on one flat level. It was withdrawn after the owner worked in it: pressing `U`
+or twirling a layer open was the same number of clicks, and the Layers view is already
+dense enough to read a composition's timing off. The one part of it that was kept is its
+strip of commands, which now lives along the bottom of the Layers view (below).
 
 A key's *shape* is its interpolation, here and on a Layers lane alike. A diamond runs in a
 straight line, an hourglass is a curve, a square is a hold — the value stays put until the
@@ -8699,45 +8694,35 @@ things the modes swap the *body* underneath, not three copies. That is why switc
 never moves the ruler and never loses your place: the same range is on screen, described
 differently. In the code this is one field saying which mode is up
 (`TimelineMode` in `flutter_ui/lib/panels/timeline_panel_frb.dart`) rather than a switch
-per mode, because two switches can say "graph and keys at once" and a state nobody can
-draw is a state something will eventually reach.
+per mode, because two switches can say "both at once" and a state nobody can draw is a
+state something will eventually reach.
 
-### The graph's own list, and Normalise
+### The graph's list is the Layers list
 
-Graph mode has a different left-hand list from the other two. Layers mode's list is a
-control surface — switches, blend modes, parents, in and out times — and none of that has
-anything to do with shaping a curve, so the graph replaces it with the one question it
-actually asks: **which properties am I looking at?**
+Graph mode used to have a left-hand list of its own — every animated property, flat, each
+row with a tick box that put its curve on the pane. It has gone, and the graph now shows
+**exactly** what Layers shows: the same twirls, the same columns, the same rows.
 
-The list is every *animated* property, flat, one row each, and each row carries a small
-tick box, a coloured dot, its name, and what it reads at the playhead. Tick a row and its
-curve appears on the pane in the colour of its dot; untick it and the curve goes, leaving
-the others alone. Click the row's **name** instead and you get just that property, with
-its keyframes selected — the quick way to work on one curve. A property with two axes,
-like Position, is one row with two dots, because ticking is per property. **Show — All**
-lists everything a layer has, including the properties with nothing keyed on them yet.
+The reason is that there were two ways of choosing a curve and one of them was only
+available in one view. Now there is one: **whichever property rows you have picked are the
+curves on the pane**, in either view. Pick Opacity in Layers, switch to Graph, and its
+curve is there. A row's small coloured tick on its lane says which curve is which, and a
+property with two axes says both.
 
-There is no separate idea of "what the graph is showing" underneath this. The ticked rows
-*are* the panel's property selection — the same list the Layers outline picks with — so
-there is one answer anywhere in the editor to which curves are up, and no way for two
-parts of the panel to disagree about it.
+What went with the list was **Normalise**, a checkbox that drew each curve against its own
+smallest and largest value so that a rotation in degrees and a position in pixels both
+filled the height. It was withdrawn because it was hard to know what you were looking at
+while it was on — the numbers down the side stopped being values and became percentages of
+something different per curve. Without it the curves share one scale again, which means a
+small-numbered curve beside a large-numbered one really is a flat line along the bottom.
+That is the trade, taken deliberately: a picture that is harder to compare is better than
+one that is easier to misread.
 
-**Normalise** is the checkbox at the right of that same row. The problem it solves: a
-rotation measured in degrees might run from 0 to 45 while a position measured in pixels
-runs from 0 to 1900, and drawn on one axis the rotation is a flat line squashed along the
-bottom while the position uses the whole pane. With Normalise on, every curve is drawn
-against **its own** smallest and largest value, so each one fills the height and you can
-compare their *shapes* — which is what you were looking at them together for.
-
-It changes nothing about the animation. Under the hood each curve simply gets its own
-top-and-bottom pair rather than the values themselves being scaled, which matters more
-than it sounds: it means every measurement in the pane stays in the property's real units,
-so dragging a key with Normalise on writes exactly the value it would have written with
-Normalise off. A curve's own top and bottom are worked out from the saved keyframes rather
-than from the drag in progress, too — otherwise the curve would rescale under your hand
-and a key you were dragging upward would appear to stay still. While Normalise is on, the
-numbers down the side read 0 to 100 as a percentage, because with unlike units on one pane
-there is no single scale left to write.
+While exactly one keyframe is selected, a small row appears at the foot of the list reading
+which frame it sits on, what it holds, and its two **influences** as editable percentages —
+how far each side's ease reaches toward its neighbour. Typing into those is the same edit as
+dragging the key's handle on the pane, and lands as one undo step. Two or more keys are a
+block, and a block has its own badge, so the row steps aside.
 
 Those numbers live in a narrow strip pinned to the **right** edge of what you can see —
 never over the curves, and never scrolling away. The pane itself is as wide as the whole
@@ -8750,10 +8735,6 @@ list reading which frame it sits on, what it holds, and its two **influences** a
 percentages — how far each side's ease reaches toward its neighbour. Typing into those is
 the same edit as dragging the key's handle on the pane, and lands as one undo step. Two or
 more keys are a block, and a block has its own badge, so the row steps aside.
-
-Anyone who would rather have one shape everywhere can turn on Settings ▸ Interface ▸
-Panels ▸ *Graph mode keeps the Layers outline*, and the graph goes back to showing the
-Layers list.
 
 ### Selecting a run of keyframes as one thing
 
@@ -8772,9 +8753,10 @@ single one does.
 
 The label is also a button: press it and the **Ease popover** opens on the selection.
 
-None of this is Keys mode's own. The box is drawn by the part of the panel that draws the
-lanes, and Layers mode uses that same part, so a block selected in either view behaves the
-same way — one piece of code, not two that have to be kept in step. The arithmetic behind
+The box is drawn by the part of the panel that draws the lanes, so a block behaves the
+same way wherever its keys were picked — one piece of code, not two that have to be kept
+in step. (This is why nothing about blocks had to be unpicked when the dope sheet was
+withdrawn: none of it was ever the sheet's.) The arithmetic behind
 it (how far each key moves, what the label counts, what Reverse and Stagger do to a time)
 lives on its own in `flutter_ui/lib/panels/key_block.dart`, with no picture and no engine
 in it, so it can be checked directly rather than measured off a screen.
@@ -8782,13 +8764,13 @@ in it, so it can be checked directly rather than measured off a screen.
 ### The same block, in the graph: scaling by its edges
 
 Graph mode draws the same box round two or more selected keyframes, and there it has a
-second dimension to it. On the dope sheet a block only has a length — the frames it
-covers. On the graph a block also has a *height*, because up and down is the value the
-property holds. So the box there is a real rectangle, and each of its four edges is
-something you can take hold of.
+second dimension to it. On a lane a block only has a length — the frames it covers. On the
+graph a block also has a *height*, because up and down is the value the property holds. So
+the box there is a real rectangle, and each of its four edges is something you can take
+hold of.
 
-Drag the **left or right** edge and the selection scales in time, exactly as the dope
-sheet's handles do: the edge you did not touch stays put, the one in your hand goes where
+Drag the **left or right** edge and the selection scales in time, exactly as the lane
+handles do: the edge you did not touch stays put, the one in your hand goes where
 you put it, and every key keeps its share of the distance. Drag the **top or bottom** edge
 and the same thing happens to the values: pull the top down and the whole animation gets
 tamer, push it up and it gets bigger, and whichever edge you left alone holds its keys
@@ -8803,14 +8785,12 @@ its corners sitting on the selection's own outermost keyframes, and a corner tar
 would take the clicks and drags those keys need for themselves. Scaling both directions is
 two drags instead of one, which is a small price for keeping every keyframe reachable.
 
-The sums are the dope sheet's sums. `scaledAbout` in
+The sums are the lanes' sums. `scaledAbout` in
 `flutter_ui/lib/panels/key_block.dart` — "here is the end that stays, here is how far the
 other end used to reach, here is how far it reaches now, where does this one go?" — is the
 whole of it, and both the lane handles and the graph's edges ask it. Time is measured in
-frames; value is measured in **pixels on screen**, which sounds odd until you remember
-Normalise: with each curve drawn against its own range, a scale that meant "half" in one
-curve's units would mean something else in another's, whereas half the height on screen is
-half the height on screen for all of them.
+frames; value is measured in **pixels on screen**, so that a scale meaning "half" means
+half of what you can see whatever units the curve is in.
 
 ### Typing a keyframe's numbers
 
@@ -8905,9 +8885,9 @@ Nothing here works out a curve for itself. The shapes come from the same file th
 panel uses, and Apply goes through the same call, so an ease chosen here and an ease drawn
 there land identically.
 
-### Keys mode's strip of commands
+### The keyframe strip
 
-Along the bottom of the dope sheet: **Interpolation** — Linear, Hold, Ease, Bezier —
+Along the bottom of the Layers view: **Interpolation** — Linear, Hold, Ease, Bezier —
 which sets both sides of every selected key at a press (Ease opens the popover above);
 then **Reverse**, **Copy** and **Paste at playhead**.
 
@@ -8919,6 +8899,22 @@ while the shape of the motion still pointed the old way.
 
 Paste at playhead puts the copied keys down with the first of them under the playhead, on
 the properties they came off.
+
+### Words or pictures on the buttons
+
+Every button, tab and toggle in Lumit has a word and a small drawing that mean the same
+thing. **Settings ▸ Appearance ▸ Interface ▸ Chrome labels** chooses which of the two you
+see: *Words*, *Icons* (the default — buttons, tabs and toggles become drawings, while
+panel titles stay as words), or *Icons everywhere* (the panel titles too).
+
+Two things are true whichever you choose. Hovering anything always spells out the word, so
+nothing is ever a picture you cannot name. And **anything you typed yourself** — a layer's
+name, a composition's — is never turned into a drawing; the setting is about Lumit's own
+chrome, not about your document.
+
+The first place it shows is the Timeline's bottom bar, where the three column toggles
+(Switches, Modes, Parent) draw as glyphs by default. The rest of the chrome still speaks
+words and will be converted a surface at a time.
 
 ### One gesture, one undo
 

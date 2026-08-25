@@ -100,11 +100,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    Future<void> openKeysMode(WidgetTester tester) async {
-      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
-      await tester.pumpAndSettle();
-    }
-
     /// Drag a box from [from] to [to], both in global coordinates.
     ///
     /// Moved in two steps with a pump between: the first move is what takes the
@@ -139,97 +134,6 @@ void main() {
 
     List<BridgeKeyframe> opacityKeys(LayerReference layer) =>
         (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
-
-    // ---------------------------------------------------------------------
-    // §2.3 — Keys mode's ground.
-    // ---------------------------------------------------------------------
-
-    /// **Keys mode opens with every listed layer twirled open.** The dope
-    /// sheet's point is the flattened property rows; a sheet of shut bands
-    /// shows nothing and takes no marquee. Its twirl set is its own — Layers
-    /// mode's shut-by-default is not inherited — and still toggles per layer.
-    testWidgets('Keys mode opens with every layer twirled open',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-
-      final row =
-          find.byKey(ValueKey<String>('tl-keys-prop-${opacityPath(layer)}'));
-      expect(row, findsNothing, reason: 'Layers mode is shut by default');
-
-      await openKeysMode(tester);
-      expect(row, findsOneWidget,
-          reason: 'the sheet opens onto its property rows');
-
-      // Still a twirl: the default is "open", not "cannot be shut".
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-keys-twirl-${layer.internallayerId}')));
-      await tester.pumpAndSettle();
-      expect(row, findsNothing, reason: 'the twirl still shuts the layer');
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-keys-twirl-${layer.internallayerId}')));
-      await tester.pumpAndSettle();
-      expect(row, findsOneWidget, reason: 'and opens it again');
-    });
-
-    /// **Keys mode's twirl set is its own.** Opening Layers mode after shutting
-    /// a layer in Keys leaves Layers as it was: two modes, two defaults, one
-    /// document.
-    testWidgets('shutting a layer in Keys mode leaves Layers mode alone',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      expect(find.byKey(laneKeyOf(layer)), findsOneWidget);
-
-      await openKeysMode(tester);
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-keys-twirl-${layer.internallayerId}')));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('tl-view-lanes')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(laneKeyOf(layer)), findsOneWidget,
-          reason: 'Layers mode kept the fold the user opened there');
-    });
-
-    /// **A Keys-mode layer band selects on tap but never swallows a drag**
-    /// (P5). It was an opaque tap-only band across every row of the resting
-    /// sheet, so the box could not be started anywhere at all.
-    testWidgets('a Keys-mode layer band selects on tap', (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeysMode(tester);
-
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-keys-layer-${layer.internallayerId}')));
-      await tester.pumpAndSettle();
-      expect(
-          p.uiState.selectedLayer.value?.internallayerId, layer.internallayerId,
-          reason: 'the band is the layer\'s row wherever it is drawn');
-    });
-
-    testWidgets('a drag begun on a Keys-mode layer band boxes keys',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeysMode(tester);
-
-      final band = tester.getRect(find
-          .byKey(ValueKey<String>('tl-keys-layer-${layer.internallayerId}')));
-      final lane = tester.getRect(find.byKey(laneKeyOf(layer)));
-      expect(selectedOn(tester, laneKeyOf(layer)), isEmpty);
-
-      // Down on the band, out across the property lane below it.
-      await boxFrom(tester, Offset(band.left + 1, band.top + 2),
-          Offset(lane.right - 1, lane.bottom - 1));
-      expect(selectedOn(tester, laneKeyOf(layer)), hasLength(2),
-          reason: 'the band let the marquee through');
-    });
 
     // ---------------------------------------------------------------------
     // §2.1 — where a marquee may start, and what a modifier does to it.
@@ -401,19 +305,6 @@ void main() {
           reason: 'two selected keys are the block, however they were picked');
     });
 
-    /// The same gesture on the dope sheet's rows, where the name *is* the row.
-    testWidgets('a Keys-mode property row selects its keys', (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeysMode(tester);
-
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-keys-prop-${opacityPath(layer)}')));
-      await tester.pumpAndSettle();
-      expect(selectedOn(tester, laneKeyOf(layer)), {0, 1});
-    });
-
     /// `Ctrl`-click toggles the property's keys in and out of the standing key
     /// selection.
     testWidgets('Ctrl-clicking a property name toggles its keys',
@@ -421,9 +312,8 @@ void main() {
       final p = withComp();
       final layer = keyedLayer(p);
       await mount(tester, p);
-      await openKeysMode(tester);
-      final row =
-          find.byKey(ValueKey<String>('tl-keys-prop-${opacityPath(layer)}'));
+      await openTransform(tester, layer);
+      final row = find.text('Opacity');
 
       await tester.tap(row);
       await tester.pumpAndSettle();
@@ -458,15 +348,13 @@ void main() {
       );
       p.uiState.model.refresh();
       await mount(tester, p);
-      await openKeysMode(tester);
+      await openTransform(tester, layer);
 
       final rotationPath = '${layer.internallayerId}/transform/rotation';
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-keys-prop-${opacityPath(layer)}')));
+      await tester.tap(find.text('Opacity'));
       await tester.pumpAndSettle();
       await holding(tester, LogicalKeyboardKey.shiftLeft, () async {
-        await tester
-            .tap(find.byKey(ValueKey<String>('tl-keys-prop-$rotationPath')));
+        await tester.tap(find.text('Rotation'));
         await tester.pumpAndSettle();
       });
 

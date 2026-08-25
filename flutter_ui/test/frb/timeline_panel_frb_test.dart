@@ -9,7 +9,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -33,6 +32,7 @@ import 'package:lumit_flutter/panels/ease_popover.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/panels/waveform_frb.dart';
+import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
@@ -345,6 +345,11 @@ void main() {
     /// **The frame counter says how many frames there are** (§12A.1): the
     /// mockup's `F48 / 250`, the whole phrase in one muted colour. It said
     /// only `F48`, which left the reader with no idea how far in that was.
+    ///
+    /// **No space after the slash** (K-529, the owner after desktop testing):
+    /// the mockup writes one, and on a real composition the phrase then broke
+    /// into three marks — a number, a lone stroke, another number — where it
+    /// is one reading. The stroke binds to the count it introduces.
     testWidgets('the frame counter carries the comp\'s total', (tester) async {
       final p = withComp();
       p.uiState.playheadFrame.value = 3;
@@ -353,9 +358,11 @@ void main() {
 
       final total = p.comp.durationFrames();
       expect(find.text('F3'), findsOneWidget);
-      expect(find.text('/ $total'), findsOneWidget,
+      expect(find.text('/$total'), findsOneWidget,
           reason: 'the comp\'s whole length, after the frame in hand');
-      expect(tester.widget<Text>(find.text('/ $total')).style?.color,
+      expect(find.text('/ $total'), findsNothing,
+          reason: 'and nothing between the stroke and the number');
+      expect(tester.widget<Text>(find.text('/$total')).style?.color,
           LumitTheme.dark().textMuted,
           reason: 'in the same muted colour as the frame number it follows');
     });
@@ -3293,12 +3300,12 @@ void main() {
       const g = TimelineGroup.values;
       expect(
         reorderedGroups(defaultGroupOrder, g[0], g[3]),
-        [g[1], g[2], g[3], g[0], g[4]],
+        [g[1], g[2], g[3], g[0], g[4], g[5]],
         reason: 'dragged right, it lands after the target',
       );
       expect(
         reorderedGroups(defaultGroupOrder, g[3], g[0]),
-        [g[3], g[0], g[1], g[2], g[4]],
+        [g[3], g[0], g[1], g[2], g[4], g[5]],
         reason: 'dragged left, it lands before the target',
       );
       expect(reorderedGroups(defaultGroupOrder, g[1], g[1]), defaultGroupOrder);
@@ -3311,6 +3318,8 @@ void main() {
           valueColumnFor(defaultGroupOrder, defaultGroupWidths).rightInset,
           groupDividerWidth +
               composeGroupWidth +
+              groupDividerWidth +
+              parentGroupWidth +
               groupDividerWidth +
               timingsGroupWidth);
       final renderLast = reorderedGroups(
@@ -4233,7 +4242,7 @@ void main() {
       final from =
           tester.getCenter(find.byKey(const ValueKey('tl-colgroup-switches')));
       final to =
-          tester.getCenter(find.byKey(const ValueKey('tl-colgroup-compose')));
+          tester.getCenter(find.byKey(const ValueKey('tl-colgroup-parent')));
       final gesture = await tester.startGesture(from);
       await tester.pump(const Duration(milliseconds: 200));
       final step = (to - from) / 8;
@@ -5495,417 +5504,40 @@ void main() {
     });
 
     // ---------------------------------------------------------------------
-    // Keys mode — the dope sheet (K-455, §12A.1).
+    // The keyframe block and the bottom bar's strip (K-458), in Layers mode.
     //
-    // The mode adds no editing behaviour Layers lacks: it is a different
-    // arrangement of the same parts, so most of what these claim is that the
-    // *same* machinery is running under a different layout — the same key
-    // paths, the same drag, the same selection, the same ruler.
+    // Keys mode — the dope sheet these were written against — is gone
+    // (K-529), and the strip came with them to the Layers bar. The machinery
+    // never was the sheet's: the block box, its stretch handles, the Ease
+    // popover and the seven commands all act on the lane key selection, which
+    // is the same selection in every view.
     // ---------------------------------------------------------------------
 
-    /// A solid whose Opacity is keyed at [frames], the fixture every claim
-    /// below starts from.
-    LayerReference keyedLayer(dynamic p, {List<int> frames = const [0, 60]}) {
-      final layer = (p.comp as CompositionReference).addSolidLayer();
-      layer.setTransform(
-        prop: BridgeTransformProp.opacity,
-        value: BridgeScalar.keyframed([
-          for (final f in frames)
-            BridgeKeyframe(
-              time: (p.comp as CompositionReference).timeOfFrame(frame: f),
-              value: f.toDouble(),
-              interpIn: const BridgeSideInterp.linear(),
-              interpOut: const BridgeSideInterp.linear(),
-            ),
-        ]),
-      );
-      (p.uiState as LumitUiState).model.refresh();
-      return layer;
-    }
-
-    /// Switch the panel to Keys mode, which is all it takes: the dope sheet
-    /// opens with every layer twirled down (K-500 §2.3), so the property rows
-    /// are there as soon as the mode is.
-    Future<void> openKeys(WidgetTester tester, LayerReference layer) async {
-      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
+    /// Twirl a layer open onto its Transform group, which is how a keyed
+    /// property's lane is reached (K-529: it used to be a tap on the Keys
+    /// tab, and the sheet opened every layer for you).
+    Future<void> openKeyLane(WidgetTester tester, LayerReference layer) async {
+      await openFold(tester, layer.internallayerId, group: 'Transform');
       await tester.pumpAndSettle();
     }
 
-    /// The tab row gains a third segment, between its two (§12A.1, K-455), and
-    /// the mode it opens is neither of the other two.
-    testWidgets('the mode tabs read Layers, Keys and Graph, in that order',
+    /// **Two mode tabs, not three** (K-529): Keys is gone, and the tab that
+    /// opened it with it.
+    testWidgets('the mode tabs read Layers and Graph, in that order',
         (tester) async {
       final p = withComp();
       await mount(tester, p);
 
-      expect(find.text('KEYS'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tl-view-keys')), findsNothing);
+      expect(find.text('KEYS'), findsNothing);
       final layers =
           tester.getRect(find.byKey(const ValueKey('tl-view-lanes')));
-      final keys = tester.getRect(find.byKey(const ValueKey('tl-view-keys')));
       final graph = tester.getRect(find.byKey(const ValueKey('tl-graph')));
-      expect(layers.right, lessThanOrEqualTo(keys.left));
-      expect(keys.right, lessThanOrEqualTo(graph.left));
-      expect(keys.center.dy, moreOrLessEquals(layers.center.dy, epsilon: 2));
+      expect(layers.right, lessThanOrEqualTo(graph.left));
+      expect(graph.center.dy, moreOrLessEquals(layers.center.dy, epsilon: 2));
 
-      // Keys is a mode of its own: the graph does not come up with it, and
-      // the columns Layers mode carries stand down.
-      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
-      await tester.pumpAndSettle();
-      expect(find.byType(GraphEditorFrb), findsNothing);
-      expect(find.byKey(const ValueKey('tl-keys-filters')), findsOneWidget,
-          reason: 'the dope sheet\'s filter row replaces the column header');
-
-      // And Layers is unchanged behind it.
-      await tester.tap(find.byKey(const ValueKey('tl-view-lanes')));
-      await tester.pumpAndSettle();
+      // The sheet's own surfaces went with the mode, not dormant behind it.
       expect(find.byKey(const ValueKey('tl-keys-filters')), findsNothing);
-    });
-
-    /// The sheet itself: a layer's own row saying how many properties it
-    /// carries, then one flat row per keyed property named by the group it
-    /// came out of — `Transform · Opacity` — with what it reads at the
-    /// playhead beside it.
-    testWidgets('Keys mode lists a layer\'s keyed properties, flat',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeys(tester, layer);
-
-      expect(
-          find.byKey(ValueKey<String>('tl-keys-row-${layer.internallayerId}')),
-          findsOneWidget);
-      expect(find.text('1 property'), findsOneWidget,
-          reason: 'the layer says how much of it is listed');
-      expect(
-          find.byKey(ValueKey<String>(
-              'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
-          findsOneWidget);
-      expect(find.text('Transform'), findsOneWidget,
-          reason: 'the group the property came out of names it');
-      expect(find.text('Opacity'), findsOneWidget);
-      // At frame 0 the curve reads 0 — in a **well** now (K-499), so it reads
-      // with the axis's own suffix exactly as the Layers fold row's does.
-      expect(
-          find.descendant(
-              of: find.byKey(ValueKey<String>(
-                  'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
-              matching: find.text('0%')),
-          findsOneWidget);
-
-      // And a lane beside it, at the same path Layers mode uses.
-      expect(
-          find.byKey(ValueKey<String>(
-              'tl-keys-${layer.internallayerId}/transform/opacity')),
-          findsOneWidget);
-    });
-
-    /// The Animated filter (K-441) applies here as it does in Layers: on — the
-    /// default — only keyframed properties are listed; All restores the rest.
-    testWidgets('the Animated filter decides what the sheet lists',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeys(tester, layer);
-
-      expect(find.text('Position'), findsNothing,
-          reason: 'Position is not animated, so Animated leaves it out');
-
-      await tester.tap(find.byKey(const ValueKey('tl-keys-all')));
-      await tester.pumpAndSettle();
-      expect(find.text('Position'), findsOneWidget,
-          reason: 'All restores every property the layer has');
-      expect(find.text('Opacity'), findsOneWidget,
-          reason: 'and keeps the animated ones');
-
-      await tester.tap(find.byKey(const ValueKey('tl-keys-animated')));
-      await tester.pumpAndSettle();
-      expect(find.text('Position'), findsNothing);
-    });
-
-    /// **Keys mode has no scope pair** (K-515, the owner's ruling from desktop
-    /// testing). It listed *Layers* and *Selected only* hard right of the
-    /// filter until the ruling took them out: the sheet is always every layer
-    /// in the composition, and which properties are in hand is already said by
-    /// the outline and by the wash on a picked lane. The filter row keeps
-    /// Show All / Animated and the `U` beside them.
-    testWidgets('the dope sheet is every layer, with no scope to choose',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      final other = p.comp.addSolidLayer();
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      await openKeys(tester, layer);
-
-      expect(find.byKey(const ValueKey('tl-keys-scope-layers')), findsNothing);
-      expect(
-          find.byKey(const ValueKey('tl-keys-scope-selected')), findsNothing);
-      // The two words that stayed.
-      expect(find.byKey(const ValueKey('tl-keys-all')), findsOneWidget);
-      expect(find.byKey(const ValueKey('tl-keys-animated')), findsOneWidget);
-
-      // Selecting one layer does not narrow the sheet to it: both are still
-      // listed, which is what "always the layers scope" means.
-      for (final l in [layer, other]) {
-        expect(find.byKey(ValueKey<String>('tl-keys-row-${l.internallayerId}')),
-            findsOneWidget);
-      }
-    });
-
-    /// `U` is the same reveal it has always been: it opens a layer onto what
-    /// is animated, and the dope sheet's rows are what it opens onto.
-    testWidgets('U opens a layer in Keys mode as it does in Layers',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await tester.tap(find.byKey(const ValueKey('tl-view-keys')));
-      await tester.pumpAndSettle();
-      // Shut by hand first: the sheet opens with every layer down (K-500
-      // §2.3), so there is nothing for `U` to reveal until one is closed.
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-keys-twirl-${layer.internallayerId}')));
-      await tester.pumpAndSettle();
-      expect(
-          find.byKey(ValueKey<String>(
-              'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
-          findsNothing,
-          reason: 'the twirl shut it');
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyU);
-      await tester.pumpAndSettle();
-      expect(
-          find.byKey(ValueKey<String>(
-              'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
-          findsOneWidget,
-          reason: 'U reveals what is animated, in this mode too');
-    });
-
-    /// **The dope sheet's keys are the lanes' keys.** Clicking one selects it
-    /// and dragging one moves it — through the very machinery Layers mode
-    /// uses, at the same path, committing one op that undoes in one step.
-    /// This is the claim K-455 rests on: were Keys a second implementation,
-    /// this would need a second set of gestures to pass.
-    testWidgets('a key in Keys mode selects and drags like a lane key',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p, frames: [600, 2400]);
-      await mount(tester, p);
-      await openKeys(tester, layer);
-
-      List<BridgeKeyframe> keys() =>
-          (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
-      final laneKey = ValueKey<String>(
-          'tl-keys-${layer.internallayerId}/transform/opacity');
-      final handle = find.byKey(ValueKey<String>(
-          'tl-key-${layer.internallayerId}/transform/opacity#0'));
-      expect(handle, findsOneWidget,
-          reason: 'the diamond is a drag handle here too');
-
-      final perFrame =
-          (tester.getRect(find.byKey(laneKey)).width - TimelineAxis.pad * 2) /
-              p.comp.durationFrames();
-      await tester.drag(handle, Offset(perFrame * 10.5, 0));
-      await tester.pumpAndSettle();
-
-      final moved = p.comp.frameAtTime(time: keys().first.time);
-      expect(moved, greaterThan(600), reason: 'the drag moved the key later');
-      expect(keys(), hasLength(2), reason: 'no key added or lost');
-
-      p.state.project!.undo();
-      expect(p.comp.frameAtTime(time: keys().first.time), 600,
-          reason: 'one gesture, one undo step — the lane commit, unchanged');
-    });
-
-    /// The ruler, the work area, the cache bar and the playhead are the same
-    /// ones Layers mode draws, not copies: a mode switch leaves them where
-    /// they were, so the two views scroll the same range (§12A.1).
-    testWidgets('Keys mode keeps the shared ruler and playhead',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      p.uiState.playheadFrame.value = 24;
-      await mount(tester, p);
-
-      final rulerBefore =
-          tester.getRect(find.byKey(const ValueKey('tl-ruler')));
-      final headBefore = tester.getRect(find.byType(PlayheadMarker).first);
-      final zoomBefore = tester
-          .widget<HouseSlider>(find.byKey(const ValueKey('tl-zoom-slider')))
-          .value;
-
-      await openKeys(tester, layer);
-
-      expect(
-          tester.getRect(find.byKey(const ValueKey('tl-ruler'))), rulerBefore,
-          reason: 'the ruler does not move on a mode switch');
-      expect(tester.getRect(find.byType(PlayheadMarker).first), headBefore,
-          reason: 'nor does the playhead');
-      // The zoom is the *same control*, at the same setting — one slider, not
-      // two. Its x does move, and must: the Keys drawing puts a strip of
-      // commands on this bar to the left of it (K-458), so the slider sits
-      // along from where an empty Layers bar leaves it. What §12A.1a asks of
-      // the zoom is that the two views share it, which is what this reads.
-      expect(find.byKey(const ValueKey('tl-zoom-slider')), findsOneWidget,
-          reason: 'one zoom slider, shared, not one per mode');
-      expect(
-          tester
-              .widget<HouseSlider>(find.byKey(const ValueKey('tl-zoom-slider')))
-              .value,
-          zoomBefore,
-          reason: 'and it is still where it was left');
-      expect(find.byType(TimelineCacheBar), findsWidgets);
-    });
-
-    /// The sheet's own metrics, from the approved Keys drawing: the rows are
-    /// the density's lane row on both sides, and a key measures 11 point to
-    /// point where a Layers lane draws 8 (the dope sheet is where the keys
-    /// are the subject).
-    testWidgets('the Keys sheet is built to the drawing\'s metrics',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeys(tester, layer);
-      const d = DensityTokens.regular;
-
-      final row = tester.getRect(
-          find.byKey(ValueKey<String>('tl-keys-row-${layer.internallayerId}')));
-      final lane = tester.getRect(find
-          .byKey(ValueKey<String>('tl-keys-layer-${layer.internallayerId}')));
-      final prop = tester.getRect(find.byKey(ValueKey<String>(
-          'tl-keys-prop-${layer.internallayerId}/transform/opacity')));
-      expect(row.height, closeTo(d.laneRow, 0.5),
-          reason: 'a layer\'s row is the density\'s lane row (K-454)');
-      expect(prop.height, closeTo(d.laneRow, 0.5),
-          reason: 'and so is a property\'s');
-      expect(lane.top, closeTo(row.top, 0.5),
-          reason: 'the two halves are one table here as well');
-      expect(lane.height, closeTo(row.height, 0.5));
-
-      // The filter row is the Timeline's second chrome row, level with the
-      // column header it replaces — which is what keeps the ruler opposite it
-      // (K-511).
-      expect(
-          tester.getRect(find.byKey(const ValueKey('tl-keys-filters'))).height,
-          closeTo(d.timelineHeaderRow, 0.5));
-
-      // The property's value is the fold row's **well** (K-499), so its
-      // metrics are the well's: mono at [wellTextSize], and `animated`
-      // because the property is keyed. The count stays mono at 9 muted — the
-      // drawing's own size for a count.
-      final value = tester
-          .renderObject<RenderParagraph>(find.descendant(
-              of: find.byKey(ValueKey<String>(
-                  'tl-keys-prop-${layer.internallayerId}/transform/opacity')),
-              matching: find.text('0%')))
-          .text
-          .style!;
-      expect(value.fontSize, wellTextSize);
-      expect(value.color, LumitTheme.dark().animated);
-      final count = tester
-          .renderObject<RenderParagraph>(find.text('1 property'))
-          .text
-          .style!;
-      expect(count.fontSize, 9);
-      expect(count.color, LumitTheme.dark().textMuted);
-
-      expect(keysNumberText(960), '960',
-          reason: 'whole numbers plain, as the drawing writes them');
-      expect(keysNumberText(1.6), '1.60');
-
-      // The drawing's own two distances: a key spans 11 point to point, and a
-      // property row starts 30 in, clear of the twirl and the colour dot.
-      expect(laneKeyHalf * 2, 11);
-      expect(keysPropertyIndent, 30);
-      // The indent is where the **row** starts, and since K-499 what starts
-      // there is the stopwatch — the drawing's 30 measured to the first thing
-      // on the row, exactly as a Layers fold row measures to its own.
-      final stopwatch = tester
-          .getRect(find.byKey(const ValueKey('kf-stopwatch-tl-tf-opacity')));
-      expect(stopwatch.left - prop.left, closeTo(keysPropertyIndent, 0.5),
-          reason: 'the row starts at the drawing\'s indent');
-      expect(tester.getRect(find.text('Transform')).left,
-          greaterThan(stopwatch.right),
-          reason: 'and the name follows the controls, as the fold row lays '
-              'them out');
-    });
-
-    /// **K-499: a Keys row *is* a Layers fold row.** The owner's finding was
-    /// that the dope sheet's rows had gone read-only — a name and a number
-    /// where the fold-out offers a stopwatch, a navigator and a well. The
-    /// anatomy, pinned: the layer number on the layer's row, and on the
-    /// property's the four controls in the fold row's own order.
-    testWidgets('a Keys property row carries the fold row\'s anatomy',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeys(tester, layer);
-
-      // The layer number, back in the sheet (K-461's column).
-      expect(
-          find.descendant(
-              of: find.byKey(
-                  ValueKey<String>('tl-keys-row-${layer.internallayerId}')),
-              matching: find.text('1')),
-          findsOneWidget,
-          reason: 'the layer says which layer it is');
-
-      final row = find.byKey(ValueKey<String>(
-          'tl-keys-prop-${layer.internallayerId}/transform/opacity'));
-      for (final control in [
-        'kf-stopwatch-tl-tf-opacity',
-        'kf-prev-tl-tf-opacity',
-        'kf-toggle-tl-tf-opacity',
-        'kf-next-tl-tf-opacity',
-        'tl-tf-opacity',
-      ]) {
-        expect(
-            find.descendant(
-                of: row, matching: find.byKey(ValueKey<String>(control))),
-            findsOneWidget,
-            reason:
-                '$control belongs to a fold row, so it belongs to this one');
-      }
-
-      // The group still names the row, with the drawing's middle dot.
-      expect(find.text('Transform'), findsOneWidget);
-      expect(find.text('·'), findsOneWidget);
-    });
-
-    /// The open question §3.2 left for this package, answered by test rather
-    /// than by ruling: **the Keys wells write through K-189's playhead edit
-    /// rule**, because they are the fold-out's own wells. A typed value lands
-    /// on the key under the playhead — it does not flatten the curve, and it
-    /// does not plant a second key where one already sits.
-    testWidgets('a Keys value well writes into the key at the playhead',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openKeys(tester, layer);
-
-      List<BridgeKeyframe> keys() =>
-          (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
-      expect(keys().length, 2);
-
-      final well = find.byKey(const ValueKey('tl-tf-opacity'));
-      await tester.tap(well);
-      await tester.pump();
-      await tester.enterText(
-          find.descendant(of: well, matching: find.byType(EditableText)), '42');
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-
-      expect(keys().length, 2,
-          reason: 'the curve is neither flattened nor added to');
-      expect(keys().first.value, 42,
-          reason: 'the playhead sits on the first key, so that is the one the '
-              'well wrote (K-189)');
-      expect(keys().last.value, 60, reason: 'and the other is untouched');
     });
 
     /// Interpolation is drawn as shape (§6.2): diamond linear, square hold,
@@ -5932,7 +5564,7 @@ void main() {
       );
       p.uiState.model.refresh();
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
 
       final keys =
           (layer.getTransform().opacity as BridgeScalar_Keyframed).field0;
@@ -6040,7 +5672,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
 
       final laneKey = ValueKey<String>(
           'tl-keys-${layer.internallayerId}/transform/opacity');
@@ -6096,7 +5728,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
       await boxRow(
           tester,
           ValueKey<String>(
@@ -6166,7 +5798,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
 
       await tester.tap(find.byKey(ValueKey<String>(
           'tl-key-${layer.internallayerId}/transform/opacity#0')));
@@ -6182,7 +5814,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 900, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
 
       final laneKey = ValueKey<String>(
           'tl-keys-${layer.internallayerId}/transform/opacity');
@@ -6215,7 +5847,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 900, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
 
       final laneKey = ValueKey<String>(
           'tl-keys-${layer.internallayerId}/transform/opacity');
@@ -6263,7 +5895,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
 
       await boxRow(
           tester,
@@ -6304,18 +5936,16 @@ void main() {
           reason: 'one press, one undo step');
     });
 
-    /// The Keys drawing's bottom-bar strip, and only there: Layers mode's own
-    /// bar carries the column toggles and the comp-wide switches.
-    testWidgets('the Keys bottom bar carries the drawing\'s strip',
+    /// **The strip lives on the Layers bar** (K-529). It was drawn for Keys
+    /// mode and it is what the owner valued about that mode, so it moved
+    /// rather than going with it — and it is there from the moment the panel
+    /// is, because the commands act on a key selection, not on a view.
+    testWidgets('the Layers bottom bar carries the keyframe strip',
         (tester) async {
       final p = withComp();
-      final layer = blockLayer(p, [600, 1500]);
+      blockLayer(p, [600, 1500]);
       await mount(tester, p);
 
-      expect(find.byKey(const ValueKey('keys-interp-linear')), findsNothing,
-          reason: 'not on the Layers bar');
-
-      await openKeys(tester, layer);
       for (final key in const [
         'keys-interp-linear',
         'keys-interp-hold',
@@ -6338,27 +5968,6 @@ void main() {
       expect(x('keys-copy'), lessThan(x('keys-paste')));
     });
 
-    /// The outline's end of the bottom bar has no columns to toggle in Keys
-    /// mode, because Keys mode draws none (§12A.1a) — and the drawing gives
-    /// that end of the bar to the sheet's strip instead. The comp-wide cluster
-    /// stays: it is the document's, not the outline's.
-    testWidgets('Keys mode drops the column toggles that toggle nothing',
-        (tester) async {
-      final p = withComp();
-      final layer = blockLayer(p, [600, 1500]);
-      await mount(tester, p);
-      expect(find.byKey(const ValueKey('tl-column-switches')), findsOneWidget,
-          reason: 'Layers mode has columns to hide');
-
-      await openKeys(tester, layer);
-      expect(find.byKey(const ValueKey('tl-column-switches')), findsNothing);
-      expect(find.byKey(const ValueKey('tl-column-render')), findsNothing);
-      expect(find.byKey(const ValueKey('tl-column-compose')), findsNothing);
-      expect(find.byKey(const ValueKey('tl-hide-shy')), findsOneWidget,
-          reason: 'the comp-wide switches are wanted in every mode');
-      expect(find.byKey(const ValueKey('tl-more')), findsOneWidget);
-    });
-
     /// Interpolation, from the strip: the selected keys' two sides, set at a
     /// press, using K-457's vocabulary — and drawn with K-457's shapes.
     testWidgets(
@@ -6367,7 +5976,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
       await boxRow(
           tester,
           ValueKey<String>(
@@ -6399,7 +6008,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 900, 1500]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
       await boxRow(
           tester,
           ValueKey<String>(
@@ -6427,7 +6036,7 @@ void main() {
       final p = withComp();
       final layer = blockLayer(p, [600, 900]);
       await mount(tester, p);
-      await openKeys(tester, layer);
+      await openKeyLane(tester, layer);
       await boxRow(
           tester,
           ValueKey<String>(
@@ -6445,6 +6054,298 @@ void main() {
           reason: 'and the second kept its 300-frame gap');
       expect(frames, containsAll(<int>[600, 900]),
           reason: 'a paste adds; it does not move what was there');
+    });
+
+    // ---------------------------------------------------------------------
+    // The owner's desktop-testing batch (K-529, K-530).
+    // ---------------------------------------------------------------------
+
+    /// **Each column toggle hides the columns its own word names.** The bug
+    /// the owner found: pressing PARENT took the matte and the blend with it,
+    /// because the three pickers were one draggable cluster and the toggle was
+    /// mapped to the cluster rather than to the column it is named after.
+    testWidgets('a column toggle hides its own columns and no others',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      Finder cell(String name) => find.byKey(ValueKey<String>('tl-$name-$id'));
+
+      // What each toggle owns, and what it must leave alone.
+      const scopes = <String, List<String>>{
+        'switches': ['visible', 'solo', 'locked', 'shy', 'guide'],
+        'render': ['fx', 'mb', '3d'],
+        'parent': ['parent'],
+      };
+      // The matte and the blend answer to no toggle at all: the mockup's
+      // bottom bar carries three words and these are not among them.
+      const untoggleable = ['matte', 'blend'];
+
+      for (final entry in scopes.entries) {
+        for (final name in [...entry.value, ...untoggleable]) {
+          expect(cell(name), findsOneWidget,
+              reason: '$name is drawn before anything is hidden');
+        }
+
+        await tester
+            .tap(find.byKey(ValueKey<String>('tl-column-${entry.key}')));
+        await tester.pumpAndSettle();
+
+        for (final name in entry.value) {
+          expect(cell(name), findsNothing,
+              reason: '${entry.key} hides $name, which it names');
+        }
+        for (final other in scopes.entries) {
+          if (other.key == entry.key) continue;
+          for (final name in other.value) {
+            expect(cell(name), findsOneWidget,
+                reason: '${entry.key} must not touch ${other.key}\'s $name');
+          }
+        }
+        for (final name in untoggleable) {
+          expect(cell(name), findsOneWidget,
+              reason: '${entry.key} must not touch $name, which no toggle '
+                  'owns');
+        }
+
+        await tester
+            .tap(find.byKey(ValueKey<String>('tl-column-${entry.key}')));
+        await tester.pumpAndSettle();
+      }
+    });
+
+    /// **The three toggles are glyphs by default and words on request**
+    /// (K-440's Chrome labels setting, consumed here for the first time —
+    /// K-530). A tooltip carries the word in either mode, which is what makes
+    /// the glyph readable at all.
+    testWidgets('the column toggles are icons by default, words when asked',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      expect(p.uiState.workspace.interface.chromeLabels, ChromeLabels.icons,
+          reason: 'the shipped default');
+      for (final group in const ['switches', 'render', 'parent']) {
+        final toggle = find.byKey(ValueKey<String>('tl-column-$group'));
+        expect(
+            find.descendant(of: toggle, matching: find.byType(glyph.LumitIcon)),
+            findsOneWidget,
+            reason: '$group draws the set\'s own glyph');
+        expect(find.descendant(of: toggle, matching: find.byType(Text)),
+            findsNothing);
+      }
+
+      p.uiState.workspace.interface.chromeLabels = ChromeLabels.words;
+      p.uiState.workspace.settingsChanged();
+      await tester.pumpAndSettle();
+
+      for (final (group, word) in const [
+        ('switches', 'SWITCHES'),
+        ('render', 'MODES'),
+        ('parent', 'PARENT'),
+      ]) {
+        final toggle = find.byKey(ValueKey<String>('tl-column-$group'));
+        expect(find.descendant(of: toggle, matching: find.text(word)),
+            findsOneWidget,
+            reason: 'Words gives $group its word back');
+        expect(
+            find.descendant(of: toggle, matching: find.byType(glyph.LumitIcon)),
+            findsNothing);
+      }
+    });
+
+    /// **The floating tag rides the cursor** (K-529). Flutter's default anchors
+    /// the feedback where the pointer sat inside the *child*, and the child is
+    /// a header a couple of hundred pixels wide — so a header grabbed anywhere
+    /// but its left edge drew its own name back at the header's x.
+    testWidgets('a dragged column header\'s tag follows the pointer',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final header =
+          tester.getRect(find.byKey(const ValueKey('tl-colgroup-identity')));
+      // Grabbed well to the right of the header's left edge, which is the case
+      // the old anchor got wrong.
+      final from = Offset(header.right - 20, header.center.dy);
+      final gesture = await tester.startGesture(from);
+      await tester.pump(const Duration(milliseconds: 200));
+      await gesture.moveBy(const Offset(30, 0));
+      await tester.pump();
+
+      final at = from + const Offset(30, 0);
+      // The tag carries the column's word as written, where the header above
+      // it is set in capitals — so this finds the tag and never the header.
+      final tag = tester.getRect(find.text('Layer'));
+      expect((tag.left - at.dx).abs(), lessThan(20),
+          reason: 'the tag is under the hand, not back at the header\'s x');
+      expect(tag.left, greaterThan(header.left + 40),
+          reason: 'and nowhere near where the column starts');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
+    /// **The zoom and the magnet are at the left edge of the lane area in
+    /// every view** (K-529): they are the one run this bar carries whatever
+    /// the panel is showing, and in graph view they used to sit behind four
+    /// runs of graph commands.
+    testWidgets('the zoom and the magnet lead the bottom bar in both views',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final f in [0, 60])
+            BridgeKeyframe(
+              time: p.comp.timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      double leadingEdge() =>
+          tester.getRect(find.byKey(const ValueKey('tl-lane-bottom-bar'))).left;
+      double zoomLeft() =>
+          tester.getRect(find.byKey(const ValueKey('tl-zoom-slider'))).left;
+
+      // Layers: the strip follows the zoom, not the other way round.
+      expect(zoomLeft() - leadingEdge(), lessThan(40));
+      expect(
+          tester.getRect(find.byKey(const ValueKey('keys-interp-linear'))).left,
+          greaterThan(
+              tester.getRect(find.byKey(const ValueKey('tl-magnet'))).right));
+
+      await tester.tap(find.byKey(const ValueKey('tl-graph')));
+      await tester.pumpAndSettle();
+
+      expect(zoomLeft() - leadingEdge(), lessThan(40),
+          reason: 'the graph puts them in the same place');
+      expect(
+          tester
+              .getRect(find.byKey(const ValueKey('graph-interp-linear')))
+              .left,
+          greaterThan(
+              tester.getRect(find.byKey(const ValueKey('tl-magnet'))).right),
+          reason: 'the graph\'s own commands follow them');
+    });
+
+    /// **A seam drag is staged and committed once** (K-529). Column widths are
+    /// pure view state, so nothing reaches the document either way — the lag
+    /// was the panel rebuilding whole on every pointer move. The gesture now
+    /// draws its own line and the columns move once, on release.
+    testWidgets('a column seam stages its drag and commits on release',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final seam = find.byKey(const ValueKey('tl-seam-identity'));
+      final before = tester.getRect(seam);
+
+      final gesture = await tester.startGesture(before.center);
+      await tester.pump(const Duration(milliseconds: 100));
+      for (var i = 0; i < 6; i++) {
+        await gesture.moveBy(const Offset(10, 0));
+        await tester.pump();
+      }
+
+      expect(find.byKey(const ValueKey('tl-seam-preview')), findsOneWidget,
+          reason: 'the gesture draws where the seam will land');
+      expect(tester.getRect(seam).left, closeTo(before.left, 0.5),
+          reason: 'and the columns have not moved yet');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('tl-seam-preview')), findsNothing);
+      expect(tester.getRect(seam).left, greaterThan(before.left + 50),
+          reason: 'the whole travel landed in one step');
+    });
+
+    /// **`Ctrl+C` then `Ctrl+V` round-trips a block of keys — in Layers.**
+    /// The chord goes through the shell's own copy/paste, which hands it to
+    /// whichever panel has claimed it (K-300).
+    testWidgets('Ctrl+C and Ctrl+V round-trip keys in Layers mode',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 900]);
+      await mount(tester, p);
+      await openKeyLane(tester, layer);
+      await boxRow(
+          tester,
+          ValueKey<String>(
+              'tl-keys-${layer.internallayerId}/transform/opacity'));
+
+      graphKeyClipboard = const [];
+      expect(copySelectionFrb(p.uiState), isTrue,
+          reason: 'the Timeline claims the chord and takes the keys');
+      expect(graphKeyClipboard, hasLength(1));
+      expect(graphKeyClipboard.single.keys, hasLength(2));
+
+      p.uiState.playheadFrame.value = 1800;
+      expect(
+          await pasteSelectionFrb(p.state, p.uiState, p.comp, layer), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(framesOf(p, layer), containsAll(<int>[600, 900, 1800, 2100]),
+          reason: 'the block landed with its first key on the playhead, and '
+              'the paste added rather than moved');
+    });
+
+    /// The same round trip in **Graph** mode, where the selection speaks in
+    /// channel ids rather than in row paths.
+    testWidgets('Ctrl+C and Ctrl+V round-trip keys in Graph mode',
+        (tester) async {
+      final p = withComp();
+      final layer = blockLayer(p, [600, 900]);
+      await mount(tester, p);
+      await openKeyLane(tester, layer);
+      await tester.tap(find.text('Opacity'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tl-graph')));
+      await tester.pumpAndSettle();
+
+      graphKeyClipboard = const [];
+      expect(copySelectionFrb(p.uiState), isTrue);
+      expect(graphKeyClipboard.single.keys, hasLength(2));
+
+      p.uiState.playheadFrame.value = 1800;
+      expect(
+          await pasteSelectionFrb(p.state, p.uiState, p.comp, layer), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(framesOf(p, layer), containsAll(<int>[600, 900, 1800, 2100]));
+    });
+
+    /// **A copy that took nothing says so** (K-529). It used to claim the
+    /// chord anyway, which swallowed `Ctrl+C` and left the *previous* copy on
+    /// the clipboard for the next paste to put down — the shape "Copy does
+    /// nothing" took on the owner's desktop.
+    testWidgets('a copy with no keys and no rows does not claim the chord',
+        (tester) async {
+      final p = withComp();
+      blockLayer(p, [600, 900]);
+      await mount(tester, p);
+
+      graphKeyClipboard = const [];
+      // Nothing picked at all: no keys, no property rows.
+      expect(p.uiState.copyClaim?.call(), isFalse,
+          reason: 'the chord falls through to the layer copy below it');
+      expect(graphKeyClipboard, isEmpty);
     });
   }, skip: !engineAvailable);
 }

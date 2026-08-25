@@ -916,7 +916,14 @@ String lumitVersion() {
 /// clipboard gets the tab-separated keyframe table (docs/07 §5.3) — values
 /// *and* easing — so a copied ramp can be scripted, inspected, or carried into
 /// another tool.
-void copySelectedKeys({
+///
+/// **Returns whether anything was taken** (K-529). It used to return nothing
+/// at all, so a caller could not tell a copy that captured a curve from one
+/// that captured nothing — and the Timeline's caller reported success either
+/// way, which swallowed `Ctrl+C` and left the previous copy on the clipboard
+/// for the next Paste to put down. A copy that took nothing says so, and the
+/// chord falls through to whatever else the selection offers.
+bool copySelectedKeys({
   required CompositionReference comp,
   required List<GraphChannel> channels,
   required Set<String> selectedKeys,
@@ -931,7 +938,7 @@ void copySelectedKeys({
     ];
     if (hit.isNotEmpty) copied.add(GraphClipChannel(channel, hit));
   }
-  if (copied.isEmpty) return;
+  if (copied.isEmpty) return false;
   graphKeyClipboard = copied;
 
   // The text mirror. The axes of one property fold into a single group with an
@@ -978,6 +985,7 @@ void copySelectedKeys({
       groups: groups,
     ),
   ));
+  return true;
 }
 
 /// Copy **whole rows** — every key of an animated channel, or the plain value
@@ -1268,22 +1276,6 @@ class GraphEditorFrb extends StatefulWidget {
   /// range is the user's — the wheel pans it and `Alt`+wheel zooms it.
   final bool autoFit;
 
-  /// **Normalise** (§3.3): every shown curve scaled to its own min–max, so
-  /// unlike units share the pane — a rotation in degrees and an opacity in per
-  /// cent both fill the height instead of one being a flat line under the
-  /// other.
-  ///
-  /// A **view** setting, never data: no key moves, and a drag under it writes
-  /// the same values it would write without it. It is implemented as a range
-  /// per channel rather than as a scaling of values, so every coordinate in
-  /// this file stays in the property's own units and a pointer's y still comes
-  /// back as a real value ([rangeOf]).
-  ///
-  /// The shared range — the grid and the gutter's numbers — becomes 0–100,
-  /// read as per cent of each curve's own span, because with unlike units on
-  /// one pane there is no single value axis left to label.
-  final bool normalise;
-
   /// Whether the Pen tool is armed on the toolbar (docs/07 §1.7).
   ///
   /// With it in hand the graph plants and lifts keys on a single click — the
@@ -1326,7 +1318,6 @@ class GraphEditorFrb extends StatefulWidget {
     this.snapTargets = const [],
     required this.lens,
     required this.autoFit,
-    this.normalise = false,
     this.vegas = false,
     this.penArmed = false,
     required this.selectedKeys,
@@ -1613,7 +1604,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// The length a side is drawn at, from its stored ease.
   double _measuredLength(GraphChannel channel, int index, bool isOut,
       (double, double) range, double height) {
-    range = rangeOf(channel, range);
     final keys = channel.keys;
     final key = keys[index];
     final end = _sideEndpoint(keys, index, isOut);
@@ -1628,7 +1618,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// under the scales in force now, else the one its stored ease draws it at.
   double _handleLength(GraphChannel channel, int index, bool isOut,
       (double, double) range, double height) {
-    range = rangeOf(channel, range);
     final held =
         _handleLenPx[_handleLenKey(channel, channel.keys[index], isOut)];
     final (xScale, yScale) = _scales(range, height);
@@ -1642,7 +1631,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   void _rememberLength(GraphChannel channel, BridgeKeyframe key, bool isOut,
       double lenPx, (double, double) range, double height) {
-    range = rangeOf(channel, range);
     final (xScale, yScale) = _scales(range, height);
     _handleLenPx[_handleLenKey(channel, key, isOut)] =
         (lenPx: lenPx, xScale: xScale, yScale: yScale);
@@ -1775,40 +1763,12 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   }
 
   (double, double) _range() {
-    // Normalised, the pane has no single value axis: each curve is drawn
-    // against its own span, and what the grid and the gutter can honestly say
-    // is *how far up its own range* a curve is. Hence 0–100, read as per cent.
-    if (widget.normalise) return normalisedRange;
     final frozen = _frozen;
     if (frozen != null) return frozen;
     if (!widget.autoFit) {
       return _manual[widget.lens] ??= _fitRange();
     }
     return _fitRange();
-  }
-
-  /// The shared range while Normalise is on: per cent of each curve's own span.
-  static const (double, double) normalisedRange = (0.0, 100.0);
-
-  /// One channel's own fitted range, cached for the length of a build.
-  ///
-  /// Fitted from the **document's** keys rather than the shown ones: a
-  /// normalised curve whose range followed its own drag would rescale under
-  /// the hand, so the key would appear not to move.
-  final Map<String, (double, double)> _ownRange = {};
-
-  /// The vertical range [channel] is drawn against: the pane's shared one, or
-  /// — with Normalise on — the channel's own min–max (§3.3).
-  ///
-  /// Everything that turns a value into a y, or a y back into a value, goes
-  /// through this, so the curve, its keys, its handles and a drag on any of
-  /// them all agree about where the channel sits.
-  (double, double) rangeOf(GraphChannel channel, (double, double) shared) {
-    if (!widget.normalise) return shared;
-    return _ownRange[channel.id] ??= lensOf(channel) == GraphLens.value
-        ? fitValueRange(
-            [channel.keys], channel.isStatic ? [channel.staticValue] : const [])
-        : fitSpeedRange([channel.keys]);
   }
 
   double _yOf(double v, (double, double) range, double height) {
@@ -1834,7 +1794,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // that is actually being drawn (K-334, K-336).
     final shown = _shownKeys(channel);
     if (index >= shown.length) return 0;
-    range = rangeOf(channel, range);
     if (lensOf(channel) == GraphLens.value) {
       return _yOf(shown[index].value, range, height);
     }
@@ -1997,7 +1956,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             : evaluateKeysSpeed(keys, seconds) *
                 (isEnvelope(channel) ? 100 : 1);
       }
-      final d = (_yOf(drawn, rangeOf(channel, range), height) - local.dy).abs();
+      final d = (_yOf(drawn, range, height) - local.dy).abs();
       if (d < best) {
         best = d;
         nearest = channel;
@@ -2197,7 +2156,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       // Per channel, because Normalise gives each curve its own range: the
       // same travel in pixels is a different travel in value on each of them,
       // and it is each curve's own scale the hand was working against.
-      final own = rangeOf(channel, range);
+      final own = range;
       final span = (own.$2 - own.$1).abs() < 1e-12 ? 1.0 : own.$2 - own.$1;
       final dValue = widget.lens == GraphLens.value && height > 0
           ? -drag.dyPx / height * span
@@ -2306,7 +2265,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         dot.index == index) {
       x += dot.dxPx;
       if (dot.isOut == isOut) {
-        y = _yOf(dot.shownSpeed, rangeOf(channel, range), height);
+        y = _yOf(dot.shownSpeed, range, height);
       }
     }
     return Offset(x, y);
@@ -2388,7 +2347,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       // Value is scaled in **pixels**, so that under Normalise — where every
       // curve is drawn against its own range — the whole selection still
       // scales by the one amount the hand asked for.
-      final own = rangeOf(channel, range);
+      final own = range;
       var v = _valueAt(
         scaledAbout(
             anchor: box.anchor,
@@ -2486,7 +2445,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   void _startHandleDrag(GraphChannel channel, int index, bool isOut,
       bool dotOnly, (double, double) range, double height) {
-    range = rangeOf(channel, range);
     final keys = channel.keys;
     final key = keys[index];
     final side = isOut ? key.interpOut : key.interpIn;
@@ -2532,7 +2490,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       {double dx = 0, double dy = 0}) {
     final drag = _handleDrag;
     if (drag == null) return;
-    range = rangeOf(drag.channel, range);
     final keys = drag.channel.keys;
     final key = keys[drag.index];
     final nb = _neighbour(keys, drag.index, drag.isOut);
@@ -2596,8 +2553,46 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // The shaped curve, exactly as the release will commit it (K-192): an ease
     // or an envelope point changes which source moment every frame between two
     // keys reads, so it is as much a picture edit as moving the key itself.
+    //
+    // **Only where the picture can actually differ** (K-529, owner: a handle
+    // drag cost calls by the hundred per second wherever it was made). An ease
+    // changes the values *between* two keys and nothing outside them, so with
+    // the playhead outside that span every one of those renders came back with
+    // the frame already on screen. A key drag is not like this — it moves the
+    // key, so the span it changes moves with the pointer — which is why the
+    // guard sits here rather than inside [_previewDrag].
+    if (!_handleDragShowsAtPlayhead(drag)) return;
     _previewDrag(
         {drag.channel: BridgeScalar.keyframed(_shownKeys(drag.channel))});
+  }
+
+  /// Whether the frame on screen is one this handle drag can change: the span
+  /// between the dragged key and its neighbour, widened to the partner's span
+  /// when the two sides are joined and so swing together.
+  ///
+  /// An envelope point is the exception and always answers true: dragging one
+  /// re-integrates every frame after it (K-247), so the change is not bounded
+  /// by a span at all.
+  bool _handleDragShowsAtPlayhead(_HandleDrag drag) {
+    if (isEnvelope(drag.channel) || drag.dotOnly) return true;
+    final keys = drag.channel.keys;
+    if (drag.index < 0 || drag.index >= keys.length) return true;
+    final key = keys[drag.index];
+    var lo = rationalSeconds(key.time);
+    var hi = lo;
+    for (final isOut in drag.mirrored ? const [true, false] : [drag.isOut]) {
+      final nb = _neighbour(keys, drag.index, isOut);
+      if (nb == null) continue;
+      final at = rationalSeconds(nb.time);
+      if (at < lo) lo = at;
+      if (at > hi) hi = at;
+    }
+    if (hi <= lo) return false;
+    final fps = widget.fps <= 0 ? 1.0 : widget.fps;
+    final playhead =
+        Provider.of<LumitUiState>(context, listen: false).playheadFrame.value /
+            fps;
+    return playhead >= lo && playhead <= hi;
   }
 
   /// Swing the joined partner opposite the dragged handle, keeping the pixel
@@ -2611,7 +2606,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void _mirrorPartner(_HandleDrag drag, BridgeKeyframe key, double speed,
       double influence, (double, double) range, double height) {
     if (!drag.mirrored) return;
-    range = rangeOf(drag.channel, range);
     final keys = drag.channel.keys;
     final partnerNb = _neighbour(keys, drag.index, !drag.isOut);
     if (partnerNb == null) return;
@@ -3097,10 +3091,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = constraints.maxHeight;
-        // Fitted afresh each build: the keys it is fitted from change with
-        // every edit, and a stale normalised range would draw a curve outside
-        // its own pane.
-        _ownRange.clear();
         final range = _range();
         _lastRange = range;
         _paneSize = Size(constraints.maxWidth, height);
@@ -3146,9 +3136,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         axis: widget.axis,
                         fps: widget.fps,
                         range: range,
-                        ranges: [
-                          for (final c in widget.channels) rangeOf(c, range)
-                        ],
                         palette: t.curve,
                         comp: Provider.of<LumitUiState>(context, listen: false)
                             .model,
@@ -3160,8 +3147,6 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         viewportLeft: _viewportLeft,
                         viewportWidth: _viewportWidth(constraints.maxWidth),
                         gutterFill: t.surface0.withValues(alpha: 0.85),
-                        labelSuffix:
-                            widget.normalise ? l10n.unitSymbolPercent : null,
                         vegas: widget.vegas,
                       ),
                     ),
@@ -3591,32 +3576,36 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               },
               // The glyph is small; the target around it is not (see
               // [_keyGrab]).
-              child: MouseRegion(
-                // A key moves in time and value: the move cursor says so
-                // before the button goes down (P2).
-                cursor: SystemMouseCursors.move,
-                child: SizedBox(
-                  width: _keyGrab,
-                  height: _keyGrab,
-                  child: Center(
-                    child: SizedBox(
-                      // A selected key draws one size step larger — the
-                      // drawing's 7 in a 6 world — so the catch reads at a
-                      // glance without a second colour beyond `text_primary`.
-                      width: chosen ? _selectedKeyGlyph : _keyGlyph,
-                      height: chosen ? _selectedKeyGlyph : _keyGlyph,
-                      child: CustomPaint(
-                        painter: _KeyGlyphPainter(
-                          key_: keys[i],
-                          // Selected is `text_primary` — the one colour
-                          // selection speaks in. Not the accent: its jobs are
-                          // the playhead, the one filled button and the active
-                          // tab tick, and nothing else (K-439).
-                          colour: chosen
-                              ? t.textPrimary
-                              : t.curve[channel.colourIndex % t.curve.length],
-                          speedDot: widget.lens == GraphLens.speed,
-                        ),
+              //
+              // **No cursor of its own** (owner, desktop testing): hovering a
+              // key used to swap the pointer for the move cursor, so crossing
+              // a curve full of keys made the cursor flicker between two
+              // shapes on the way to wherever the hand was actually going.
+              // The mark under the pointer already says a key is there, and
+              // it brightens to say so. The *drag* cursors stay — a handle
+              // swings up and down, a box edge scales — because those are
+              // gestures with one direction to promise.
+              child: SizedBox(
+                width: _keyGrab,
+                height: _keyGrab,
+                child: Center(
+                  child: SizedBox(
+                    // A selected key draws one size step larger — the
+                    // drawing's 7 in a 6 world — so the catch reads at a
+                    // glance without a second colour beyond `text_primary`.
+                    width: chosen ? _selectedKeyGlyph : _keyGlyph,
+                    height: chosen ? _selectedKeyGlyph : _keyGlyph,
+                    child: CustomPaint(
+                      painter: _KeyGlyphPainter(
+                        key_: keys[i],
+                        // Selected is `text_primary` — the one colour
+                        // selection speaks in. Not the accent: its jobs are
+                        // the playhead, the one filled button and the active
+                        // tab tick, and nothing else (K-439).
+                        colour: chosen
+                            ? t.textPrimary
+                            : t.curve[channel.colourIndex % t.curve.length],
+                        speedDot: widget.lens == GraphLens.speed,
                       ),
                     ),
                   ),
@@ -3644,7 +3633,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
           if (e == null) continue;
           final point = Offset(
             widget.axis.xOf(e.$1 * widget.fps),
-            _yOf(e.$2, rangeOf(channel, range), height),
+            _yOf(e.$2, range, height),
           );
           // A handle's reach is a fraction of the gap to the next key, so on a
           // long composition both handles sit a few pixels from their key —
@@ -3903,10 +3892,6 @@ class _GraphPainter extends CustomPainter {
   /// The shared range — what the grid lines and the gutter's numbers say.
   final (double, double) range;
 
-  /// The range each channel is drawn against, one per entry of [channels].
-  /// The same as [range] for every channel unless Normalise is on, when each
-  /// curve has its own (§3.3).
-  final List<(double, double)> ranges;
   final List<Color> palette;
   final Color grid;
   final TextStyle label;
@@ -3929,10 +3914,6 @@ class _GraphPainter extends CustomPainter {
   /// The gutter's translucent ground.
   final Color gutterFill;
 
-  /// Appended to every axis number — `%` while Normalise is on, where the
-  /// numbers are per cent of each curve's own span rather than values.
-  final String? labelSuffix;
-
   /// Whether Retime channels draw as the Vegas envelope (K-247) — which puts
   /// their curve on the axis in **per cent** rather than in source seconds per
   /// second, so it lands on the points drawn over it.
@@ -3945,7 +3926,6 @@ class _GraphPainter extends CustomPainter {
     required this.axis,
     required this.fps,
     required this.range,
-    required this.ranges,
     required this.palette,
     required this.grid,
     required this.label,
@@ -3953,7 +3933,6 @@ class _GraphPainter extends CustomPainter {
     required this.viewportLeft,
     required this.viewportWidth,
     required this.gutterFill,
-    this.labelSuffix,
     this.vegas = false,
   });
 
@@ -3970,7 +3949,6 @@ class _GraphPainter extends CustomPainter {
     for (var c = 0; c < channels.length; c++) {
       final channel = channels[c];
       final keys = shownKeys[c];
-      final range = c < ranges.length ? ranges[c] : this.range;
       // A Retime drawn as the Vegas envelope reads in per cent, so its curve
       // is scaled onto the same axis as its points (K-247).
       final envelope = vegas && channel.retime && lens == GraphLens.speed;
@@ -4124,9 +4102,8 @@ class _GraphPainter extends CustomPainter {
       final text = TextPainter(
         text: TextSpan(
             text: (v.abs() >= 100 || v == v.roundToDouble()
-                    ? v.round().toString()
-                    : v.toStringAsFixed(1)) +
-                (labelSuffix ?? ''),
+                ? v.round().toString()
+                : v.toStringAsFixed(1)),
             style: label),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -4193,7 +4170,7 @@ class _HandlesPainter extends CustomPainter {
               : state._keyPoint(channel, i, range, height, isOut: isOut);
           final to = Offset(
             widget.axis.xOf(e.$1 * widget.fps),
-            state._yOf(e.$2, state.rangeOf(channel, range), height),
+            state._yOf(e.$2, range, height),
           );
           _dashed(canvas, from, to, paint);
         }

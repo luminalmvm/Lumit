@@ -126,6 +126,29 @@ enum ViewerBars {
   bottom,
 }
 
+/// What the chrome says: a word, or the glyph that stands for it (K-440).
+///
+/// In plain terms: every button, tab and toggle in Lumit has a word and a
+/// drawing that mean the same thing. This chooses which of the two is shown.
+/// A tooltip always carries the word, in every mode, so nothing is ever
+/// unnameable — and content the user typed is never turned into a picture.
+///
+/// **Icons is the shipped default**, by the owner's ruling after desktop
+/// testing; K-440 wrote Words. The first surface to read this setting is the
+/// Timeline's Switches / Modes / Parent column toggles, and the owner's answer
+/// on seeing them was that a row of three short words is a sentence to read
+/// where three marks are a thing to aim at.
+enum ChromeLabels {
+  /// The word, everywhere.
+  words,
+
+  /// Buttons, tabs and toggles become glyphs; panel titles stay text.
+  icons,
+
+  /// Panel titles too.
+  iconsEverywhere,
+}
+
 /// Interface (Settings → Interface): UI scale and tooltips (K-117), plus the
 /// two editing preferences that make Lumit behave the Vegas way (K-246).
 class InterfaceSettings {
@@ -230,17 +253,6 @@ class InterfaceSettings {
   /// and dismissed where the button is.
   bool easingInPopup;
 
-  /// Whether **Graph mode** keeps the Layers outline instead of its own
-  /// filtered animated list (K-442, §12A.2).
-  ///
-  /// Off by default: the graph's own outline is the drawing's, and it is the
-  /// surface the curves are chosen from — one row per animated property, with
-  /// a tick that puts it on the pane. On restores an outline identical to
-  /// Layers mode, for anyone who would rather have one shape everywhere; the
-  /// curves are then chosen the way they always were, by selecting property
-  /// rows.
-  bool graphOutlineLikeLayers;
-
   /// Whether a layer's name is written along its bar in the Timeline's lane
   /// area (K-514).
   ///
@@ -271,6 +283,14 @@ class InterfaceSettings {
   /// controls in the same order, on one row instead of two.
   ViewerBars viewerBars;
 
+  /// What the chrome says: words, or the icon set's glyphs (K-440).
+  ///
+  /// [ChromeLabels.icons] by default — see the enum for why that is not
+  /// K-440's own Words. A settings file written before this field existed
+  /// adopts it, deliberately: the ruling is about what the editor should look
+  /// like, not about who asked first, and Words is one click away.
+  ChromeLabels chromeLabels;
+
   /// The interface language, as a BCP-47 tag (`en`, `de`, `zh`), or null to
   /// follow whatever the machine is set to (K-303).
   ///
@@ -283,6 +303,7 @@ class InterfaceSettings {
 
   InterfaceSettings({
     this.language,
+    this.chromeLabels = ChromeLabels.icons,
     this.uiScale = 1.0,
     this.showTooltips = true,
     this.transformInEffectControls = false,
@@ -295,7 +316,6 @@ class InterfaceSettings {
     this.waveformsFromBottom = false,
     this.showToneMap = false,
     this.easingInPopup = false,
-    this.graphOutlineLikeLayers = false,
     this.layerNamesOnBars = false,
     this.compact = false,
     this.viewerBars = ViewerBars.split,
@@ -303,6 +323,7 @@ class InterfaceSettings {
 
   Map<String, dynamic> toJson() => {
         if (language != null) 'language': language,
+        'chrome_labels': chromeLabels.name,
         'ui_scale': uiScale,
         'show_tooltips': showTooltips,
         'transform_in_effect_controls': transformInEffectControls,
@@ -315,7 +336,6 @@ class InterfaceSettings {
         'waveforms_from_bottom': waveformsFromBottom,
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
-        'graph_outline_like_layers': graphOutlineLikeLayers,
         'layer_names_on_bars': layerNamesOnBars,
         'compact': compact,
         'viewer_bars': viewerBars.name,
@@ -325,6 +345,14 @@ class InterfaceSettings {
         // Absent means "follow the machine", which is what every settings file
         // written before this field existed was doing.
         language: j['language'] as String?,
+        // By name, not by index: a settings file outlives any build, and a
+        // reordered enum would otherwise silently change what the chrome
+        // says. An unknown name — an older file that has none, or a newer
+        // build's — is the shipped default.
+        chromeLabels: ChromeLabels.values.firstWhere(
+          (c) => c.name == j['chrome_labels'],
+          orElse: () => ChromeLabels.icons,
+        ),
         uiScale: (j['ui_scale'] as num?)?.toDouble() ?? 1.0,
         showTooltips: j['show_tooltips'] as bool? ?? true,
         transformInEffectControls:
@@ -361,12 +389,6 @@ class InterfaceSettings {
         // this replaced never shipped in a release, so no settings file can be
         // asking for it by silence.
         easingInPopup: j['easing_in_popup'] as bool? ?? false,
-        // Absent means off: the graph's own outline is the new default
-        // (K-442), and a settings file written before this field existed
-        // should get the drawing's surface rather than be pinned to the
-        // outline it happened to have.
-        graphOutlineLikeLayers:
-            j['graph_outline_like_layers'] as bool? ?? false,
         // Absent means off (K-514). Every settings file written before this
         // field existed was written by a build that always drew the names, so
         // those users lose them — deliberately, because off is the owner's

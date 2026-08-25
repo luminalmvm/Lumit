@@ -3325,27 +3325,6 @@
       }
     }
   },
-  "keysPropertyCount": "{count, plural, =0{No properties} =1{1 property} other{{count} properties}}",
-  "@keysPropertyCount": {
-    "description": "Timeline, Keys mode: at the right-hand end of a layer's own row, how many of its properties the sheet is listing under it.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "keysShow": "Show",
-  "@keysShow": {
-    "description": "Timeline, Keys mode: the label at the left of the filter row, naming the two words that follow it. Drawn in capitals; one word."
-  },
-  "keysShowAll": "All",
-  "@keysShowAll": {
-    "description": "Timeline, Keys mode: the filter word for listing every property a layer has, beside 'Animated'. Drawn in capitals; one word."
-  },
-  "keysShowAnimated": "Animated",
-  "@keysShowAnimated": {
-    "description": "Timeline, Keys mode: the filter word for listing only keyframed properties, beside 'All'. The default. Drawn in capitals; one word."
-  },
   "languageFollowSystem": "Same as this machine",
   "@languageFollowSystem": {
     "description": "Language picker: the default, which follows the operating system's own language."
@@ -5115,10 +5094,6 @@
   "@timelineModeGraph": {
     "description": "Label on the right-hand mode segment in the Timeline's top row: the view showing each animated property as a curve. Drawn in capitals; one word."
   },
-  "timelineModeKeys": "Keys",
-  "@timelineModeKeys": {
-    "description": "Label on the middle mode segment in the Timeline's top row: the dope sheet, showing every keyframe in the composition as a row of marks against time. Drawn in capitals; one word."
-  },
   "timelineModeLayers": "Layers",
   "@timelineModeLayers": {
     "description": "Label on the left-hand mode segment in the Timeline's top row: the view showing each layer as a bar against time. Drawn in capitals; one word."
@@ -5271,10 +5246,6 @@
   "tipInverted": "Inverted",
   "@tipInverted": {
     "description": "Tooltip: the matte is the other way round. Under five words."
-  },
-  "tipKeysView": "Keys view",
-  "@tipKeysView": {
-    "description": "Tooltip: show every keyframe in the composition as a sheet. Under five words."
   },
   "tipLabelColour": "Label colour",
   "@tipLabelColour": {
@@ -8723,10 +8694,6 @@
       "last": { "type": "int" }
     }
   },
-  "graphNormalise": "Normalise",
-  "@graphNormalise": {
-    "description": "Timeline, Graph mode: the label of the checkbox at the right of the filter row above the outline. On, every curve is scaled to its own smallest and largest value so curves in unlike units share the pane. Shown in small capitals."
-  },
   "graphKeyKicker": "Key",
   "@graphKeyKicker": {
     "description": "Timeline, Graph mode: the label opening the readout row at the foot of the outline, which appears while exactly one keyframe is selected and says which frame and value it holds. Shown in small capitals."
@@ -8745,10 +8712,6 @@
   "graphEaseOut": "Out",
   "@graphEaseOut": {
     "description": "Timeline, Graph mode: the label before the editable field holding the outgoing influence, as a percentage, of the selected keyframe. Shown in small capitals beside an In field."
-  },
-  "settingsGraphKeepsTheLayersOutline": "Graph mode keeps the Layers outline",
-  "@settingsGraphKeepsTheLayersOutline": {
-    "description": "Settings, Timeline page, Panels group: a switch. On, the graph editor's left-hand list is the same one Layers mode shows, instead of the graph's own list of animated properties with a tick beside each."
   },
   "graphBoxHint": "f{first}–f{last} · {low}–{high}",
   "@graphBoxHint": {
@@ -9085,6 +9048,34 @@
   "@tipUnfavourite": {
     "description": "Hover text on the star beside an effect or preset that is already starred. Pressing it takes the row out of the Favourites heading."
   },
+  "tipViewerMoreControls": "More viewer controls",
+  "@tipViewerMoreControls": {
+    "description": "Hover text on the overflow mark at the left of the Viewer's bottom bar. It appears only when the Viewer is docked too narrow for the bar to hold the transparency grid, guides, channel, exposure and snapshot controls, and opens all of them in a small floating strip."
+  },
+  "columnCompose": "Compose",
+  "@columnCompose": {
+    "description": "Timeline column-cluster name, seen on the floating tag while the MATTE / BLEND pair of column headings is dragged to a new place in the outline. Not a heading itself: the two headings above the cells keep their own words."
+  },
+  "settingsChromeLabels": "Chrome labels",
+  "@settingsChromeLabels": {
+    "description": "Settings row title, on the Appearance page's Interface section. Chooses whether buttons, tabs and toggles show their word or the icon that stands for it."
+  },
+  "settingsHelpChromeLabels": "Whether buttons, tabs and toggles show their word or the glyph that stands for it. Hover text always says the word, whichever you choose, and anything you typed yourself is never turned into a picture.",
+  "@settingsHelpChromeLabels": {
+    "description": "Explanatory line under the Chrome labels row in Settings."
+  },
+  "chromeLabelsWords": "Words",
+  "@chromeLabelsWords": {
+    "description": "One of three choices in the Settings 'Chrome labels' dropdown: every button, tab and toggle shows its word."
+  },
+  "chromeLabelsIcons": "Icons",
+  "@chromeLabelsIcons": {
+    "description": "One of three choices in the Settings 'Chrome labels' dropdown: buttons, tabs and toggles show a glyph, while panel titles stay as words. The shipped default."
+  },
+  "chromeLabelsIconsEverywhere": "Icons everywhere",
+  "@chromeLabelsIconsEverywhere": {
+    "description": "One of three choices in the Settings 'Chrome labels' dropdown: as Icons, and panel titles become glyphs too."
+  },
   "viewerAtEffect": "at {effect}",
   "@viewerAtEffect": {
     "description": "The chip over the Viewer's picture that shows the composition with the selected layer's effects stopping after the named effect. Lower case and no full stop: it reads as a continuation of the picture, not a sentence. {effect} is the effect's name, e.g. 'at Gaussian blur'.",
@@ -9097,9 +9088,5 @@
   "tipViewerAtEffect": "Picture at this effect",
   "@tipViewerAtEffect": {
     "description": "Tooltip on the Viewer's 'at effect' chip: clicking it shows the composition with that layer's effects stopping there, and clicking again returns the finished picture. Under five words."
-  },
-  "tipViewerMoreControls": "More viewer controls",
-  "@tipViewerMoreControls": {
-    "description": "Hover text on the overflow mark at the left of the Viewer's bottom bar. It appears only when the Viewer is docked too narrow for the bar to hold the transparency grid, guides, channel, exposure and snapshot controls, and opens all of them in a small floating strip."
   }
 }

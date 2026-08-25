@@ -430,8 +430,10 @@ does not gate the four. Delete each phase here when it lands, as with everything
 - **Phase 1 - theme groundwork** (K-438, K-439, K-440): the `animated` token and the
     three-greys-at-rest audit; Hanken Grotesk and Geist Mono bundled (replacing the
     old bundle-the-household-fonts item under *Later - Design*); the icon set drawn
-    on its 16 px grammar and embedded as Flutter icons; the three-way Chrome labels
-    setting with its word-carrying tooltips.
+    on its 16 px grammar and embedded as Flutter icons. **The Chrome labels setting is
+    built and consuming** (K-530): the three-way setting ships as Icons, is read by the
+    Timeline's column toggles, and carries its word in every tooltip. What is left is
+    converting the rest of the chrome a surface at a time.
 - **The glyphs the set still owes** (K-440). The set is adopted application-wide, but
     thirty of the names in `flutter_ui/lib/icons/icons.dart` have no drawing in it yet and
     still show an Iconoir stand-in or a painter-drawn mark: the puppet tools (pin, starch,
@@ -450,8 +452,9 @@ does not gate the four. Delete each phase here when it lands, as with everything
     Matte row with invert), the Timeline (Layers/Graph modes, the Animated filter,
     full-width composition tabs, the double-height ruler with its end padding, the
     tier-coloured cache bar, the work-area band, trimmed-extent outlines) and Graph
-    mode's surface (the filtered colour-ticked outline, edge-to-edge curves, the
-    fixed value gutter, the Value/Speed strip), the Project panel, the Viewer bar,
+    mode's surface (edge-to-edge curves, the fixed value gutter, the Value/Speed strip
+    - the filtered colour-ticked outline is withdrawn, K-529: the graph shows the Layers
+    outline), the Project panel, the Viewer bar,
     Settings, the welcome screen, and **the export dialog plus the export queue** on
     the K-444 pattern. Every dialog is built **in-window**, as an ordinary
     `showDialog` overlay - that is the migration prep, not a stopgap: when windowing
@@ -574,6 +577,16 @@ does not gate the four. Delete each phase here when it lands, as with everything
     only, the welcome window, the dialogs (mostly free), the settings/theme/queue
     windows, and last the satellite tear-off panels - which is where the old
     pop-out-panel-windows rebuild item (K-182) is folded in.
+
+### Owed from the 2026-08-25 desktop-testing batch (K-529)
+
+- **Tab-hop between value wells** (15-DESIGN §12A.3): tabbing into a well must arrive with
+    its text selected so the first keystroke replaces it, and tabbing off a row's last well
+    must continue to the next row's first (wrapping down; `Shift+Tab` mirroring up). Today
+    the hop is ordinary focus traversal and the text arrives unselected. The fix belongs in
+    `DragValueField` (`flutter_ui/lib/widgets/controls.dart`), which is the one place a
+    well's focus is decided - a well gaining focus by traversal should begin its edit, which
+    is the call that already selects the whole value. Regression tests for both halves.
 
 ## Next - colour management: OCIO (K-489, K-490, docs/impl/ocio.md)
 

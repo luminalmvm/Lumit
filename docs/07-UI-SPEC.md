@@ -1028,11 +1028,13 @@ the band's own row at the ruler's floor — the **cache bar**; then layer lanes.
   narrowed", which is what the whole comp *is*). Work area is the preview range and default export range,
   and playback **loops** it (§10's default loop mode): reaching its end resumes from its
   start. It draws as **one band in `animated`** (K-441,
-  [15-DESIGN.md](15-DESIGN.md) §12A.1): the **whole height of the ruler**
-  (K-513 - it was the lower half only, back when a seam was drawn across the ruler's
-  waist), then on behind the cache bar and down through the lanes, behind the bars and the
-  keys. Its two edges, at half strength, *are* the two drag handles, and they are
-  grabbable for the ruler's whole height too. The **double-click that clears it** is the
+  [15-DESIGN.md](15-DESIGN.md) §12A.1): the ruler's **second row** — K-513 gave it the whole
+  height and K-529 reversed that half after desktop testing, a wash over the clock making
+  the numbers harder to read — then on behind the cache bar and down through the lanes,
+  behind the bars and the keys. Its **two drag handles keep the ruler's whole height** (the
+  half of K-513 that stands) and are **drawn**: a small vertical rounded tab in the band's
+  own colour a step stronger than its edge, with another step under the pointer. The
+  **double-click that clears it** is the
   one gesture the ruler's waist still divides: below the waist clears the work area, above
   it makes a marker. It has to stay divided — a comp nobody has narrowed has a work area
   of the whole comp, so a band-wide double-click would leave nowhere on the ruler to make
@@ -1597,9 +1599,11 @@ two, and `Shift+=`.
 
 ## 5. Graph editor
 
-The graph editor is a mode of the Timeline's lane area (toggle button in the Timeline
-header, `Shift+F3`): the lanes are replaced by curves for the selected properties. The
-outline stays; each property gains an *include in graph* toggle.
+The graph editor is a mode of the Timeline's lane area (the mode tabs in the Timeline
+header, `Shift+F3`): the lanes are replaced by curves for the selected properties. **The
+outline is the Layers outline, identical** (K-529): a property's curves are on the pane
+when its row is selected, which is the one way in — the graph's own filtered list, its
+per-row *include in graph* tick and its Normalise control were withdrawn with it.
 
 In graph mode the outline scrolls **independently** of the curve (UI-8): it keeps its own
 vertical scrollbar at the outline's right edge, and a wheel over the curve pans or zooms the

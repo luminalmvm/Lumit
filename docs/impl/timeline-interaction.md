@@ -60,7 +60,12 @@ These are the study's distilled interaction rules (`Caddis study/notes-editor-ux
 
 ## 2. The selection model (K-500)
 
-One model for Layers mode lanes, Keys mode and the graph. Each sentence is testable.
+One model for the Layers lanes and the graph. Each sentence is testable.
+
+> **Keys mode is withdrawn** (K-529). Where this note says "Keys mode", read it as history:
+> the sheet's own surfaces are deleted, and every rule it shared with the lanes is a lane
+> rule and still holds. §2.3 and §3.2 are frozen for that reason; §3.3 is rewritten,
+> because the graph's outline is now the Layers outline.
 
 ### 2.1 Keys
 
@@ -119,7 +124,10 @@ One model for Layers mode lanes, Keys mode and the graph. Each sentence is testa
 - The lane, Keys and graph key selections are one selection wherever the id space allows
   (a lane key fans out to its axes' channels — shipped, `_actionKeySelection`).
 
-### 2.3 Keys mode's ground
+### 2.3 Keys mode's ground — **frozen (K-529)**
+
+> Keys mode is gone and so is its twirl set. Both remaining views use `_open`, Layers
+> mode's shut-by-default set, through the same `_setOpen` / `_shutLayerDeep` pair.
 
 - **Keys mode opens with every listed layer twirled open.** The dope sheet's point is the
   flattened property rows; a sheet of shut bands shows nothing and takes no marquee. The
@@ -146,7 +154,11 @@ One model for Layers mode lanes, Keys mode and the graph. Each sentence is testa
 As built and ruled (K-461/K-462/K-463); no interaction change from this note beyond §2's
 property-name rule. Hover on a row washes the row one step (`surface_2`), P1-transient.
 
-### 3.2 Keys mode rows (K-499 — the owner's finding *a*)
+### 3.2 Keys mode rows (K-499 — the owner's finding *a*) — **frozen (K-529)**
+
+> The sheet is gone. What this section decided outlives it as the reason the fold row is
+> the one property-row implementation: a Keys row *was* a `_FoldRow`, which is why nothing
+> had to be unpicked when the sheet went.
 
 The shipped `_KeysOutline` (timeline_panel_frb.dart:6331) draws name-only property rows
 with a read-only value, and its layer row (`_KeysLayerRow`, :6436) dropped the layer
@@ -189,50 +201,39 @@ and §12A.1a's bullet. The exact anatomy, recorded:
 
 ### 3.3 Graph mode
 
-Built in TI-6. Per K-442, §12A.2 and `GraphMode.dc.html` the Graph outline is:
+Built in TI-6 to K-442's filtered outline; **rebuilt to K-529's**, which is no outline of
+its own at all.
 
-- The **filtered animated list**: Show — Animated (default) / All, no Selected; one row
-  per animated property, carrying an **include-in-graph tick** and a **swatch in the
-  curve's colour**, the name, and the value at the playhead — `animated` when the row is
-  shown in the graph, muted when unticked. It is the same flattened sheet Keys mode
-  draws (`keysLayerRows`), under the graph's own Show filter, so a property has one row
-  model wherever it is listed; the twirl set is Keys mode's own `_keysShut` for the same
-  reason (`_flatSheet`), and a layer opened on one sheet is open on the other.
-- **The tick is the selection.** A ticked property is a property in `_selectedProperties`
-  — the set the Layers outline picks with and the set `graphChannels` reads — so there is
-  one answer anywhere in the panel to "which curves are up". Ticking is `Ctrl`-clicking a
-  name without the modifier; clicking the **name** selects that property alone and takes
-  its keys with it (§2.1). A tick never carries the row's keys: it says what to look at,
-  and selecting keyframes is the name's job (K-196).
-- **Two departures from the drawing, deliberate.** The drawing splits a two-axis property
-  into `Position · X` and `Position · Y` rows, each separately ticked; the row here is the
-  **property**, because the tick's granularity is the property — a per-axis tick would
-  need a second membership set beside the selection, and one selection is worth more than
-  one row per curve. A multi-axis row draws **one swatch per axis** instead, exactly as
-  the Layers fold row already names both of its curves. And an **unticked** row's swatch
-  is muted rather than coloured: an unticked property has no curve, so it has no colour
-  to promise.
-- A **Normalise** checkbox at the far right of the filter row. **Its scaling, decided
-  here** (the open question closed): each shown curve is fitted to **its own min–max**,
-  not to a shared symmetric range — the point is that a rotation in degrees and an
-  opacity in per cent both fill the height. It is implemented as a **range per channel**
-  (`GraphEditorFrbState.rangeOf`) rather than as a scaling of values, so every coordinate
-  in the pane stays in the property's own units and a pointer's y still comes back as a
-  real value: a drag under Normalise writes exactly what it would write without it. The
-  shared range — the grid and the gutter's numbers — becomes 0–100 read as per cent,
-  because with unlike units on one pane there is no single value axis left to label. Each
-  channel's own range is fitted from the **document's** keys, not the shown ones, so a
-  normalised curve does not rescale under its own drag. A view setting, never data.
+- **The outline is the Layers outline, identical.** Same twirls, same columns, same rows,
+  same widget (`_Outline`) — the panel does not branch on the mode for its left half at
+  all. A property's curves are on the pane when its row is in `_selectedProperties`, which
+  is what clicking its name does (§2.1), and that is now the only way in.
+- **What went with the filtered list**, deleted rather than left dormant: the
+  colour-ticked rows (`_GraphOutline`), the include-in-graph tick and its `_toggleInGraph`
+  handler, the Show filter (`_KeysFilterRow`), the flat row model both sheets shared
+  (`keysLayerRows`) and the twirl set that went with it (`_keysShut`, `_flatSheet`), and
+  the setting that used to switch between the two outlines
+  (`InterfaceSettings.graphOutlineLikeLayers`).
+- **Normalise is gone**, and the per-curve ranges with it. `rangeOf` and `_ownRange` are
+  deleted and every coordinate in the pane reads the one shared range, so unlike units are
+  once more one flat line under another. The `%` rider on the axis numbers goes too, the
+  numbers being values again.
 - A **Key readout row** pinned at the outline's foot while exactly one key is selected:
   `KEY f<frame> <value><unit>` then `In [well] % Out [well] %` — the influence wells
   editable, committing through the same tangent write the handles use (a side becomes a
   bezier at its current speed and the influence asked for). Two or more selected keys are
   a block, whose badge is the readout, and the row draws nothing at all rather than an
-  empty strip.
-- A setting restores an outline identical to Layers mode (K-442): Settings ▸ Interface ▸
-  Panels ▸ *Graph mode keeps the Layers outline*, off by default. It is also the only way
-  to reach a **value well** while the graph is up — the graph's own outline reads values
-  rather than editing them — which is what the K-333/K-334/K-336 regression tests use.
+  empty strip. This is the graph's, not the filtered outline's, and it stays.
+- **Hovering a key sets no cursor** (K-529). The drag cursors stay — the handle ring's
+  `resizeUpDown`, the transform box's edge cursors — because those promise one direction.
+- **A handle drag previews only where the picture can differ** (K-529): an ease changes the
+  values between the dragged key and its neighbour and nothing outside them, so with the
+  playhead outside that span `_updateHandleDrag` asks for no render at all. An envelope
+  point is exempt — dragging one re-integrates every frame after it (K-247). The budget is
+  pinned in `bridge_call_budget_test`.
+- **A value well is reached the ordinary way** now that the outline is the Layers outline:
+  the fold row's own well, which is what the K-333/K-334/K-336 regression tests drag. The
+  setting that used to be the only route to one is gone with the outline that needed it.
 
 ---
 

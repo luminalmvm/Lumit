@@ -76,28 +76,24 @@ void main() {
     /// whole gesture. A **still** property is not on the Animated list, so
     /// Show is flipped to All to reach it.
     Future<void> pickProperty(WidgetTester tester, String label) async {
-      if (find.text(label).evaluate().isEmpty) {
-        await tester.tap(find.byKey(const ValueKey('tl-keys-all')));
-        await tester.pump();
-      }
       await tester.tap(find.text(label));
       await tester.pump();
     }
 
-    /// [layersOutline] is Settings ▸ *Graph mode keeps the Layers outline*
-    /// (K-442): on, the graph shows the Layers columns and its properties are
-    /// reached by twirling, which is what the tests that drag an outline
-    /// **value well** need — the graph's own outline reads values, it does
-    /// not edit them.
+    /// Mount the panel in Graph mode with a property picked.
+    ///
+    /// **The outline is the Layers outline** (K-529): the graph's own
+    /// colour-ticked filtered list is gone, so a property is reached by
+    /// twirling the layer open exactly as it is in Layers mode, and the
+    /// `layersOutline` flag those tests used to pass has nothing left to
+    /// switch.
     Future<void> mountGraph(WidgetTester tester, dynamic p,
-        {bool selectOpacity = true, bool layersOutline = false}) async {
+        {bool selectOpacity = true}) async {
       // The outline alone is ~740 px of columns; the default 800×600 test
       // surface would push the graph pane off screen.
       tester.view.physicalSize = const Size(1280, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      (p.uiState as LumitUiState).workspace.interface.graphOutlineLikeLayers =
-          layersOutline;
       await tester.pumpWidget(hostPanel(
         child: const TimelinePanelFrb(),
         state: p.state as LumitState,
@@ -108,14 +104,12 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
       await tester.pump();
       if (!selectOpacity) return;
-      if (layersOutline) {
-        final layer = (p as dynamic).layer as LayerReference;
-        await tester.tap(
-            find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
-        await tester.pump();
-        await tester.tap(find.text('Transform'));
-        await tester.pump();
-      }
+      final layer = (p as dynamic).layer as LayerReference;
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
+      await tester.pump();
+      await tester.tap(find.text('Transform'));
+      await tester.pump();
       await pickProperty(tester, 'Opacity');
     }
 
@@ -158,7 +152,7 @@ void main() {
       animateOpacity(p.comp, p.layer);
       // The Layers outline, because this drags a **value well** — the graph's
       // own outline reads values rather than editing them (§3.3).
-      await mountGraph(tester, p, layersOutline: true);
+      await mountGraph(tester, p);
 
       final glyph = find.byKey(ValueKey<String>(opacityKey(p.layer, 0)));
       final before = tester.getCenter(glyph);
@@ -201,7 +195,7 @@ void main() {
       // insert a duplicate key instead of replacing (K-336). Frame 50 is
       // float-exact and cannot catch it.
       p.uiState.scrubTo(31);
-      await mountGraph(tester, p, layersOutline: true);
+      await mountGraph(tester, p);
 
       expect(opacityKeys(p.layer).length, 2);
 
@@ -278,7 +272,7 @@ void main() {
       }
       p.layer.setEffects(effects: staged);
       p.uiState.model.refresh();
-      await mountGraph(tester, p, selectOpacity: false, layersOutline: true);
+      await mountGraph(tester, p, selectOpacity: false);
 
       // Select the Radius property the outline way.
       await tester.tap(
@@ -328,7 +322,7 @@ void main() {
       p.layer.toggleRetimeProperty();
       p.uiState.scrubTo(31);
       p.uiState.model.refresh();
-      await mountGraph(tester, p, selectOpacity: false, layersOutline: true);
+      await mountGraph(tester, p, selectOpacity: false);
 
       final id = p.layer.internallayerId;
       await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
@@ -502,14 +496,20 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pump();
 
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-interp-hold')));
       await tester.tap(find.byKey(const ValueKey('graph-interp-hold')));
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Hold>());
 
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-interp-bezier')));
       await tester.tap(find.byKey(const ValueKey('graph-interp-bezier')));
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Bezier>());
 
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-interp-linear')));
       await tester.tap(find.byKey(const ValueKey('graph-interp-linear')));
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Linear>());
@@ -1172,9 +1172,12 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tl-graph')));
       await tester.pump();
-      // Graph mode's outline lists the Retime row flat, under its layer.
-      await tester.tap(find.byKey(
-          ValueKey<String>('tl-graph-name-${layer.internallayerId}/retime')));
+      // The graph's outline is the Layers outline (K-529), so the Retime row
+      // is reached by twirling the layer open, as it is in Layers mode.
+      await tester.tap(
+          find.byKey(ValueKey<String>('tl-twirl-${layer.internallayerId}')));
+      await tester.pump();
+      await tester.tap(find.text('Retime'));
       await tester.pump();
     }
 
@@ -1545,14 +1548,13 @@ void main() {
       expect((tester.widget<CustomPaint>(glyph()).painter as dynamic).colour,
           isNot(t.accent));
 
-      expect(
-          tester
-              .widget<MouseRegion>(find
-                  .descendant(of: key, matching: find.byType(MouseRegion))
-                  .first)
-              .cursor,
-          SystemMouseCursors.move,
-          reason: 'a key moves in time and value, and says so');
+      // **No cursor of its own** (K-529, owner): hovering a key used to swap
+      // the pointer for the move cursor, so crossing a curve full of keys made
+      // it flicker. The mark under the pointer already says a key is there.
+      // The drag cursors stay — see the handle ring and the box edges.
+      expect(find.descendant(of: key, matching: find.byType(MouseRegion)),
+          findsNothing,
+          reason: 'a key changes nothing about the pointer');
 
       await tester.tap(key);
       await tester.pump();
@@ -1614,46 +1616,36 @@ void main() {
       );
     }
 
-    testWidgets('the graph outline is the filtered animated list',
+    /// **The graph outline is the Layers outline, identical** (K-529). The
+    /// colour-ticked filtered list is gone: the same twirls, the same columns,
+    /// the same rows, in both views — so switching mode changes what is drawn
+    /// against time and nothing about how a property is found.
+    testWidgets('the graph outline is the Layers outline, identical',
         (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer);
       await mountGraph(tester, p, selectOpacity: false);
       final id = p.layer.internallayerId;
 
-      expect(find.byKey(ValueKey<String>('tl-twirl-$id')), findsNothing,
-          reason: 'not the Layers outline');
+      expect(find.byKey(ValueKey<String>('tl-twirl-$id')), findsOneWidget,
+          reason: 'the Layers outline, twirls and all');
+      expect(find.byKey(const ValueKey('tl-column-switches')), findsOneWidget,
+          reason: 'and its column header, and its column toggles');
       expect(
           find.byKey(ValueKey<String>('tl-graph-prop-$id/transform/opacity')),
-          findsOneWidget,
-          reason: 'the animated property is listed');
-      expect(
-          find.byKey(ValueKey<String>('tl-graph-prop-$id/transform/positionX')),
           findsNothing,
-          reason: 'a still property is not on the Animated list');
-      expect(find.byKey(const ValueKey('tl-graph-normalise')), findsOneWidget,
-          reason: "Normalise sits at the filter row's right");
-
-      // Show: All lists every property a layer has.
-      await tester.tap(find.byKey(const ValueKey('tl-keys-all')));
-      await tester.pump();
-      expect(
-          find.byKey(ValueKey<String>('tl-graph-prop-$id/transform/positionX')),
-          findsOneWidget);
-
-      // The row reads what it holds, with its unit outside the number.
-      expect(
-          find.descendant(
-              of: find.byKey(
-                  ValueKey<String>('tl-graph-prop-$id/transform/opacity')),
-              matching: find.text('%')),
-          findsOneWidget,
-          reason: 'the unit rides beside the value');
+          reason: 'the filtered list is gone');
+      expect(find.byKey(const ValueKey('tl-keys-filters')), findsNothing,
+          reason: 'and so is the Show filter that only it had');
+      expect(find.byKey(const ValueKey('tl-graph-normalise')), findsNothing,
+          reason: 'Normalise goes with it (the owner found it opaque)');
     });
 
-    /// **The tick is the selection**: it puts one property's curves on the
-    /// pane and takes them off, leaving every other row alone.
-    testWidgets('the include tick adds and removes one curve', (tester) async {
+    /// **A property row is what puts a curve on the pane** (K-529), in both
+    /// views — the tick that used to do it went with the graph's own outline,
+    /// and selecting a row was always the other way in.
+    testWidgets('picking a property row puts its curve on the pane',
+        (tester) async {
       final p = withLayer();
       animateOpacity(p.comp, p.layer);
       animatePositionX(p.comp, p.layer);
@@ -1663,69 +1655,36 @@ void main() {
       Finder glyph(String channel) =>
           find.byKey(ValueKey<String>('graph-key-$id/$channel#0'));
 
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-graph-tick-$id/transform/opacity')));
+      await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
+      await tester.pump();
+      await tester.tap(find.text('Transform'));
+      await tester.pump();
+
+      await tester.tap(find.text('Opacity'));
       await tester.pump();
       expect(glyph('transform/opacity@opacity'), findsOneWidget);
 
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-graph-tick-$id/transform/positionX')));
+      // A second row, added to the selection rather than replacing it: both
+      // curves share the pane, on one value scale (the per-curve ranges died
+      // with Normalise).
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.text('Position'));
       await tester.pump();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
       expect(glyph('transform/opacity@opacity'), findsOneWidget,
           reason: 'the first curve stayed');
       expect(glyph('transform/positionX@positionX'), findsOneWidget);
 
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-graph-tick-$id/transform/opacity')));
-      await tester.pump();
-      expect(glyph('transform/opacity@opacity'), findsNothing,
-          reason: 'unticking took only its own curve off');
-      expect(glyph('transform/positionX@positionX'), findsOneWidget);
-    });
-
-    /// **Normalise** (§3.3): each shown curve is scaled to its own min–max, so
-    /// an opacity in per cent and a position in pixels both fill the pane
-    /// instead of one being a flat line under the other. A view setting: the
-    /// keys themselves do not move.
-    testWidgets('Normalise gives every curve its own span', (tester) async {
-      final p = withLayer();
-      animateOpacity(p.comp, p.layer);
-      animatePositionX(p.comp, p.layer);
-      await mountGraph(tester, p, selectOpacity: false);
-      final id = p.layer.internallayerId;
-      await tester.tap(
-          find.byKey(ValueKey<String>('tl-graph-tick-$id/transform/opacity')));
-      await tester.pump();
-      await tester.tap(find
-          .byKey(ValueKey<String>('tl-graph-tick-$id/transform/positionX')));
-      await tester.pump();
-
+      // One value scale for both, so 100 and 1000 are nowhere near each other
+      // — which is what "the curves share the value scale again" means.
       double topOf(String channel) => tester
           .getCenter(find.byKey(ValueKey<String>('graph-key-$id/$channel#1')))
           .dy;
-
-      final apart = (topOf('transform/opacity@opacity') -
-              topOf('transform/positionX@positionX'))
-          .abs();
-      expect(apart, greaterThan(20),
-          reason: 'on one axis, 100 and 1000 are nowhere near each other');
-
-      await tester.tap(find.byKey(const ValueKey('tl-graph-normalise')));
-      await tester.pump();
       expect(
           (topOf('transform/opacity@opacity') -
                   topOf('transform/positionX@positionX'))
               .abs(),
-          lessThan(2),
-          reason: 'each curve now fills its own span, so both tops meet');
-
-      // A view setting, never data.
-      expect(
-          (p.layer.getTransform().opacity as BridgeScalar_Keyframed)
-              .field0
-              .last
-              .value,
-          100);
+          greaterThan(20));
     });
 
     /// The **Key readout row** (§3.3): pinned at the outline's foot while

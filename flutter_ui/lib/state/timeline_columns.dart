@@ -23,8 +23,15 @@ enum TimelineGroup {
   /// the fold-out rows align their value cells to.
   render,
 
-  /// Matte · blend · parent.
+  /// Matte · blend.
   compose,
+
+  /// Parent. **A cluster of its own** (owner, desktop testing): the bottom
+  /// bar's three toggles hide the columns they name, and Parent named a
+  /// cluster that also held the matte and the blend — so hiding the parent
+  /// picker took two other pickers with it. A toggle hides what its word
+  /// says, and the word here says Parent.
+  parent,
 
   /// Render time — what this layer's picture cost in the frame the playhead is
   /// on, and, on a twirled-open effect's heading, what that effect cost
@@ -41,6 +48,7 @@ const List<TimelineGroup> defaultGroupOrder = [
   TimelineGroup.identity,
   TimelineGroup.render,
   TimelineGroup.compose,
+  TimelineGroup.parent,
   TimelineGroup.timings,
 ];
 
@@ -124,8 +132,14 @@ const double parentCellWidth = 64;
 /// The compose group at rest — a comp with no matte set anywhere in view. The
 /// panel adds [matteToggleWidth] to whatever width this group is at (dragged
 /// or not) as soon as one is.
-const double composeGroupWidth =
-    matteFaceWidth + cellGap + blendCellWidth + cellGap + parentCellWidth;
+///
+/// **Two cells, not three**: the parent picker is its own group, so that the
+/// bottom bar's Parent toggle can hide it on its own.
+const double composeGroupWidth = matteFaceWidth + cellGap + blendCellWidth;
+
+/// The parent group: the mockup's own 64 for its dropdown face, and nothing
+/// else in the cluster.
+const double parentGroupWidth = parentCellWidth;
 
 /// The render-time cell: wide enough for "1234 ms" and its switch, and no
 /// wider — it is a readout beside the work, not a column of the outline that
@@ -160,6 +174,7 @@ const Map<TimelineGroup, double> defaultGroupWidths = {
   TimelineGroup.identity: 250,
   TimelineGroup.render: renderGroupWidth,
   TimelineGroup.compose: composeGroupWidth,
+  TimelineGroup.parent: parentGroupWidth,
   TimelineGroup.timings: timingsGroupWidth,
 };
 
@@ -183,7 +198,8 @@ double minGroupWidth(TimelineGroup group) => switch (group) {
       TimelineGroup.switches => switchesGroupWidth,
       TimelineGroup.identity => 120,
       TimelineGroup.render => renderGroupWidth,
-      TimelineGroup.compose => 180,
+      TimelineGroup.compose => 120,
+      TimelineGroup.parent => 60,
       // Enough for the widest number the readout writes ("12.34 s").
       TimelineGroup.timings => 56,
     };
@@ -214,23 +230,18 @@ double outlineWidthOf(Map<TimelineGroup, double> widths) =>
     widths.values.fold(0.0, (a, b) => a + b) +
     (widths.length - 1) * groupDividerWidth;
 
-/// The compose group's three cells at a given group width, keeping the
+/// The compose group's two cells at a given group width, keeping the
 /// proportions the defaults set — so widening the group widens the pickers
 /// rather than leaving dead space beside them.
 ///
 /// [matteToggles] is whether the matte column is carrying its two mode
 /// toggles' room, which it does only while some visible row has a matte set
 /// (K-463). The header and the rows are handed the same answer, so they agree.
-(double, double, double) composeCellWidths(double width,
-    {required bool matteToggles}) {
-  final usable = (width - 2 * cellGap).clamp(60.0, 1e6);
+(double, double) composeCellWidths(double width, {required bool matteToggles}) {
+  final usable = (width - cellGap).clamp(40.0, 1e6);
   final matte = matteFaceWidth + (matteToggles ? matteToggleWidth : 0);
-  final total = matte + blendCellWidth + parentCellWidth;
-  return (
-    usable * matte / total,
-    usable * blendCellWidth / total,
-    usable * parentCellWidth / total,
-  );
+  final total = matte + blendCellWidth;
+  return (usable * matte / total, usable * blendCellWidth / total);
 }
 
 /// The order after dropping [dragged] onto [target]: the dragged group takes

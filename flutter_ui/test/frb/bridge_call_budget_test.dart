@@ -21,6 +21,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
+import 'package:lumit_flutter/panels/graph_maths.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
@@ -337,6 +338,165 @@ void main() {
         lessThan(40),
         reason: 'a zoom drag re-read far too much:\n${counter.ranking()}',
       );
+    });
+
+    /// **A column-seam drag reaches the engine not at all** (K-529). Column
+    /// widths are pure view state, and the owner's report of a lagging seam
+    /// was the panel rebuilding whole on every pointer move — so what is
+    /// guarded here is the seam's own bill: nought.
+    testWidgets('a column-seam drag costs no bridge calls', (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp.addSolidLayer();
+      comp.addTextLayer();
+      p.uiState.setSelectedComp(comp);
+
+      tester.view.physicalSize = const Size(1280, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1280, 600),
+        child: const TimelinePanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      final seam = find.byKey(const ValueKey('tl-seam-identity'));
+      final before = tester.getRect(seam);
+      counter
+        ..reset()
+        ..counting = true;
+      final gesture = await tester.startGesture(before.center);
+      await tester.pump(const Duration(milliseconds: 100));
+      for (var i = 0; i < 60; i++) {
+        await gesture.moveBy(const Offset(2, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      counter.counting = false;
+
+      expect(tester.getRect(seam).left, greaterThan(before.left + 50),
+          reason: 'the drag actually widened the column');
+      // ignore: avoid_print
+      print('SEAM DRAG COST ${counter.total} calls\n${counter.ranking()}');
+      // **N = 4.** A sixty-move drag, and the only thing that may cross the
+      // seam is the read model's once-a-frame revision check after the one
+      // commit on release. Nothing per move, because nothing about a column
+      // width is the document's.
+      expect(
+        counter.total,
+        lessThanOrEqualTo(4),
+        reason: 'a seam drag reached the engine at all:\n${counter.ranking()}',
+      );
+    });
+
+    /// **A graph handle drag is bounded, and free where the picture cannot
+    /// change** (K-529). The owner's report: dragging a tangent handle fired
+    /// calls by the hundred per second wherever it was made. Two things bound
+    /// it — the preview throttle, which coalesces the ticks between renders,
+    /// and the span guard, which does not ask for a render at all when the
+    /// playhead is outside the stretch an ease can change.
+    testWidgets('a graph handle drag costs a bounded number of calls',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          // Eased on both sides, because a tangent handle is only drawn on a
+          // bezier one — a linear key has no handle to take hold of.
+          for (final f in [30, 90, 150])
+            BridgeKeyframe(
+              time: comp.timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: easyEase,
+              interpOut: easyEase,
+            ),
+        ]),
+      );
+      p.uiState.setSelectedComp(comp);
+
+      tester.view.physicalSize = const Size(1280, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(1280, 600),
+        child: const TimelinePanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      final id = layer.internallayerId;
+      await tester.tap(find.byKey(ValueKey<String>('tl-twirl-$id')));
+      await tester.pump();
+      await tapNearLeft(
+          tester, find.byKey(ValueKey<String>('tl-group-$id/transform')));
+      await tester.pump();
+      await tester.tap(find.text('Opacity'));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('tl-graph')));
+      await tester.pump();
+      await tester.tap(find.byKey(
+          ValueKey<String>('graph-key-$id/transform/opacity@opacity#1')));
+      await tester.pump();
+
+      final handle = find.byKey(
+          ValueKey<String>('graph-handle-$id/transform/opacity@opacity#1-out'));
+      expect(handle, findsOneWidget,
+          reason: 'a selected key draws its handles');
+
+      Future<int> costOfDrag() async {
+        counter
+          ..reset()
+          ..counting = true;
+        final gesture = await tester.startGesture(tester.getCenter(handle));
+        await tester.pump(const Duration(milliseconds: 100));
+        for (var i = 0; i < 60; i++) {
+          await gesture.moveBy(const Offset(0, -1));
+          await tester.pump(const Duration(milliseconds: 8));
+        }
+        await gesture.up();
+        await tester.pumpAndSettle();
+        counter.counting = false;
+        return counter.total;
+      }
+
+      // The playhead sits outside the two keys the ease runs between, so no
+      // frame on screen can differ: the drag asks for no preview at all, and
+      // the whole bill is the one commit on release.
+      p.uiState.playheadFrame.value = 200;
+      await tester.pump();
+      final away = await costOfDrag();
+      // ignore: avoid_print
+      print('HANDLE DRAG (playhead away) $away calls\n${counter.ranking()}');
+      // **N = 12** for a sixty-move drag: the commit, and the read model's
+      // revision checks around it. Nothing per move.
+      expect(away, lessThanOrEqualTo(12),
+          reason: 'a handle drag away from the span it changes previewed '
+              'anyway:\n${counter.ranking()}');
+
+      // With the playhead between the two keys the previews are wanted — and
+      // still bounded, because the throttle coalesces them.
+      p.uiState.playheadFrame.value = 60;
+      await tester.pump();
+      final inside = await costOfDrag();
+      // ignore: avoid_print
+      print(
+          'HANDLE DRAG (playhead inside) $inside calls\n${counter.ranking()}');
+      // **N = 80** for the same sixty moves — the measured cost is 57, which
+      // is the throttle's rate over the drag's length rather than one bill per
+      // move. What must never come back is a count that scales with the
+      // moves: unthrottled, sixty of them cost two calls each and the total
+      // lands past 120.
+      expect(inside, lessThanOrEqualTo(80),
+          reason: 'a handle drag previewed once per pointer move:\n'
+              '${counter.ranking()}');
+      expect(inside, greaterThan(away),
+          reason: 'and it does preview where the picture can differ');
     });
 
     /// Hovering the Project panel used to re-fetch names (and once, the

@@ -564,7 +564,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
-        settings.graphOutlineLikeLayers = shipped.graphOutlineLikeLayers;
         settings.layerNamesOnBars = shipped.layerNamesOnBars;
         workspace.settingsChanged();
       case SettingsPage.viewer:
@@ -802,6 +801,30 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ui.workspace.recompose();
             ui.workspace.save();
           }),
+          // What the chrome says (K-440), on the Appearance page's Interface
+          // section — the place K-465 named for it, drawn now that a surface
+          // reads it.
+          _row(
+            t,
+            l10n.settingsChromeLabels,
+            description: l10n.settingsHelpChromeLabels,
+            _dropdown<ChromeLabels>(
+              key: 'settings-chrome-labels',
+              value: settings.chromeLabels,
+              options: ChromeLabels.values,
+              label: (mode) => switch (mode) {
+                ChromeLabels.words => l10n.chromeLabelsWords,
+                ChromeLabels.icons => l10n.chromeLabelsIcons,
+                ChromeLabels.iconsEverywhere =>
+                  l10n.chromeLabelsIconsEverywhere,
+              },
+              width: _ddWide,
+              onChanged: (mode) => setState(() {
+                settings.chromeLabels = mode;
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
         ],
       ),
       (
@@ -1210,12 +1233,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _flag(t, 'settings-easing-in-popup', l10n.settingsShapeEasesInAPopup,
               value: settings.easingInPopup, set: (on) {
             settings.easingInPopup = on;
-            changed();
-          }),
-          _flag(t, 'settings-graph-outline-like-layers',
-              l10n.settingsGraphKeepsTheLayersOutline,
-              value: settings.graphOutlineLikeLayers, set: (on) {
-            settings.graphOutlineLikeLayers = on;
             changed();
           }),
           // Off by default (K-514): the lane area draws bars, and the names

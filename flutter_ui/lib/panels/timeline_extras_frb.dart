@@ -1336,6 +1336,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
     );
   }
 
+  /// Which work-area handle the pointer is over, or null. Held rather than
+  /// read from a hover intent because the two handles are one loop and each
+  /// has to know whether the answer is *it*.
+  bool? _hoveredHandleIsStart;
+
   /// The work area as it should draw right now: the panel's, with the edge
   /// being dragged moved to where the pointer is. Each edge stops one frame
   /// short of the other, the rule [workAreaWith] commits.
@@ -1371,13 +1376,13 @@ class _TimelineRulerState extends State<TimelineRuler> {
         // **On the band**: the work area goes back to the whole comp
         // (docs/07 §4.1). Anywhere else: a marker is made at that frame.
         //
-        // **The waist still divides this one gesture**, though nothing is
-        // drawn along it any more and the highlight now covers the whole
-        // ruler (K-513). It has to: a comp nobody has narrowed has a work
-        // area of the whole comp, so a band-wide double-click would clear a
-        // work area that is already whole and there would be nowhere left on
-        // the ruler to make a marker. Clock above, band below — for the
-        // double-click, and for nothing else.
+        // **The waist divides this one gesture**, though nothing is drawn
+        // along it any more (K-513). It has to: a comp nobody has narrowed
+        // has a work area of the whole comp, so a ruler-wide double-click
+        // would clear a work area that is already whole and there would be
+        // nowhere left on the ruler to make a marker. The highlight is on the
+        // second row again (K-529), so the line this gesture reads by is now
+        // the line the highlight itself draws.
         final x = d.localPosition.dx;
         final onBand = d.localPosition.dy >= widget.height / 2 &&
             x >= axis.xOf(work.start) &&
@@ -1416,17 +1421,20 @@ class _TimelineRulerState extends State<TimelineRuler> {
               ),
             ),
             // The work area: the span the Viewer previews and the export
-            // writes. **The whole ruler**, not its lower half (K-513): the
-            // ruler is one band now, so the span that band describes covers
-            // all of it — and this is the top of *one* highlight that carries
-            // on behind the cache bar and down through the lanes (docs/15
-            // §12A.1). It was the lower half alone, back when a drawn seam
-            // said the clock above was a separate reading.
+            // writes. **The ruler's second row**, not the whole of it (K-529,
+            // reverting that half of K-513 — the owner tried the full-height
+            // highlight on a real composition and asked for the lower row
+            // back). A wash over the clock made the numbers harder to read
+            // for no gain: the band's job is to say *which stretch of time*,
+            // and the row that carries the markers is the row that says where
+            // things sit in time. It is still the top of *one* highlight,
+            // carrying on behind the cache bar and down through the lanes
+            // (docs/15 §12A.1) — it simply starts at the waist again.
             Positioned(
               left: axis.xOf(work.start),
               width:
                   (axis.xOf(work.end) - axis.xOf(work.start)).clamp(1.0, 1e6),
-              top: 0,
+              top: widget.height / 2,
               bottom: 0,
               child: IgnorePointer(
                 child: Container(
@@ -1442,12 +1450,11 @@ class _TimelineRulerState extends State<TimelineRuler> {
             // to take hold of. Each edge stops one frame short of the other,
             // so a drag can never invert the span.
             //
-            // **The full height of the ruler** (K-513), because the band they
-            // belong to is now the full height too: an edge you can see for
-            // the whole of the ruler and can only grab for the bottom half of
-            // it is a handle that is half a lie. They were the lower half
-            // alone, which kept the scrub free right next to an edge; the
-            // owner's ruling takes that trade the other way, and the ten
+            // **The full height of the ruler**, both rows (K-513, kept by
+            // K-529 where the highlight was not): the band says which stretch
+            // of time, and the handle is a *thing to take hold of* — so it
+            // stands up the whole ruler where the eye and the pointer are,
+            // rather than hiding in the lower row with the markers. The ten
             // pixels either side of an edge are the edge's.
             if (widget.onWorkArea != null)
               for (final isStart in const [true, false])
@@ -1459,6 +1466,9 @@ class _TimelineRulerState extends State<TimelineRuler> {
                   bottom: 0,
                   child: MouseRegion(
                     cursor: SystemMouseCursors.resizeLeftRight,
+                    onEnter: (_) =>
+                        setState(() => _hoveredHandleIsStart = isStart),
+                    onExit: (_) => setState(() => _hoveredHandleIsStart = null),
                     child: GestureDetector(
                       key: ValueKey('tl-work-${isStart ? 'start' : 'end'}'),
                       behavior: HitTestBehavior.opaque,
@@ -1519,12 +1529,31 @@ class _TimelineRulerState extends State<TimelineRuler> {
                         _escape.end();
                         _abandonWorkDrag();
                       },
-                      // Nothing of its own to draw: the band's own edges *are*
-                      // the two handles (docs/15 §12A.1), and a second mark
-                      // over them only thickened the line. The grab stays the
-                      // ten pixels this box is wide — a handle you have to aim
-                      // at is not a handle.
-                      child: const SizedBox.expand(),
+                      // **A drawn tab** (owner's reference image, K-529).
+                      // The handles used to draw nothing at all and let the
+                      // band's own edge stand for them — which worked while
+                      // the band ran the ruler's whole height, and stopped
+                      // working the moment the highlight went back to the
+                      // second row: an edge drawn on the lower row cannot be
+                      // the visible half of a handle that reaches the top of
+                      // the ruler. So the tab is drawn, and it is drawn over
+                      // both rows, which is exactly the reach it grabs.
+                      child: Center(
+                        child: SizedBox(
+                          width: _workHandleTabWidth,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: workAreaHandleColour(t,
+                                  hovered: _hoveredHandleIsStart == isStart ||
+                                      _dragFrame != null &&
+                                          _dragIsStart == isStart),
+                              borderRadius: BorderRadius.circular(
+                                  _workHandleTabWidth / 2),
+                            ),
+                            child: const SizedBox.expand(),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -2137,6 +2166,23 @@ BoxDecoration workAreaBand(LumitTheme t, {required double fillAlpha}) =>
 /// The band's two edges, at half strength (§12A.1).
 Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 
+/// A work-area **handle**'s tab, at rest and under the pointer (K-529, the
+/// owner's reference image).
+///
+/// Derived from the band's own colour, never a second hex: the tab is the same
+/// hue as the highlight it moves, one step stronger than the band's edge
+/// ([workAreaEdgeColour]'s half) so it reads as a thing to grab rather than as
+/// a line to look at. Hover takes another step, which is the only thing that
+/// changes under the pointer — the shape and the width do not, so nothing
+/// jumps as the hand arrives.
+Color workAreaHandleColour(LumitTheme t, {required bool hovered}) =>
+    t.animated.withValues(alpha: hovered ? 0.9 : 0.7);
+
+/// How wide the drawn tab is, inside the [_workHandleWidth] it grabs across.
+/// Narrow, because it is a mark on an edge rather than a bar of its own — and
+/// rounded to its own half-width, which is what makes it read as a tab.
+const double _workHandleTabWidth = 3;
+
 /// What a marker's label is set in: mono at 8, the mockup's own size (K-451) —
 /// a marker's label is a cue read at a glance beside a clock, and it sets in
 /// the same face the clock does, one step quieter so the pill stays a pill
@@ -2182,23 +2228,6 @@ double clipBarInsetFor(DensityTokens d) => (d.laneRow - clipBarHeight) / 2;
 /// The same fill on a selected bar. Brighter as well as lighter, so selection
 /// beats every label colour in the palette (§6.1).
 const double clipFillSelectedAlpha = 0.62;
-
-/// **The Layers bar, shown through Keys mode** (K-515): each layer band in the
-/// dope sheet draws that layer's bar behind its keys, at this share of the
-/// label colour.
-///
-/// In plain terms: in Keys mode you see when a layer's keys are but not how
-/// long the layer *is*, so a key sitting past the end of its own layer looked
-/// no different from one inside it. The bar is drawn back in as a ghost — the
-/// same rectangle, in the same place, at the same 16 inside the row — so the
-/// length reads at a glance.
-///
-/// **The disabled treatment**, and deliberately so: it is [clipFillAlpha]'s
-/// fill taken most of the way down, it carries no leading edge, no name, no
-/// end marks and no gestures of any kind. Everything that made the Layers bar
-/// a handle is exactly what has to be missing here, or a reader would try to
-/// drag it. Pinned by `timeline_alignment_test`.
-const double keysGhostBarAlpha = 0.15;
 
 /// The solid mark at a bar's or a clip's start, in the label's full colour:
 /// what makes a desaturated fill still land with a snap.
