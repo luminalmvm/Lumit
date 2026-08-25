@@ -9084,5 +9084,18 @@
   "tipUnfavourite": "Remove from favourites",
   "@tipUnfavourite": {
     "description": "Hover text on the star beside an effect or preset that is already starred. Pressing it takes the row out of the Favourites heading."
+  },
+  "viewerAtEffect": "at {effect}",
+  "@viewerAtEffect": {
+    "description": "The chip over the Viewer's picture that shows the composition with the selected layer's effects stopping after the named effect. Lower case and no full stop: it reads as a continuation of the picture, not a sentence. {effect} is the effect's name, e.g. 'at Gaussian blur'.",
+    "placeholders": {
+      "effect": {
+        "type": "String"
+      }
+    }
+  },
+  "tipViewerAtEffect": "Picture at this effect",
+  "@tipViewerAtEffect": {
+    "description": "Tooltip on the Viewer's 'at effect' chip: clicking it shows the composition with that layer's effects stopping there, and clicking again returns the finished picture. Under five words."
   }
 }

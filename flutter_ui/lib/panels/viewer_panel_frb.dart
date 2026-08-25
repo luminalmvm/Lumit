@@ -84,6 +84,7 @@ import 'viewer_tool_cursor.dart';
 import 'viewer_track.dart';
 import 'viewer_camera.dart';
 import 'viewer_paint.dart';
+import 'viewer_prefix_chip.dart';
 import 'viewer_progress_bar.dart';
 import 'viewer_type.dart';
 import 'viewer_region.dart';
@@ -1351,6 +1352,11 @@ class _Stage extends StatelessWidget {
             // in the stack because it is chrome: it names what is selected
             // whatever is being drawn underneath, including a held snapshot.
             _ViewerTag(uiState: uiState),
+            // And what is being *looked at*, when that is not the finished
+            // composition (K-524). Its own file, so this is one line: the chip
+            // is the Viewer's, but it follows the effect selection rather than
+            // anything this panel knows.
+            ViewerPrefixChip(uiState: uiState),
           ],
         ),
       ),

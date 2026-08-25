@@ -992,6 +992,9 @@ class LumitUiState extends ChangeNotifier {
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
             : BridgePlaybackMode.everyFrame,
+        // The "at effect" chip (K-524). The engine latches it, so the drags,
+        // the playback and the idle fill that follow show the same picture.
+        prefix: viewerPrefix,
       );
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
@@ -1192,6 +1195,58 @@ class LumitUiState extends ChangeNotifier {
       ValueNotifier(const []);
   LayerReference? selectedEffectsLayer;
 
+  /// Whether the Viewer is showing the picture **at** the selected effect —
+  /// that layer's stack stopping there — rather than the finished composition
+  /// (K-524). The "at effect" chip over the picture is what turns it on.
+  ///
+  /// Session state at the shell level, like the armed tool and the picked
+  /// graph box: it is set on the Viewer and read where the render is asked
+  /// for, and the two need not be mounted together.
+  final ValueNotifier<bool> atSelectedEffect = ValueNotifier(false);
+
+  /// Where the Viewer is cutting the stack, or null for the picture as the
+  /// document has it — read by [requestFrame] and by nothing else.
+  ///
+  /// **Derived, never stored.** One effect selected and the chip engaged is the
+  /// whole of it, so the point cannot drift from the selection it names: there
+  /// is no second copy to keep in step. A run of effects picked names no single
+  /// point and so cuts nothing.
+  BridgePrefixPoint? get viewerPrefix {
+    final layer = selectedEffectsLayer;
+    final picked = selectedEffects.value;
+    if (!atSelectedEffect.value || layer == null || picked.length != 1) {
+      return null;
+    }
+    return BridgePrefixPoint(layer: layer, effect: picked.single);
+  }
+
+  /// Turn the chip on or off, and show what it asks for.
+  ///
+  /// The render is the point: nothing else tells the engine, and the frame the
+  /// Viewer is already showing is of the other picture. One call, which is the
+  /// same one a playhead step makes.
+  void setAtSelectedEffect(bool on) {
+    if (atSelectedEffect.value == on) return;
+    atSelectedEffect.value = on;
+    requestFrame();
+  }
+
+  /// Keep the chip honest after the effect selection moves.
+  ///
+  /// Picking a **different** single effect keeps it engaged and moves the
+  /// point: walking down a stack watching each effect land is what it is for.
+  /// Picking a run, or nothing, leaves no single point to stop at, so it goes
+  /// off — a chip that outlived its selection would leave the Viewer quietly
+  /// showing a truncated composition with nothing on screen saying why.
+  ///
+  /// Silent while the chip is off, because an effect is picked on every click
+  /// in two panels and a render apiece would be a render nobody asked for.
+  void _followSelectionWithChip() {
+    if (!atSelectedEffect.value) return;
+    if (selectedEffects.value.length != 1) atSelectedEffect.value = false;
+    requestFrame();
+  }
+
   /// Replace the effect selection outright — what the Timeline hands over,
   /// having already applied the click rules to its own rows.
   void setEffectSelection(LayerReference layer, List<UuidValue> effects) {
@@ -1201,6 +1256,7 @@ class LumitUiState extends ChangeNotifier {
     }
     selectedEffectsLayer = layer;
     selectedEffects.value = List.unmodifiable(effects);
+    _followSelectionWithChip();
     notifyListeners();
   }
 
@@ -1253,6 +1309,7 @@ class LumitUiState extends ChangeNotifier {
     selectedEffectsLayer = null;
     if (selectedEffects.value.isEmpty) return;
     selectedEffects.value = const [];
+    _followSelectionWithChip();
     notifyListeners();
   }
 
@@ -1706,6 +1763,7 @@ class LumitUiState extends ChangeNotifier {
     selectedLayer.dispose();
     selectedLayers.dispose();
     graphNode.dispose();
+    atSelectedEffect.dispose();
     activePanel.dispose();
     paletteRequest.dispose();
     consoleRequest.dispose();
