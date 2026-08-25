@@ -1,0 +1,56 @@
+---
+import Base from "../layouts/Base.astro";
+
+// One page, one button. The site never touches a payment: GitHub Sponsors
+// processes everything, and the whole of this page's job is to say so plainly
+// and link there (the same posture as .github/FUNDING.yml on the repo).
+const SPONSORS = "https://github.com/sponsors/luminalmvm";
+
+const answers = [
+  {
+    th: "What it pays for",
+    td: "Development time. Lumit has no company behind it; sponsorship is what lets the hours go in.",
+  },
+  {
+    th: "What it does not buy",
+    td: "Features. There is no pro tier and no feature gate - everything ships to everyone, GPLv3, whether or not anyone sponsors.",
+  },
+  {
+    th: "How it is handled",
+    td: "Entirely by GitHub Sponsors. This site takes no payment details and sets no cookies for it; the button is a link.",
+  },
+];
+---
+
+<Base
+  title="Sponsor Lumit"
+  description="Sponsor Lumit's development through GitHub Sponsors. Everything ships free under GPLv3 either way."
+>
+  <section class="py-16 sm:py-24">
+    <div class="wrap">
+      <p class="kicker">Sponsor</p>
+      <h2 class="mt-4 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Keep the hours going in.</h2>
+      <p class="mt-4 max-w-[620px]">
+        Lumit is free and open source under GPLv3, and stays that way. If it earns a place
+        in your work and you want it to keep moving, sponsorship is the way to help.
+      </p>
+
+      <div class="mt-9">
+        <a class="btn" href={SPONSORS}>Sponsor on GitHub</a>
+      </div>
+
+      <table class="mt-14 w-full max-w-[720px] border-collapse text-[15px]">
+        <tbody>
+          {
+            answers.map((a) => (
+              <tr class="border-t border-line">
+                <th class="w-[180px] py-4 pr-6 text-left align-top font-normal text-fg">{a.th}</th>
+                <td class="py-4 leading-[1.5] text-fg-3">{a.td}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+</Base>
