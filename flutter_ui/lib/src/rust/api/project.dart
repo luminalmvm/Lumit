@@ -6,6 +6,7 @@
 import '../api.dart';
 import '../frb_generated.dart';
 import 'cache.dart';
+import 'colour.dart';
 import 'composition.dart';
 import 'effect.dart';
 import 'folder.dart';
@@ -120,6 +121,20 @@ class ProjectReference {
         that: this,
       );
 
+  /// Whether a named colour space can actually be delivered right now — what
+  /// the export dialogue's colour dropdown enables a row on (K-485's
+  /// disabled-not-hidden rule), and the question the export itself refuses on.
+  ///
+  /// `false` for a config that is missing or refused and for a name it does
+  /// not have, which is the half of K-490's asymmetry that says no: a preview
+  /// degrades to the built-in transform, a delivery does not. The built-in
+  /// space names are not asked about here — they are always deliverable, and
+  /// `BridgeFormatCaps::colour_spaces` is what decides whether the *format*
+  /// can state one.
+  bool canDeliverColourSpace({required String name}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceCanDeliverColourSpace(
+          that: this, name: name);
+
   /// Close this project: forget it in both registries, so every later call
   /// through this reference answers `InvalidProject` — and, with the state
   /// dropped, the request channel its render worker waits on is dropped too.
@@ -135,6 +150,16 @@ class ProjectReference {
   /// proof: a test process makes a project per test, and without a close the
   /// Linux CI runner ran out of memory under the pile of live renderers.
   void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
+        that: this,
+      );
+
+  /// What the project's colour config is, and every name it puts in a picker.
+  ///
+  /// **Not for a rebuild path.** It reads the config file to see whether it
+  /// has changed; the frontend asks on a document change and holds the
+  /// answer, which is what the bridge-call budget test enforces (K-183).
+  BridgeColourSummary colourSummary() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceColourSummary(
         that: this,
       );
 
@@ -286,6 +311,19 @@ class ProjectReference {
   void setCacheLocation({BridgeProjectCacheLocation? location}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetCacheLocation(
           that: this, location: location);
+
+  /// Point the project at an OCIO config, or at none (`None`, which is the
+  /// built-in colour family and the behaviour of every project written before
+  /// this existed).
+  ///
+  /// An ordinary op, so it is undoable, journalled, and travels in the `.lum`
+  /// — colour management changes what a comp looks like, so it is the
+  /// project's property and not the machine's (K-490). The path is stored as
+  /// a `MediaRef` for the same reason footage is: the relative path is what a
+  /// saved project carries, the absolute one is never serialised (K-173), and
+  /// a config that moved relinks by fingerprint like any other file.
+  void setColourConfig({String? path}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceSetColourConfig(that: this, path: path);
 
   /// Record the arrangement to be written into the file on the next save.
   /// `None`, or JSON that does not parse, clears it rather than failing: a

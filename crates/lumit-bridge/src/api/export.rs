@@ -356,15 +356,24 @@ pub fn export_audio_rates() -> Vec<u32> {
     crate::export::audio_rates()
 }
 
-/// Refuse a spec the chosen format cannot honour, in the dialogue's own words —
-/// empty when the spec is exportable.
-///
-/// The engine refuses the same combinations before a frame is rendered; asking
-/// here only means the message arrives while the user is looking at the fields
-/// rather than minutes later from the queue.
-#[frb(sync)]
-pub fn export_spec_check(spec: BridgeExportSpec) -> String {
-    crate::export::spec_check(&spec)
+impl CompositionReference {
+    /// Refuse a spec the chosen format cannot honour, in the dialogue's own
+    /// words — empty when the spec is exportable.
+    ///
+    /// The engine refuses the same combinations before a frame is rendered;
+    /// asking here only means the message arrives while the user is looking at
+    /// the fields rather than minutes later from the queue.
+    ///
+    /// **On the composition rather than free-standing** because a colour space
+    /// is one of the settings, and whether a name can be delivered is a
+    /// question about *this project's* colour config (K-490) — one check, so
+    /// the footer and the exporter cannot disagree about the same spec.
+    #[frb(sync)]
+    pub fn export_spec_check(&self, spec: BridgeExportSpec) -> Result<String, BridgeError> {
+        let state = self.project()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        crate::api::colour::with_colour(&state, |colour| crate::export::spec_check(&spec, colour))
+    }
 }
 
 /// The crop this spec actually applies to a `comp_width` × `comp_height` frame,

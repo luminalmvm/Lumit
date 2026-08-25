@@ -27,15 +27,6 @@ BridgeFormatCaps exportFormatCaps({required String codec}) =>
 Uint32List exportAudioRates() =>
     BridgeLib.instance.api.crateApiExportExportAudioRates();
 
-/// Refuse a spec the chosen format cannot honour, in the dialogue's own words —
-/// empty when the spec is exportable.
-///
-/// The engine refuses the same combinations before a frame is rendered; asking
-/// here only means the message arrives while the user is looking at the fields
-/// rather than minutes later from the queue.
-String exportSpecCheck({required BridgeExportSpec spec}) =>
-    BridgeLib.instance.api.crateApiExportExportSpecCheck(spec: spec);
-
 /// The crop this spec actually applies to a `comp_width` × `comp_height` frame,
 /// and the frame that survives it — the typed insets, or the Viewer's region of
 /// interest when that is asked for and exists (K-362, K-479).

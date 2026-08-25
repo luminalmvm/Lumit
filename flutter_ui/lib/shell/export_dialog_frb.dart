@@ -553,7 +553,9 @@ class _ExportDialogState extends State<_ExportDialog> {
     _bitrateBps = exportResolvedBitrate(
             spec: spec, width: width, height: height, fps: _rate)
         .toInt();
-    _check = exportSpecCheck(spec: spec);
+    // Asked of the composition, not free-standing: whether a colour space can
+    // be delivered is a question about this project's colour config (K-490).
+    _check = widget.comp.exportSpecCheck(spec: spec);
   }
 
   // ---- the frame -----------------------------------------------------------

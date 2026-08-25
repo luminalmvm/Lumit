@@ -554,6 +554,47 @@ the job rather than passed in, so the proxy arrives whether or not the panel tha
 is still on screen. The document's lock is taken after the job's own is dropped, never across
 it (the one-lock-held-briefly rule above).
 
+### Colour management crosses as names down, a summary up (K-489, K-490)
+
+The project stores a path to an OCIO config and a colour-space name per footage item, and
+**everything else is derived** — the parse, the resolved chains, the baked tables. So the
+seam is one read of derived state and two ordinary document edits.
+
+- **Read**: `ProjectReference::colour_summary() -> BridgeColourSummary` — the config's
+    display path, whether it is loaded and usable, the refusal if it is not, the active
+    colour space names, and each display with its views. **One call for the whole
+    structure** (K-451), fetched on a document change and held in Dart; it reads the config
+    file to see whether it has changed, so it never belongs in a `build()` (K-183, and the
+    budget test that forbids it). `FootageReference::colour_space()` is the per-item read.
+- **Write**: `ProjectReference::set_colour_config(path)` and
+    `FootageReference::set_colour_space(space)`, both `None` for "back to the built-in
+    family". Ordinary commits, so one gesture is one undo step and both travel in the
+    `.lum` — colour management changes what a comp looks like, so it is the project's
+    property and not the machine's. The path is stored as a `MediaRef` (K-173), built by
+    the same `media_ref_at` a proxy is attached with.
+- **The Viewer's chosen display and view ride the look message**, as
+    `set_viewer_look(..., colour_view: Option<Vec<String>>)` — the two-name list
+    `[display, view]`, and anything else (an omitted argument included) is the built-in
+    transform. Session state, like the exposure beside it: never in the document, never
+    sent to an export's own renderer. **The trap**: the look is set *whole*, so a caller
+    that sends one without the view has said "no view", not "leave the view alone". The
+    frontend holds the choice alongside the exposure and sends all of it every time.
+- **The export's two colour questions are asked of the project**, because whether a name
+    can be delivered depends on this project's config:
+    `ProjectReference::can_deliver_colour_space(name)` is what the dialogue's dropdown
+    enables a row on (K-485's disabled-not-hidden rule), and
+    `CompositionReference::export_spec_check(spec)` — which replaced the free-standing
+    `export_spec_check` — is the pre-queue check. `BridgeExportSpec::colour_space` itself
+    **does not change shape**: it is still one stable string, and a config's own name is
+    simply one more value it can hold.
+
+**A refusal is not a sentence.** Every reason a config can be unusable names something in
+the middle of it, so it crosses as `ColourError::key` plus `::args` — the K-303 rule below,
+with the import report as the other worked example. `problem_english` rides along as the
+fallback. **The config's own names — spaces, displays, views, and the facts inside a
+refusal — are the user's words and are never translated**, so they must not go through
+`engineLabel` on the way to the screen.
+
 ### The layer switches (K-497)
 
 `BridgeLayerSwitches` is one read of every switch, and `set_switch(BridgeLayerSwitch, on)` is
@@ -695,10 +736,11 @@ The frontend translates them on arrival, by looking the English text up in
   otherwise, so it cannot be forgotten quietly.
 - **Build a display string with `format!` and it cannot be translated**, because the
   lookup is by whole text. Send the pieces and let the frontend assemble them, or give the
-  string a stable id of its own. The import report's reasons are the worked example (above):
-  an id and its named facts cross, and `flutter_ui/lib/l10n/engine_labels.dart` writes the
-  sentence. `test/l10n/engine_labels_test.dart` reads the Rust enum, so a reason added to the
-  engine with no sentence on this side fails the same gate a new effect label does.
+  string a stable id of its own. The import report's reasons are the worked example (above),
+  and the colour config's refusals the second: an id and its named facts cross, and
+  `flutter_ui/lib/l10n/engine_labels.dart` writes the sentence. `test/l10n/engine_labels_test.dart`
+  reads both Rust enums, so a reason or a refusal added to the engine with no sentence on
+  this side fails the same gate a new effect label does.
 
 Nothing else the bridge sends is display text: a layer name, a comp name, a file path and
 a preset name are the *user's* words, and are passed through untouched.
@@ -741,8 +783,10 @@ that read-back is gone.
     one place it becomes the engine's type, and the queue stores the spec itself rather
     than a serialised copy of it, so a queued item can be read back exactly as it was
     added. Four sync calls let the dialogue ask the engine rather than re-deriving its
-    answers in Dart — `export_format_caps`, `export_spec_check`, `export_crop_for`,
-    `export_resolved_bitrate` — and four more are the preset store
+    answers in Dart — `export_format_caps`, `export_crop_for`,
+    `export_resolved_bitrate` and `CompositionReference::export_spec_check` (on the
+    composition, because the colour question is the project's) — and four more are the
+    preset store
     (`export_preset_list`/`_get`/`_save`/`_delete`, over `lumit_render::export_presets`).
     Naming a codec needs the `media` feature: without it the conversion answers a calm
     "this build has no encoder" and every capability reads false, which disables the

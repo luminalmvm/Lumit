@@ -12,7 +12,7 @@ import 'package:uuid/uuid.dart';
 import 'state.dart';
 part 'footage.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `attach_proxy`, `project`, `resolve_path`, `source_path`
+// These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `source_path`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -199,6 +199,18 @@ class FootageReference {
         that: this,
       );
 
+  /// The colour space this footage says it arrives in, by the config's own
+  /// name, or `None` for the built-in interpretation defaults (video is
+  /// Rec.709, stills are sRGB, the container's own metadata wins).
+  ///
+  /// A name is kept even when the config that defined it is missing: it is
+  /// the user's statement about the file, and dropping it because a path
+  /// moved would be a silent edit of their project.
+  String? colourSpace() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceColourSpace(
+        that: this,
+      );
+
   /// Where this item's file is, as the *project* records it: the relative
   /// path a saved project actually carries (K-173), falling back to the
   /// absolute one only when the project has never been saved and there is
@@ -259,6 +271,11 @@ class FootageReference {
   /// picked one, so a healthy item is never repointed.
   void relink({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceRelink(that: this, path: path);
+
+  /// Say what colour space this footage arrives in, or clear it back to the
+  /// built-in defaults. One gesture, one op, one undo step.
+  void setColourSpace({String? space}) => BridgeLib.instance.api
+      .crateApiFootageFootageReferenceSetColourSpace(that: this, space: space);
 
   /// Attach `path` as this item's proxy, replacing any proxy already there,
   /// and switch it on.

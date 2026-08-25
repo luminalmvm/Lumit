@@ -91,6 +91,46 @@ Set<String> _importReasonKeys() {
   return keys;
 }
 
+/// Every way the colour config can be refused, by the id it crosses the bridge
+/// under (`lumit_colour::ColourError::key`, the variant's own name in snake
+/// case), plus the one the renderer raises itself.
+///
+/// Read out of the Rust source the way the import reasons are, and for the same
+/// reason: nothing in either type system connects a variant there to a sentence
+/// in `engine_labels.dart`, and the failure is silent — a config refused for a
+/// reason this build has no sentence for shows the engine's English inside a
+/// translated window.
+Set<String> _colourRefusalKeys() {
+  final source = File('../crates/lumit-colour/src/error.rs');
+  expect(source.existsSync(), isTrue,
+      reason: 'run this from flutter_ui/, beside the crates/ tree');
+  final body = RegExp(r'pub enum ColourError \{(.*?)\n\}', dotAll: true)
+      .firstMatch(source.readAsStringSync())
+      ?.group(1);
+  expect(body, isNotNull,
+      reason: 'the ColourError enum has moved or been renamed');
+
+  final keys = <String>{};
+  for (final m
+      in RegExp(r'^    ([A-Z]\w*)\s*[,{]', multiLine: true).allMatches(body!)) {
+    keys.add(m.group(1)!.replaceAllMapped(
+        RegExp(r'(?<=.)([A-Z])'), (c) => '_${c.group(1)}').toLowerCase());
+  }
+  expect(keys.length, greaterThan(15),
+      reason: 'the enum declares far more refusals than this — the scrape has '
+          'stopped matching the source');
+
+  // The one refusal that is not a ColourError: the file the project names was
+  // not there to be parsed at all (`lumit_render::colour::load`).
+  final renderer = File('../crates/lumit-render/src/colour.rs');
+  expect(renderer.existsSync(), isTrue);
+  expect(renderer.readAsStringSync().contains('"config_unreadable"'), isTrue,
+      reason: 'the renderer no longer raises config_unreadable by that id');
+  keys.add('config_unreadable');
+
+  return keys;
+}
+
 void main() {
   test('every import report reason has a sentence to be translated', () {
     final missing = _importReasonKeys().where((k) => !hasImportReason(k)).toList()
@@ -127,6 +167,43 @@ void main() {
     // the effect landing and this test being satisfied.
     expect(engineLabel('Not a real effect'), 'Not a real effect');
     expect(engineLabel(''), '');
+  });
+
+
+  test('every colour config refusal has a sentence to be translated', () {
+    final missing =
+        _colourRefusalKeys().where((k) => !hasColourProblem(k)).toList()..sort();
+    expect(
+      missing,
+      isEmpty,
+      reason: 'these are ways lumit-colour can refuse a config with no case in '
+          "colourProblem() in lib/l10n/engine_labels.dart. Add each one's "
+          'sentence there and the matching key to lib/l10n/app_en.arb, or the '
+          'Colour row ships in English inside a translated window.',
+    );
+  });
+
+  test('a colour refusal with no sentence says so, so the caller can fall back',
+      () {
+    expect(colourProblem('not_a_real_refusal', const {}), isNull);
+    expect(hasColourProblem('unsupported_transform'), isTrue);
+  });
+
+  test('a config supplies the names, and its names are never translated', () {
+    // "Alpha" is an effect parameter this application translates. A colour
+    // space of that name in somebody's config file is not that word, and must
+    // come back exactly as it arrived (K-303).
+    expect(hasEngineLabel('Alpha'), isTrue);
+    expect(
+      colourProblem('unknown_colour_space', const {'name': 'Alpha'}),
+      contains('Alpha'),
+    );
+    // And the space a refusal surfaced in wraps the sentence rather than
+    // replacing it.
+    final wrapped = colourProblem(
+        'lut_file_not_found', const {'name': 'shot.spi3d', 'in_space': 'graded'});
+    expect(wrapped, contains('shot.spi3d'));
+    expect(wrapped, contains('graded'));
   });
 
   test('a known label resolves through the table', () {

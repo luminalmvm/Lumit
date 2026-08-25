@@ -85,7 +85,7 @@ impl FootageReference {
     }
 
     #[frb(ignore)]
-    fn project(&self) -> Result<Arc<std::sync::RwLock<LumitBridgeState>>, BridgeError> {
+    pub(crate) fn project(&self) -> Result<Arc<std::sync::RwLock<LumitBridgeState>>, BridgeError> {
         let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
         let project = projects.get(&self.project);
 
@@ -558,12 +558,36 @@ impl FootageReference {
     }
 }
 
+/// A reference to a file on disk, built the way a relink builds one: the
+/// absolute path for this session, the project-relative path where there is a
+/// project directory to be relative to (the only one a saved `.lum` carries,
+/// K-173), and a content fingerprint so a moved file can be found again.
+///
+/// Every second file a project can name goes through here — a proxy, and the
+/// colour config — so none of them can quietly disagree about what gets written
+/// into the file.
+#[frb(ignore)]
+pub(crate) fn media_ref_at(
+    project_dir: Option<&std::path::Path>,
+    path: &std::path::Path,
+) -> lumit_core::model::MediaRef {
+    let mut media = lumit_core::model::MediaRef {
+        relative_path: String::new(),
+        absolute_path: path.to_string_lossy().into_owned(),
+        fingerprint: None,
+        extra: serde_json::Map::new(),
+    };
+    if let Some(dir) = project_dir {
+        if let Some(rel) = lumit_project::relative_between(dir, path) {
+            media.relative_path = rel;
+        }
+    }
+    media.fingerprint = lumit_project::fingerprint_path(path).ok();
+    media
+}
+
 /// Point `item`'s proxy at `path`, switched on — the one place a proxy is
 /// attached, whether by the picker or by a transcode that has just landed.
-///
-/// The reference is built exactly as a relink builds one: the absolute path for
-/// this session, the project-relative path where there is a project directory to
-/// be relative to, and a content fingerprint so a moved file can be found again.
 #[frb(ignore)]
 pub(crate) fn attach_proxy(
     project: Uuid,
@@ -587,19 +611,7 @@ pub(crate) fn attach_proxy(
         ) {
             return Err(BridgeError::InvalidItem);
         }
-        let mut media = lumit_core::model::MediaRef {
-            relative_path: String::new(),
-            absolute_path: path.to_string_lossy().into_owned(),
-            fingerprint: None,
-            extra: serde_json::Map::new(),
-        };
-        if let Some(dir) = p.path.as_deref().and_then(|p| p.parent()) {
-            if let Some(rel) = lumit_project::relative_between(dir, path) {
-                media.relative_path = rel;
-            }
-        }
-        media.fingerprint = lumit_project::fingerprint_path(path).ok();
-        media
+        media_ref_at(p.path.as_deref().and_then(|p| p.parent()), path)
     };
 
     let p = proj.write().map_err(|_| BridgeError::WriteFailed)?;

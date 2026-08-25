@@ -629,6 +629,31 @@ edited). Engine-sent refusal sentences into `engine_labels.dart` + `app_en.arb`
 **Tests**: `engine_labels_test.dart` green; an frb test loading a fixture config and
 walking assign/undo through the seam; `bridge_call_budget_test.dart` unchanged at 0.
 
+**Landed.** The seam as WP5 will find it, in `crates/lumit-bridge/src/api/colour.rs`:
+
+- `ProjectReference::colour_summary() -> BridgeColourSummary { path, loaded, problem,
+  problem_args, problem_english, spaces, displays }` — `displays` is
+  `BridgeColourDisplay { name, views }`. One read of the whole structure, fetched on a
+  document change and held in Dart.
+- `ProjectReference::set_colour_config(Option<String>)`,
+  `FootageReference::{colour_space(), set_colour_space(Option<String>)}` — the two edits
+  and the per-item read.
+- `CompositionReference::set_viewer_look(..., colour_view: Option<Vec<String>>)` — the
+  `[display, view]` list; **the look is set whole**, so a caller that omits it has said
+  "no view".
+- `ProjectReference::can_deliver_colour_space(name)` for the dropdown's enable, and
+  `CompositionReference::export_spec_check(spec)` — which **replaced** the free-standing
+  `export_spec_check` — for the pre-queue check.
+
+Two shapes §6.1 did not foresee. The refusal is **not** the engine's sentence: it crosses
+as `ColourError::key` plus `::args` (`config_unreadable` is the one id the renderer raises
+itself), and `colourProblem` in `engine_labels.dart` writes the words — a sentence with a
+config's name in the middle of it can never be looked up whole, and `problem_english` is
+the fallback. And the seam keeps its **own** `ColourState` beside the render worker's: the
+renderer lives behind a request channel, and a summary read that had to wait for a frame
+would be a panel blocked on the Viewer. Both parse the same file by content hash, so the
+cost is one parse each and neither can go stale.
+
 ### WP5 — Viewer, export, project UI
 
 The picker's display/view sections and faces (§6.2), the export dropdown's config

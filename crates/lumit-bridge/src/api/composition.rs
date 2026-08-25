@@ -315,6 +315,21 @@ pub struct BridgeAnimatedMaskPath {
     pub vertices: Vec<crate::api::layer::BridgeVertex>,
 }
 
+/// The Viewer's chosen OCIO display and view, out of the two-name list the
+/// seam carries it as (K-490).
+///
+/// A list rather than a pair because that is what crosses the bridge cleanly,
+/// and **anything that is not exactly two names is no view at all** — the
+/// built-in transform. That is also how "clear the view" is said, because the
+/// look is set whole and never in halves.
+#[frb(ignore)]
+pub(crate) fn colour_view_pair(list: Option<Vec<String>>) -> Option<(String, String)> {
+    match list?.as_slice() {
+        [display, view] => Some((display.clone(), view.clone())),
+        _ => None,
+    }
+}
+
 impl CompositionReference {
     #[frb(ignore)]
     pub fn new(project: Uuid, id: Uuid) -> CompositionReference {
@@ -1692,6 +1707,15 @@ impl CompositionReference {
     /// the frame under the playhead: a setting changes what the next frame is
     /// made of, and without an ask the picture would not move until something
     /// else did.
+    ///
+    /// `colour_view` is the OCIO display and view the picture is shown through
+    /// (K-490), as the two-element list `[display, view]`; anything else —
+    /// including omitting it — is the built-in transform. It rides this message
+    /// rather than getting one of its own for the reason the rest of the look
+    /// does, and **that is the trap to know**: a caller that sends a look
+    /// without it has said "no view", not "leave the view alone". The look is
+    /// set whole, never in halves, so the frontend holds the chosen view
+    /// alongside the exposure and sends all of it every time.
     #[frb(sync)]
     pub fn set_viewer_look(
         &self,
@@ -1699,6 +1723,7 @@ impl CompositionReference {
         tone_map: bool,
         transparent_background: bool,
         region: Option<Vec<f32>>,
+        colour_view: Option<Vec<String>>,
     ) -> Result<(), BridgeError> {
         // A region arrives as a list because that is what crosses the bridge
         // cleanly; anything that is not four numbers is no region, which is
@@ -1709,6 +1734,7 @@ impl CompositionReference {
             tone_map,
             transparent_background,
             region,
+            colour_view: colour_view_pair(colour_view),
         })
     }
 

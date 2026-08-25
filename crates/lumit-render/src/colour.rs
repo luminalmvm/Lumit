@@ -44,6 +44,41 @@ pub enum Edge {
     Output(String),
 }
 
+/// A refusal as the frontend needs it: the stable id it writes its own
+/// translated sentence from, and the facts that fill it, by name.
+///
+/// The facts are the **config's own words** — a colour space, a display, a
+/// look-up-table path — so they cross verbatim and are never translated, in
+/// exactly the way a codec name is not (K-303).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refusal {
+    /// `lumit_colour::ColourError::key`, or `config_unreadable` for the one
+    /// refusal this module raises itself: the file the document names is not
+    /// there to be parsed at all.
+    pub key: String,
+    pub args: Vec<(String, String)>,
+}
+
+impl Refusal {
+    /// The refusal a `lumit-colour` error is, optionally noting which colour
+    /// space was being resolved when it surfaced — `in_space` rather than
+    /// `space`, because a refusal may already name a space of its own.
+    fn from_error(e: &lumit_colour::ColourError, in_space: Option<&str>) -> Refusal {
+        let mut args: Vec<(String, String)> = e
+            .args()
+            .into_iter()
+            .map(|(name, value)| (name.to_string(), value))
+            .collect();
+        if let Some(space) = in_space {
+            args.push(("in_space".to_string(), space.to_string()));
+        }
+        Refusal {
+            key: e.key().to_string(),
+            args,
+        }
+    }
+}
+
 /// A config the renderer has tried to load, in whichever of the three states it
 /// ended up in.
 pub struct Loaded {
@@ -57,6 +92,15 @@ pub struct Loaded {
     config: Option<LoadedConfig>,
     /// One calm sentence, present exactly when `config` is `None`.
     pub problem: Option<String>,
+    /// The same refusal, keyed — present exactly when `problem` is.
+    ///
+    /// `problem` is the engine's English, which is a fallback and nothing more:
+    /// every one of these sentences has a config's own name or a file path in
+    /// the middle of it, so no whole-text lookup could ever translate one. The
+    /// frontend writes its own sentence from this id and its named facts
+    /// (K-005, K-303, docs/17), exactly as the After Effects import report's
+    /// rows are written.
+    pub refusal: Option<Refusal>,
     /// Baked artefacts by edge, worked out on first use and kept. Behind a
     /// lock because a render borrows this immutably and may want an edge it has
     /// not needed before; the lock is never held across a GPU submit.
@@ -173,6 +217,27 @@ impl ColourState {
         self.loaded.as_ref()
     }
 
+    /// Whether a named colour space can actually be delivered right now — the
+    /// question an export's refusal asks (K-479, K-490), and the one the export
+    /// dialogue asks of every name it offers before it draws the row live.
+    ///
+    /// It is the half of K-490's asymmetry that says no: a preview degrades to
+    /// the built-in transform, a delivery does not. `false` for a config that is
+    /// missing or refused, and for a name this config does not have.
+    ///
+    /// Answered here rather than on the renderer because the seam has no
+    /// renderer in hand — the colour state is the whole of what the question
+    /// needs, and one implementation is what stops the dialogue and the
+    /// exporter disagreeing about the same name.
+    #[must_use]
+    pub fn can_deliver(&self, name: &str) -> bool {
+        self.loaded
+            .as_ref()
+            .filter(|l| l.usable())
+            .and_then(|l| l.artefact(&Edge::Output(name.to_string())))
+            .is_some()
+    }
+
     /// The config's identity for a frame's name (§5.5). Zero when there is
     /// none, so a project without a config names its frames exactly as it did
     /// before this existed, and an unusable config names them as no config at
@@ -189,21 +254,28 @@ impl ColourState {
 /// Load and check a config, turning every failure into a state rather than an
 /// error (§3.3).
 fn load(path: &str, hash: u64, present: bool) -> Loaded {
-    let empty = |problem: String| Loaded {
+    let empty = |problem: String, refusal: Refusal| Loaded {
         path: path.to_string(),
         hash,
         config: None,
         problem: Some(problem),
+        refusal: Some(refusal),
         baked: std::sync::Mutex::new(BTreeMap::new()),
     };
     if !present {
-        return empty(format!(
-            "the colour config {path} could not be read, so the built-in transform is in use"
-        ));
+        return empty(
+            format!(
+                "the colour config {path} could not be read, so the built-in transform is in use"
+            ),
+            Refusal {
+                key: "config_unreadable".to_string(),
+                args: vec![("path".to_string(), path.to_string())],
+            },
+        );
     }
     let loaded = match LoadedConfig::load(Path::new(path)) {
         Ok(l) => l,
-        Err(e) => return empty(e.to_string()),
+        Err(e) => return empty(e.to_string(), Refusal::from_error(&e, None)),
     };
     // `unresolvable` is the crate's own is-this-config-usable answer: every
     // colour space the config declares, walked to a chain. A config that names
@@ -214,13 +286,15 @@ fn load(path: &str, hash: u64, present: bool) -> Loaded {
         .into_iter()
         .next()
     {
-        return empty(format!("{why} (the colour space {space})"));
+        let refusal = Refusal::from_error(&why, Some(&space));
+        return empty(format!("{why} (the colour space {space})"), refusal);
     }
     Loaded {
         path: path.to_string(),
         hash,
         config: Some(loaded),
         problem: None,
+        refusal: None,
         baked: std::sync::Mutex::new(BTreeMap::new()),
     }
 }

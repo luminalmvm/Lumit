@@ -7646,3 +7646,341 @@ fn the_proxy_path_is_named_beside_the_original() {
     );
     std::fs::remove_file(&here).ok();
 }
+
+// ---------------------------------------------------------------------------
+// Colour management (K-489, K-490, docs/impl/ocio.md §6.1). The seam's half:
+// the summary a picker is built from, the two edits, deliverability, and the
+// export's pre-queue refusal.
+// ---------------------------------------------------------------------------
+
+/// A small, complete config: one space that is not the reference, one display
+/// with one view, and the roles the resolution walk reads.
+const GOOD_CONFIG: &str = r#"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+  reference: ref
+displays:
+  sRGB:
+    - !<View> {name: Standard, colorspace: out_srgb}
+colorspaces:
+  - !<ColorSpace>
+    name: ref
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: srgb_texture
+    to_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0]}
+  - !<ColorSpace>
+    name: out_srgb
+    from_reference: !<ExponentWithLinearTransform> {gamma: [2.4, 2.4, 2.4, 1], offset: [0.055, 0.055, 0.055, 0], direction: inverse}
+"#;
+
+/// The same, with one space asking for a transform v1 does not implement. The
+/// parse itself refuses, naming the transform.
+const REFUSED_CONFIG: &str = r#"
+ocio_profile_version: 2
+roles:
+  scene_linear: lin
+colorspaces:
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: fancy
+    to_scene_reference: !<FixedFunctionTransform> {style: ACES_RedMod03}
+"#;
+
+/// One that parses perfectly well and only falls over when a colour space is
+/// walked to a chain: the look-up table it names is not on the search path. The
+/// refusal has to name the *space* as well as the file, or the row it lands on
+/// says nothing about where to look.
+const UNRESOLVABLE_CONFIG: &str = r#"
+ocio_profile_version: 1
+roles:
+  scene_linear: lin
+  reference: ref
+colorspaces:
+  - !<ColorSpace>
+    name: ref
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: graded
+    to_reference: !<FileTransform> {src: nothere.spi1d}
+"#;
+
+/// A project holding one footage item, and a directory to write configs into.
+fn project_with_footage() -> (ProjectReference, FootageReference, tempfile::TempDir) {
+    let project = crate::api::state::LumitBridgeState::new_project(None).expect("a new project");
+    let id = Uuid::now_v7();
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        state
+            .store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(FootageItem {
+                    id,
+                    name: "shot.mov".into(),
+                    media: MediaRef {
+                        relative_path: "shot.mov".into(),
+                        absolute_path: String::new(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    extra: serde_json::Map::new(),
+                    colour_space: None,
+                })),
+            })
+            .expect("seeded");
+    }
+    let footage = FootageReference::new(project.id, id);
+    (project, footage, tempfile::tempdir().expect("a directory"))
+}
+
+fn write_config(dir: &tempfile::TempDir, text: &str) -> String {
+    let path = dir.path().join("config.ocio");
+    std::fs::write(&path, text).expect("a config on disk");
+    path.to_string_lossy().into_owned()
+}
+
+/// The whole vocabulary a picker is built from crosses in one read: the config's
+/// own active space names, then each display with its views — in the config's
+/// order, and never translated (K-303).
+#[test]
+fn the_colour_summary_carries_the_config_s_own_names() {
+    let (project, _footage, dir) = project_with_footage();
+
+    let before = project.colour_summary().expect("a summary");
+    assert_eq!(before, crate::api::colour::BridgeColourSummary::default());
+
+    project
+        .set_colour_config(Some(write_config(&dir, GOOD_CONFIG)))
+        .expect("a config named");
+
+    let summary = project.colour_summary().expect("a summary");
+    assert!(summary.loaded, "{}", summary.problem_english);
+    assert!(summary.problem.is_empty());
+    assert!(summary.path.ends_with("config.ocio"), "{}", summary.path);
+    assert!(
+        summary.spaces.iter().any(|s| s == "srgb_texture"),
+        "{:?}",
+        summary.spaces
+    );
+    assert_eq!(summary.displays.len(), 1);
+    assert_eq!(summary.displays[0].name, "sRGB");
+    assert_eq!(summary.displays[0].views, vec!["Standard".to_string()]);
+}
+
+/// A config that is not there does not stop anything: the project keeps every
+/// name it was given, and the refusal crosses as an id plus its facts so the
+/// frontend can write the sentence in the reader's own language (K-005).
+#[test]
+fn a_missing_config_refuses_by_id_and_keeps_every_name() {
+    let (project, footage, dir) = project_with_footage();
+    footage
+        .set_colour_space(Some("srgb_texture".into()))
+        .expect("a space named");
+    let gone = dir
+        .path()
+        .join("not-here.ocio")
+        .to_string_lossy()
+        .into_owned();
+    project
+        .set_colour_config(Some(gone))
+        .expect("a config named");
+
+    let summary = project.colour_summary().expect("a summary");
+    assert!(!summary.loaded);
+    assert_eq!(summary.problem, "config_unreadable");
+    assert_eq!(
+        summary
+            .problem_args
+            .iter()
+            .find(|a| a.name == "path")
+            .map(|a| a.value.ends_with("not-here.ocio")),
+        Some(true),
+        "{:?}",
+        summary.problem_args
+    );
+    assert!(
+        !summary.problem_english.is_empty(),
+        "the engine's own words ride along for a frontend with no sentence"
+    );
+    assert!(
+        summary.spaces.is_empty(),
+        "an unusable config offers nothing"
+    );
+    assert_eq!(
+        footage.colour_space().expect("still readable"),
+        Some("srgb_texture".to_string()),
+        "a name is the user's statement about the file and is never dropped"
+    );
+}
+
+/// A config Lumit will not run is refused **by name**, and the name is the
+/// config's own word — the transform it asked for, or the look-up table it could
+/// not find and the colour space that wanted it.
+#[test]
+fn a_refused_config_names_what_it_asked_for() {
+    let (project, _footage, dir) = project_with_footage();
+    project
+        .set_colour_config(Some(write_config(&dir, REFUSED_CONFIG)))
+        .expect("a config named");
+
+    let summary = project.colour_summary().expect("a summary");
+    assert!(!summary.loaded);
+    assert_eq!(summary.problem, "unsupported_transform");
+    let arg = |name: &str| {
+        summary
+            .problem_args
+            .iter()
+            .find(|a| a.name == name)
+            .map(|a| a.value.clone())
+    };
+    assert_eq!(arg("name").as_deref(), Some("FixedFunctionTransform"));
+    assert!(
+        arg("in_space").is_none(),
+        "the parse refused before any space was walked: {:?}",
+        summary.problem_args
+    );
+
+    // The other half: a config that parses and only fails when a space is
+    // resolved. The space that wanted the missing file is named too, because a
+    // row saying only "nothere.spi1d" gives the reader nowhere to look.
+    project
+        .set_colour_config(Some(write_config(&dir, UNRESOLVABLE_CONFIG)))
+        .expect("a config named");
+    let summary = project.colour_summary().expect("a summary");
+    let arg = |name: &str| {
+        summary
+            .problem_args
+            .iter()
+            .find(|a| a.name == name)
+            .map(|a| a.value.clone())
+    };
+    assert!(!summary.loaded);
+    assert_eq!(summary.problem, "lut_file_not_found");
+    assert_eq!(arg("name").as_deref(), Some("nothere.spi1d"));
+    assert_eq!(
+        arg("in_space").as_deref(),
+        Some("graded"),
+        "{:?}",
+        summary.problem_args
+    );
+}
+
+/// Both colour edits are ordinary document ops, so one gesture is one undo step
+/// and undo puts the project back exactly as it was.
+#[test]
+fn the_two_colour_edits_are_one_undo_step_each() {
+    let (project, footage, dir) = project_with_footage();
+
+    project
+        .set_colour_config(Some(write_config(&dir, GOOD_CONFIG)))
+        .expect("a config named");
+    assert!(project.colour_summary().expect("a summary").loaded);
+    project.undo().expect("undone");
+    assert_eq!(project.colour_summary().expect("a summary").path, "");
+    project.redo().expect("redone");
+    assert!(project.colour_summary().expect("a summary").loaded);
+
+    footage
+        .set_colour_space(Some("srgb_texture".into()))
+        .expect("a space named");
+    project.undo().expect("undone");
+    assert_eq!(footage.colour_space().expect("readable"), None);
+    project.redo().expect("redone");
+    assert_eq!(
+        footage.colour_space().expect("readable"),
+        Some("srgb_texture".to_string())
+    );
+}
+
+/// The half of K-490's asymmetry that says no: a space is deliverable only when
+/// the config that defines it is loaded and the transform to it bakes.
+#[test]
+fn only_a_loaded_config_can_deliver_its_spaces() {
+    let (project, _footage, dir) = project_with_footage();
+    let deliverable = |name: &str| {
+        project
+            .can_deliver_colour_space(name.to_string())
+            .expect("asked")
+    };
+
+    assert!(
+        !deliverable("out_srgb"),
+        "with no config named there is nothing to deliver into"
+    );
+
+    let path = write_config(&dir, GOOD_CONFIG);
+    project
+        .set_colour_config(Some(path.clone()))
+        .expect("a config named");
+    assert!(deliverable("out_srgb"));
+    assert!(!deliverable("no_such_space"));
+
+    std::fs::remove_file(&path).expect("the config moves away");
+    assert!(
+        !deliverable("out_srgb"),
+        "the same name a moment after the config went: a delivery refuses where a preview degrades"
+    );
+}
+
+/// The dialogue's pre-queue check asks the project, so an OCIO name is refused
+/// or allowed by whether *this* project can actually deliver it — and the
+/// refusal names the space, which is what the footer shows.
+#[test]
+fn the_export_check_answers_for_this_project_s_colour_config() {
+    let (project, _footage, dir) = project_with_footage();
+    let comp = project
+        .new_composition("Scene".into(), None)
+        .expect("a composition");
+    let spec = crate::api::export::BridgeExportSpec {
+        codec: "png".to_owned(),
+        colour_space: "out_srgb".to_owned(),
+        ..crate::api::export::BridgeExportSpec::default()
+    };
+
+    let refusal = comp.export_spec_check(spec.clone()).expect("checked");
+    assert!(
+        refusal.contains("out_srgb"),
+        "a name no config defines is refused by name: {refusal}"
+    );
+
+    project
+        .set_colour_config(Some(write_config(&dir, GOOD_CONFIG)))
+        .expect("a config named");
+    assert_eq!(
+        comp.export_spec_check(spec).expect("checked"),
+        "",
+        "the config's own space is deliverable once the config is loaded"
+    );
+
+    assert_eq!(
+        comp.export_spec_check(crate::api::export::BridgeExportSpec::default())
+            .expect("checked"),
+        "",
+        "and a spec with no colour space in it is unaffected"
+    );
+}
+
+/// The Viewer's chosen view rides the look message as a two-name list, and
+/// anything that is not exactly two names is the built-in transform — which is
+/// also how "no view" is said, since the look is always set whole.
+#[test]
+fn a_view_choice_is_two_names_or_it_is_the_built_in_transform() {
+    use crate::api::composition::colour_view_pair;
+    assert_eq!(
+        colour_view_pair(Some(vec!["sRGB".into(), "Standard".into()])),
+        Some(("sRGB".to_string(), "Standard".to_string()))
+    );
+    assert_eq!(colour_view_pair(None), None);
+    assert_eq!(colour_view_pair(Some(Vec::new())), None);
+    assert_eq!(colour_view_pair(Some(vec!["sRGB".into()])), None);
+    assert_eq!(
+        colour_view_pair(Some(vec!["sRGB".into(), "Standard".into(), "extra".into()])),
+        None
+    );
+}

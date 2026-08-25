@@ -648,6 +648,13 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
     };
     // Every name below is of this one snapshot: probe it once, so the memo's
     // misses are hashes and nothing else (see `frame_name`).
+    // The config the document names, before a single frame is named under
+    // it: the colour choice folds into every frame's key (§5.5), so a
+    // name worked out against a stale config would be one the render is
+    // about to disagree with. Cheap when nothing changed — one file read
+    // and a hash comparison — and the reason a config edited on disk
+    // retires the frames it made.
+    state.renderer.sync_colour(&document);
     state.renderer.presync_items(&document, comp_id);
 
     // Naming one frame needs the renderer, the document and the three tiers; the
@@ -1385,6 +1392,13 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // warm up by *reading* rather than by rendering everything a second time.
     // The walk's names are all of this one snapshot: probe it once, then
     // each name is computed at most once per edit (see `frame_name`).
+    // The config the document names, before a single frame is named under
+    // it: the colour choice folds into every frame's key (§5.5), so a
+    // name worked out against a stale config would be one the render is
+    // about to disagree with. Cheap when nothing changed — one file read
+    // and a hash comparison — and the reason a config edited on disk
+    // retires the frames it made.
+    state.renderer.sync_colour(&document);
     state.renderer.presync_items(&document, comp_ref.id);
     for frame in crate::playback::fill_order(anchor, first, last).take(reach) {
         // Naming the frame is what tells the fill whether there is anything to
@@ -1497,6 +1511,11 @@ pub enum WorkerRequest {
         /// background flag does: the renderer must never hold half a look, and
         /// this is a way of viewing like the rest of it.
         region: Option<[f32; 4]>,
+        /// The OCIO display and view the picture is shown through (K-490), or
+        /// `None` for the built-in transform. Session state like the exposure
+        /// beside it: it changes what every frame from here on is
+        /// display-encoded through, and never the document.
+        colour_view: Option<(String, String)>,
     },
 }
 
@@ -2501,6 +2520,13 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // Every name asked for below — the disk grace, the look-ahead —
             // is of this one snapshot: probe it once, so the memo's misses
             // are hashes and nothing else (see `frame_name`).
+            // The config the document names, before a single frame is named under
+            // it: the colour choice folds into every frame's key (§5.5), so a
+            // name worked out against a stale config would be one the render is
+            // about to disagree with. Cheap when nothing changed — one file read
+            // and a hash comparison — and the reason a config edited on disk
+            // retires the frames it made.
+            state.renderer.sync_colour(&document);
             state.renderer.presync_items(&document, comp_id);
             // Every-frame only: when the NEXT frame's bytes are on their way
             // up from disk, hold the composite a bounded moment — the copy is
@@ -2770,6 +2796,13 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     // starts at Full (the reset below), so the names are at the plain scale.
     let quality = quality_for(req.scale);
     let bgra = zero_copy_wants_bgra();
+    // The config the document names, before a single frame is named under
+    // it: the colour choice folds into every frame's key (§5.5), so a
+    // name worked out against a stale config would be one the render is
+    // about to disagree with. Cheap when nothing changed — one file read
+    // and a hash comparison — and the reason a config edited on disk
+    // retires the frames it made.
+    state.renderer.sync_colour(&document);
     state.renderer.presync_items(&document, comp_id);
     let ask_to = from.saturating_add(DISK_PRE_ASK).min(last);
     for frame in from..=ask_to {
@@ -2898,6 +2931,7 @@ fn handle_requests(
                     tone_map,
                     transparent_background,
                     region,
+                    colour_view,
                 } => {
                     state
                         .renderer
@@ -2906,6 +2940,7 @@ fn handle_requests(
                         .renderer
                         .set_transparent_background(transparent_background);
                     state.renderer.set_region(region);
+                    state.renderer.set_colour_view(colour_view);
                     // The look is folded into every frame's name
                     // (`named_under_view`), so this message renames every
                     // frame without moving the document revision — the one

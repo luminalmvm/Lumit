@@ -7,6 +7,7 @@ import 'api.dart';
 import 'api/assets.dart';
 import 'api/audio.dart';
 import 'api/cache.dart';
+import 'api/colour.dart';
 import 'api/composition.dart';
 import 'api/effect.dart';
 import 'api/export.dart';
@@ -298,7 +299,16 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeColour dco_decode_bridge_colour(dynamic raw);
 
   @protected
+  BridgeColourArg dco_decode_bridge_colour_arg(dynamic raw);
+
+  @protected
+  BridgeColourDisplay dco_decode_bridge_colour_display(dynamic raw);
+
+  @protected
   BridgeColourRgba dco_decode_bridge_colour_rgba(dynamic raw);
+
+  @protected
+  BridgeColourSummary dco_decode_bridge_colour_summary(dynamic raw);
 
   @protected
   BridgeCompModel dco_decode_bridge_comp_model(dynamic raw);
@@ -660,6 +670,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeClip> dco_decode_list_bridge_clip(dynamic raw);
 
   @protected
+  List<BridgeColourArg> dco_decode_list_bridge_colour_arg(dynamic raw);
+
+  @protected
+  List<BridgeColourDisplay> dco_decode_list_bridge_colour_display(dynamic raw);
+
+  @protected
   List<BridgeEffectInfo> dco_decode_list_bridge_effect_info(dynamic raw);
 
   @protected
@@ -878,6 +894,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   ProjectReference? dco_decode_opt_box_autoadd_project_reference(dynamic raw);
+
+  @protected
+  List<String>? dco_decode_opt_list_String(dynamic raw);
 
   @protected
   Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw);
@@ -1186,7 +1205,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeColour sse_decode_bridge_colour(SseDeserializer deserializer);
 
   @protected
+  BridgeColourArg sse_decode_bridge_colour_arg(SseDeserializer deserializer);
+
+  @protected
+  BridgeColourDisplay sse_decode_bridge_colour_display(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeColourRgba sse_decode_bridge_colour_rgba(SseDeserializer deserializer);
+
+  @protected
+  BridgeColourSummary sse_decode_bridge_colour_summary(
+      SseDeserializer deserializer);
 
   @protected
   BridgeCompModel sse_decode_bridge_comp_model(SseDeserializer deserializer);
@@ -1593,6 +1623,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeClip> sse_decode_list_bridge_clip(SseDeserializer deserializer);
 
   @protected
+  List<BridgeColourArg> sse_decode_list_bridge_colour_arg(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeColourDisplay> sse_decode_list_bridge_colour_display(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeEffectInfo> sse_decode_list_bridge_effect_info(
       SseDeserializer deserializer);
 
@@ -1859,6 +1897,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   ProjectReference? sse_decode_opt_box_autoadd_project_reference(
       SseDeserializer deserializer);
+
+  @protected
+  List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
 
   @protected
   Float32List? sse_decode_opt_list_prim_f_32_strict(
@@ -2180,8 +2221,20 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_colour(BridgeColour self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_colour_arg(
+      BridgeColourArg self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_colour_display(
+      BridgeColourDisplay self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_colour_rgba(
       BridgeColourRgba self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_colour_summary(
+      BridgeColourSummary self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_comp_model(
@@ -2635,6 +2688,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeClip> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_colour_arg(
+      List<BridgeColourArg> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_colour_display(
+      List<BridgeColourDisplay> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_effect_info(
       List<BridgeEffectInfo> self, SseSerializer serializer);
 
@@ -2910,6 +2971,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_project_reference(
       ProjectReference? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_prim_f_32_strict(

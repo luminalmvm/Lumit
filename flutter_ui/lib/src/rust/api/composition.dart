@@ -593,6 +593,22 @@ class CompositionReference {
         that: this,
       );
 
+  /// Refuse a spec the chosen format cannot honour, in the dialogue's own
+  /// words — empty when the spec is exportable.
+  ///
+  /// The engine refuses the same combinations before a frame is rendered;
+  /// asking here only means the message arrives while the user is looking at
+  /// the fields rather than minutes later from the queue.
+  ///
+  /// **On the composition rather than free-standing** because a colour space
+  /// is one of the settings, and whether a name can be delivered is a
+  /// question about *this project's* colour config (K-490) — one check, so
+  /// the footer and the exporter cannot disagree about the same spec.
+  String exportSpecCheck({required BridgeExportSpec spec}) => BridgeLib
+      .instance.api
+      .crateApiCompositionCompositionReferenceExportSpecCheck(
+          that: this, spec: spec);
+
   /// This composition's rate as a plain number, for turning frames into
   /// seconds. Falls back to 60 for a comp with a nonsense rate rather than
   /// dividing by zero.
@@ -1104,18 +1120,29 @@ class CompositionReference {
   /// the frame under the playhead: a setting changes what the next frame is
   /// made of, and without an ask the picture would not move until something
   /// else did.
+  ///
+  /// `colour_view` is the OCIO display and view the picture is shown through
+  /// (K-490), as the two-element list `[display, view]`; anything else —
+  /// including omitting it — is the built-in transform. It rides this message
+  /// rather than getting one of its own for the reason the rest of the look
+  /// does, and **that is the trap to know**: a caller that sends a look
+  /// without it has said "no view", not "leave the view alone". The look is
+  /// set whole, never in halves, so the frontend holds the chosen view
+  /// alongside the exposure and sends all of it every time.
   void setViewerLook(
           {required double stops,
           required bool toneMap,
           required bool transparentBackground,
-          Float32List? region}) =>
+          Float32List? region,
+          List<String>? colourView}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetViewerLook(
               that: this,
               stops: stops,
               toneMap: toneMap,
               transparentBackground: transparentBackground,
-              region: region);
+              region: region,
+              colourView: colourView);
 
   /// Set the work area, or clear it with `None`.
   void setWorkArea({BridgeSpan? span}) =>

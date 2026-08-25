@@ -37,6 +37,19 @@ pub struct LumitBridgeState {
     /// the document changes identity.
     pub journal: SharedJournal,
     pub sender: Option<Sender<WorkerRequest>>,
+    /// The project's OCIO config as the *seam* holds it (K-490): the parse and
+    /// the baked output-space tables the colour reads answer from.
+    ///
+    /// Derived state, never stored — the document holds a path and nothing else
+    /// — and rebuilt from the file by content hash, so this is a cache with no
+    /// invalidation step to get wrong. The render worker keeps its own for the
+    /// same file, deliberately: the renderer lives on another thread behind a
+    /// request channel, and a summary read that had to wait for a frame to
+    /// finish would be a panel blocked on the Viewer.
+    ///
+    /// A `Mutex` inside the state rather than a field the state's own write
+    /// lock guards, because syncing it is what a *read* does.
+    pub(crate) colour: Mutex<lumit_render::colour::ColourState>,
 }
 
 /// The journal handle the observer writes through. `None` before one is armed,
@@ -505,6 +518,7 @@ impl LumitBridgeState {
             media: MediaCache::default(),
             journal: Arc::clone(&journal),
             sender: None,
+            colour: Mutex::new(lumit_render::colour::ColourState::default()),
         };
 
         state.store.set_callback(Arc::new(move |c| {
@@ -668,6 +682,7 @@ pub(crate) fn adopt(
         media: MediaCache::default(),
         journal: Arc::clone(&journal),
         sender: None,
+        colour: Mutex::new(lumit_render::colour::ColourState::default()),
     };
     state.store.set_callback(Arc::new(move |c| {
         LumitBridgeState::handle_change_callback(c, id, &journal)

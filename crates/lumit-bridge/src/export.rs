@@ -107,6 +107,7 @@ fn preset_default_file_name(name: &str) -> &'static str {
 // ---------------------------------------------------------------------------
 
 use crate::api::export::{BridgeCrop, BridgeExportPresetEntry, BridgeExportSpec, BridgeFormatCaps};
+use lumit_render::colour::ColourState;
 // Only the conversion names a metadata field, and only a build with an encoder
 // converts anything.
 #[cfg(feature = "media")]
@@ -154,11 +155,18 @@ pub(crate) fn crop_for(spec: &BridgeExportSpec, comp_w: u32, comp_h: u32) -> Bri
 }
 
 /// Whatever the engine refuses this spec for, or an empty string.
-pub(crate) fn spec_check(spec: &BridgeExportSpec) -> String {
+///
+/// `colour` is the project's colour state, so a spec naming one of an OCIO
+/// config's own spaces is answered by whether that space can actually be
+/// delivered — the config loaded, and the transform to it baked — rather than
+/// by K-479's blanket refusal of every OCIO name. A config that has gone
+/// missing refuses **by name**, which is K-490's asymmetry: the preview
+/// degrades to the built-in transform, the delivery does not.
+pub(crate) fn spec_check(spec: &BridgeExportSpec, colour: &ColourState) -> String {
     // The crop plays no part in what a format can carry, so the comp's size is
     // not needed to answer this one.
     match to_export_spec(spec, 0, 0) {
-        Ok(resolved) => resolved.check().err().unwrap_or_default(),
+        Ok(resolved) => resolved.check_with_colour(colour).err().unwrap_or_default(),
         Err(e) => e,
     }
 }
@@ -1214,6 +1222,13 @@ mod driving {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// The colour-blind form of [`super::spec_check`], for the rows that have
+    /// nothing to do with colour management: a project naming no config, which
+    /// is what every test below is.
+    fn spec_check(spec: &BridgeExportSpec) -> String {
+        super::spec_check(spec, &ColourState::default())
+    }
 
     /// A zero size, a zero rate and a negative range all mean "the
     /// composition's own", which is what the dialogue's untouched fields say

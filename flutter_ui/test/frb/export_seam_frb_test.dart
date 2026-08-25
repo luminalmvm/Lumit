@@ -15,8 +15,10 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/state.dart';
 
 import 'frb_test_support.dart';
 
@@ -68,6 +70,13 @@ void main() {
   setUpAll(initEngineForTests);
 
   group('Export seam (frb)', () {
+    // The spec check asks a *composition*, because whether a colour space can
+    // be delivered is a question about that project's colour config (K-490).
+    late CompositionReference comp;
+    setUp(() {
+      comp = LumitBridgeState.newProject().newComposition(name: 'Scene');
+    });
+
     test('a spec that sets none of the new fields is the export we always had',
         () {
       final spec = plainSpec();
@@ -76,7 +85,7 @@ void main() {
       expect(spec.motionBlur, 0);
       expect(spec.retimeBlend, 0);
       expect(spec.useProxies, isFalse);
-      expect(exportSpecCheck(spec: spec), '',
+      expect(comp.exportSpecCheck(spec: spec), '',
           reason: 'and the engine takes it without complaint');
     });
 
@@ -104,9 +113,9 @@ void main() {
 
     test('a setting the format cannot carry is refused in the footer words',
         () {
-      expect(exportSpecCheck(spec: plainSpec(audioDepth: 24)), isNotEmpty);
+      expect(comp.exportSpecCheck(spec: plainSpec(audioDepth: 24)), isNotEmpty);
       expect(
-        exportSpecCheck(
+        comp.exportSpecCheck(
           spec: plainSpec(
             codec: 'wav',
             audioDepth: 24,

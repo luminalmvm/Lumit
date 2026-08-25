@@ -107,5 +107,187 @@ pub enum ColourError {
     },
 }
 
+impl ColourError {
+    /// The stable id this refusal crosses the bridge under (K-005, K-303,
+    /// docs/17 "Display text crosses the bridge in English").
+    ///
+    /// In plain terms: the sentences above are English, and every one of them
+    /// has a name or a file path in the middle of it — so a whole-text lookup
+    /// could never translate them. The frontend writes its own sentence from
+    /// this id and [`Self::args`], and shows the English above only when it has
+    /// no sentence for the id.
+    ///
+    /// The id is the variant's own name in snake case, which is what lets
+    /// `engine_labels_test.dart` read this enum and fail on a variant with no
+    /// sentence. The match is exhaustive on purpose: a new refusal is a compile
+    /// error here rather than a row that ships untranslated.
+    #[must_use]
+    pub fn key(&self) -> &'static str {
+        match self {
+            ColourError::UnsupportedTransform { .. } => "unsupported_transform",
+            ColourError::UnsupportedBuiltin { .. } => "unsupported_builtin",
+            ColourError::Unsupported3dLutInverse { .. } => "unsupported3d_lut_inverse",
+            ColourError::NonMonotoneCurve { .. } => "non_monotone_curve",
+            ColourError::SingularMatrix => "singular_matrix",
+            ColourError::UnsupportedLutFormat { .. } => "unsupported_lut_format",
+            ColourError::ContextVariable { .. } => "context_variable",
+            ColourError::UnsupportedClfNode { .. } => "unsupported_clf_node",
+            ColourError::UnsupportedClfFeature { .. } => "unsupported_clf_feature",
+            ColourError::UnsupportedConfigVersion { .. } => "unsupported_config_version",
+            ColourError::UnknownColourSpace { .. } => "unknown_colour_space",
+            ColourError::UnknownRole { .. } => "unknown_role",
+            ColourError::UnknownDisplay { .. } => "unknown_display",
+            ColourError::UnknownView { .. } => "unknown_view",
+            ColourError::UnknownLook { .. } => "unknown_look",
+            ColourError::LutFileNotFound { .. } => "lut_file_not_found",
+            ColourError::FileRead { .. } => "file_read",
+            ColourError::Parse { .. } => "parse",
+            ColourError::TableTooLarge { .. } => "table_too_large",
+        }
+    }
+
+    /// The facts this refusal names, by field name — `name` → `ACES_RedMod03`,
+    /// `space` → `fancy`.
+    ///
+    /// Named rather than positional so a translation may put them in whatever
+    /// order its language wants. **These are the config's own words** (a colour
+    /// space, a display, a file path) and are never translated, exactly as a
+    /// codec name is not.
+    #[must_use]
+    pub fn args(&self) -> Vec<(&'static str, String)> {
+        match self {
+            ColourError::UnsupportedTransform { name }
+            | ColourError::UnknownColourSpace { name }
+            | ColourError::UnknownRole { name }
+            | ColourError::UnknownDisplay { name }
+            | ColourError::UnknownLook { name }
+            | ColourError::LutFileNotFound { name } => vec![("name", name.clone())],
+            ColourError::UnsupportedBuiltin { style } => vec![("style", style.clone())],
+            ColourError::Unsupported3dLutInverse { space } => vec![("space", space.clone())],
+            ColourError::NonMonotoneCurve { path } | ColourError::ContextVariable { path } => {
+                vec![("path", path.clone())]
+            }
+            ColourError::SingularMatrix => Vec::new(),
+            ColourError::UnsupportedLutFormat { extension } => {
+                vec![("extension", extension.clone())]
+            }
+            ColourError::UnsupportedClfNode { node } => vec![("node", node.clone())],
+            ColourError::UnsupportedClfFeature { feature } => vec![("feature", feature.clone())],
+            ColourError::UnsupportedConfigVersion { version } => {
+                vec![("version", version.clone())]
+            }
+            ColourError::UnknownView { display, view } => {
+                vec![("display", display.clone()), ("view", view.clone())]
+            }
+            ColourError::FileRead { path, reason } => vec![
+                ("path", path.display().to_string()),
+                ("reason", reason.clone()),
+            ],
+            ColourError::Parse { what, reason } => {
+                vec![("what", what.clone()), ("reason", reason.clone())]
+            }
+            ColourError::TableTooLarge { what, size, limit } => vec![
+                ("what", what.clone()),
+                ("size", size.to_string()),
+                ("limit", limit.to_string()),
+            ],
+        }
+    }
+}
+
 /// The shorthand this crate returns everywhere.
 pub type Result<T> = std::result::Result<T, ColourError>;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    /// Two refusals must never share an id, and every fact a sentence prints
+    /// has to arrive by name as well — otherwise the frontend's own wording
+    /// would have a hole where the config's name should be (K-005).
+    #[test]
+    fn every_refusal_has_its_own_id_and_names_its_facts() {
+        let all = [
+            ColourError::UnsupportedTransform {
+                name: "FixedFunctionTransform".into(),
+            },
+            ColourError::UnsupportedBuiltin {
+                style: "APPLE_LOG_to_ACES2065-1".into(),
+            },
+            ColourError::Unsupported3dLutInverse {
+                space: "fancy".into(),
+            },
+            ColourError::NonMonotoneCurve {
+                path: "curve.spi1d".into(),
+            },
+            ColourError::SingularMatrix,
+            ColourError::UnsupportedLutFormat {
+                extension: ".cube".into(),
+            },
+            ColourError::ContextVariable {
+                path: "$SHOT/lut.spi3d".into(),
+            },
+            ColourError::UnsupportedClfNode {
+                node: "ACES".into(),
+            },
+            ColourError::UnsupportedClfFeature {
+                feature: "halfDomain".into(),
+            },
+            ColourError::UnsupportedConfigVersion {
+                version: "3".into(),
+            },
+            ColourError::UnknownColourSpace {
+                name: "nope".into(),
+            },
+            ColourError::UnknownRole {
+                name: "aces_interchange".into(),
+            },
+            ColourError::UnknownDisplay {
+                name: "Rec1886".into(),
+            },
+            ColourError::UnknownView {
+                display: "sRGB".into(),
+                view: "Log".into(),
+            },
+            ColourError::UnknownLook {
+                name: "grade".into(),
+            },
+            ColourError::LutFileNotFound {
+                name: "lut.spi3d".into(),
+            },
+            ColourError::FileRead {
+                path: "config.ocio".into(),
+                reason: "no such file".into(),
+            },
+            ColourError::Parse {
+                what: "config.ocio".into(),
+                reason: "line 4".into(),
+            },
+            ColourError::TableTooLarge {
+                what: "lut.spi3d".into(),
+                size: 512,
+                limit: 128,
+            },
+        ];
+
+        let mut keys = std::collections::BTreeSet::new();
+        for e in &all {
+            assert!(
+                keys.insert(e.key()),
+                "two refusals share the id {}",
+                e.key()
+            );
+            // Every value the sentence prints must also arrive by name, so the
+            // frontend's own wording can place it.
+            for (_, value) in e.args() {
+                assert!(
+                    e.to_string().contains(&value),
+                    "{}: the argument {value} is not in the sentence",
+                    e.key()
+                );
+            }
+        }
+        assert_eq!(keys.len(), all.len());
+    }
+}
