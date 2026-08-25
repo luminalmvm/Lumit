@@ -431,8 +431,7 @@ void main() {
       // what is being waited for: the held reference is another project's.
       final before = p.state.project;
       await choose(tester, 'File', 'Open project…');
-      await settleFrb(tester,
-          until: () => !identical(p.state.project, before));
+      await settleFrb(tester, until: () => !identical(p.state.project, before));
 
       final names = allItems(p.state).map((i) => i.name()).toList();
       expect(names, contains('hero.mov'));
@@ -741,6 +740,11 @@ void main() {
     /// The Window menu's panel list: ticked when the panel is in the
     /// arrangement, and clicking one adds or drops it. Persistence comes free
     /// — what is stored is the arrangement, and this changes the arrangement.
+    ///
+    /// **And the menu stays open while you do it** (K-520). Panels are ticked
+    /// several at a time, so the row is pressed again here without reopening
+    /// anything — which is also what proves the tick redraws in place rather
+    /// than showing what it said when the menu was raised.
     testWidgets('the Window menu ticks the panels and toggles them',
         (tester) async {
       final p = await mount(tester);
@@ -754,10 +758,19 @@ void main() {
           isNot(contains(Panel.scopes.name)),
           reason: 'the stored arrangement is what persists it');
 
-      await choose(tester, 'Window', Panel.scopes.title);
+      expect(find.text(Panel.scopes.title), findsOneWidget,
+          reason: 'a toggle row leaves the menu up');
+      await tester.tap(find.text(Panel.scopes.title));
       await tester.pump();
       expect(panelsIn(p.uiState.split), contains(Panel.scopes),
-          reason: 'and back again');
+          reason: 'and back again, without opening the menu a second time');
+
+      // A row that is not a toggle still closes it.
+      await tester.tap(find.text('Command palette…'));
+      await tester.pump();
+      expect(find.text(Panel.scopes.title), findsNothing,
+          reason: 'an ordinary command closes the menu as it always did');
+      await dismiss(tester);
     });
 
     /// **The bar is chrome: it spans the window, one colour, from the left.**

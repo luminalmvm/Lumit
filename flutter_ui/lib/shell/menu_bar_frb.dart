@@ -73,7 +73,13 @@ class MenuEntry {
   final bool isDivider;
   final String? action;
   final bool todo;
-  final bool? checked;
+
+  /// The tick a fixed row was built with. Null on a row that is not a toggle,
+  /// and null on a [MenuEntry.toggle], which reads its own tick live.
+  final bool? _checked;
+
+  /// A toggle's tick, read every time the row is drawn. See [MenuEntry.toggle].
+  final bool Function()? _checkedNow;
 
   /// What this row watches, for the few rows whose wording changes while the
   /// menu is open. Null for every ordinary row — see [MenuEntry.live].
@@ -86,10 +92,34 @@ class MenuEntry {
     this.label,
     this.onPressed, {
     this.action,
-    this.checked,
+    bool? checked,
   })  : isDivider = false,
         children = null,
         todo = false,
+        _checked = checked,
+        _checkedNow = null,
+        live = null,
+        rebuild = null;
+
+  /// **A checkbox row that leaves the menu open** (K-520).
+  ///
+  /// The panel toggles in Window are used several at a time — turn Scopes on,
+  /// turn Node preview off, turn Hierarchy on — and a menu that shut after
+  /// each tick meant opening it again for every one of them. So a toggle row
+  /// stays put: it runs [onPressed], re-reads [checked] and redraws its own
+  /// tick, and the menu closes on Escape, a click away, or any row that is not
+  /// a toggle, exactly as it always did.
+  ///
+  /// Only for genuine on/off rows. A row that *picks* one of several — a
+  /// workspace preset, a preview resolution — is an ordinary [MenuEntry] with
+  /// `checked:`, and closing after the choice is what a choice should do.
+  MenuEntry.toggle(this.label, this.onPressed,
+      {this.action, required bool Function() checked})
+      : isDivider = false,
+        children = null,
+        todo = false,
+        _checked = null,
+        _checkedNow = checked,
         live = null,
         rebuild = null;
 
@@ -100,7 +130,8 @@ class MenuEntry {
         isDivider = true,
         action = null,
         todo = false,
-        checked = null,
+        _checked = null,
+        _checkedNow = null,
         live = null,
         rebuild = null;
 
@@ -109,7 +140,8 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
-        checked = null,
+        _checked = null,
+        _checkedNow = null,
         live = null,
         rebuild = null;
 
@@ -119,7 +151,8 @@ class MenuEntry {
         children = null,
         isDivider = false,
         todo = true,
-        checked = null,
+        _checked = null,
+        _checkedNow = null,
         live = null,
         rebuild = null;
 
@@ -140,7 +173,18 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
-        checked = null;
+        _checked = null,
+        _checkedNow = null;
+
+  /// The tick this row wears now: fixed for an ordinary row, re-read for a
+  /// [MenuEntry.toggle] whose menu is still open after it was pressed.
+  bool? get checked {
+    final now = _checkedNow;
+    return now == null ? _checked : now();
+  }
+
+  /// Whether pressing this row leaves the menu up (K-520).
+  bool get keepsMenuOpen => _checkedNow != null;
 
   /// This row as it currently reads. The same row for everything except a
   /// [MenuEntry.live] one, which asks its builder.
@@ -819,15 +863,17 @@ List<MenuSection> lumitMenus(
         MenuEntry.divider(),
         // Every panel, ticked when it is in the arrangement. Toggling one adds
         // or drops its pane and persists the layout, so a panel you closed stays
-        // closed across a restart.
+        // closed across a restart — and the menu stays open while you do it
+        // (K-520), because turning three panels on is three ticks, not three
+        // trips to the Window menu.
         for (final panel in Panel.values)
-          MenuEntry(
+          MenuEntry.toggle(
             panel.title,
             () {
               setPanelVisible(ui.split, panel, !panelVisible(ui.split, panel));
               ui.workspace.touch();
             },
-            checked: panelVisible(ui.split, panel),
+            checked: () => panelVisible(ui.split, panel),
           ),
         MenuEntry.divider(),
         MenuEntry(
@@ -852,14 +898,14 @@ List<MenuSection> lumitMenus(
         MenuEntry(
             l10n.menuLumitOnlineGuides, () => _openLink(app, lumitGuidesUrl)),
         MenuEntry.divider(),
-        MenuEntry(
+        MenuEntry.toggle(
           l10n.menuEnableDebugPanel,
           () {
             setPanelVisible(
                 ui.split, Panel.debug, !panelVisible(ui.split, Panel.debug));
             ui.workspace.touch();
           },
-          checked: panelVisible(ui.split, Panel.debug),
+          checked: () => panelVisible(ui.split, Panel.debug),
         ),
       ]
     ),
@@ -1521,13 +1567,22 @@ class _OpenMenuState extends State<_OpenMenu> {
   }
 }
 
-class _MenuList extends StatelessWidget {
+class _MenuList extends StatefulWidget {
   final List<MenuEntry> items;
   final VoidCallback close;
   const _MenuList({required this.items, required this.close});
 
   @override
+  State<_MenuList> createState() => _MenuListState();
+}
+
+/// Stateful for one reason: a [MenuEntry.toggle] row leaves the menu up, so the
+/// list has to redraw itself to show the tick it just changed (K-520).
+class _MenuListState extends State<_MenuList> {
+  @override
   Widget build(BuildContext context) {
+    final items = widget.items;
+    final close = widget.close;
     final t = ThemeScope.of(context).theme;
     final keymap = context.read<LumitUiState>().keymap;
     // A tick column only where something in this menu is a toggle, so an
@@ -1577,12 +1632,21 @@ class _MenuList extends StatelessWidget {
                   )
                 else
                   MenuRow(
+                    key: item.label == null
+                        ? null
+                        : ValueKey<String>('menu-row-${item.label}'),
                     onPressed: item.onPressed == null
                         ? close
-                        : () {
-                            close();
-                            item.onPressed!();
-                          },
+                        : item.keepsMenuOpen
+                            // A toggle stays put and redraws its own tick.
+                            ? () {
+                                item.onPressed!();
+                                if (mounted) setState(() {});
+                              }
+                            : () {
+                                close();
+                                item.onPressed!();
+                              },
                     child: _label(
                       t,
                       item,

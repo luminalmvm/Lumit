@@ -1945,6 +1945,71 @@ class _SubmenuRowState extends State<SubmenuRow> {
   }
 }
 
+/// One popup on the chain: the handle that takes it back down again.
+class _PopupHandle {
+  _PopupHandle(this.dismiss);
+
+  /// Closes this popup with nothing picked, exactly as clicking away does.
+  final VoidCallback dismiss;
+}
+
+/// **The one chain of open popups, outermost first** (K-519).
+///
+/// Every menu, dropdown, picker and flyout in the application goes through
+/// [showLumitPopup], and each call used to push an overlay entry of its own
+/// with a click-away barrier of its own and no idea the others existed. Move
+/// the pointer quickly across the menu bar, the Add-effect list and a picker
+/// and you could end up with three menus on screen at once, each wanting its
+/// own click to dismiss.
+///
+/// This list is the missing authority. A popup raised from a context *inside*
+/// an open popup — a submenu flying out of a menu row — extends the chain;
+/// one raised from anywhere else starts a new chain, which closes whatever was
+/// up. One click on a barrier, or one Escape, takes the whole chain.
+final List<_PopupHandle> _popupChain = [];
+
+/// Close every popup at [depth] and deeper, innermost first.
+void _truncatePopups(int depth) {
+  while (_popupChain.length > depth) {
+    _popupChain.removeLast().dismiss();
+  }
+  if (_popupChain.isEmpty) {
+    HardwareKeyboard.instance.removeHandler(_popupEscape);
+  }
+}
+
+/// Take down every open menu, dropdown and flyout.
+void closeLumitPopups() => _truncatePopups(0);
+
+/// Whether any popup is up. The menus are not a modal — panels keep their
+/// keyboard — so this is for tests and for Escape, not for gating commands.
+bool get lumitPopupOpen => _popupChain.isNotEmpty;
+
+/// Escape while a chain is up dismisses all of it.
+///
+/// A hardware-keyboard handler rather than Flutter's own [DismissIntent],
+/// because a menu holds no focus: the intent would be dispatched at whatever
+/// widget the focus was on when the menu opened, which is outside the popup's
+/// subtree, so an `Actions` entry there would never be reached. Registered
+/// only while a chain is open, so nothing else pays for it.
+bool _popupEscape(KeyEvent event) {
+  if (event is! KeyDownEvent) return false;
+  if (event.logicalKey != LogicalKeyboardKey.escape) return false;
+  if (_popupChain.isEmpty) return false;
+  closeLumitPopups();
+  return true;
+}
+
+/// Marks a popup's own subtree, so a popup raised from inside one knows it is
+/// a flyout of that popup rather than a new chain.
+class _PopupScope extends InheritedWidget {
+  final int depth;
+  const _PopupScope({required this.depth, required super.child});
+
+  @override
+  bool updateShouldNotify(_PopupScope old) => old.depth != depth;
+}
+
 Future<T?> showLumitPopup<T>({
   required BuildContext context,
   required Offset position,
@@ -1958,10 +2023,27 @@ Future<T?> showLumitPopup<T>({
   final overlay = Overlay.of(context);
   final completer = Completer<T?>();
   late OverlayEntry entry;
+  late _PopupHandle handle;
   void close(T? v) {
     if (completer.isCompleted) return;
     completer.complete(v);
     entry.remove();
+    // Anything this popup itself opened goes with it.
+    final at = _popupChain.indexOf(handle);
+    if (at >= 0) _truncatePopups(at);
+  }
+
+  // Where this popup sits on the chain: one deeper than the popup it was
+  // raised from, or the root when it was raised from outside every popup —
+  // in which case the chain that was up is dismissed first.
+  final parentDepth =
+      context.getInheritedWidgetOfExactType<_PopupScope>()?.depth ?? -1;
+  _truncatePopups(parentDepth + 1);
+  final depth = _popupChain.length;
+  handle = _PopupHandle(() => close(null));
+  _popupChain.add(handle);
+  if (_popupChain.length == 1) {
+    HardwareKeyboard.instance.addHandler(_popupEscape);
   }
 
   entry = OverlayEntry(
@@ -1981,8 +2063,10 @@ Future<T?> showLumitPopup<T>({
               behavior: hoverThrough
                   ? HitTestBehavior.translucent
                   : HitTestBehavior.opaque,
-              onTap: () => close(null),
-              onSecondaryTap: () => close(null),
+              // One click away is one dismissal: the whole chain goes, not
+              // just the popup whose barrier caught the click (K-519).
+              onTap: closeLumitPopups,
+              onSecondaryTap: closeLumitPopups,
             ),
           ),
           Positioned.fill(
@@ -1990,7 +2074,9 @@ Future<T?> showLumitPopup<T>({
               delegate: _PopupLayout(position),
               // Scrolls only when it has to: a shorter popup shrink-wraps and
               // behaves exactly as before.
-              child: SingleChildScrollView(child: builder(close)),
+              child: SingleChildScrollView(
+                child: _PopupScope(depth: depth, child: builder(close)),
+              ),
             ),
           ),
         ],

@@ -8201,7 +8201,7 @@
       }
     }
   },
-  "panelGraph": "Graph",
+  "panelGraph": "Node graph",
   "@panelGraph": {
     "description": "The name of the panel drawing a layer's effect stack as boxes joined by wires, with the drivers wired into its parameters. A panel name, so a noun."
   },
@@ -9064,5 +9064,17 @@
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
     "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+  },
+  "closePanel": "Close panel",
+  "@closePanel": {
+    "description": "The right-click menu on a panel's tab: the row that takes the panel out of the arrangement. The same thing as un-ticking the panel in the Window menu."
+  },
+  "popOutPanel": "Pop out",
+  "@popOutPanel": {
+    "description": "The right-click menu on a panel's tab: the row that would tear the panel off into its own separate window. Drawn greyed out because the feature is not built yet."
+  },
+  "popOutPanelBlocked": "A panel in its own window needs multi-window support Flutter has not released yet.",
+  "@popOutPanelBlocked": {
+    "description": "The hover reason on the greyed-out Pop out row in a panel tab's right-click menu. It says honestly why the row cannot be pressed: separate operating-system windows are not available in the toolkit Lumit is built on."
   }
 }

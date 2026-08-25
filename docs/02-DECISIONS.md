@@ -14300,3 +14300,59 @@ rows still gate everything else: a transposed cube, a wrong style, a missing dis
 encoding, a drifting bake. §4.1's recorded follow-up — an exact Rust port of each output
 style, moving it from tier two to tier one — is what tightens it, and these rows are what
 the port will be measured against.
+
+## K-519 — One menu chain at a time, and one dismissal takes it
+
+**DECIDED 2026-08-25** (owner desktop test; `flutter_ui/lib/widgets/controls.dart`,
+`flutter_ui/test/popup_chain_test.dart`).
+Every menu, dropdown, picker and right-click menu is raised by `showLumitPopup`, and each
+call used to push an overlay entry of its own with a click-away barrier of its own and no
+knowledge of the others. Nothing anywhere held the rule that only one menu may be open, so
+a fast pointer across the menu bar, an Add-effect list and a picker left several on screen
+at once, each wanting a separate click to dismiss.
+
+**The authority is one list, in `showLumitPopup` itself.** A popup raised from a context
+*inside* an open popup extends the chain (a flyout belongs to its menu); one raised from
+anywhere else replaces it, closing whatever was up first. A click on any barrier, or
+Escape, dismisses the whole chain rather than peeling one layer. Escape is a hardware-key
+handler registered only while a chain is open, not Flutter's `DismissIntent`: a menu holds
+no focus, so the intent would be dispatched outside the popup's subtree and an `Actions`
+entry there would never be reached (K-319's mechanism works for windows because a window's
+default button takes focus; a menu has nothing to take it).
+
+No opener was taught anything. Fixing this per caller would have meant every menu knowing
+about every other menu — the shape that let the bug exist — and would have left out the
+menus not yet written.
+
+## K-520 — A checkbox row in a menu leaves the menu open
+
+**DECIDED 2026-08-25** (owner desktop test; `MenuEntry.toggle` in
+`flutter_ui/lib/shell/menu_bar_frb.dart`).
+The Window menu's panel list is used several rows at a time — Scopes on, Node preview off,
+Hierarchy on — and a menu that shut after each tick meant reopening it for every one. A
+toggle row now runs its command, re-reads its own tick and stays put; the menu closes on
+Escape, on a click away, or on any row that is not a toggle.
+
+**Only genuine on/off rows.** A row that picks one of several — a workspace preset, a
+preview resolution — stays an ordinary row with a tick and closes after the choice, because
+closing is what a choice should do. The distinction is in the constructor rather than in a
+flag on the call site, so a row cannot half-declare it: `MenuEntry.toggle` reads its tick
+through a closure, which is also what lets the mark redraw in place rather than showing what
+it said when the menu was raised.
+
+## K-521 — A panel tab's right-click menu, with Pop out listed and honestly disabled
+
+**DECIDED 2026-08-25** (owner desktop test; `flutter_ui/lib/shell/dock_widget.dart`,
+`flutter_ui/test/dock_tab_menu_test.dart`).
+Right-clicking a tab pill opens a small menu: **Close panel**, which is the Window menu's
+visibility tick reached from the panel itself, and **Pop out**, drawn disabled with a hover
+reason naming the gate — a panel in its own window needs the multi-window support Flutter
+has not released (K-449, `docs/impl/multi-window.md`).
+
+**Listed and greyed rather than left off, and not faked.** A row you can see is disabled
+tells you the feature is intended and why it is not there; a missing row tells you nothing.
+An in-window floating panel was considered and refused: a panel that says it popped out and
+then cannot leave the application window is a worse answer than a disabled row, and it
+would have to be unbuilt when real windows arrive. If a drawing later asks for a floating
+panel in its own right, that is a different feature with a different name.
+

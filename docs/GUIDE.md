@@ -7163,6 +7163,42 @@ turns amber at the moment the guard is actually holding a row switch back, which
 is the moment worth watching. It only draws; the guard cannot see it and decides
 exactly what it would have decided with the switch off.
 
+### One menu at a time (K-519)
+
+Menus, dropdowns, pickers and right-click menus are all the same thing
+underneath: a small floating panel painted into the window's *overlay*, with an
+invisible full-window sheet behind it that catches the click that dismisses it.
+Every one of them is raised by the same function, `showLumitPopup`.
+
+For a long time each call was on its own. It pushed its own floating panel, put
+its own invisible sheet behind it, and knew nothing about any other menu that
+happened to be up. Nothing enforced the obvious rule — that only one menu should
+be open at once — and with a quick enough pointer you could break it: skate
+across the menu bar, an Add-effect list and a colour picker and end up with
+three menus on screen, each needing its own separate click to make it go away.
+
+The fix is a single list, held in one place: **the chain**. When a menu opens it
+joins the end of the chain. Which end it joins tells you everything:
+
+- Raised from *inside* an open menu — a submenu flying out of a row — it
+  **extends** the chain. The parent stays; the two belong together.
+- Raised from anywhere else — the menu bar, a panel, a toolbar button — it
+  **replaces** the chain. Whatever was open closes first, automatically, with no
+  opener needing to know what else exists.
+
+Everything else follows from that. One click on the sheet dismisses the whole
+chain rather than peeling one layer off it. Escape does the same. Hovering from
+one menu-bar heading to the next hands over, because the second menu's opener
+sits outside the first menu. And no individual menu had to be taught any of
+this: the rule lives in the one function they all go through, which is why it
+also covers the menus nobody has written yet.
+
+A menu knows whether it is inside another because the popup wraps its contents
+in a marker widget carrying its position on the chain. A widget can always ask
+its ancestors what surrounds it, so an opener finds the marker if there is one
+above it and finds nothing if there is not — which is exactly the question
+"am I inside a menu?".
+
 ### How windows answer the keyboard (K-319)
 
 **Every house control holds focus.** The buttons, the checkboxes, the radios,

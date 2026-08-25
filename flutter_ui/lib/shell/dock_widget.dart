@@ -8,6 +8,7 @@
 import 'package:flutter/rendering.dart' show RenderOffstage;
 import 'package:flutter/widgets.dart';
 
+import '../l10n/strings.dart';
 import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -77,6 +78,13 @@ class _DockWidgetState extends State<DockWidget> {
     widget.onLayoutChanged();
   }
 
+  /// Drop a panel out of the arrangement — the same thing the Window menu's
+  /// tick does, reached from the tab's own right-click menu (K-521).
+  void _closePanel(Panel panel) {
+    setState(() => setPanelVisible(widget.root, panel, false));
+    widget.onLayoutChanged();
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -99,6 +107,7 @@ class _DockWidgetState extends State<DockWidget> {
             buildPanel: widget.buildPanel,
             activePanel: widget.activePanel,
             drag: _drag,
+            onClose: _closePanel,
             onChanged: () {
               setState(() {});
               widget.onLayoutChanged();
@@ -488,12 +497,16 @@ class _TabGroup extends StatelessWidget {
   final ValueNotifier<Panel?> activePanel;
   final _DragController drag;
 
+  /// Take a panel out of the arrangement, for the tab's right-click menu.
+  final void Function(Panel) onClose;
+
   const _TabGroup({
     required this.tabs,
     required this.buildPanel,
     required this.onChanged,
     required this.activePanel,
     required this.drag,
+    required this.onClose,
   });
 
   @override
@@ -523,6 +536,7 @@ class _TabGroup extends StatelessWidget {
                           title: tabs.children[i].panel.title,
                           active: i == tabs.active,
                           drag: drag,
+                          onClose: onClose,
                           onPressed: () {
                             tabs.active = i;
                             onChanged();
@@ -612,6 +626,7 @@ class _TabPill extends StatefulWidget {
   final bool active;
   final VoidCallback onPressed;
   final _DragController drag;
+  final void Function(Panel) onClose;
 
   const _TabPill({
     required this.panel,
@@ -619,6 +634,7 @@ class _TabPill extends StatefulWidget {
     required this.active,
     required this.onPressed,
     required this.drag,
+    required this.onClose,
   });
 
   @override
@@ -700,6 +716,7 @@ class _TabPillState extends State<_TabPill> {
         onExit: (_) => setState(() => _hover = false),
         child: GestureDetector(
           onTap: widget.onPressed,
+          onSecondaryTapUp: (d) => _showTabMenu(context, d.globalPosition),
           // While this pill is the dragged one, it paints nothing but keeps
           // its footprint — egui leaves the gap while the ghost floats free.
           child: AnimatedBuilder(
@@ -709,6 +726,54 @@ class _TabPillState extends State<_TabPill> {
               child: child,
             ),
             child: pill,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The tab's right-click menu (K-521): close the panel, and the pop-out that
+  /// is not built yet, listed disabled rather than left off.
+  ///
+  /// **Pop out is greyed and says why.** Tearing a panel into its own window
+  /// needs real operating-system windows, and Flutter has not shipped those on
+  /// a stable release (K-449, `docs/impl/multi-window.md`) — so the row names
+  /// the gate in its tooltip instead of quietly doing something else. It is
+  /// deliberately *not* faked with a floating in-window panel: a panel that
+  /// says it popped out and then cannot leave the app window is a worse answer
+  /// than a disabled row.
+  void _showTabMenu(BuildContext context, Offset position) {
+    final t = ThemeScope.of(context).theme;
+    showLumitPopup<void>(
+      context: context,
+      position: position,
+      builder: (close) => FloatSurface(
+        child: IntrinsicWidth(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              MenuRow(
+                key: const ValueKey('tab-menu-close'),
+                onPressed: () {
+                  close(null);
+                  widget.onClose(widget.panel);
+                },
+                child: Text(l10n.closePanel),
+              ),
+              LumitTooltip(
+                message: l10n.popOutPanelBlocked,
+                child: Padding(
+                  key: const ValueKey('tab-menu-pop-out'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  child: Text(
+                    l10n.popOutPanel,
+                    style: t.body.copyWith(color: t.textDisabled),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
