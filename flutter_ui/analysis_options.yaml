@@ -14,3 +14,10 @@ analyzer:
     # `flutter_rust_bridge_codegen` whenever crates/lumit-bridge/src/api changes.
     # Hand-fixing a lint here would be undone by the next generation.
     - lib/src/rust/**
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
