@@ -15000,3 +15000,43 @@ separate answer — hiding a layer must not hide what it *is*. So footage, solid
 text, shape, sequence and adjustment rows all carry it, camera, light, null and audio rows
 leave it empty, and the Modes group stays `5 × switchCellWidth` on every row so the pickers
 after it never step sideways.
+
+## K-538 — Spruce is the accent, and the mark goes green with it
+
+**DECIDED 2026-08-25.** Supersedes K-531, which had reversed K-511 the same day. The
+owner's ruling after seeing spruce carried through the whole site rather than judged as
+one swatch against a mark that was still arguing with it: *"Amazing stuff"*, then the
+instruction to take it everywhere.
+
+**What settles it is the mark, not the swatch.** K-531 put clay back after living with
+spruce, and the reason it did not sit right was never the green — it was a green accent
+against a wordmark whose second key was violet-magenta, which is the clay family. So the
+mark moves too. The two keys **swap sides**: the `l` is now a green `#6fdca8→#b6e84f`,
+and the `t` carries the `#86e2ff→#2f6fe0` blue the `l` used to, unchanged. The blue is
+not retouched anywhere; only the violet-magenta half is replaced, because only that half
+was the accent's family.
+
+**One value, and it is `#35785e`.** The accent's job list does not move — K-439 still
+holds it to the single filled button per surface, the playhead and the active tab tick,
+and the selection washes still derive by alpha. Spruce leads the six Settings presets and
+clay stands second, one click back (K-465).
+
+**Light loses its exception.** Clay on white sat under the contrast floor, so Light kept
+a hand-darkened `#c23f58` of its own. Spruce clears the floor unaided at 5.3:1, so both
+stock schemes are now exactly `with_accent(default_accent)` — Dark `#35785e`/`#478a70`,
+Light `#35785e`/`#23664c` — and no scheme carries a hand-tuned accent any more. That was
+K-511's one genuine improvement and it survives intact.
+
+**Everywhere means everywhere.** Both sites' tokens, the marketing site's hero field
+(where the wine wash — the only one of the three that was actually red — becomes the
+accent itself, the blue and the violet-turned-teal keeping their own darkness), the
+application's `default_accent` and preset order, `brand.dart`'s four key tokens, the
+wordmark the application ships (K-480), and every brand SVG: the mark, the wordmark, the
+three document icons, and the six Icon Composer layers of the macOS Liquid Glass icon
+(K-309). The rasters are regenerated from those sources by `scripts/gen-icons.py` (K-251),
+so the `.ico` and `.icns` files follow without being edited.
+
+*See docs/15-DESIGN.md §3.1 (the roles table), §9 (the light ramp) and §11 (the brand
+palette), K-092 (the hover-shift rule), K-439 (the accent's closed job list), K-465 (the
+one-click swatches), K-480 (the shipped wordmark), K-251 (the icon generator), K-309 (the
+macOS icon) and K-279 (the two sites).*

@@ -10,23 +10,26 @@
 // be written as a number (docs/15-DESIGN.md §4.1).
 //
 // Each key is a gradient of two stops, and the pair of gradients is what the
-// brand is: a blue key and a violet-magenta one. The values are the SVG
-// sources' own, character for character (docs/15-DESIGN.md §11).
+// brand is: a green key on the left and a blue one on the right. It was a blue
+// key and a violet-magenta one until K-538 - the violet-magenta was the old
+// accent's family and went green with it, and the two keys swapped sides so the
+// lockup opens green and closes blue. The blue's own two values did not change.
+// All four are the SVG sources' own, character for character (§11).
 
 import 'dart:ui' show Color;
 
-/// The blue key, light stop — the top of the `l`.
+/// The green key, jade stop — the top of the `l`.
+const Color brandKeyJade = Color(0xff6fdca8);
+
+/// The green key, lime stop — the foot of the `l`.
+const Color brandKeyLime = Color(0xffb6e84f);
+
+/// The blue key, light stop — the top of the `t`, which is the green key turned
+/// through 180°, so its gradient runs the other way.
 const Color brandKeyBlueLight = Color(0xff86e2ff);
 
-/// The blue key, deep stop — the foot of the `l`.
+/// The blue key, deep stop.
 const Color brandKeyBlue = Color(0xff2f6fe0);
-
-/// The violet key, violet stop — the top of the `t`, which is the blue key
-/// turned through 180°, so its gradient runs the other way.
-const Color brandKeyViolet = Color(0xff8a70ff);
-
-/// The violet key, magenta stop.
-const Color brandKeyMagenta = Color(0xffff4f9e);
 
 /// The wordmark's lettering on a dark ground — the near-white the SVG sources
 /// set `umi` in. Lumit is dark-first, so this is the mark as it is usually seen.

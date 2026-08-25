@@ -14,7 +14,7 @@
        not read as a slice. -->
   <defs>
     <linearGradient id="key-b" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#8a70ff"/><stop offset="1" stop-color="#ff4f9e"/>
+      <stop offset="0" stop-color="#86e2ff"/><stop offset="1" stop-color="#2f6fe0"/>
     </linearGradient>
   </defs>
   <path d="M451.54 230.54 L357.46 136.46 A36 36 0 0 0 306.54 136.46

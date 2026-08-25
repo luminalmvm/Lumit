@@ -116,7 +116,7 @@ void main() {
       for (final sample in [
         const Color.fromARGB(0xff, 12, 200, 90),
         const Color.fromARGB(0xff, 200, 40, 160),
-        const Color.fromARGB(0xff, 224, 90, 114), // the default clay accent
+        const Color.fromARGB(0xff, 224, 90, 114), // clay, a preset accent
       ]) {
         final hsv = rgbToHsv(sample);
         final back = hsvToRgb(hsv.$1, hsv.$2, hsv.$3);

@@ -149,10 +149,10 @@ void main() {
       }
 
       for (final key in [
+        brandKeyJade,
+        brandKeyLime,
         brandKeyBlueLight,
         brandKeyBlue,
-        brandKeyViolet,
-        brandKeyMagenta,
       ]) {
         expect(svg, contains(hex(key)),
             reason: '${hex(key)} is one of the mark\'s keys');
