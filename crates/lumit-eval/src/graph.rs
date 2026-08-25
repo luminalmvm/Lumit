@@ -368,6 +368,7 @@ mod tests {
             LayerKind::Camera {
                 zoom: Property::fixed(1000.0),
                 solve_link: None,
+                correction_base: None,
             },
             Vec::new(),
         );

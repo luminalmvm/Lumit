@@ -2127,6 +2127,7 @@ mod tests {
                 kind: LayerKind::Camera {
                     zoom: Property::fixed(1000.0),
                     solve_link: None,
+                    correction_base: None,
                 },
                 ..text_layer("", 0.0, 5.0, 0.0)
             },
