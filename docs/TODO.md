@@ -24,14 +24,12 @@ hover-scrub thumbnails only if cheap (skip if they cost frame time); A14 release
 format is the owner's own later; Mix keeps its name (K-563); multi-window stays gated
 (K-449).
 
-**FP1 - units and semantics (engine first).**
-- Threshold's matte moves the level per pixel (K-559), with its `check_matte_claim` row.
-- Fast motion blur (and Datamosh) on adjustment and Precomp layers: build the
-  below-stack at the neighbour time, measure flow between the two composites on the
-  card (the `GpuFlow` texture entry point) - the designed shape further down this file.
-- The Lens flare Matte row's Invert (already listed under Next).
-- The flaky `smooth_of_a_ramp_is_the_ramp` threshold (drivers/mod.rs test): make the
-  bound honest for the wiggle signal it measures.
+**FP1 - units and semantics: LANDED 2026-08-25**, all five packages (the K-558 sweep
+with its migrate_percent_to_px compat road - Vegas needed nothing, already px; K-559;
+the flare's Invert; composite flow K-565; the seeded-wiggle test fix). One true
+remainder is recorded under Next: footage simply playing beneath an adjustment still
+contributes no flow (the decode-planner FX-1 sibling), and the composite flow
+measurement carries a named ponytail: cache upgrade.
 
 **FP2 - chrome, panels, interaction.**
 - UI scale rebase and popup anchoring (K-560): the 1.1 presentation baseline, the
