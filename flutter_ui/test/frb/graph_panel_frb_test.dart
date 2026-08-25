@@ -18,6 +18,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
+import 'package:lumit_flutter/panels/viewer_prefix_chip.dart';
+import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -729,6 +731,191 @@ void main() {
       await doubleTapName(tester, 'source');
       expect(find.byKey(const ValueKey<String>('graph-node-rename-source')),
           findsNothing);
+    });
+
+    // -------------------------------------------------------------------
+    // **The pick is a set** (K-533, and with it K-523 and K-522). Delete, Bypass and Expose were
+    // singular because the selection was, not because any of them is singular
+    // by nature — and `Ctrl+A` had nothing here to mean.
+    //
+    // The pick is read through `selectedEffects`, which is where the graph
+    // publishes it: the box and the Effect controls heading are one selection
+    // (K-300), so what the canvas has picked is exactly what that list says.
+    // -------------------------------------------------------------------
+
+    /// A layer with two effect boxes between Source and Layer out, in a comp
+    /// the shell has fronted — so the read model holds the layer and things
+    /// derived from the pick (the Viewer's chip) can be read off it.
+    ({LumitState state, LumitUiState uiState, LayerReference layer})
+        withTwoEffects() {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      p.uiState.setSelectedComp(comp);
+      comp.addSolidLayer();
+      final layer = comp.getLayers().single;
+      layer.addEffect(name: 'blur');
+      layer.addEffect(name: 'exposure');
+      p.uiState.selectedLayer.value = layer;
+      p.uiState.model.refresh();
+      return (state: p.state, uiState: p.uiState, layer: layer);
+    }
+
+    List<UuidValue> stackIds(LayerReference layer) =>
+        [for (final e in layer.getEffects()) e.id()];
+
+    Finder boxOf(LayerReference layer, int i) =>
+        find.byKey(ValueKey<String>('graph-node-effect:${stackIds(layer)[i]}'));
+
+    Future<void> clickBox(WidgetTester tester, Finder box,
+        {LogicalKeyboardKey? held}) async {
+      if (held != null) await tester.sendKeyDownEvent(held);
+      await tester.tapAt(tester.getCenter(box));
+      if (held != null) await tester.sendKeyUpEvent(held);
+      await tester.pump();
+    }
+
+    testWidgets('a click replaces the pick and Ctrl-click toggles it',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+      final ids = stackIds(p.layer);
+
+      await clickBox(tester, boxOf(p.layer, 0));
+      expect(p.uiState.selectedEffects.value, [ids[0]]);
+
+      await clickBox(tester, boxOf(p.layer, 1),
+          held: LogicalKeyboardKey.controlLeft);
+      expect(p.uiState.selectedEffects.value, ids,
+          reason: 'Ctrl added the second, in stack order');
+
+      await clickBox(tester, boxOf(p.layer, 0),
+          held: LogicalKeyboardKey.controlLeft);
+      expect(p.uiState.selectedEffects.value, [ids[1]],
+          reason: 'and a second Ctrl-click on a picked box takes it out again');
+
+      // A plain click on one of several picked boxes collapses the pick to it.
+      await clickBox(tester, boxOf(p.layer, 1),
+          held: LogicalKeyboardKey.shiftLeft);
+      expect(p.uiState.selectedEffects.value, [ids[1]]);
+      await clickBox(tester, boxOf(p.layer, 0),
+          held: LogicalKeyboardKey.shiftLeft);
+      expect(p.uiState.selectedEffects.value, ids, reason: 'Shift adds');
+      await clickBox(tester, boxOf(p.layer, 0));
+      expect(p.uiState.selectedEffects.value, [ids[0]]);
+    });
+
+    /// **A box swept on empty canvas** — the application's own rubber band,
+    /// caught wholly inside as it is everywhere else. The chain lies in one
+    /// row, so a band that takes the two effects between Source and Layer out
+    /// proves both halves of that rule at once.
+    testWidgets('a marquee on empty canvas takes the boxes wholly inside it',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+      final ids = stackIds(p.layer);
+
+      final first = tester.getRect(boxOf(p.layer, 0));
+      final second = tester.getRect(boxOf(p.layer, 1));
+      final band = first.expandToInclude(second).inflate(8);
+      // The corner it starts from is the gap between Source and the first
+      // effect: empty canvas, which is what makes this a band and not a drag.
+      await tester.dragFrom(band.topLeft, band.bottomRight - band.topLeft);
+      await tester.pump();
+
+      expect(p.uiState.selectedEffects.value, ids);
+      expect(find.byKey(const ValueKey('graph-marquee')), findsNothing,
+          reason: 'the band goes when it is let go of');
+    });
+
+    /// **Deleting several boxes is one undo step.** Each effect leaves by the
+    /// stack's own op, so without a group a pick of two would take two undos
+    /// to bring back — and the second one would be the gesture before it.
+    testWidgets('Delete takes the whole pick, and one undo brings it back',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+      expect(p.layer.getEffects(), hasLength(2));
+
+      await clickBox(tester, boxOf(p.layer, 0));
+      await clickBox(tester, boxOf(p.layer, 1),
+          held: LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
+      await tester.pump();
+      expect(p.layer.getEffects(), isEmpty);
+
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getEffects(), hasLength(2),
+          reason: 'one gesture, one undo step');
+    });
+
+    testWidgets('the B badge bypasses every picked box', (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+      final ids = stackIds(p.layer);
+
+      await clickBox(tester, boxOf(p.layer, 0));
+      await clickBox(tester, boxOf(p.layer, 1),
+          held: LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-B-effect:'
+          '${ids[0]}')));
+      await tester.pump();
+
+      expect([for (final e in p.layer.getEffects()) e.getInfo().enabled],
+          [false, false]);
+    });
+
+    testWidgets('the E badge exposes every picked box', (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+      final ids = stackIds(p.layer);
+
+      await clickBox(tester, boxOf(p.layer, 0));
+      await clickBox(tester, boxOf(p.layer, 1),
+          held: LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.byKey(ValueKey<String>('graph-badge-E-effect:'
+          '${ids[0]}')));
+      await tester.pump();
+
+      expect(p.layer.getGraph().wiring.exposed, hasLength(2));
+      p.state.project!.undo();
+      p.uiState.model.refresh();
+      await tester.pump();
+      expect(p.layer.getGraph().wiring.exposed, isEmpty,
+          reason: 'one `setGraph`, so one undo step however many were picked');
+    });
+
+    /// `Ctrl+A` here means this canvas, not the composition's layers (K-522).
+    testWidgets('Ctrl+A picks every box on the canvas', (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      p.uiState.activePanel.value = Panel.graph;
+      expect(p.uiState.requestSelectAll(), isTrue,
+          reason: 'the graph claims the chord now that it can answer it');
+      await tester.pump();
+
+      expect(p.uiState.selectedEffects.value, stackIds(p.layer),
+          reason: 'both effect boxes; Source and Layer out are picked too, '
+              'and carry no effect id to publish');
+    });
+
+    /// **The Viewer chip wants exactly one** (K-528). Its name is derived, so
+    /// a pick of several must make it go away by itself rather than by anyone
+    /// remembering to turn it off.
+    testWidgets('the prefix chip names one picked box and no more',
+        (tester) async {
+      final p = withTwoEffects();
+      await mount(tester, p);
+
+      await clickBox(tester, boxOf(p.layer, 0));
+      expect(prefixChipName(p.uiState), isNotNull);
+
+      await clickBox(tester, boxOf(p.layer, 1),
+          held: LogicalKeyboardKey.controlLeft);
+      expect(prefixChipName(p.uiState), isNull,
+          reason: 'two picked is no single point to stop at');
     });
   });
 }

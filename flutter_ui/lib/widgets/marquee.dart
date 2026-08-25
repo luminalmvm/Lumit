@@ -16,6 +16,37 @@ import 'controls.dart';
 /// them.
 const double marqueeWashAlpha = 0.12;
 
+/// The box's painted face, on its own.
+///
+/// [MarqueeSelect] draws it, and so does any surface that cannot use that
+/// widget — the Node graph reads its pointers through one raw `Listener` so
+/// that a socket can be grabbed without a gesture detector per socket, and a
+/// `GestureDetector` laid over that would take the grabs. It sweeps its box in
+/// its own handlers and puts this face on it, so there is still one description
+/// of what a selection box looks like.
+class MarqueeBox extends StatelessWidget {
+  const MarqueeBox({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return IgnorePointer(
+      child: Container(
+        decoration: BoxDecoration(
+          // **What is selected is one colour, and it is not the accent**
+          // (K-439, docs/impl/timeline-interaction.md P4): the box that says
+          // what is about to be selected draws in the same `text_primary` the
+          // selection it makes will, over the drawings' 12% wash. The accent's
+          // list is closed — the playhead, one filled button, the active tab's
+          // tick — and a box in it read as a second playhead being dragged out.
+          color: t.textPrimary.withValues(alpha: marqueeWashAlpha),
+          border: Border.all(color: t.textPrimary, width: 1),
+        ),
+      ),
+    );
+  }
+}
+
 class MarqueeSelect extends StatefulWidget {
   /// The finished box, in this widget's own coordinates, and whether the drag
   /// was **additive** — `Shift` or `Ctrl` held when it started (K-500 §2.1).
@@ -67,7 +98,6 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
     return Stack(
       children: [
         Positioned.fill(
@@ -103,21 +133,7 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
         if (_from != null && _to != null)
           Positioned.fromRect(
             rect: Rect.fromPoints(_from!, _to!),
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  // **What is selected is one colour, and it is not the
-                  // accent** (K-439, docs/impl/timeline-interaction.md P4):
-                  // the box that says what is about to be selected draws in
-                  // the same `text_primary` the selection it makes will, over
-                  // the drawings' 12% wash. The accent's list is closed — the
-                  // playhead, one filled button, the active tab's tick — and a
-                  // box in it read as a second playhead being dragged out.
-                  color: t.textPrimary.withValues(alpha: marqueeWashAlpha),
-                  border: Border.all(color: t.textPrimary, width: 1),
-                ),
-              ),
-            ),
+            child: const MarqueeBox(),
           ),
       ],
     );

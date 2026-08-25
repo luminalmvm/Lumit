@@ -14768,3 +14768,41 @@ tho" — and spruce #35785E becomes the second preset, one click away. Hover now
 one genuine improvement: `withAccent(defaultAccent)` reproduces the dark pair. Light
 restores its own darkened clay #c23f58 (clay unaided sits under the contrast floor),
 the one scheme the derivation does not cover, said in the code. Both sites follow.
+
+## K-533 — The Node graph's pick is a set, and the canvas pans with the middle button
+
+**DECIDED 2026-08-25.** The last of K-523's audit, and the only one that was a model
+change rather than a routing. Delete, Bypass and Expose on the Graph panel were singular
+because the *selection* was — one `BridgeNodeRef`, not a set — and `Ctrl+A` had nothing
+there to mean, which is why K-522 deliberately left the panel off its list until this
+landed.
+
+**The pick is now a set, and it picks the way every other list here picks**: a click
+replaces, `Ctrl`-click toggles, `Shift`-click adds, and a drag on empty canvas sweeps the
+application's own rubber band, taking every box **wholly** inside it (docs/07 §4.5's rule,
+`Shift` or `Ctrl` adding the catch to what is already picked). `Ctrl+A` joins K-522's
+framework and means every box on this canvas. Delete, Bypass and Expose act on the whole
+pick, with the derived boxes — Source and Layer out — excluded from deletion exactly as
+they were before, and a press on a box's `E` or `B` badge no longer counts as picking the
+box (the Timeline's rule for its switch cells, K-452, which the canvas needed because it
+reads every pointer through one `Listener`).
+
+**A plural act is one undo step.** The kept edges are worked out against every victim at
+once, so the drivers leave in a single `set_graph` carrying them; a pick that also holds
+effects wraps the whole thing in one undo group, because each effect leaves by the stack's
+own op. Exposure was already one `set_graph` and stays one however many are picked.
+
+**Panning moved to the middle button**, which is what the primary drag on empty canvas
+cost: it sweeps a selection box now. The middle-drag pan is what every node editor already
+does, and the wheel still zooms about the pointer. Nothing else about the canvas's
+gestures changed — a socket is still grabbed by dragging it, a box still moves by dragging
+its body, and a body drag that starts inside the picked set moves the whole set.
+
+**The two things that follow the pick both keep working under a set, and neither panel
+knows the pick exists.** `LumitUiState.graphNode` carries the **anchor** — the box picked
+last — because the Node panel draws one box's rows and that is singular by nature, the way
+a rename is (K-523). `setEffectSelection` carries **every** picked effect, in stack order,
+because the graph's box and the Effect controls heading are one selection (K-300). The
+Viewer's *at effect* chip needed nothing: K-528 derived its name from "exactly one effect
+picked", so a pick of several makes the chip go away by itself rather than by anyone
+remembering to turn it off.

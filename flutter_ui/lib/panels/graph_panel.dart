@@ -31,7 +31,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart' show KeyDownEvent, LogicalKeyboardKey;
+import 'package:flutter/services.dart'
+    show HardwareKeyboard, KeyDownEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -45,8 +46,10 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../state/dock.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import '../widgets/marquee.dart';
 import 'placeholder.dart';
 
 // --- The drawing's own numbers (NodeGraph, Nodes-workspace) ---------------
@@ -320,12 +323,24 @@ class _InFlight {
   _InFlight(this.from, this.to);
 }
 
-/// A box being dragged: which one, and where it started.
+/// Boxes being dragged: where the pointer took hold, and where each box being
+/// moved started.
+///
+/// A drag on a box that is **part of the picked set moves the whole set**
+/// (docs/07 §4.5's rule for every surface here), so this carries an origin per
+/// box rather than one.
 class _NodeDrag {
+  /// The box actually pressed — what a release that never moved collapses the
+  /// selection to, because a plain click replaces.
   final String key;
   final Offset grab;
-  final Offset origin;
-  _NodeDrag(this.key, this.grab, this.origin);
+  final Map<String, Offset> origins;
+
+  /// The press landed on a box that was already picked, so the pick was left
+  /// alone on the way down. A click that does not move then means what a plain
+  /// click always means: this box, and only this box.
+  final bool collapse;
+  _NodeDrag(this.key, this.grab, this.origins, {this.collapse = false});
 }
 
 class GraphPanelFrb extends StatefulWidget {
@@ -355,18 +370,57 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   /// it, the K-344 pattern. Seeded from the document on each read.
   Map<String, Offset> _positions = {};
 
-  /// The picked box. Mirrored into [LumitUiState.graphNode] on every write, so
-  /// the Node panel — which is a different pane of the dock, and may not even
-  /// be in the arrangement — follows the pick without this panel having to
-  /// know it is there. A getter pair rather than a `_select` method because
-  /// every site that already assigns the field then keeps working unchanged.
-  BridgeNodeRef? _selectedNode;
+  /// **The picked boxes**, by node key, in the order they were picked
+  /// (K-533, K-523).
+  ///
+  /// A set rather than one box, which is what Delete, Bypass, Expose and
+  /// `Ctrl+A` were all waiting for: they were singular because the selection
+  /// was, not because any of them is singular by nature. Keyed by
+  /// [graphNodeKey] because that string is this panel's idea of identity
+  /// everywhere else — the positions map, the layout, the exposed list — and
+  /// the reference is kept as the value because the commits need it.
+  ///
+  /// Two things follow the pick, and neither panel knows this one exists:
+  /// [LumitUiState.graphNode] carries the **anchor** — the box picked last —
+  /// because the Node panel draws one box's rows and that is singular the way
+  /// a rename is; and [LumitUiState.setEffectSelection] carries every picked
+  /// effect, because the graph's box and the Effect controls heading are one
+  /// selection (K-300).
+  final Map<String, BridgeNodeRef> _selection = {};
 
-  BridgeNodeRef? get _selected => _selectedNode;
+  /// The anchor: the box picked last, or null with nothing picked.
+  BridgeNodeRef? get _selected =>
+      _selection.isEmpty ? null : _selection.values.last;
 
-  set _selected(BridgeNodeRef? node) {
-    _selectedNode = node;
-    _ui?.graphNode.value = node;
+  bool _isPicked(BridgeNodeRef node) =>
+      _selection.containsKey(graphNodeKey(node));
+
+  /// Replace the pick outright, and tell the two surfaces that follow it.
+  ///
+  /// Called from inside `setState` at every site, exactly as the old field
+  /// assignment was — the mirroring is what must not be forgotten, so it lives
+  /// here rather than at five call sites.
+  void _pick(Iterable<BridgeNodeRef> nodes) {
+    _selection
+      ..clear()
+      ..addEntries([for (final n in nodes) MapEntry(graphNodeKey(n), n)]);
+    _publishPick();
+  }
+
+  void _publishPick() {
+    _ui?.graphNode.value = _selected;
+    final layer = _layer;
+    if (layer == null) return;
+    // In stack order, which is the order `selectedEffects` is documented to
+    // hold and the order the graph's own node list is already in. A pick of
+    // drivers alone carries no effects, and an empty list clears — which is
+    // right: the heading in Effect controls should not stay lit for a box that
+    // is not an effect.
+    _ui?.setEffectSelection(layer, [
+      for (final node in _graph?.nodes ?? const <BridgeGraphNode>[])
+        if (_selection.containsKey(graphNodeKey(node.node)))
+          if (_effectIdOf(node.node) case final effect?) effect,
+    ]);
   }
 
   /// The box whose name is an inline editor, by node key (K-321). A
@@ -388,6 +442,20 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   _NodeDrag? _nodeDrag;
   Offset? _panFrom;
   Offset? _pressAt;
+
+  /// Set by a control on a card on its way down, so the canvas behind it
+  /// leaves the press alone: pressing a box's `E` or `B` is not picking the
+  /// box. The canvas reads every pointer itself — that is how a socket is
+  /// grabbed without a gesture detector per socket — so it cannot tell a press
+  /// on a badge from a press on the card, and the badge has to say.
+  bool _claimed = false;
+
+  /// The rubber band in flight, in the canvas widget's own pixels (so it is
+  /// drawn without the pan/zoom transform and turned into canvas units only
+  /// when it is released), and whether it adds to the standing pick.
+  Offset? _marqueeFrom;
+  Offset? _marqueeTo;
+  bool _marqueeAdds = false;
 
   /// The Tab search: where it opened, and the wire (if any) that opened it.
   Offset? _searchAt;
@@ -412,12 +480,26 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _ui = ui;
     ui.selectedLayer.addListener(_reload);
     ui.model.addListener(_reload);
+    // `Ctrl+A` here means every box on this canvas (K-522), which it can only
+    // mean now the pick is a set.
+    ui.selectAllRequest.addListener(_onSelectAllRequested);
     _reload();
   }
 
   void _unbind() {
     _ui?.selectedLayer.removeListener(_reload);
     _ui?.model.removeListener(_reload);
+    _ui?.selectAllRequest.removeListener(_onSelectAllRequested);
+  }
+
+  /// Pick every box the canvas is drawing — Source and Layer out included,
+  /// because they are picked by a click like any other box and the commands
+  /// that cannot touch them already say so themselves.
+  void _onSelectAllRequested() {
+    final ui = _ui;
+    if (!mounted || ui == null) return;
+    if (!ui.selectAllRequestIsFor(Panel.graph)) return;
+    setState(() => _pick([for (final n in _graph?.nodes ?? const []) n.node]));
   }
 
   @override
@@ -453,10 +535,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
         for (final p in graph?.wiring.layout ?? const <BridgeNodePosition>[])
           graphNodeKey(p.node): Offset(p.x, p.y),
       };
+      // A box that has gone leaves the pick; the rest of the pick stands.
       final present =
           (graph?.nodes ?? const []).map((n) => graphNodeKey(n.node)).toSet();
-      if (_selected != null && !present.contains(graphNodeKey(_selected!))) {
-        _selected = null;
+      if (_selection.keys.any((k) => !present.contains(k))) {
+        _selection.removeWhere((key, _) => !present.contains(key));
+        _publishPick();
       }
     });
   }
@@ -632,13 +716,22 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   // --- Node gestures ------------------------------------------------------
 
+  /// The boxes a command pressed on [node] acts on (K-523): the whole pick
+  /// when this box is part of it, and this box alone when it is not — the rule
+  /// every other surface here follows.
+  List<BridgeNodeRef> _targets(BridgeNodeRef node) =>
+      _isPicked(node) ? _selection.values.toList() : [node];
+
   void _toggleExposed(BridgeNodeRef node) {
     final key = graphNodeKey(node);
-    final was = _graph!.wiring.exposed.any((e) => graphNodeKey(e) == key);
+    // The pressed box's new state, for all of them, so a pick of mixed badges
+    // comes out even. One `setGraph`, so one undo step however many it is.
+    final on = !_graph!.wiring.exposed.any((e) => graphNodeKey(e) == key);
+    final targets = {for (final n in _targets(node)) graphNodeKey(n): n};
     _commit(_wiringNow(exposed: [
       for (final e in _graph!.wiring.exposed)
-        if (graphNodeKey(e) != key) e,
-      if (!was) node,
+        if (!targets.containsKey(graphNodeKey(e))) e,
+      if (on) ...targets.values,
     ]));
   }
 
@@ -648,28 +741,41 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   void _toggleBypass(BridgeGraphNode node) {
     final layer = _layer;
     if (layer == null) return;
-    final driver = _driverIdOf(node.node);
+    // The pressed box's new state, for every box the press acts on (K-523), so
+    // a pick of mixed bypasses comes out even.
+    final on = !node.enabled;
+    final targets = {for (final n in _targets(node.node)) graphNodeKey(n)};
+    final drivers = <UuidValue>{};
+    final effects = <UuidValue>{};
+    for (final n in _graph?.nodes ?? const <BridgeGraphNode>[]) {
+      if (!targets.contains(graphNodeKey(n.node))) continue;
+      if (_driverIdOf(n.node) case final id?) drivers.add(id);
+      if (_effectIdOf(n.node) case final id?) effects.add(id);
+    }
+
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final group = project != null && drivers.length + effects.length > 1;
+    if (group) project.beginUndoGroup();
     try {
-      if (driver != null) {
+      if (drivers.isNotEmpty) {
+        // Every picked driver rides one staged list and one `setGraph`.
         final staged = layer.getGraphDrivers();
         for (final instance in staged) {
-          if (instance.id() == driver) {
-            instance.setEnabled(enabled: !node.enabled);
-            layer.setGraph(drivers: staged, wiring: _wiringNow());
-            break;
+          if (drivers.contains(instance.id())) {
+            instance.setEnabled(enabled: on);
           }
         }
-      } else if (_effectIdOf(node.node) case final effect?) {
-        for (final instance in layer.getEffects()) {
-          if (instance.id() == effect) {
-            layer.setEffectEnabled(effect: instance, enabled: !node.enabled);
-            break;
-          }
+        layer.setGraph(drivers: staged, wiring: _wiringNow());
+      }
+      for (final instance in layer.getEffects()) {
+        if (effects.contains(instance.id())) {
+          layer.setEffectEnabled(effect: instance, enabled: on);
         }
       }
     } catch (_) {
       // The stack or the graph moved under us; re-reading is the recovery.
     }
+    if (group) project.endUndoGroup();
     _ui?.model.refresh();
     _reload();
   }
@@ -719,58 +825,87 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _reload();
   }
 
-  /// Delete the selected box.
+  /// Delete every picked box.
   ///
-  /// **Heal** decides what happens to the wires on it. On, they go with it in
-  /// the same commit; off, a box that still carries a wire is left alone —
-  /// unplug it first, and the document never passes through a state where a
-  /// wire names a box that is not there.
+  /// **Heal** decides what happens to the wires on them. On, they go with the
+  /// boxes in the same commit; off, a box that still carries a wire is left
+  /// alone — unplug it first, and the document never passes through a state
+  /// where a wire names a box that is not there. With several picked that is
+  /// decided per box, so an unwired one still goes.
   ///
   /// The image chain heals by construction either way: taking an effect out of
   /// the list joins its neighbours, because the list *is* the chain.
+  ///
+  /// **The kept edges are worked out against every victim at once**, which is
+  /// what keeps a plural delete one undo step rather than a cascade: the
+  /// drivers leave in a single `setGraph` carrying those edges, and where
+  /// effects go too the whole thing is wrapped in one undo group.
   void _deleteSelected() {
-    final node = _selected;
     final layer = _layer;
-    if (node == null || layer == null || _graph == null) return;
-    if (node is BridgeNodeRef_Source || node is BridgeNodeRef_Out) return;
+    if (layer == null || _graph == null || _selection.isEmpty) return;
 
-    final key = graphNodeKey(node);
+    // Source and Layer out are the picture's own ends, not boxes anyone put
+    // there: they are picked like any other and deleted like none.
+    final victims = [
+      for (final node in _selection.values)
+        if (node is! BridgeNodeRef_Source && node is! BridgeNodeRef_Out)
+          if (_heal || !_graph!.wiring.edges.any((e) => _touches(e, node)))
+            node,
+    ];
+    if (victims.isEmpty) return;
+
     final kept = [
       for (final e in _graph!.wiring.edges)
-        if (!_touches(e, node)) e,
+        if (!victims.any((v) => _touches(e, v))) e,
     ];
-    if (!_heal && kept.length != _graph!.wiring.edges.length) return;
+    final drivers = {
+      for (final v in victims)
+        if (_driverIdOf(v) case final id?) id,
+    };
+    final effects = {
+      for (final v in victims)
+        if (_effectIdOf(v) case final id?) id,
+    };
 
-    final driver = _driverIdOf(node);
-    if (driver != null) {
-      final staged = [
-        for (final d in layer.getGraphDrivers())
-          if (d.id() != driver) d,
-      ];
-      _positions.remove(key);
-      _selected = null;
-      _commit(_wiringNow(edges: kept), drivers: staged);
-      return;
+    // One undo step for the gesture. A pick of drivers alone is already one
+    // `setGraph`, and a pick of effects alone one `SetLayerEffects` each — the
+    // group is what makes a mixed pick, or several effects, undo whole.
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    final group = project != null && drivers.length + effects.length > 1;
+    if (group) project.beginUndoGroup();
+
+    if (drivers.isNotEmpty) {
+      // The wires go with them in the same write.
+      _commit(
+        _wiringNow(edges: kept),
+        drivers: [
+          for (final d in layer.getGraphDrivers())
+            if (!drivers.contains(d.id())) d,
+        ],
+      );
     }
-
-    // An effect's removal is the stack's own op, and one op is all it takes:
-    // `Op::SetLayerEffects` prunes the edges, positions and badges naming the
-    // box that went, inside the same commit, so this is one write and one undo
-    // step exactly as a driver's removal is.
-    final effect = _effectIdOf(node);
-    if (effect == null) return;
-    try {
-      for (final instance in layer.getEffects()) {
-        if (instance.id() == effect) {
-          layer.removeEffect(effect: instance);
-          break;
+    if (effects.isNotEmpty) {
+      // An effect's removal is the stack's own op, and one op is all it takes:
+      // `Op::SetLayerEffects` prunes the edges, positions and badges naming the
+      // box that went, inside the same commit, so this is one write per effect
+      // exactly as a driver's removal is one for all of them.
+      try {
+        for (final instance in layer.getEffects()) {
+          if (effects.contains(instance.id())) {
+            layer.removeEffect(effect: instance);
+          }
         }
+      } catch (_) {
+        // Refused; what had already gone stays gone and the rest stands.
       }
-    } catch (_) {
-      // Refused; the document is as it was.
     }
-    _positions.remove(key);
-    _selected = null;
+    if (group) project.endUndoGroup();
+
+    for (final v in victims) {
+      _positions.remove(graphNodeKey(v));
+      _selection.remove(graphNodeKey(v));
+    }
+    _publishPick();
     _ui?.model.refresh();
     _reload();
   }
@@ -848,7 +983,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     }
     _ui?.model.refresh();
     _reload();
-    setState(() => _selected = ref);
+    setState(() => _pick([ref]));
   }
 
   /// The wire joining the box about to be added to the wire in hand, or null
@@ -891,6 +1026,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   void _down(PointerDownEvent event, _Layout layout) {
     _canvasFocus.requestFocus();
+    if (_claimed) {
+      _claimed = false;
+      return;
+    }
     if (_searchAt != null) {
       _closeSearch();
       return;
@@ -907,23 +1046,62 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     final box = layout.boxAt(at);
     if (box != null) {
       final key = graphNodeKey(box.node.node);
+      final keys = HardwareKeyboard.instance;
+      final toggle = keys.isControlPressed || keys.isMetaPressed;
+      final add = keys.isShiftPressed;
+      final held = _isPicked(box.node.node);
       setState(() {
-        _selected = box.node.node;
-        _nodeDrag = _NodeDrag(key, at, _positions[key] ?? box.rect.topLeft);
-      });
-      // The graph and the stack share one selection (K-300), so picking a box
-      // fronts the same effect in Effect controls and the Timeline.
-      if (_effectIdOf(box.node.node) case final effect?) {
-        if (_layer case final layer?) {
-          _ui?.setEffectSelection(layer, [effect]);
+        // **Click replaces, Ctrl toggles, Shift adds** — the three rules a
+        // layer row, a project row and an effect heading all follow, because a
+        // selection that behaved one way here and another there would be two
+        // selections to learn.
+        if (toggle) {
+          if (_selection.remove(key) == null) {
+            _selection[key] = box.node.node;
+          }
+          _publishPick();
+        } else if (add) {
+          _selection[key] = box.node.node;
+          _publishPick();
+        } else if (!held) {
+          _pick([box.node.node]);
         }
-      }
+        // A press inside something already picked takes the whole pick with
+        // it, so several boxes move together (docs/07 §4.5). A release that
+        // never moved collapses it back to this box, which is what the plain
+        // click above would have done.
+        final moving = held && !toggle && !add
+            ? _selection.keys
+            : <String>[if (_selection.containsKey(key)) key];
+        _nodeDrag = _NodeDrag(
+          key,
+          at,
+          {
+            for (final k in moving)
+              k: _positions[k] ?? layout.byKey[k]?.rect.topLeft ?? Offset.zero,
+          },
+          collapse: held && !toggle && !add,
+        );
+      });
       return;
     }
 
+    // **Empty canvas.** The primary button sweeps a selection box; the middle
+    // button pans, which is where panning went when the box took the drag it
+    // used to have (K-533). A press with no modifier clears, exactly as it always did;
+    // an additive one keeps what is picked and adds the catch to it.
+    if (event.buttons == kMiddleMouseButton) {
+      setState(() => _panFrom = _pan - event.localPosition);
+      return;
+    }
+    final keys = HardwareKeyboard.instance;
+    final additive =
+        keys.isShiftPressed || keys.isControlPressed || keys.isMetaPressed;
     setState(() {
-      _selected = null;
-      _panFrom = _pan - event.localPosition;
+      if (!additive) _pick(const []);
+      _marqueeFrom = event.localPosition;
+      _marqueeTo = null;
+      _marqueeAdds = additive;
     });
   }
 
@@ -934,7 +1112,15 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       return;
     }
     if (_nodeDrag case final drag?) {
-      setState(() => _positions[drag.key] = drag.origin + (at - drag.grab));
+      setState(() {
+        for (final entry in drag.origins.entries) {
+          _positions[entry.key] = entry.value + (at - drag.grab);
+        }
+      });
+      return;
+    }
+    if (_marqueeFrom != null) {
+      setState(() => _marqueeTo = event.localPosition);
       return;
     }
     if (_panFrom case final from?) {
@@ -968,9 +1154,39 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       return;
     }
 
-    if (_nodeDrag != null) {
-      setState(() => _nodeDrag = null);
+    if (_nodeDrag case final drag?) {
+      setState(() {
+        _nodeDrag = null;
+        // The press that kept a standing pick, released without moving: that
+        // is a plain click, and a plain click replaces.
+        if (!moved && drag.collapse) {
+          final node = _selection[drag.key];
+          if (node != null) _pick([node]);
+        }
+      });
       if (moved && _graph != null) _commit(_wiringNow());
+      return;
+    }
+
+    if (_marqueeFrom case final from?) {
+      final to = _marqueeTo;
+      final adds = _marqueeAdds;
+      setState(() {
+        _marqueeFrom = null;
+        _marqueeTo = null;
+        if (to == null) return;
+        // **Wholly inside**, the house rule for every rubber band here
+        // (docs/07 §4.5): a box the band clipped a corner off was not what the
+        // gesture pointed at.
+        final band = Rect.fromPoints(_toCanvas(from), _toCanvas(to));
+        final caught = [
+          for (final box in layout.boxes)
+            if (band.contains(box.rect.topLeft) &&
+                band.contains(box.rect.bottomRight))
+              box.node.node,
+        ];
+        _pick([if (adds) ..._selection.values, ...caught]);
+      });
       return;
     }
     setState(() => _panFrom = null);
@@ -1166,12 +1382,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                                   title: box.node.node is BridgeNodeRef_Source
                                       ? _layerName
                                       : engineLabel(box.node.label),
-                                  selected: _selected != null &&
-                                      graphNodeKey(_selected!) ==
-                                          graphNodeKey(box.node.node),
+                                  selected: _isPicked(box.node.node),
                                   exposed: _graph!.wiring.exposed.any((e) =>
                                       graphNodeKey(e) ==
                                       graphNodeKey(box.node.node)),
+                                  onOwnPress: () => _claimed = true,
                                   onExpose: () => _toggleExposed(box.node.node),
                                   onBypass: () => _toggleBypass(box.node),
                                   renaming: _renamingNode ==
@@ -1191,6 +1406,16 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                         ),
                       ),
                     ),
+                    // Over the boxes and outside the pan/zoom transform: the
+                    // band is drawn where the pointer is, not where the canvas
+                    // is. The face is the application's one selection box
+                    // ([MarqueeBox]).
+                    if (_marqueeFrom != null && _marqueeTo != null)
+                      Positioned.fromRect(
+                        key: const ValueKey('graph-marquee'),
+                        rect: Rect.fromPoints(_marqueeFrom!, _marqueeTo!),
+                        child: const MarqueeBox(),
+                      ),
                     _legend(t),
                   ],
                 ),
@@ -1358,6 +1583,10 @@ class _NodeCard extends StatelessWidget {
   final VoidCallback onExpose;
   final VoidCallback onBypass;
 
+  /// A control on this card has taken the press, so the canvas behind it
+  /// leaves the pick alone.
+  final VoidCallback onOwnPress;
+
   /// The name is an inline editor rather than a label (K-321), its commit —
   /// empty clears back to the box's own label — and the Escape that throws the
   /// edit away instead (K-323). The same contract the Effect controls heading
@@ -1374,6 +1603,7 @@ class _NodeCard extends StatelessWidget {
     required this.exposed,
     required this.onExpose,
     required this.onBypass,
+    required this.onOwnPress,
     required this.renaming,
     required this.onStartRename,
     required this.onRenamed,
@@ -1530,25 +1760,34 @@ class _NodeCard extends StatelessWidget {
     VoidCallback onTap,
     Color onColour,
   ) =>
-      GestureDetector(
-        key: ValueKey<String>(
-            'graph-badge-$mark-${graphNodeKey(box.node.node)}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          width: graphBadgeSize,
-          height: graphBadgeSize,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: on ? t.surface4 : null,
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-            border: Border.all(color: on ? onColour : t.hairlineStrong),
-          ),
-          child: Text(
-            mark,
-            style: t.mono.copyWith(
-              fontSize: 8,
-              color: on ? onColour : t.textMuted,
+      // **Pressing a badge is not picking the box** (the Timeline's rule for
+      // its switch cells, K-452). The canvas reads its pointers through one
+      // `Listener` above this card, and a child listener is dispatched first —
+      // so the flag is set before the canvas decides what the press meant.
+      // Without it, pressing B on one of four picked boxes collapsed the pick
+      // to that box and then bypassed only it.
+      Listener(
+        onPointerDown: (_) => onOwnPress(),
+        child: GestureDetector(
+          key: ValueKey<String>(
+              'graph-badge-$mark-${graphNodeKey(box.node.node)}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Container(
+            width: graphBadgeSize,
+            height: graphBadgeSize,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: on ? t.surface4 : null,
+              borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+              border: Border.all(color: on ? onColour : t.hairlineStrong),
+            ),
+            child: Text(
+              mark,
+              style: t.mono.copyWith(
+                fontSize: 8,
+                color: on ? onColour : t.textMuted,
+              ),
             ),
           ),
         ),
