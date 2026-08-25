@@ -1883,7 +1883,7 @@
   },
   "fxImage": "Image",
   "@fxImage": {
-    "description": "Graph panel \u2014 the name of a socket that carries a picture."
+    "description": "Graph panel — the name of a socket that carries a picture."
   },
   "fxInFront": "In front",
   "@fxInFront": {
@@ -1895,7 +1895,7 @@
   },
   "fxInput": "Input",
   "@fxInput": {
-    "description": "Graph panel \u2014 the name of the socket a box takes its picture in by."
+    "description": "Graph panel — the name of the socket a box takes its picture in by."
   },
   "fxIntensity": "Intensity",
   "@fxIntensity": {
@@ -1927,7 +1927,7 @@
   },
   "fxLayerOut": "Layer out",
   "@fxLayerOut": {
-    "description": "Graph panel \u2014 the name of the box where a layer's finished picture leaves."
+    "description": "Graph panel — the name of the box where a layer's finished picture leaves."
   },
   "fxLength": "Length",
   "@fxLength": {
@@ -2491,7 +2491,7 @@
   },
   "fxOutput": "Output",
   "@fxOutput": {
-    "description": "Graph panel \u2014 the name of the socket a box hands its picture on by."
+    "description": "Graph panel — the name of the socket a box hands its picture on by."
   },
   "fxOutputBlack": "Output black",
   "@fxOutputBlack": {
@@ -7035,10 +7035,6 @@
   "@menuImportAe": {
     "description": "Item in the File menu's Import submenu — opens a file chooser for an After Effects .aep project, which Lumit reads directly."
   },
-  "menuImportAeBundle": "Bridge bundle folder…",
-  "@menuImportAeBundle": {
-    "description": "The quieter second item in the File menu's Import submenu — opens a folder chooser for a bundle written by the Lumit Bridge script inside After Effects. Bridge is the product name and stays untranslated."
-  },
   "menuImportFootage": "Import footage…",
   "@menuImportFootage": {
     "description": "Item in the File menu's Import submenu — opens the file chooser for video, image and audio files. Also the command palette's name for the same command."
@@ -8642,15 +8638,21 @@
   "@makingProxyFrame": {
     "description": "Status line, while a proxy is being made: how far the transcode has got. {frame} is the frame written so far and {total} the clip's length in frames.",
     "placeholders": {
-      "frame": { "type": "String" },
-      "total": { "type": "String" }
+      "frame": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
     }
   },
   "proxyMade": "Proxy made: {path}",
   "@proxyMade": {
     "description": "Status line, when a proxy has finished and attached itself to its item. {path} is the file it wrote.",
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "proxyCancelled": "Proxy cancelled",
@@ -8661,25 +8663,39 @@
   "@proxyFailed": {
     "description": "Status line, when a proxy could not be made. {error} is the engine's own reason, in English.",
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "graphKeyHint": "f{frame} · {value} · {inPct} / {outPct} %",
   "@graphKeyHint": {
     "description": "Graph editor: the small readout pill beside the one selected keyframe, saying which frame it sits on, the value it holds, and the influence of its incoming and outgoing eases in per cent. Very small mono type; the middle dots separate the parts.",
     "placeholders": {
-      "frame": { "type": "int" },
-      "value": { "type": "String" },
-      "inPct": { "type": "int" },
-      "outPct": { "type": "int" }
+      "frame": {
+        "type": "int"
+      },
+      "value": {
+        "type": "String"
+      },
+      "inPct": {
+        "type": "int"
+      },
+      "outPct": {
+        "type": "int"
+      }
     }
   },
   "timelineKeyDragHint": "f{frame} · {value}",
   "@timelineKeyDragHint": {
     "description": "Timeline lanes: the small readout pill beside a keyframe while it is being dragged, saying which frame it has reached and the value it holds. Very small mono type; the middle dot separates the two.",
     "placeholders": {
-      "frame": { "type": "int" },
-      "value": { "type": "String" }
+      "frame": {
+        "type": "int"
+      },
+      "value": {
+        "type": "String"
+      }
     }
   },
   "keyMenuEase": "Ease…",
@@ -8690,8 +8706,12 @@
   "@timelineStretchHint": {
     "description": "Timeline lanes: the small readout pill beside the handle while a block of keyframes is being stretched, saying which frames the block now reaches from and to. Very small mono type; an en dash between the two.",
     "placeholders": {
-      "first": { "type": "int" },
-      "last": { "type": "int" }
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      }
     }
   },
   "graphKeyKicker": "Key",
@@ -8702,7 +8722,9 @@
   "@graphKeyFrame": {
     "description": "Timeline, Graph mode: a frame number in the selected keyframe's readout row, written the short way with a lower-case f in front of it. Mono type.",
     "placeholders": {
-      "frame": { "type": "int" }
+      "frame": {
+        "type": "int"
+      }
     }
   },
   "graphEaseIn": "In",
@@ -8717,10 +8739,18 @@
   "@graphBoxHint": {
     "description": "Timeline, Graph mode: the small readout pill under the selection box while its edge is being dragged to scale a group of keyframes. It says which frames the box now reaches from and to, and the lowest and highest values it now covers. Very small mono type; an en dash inside each pair and a middle dot between them.",
     "placeholders": {
-      "first": { "type": "int" },
-      "last": { "type": "int" },
-      "low": { "type": "String" },
-      "high": { "type": "String" }
+      "first": {
+        "type": "int"
+      },
+      "last": {
+        "type": "int"
+      },
+      "low": {
+        "type": "String"
+      },
+      "high": {
+        "type": "String"
+      }
     }
   },
   "graphKeyFrameField": "Frame",
@@ -8783,39 +8813,49 @@
   "@fxNearestDistance": {
     "description": "Graph panel — an output socket on the Points sample driver: how far the nearest particle is from the chosen point, in pixels."
   },
-"ocioConfigUnreadable": "the colour config {path} could not be read, so the built-in transform is in use",
+  "ocioConfigUnreadable": "the colour config {path} could not be read, so the built-in transform is in use",
   "@ocioConfigUnreadable": {
     "description": "Project settings, Colour group. Why the project's colour config is not in force, lower case, shown as one calm line under the config path. The path is a file location and stays as it is.",
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "ocioUnsupportedTransform": "this config needs {name}, which Lumit does not support yet",
   "@ocioUnsupportedTransform": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The name is a transform's name from the OpenColorIO file format and stays in English.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocioUnsupportedBuiltin": "this config needs the built-in transform {style}, which Lumit does not support yet",
   "@ocioUnsupportedBuiltin": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The style is an OpenColorIO built-in transform name and stays in English.",
     "placeholders": {
-      "style": { "type": "String" }
+      "style": {
+        "type": "String"
+      }
     }
   },
   "ocioUnsupported3dLutInverse": "the colour space {space} would have to invert a 3D look-up table, which Lumit refuses rather than approximate",
   "@ocioUnsupported3dLutInverse": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A look-up table is a table of colour values; the space is a name out of the user's own config file and stays as it is.",
     "placeholders": {
-      "space": { "type": "String" }
+      "space": {
+        "type": "String"
+      }
     }
   },
   "ocioNonMonotoneCurve": "the curve in {path} does not rise or fall consistently, so it cannot be inverted",
   "@ocioNonMonotoneCurve": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The path names a look-up table file and stays as it is.",
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "ocioSingularMatrix": "a matrix in this transform has no inverse",
@@ -8826,111 +8866,153 @@
   "@ocioUnsupportedLutFormat": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The extension is a file suffix such as .cube and stays as it is.",
     "placeholders": {
-      "extension": { "type": "String" }
+      "extension": {
+        "type": "String"
+      }
     }
   },
   "ocioContextVariable": "this config uses context variables in the path {path}, which Lumit does not support yet",
   "@ocioContextVariable": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A context variable is a placeholder the config fills in per shot; the path stays as it is.",
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "ocioUnsupportedClfNode": "this look-up table uses the {node} process node, which Lumit does not support yet",
   "@ocioUnsupportedClfNode": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The node is a step name from the Common LUT Format file standard and stays in English.",
     "placeholders": {
-      "node": { "type": "String" }
+      "node": {
+        "type": "String"
+      }
     }
   },
   "ocioUnsupportedClfFeature": "this look-up table uses {feature}, which Lumit does not support yet",
   "@ocioUnsupportedClfFeature": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The feature is an option name from the Common LUT Format file standard and stays in English.",
     "placeholders": {
-      "feature": { "type": "String" }
+      "feature": {
+        "type": "String"
+      }
     }
   },
   "ocioUnsupportedConfigVersion": "this config is written for OCIO profile version {version}, which Lumit does not read yet",
   "@ocioUnsupportedConfigVersion": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. OCIO is the OpenColorIO standard and stays as it is; the version is a number.",
     "placeholders": {
-      "version": { "type": "String" }
+      "version": {
+        "type": "String"
+      }
     }
   },
   "ocioUnknownColourSpace": "this config has no colour space named {name}",
   "@ocioUnknownColourSpace": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The name comes out of the user's own config file and stays as it is.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocioUnknownRole": "this config does not define the {name} role",
   "@ocioUnknownRole": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A role is a config's own nickname for one of its colour spaces; the name stays in English.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocioUnknownDisplay": "this config has no display named {name}",
   "@ocioUnknownDisplay": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A display is a kind of monitor the config knows how to show pictures on; the name stays as it is.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocioUnknownView": "the display {display} has no view named {view}",
   "@ocioUnknownView": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Both names come out of the user's own config file and stay as they are.",
     "placeholders": {
-      "display": { "type": "String" },
-      "view": { "type": "String" }
+      "display": {
+        "type": "String"
+      },
+      "view": {
+        "type": "String"
+      }
     }
   },
   "ocioUnknownLook": "this config has no look named {name}",
   "@ocioUnknownLook": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. A look is a named creative grade the config offers; the name stays as it is.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocioLutFileNotFound": "the look-up table {name} was not found on this config's search path",
   "@ocioLutFileNotFound": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The search path is the list of folders the config looks in; the name is a file name and stays as it is.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "ocioFileRead": "{path} could not be read: {reason}",
   "@ocioFileRead": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. The path is a file location and the reason is the operating system's own words; both stay as they are.",
     "placeholders": {
-      "path": { "type": "String" },
-      "reason": { "type": "String" }
+      "path": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "ocioParse": "{what} could not be read: {reason}",
   "@ocioParse": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Something in the file is not written the way the format expects. Both blanks are file names or the reader's own words and stay as they are.",
     "placeholders": {
-      "what": { "type": "String" },
-      "reason": { "type": "String" }
+      "what": {
+        "type": "String"
+      },
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "ocioTableTooLarge": "a look-up table in {what} is larger than Lumit allows ({size} points, limit {limit})",
   "@ocioTableTooLarge": {
     "description": "Project settings, Colour group. Why the colour config is not in force, lower case. Points are entries in the table; size and limit are counts.",
     "placeholders": {
-      "what": { "type": "String" },
-      "size": { "type": "String" },
-      "limit": { "type": "String" }
+      "what": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
     }
   },
   "ocioProblemInSpace": "{problem} (the colour space {space})",
   "@ocioProblemInSpace": {
     "description": "Project settings, Colour group. Wraps any of the ocio* reasons above when the trouble surfaced while working out one particular colour space, so the reader knows where to look. The space name comes out of the user's own config file and stays as it is.",
     "placeholders": {
-      "problem": { "type": "String" },
-      "space": { "type": "String" }
+      "problem": {
+        "type": "String"
+      },
+      "space": {
+        "type": "String"
+      }
     }
   },
   "graphNoStream": "No stream",
@@ -8949,8 +9031,12 @@
   "@viewerColourViewFace": {
     "description": "The Viewer header's colour-pipeline picker, on its closed face, naming the view the picture is shown through. Both words come out of the user's own colour configuration file and stay exactly as they are; only the punctuation between them is ours.",
     "placeholders": {
-      "view": { "type": "String" },
-      "display": { "type": "String" }
+      "view": {
+        "type": "String"
+      },
+      "display": {
+        "type": "String"
+      }
     }
   },
   "colourSpace": "Colour space",
@@ -8981,15 +9067,21 @@
   "@projectColourLoaded": {
     "description": "Project settings, Colour group: the line under the configuration row when the file was read and is in use. A display is a monitor the configuration knows how to show pictures on; both blanks are counts.",
     "placeholders": {
-      "spaces": { "type": "String" },
-      "displays": { "type": "String" }
+      "spaces": {
+        "type": "String"
+      },
+      "displays": {
+        "type": "String"
+      }
     }
   },
   "projectColourNotInForce": "Not in force: {reason}. The built-in colour handling is being used instead.",
   "@projectColourNotInForce": {
     "description": "Project settings, Colour group: the line under the configuration row when the file is named but cannot be used. The reason is one of the ocio* sentences above, which all begin in lower case.",
     "placeholders": {
-      "reason": { "type": "String" }
+      "reason": {
+        "type": "String"
+      }
     }
   },
   "projectColourWorkingSpace": "Working space",

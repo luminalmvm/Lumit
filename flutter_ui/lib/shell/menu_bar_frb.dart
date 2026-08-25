@@ -215,7 +215,6 @@ class LumitMenuBarFrb extends StatelessWidget {
   final Future<String?> Function()? aeProjectPicker;
 
   /// The Bridge bundle chooser — a folder picker (docs/11 §2.1).
-  final Future<String?> Function()? bundlePicker;
 
   const LumitMenuBarFrb({
     super.key,
@@ -224,7 +223,6 @@ class LumitMenuBarFrb extends StatelessWidget {
     this.savePicker,
     this.footagePicker,
     this.aeProjectPicker,
-    this.bundlePicker,
   });
 
   @override
@@ -259,7 +257,6 @@ class LumitMenuBarFrb extends StatelessWidget {
       savePicker: savePicker,
       footagePicker: footagePicker,
       aeProjectPicker: aeProjectPicker,
-      bundlePicker: bundlePicker,
       palette: () => _palette(context),
     );
 
@@ -490,7 +487,6 @@ List<MenuSection> lumitMenus(
   Future<String?> Function()? savePicker,
   Future<List<String>> Function()? footagePicker,
   Future<String?> Function()? aeProjectPicker,
-  Future<String?> Function()? bundlePicker,
   VoidCallback? palette,
 }) {
   final ui = context.read<LumitUiState>();
@@ -553,30 +549,26 @@ List<MenuSection> lumitMenus(
                     forcePicker: true, picker: savePicker),
             action: 'file.save.as'),
         MenuEntry.divider(),
-        // One Import home (owner, 2026-08-21): footage and the After Effects
-        // route live under a single submenu, so the word "Import" is one place
-        // in the menu however many routes arrive.
+        // Import footage stands in the menu proper (owner, 2026-08-25,
+        // superseding the one-Import-home grouping of 2026-08-21): it is the
+        // everyday act, and a submenu hop for it earned its promotion.
+        MenuEntry(
+            l10n.menuImportFootage,
+            project == null
+                ? null
+                : () => importFootageFrb(app, picker: footagePicker),
+            action: 'file.import'),
+        // The After Effects route keeps the submenu. The Bridge-bundle entry
+        // is gone (owner, repeatedly): the .aep front door (K-418) is the
+        // import; the bundle format itself remains supported for anything
+        // that already produced one, just not offered here.
         MenuEntry.submenu(l10n.menuImport, [
-          MenuEntry(
-              l10n.menuImportFootage,
-              project == null
-                  ? null
-                  : () => importFootageFrb(app, picker: footagePicker),
-              action: 'file.import'),
           // Not gated on a project: an import *replaces* whatever is loaded,
           // the way opening a `.lum` does, so it is offered with none.
-          // The front door since K-418 — the `.aep` itself.
           MenuEntry(
               l10n.menuImportAe,
               () => importAeBundleFrb(context, app,
                   picker: aeProjectPicker ?? pickAeProject)),
-          // The Bridge route, kept first-class and quieter: it is what a
-          // studio exports where Lumit is not installed, and the answer that
-          // cannot drift with an After Effects version (K-418).
-          MenuEntry(
-              l10n.menuImportAeBundle,
-              () => importAeBundleFrb(context, app,
-                  picker: bundlePicker ?? pickAeBundle)),
         ]),
         MenuEntry(
             l10n.menuExport, comp == null ? null : () => exportFrb(context),
