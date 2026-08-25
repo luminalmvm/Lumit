@@ -9355,32 +9355,42 @@ beside it and a short timeline underneath. The **Node panel** sits under that vi
 lists the settings of whichever box you last clicked — the same rows Effect controls
 draws, but for one box at a time, and for drivers too, which have no place in an effect
 list. Click a driver on the canvas and its Amount and Frequency are right there; click an
-effect and you get its own rows, with the driven ones saying so. The **Node preview
-panel** is a second, locked viewer that shows what the picture looks like at one chosen
-box — halfway down the stack, say — without soloing or bypassing anything. None of these
-is the engine's internal "evaluation graph" (§1's compiler still builds that in
-private); what you are looking at is always your own document.
+effect and you get its own rows, with the driven ones saying so. Neither of these is the
+engine's internal "evaluation graph" (§1's compiler still builds that in private); what
+you are looking at is always your own document.
 
-**How the preview knows what to show.** There is no special "render up to here" machinery
+**Seeing the picture at one box: the "at effect" chip.** Select an effect — either by
+clicking its box on the graph, or by clicking its heading in the Effect controls list,
+which are the same click as far as Lumit is concerned — and a small chip appears over the
+Viewer's picture saying *at* that effect's name. Click it and the Viewer shows the
+composition as it looks with that layer's effects stopping there: the blur applied and
+nothing after it. Click it again and the finished picture comes back. Nothing has been
+soloed, bypassed or switched off, and nothing about your project has changed; you are
+just looking at a different point in the chain, in the Viewer you were already using, at
+its own size and quality, with the exposure and channel controls and the scopes all
+reading the picture in front of you.
+
+**How the chip knows what to show.** There is no special "render up to here" machinery
 behind it, and that is the point. Because the chain *is* the list, the picture at the
 third box is simply the picture your composition makes if that layer had only its first
 three effects. So the engine takes a throwaway copy of the project, shortens that one
 layer's list, and renders it the ordinary way — the same trick already used when you drag
 a value and the picture keeps up, where a copy carries the value you are dragging before
 it is written down. Your project is never touched; the copy is thrown away with the
-frame.
+frame. And because it is the ordinary way, it is the ordinary Viewer: the picture arrives
+by the same route at the same quality, and playing, scrubbing and dragging all work as
+they always do.
 
 Two things fall out of that, and both are why it was worth doing this way rather than
-building a second Viewer. Lumit remembers finished frames under a *name* worked out from
-everything that went into them, effects included — so a shortened list is automatically a
-different name, and the preview can never be handed the full picture out of the cupboard
-by mistake. And the preview does not need to be fast in the way the Viewer does: it
-changes when you click a different box, move the playhead, or edit something, not sixty
-times a second. So it comes across as a small picture — at most 256 pixels on its longest
-edge, about the size of a scope trace — rather than through the Viewer's zero-copy
-graphics-card plumbing, which exists to keep up with playback and would have had to be
-built a second time, on three operating systems, to show a postage stamp. Close the
-panel and the extra rendering stops immediately, because nothing is left asking for it.
+building a second, smaller viewer beside the first. Lumit remembers finished frames under
+a *name* worked out from everything that went into them, effects included — so a
+shortened list is automatically a different name, and the cupboard can never hand you the
+full picture by mistake. The other is subtler and is the kind of bug that looks like
+nothing at all: Lumit also keeps a short-cut list of those names so it does not have to
+work them out over and over, and that list is only thrown away when the *document*
+changes. Turning the chip on does not change the document. So the engine throws the list
+away itself whenever the chip moves — the same thing it already does when you change the
+exposure, for exactly the same reason.
 
 ## 21. The wordmark and the empty shell, in plain terms
 

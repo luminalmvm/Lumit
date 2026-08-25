@@ -209,8 +209,6 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3V8H2zM6.5 12h3V5h-3zM11 12h3V2h-3z"/></svg>';
   static const String scopes =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h12"/><path d="M3 12c1-8 3-8 4 0s3-8 4 0 2-6 2-2"/></svg>';
-  static const String nodePreview =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="11" height="9"/><circle cx="5.5" cy="8" r="1" fill="currentColor"/><circle cx="10.5" cy="8" r="1" fill="currentColor"/><path d="M6.5 8h3"/></svg>';
 
   // --- Project ---
   static const String folder =
@@ -369,7 +367,6 @@ abstract final class LumitIcons {
     'Colour space': colourSpace,
     'Quality': quality,
     'Scopes': scopes,
-    'Node preview': nodePreview,
     'Folder': folder,
     'New folder': newFolder,
     'Composition': composition,

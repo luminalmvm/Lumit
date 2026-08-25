@@ -1618,11 +1618,6 @@ class LumitUiState extends ChangeNotifier {
         // directly, so there is nothing for the Viewer to do with one.
         case WorkerResponse_Scope():
           break;
-        // The picture at a graph node (K-486), for the same reason: the Node
-        // preview panel subscribes to this stream itself, and the Viewer has
-        // nothing to do with a picture that is not its own.
-        case WorkerResponse_NodePreview():
-          break;
         // Playback ran off the end on its own. Stopping because the *user* asked
         // needs no message — `stopPlayback` already set the flag.
         case WorkerResponse_PlaybackEnded():
@@ -2106,9 +2101,11 @@ class LumitUiState extends ChangeNotifier {
 
   /// Put the panels where the session says, if it says anything about them.
   ///
-  /// A layout naming a panel this build has never heard of is dropped whole
-  /// rather than half-applied — the arrangement is a hint, and the one on
-  /// screen is a perfectly good fallback.
+  /// A layout naming a panel this build does not have loses **that pane** and
+  /// keeps the rest ([`DockNode.fromJson`]) — a panel folded away must not cost
+  /// anyone their arrangement. Anything else malformed is dropped whole rather
+  /// than half-applied: the arrangement is a hint, and the one on screen is a
+  /// perfectly good fallback.
   void _applyDock(Map<String, dynamic>? json) {
     if (json == null) return;
     try {

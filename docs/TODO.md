@@ -470,13 +470,13 @@ does not gate the four. Delete each phase here when it lands, as with everything
 - **Phase 3 - the node graph and the Nodes workspace** (K-445): the Graph panel as a
     second view of the effect stack that can also wire effects together, auto-wire
     and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes
-    workspace with the small viewer and short timeline, and the Node preview panel
-    (its own panel, openable in a sidebar of the Effects workspace, K-448). The
+    workspace with the small viewer and short timeline, and the picture at a node
+    (K-448, K-486, folded into the Viewer's own "at effect" chip by K-524). The
     design step has answered the document-model question (K-471, K-472, K-473): the
     stack stays the spine and each layer gains an additive driver graph -
     **docs/impl/node-graph.md** holds the model and the six ordered work packages
-    (engine model, bridge, Graph panel, Nodes workspace, Node preview panel, points
-    stream + Particulate design doc). ~~WP6, the Particulate design document~~ —
+    (engine model, bridge, Graph panel, Nodes workspace, the picture at a node,
+    points stream + Particulate design doc). ~~WP6, the Particulate design document~~ —
     landed as **docs/impl/particulate.md**; K-474/K-475 have since been
     confirmed DECIDED by K-491's commission, below.
     ~~WP1, the engine model and evaluation~~ — **landed 2026-08-24**:
@@ -506,7 +506,11 @@ does not gate the four. Delete each phase here when it lands, as with everything
     `render_frame_with_driver_preview` stages the graph's nodes as the stack
     preview stages the effect list, so a driver's number moves the picture
     while it is dragged rather than only on release.
-    **WP5 is pending**: the Node preview panel. WP1's named gap is closed:
+    ~~WP5, the picture at a node~~ — **landed 2026-08-24** as its own panel
+    (K-486), **folded into the Viewer 2026-08-25** (K-524): selecting an effect
+    on the graph or in the Effect controls stack offers an "at effect" chip over
+    the Viewer's picture, and the panel, its seam and its 256px thumbnail are
+    gone. WP1's named gap is closed:
     the `AudioTap` is wired (`lumit_render::audio_tap`), so Audio level reads
     the referenced layer's own footage at a fixed rate, identically in the
     preview and the export — the K-031 matrix carries an audio-driven row.

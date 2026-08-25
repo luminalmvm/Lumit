@@ -396,10 +396,6 @@
     {
      "name": "Scopes",
      "body": "<path d=\"M2 12h12\"/><path d=\"M3 12c1-8 3-8 4 0s3-8 4 0 2-6 2-2\"/>"
-    },
-    {
-     "name": "Node preview",
-     "body": "<rect x=\"2.5\" y=\"3.5\" width=\"11\" height=\"9\"/><circle cx=\"5.5\" cy=\"8\" r=\"1\" fill=\"currentColor\"/><circle cx=\"10.5\" cy=\"8\" r=\"1\" fill=\"currentColor\"/><path d=\"M6.5 8h3\"/>"
     }
    ]
   },

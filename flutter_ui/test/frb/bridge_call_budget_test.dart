@@ -22,7 +22,6 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
-import 'package:lumit_flutter/panels/node_preview_panel.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
@@ -441,62 +440,6 @@ void main() {
         counter.total,
         0,
         reason: 'the canvas re-read the engine on a hover:\n'
-            '${counter.ranking()}',
-      );
-    });
-
-    /// The Node preview holds its picture and its box's name, both read at the
-    /// moments they can change — the pick, the layer, the playhead, a commit
-    /// (K-448, K-486). A rebuild draws what it already has: one image and one
-    /// string. Hovering it must therefore cost nothing at all, and a preview
-    /// that asked per rebuild would be asking the render worker for a *render*
-    /// per rebuild, which is the worst version of this mistake in the shell.
-    testWidgets('hovering the Node preview asks the engine nothing',
-        (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      final layer = comp.addSolidLayer();
-      layer.addEffect(name: 'blur');
-      p.uiState.setSelectedComp(comp);
-      p.uiState.selectedLayer.value = layer;
-      p.uiState.model.refresh();
-      p.uiState.graphNode.value =
-          layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node;
-
-      await tester.pumpWidget(hostPanel(
-        state: p.state,
-        uiState: p.uiState,
-        child: const NodePreviewPanelFrb(),
-        size: const Size(340, 300),
-      ));
-      await settleFrb(tester, minRounds: 4);
-
-      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await mouse.addPointer(location: Offset.zero);
-      addTearDown(mouse.removePointer);
-      await tester.pump();
-
-      counter
-        ..reset()
-        ..counting = true;
-      for (var pass = 0; pass < 2; pass++) {
-        for (final spot in [
-          tester.getCenter(
-              find.byKey(const ValueKey<String>('node-preview-header'))),
-          tester.getCenter(
-              find.byKey(const ValueKey<String>('node-preview-stage'))),
-          const Offset(4, 290),
-        ]) {
-          await mouse.moveTo(spot);
-          await tester.pump();
-        }
-      }
-      counter.counting = false;
-
-      expect(
-        counter.total,
-        0,
-        reason: 'the preview re-read the engine on a hover:\n'
             '${counter.ranking()}',
       );
     });

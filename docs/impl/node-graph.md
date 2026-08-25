@@ -3,7 +3,8 @@
 **Decision:** K-471 (the stack stays the spine; a layer gains an additive driver graph),
 K-472 (port types, wire colours, the points stream), K-473 (the selected node border).
 **Related:** K-445 (the graph is a second view that can also wire), K-446 (Particulate
-emits a points stream), K-448 (the Node preview is its own panel), K-458 (the drawing is
+emits a points stream), K-448/K-486/K-524 (the picture at a node — its own panel, then a
+bounded thumbnail, now the Viewer's own chip), K-458 (the drawing is
 authoritative), K-381 (the effect registry), K-395 (the uniform matte row), K-142 (matte
 sources), K-305 (expressions). This note is the *how* for the whole of redesign phase 3:
 model, ops, bridge surface, migration, the points-stream type, and the ordered work
@@ -499,46 +500,50 @@ docs/07 §1.6, arb keys.
 selection; timeline in the workspace is the ordinary Timeline at reduced height (shared
 widget, no fork).
 
-### WP5 — Node preview panel
+### WP5 — The picture at a node
 
-K-448: its own panel, openable in a sidebar of the Effects workspace — a locked,
-read-only second viewport showing one node's output without soloing. Engine side: a
-render request for the compiled node matching a stack prefix (the request tuple already
-addresses nodes).
+K-448 asked for its own panel, openable in a sidebar of the Effects workspace: a locked,
+read-only second viewport showing one node's output without soloing. **K-486** landed it
+that way on 2026-08-24 as a bounded 256px thumbnail rather than a second zero-copy
+target.
 
-**Landed 2026-08-24**, with the transport settled the smaller way (**K-486**, which
-supersedes this note's "presented to a second shared texture alongside the Viewer's").
-The preview is a **bounded thumbnail on the worker's existing response stream**, not a
-second zero-copy target: it is a still that changes when the pick, the playhead, the
-layer or the document does, so a second present target would have been a whole Viewer's
-plumbing — three platform variants, a second Dart texture registration, a present pool
-keyed by role rather than size — for a picture the size of a scope trace. K-486 carries
-the reasoning; the seam is `preview_node` / `WorkerResponse::NodePreview` (docs/17).
+**K-524 folded it into the Viewer** (owner ruling: "node preview is just the viewer") and
+supersedes both. The panel is gone. Selecting an effect — a box on this canvas *or* a
+heading in the Effect controls stack, which are one selection (K-300) — offers an **"at
+&lt;effect&gt;" chip** over the Viewer's own picture, and turning it on renders the
+composition with that layer's stack truncated there, down the ordinary frame transport at
+the Viewer's full quality. A second viewport for a still was the thing worth removing: at
+full size, in the Viewer you are already looking at, it is the same picture answered
+properly. K-524 carries the reasoning; the seam is `render_frame`'s optional
+`BridgePrefixPoint` (docs/17).
 
-Three further things came out of building it:
+The three things WP5 established all survive the fold, and two of them are why it was
+cheap:
 
 - **The prefix is a length, not a new render path.** `graph::prefix_len` turns a node
   into "how many effects are upstream of it" and `graph::truncated_effects` hands back a
   patched *copy* of the snapshot with the layer's stack cut there — the same shape the
   dropper's solo read and every drag preview already use. The ordinary interactive path
-  renders it, so export-equals-preview and the drag fast path come for free.
+  renders it, so export-equals-preview and the drag fast path come for free. Both
+  functions are unchanged; only their caller moved.
 - **The frame key needed no field.** It already hashes each layer's effects, so a shorter
-  stack is a different name by construction. The Layer out node cuts nothing, and so
-  rides the frame the Viewer has already banked.
-- **A driver is answered with silence.** It makes a number, not a picture; the panel
-  draws its own empty face rather than being told a picture is coming.
+  stack is a different name by construction. Selecting the last effect cuts nothing, and
+  so rides the frame the Viewer has already banked. What the interactive path *did* need
+  was the name **memo** emptied when the point moves: a prefix renames every frame
+  without moving the document revision, which is the one case the memo cannot see (the
+  viewer look taught this first).
+- **A driver offers no chip.** It makes a number, not a picture.
 
-**Files**: `crates/lumit-core/src/graph.rs` (`prefix_len`, `truncated_effects`),
-`crates/lumit-bridge/src/api/{composition,state,worker_thread}.rs` (then codegen),
-`flutter_ui/lib/panels/node_preview_panel.dart`, `state/dock.dart` (the panel and its
-place in the Effects preset), arb keys.
-**Tests**: preview of a two-effect layer's first node differs from the Viewer exactly by
-the second effect, and equals a project authored with only that effect
-(`lumit-render/tests/node_prefix_preview.rs`, skip-on-no-GPU as the Viewer tests are);
-each prefix names its own frame; the preview's own drain lane; the panel's face, its
-following of the pick, and 0 bridge calls on a hover. Closing the panel stops the second
-render by construction — the reply subscription and every listener go with it, so
-nothing is left asking.
+**Files**: `crates/lumit-core/src/graph.rs` (`prefix_len`, `truncated_effects`,
+unchanged), `crates/lumit-bridge/src/api/{composition,state,worker_thread}.rs` (then
+codegen), `flutter_ui/lib/panels/viewer_prefix_chip.dart`, `viewer_panel_frb.dart` (one
+hookup), `main.dart` (the chip's point, beside the selection it follows),
+`state/dock.dart` (the folded panel, and a saved layout that still names it), arb keys.
+**Tests**: the cut document renders exactly what a project authored with those effects
+renders, and differs from the full frame (`lumit-render/tests/node_prefix_preview.rs`,
+skip-on-no-GPU); each prefix names its own frame, on the thumbnail path and on the
+interactive one; latching a point empties the name memo; the chip from **both** selection
+surfaces, its clearing, and its bounded cost per toggle.
 
 ### WP6 — Points stream and the Particulate design document
 

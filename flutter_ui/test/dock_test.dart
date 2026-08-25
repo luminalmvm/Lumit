@@ -53,11 +53,10 @@ void main() {
   /// the same reason (docs/07 §1.6): a panel nobody asked for should not
   /// appear in an arrangement they already know. **Easing** belongs to
   /// Retiming (K-349); the **Graph** and **Node** panels to Nodes (K-445,
-  /// K-471); the **Node preview** opens in the Effects workspace's sidebar
-  /// (K-448). All four are one tick away in the Window menu.
+  /// K-471). All three are one tick away in the Window menu.
   test(
       'no panel appears twice in the default workspace, and only Easing, '
-      'Graph, Node and Node preview are absent', () {
+      'Graph and Node are absent', () {
     final panels = panelsIn(defaultLayout());
     expect(panels.toSet().length, panels.length);
     expect(
@@ -67,32 +66,73 @@ void main() {
             Panel.easing,
             Panel.graph,
             Panel.node,
-            Panel.nodePreview,
           ]));
   });
 
-  /// K-448: the Node preview opens in a **sidebar of the Effects workspace**,
-  /// tabbed behind rather than fronted. Behind, because it answers a question
-  /// you go looking for; present, because "openable in a sidebar" has to mean
-  /// somewhere in particular or it means the Window menu and nothing else.
-  test('the Effects workspace carries the Node preview, tabbed behind', () {
+  /// The Effects workspace's right-hand column, now that the Node preview is
+  /// the Viewer's own chip (K-524): Effects & presets fronted, Scopes and the
+  /// Debug panel behind it. Nothing took the folded panel's slot, because
+  /// nothing was waiting for one.
+  test('the Effects workspace sidebar is Effects, Scopes and Debug', () {
     final root = presetLayout(WorkspacePreset.effects);
     final upper = root.children[0] as DockSplit;
     final sidebar = upper.children[3] as DockTabs;
     expect(
       [for (final c in sidebar.children) c.panel],
-      [
-        Panel.effectsAndPresets,
-        Panel.scopes,
-        Panel.nodePreview,
-        Panel.debug,
-      ],
+      [Panel.effectsAndPresets, Panel.scopes, Panel.debug],
     );
     expect(sidebar.active, 0,
         reason: 'the sidebar still opens on Effects & presets');
-    expect(panelVisible(presetLayout(WorkspacePreset.edit), Panel.nodePreview),
-        isFalse,
-        reason: 'and it is in no other arrangement');
+  });
+
+  /// **A panel that has been folded away must not cost anyone their
+  /// arrangement** (K-524). Every workspace saved while the Node preview
+  /// existed still names it, and the pane lookup used to be a bare `!` — so
+  /// reading one back threw, and the stored layout took the settings with it.
+  /// A pane naming a panel this build does not have is dropped instead, and
+  /// what is left opens as it was.
+  test('a saved layout naming a panel that has gone opens without it', () {
+    final saved = {
+      'kind': 'split',
+      'axis': 'horizontal',
+      'shares': [0.7, 0.3],
+      'children': [
+        {'kind': 'pane', 'panel': 'viewer'},
+        {
+          'kind': 'tabs',
+          'active': 1,
+          'children': [
+            {'kind': 'pane', 'panel': 'scopes'},
+            {'kind': 'pane', 'panel': 'nodePreview'},
+          ],
+        },
+      ],
+    };
+    final parsed = DockNode.fromJson(saved);
+    expect(parsed, isA<DockSplit>());
+    final root = parsed! as DockSplit;
+    expect([for (final c in root.children) c.runtimeType.toString()].length, 2,
+        reason: 'the viewer and the tab group both survive');
+    final tabs = root.children[1] as DockTabs;
+    expect([for (final c in tabs.children) c.panel], [Panel.scopes]);
+    expect(tabs.active, 0,
+        reason: 'the fronted tab had gone, so the group opens on what is left');
+    expect(root.shares, [0.7, 0.3], reason: 'the shares stay with their panes');
+  });
+
+  /// And a group left with nothing in it goes too, rather than opening as a
+  /// blank pane nobody asked for.
+  test('a tab group emptied by a folded panel is dropped with it', () {
+    expect(
+      DockNode.fromJson({
+        'kind': 'tabs',
+        'active': 0,
+        'children': [
+          {'kind': 'pane', 'panel': 'nodePreview'},
+        ],
+      }),
+      isNull,
+    );
   });
 
   test('serialisation round-trips the tree', () {

@@ -49,7 +49,6 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.graph => 320,
       Panel.effectsAndPresets => 180,
       Panel.node => 200,
-      Panel.nodePreview => 160,
       Panel.scopes => 160,
       Panel.hierarchy => 180,
       Panel.easing => 220,

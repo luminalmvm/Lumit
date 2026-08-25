@@ -107,9 +107,8 @@ the panel arrangement is the local user's own.
 ### 1.6 Shipped workspace presets
 
 Structure only, with three exceptions: **Retiming**'s panel inventory differs because the
-Easing panel is in no other arrangement (K-349), **Nodes**' (K-445, K-471) because the
-Graph and Node panels are in no other, and **Effects**' (K-448) because the Node preview
-opens there and nowhere else.
+Easing panel is in no other arrangement (K-349) and **Nodes**' (K-445, K-471) because the
+Graph and Node panels are in no other.
 
 - **Edit** (default): Project panel left, fronted, with Effect Controls and Hierarchy tabbed
   behind it; Viewer centre; **right column Effects & Presets, fronted**, with Scopes and the
@@ -118,13 +117,12 @@ opens there and nowhere else.
   bottom at roughly one-third window height. Shares: 0.68/0.32 vertically, 0.22/0.58/0.20
   across the upper band.
 - **Effects**: Effect Controls promoted to its own left column beside the Project panel;
-  Effects & Presets expanded on the right with Scopes tabbed behind; Timeline slightly
-  shorter than Edit. The **Node preview panel** (K-448, K-486) rides that right-hand
-  column as a further tab, **behind rather than fronted**: this is the workspace it opens
-  in, and "openable in a sidebar" means a tab you reach for, not a pane that takes width
-  from the Viewer before anyone has asked for it. It shows the picture *at* whichever box
-  the Graph panel has picked — the chain rendered up to that point — and is in no other
-  arrangement.
+  Effects & Presets expanded on the right with Scopes and the Debug view tabbed behind;
+  Timeline slightly shorter than Edit. Seeing the picture *at* one effect rather than at
+  the end of the stack is not a panel of this preset or any other: it is the Viewer's own
+  **"at effect" chip** (K-524, §2.2), which appears over the picture whenever an effect is
+  selected — in the Effect controls stack or as a box on the graph — and shows the
+  composition with that layer's effects stopping there.
 - **Colour**: Scopes given a wide right-hand column showing waveform and vectorscope
   simultaneously (two panels stacked); Effect Controls left; Effects & Presets tabbed away;
   Viewer centre-dominant.
@@ -143,9 +141,9 @@ opens there and nowhere else.
   column; the small **Viewer** — keeping its whole bar — sits upper right, and the **Node
   panel** (the selected node's parameter rows) lower right. The approved Nodes-workspace
   drawing governs the layout; the panel rules are 15-DESIGN §12A.7 and the model is
-  [impl/node-graph.md](impl/node-graph.md). The **Node preview panel** (K-448) is not in
-  this preset — it opens in a sidebar of the Effects workspace, beside rather than
-  replacing this preset's small viewer. It is also the one preset whose root splits
+  [impl/node-graph.md](impl/node-graph.md). Picking a box and seeing the picture there is
+  the small Viewer's own chip (K-524), so this preset needs no second viewport for it. It
+  is also the one preset whose root splits
   **across** rather than down, because the Timeline runs under the graph column only:
   shares 0.76/0.24 across, the graph column 0.82 Graph to 0.18 Timeline, the right column
   0.80 Viewer to 0.20 Node. It carries no Project panel, which is the drawing's own
@@ -465,6 +463,33 @@ of the eye that means nothing. For the same reason the **playback-mode button sa
 which mode is in force** ("Adaptive res" or "Every frame") and never the tier it has
 settled on: which tier a frame was made at is item 9's badge, which appears only when
 there is something to say.
+
+#### 2.2.1 The "at effect" chip (K-524)
+
+**Whenever exactly one effect is selected, the Viewer offers to stop the picture there.**
+A small chip reading *at &lt;effect name&gt;* appears over the top-left of the picture,
+and clicking it flips the Viewer between the finished composition and the composition
+rendered with that layer's effect stack **truncated after the selected effect** — the
+blur applied and nothing after it, without soloing the layer, bypassing anything, or
+opening a second viewport. Clicking it again goes back.
+
+- **Both selection surfaces offer it, because there is one selection.** An effect picked
+  in the Effect controls stack and a box picked on the node graph are the same pick
+  (K-300), so the chip is the same chip. Picking a *driver* offers nothing: a driver
+  makes a number, not a picture.
+- **It is the Viewer, not a preview of one.** The cut picture arrives down the ordinary
+  frame transport at the Viewer's own quality and magnification, and every way of looking
+  — the exposure, the channel, the transparency board, the scopes reading it — applies to
+  it unchanged. It is a *way of looking*, and the chip is what says so: it MUST read as
+  engaged while it is on, naming the effect the picture stops at, so the Viewer is never
+  quietly showing an unfinished composition.
+- **It clears itself.** Deselecting, selecting a second effect, selecting a different
+  layer, or deleting the effect takes the chip away and returns the picture — a chip that
+  outlived its selection would leave the Viewer quietly showing a truncated composition
+  with nothing on screen saying why.
+- **It is not on the bar.** The bar is a fixed row of ways of looking that are always
+  available; this one exists only while something is selected, so it sits over the
+  picture where the selection is, and takes no width from anything when it is away.
 
 ### 2.3 Layer controls: the wireframe and the transform gizmo (K-217)
 

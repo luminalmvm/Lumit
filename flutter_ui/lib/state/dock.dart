@@ -30,14 +30,7 @@ enum Panel {
   /// The parameter rows of whichever box the Graph panel has picked (K-471) —
   /// the Nodes workspace's lower-right column. The Effect controls panel lists
   /// the whole stack; this one answers "what is selected", drivers included.
-  node,
-
-  /// The picture **at** whichever box the Graph panel has picked (K-448) — the
-  /// chain rendered up to that point, read-only, beside the Viewer rather than
-  /// instead of it. It opens in the Effects workspace's right-hand sidebar,
-  /// tabbed behind rather than fronted: it answers a question you go looking
-  /// for, and the arrangement should not change until you do.
-  nodePreview;
+  node;
 
   String get title => switch (this) {
         Panel.project => l10n.panelProject,
@@ -50,7 +43,6 @@ enum Panel {
         Panel.easing => l10n.panelEasing,
         Panel.graph => l10n.panelGraph,
         Panel.node => l10n.panelNode,
-        Panel.nodePreview => l10n.panelNodePreview,
         Panel.debug => l10n.panelDebug
       };
 }
@@ -60,25 +52,60 @@ enum DockAxis { horizontal, vertical }
 sealed class DockNode {
   Map<String, dynamic> toJson();
 
-  static DockNode fromJson(Map<String, dynamic> j) => switch (j['kind']) {
-        'pane' => DockPane(Panel.values.asNameMap()[j['panel']]!),
-        'tabs' => DockTabs(
-            [
-              for (final c in j['children'] as List)
-                fromJson(c as Map<String, dynamic>) as DockPane
-            ],
-            active: j['active'] as int? ?? 0,
-          ),
-        'split' => DockSplit(
-            j['axis'] == 'vertical' ? DockAxis.vertical : DockAxis.horizontal,
-            [
-              for (final c in j['children'] as List)
-                fromJson(c as Map<String, dynamic>)
-            ],
-            [for (final s in j['shares'] as List) (s as num).toDouble()],
-          ),
+  /// Read a saved arrangement back. `null` for a node this build cannot make
+  /// — a pane naming a panel that no longer exists, or a group left empty by
+  /// one — and its parent drops it.
+  ///
+  /// **A folded-away panel must not cost anyone their arrangement.** Panels do
+  /// go: the Node preview became a chip on the Viewer's own picture (K-524).
+  /// Every workspace saved while it existed still names it, and reading that
+  /// as a fault would have thrown on the way in — a stored layout taking the
+  /// settings down with it, which is the worst way to learn a panel was
+  /// removed. Dropped, the arrangement opens as it was minus the panel that
+  /// has gone, which is exactly what it now means.
+  static DockNode? fromJson(Map<String, dynamic> j) => switch (j['kind']) {
+        'pane' => switch (Panel.values.asNameMap()[j['panel']]) {
+            final panel? => DockPane(panel),
+            _ => null,
+          },
+        'tabs' => _tabs(j),
+        'split' => _split(j),
         _ => throw FormatException('unknown dock node: ${j['kind']}'),
       };
+
+  static DockNode? _tabs(Map<String, dynamic> j) {
+    final children = [
+      for (final c in j['children'] as List)
+        if (fromJson(c as Map<String, dynamic>) case final DockPane pane) pane,
+    ];
+    if (children.isEmpty) return null;
+    // Clamped, because the tab that was fronted may be one of the dropped
+    // ones — and a group opening on a tab that is not there is a blank panel.
+    final active = (j['active'] as int? ?? 0).clamp(0, children.length - 1);
+    return DockTabs(children, active: active);
+  }
+
+  static DockNode? _split(Map<String, dynamic> j) {
+    // The shares are positional, so a dropped child takes its own share with
+    // it rather than leaving the list a different length from the children
+    // (which the constructor asserts on, and rightly).
+    final raw = j['children'] as List;
+    final weights = j['shares'] as List;
+    final children = <DockNode>[];
+    final shares = <double>[];
+    for (var i = 0; i < raw.length; i++) {
+      final child = fromJson(raw[i] as Map<String, dynamic>);
+      if (child == null) continue;
+      children.add(child);
+      shares.add(i < weights.length ? (weights[i] as num).toDouble() : 1);
+    }
+    if (children.isEmpty) return null;
+    return DockSplit(
+      j['axis'] == 'vertical' ? DockAxis.vertical : DockAxis.horizontal,
+      children,
+      shares,
+    );
+  }
 }
 
 class DockPane extends DockNode {
@@ -201,11 +228,6 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
       // Effect controls promoted to its own column beside the Project panel;
       // Effects & presets expanded right with Scopes tabbed behind; the
       // Timeline slightly shorter than Edit.
-      //
-      // The Node preview (K-448) rides that right-hand column as a further
-      // tab, behind rather than fronted: this is the workspace it opens in,
-      // and "openable in a sidebar" is a tab you reach for, not a pane that
-      // takes width from the Viewer before anyone has asked for it.
       WorkspacePreset.effects => DockSplit(
           DockAxis.vertical,
           [
@@ -221,7 +243,6 @@ DockSplit presetLayout(WorkspacePreset preset) => switch (preset) {
                 DockTabs([
                   DockPane(Panel.effectsAndPresets),
                   DockPane(Panel.scopes),
-                  DockPane(Panel.nodePreview),
                   DockPane(Panel.debug),
                 ]),
               ],
