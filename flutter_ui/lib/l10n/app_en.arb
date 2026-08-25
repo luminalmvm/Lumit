@@ -8418,26 +8418,6 @@
   "@metadataCreated": {
     "description": "Export dialog, Metadata section: the creation time written into the file."
   },
-  "tipExportNeedsProxies": "Needs the proxy subsystem",
-  "@tipExportNeedsProxies": {
-    "description": "Export dialog: why the Proxies row is disabled. Shown on hover; a tooltip is a name, never a sentence."
-  },
-  "tipExportNeedsGuideLayers": "Needs guide layers",
-  "@tipExportNeedsGuideLayers": {
-    "description": "Export dialog: why the Guide layers row is disabled. Shown on hover; a tooltip is a name, never a sentence."
-  },
-  "tipExportCompSetting": "The composition's setting",
-  "@tipExportCompSetting": {
-    "description": "Export dialog: why the Motion blur and Retime blend rows are disabled — an export renders what the composition renders. Shown on hover."
-  },
-  "tipExportOneResampler": "One resampler",
-  "@tipExportOneResampler": {
-    "description": "Export dialog: why the resample-quality face on the Resize row is disabled. Shown on hover."
-  },
-  "tipExportOneMix": "One mix, always",
-  "@tipExportOneMix": {
-    "description": "Export dialog: why the sample rate, depth and layout faces on the Audio row are disabled. Shown on hover."
-  },
   "tipExportAfterV1": "After version one",
   "@tipExportAfterV1": {
     "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
