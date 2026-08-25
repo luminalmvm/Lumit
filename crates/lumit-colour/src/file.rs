@@ -103,10 +103,13 @@ mod tests {
         assert!(matches!(chain.ops.first(), Some(Op::Lut1d { .. })));
     }
 
+    /// The matrix is a scale rather than the identity on purpose: an identity
+    /// matrix is dropped at chain construction (`Chain::new`), so writing one
+    /// here would be testing the fold rather than the reader.
     #[test]
     fn a_clf_file_can_become_several_steps() {
         let text = r#"<ProcessList id="t">
-          <Matrix inBitDepth="32f" outBitDepth="32f"><Array dim="3 3 3">1 0 0 0 1 0 0 0 1</Array></Matrix>
+          <Matrix inBitDepth="32f" outBitDepth="32f"><Array dim="3 3 3">2 0 0 0 2 0 0 0 2</Array></Matrix>
           <Range inBitDepth="32f" outBitDepth="32f"><minOutValue>0</minOutValue><maxOutValue>1</maxOutValue></Range>
         </ProcessList>"#;
         assert_eq!(parse("t.clf", "clf", text).expect("parses").ops.len(), 2);

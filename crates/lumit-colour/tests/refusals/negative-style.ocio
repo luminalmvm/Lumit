@@ -1,6 +1,11 @@
-# refuses: negativeStyle mirror
+# refuses: ExponentTransform with style rolloff
+# The key a config FILE writes is `style`, not `negativeStyle` — that is the
+# C++ API's and CLF's spelling. Reading for the wrong one finds nothing and
+# quietly applies the default, which is how a pass_thru gamma space was read as
+# a clamping one (K-517). `mirror` and `pass_thru` are implemented; a style
+# Lumit has never heard of must still refuse, by name, rather than default.
 ocio_profile_version: 2
 colorspaces:
   - !<ColorSpace>
-    name: mirrored
-    to_scene_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], negativeStyle: mirror}
+    name: odd
+    to_scene_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], style: rolloff}

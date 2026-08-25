@@ -229,6 +229,26 @@ fn config_edge(loaded: &LoadedConfig, id: &str, line: usize) -> Chain {
     }
 }
 
+/// Whether one channel agrees with the reference.
+///
+/// A reference value that is not finite is compared by **kind**, not by
+/// distance. Real configs reach there: an ACEScct code value of 16 decodes to
+/// 2²⁷⁰, which overflows an f32 to infinity, and the matrix after it turns
+/// `inf − inf` into a NaN. Both sides agreeing on that is the only agreement
+/// available — and `NaN − NaN` is NaN, which no tolerance passes, so without
+/// this the row fails while the two answers are identical. It still gates:
+/// infinity where the reference had a number, or the wrong sign of infinity,
+/// is a disagreement.
+fn agrees(got: f32, expected: f32, bound: f32) -> bool {
+    if expected.is_finite() {
+        (got - expected).abs() <= bound
+    } else if expected.is_nan() {
+        got.is_nan()
+    } else {
+        got == expected
+    }
+}
+
 /// §7.2's two gates over rows whose chains come from a config: exact on the
 /// processor, then the baked artefact the graphics card would sample.
 ///
@@ -261,7 +281,7 @@ fn gate_config_rows(loaded: &LoadedConfig, rows: &[Row]) {
             let off = (exact[k] - row.expected[k]).abs();
             let bound = row.tolerance * row.expected[k].abs().max(1.0);
             assert!(
-                off <= bound,
+                agrees(exact[k], row.expected[k], bound),
                 "line {} ({}), exact: {:?} → {exact:?}, expected {:?}, off by {off}",
                 row.line,
                 row.id,
@@ -296,13 +316,21 @@ fn gate_config_rows(loaded: &LoadedConfig, rows: &[Row]) {
         for k in 0..3 {
             let off = (sampled[k] - row.expected[k]).abs();
             let bound = tolerance * row.expected[k].abs().max(1.0);
+            // A table cannot interpolate an infinity: one overflowing sample
+            // poisons the interval either side of it, so where the reference
+            // has ±inf the baked form answers NaN. Both mean "past what an f32
+            // holds", and the exact gate above has already matched the kind
+            // exactly, so here the ask is only that Lumit overflowed too — a
+            // finite answer where the reference overflowed still fails.
+            let ok = if row.expected[k].is_finite() {
+                agrees(sampled[k], row.expected[k], bound)
+            } else {
+                !sampled[k].is_finite()
+            };
             assert!(
-                off <= bound,
+                ok,
                 "line {} ({}), baked: {:?} → {sampled:?}, expected {:?}, off by {off}",
-                row.line,
-                row.id,
-                row.input,
-                row.expected
+                row.line, row.id, row.input, row.expected
             );
         }
     }
@@ -335,7 +363,6 @@ fn the_legacy_aces_config_matches_the_reference() {
 }
 
 #[test]
-#[ignore = "pending: fixtures/aces-cg/ and fixtures/aces-cg.fixture, and the vendored builtin bakes, from one reference OpenColorIO run (docs/impl/ocio.md §7.1, §4.1; the recipe is in fixtures/README.md)"]
 fn the_aces_cg_config_matches_the_reference() {
     let (loaded, rows) = reference_fixture("aces-cg");
     gate_config_rows(&loaded, &rows);

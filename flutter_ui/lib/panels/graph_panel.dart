@@ -84,31 +84,6 @@ const double graphDotGrid = 20;
 /// Every wire, and the dashed one in flight.
 const double graphWireWidth = 1.5;
 
-/// How far a wire must leave its socket **horizontally** before it may curve
-/// back — canvas units, so it scales with the zoom like everything else.
-///
-/// Without a floor the cubic's handles are `±dx/2`, which is fine while the
-/// consumer sits to the right of its producer and collapses to nothing the
-/// moment it does not: a box dragged left of — or on top of — the one feeding
-/// it left a wire that ran backwards *through* both cards and was invisible
-/// behind them. Forty units is the classic node-editor S-curve: the wire
-/// visibly comes out of the output socket, loops back, and goes into the input
-/// socket from the left, so which end is which stays readable at any layout.
-const double graphWireStub = 40;
-
-/// One wire's curve, in **screen** coordinates (both ends already transformed).
-///
-/// A cubic whose handles run horizontally out of each socket — right out of the
-/// output, left into the input — by half the gap between them, or by
-/// [graphWireStub] when that half is smaller or points the wrong way. Free of
-/// the painter so its geometry can be asserted directly.
-Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
-  final reach = math.max(graphWireStub * zoom, (b.dx - a.dx).abs() / 2);
-  return Path()
-    ..moveTo(a.dx, a.dy)
-    ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
-}
-
 /// The glyphs in the toolbar and the search popover. A size down from the
 /// row glyphs' 16 (K-456: the manifest's number, not a preference).
 const double graphIconSize = 13;
@@ -1798,12 +1773,16 @@ class _GraphPainter extends CustomPainter {
     }
   }
 
-  /// One wire: [graphWirePath]'s cubic, which is the curve both drawings draw
-  /// — with the minimum stub that keeps it visible when the consumer sits left
-  /// of its producer.
+  /// One wire: a cubic whose handles run horizontally out of each socket by
+  /// half the gap between them, which is the curve both drawings draw.
   void _wire(Canvas canvas, Offset from, Offset to, Color colour,
       {required bool dashes}) {
-    final path = graphWirePath(_screen(from), _screen(to), zoom: zoom);
+    final a = _screen(from);
+    final b = _screen(to);
+    final reach = (b.dx - a.dx) / 2;
+    final path = Path()
+      ..moveTo(a.dx, a.dy)
+      ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
     final paint = Paint()
       ..color = colour
       ..style = PaintingStyle.stroke

@@ -38,6 +38,22 @@ use crate::matrix;
 use crate::op::{Chain, Direction, Op};
 use crate::{builtin, file};
 
+/// What a shared view writes where a display colour space would go: "the
+/// display showing me, by its own name". OCIO's own spelling, verbatim.
+const USE_DISPLAY_NAME: &str = "<USE_DISPLAY_NAME>";
+
+/// Wrap a curve in its stated behaviour below zero, or leave it as it is when
+/// the config asked for the curve's own (`crate::op::Negatives`).
+fn with_negatives(style: Option<crate::op::Negatives>, curve: Op) -> Op {
+    match style {
+        Some(style) => Op::Negatives {
+            style,
+            curve: Box::new(curve),
+        },
+        None => curve,
+    }
+}
+
 /// How this config's reference space is joined to Lumit's working space.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Bridge {
@@ -195,7 +211,21 @@ impl LoadedConfig {
         self.space_to_space_at(from, to, 0)
     }
 
+    /// Whether this name is a **data** space (`isdata: true`) — a mask, a
+    /// depth pass, an ID map: numbers that are not a colour.
+    ///
+    /// It short-circuits the *whole* conversion, not just that space's own
+    /// half. Leaving the bridge to Lumit's working space in place would put a
+    /// primaries matrix through a matte, which is silently wrong in the way
+    /// that only shows up as a soft edge somebody blames on the render.
+    fn is_data(&self, name: &str) -> bool {
+        self.space(name).is_ok_and(|s| s.is_data)
+    }
+
     fn space_to_space_at(&self, from: &str, to: &str, depth: usize) -> Result<Chain> {
+        if self.is_data(from) || self.is_data(to) {
+            return Ok(Chain::identity());
+        }
         Ok(self
             .to_reference_at(from, depth)?
             .then(self.from_reference_at(to, depth)?))
@@ -204,17 +234,54 @@ impl LoadedConfig {
     /// A named space → Lumit's working space: the input transform for a piece
     /// of footage tagged with that name.
     pub fn from_space(&self, name: &str) -> Result<Chain> {
+        if self.is_data(name) {
+            return Ok(Chain::identity());
+        }
         Ok(self.to_reference(name)?.then(self.reference_to_working()?))
     }
 
     /// Lumit's working space → a named space: the export's output transform.
     pub fn to_space(&self, name: &str) -> Result<Chain> {
+        if self.is_data(name) {
+            return Ok(Chain::identity());
+        }
         Ok(self
             .working_to_reference()?
             .then(self.from_reference(name)?))
     }
 
     // -- displays and views -------------------------------------------------
+
+    /// Scene reference → display reference for one view transform.
+    ///
+    /// A view transform that states no scene-referred transform of its own is
+    /// not doing nothing: it is doing whatever the config's
+    /// `default_view_transform` does, and then its own display-referred step on
+    /// top. Treating "states nothing" as the identity leaves out the whole
+    /// scene-to-display rendering, which is a picture in the wrong primaries
+    /// that still looks like a picture.
+    fn scene_to_display(&self, transform: &crate::config::ViewTransform) -> Result<Chain> {
+        match (
+            &transform.from_scene_reference,
+            &transform.to_scene_reference,
+        ) {
+            (Some(spec), _) => self.resolve_spec(&transform.name, spec, 0),
+            (None, Some(spec)) => self
+                .resolve_spec(&transform.name, spec, 0)?
+                .inverted(&transform.name),
+            (None, None) => match self
+                .config
+                .default_view_transform
+                .as_deref()
+                .and_then(|name| self.config.view_transforms.get(name))
+            {
+                // `!=` on the name, so a default that names itself cannot
+                // recurse for ever.
+                Some(default) if default.name != transform.name => self.scene_to_display(default),
+                _ => Ok(Chain::identity()),
+            },
+        }
+    }
 
     /// Lumit's working space → what a display shows through a view: the chain
     /// the Viewer's display pass and the export's identical blit both sample.
@@ -233,6 +300,17 @@ impl LoadedConfig {
                     view: view.to_string(),
                 })?;
 
+        // A view onto a data space shows the numbers as they are — the "Raw"
+        // view every ACES config ships, which exists precisely so an artist can
+        // look at a matte without a display transform on it.
+        let target = view
+            .display_colour_space
+            .as_deref()
+            .or(view.colour_space.as_deref());
+        if target.is_some_and(|name| self.is_data(name)) {
+            return Ok(Chain::identity());
+        }
+
         let mut chain = self.working_to_reference()?;
         chain = chain.then(self.looks_chain(&view.looks)?);
 
@@ -244,17 +322,26 @@ impl LoadedConfig {
                     name: name.to_string(),
                 }
             })?;
-            let step = match (
-                &transform.from_scene_reference,
-                &transform.to_scene_reference,
+            chain = chain.then(self.scene_to_display(transform)?);
+            // Then the view transform's own display-referred leg, if it states
+            // one. It runs in the display-referred domain, before the display
+            // colour space's encoding, and it is why "Video (colorimetric)"
+            // and "Un-tone-mapped" are two views rather than one.
+            match (
+                &transform.from_display_reference,
+                &transform.to_display_reference,
             ) {
-                (Some(spec), _) => self.resolve_spec(&transform.name, spec, 0)?,
-                (None, Some(spec)) => self
-                    .resolve_spec(&transform.name, spec, 0)?
-                    .inverted(&transform.name)?,
-                (None, None) => Chain::identity(),
-            };
-            chain = chain.then(step);
+                (Some(spec), _) => {
+                    chain = chain.then(self.resolve_spec(&transform.name, spec, 0)?);
+                }
+                (None, Some(spec)) => {
+                    chain = chain.then(
+                        self.resolve_spec(&transform.name, spec, 0)?
+                            .inverted(&transform.name)?,
+                    );
+                }
+                (None, None) => {}
+            }
             let display_space =
                 view.display_colour_space
                     .as_deref()
@@ -262,6 +349,17 @@ impl LoadedConfig {
                         display: display.to_string(),
                         view: view.name.clone(),
                     })?;
+            // A **shared view** is written once and listed under many displays,
+            // so it cannot name a display colour space — it writes the literal
+            // `<USE_DISPLAY_NAME>` and means "whichever display is showing me,
+            // by its own name". Every view of the ACES v2 configs is one of
+            // these, so missing it is not an edge case: it is the whole of
+            // their display half (docs/impl/ocio.md §4.2).
+            let display_space = if display_space == USE_DISPLAY_NAME {
+                display
+            } else {
+                display_space
+            };
             return Ok(chain.then(self.from_reference(display_space)?));
         }
 
@@ -391,17 +489,30 @@ impl LoadedConfig {
                 };
                 Chain::new(vec![Op::Matrix(m34)])
             }
-            TransformSpec::Exponent { value, dir } => Chain::new(vec![Op::Exponent {
-                exp: *value,
-                dir: *dir,
-            }]),
-            TransformSpec::ExponentWithLinear { gamma, offset, dir } => {
-                Chain::new(vec![Op::MonCurve {
+            TransformSpec::Exponent {
+                value,
+                negatives,
+                dir,
+            } => Chain::new(vec![with_negatives(
+                *negatives,
+                Op::Exponent {
+                    exp: *value,
+                    dir: *dir,
+                },
+            )]),
+            TransformSpec::ExponentWithLinear {
+                gamma,
+                offset,
+                negatives,
+                dir,
+            } => Chain::new(vec![with_negatives(
+                *negatives,
+                Op::MonCurve {
                     gamma: *gamma,
                     offset: *offset,
                     dir: *dir,
-                }])
-            }
+                },
+            )]),
             TransformSpec::Log { params, dir } => Chain::new(vec![Op::Log {
                 params: *params,
                 dir: *dir,
@@ -633,6 +744,115 @@ display_colorspaces:
         assert!(close(chain.eval([4.0; 3]), [1.0; 3], 1e-4));
         // 1.0 maps to 0.25, then the square root of 0.25 is 0.5.
         assert!(close(chain.eval([1.0; 3]), [0.5; 3], 1e-4));
+    }
+
+    /// The shape every ACES v2 config's display half is written in, and three
+    /// separate faults the reference fixture caught in it.
+    const SHARED_VIEWS: &str = r#"
+ocio_profile_version: 2
+roles:
+  scene_linear: lin
+default_view_transform: tonemap
+shared_views:
+  - !<View> {name: SDR, view_transform: tonemap, display_colorspace: <USE_DISPLAY_NAME>}
+  - !<View> {name: Flat, view_transform: passthrough, display_colorspace: <USE_DISPLAY_NAME>}
+displays:
+  Rec1886:
+    - !<View> {name: Raw, colorspace: data}
+    - !<Views> [SDR, Flat]
+colorspaces:
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: data
+    isdata: true
+view_transforms:
+  - !<ViewTransform>
+    name: tonemap
+    from_scene_reference: !<RangeTransform> {minInValue: 0, maxInValue: 4, minOutValue: 0, maxOutValue: 1}
+  - !<ViewTransform>
+    name: passthrough
+    from_display_reference: !<MatrixTransform> {}
+display_colorspaces:
+  - !<ColorSpace>
+    name: Rec1886
+    from_display_reference: !<ExponentTransform> {value: [0.5, 0.5, 0.5, 1]}
+"#;
+
+    #[test]
+    fn a_shared_view_takes_the_display_s_own_name_for_its_colour_space() {
+        let loaded = load(SHARED_VIEWS);
+        let chain = loaded.display_view("Rec1886", "SDR").expect("resolves");
+        // 4.0 scene-linear maps to 1.0 through the view transform, and the
+        // display curve leaves 1.0 alone — the same answer the view would give
+        // if it named `Rec1886` outright, which is the whole point.
+        assert!(close(chain.eval([4.0; 3]), [1.0; 3], 1e-4));
+        assert!(close(chain.eval([1.0; 3]), [0.5; 3], 1e-4));
+    }
+
+    #[test]
+    fn a_view_onto_a_data_space_shows_the_numbers_untouched() {
+        let loaded = load(SHARED_VIEWS);
+        // Not merely "the data space does nothing to it": the bridge into the
+        // config's reference must not run either, or a matte comes back
+        // through a primaries matrix.
+        assert!(loaded
+            .display_view("Rec1886", "Raw")
+            .expect("resolves")
+            .is_identity());
+        assert!(loaded.from_space("data").expect("resolves").is_identity());
+        assert!(loaded.to_space("data").expect("resolves").is_identity());
+        assert!(loaded
+            .space_to_space("data", "lin")
+            .expect("resolves")
+            .is_identity());
+    }
+
+    #[test]
+    fn a_display_referred_view_transform_borrows_the_default_for_the_rendering() {
+        let loaded = load(SHARED_VIEWS);
+        // `passthrough` states only a display-referred transform, so the
+        // scene-to-display leg is `default_view_transform`'s. Reading its
+        // `from_display_reference` as a scene-referred one instead — which is
+        // what this parser first did — would invert an identity matrix and
+        // quietly drop the rendering, giving 0.5 here instead of 1.0.
+        let chain = loaded.display_view("Rec1886", "Flat").expect("resolves");
+        assert!(close(chain.eval([4.0; 3]), [1.0; 3], 1e-4));
+    }
+
+    #[test]
+    fn an_exponent_s_negative_style_is_read_from_the_key_a_config_file_writes() {
+        // `style`, not `negativeStyle`: the config file's spelling. Read for
+        // the wrong key it finds nothing and clamps, and nothing above zero
+        // ever shows it (K-517).
+        let text = r#"
+ocio_profile_version: 2
+roles:
+  scene_linear: lin
+colorspaces:
+  - !<ColorSpace>
+    name: lin
+  - !<ColorSpace>
+    name: g22
+    from_scene_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], style: pass_thru, direction: inverse}
+  - !<ColorSpace>
+    name: mirrored
+    from_scene_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], style: mirror, direction: inverse}
+"#;
+        let loaded = load(text);
+        let pass_thru = loaded.from_reference("g22").expect("resolves");
+        let mirror = loaded.from_reference("mirrored").expect("resolves");
+        // Above zero the two agree, which is exactly why the fault hid.
+        assert!(close(
+            pass_thru.eval([0.25; 3]),
+            mirror.eval([0.25; 3]),
+            1e-6
+        ));
+        // Below it they part: pass_thru carries the value, mirror curves it.
+        assert!(close(pass_thru.eval([-0.25; 3]), [-0.25; 3], 1e-6));
+        // −(0.25 ^ (1 / 2.2)) = −exp(ln 0.25 / 2.2) = −0.532 520 5.
+        let m = mirror.eval([-0.25; 3]);
+        assert!(close(m, [-0.532_520_5; 3], 1e-6), "{m:?}");
     }
 
     #[test]

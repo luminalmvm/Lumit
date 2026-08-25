@@ -109,10 +109,34 @@ pub struct RangeParams {
     pub no_clamp: bool,
 }
 
+/// What a curve does with input below zero, when it does not do its own thing.
+///
+/// The names are OCIO's. Every curve op here already has a default reading of
+/// negatives — an exponent clamps them, a monCurve carries them down its
+/// straight segment — and those readings stay. This says "not that one", and
+/// it exists because the ACES v2 configs need it: their display encodings all
+/// mirror, and their gamma spaces ask for `pass_thru` by name in the config
+/// file (K-517).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Negatives {
+    /// The curve is applied to the magnitude and the sign is put back, so the
+    /// answer is odd about zero. OCIO's `mirror`.
+    Mirror,
+    /// Below zero the value is carried through untouched. OCIO's `pass_thru`.
+    PassThru,
+}
+
 /// One step of a resolved chain.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Matrix(Matrix34),
+    /// A curve wearing a stated behaviour below zero ([`Negatives`]). The op
+    /// inside never sees a negative: `Mirror` hands it the magnitude and puts
+    /// the sign back, `PassThru` does not call it at all.
+    Negatives {
+        style: Negatives,
+        curve: Box<Op>,
+    },
     /// `ExponentTransform`: `pow(max(x, 0), e)`. Negatives clamp, which is
     /// OCIO's default negative style for this transform.
     Exponent {
@@ -130,6 +154,13 @@ pub enum Op {
     },
     Log {
         params: LogParams,
+        dir: Direction,
+    },
+    /// SMPTE ST 2084 (the "PQ" curve), forward = display light to code value.
+    /// One nit is 0.01, so 1.0 is the hundred-nit reference white the ACES v2
+    /// display encodings hand it. Defined for non-negative light only; the
+    /// configs that use it wrap it in [`Negatives::Mirror`].
+    Pq {
         dir: Direction,
     },
     Cdl {
@@ -274,6 +305,31 @@ fn moncurve_inverse(gamma: f32, offset: f32, y: f32) -> f32 {
     }
 }
 
+/// SMPTE ST 2084's constants, as the standard writes them — fractions rather
+/// than decimals, so nobody has to trust a transcription.
+const PQ_M1: f32 = 2610.0 / 16384.0;
+const PQ_M2: f32 = 2523.0 / 4096.0 * 128.0;
+const PQ_C1: f32 = 3424.0 / 4096.0;
+const PQ_C2: f32 = 2413.0 / 4096.0 * 32.0;
+const PQ_C3: f32 = 2392.0 / 4096.0 * 32.0;
+/// Display light where 1.0 is 100 nits, as ST 2084 counts it (10 000 nits = 1).
+const PQ_PEAK: f32 = 100.0;
+
+fn pq_forward(x: f32) -> f32 {
+    let y = (x / PQ_PEAK).max(0.0).powf(PQ_M1);
+    ((PQ_C1 + PQ_C2 * y) / (1.0 + PQ_C3 * y)).powf(PQ_M2)
+}
+
+fn pq_inverse(n: f32) -> f32 {
+    let p = n.max(0.0).powf(1.0 / PQ_M2);
+    let num = (p - PQ_C1).max(0.0);
+    let den = PQ_C2 - PQ_C3 * p;
+    if den == 0.0 {
+        return 0.0;
+    }
+    (num / den).powf(1.0 / PQ_M1) * PQ_PEAK
+}
+
 fn cdl_forward(p: &CdlParams, rgb: [f32; 3]) -> [f32; 3] {
     let mut v = [0.0_f32; 3];
     for (c, o) in v.iter_mut().enumerate() {
@@ -352,7 +408,9 @@ impl Op {
     pub fn name(&self) -> &'static str {
         match self {
             Op::Matrix(_) => "a matrix",
+            Op::Negatives { curve, .. } => curve.name(),
             Op::Exponent { .. } => "an exponent",
+            Op::Pq { .. } => "the ST 2084 curve",
             Op::MonCurve { .. } => "an exponent with a linear segment",
             Op::Log { .. } => "a log curve",
             Op::Cdl { .. } => "a CDL grade",
@@ -367,6 +425,32 @@ impl Op {
     pub fn eval(&self, rgb: [f32; 3]) -> [f32; 3] {
         match self {
             Op::Matrix(m) => matrix::apply(m, rgb),
+            Op::Negatives { style, curve } => {
+                let magnitude = [rgb[0].abs(), rgb[1].abs(), rgb[2].abs()];
+                let positive = curve.eval(magnitude);
+                let mut out = [0.0_f32; 3];
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = if rgb[c] >= 0.0 {
+                        positive[c]
+                    } else {
+                        match style {
+                            Negatives::Mirror => -positive[c],
+                            Negatives::PassThru => rgb[c],
+                        }
+                    };
+                }
+                out
+            }
+            Op::Pq { dir } => {
+                let mut out = [0.0_f32; 3];
+                for (c, o) in out.iter_mut().enumerate() {
+                    *o = match dir {
+                        Direction::Forward => pq_forward(rgb[c]),
+                        Direction::Inverse => pq_inverse(rgb[c]),
+                    };
+                }
+                out
+            }
             Op::Exponent { exp, dir } => {
                 let mut out = [0.0_f32; 3];
                 for (c, o) in out.iter_mut().enumerate() {
@@ -433,6 +517,13 @@ impl Op {
     pub fn inverted(&self, what: &str) -> Result<Op> {
         Ok(match self {
             Op::Matrix(m) => Op::Matrix(matrix::invert(m)?),
+            // Both styles are odd about zero, so undoing the curve inside
+            // undoes the whole thing.
+            Op::Negatives { style, curve } => Op::Negatives {
+                style: *style,
+                curve: Box::new(curve.inverted(what)?),
+            },
+            Op::Pq { dir } => Op::Pq { dir: dir.flipped() },
             Op::Exponent { exp, dir } => Op::Exponent {
                 exp: *exp,
                 dir: dir.flipped(),
@@ -478,6 +569,9 @@ impl Op {
     pub fn is_channel_independent(&self) -> bool {
         match self {
             Op::Matrix(_) | Op::Lut3d { .. } => false,
+            // The wrapper only decides what happens below zero; whether the
+            // channels stay apart is the curve inside's business.
+            Op::Negatives { curve, .. } => curve.is_channel_independent(),
             // Saturation mixes the channels; slope/offset/power alone do not.
             Op::Cdl { params, .. } => params.saturation == 1.0,
             _ => true,
@@ -521,6 +615,13 @@ impl Chain {
             match (folded.last_mut(), &op) {
                 (Some(Op::Matrix(prev)), Op::Matrix(m)) => *prev = matrix::concat(prev, m),
                 _ => folded.push(op),
+            }
+            // And a fold that came out as the identity leaves altogether,
+            // which is the other half of the cancellation: keeping a matrix
+            // that does nothing would still spread one channel's overflow
+            // across the other two as NaN (`matrix::is_identity`).
+            if matches!(folded.last(), Some(Op::Matrix(m)) if matrix::is_identity(m)) {
+                folded.pop();
             }
         }
         Self { ops: folded }
@@ -862,14 +963,17 @@ mod tests {
             0.0,
         ]);
         let chain = Chain::new(vec![m.clone(), m.inverted("test").expect("invertible")]);
-        assert_eq!(chain.ops.len(), 1, "the pair folded into one matrix");
+        assert!(chain.is_identity(), "the pair cancelled away entirely");
         // What the ACEScc curve hands the matrix at the failing probe.
         let c = [65504.0, 28684.941, 0.045_310_933];
-        let got = chain.eval(c);
-        for k in 0..3 {
-            let off = (got[k] - c[k]).abs() / c[k].abs();
-            assert!(off < 1e-7, "channel {k}: {got:?} came back from {c:?}");
-        }
+        assert_eq!(chain.eval(c), c);
+        // And it must *vanish* rather than merely compose. A kept matrix, even
+        // one within 10⁻¹⁶ of the identity, spreads one channel's overflow
+        // across the other two — `inf × 10⁻¹⁶` is still infinity, and the sum
+        // that follows is a NaN. The reference library carries the finite
+        // channel straight through, and so must this.
+        let overflowed = [f32::INFINITY, f32::INFINITY, 1.479_693_5e18];
+        assert_eq!(chain.eval(overflowed), overflowed);
     }
 
     #[test]

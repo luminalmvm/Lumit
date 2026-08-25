@@ -313,11 +313,13 @@ pub enum TransformSpec {
     },
     Exponent {
         value: [f32; 3],
+        negatives: Option<crate::op::Negatives>,
         dir: Direction,
     },
     ExponentWithLinear {
         gamma: [f32; 3],
         offset: [f32; 3],
+        negatives: Option<crate::op::Negatives>,
         dir: Direction,
     },
     Log {
@@ -400,6 +402,16 @@ pub struct ViewTransform {
     pub from_scene_reference: Option<TransformSpec>,
     /// Display reference → scene reference.
     pub to_scene_reference: Option<TransformSpec>,
+    /// The display-referred half, kept apart from the scene-referred one
+    /// because they are not two spellings of the same thing. A view transform
+    /// with **only** these does no rendering of its own: it borrows the
+    /// config's `default_view_transform` to reach the display reference and
+    /// then applies this on top. The ACES v2 configs' "Video (colorimetric)"
+    /// view is exactly that, and folding these keys into the scene-referred
+    /// ones — as this parser first did — inverts a transform that was never
+    /// meant to run backwards.
+    pub from_display_reference: Option<TransformSpec>,
+    pub to_display_reference: Option<TransformSpec>,
 }
 
 /// Everything a `config.ocio` states.
@@ -421,6 +433,9 @@ pub struct Config {
     pub shared_views: Vec<View>,
     pub looks: BTreeMap<String, Look>,
     pub view_transforms: BTreeMap<String, ViewTransform>,
+    /// `default_view_transform`: the one a view borrows when it states only a
+    /// display-referred transform of its own.
+    pub default_view_transform: Option<String>,
 }
 
 /// Transform tags a config may legally carry that v1 does not implement. Named
@@ -436,6 +451,33 @@ const REFUSED_TRANSFORMS: [&str; 9] = [
     "DisplayViewTransform",
     "CDLTransform:cccid",
 ];
+
+/// The negative style an exponent transform declares, or `None` for the
+/// transform's own default.
+///
+/// **The key is `style`, not `negativeStyle`.** `negativeStyle` is the name the
+/// C++ API and the CLF grammar use; a config *file* writes `style`, and reading
+/// for the wrong one finds nothing and silently applies the default. That is
+/// how a `pass_thru` gamma space read as a clamping one for as long as this
+/// parser existed — visible only below zero, which is precisely where nobody
+/// looks (K-517).
+fn negative_style(
+    value: &Tagged,
+    tag: &str,
+    own_default: &str,
+) -> Result<Option<crate::op::Negatives>> {
+    let Some(style) = value.string("style") else {
+        return Ok(None);
+    };
+    match style.as_str() {
+        s if s == own_default => Ok(None),
+        "mirror" => Ok(Some(crate::op::Negatives::Mirror)),
+        "pass_thru" => Ok(Some(crate::op::Negatives::PassThru)),
+        other => Err(ColourError::UnsupportedTransform {
+            name: format!("{tag} with style {other}"),
+        }),
+    }
+}
 
 fn parse_transform(what: &str, value: &Tagged) -> Result<TransformSpec> {
     let tag = value.tag.clone().unwrap_or_default();
@@ -473,33 +515,17 @@ fn parse_transform(what: &str, value: &Tagged) -> Result<TransformSpec> {
                 dir,
             }
         }
-        "ExponentTransform" => {
-            if let Some(style) = value.string("negativeStyle") {
-                if style != "clamp" {
-                    return Err(ColourError::UnsupportedTransform {
-                        name: format!("an ExponentTransform with negativeStyle {style}"),
-                    });
-                }
-            }
-            TransformSpec::Exponent {
-                value: value.triple("value", 1.0),
-                dir,
-            }
-        }
-        "ExponentWithLinearTransform" => {
-            if let Some(style) = value.string("negativeStyle") {
-                if style != "linear" {
-                    return Err(ColourError::UnsupportedTransform {
-                        name: format!("an ExponentWithLinearTransform with negativeStyle {style}"),
-                    });
-                }
-            }
-            TransformSpec::ExponentWithLinear {
-                gamma: value.triple("gamma", 1.0),
-                offset: value.triple("offset", 0.0),
-                dir,
-            }
-        }
+        "ExponentTransform" => TransformSpec::Exponent {
+            value: value.triple("value", 1.0),
+            negatives: negative_style(value, &tag, "clamp")?,
+            dir,
+        },
+        "ExponentWithLinearTransform" => TransformSpec::ExponentWithLinear {
+            gamma: value.triple("gamma", 1.0),
+            offset: value.triple("offset", 0.0),
+            negatives: negative_style(value, &tag, "linear")?,
+            dir,
+        },
         "LogTransform" => TransformSpec::Log {
             params: crate::op::LogParams::plain(value.number("base").unwrap_or(2.0)),
             dir,
@@ -693,6 +719,7 @@ impl Config {
             search_paths: root.string_list("search_path", &[':']),
             active_displays: root.string_list("active_displays", &[',']),
             active_views: root.string_list("active_views", &[',']),
+            default_view_transform: root.string("default_view_transform"),
             inactive: root
                 .string_list("inactive_colorspaces", &[','])
                 .into_iter()
@@ -741,12 +768,10 @@ impl Config {
             config.view_transforms.insert(
                 name.clone(),
                 ViewTransform {
-                    from_scene_reference: read("from_scene_reference")?
-                        .or(read("from_reference")?)
-                        .or(read("to_display_reference")?),
-                    to_scene_reference: read("to_scene_reference")?
-                        .or(read("to_reference")?)
-                        .or(read("from_display_reference")?),
+                    from_scene_reference: read("from_scene_reference")?.or(read("from_reference")?),
+                    to_scene_reference: read("to_scene_reference")?.or(read("to_reference")?),
+                    from_display_reference: read("from_display_reference")?,
+                    to_display_reference: read("to_display_reference")?,
                     name,
                 },
             );

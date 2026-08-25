@@ -24,7 +24,7 @@ use crate::error::{ColourError, Result};
 /// inverse to `f32` before composing leaves a residue of about 3 × 10⁻¹⁰ in the
 /// product, which a clamped 65504 in one channel turns into 2 × 10⁻⁵ of error in
 /// another — ACEScc → ACEScg, measured against the reference library, is exactly
-/// that. Composed in double the residue is 10⁻¹⁶ and the pair cancels.
+/// that. Composed in double the residue is 10⁻¹⁶ and the pair cancels (K-516).
 pub type Matrix34 = [f64; 12];
 
 /// The matrix that changes nothing.
@@ -83,6 +83,31 @@ pub fn concat(first: &Matrix34, second: &Matrix34) -> Matrix34 {
         out[row * 4 + 3] = acc;
     }
     out
+}
+
+/// How far a coefficient may sit from the identity's and still be called the
+/// identity: a thousandth of a single-precision ULP at 1.0.
+///
+/// Composing a matrix with its own inverse leaves a residue near 10⁻¹⁶, and for
+/// colour channels — which sit within a few orders of magnitude of each other
+/// inside one pixel — a coefficient this small moves the answer by less than a
+/// thousandth of the last bit an `f32` has. It is not "close enough"; it is
+/// below what the arithmetic downstream can represent.
+const IDENTITY_EPSILON: f64 = 1e-9;
+
+/// Whether this matrix does nothing an `f32` could notice.
+///
+/// It matters beyond tidiness, and infinity is why. `matrix::apply` computes
+/// every output channel from all three inputs, so once one channel has
+/// overflowed to infinity — an ACEScct code value of 16 decodes to 2²⁷⁰ — a
+/// matrix spreads that infinity across the other two and any coefficient of
+/// zero turns it into a NaN. A matrix that does nothing should not be able to
+/// do that, and the reference library drops one for the same reason.
+#[must_use]
+pub fn is_identity(m: &Matrix34) -> bool {
+    m.iter()
+        .zip(IDENTITY)
+        .all(|(a, b)| (a - b).abs() <= IDENTITY_EPSILON)
 }
 
 /// The inverse matrix, or [`ColourError::SingularMatrix`] when there is none.
@@ -186,6 +211,22 @@ pub const AP1: Chromaticities = Chromaticities {
     white: [0.32168, 0.33767],
 };
 
+/// DCI-P3 primaries with a D65 white — the `DisplayP3` and `P3-D65` displays.
+pub const P3_D65: Chromaticities = Chromaticities {
+    red: [0.680, 0.320],
+    green: [0.265, 0.690],
+    blue: [0.150, 0.060],
+    white: [0.3127, 0.3290],
+};
+
+/// ITU-R BT.2020 primaries, D65 — the `REC.2100` displays' container.
+pub const REC2020: Chromaticities = Chromaticities {
+    red: [0.708, 0.292],
+    green: [0.170, 0.797],
+    blue: [0.131, 0.046],
+    white: [0.3127, 0.3290],
+};
+
 /// The RGB→XYZ matrix for a set of primaries (SMPTE RP 177: solve for the three
 /// primary scalings that send `(1,1,1)` to the white point, then scale the
 /// columns by them).
@@ -282,10 +323,20 @@ pub fn rgb_to_rgb(from: &Chromaticities, to: &Chromaticities) -> Result<Matrix34
     Ok(from_3x3(&m))
 }
 
+/// CIE XYZ with a D65 white → the linear RGB of a **D65** set of primaries.
+///
+/// No chromatic adaptation, deliberately: every display encoding that names
+/// this bridge is itself D65, so an adaptation step would be a matrix that
+/// should be the identity and is not. A non-D65 `to` belongs in
+/// [`rgb_to_rgb`], which adapts.
+pub fn xyz_d65_to(to: &Chromaticities) -> Result<Matrix34> {
+    let m = invert3(&rgb_to_xyz(to)?).ok_or(ColourError::SingularMatrix)?;
+    Ok(from_3x3(&m))
+}
+
 /// CIE XYZ with a D65 white → linear Rec.709, the `cie_xyz_d65_interchange` bridge.
 pub fn xyz_d65_to_rec709() -> Result<Matrix34> {
-    let m = invert3(&rgb_to_xyz(&REC709)?).ok_or(ColourError::SingularMatrix)?;
-    Ok(from_3x3(&m))
+    xyz_d65_to(&REC709)
 }
 
 /// ACES2065-1 (AP0, D60) → linear Rec.709 (D65), the `aces_interchange` bridge.
