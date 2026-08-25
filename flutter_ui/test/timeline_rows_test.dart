@@ -5,6 +5,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
+import 'package:lumit_flutter/icons/icons.dart';
 import 'package:lumit_flutter/state/timeline_columns.dart';
 
 void main() {
@@ -38,17 +39,36 @@ void main() {
       expect(scrollbarThickness, 7);
       expect(scrollbarThickness, lessThan(scrollGutterWidth));
       // The 12px gutter: 2 either side of the 7, floored rather than 2.5.
-      expect(scrollbarInset(scrollGutterWidth), 2);
-      expect(scrollbarInset(scrollGutterWidth) + scrollbarThickness,
+      expect(wholePixelInset(scrollGutterWidth, scrollbarThickness), 2);
+      expect(
+          wholePixelInset(scrollGutterWidth, scrollbarThickness) +
+              scrollbarThickness,
           lessThanOrEqualTo(scrollGutterWidth));
     });
 
     test('the inset is always a whole pixel, and never negative', () {
       for (final extent in [0.0, 4.0, 7.0, 11.0, 12.0, 18.0, 23.5]) {
-        final inset = scrollbarInset(extent);
+        final inset = wholePixelInset(extent, scrollbarThickness);
         expect(inset, inset.roundToDouble(), reason: 'a soft edge otherwise');
         expect(inset, greaterThanOrEqualTo(0));
       }
+    });
+  });
+
+  group('A switch glyph sits on the pixel grid (§6.20)', () {
+    // The two row heights the density dial offers, and the cell they sit in.
+    for (final row in [23.0, 22.0]) {
+      test('a 16px glyph in a ${row.toInt()}px row starts whole', () {
+        final top = wholePixelInset(row, iconSize);
+        expect(top, top.roundToDouble(),
+            reason: 'centring puts the odd row on 3.5, and the icons\' own '
+                'half-pixel nudge then lands the strokes back on a boundary');
+        expect(top, (row - iconSize) ~/ 2);
+      });
+    }
+
+    test('the cell width already centred whole, and is left where it was', () {
+      expect(wholePixelInset(switchCellWidth, iconSize), 3);
     });
   });
 }

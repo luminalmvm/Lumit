@@ -5336,6 +5336,14 @@
   "@tipLabelColour": {
     "description": "Tooltip on a layer's colour swatch in the Timeline, and on the glyph heading that column. Under five words."
   },
+  "tipLabelInherit": "Inherit from folder",
+  "@tipLabelInherit": {
+    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when the item sits in a folder that has a colour: picking it hands the item back to the folder's colour. Under five words."
+  },
+  "tipLabelNoColour": "No colour",
+  "@tipLabelNoColour": {
+    "description": "Tooltip on the neutral colour chip in the Project panel's row menu, when no folder above the item has a colour: picking it leaves the item untagged. Under five words."
+  },
   "tipLaneView": "Lane view",
   "@tipLaneView": {
     "description": "Tooltip: show layers as bars against time. Under five words."

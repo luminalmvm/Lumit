@@ -950,7 +950,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // searching a folder finds what it holds (docs/07 §3.1). Missing-only is
     // stricter: it is never widened by a folder name, so every visible row is
     // something to fix (docs/07 §3.3).
-    void walk(ItemReference item, int depth, bool ancestorMatched) {
+    // `inherited` is the colour of the nearest ancestor folder that carries
+    // one, 0 where no ancestor does (A12). A folder's tag tints what it holds,
+    // and an item with a tag of its own overrides it — so what walks down is
+    // the effective colour, which makes the nearest tagged ancestor the one
+    // that wins without the walk having to look up the tree.
+    void walk(
+        ItemReference item, int depth, bool ancestorMatched, int inherited) {
       final id = _idOf(item);
       _itemById[id] = item;
       itemCount++;
@@ -990,6 +996,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           // old guess called it audio.
           audio: _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null,
           label: label,
+          inherited: inherited,
           inUse: _used[id] ??= _isUsed(item),
           proxy: _proxies.putIfAbsent(
               id,
@@ -1033,7 +1040,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       // running, which has to be able to find what is inside one.
       if (_search.isNotEmpty || !_closedFolders.contains(id)) {
         for (final child in children) {
-          walk(child, depth + 1, selfMatched);
+          walk(child, depth + 1, selfMatched, label != 0 ? label : inherited);
         }
       }
     }
@@ -1041,7 +1048,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _footageById.clear();
     _itemById.clear();
     for (final item in roots) {
-      walk(item, 0, false);
+      walk(item, 0, false, 0);
     }
 
     return Column(
@@ -1996,6 +2003,12 @@ class _ProjectRowFrb extends StatefulWidget {
   /// glyph's strokes** rather than adding a dot beside it).
   final int label;
 
+  /// The colour the containing folders hand down — the nearest ancestor folder
+  /// with a tag, or `0` where none of them has one (A12). It tints this row's
+  /// glyph only while the row has no tag of its own: an explicit colour
+  /// overrides what it inherits.
+  final int inherited;
+
   /// Whether any composition places this item — the `in use` badge.
   final bool inUse;
 
@@ -2068,6 +2081,7 @@ class _ProjectRowFrb extends StatefulWidget {
     required this.missing,
     required this.audio,
     required this.label,
+    required this.inherited,
     required this.inUse,
     required this.proxy,
     required this.selected,
@@ -2276,6 +2290,7 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
               onStartRename: widget.onStartRename,
               onSetLabel: widget.onSetLabel,
               label: widget.label,
+              inherited: widget.inherited,
               onRelink: item is ItemReference_Footage
                   ? () => _doRelink((item as ItemReference_Footage).field0)
                   : null,
@@ -2478,16 +2493,26 @@ class _ProjectRowFrbState extends State<_ProjectRowFrb> {
   /// left it alone would need a mark of its own, which is what the mockup
   /// deliberately does not draw. Missing still wins over both: a file that is
   /// not there is more urgent than what colour someone filed it under.
+  ///
+  /// **A folder hands its colour down** (A12): a row with no tag of its own
+  /// wears the nearest tagged ancestor folder's, and only an item with neither
+  /// falls back to the per-type tint. An explicit tag always wins over what is
+  /// inherited, which is what makes tagging one clip inside a tagged folder
+  /// mean something.
   Widget _glyph(LumitTheme t) {
     final (icon, tint) = _iconFor(item, t);
-    return lumitIcon(
-      widget.missing ? LumitIcon.unlink : icon,
-      size: projectRowIconSize,
-      color: widget.missing
-          ? t.warning
-          : widget.label != 0
-              ? t.labelColour(widget.label)
-              : tint,
+    final tag = widget.label != 0 ? widget.label : widget.inherited;
+    return KeyedSubtree(
+      key: ValueKey<String>('project-glyph-${_idOf(item)}'),
+      child: lumitIcon(
+        widget.missing ? LumitIcon.unlink : icon,
+        size: projectRowIconSize,
+        color: widget.missing
+            ? t.warning
+            : tag != 0
+                ? t.labelColour(tag)
+                : tint,
+      ),
     );
   }
 
@@ -2581,6 +2606,11 @@ enum _ProjectMenuAction {
   delete
 }
 
+/// A colour chip with a word for it, or the bare chip where the colour is its
+/// own explanation — which is every chip but the neutral one (A12).
+Widget _menuChipTip(String? message, Widget chip) =>
+    message == null ? chip : LumitTooltip(message: message, child: chip);
+
 /// The project context menu.
 Future<void> showProjectMenuFrb({
   required BuildContext context,
@@ -2601,6 +2631,11 @@ Future<void> showProjectMenuFrb({
 
   /// The tag the item wears now, so the strip can mark it.
   int label = 0,
+
+  /// The colour the item would inherit from its folders if it wore none
+  /// (A12), or 0 where it would inherit nothing. It is what the neutral chip
+  /// means here: *inherit* inside a tagged folder, *no colour* outside one.
+  int inherited = 0,
 
   /// This item's proxy (K-501), or null where it has none — which is what
   /// decides whether the menu offers *Use proxy* and *Clear proxy* at all.
@@ -2816,22 +2851,35 @@ Future<void> showProjectMenuFrb({
                   Text(l10n.label, style: menuTheme.small),
                   const SizedBox(width: 6),
                   for (var i = 0; i < LumitTheme.labelCount; i++)
-                    GestureDetector(
-                      key: ValueKey<String>('project-menu-label-$i'),
-                      onTap: () {
-                        onSetLabel(i);
-                        close(null);
-                      },
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        margin: const EdgeInsets.only(right: 2),
-                        decoration: BoxDecoration(
-                          color: menuTheme.labelColour(i),
-                          shape: BoxShape.circle,
-                          border: i == label
-                              ? Border.all(color: menuTheme.textPrimary)
-                              : null,
+                    _menuChipTip(
+                      // The neutral chip is the way back, and what it goes back
+                      // *to* depends on where the item sits (A12): inside a
+                      // tagged folder it hands the row back to the folder's
+                      // colour, outside one it leaves the row with none. Same
+                      // chip, two words — the colours themselves say what they
+                      // are, so only this one is named.
+                      i == 0
+                          ? (inherited != 0
+                              ? l10n.tipLabelInherit
+                              : l10n.tipLabelNoColour)
+                          : null,
+                      GestureDetector(
+                        key: ValueKey<String>('project-menu-label-$i'),
+                        onTap: () {
+                          onSetLabel(i);
+                          close(null);
+                        },
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          margin: const EdgeInsets.only(right: 2),
+                          decoration: BoxDecoration(
+                            color: menuTheme.labelColour(i),
+                            shape: BoxShape.circle,
+                            border: i == label
+                                ? Border.all(color: menuTheme.textPrimary)
+                                : null,
+                          ),
                         ),
                       ),
                     ),

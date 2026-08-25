@@ -124,11 +124,16 @@ const double _labelDotSize = 6;
 /// gutter keeps its width; the thumb is centred in it.
 const double scrollbarThickness = 7;
 
-/// Where a [scrollbarThickness] thumb starts across a bar or gutter of
-/// [extent], on whole pixels: an odd remainder is floored rather than split,
-/// since a filled block with a half-pixel edge draws that edge grey.
-double scrollbarInset(double extent) =>
-    ((extent - scrollbarThickness) / 2).floorToDouble().clamp(0.0, extent);
+/// Where something [size] across starts when it is centred in [extent] **on
+/// whole pixels**: an odd remainder is floored rather than split.
+///
+/// Half a pixel off centre cannot be seen; half a pixel across the grid can.
+/// A filled block draws its edge grey ([scrollbarThickness] in a 12px gutter,
+/// §6.15) and a glyph's strokes smear — and where the glyph carries the icon
+/// set's own half-pixel nudge onto the grid (K-456), a fractional base moves
+/// it back off again, which is the switch column's drift (§6.20).
+double wholePixelInset(double extent, double size) =>
+    ((extent - size) / 2).floorToDouble().clamp(0.0, extent);
 
 /// Half a keyframe's height on a property's own lane — **the same in Layers
 /// mode and in Keys mode** (K-459). The drawing measures the key 11px point
@@ -5027,8 +5032,7 @@ class _MaskValueRowState extends State<_MaskValueRow> {
     setState(() => _staged = null);
     try {
       widget.layer.setMask(
-          mask:
-              maskWithScalar(widget.mask, widget.value, v, widget.vertex));
+          mask: maskWithScalar(widget.mask, widget.value, v, widget.vertex));
       widget.onChanged();
     } catch (_) {
       // The mask or its layer went away mid-drag.
@@ -5097,8 +5101,7 @@ class _MaskValueRowState extends State<_MaskValueRow> {
 
   /// This row's key, which per-point feather rows must not share: they are
   /// several rows of the same value on the same mask (K-545).
-  String get _rowKey =>
-      'tl-mask-${widget.value.name}-${widget.mask.id}'
+  String get _rowKey => 'tl-mask-${widget.value.name}-${widget.mask.id}'
       '${widget.vertex < 0 ? '' : '-${widget.vertex}'}';
 
   Widget _field() {
@@ -5767,9 +5770,11 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
           (-10000, 10000, ' px'),
         ShapeValue.repeatRotation => (-3600, 3600, '°'),
         ShapeValue.repeatScale => (-1000, 1000, '%'),
-        ShapeValue.repeatStartOpacity ||
-        ShapeValue.repeatEndOpacity =>
-          (0, 100, '%'),
+        ShapeValue.repeatStartOpacity || ShapeValue.repeatEndOpacity => (
+            0,
+            100,
+            '%'
+          ),
       };
   double get _min => _units.$1;
   double get _max => _units.$2;
@@ -5809,7 +5814,10 @@ class _ShapeValueRowState extends State<_ShapeValueRow> {
     try {
       widget.layer.setShapeContents(contents: [
         for (final i in widget.layer.getShapeContents())
-          if (i.id == widget.item.id) shapeWithScalar(i, widget.value, v) else i,
+          if (i.id == widget.item.id)
+            shapeWithScalar(i, widget.value, v)
+          else
+            i,
       ]);
       widget.onChanged();
     } catch (_) {
@@ -6002,16 +6010,15 @@ class _ShapePaintRow extends StatelessWidget {
                   // A shape's colours are scene-linear, so the picker counts
                   // in 0—1 rather than in bytes.
                   scale: ColourScale.unit,
-                  onPicked: (p) => _write((i) => shapeItemWith(i,
-                      fill: _picked(p, i.fill?.a ?? 1))),
+                  onPicked: (p) => _write((i) =>
+                      shapeItemWith(i, fill: _picked(p, i.fill?.a ?? 1))),
                 ),
               ShapePaint.gradientColour => ColourSwatchButton(
                   key: ValueKey<String>(key),
                   colour: _shown(item.gradientColour ?? _defaultEnd),
                   scale: ColourScale.unit,
                   onPicked: (p) => _write((i) => shapeItemWith(i,
-                      gradientColour:
-                          _picked(p, i.gradientColour?.a ?? 1))),
+                      gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
                 ),
             },
           ),
@@ -6921,7 +6928,8 @@ class _GutterScrollbar extends StatelessWidget {
                         // on whole pixels and a block edge on a half pixel is
                         // a smear: half a pixel off centre is invisible, a
                         // soft edge is not.
-                        left: scrollbarInset(constraints.maxWidth),
+                        left: wholePixelInset(
+                            constraints.maxWidth, scrollbarThickness),
                         width: scrollbarThickness,
                         height: extent,
                         child: thumb)
@@ -6931,7 +6939,8 @@ class _GutterScrollbar extends StatelessWidget {
                         // centred in whatever bar carries it — not a thumb
                         // grown from the bar's own height, which is how it
                         // came out 14 and read as a second toolbar.
-                        top: scrollbarInset(constraints.maxHeight),
+                        top: wholePixelInset(
+                            constraints.maxHeight, scrollbarThickness),
                         height: scrollbarThickness,
                         width: extent,
                         child: thumb),
@@ -8419,7 +8428,23 @@ class _OutlineRowState extends State<_OutlineRow> {
       child: SizedBox(
         width: switchCellWidth,
         height: t.density.laneRow,
-        child: Center(child: face),
+        // **On whole pixels, not centred** (§6.20). A 16px glyph centred in a
+        // 23px row starts at 3.5, and the icons carry a half-pixel nudge of
+        // their own to land their strokes on pixel centres (K-456): the two
+        // halves added up, so the whole switch column drew a pixel down and
+        // to the right of the grid, with the strokes smeared across it. The
+        // cell is the same size and takes the same click; only the paint
+        // moves, and it moves back onto the grid the nudge assumes.
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: wholePixelInset(switchCellWidth, iconSize),
+              top: wholePixelInset(t.density.laneRow, iconSize),
+            ),
+            child: face,
+          ),
+        ),
       ),
     );
     return tip == null ? cell : LumitTooltip(message: tip, child: cell);

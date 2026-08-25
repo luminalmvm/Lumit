@@ -19,7 +19,7 @@ import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart'
     show FootageReference, LumitMediaStatus;
 import 'package:lumit_flutter/src/rust/api/project_item.dart'
-    show ItemReference_Composition, ItemReference_Footage;
+    show ItemReference, ItemReference_Composition, ItemReference_Footage;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 import 'package:lumit_flutter/state/dock.dart';
@@ -1473,6 +1473,60 @@ void main() {
       await tester.pump();
       expect(rowText('other.mov'), findsOneWidget,
           reason: 'the neutral chip is the way back out');
+    });
+
+    /// A folder's colour is handed down to what it holds (A12): a tagged folder
+    /// tints its descendants' glyphs, an item with a tag of its own overrides
+    /// what it inherits, and the nearest tagged folder is the one that wins.
+    testWidgets('a folder hands its colour down, and the nearest one wins',
+        (tester) async {
+      final p = freshProject();
+      final project = p.state.project!;
+      final outer = project.newFolder(name: 'Outer', parent: null);
+      final inner =
+          project.newFolder(name: 'Inner', parent: outer.internalid);
+      // Real files: a missing clip wears the warning glyph, which wins over
+      // every tag — so an inheritance test needs footage that is there.
+      final plain = project.importFootage(path: _probeableImageFile('a.bmp'));
+      final own = project.importFootage(path: _probeableImageFile('b.bmp'));
+      final deep = project.importFootage(path: _probeableImageFile('c.bmp'));
+
+      ItemReference.footage(plain).moveToFolder(folder: outer.internalid);
+      ItemReference.footage(own).moveToFolder(folder: outer.internalid);
+      ItemReference.footage(deep).moveToFolder(folder: inner.internalid);
+      ItemReference.folder(outer).setLabel(label: 4);
+      ItemReference.folder(inner).setLabel(label: 5);
+      ItemReference.footage(own).setLabel(label: 2);
+
+      await tester.pumpWidget(hostPanel(
+        child: const ProjectPanelFrb(),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await settleFrb(tester, minRounds: 6);
+
+      final t = LumitTheme.dark();
+      Color glyphColour(String id) {
+        final filter = tester
+            .widget<SvgPicture>(find.descendant(
+                of: find.byKey(ValueKey<String>('project-glyph-$id')),
+                matching: find.byType(SvgPicture)))
+            .colorFilter;
+        expect(filter, isNotNull);
+        for (var i = 0; i < LumitTheme.labelCount; i++) {
+          if (filter == ColorFilter.mode(t.labelColour(i), BlendMode.srcIn)) {
+            return t.labelColour(i);
+          }
+        }
+        fail('the glyph is not wearing a palette colour: $filter');
+      }
+
+      expect(glyphColour('${plain.internalid}'), t.labelColour(4),
+          reason: 'an untagged item wears the folder it sits in');
+      expect(glyphColour('${own.internalid}'), t.labelColour(2),
+          reason: 'its own colour overrides what the folder hands down');
+      expect(glyphColour('${deep.internalid}'), t.labelColour(5),
+          reason: 'the nearest tagged folder wins over the one above it');
     });
 
     testWidgets('the preview card states the codec and the sound it found',
