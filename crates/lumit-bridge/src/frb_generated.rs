@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 121048433;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 212615410;
 
 // Section: executor
 
@@ -7142,6 +7142,40 @@ fn wire__crate__api__layer__layer_reference_set_adjustment_impl(
         },
     )
 }
+fn wire__crate__api__layer__layer_reference_set_axis_mode_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "layer_reference_set_axis_mode",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
+            let api_pair = <crate::api::layer::BridgeTransformPair>::sse_decode(&mut deserializer);
+            let api_mode = <crate::api::layer::BridgeAxisMode>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, BridgeError>((move || {
+                let output_ok = crate::api::layer::LayerReference::set_axis_mode(
+                    &api_that, api_pair, api_mode,
+                )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__layer__layer_reference_set_blend_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -10554,6 +10588,33 @@ impl SseDecode for crate::api::shell::BridgeAutosave {
     }
 }
 
+impl SseDecode for crate::api::layer::BridgeAxisMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::layer::BridgeAxisMode::Linked,
+            1 => crate::api::layer::BridgeAxisMode::Combined,
+            2 => crate::api::layer::BridgeAxisMode::Separated,
+            _ => unreachable!("Invalid variant for BridgeAxisMode: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::layer::BridgeAxisModes {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_anchor = <crate::api::layer::BridgeAxisMode>::sse_decode(deserializer);
+        let mut var_position = <crate::api::layer::BridgeAxisMode>::sse_decode(deserializer);
+        let mut var_scale = <crate::api::layer::BridgeAxisMode>::sse_decode(deserializer);
+        return crate::api::layer::BridgeAxisModes {
+            anchor: var_anchor,
+            position: var_position,
+            scale: var_scale,
+        };
+    }
+}
+
 impl SseDecode for crate::api::effect::BridgeBezierSide {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -11552,6 +11613,7 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
         let mut var_parent = <Option<uuid::Uuid>>::sse_decode(deserializer);
         let mut var_parentName = <Option<String>>::sse_decode(deserializer);
         let mut var_transform = <crate::api::layer::BridgeTransform>::sse_decode(deserializer);
+        let mut var_axisModes = <crate::api::layer::BridgeAxisModes>::sse_decode(deserializer);
         let mut var_effects =
             <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_decode(deserializer);
         let mut var_label = <u8>::sse_decode(deserializer);
@@ -11577,6 +11639,7 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
             parent: var_parent,
             parent_name: var_parentName,
             transform: var_transform,
+            axis_modes: var_axisModes,
             effects: var_effects,
             label: var_label,
             matte: var_matte,
@@ -12766,6 +12829,19 @@ impl SseDecode for crate::api::layer::BridgeTransform {
             rotation_x: var_rotationX,
             rotation_y: var_rotationY,
             opacity: var_opacity,
+        };
+    }
+}
+
+impl SseDecode for crate::api::layer::BridgeTransformPair {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::layer::BridgeTransformPair::Anchor,
+            1 => crate::api::layer::BridgeTransformPair::Position,
+            2 => crate::api::layer::BridgeTransformPair::Scale,
+            _ => unreachable!("Invalid variant for BridgeTransformPair: {}", inner),
         };
     }
 }
@@ -14269,7 +14345,7 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        275 => wire__crate__api__project__project_reference_save_impl(
+        276 => wire__crate__api__project__project_reference_save_impl(
             port,
             ptr,
             rust_vec_len,
@@ -14473,104 +14549,105 @@ fn pde_ffi_dispatcher_sync_impl(
 208 => wire__crate__api__layer__layer_reference_reveal_groups_impl(ptr, rust_vec_len, data_len),
 209 => wire__crate__api__layer__layer_reference_save_preset_impl(ptr, rust_vec_len, data_len),
 210 => wire__crate__api__layer__layer_reference_set_adjustment_impl(ptr, rust_vec_len, data_len),
-211 => wire__crate__api__layer__layer_reference_set_blend_impl(ptr, rust_vec_len, data_len),
-212 => wire__crate__api__layer__layer_reference_set_camera_zoom_impl(ptr, rust_vec_len, data_len),
-213 => wire__crate__api__layer__layer_reference_set_clip_retime_impl(ptr, rust_vec_len, data_len),
-214 => wire__crate__api__layer__layer_reference_set_clip_speed_impl(ptr, rust_vec_len, data_len),
-215 => wire__crate__api__layer__layer_reference_set_effect_enabled_impl(ptr, rust_vec_len, data_len),
-216 => wire__crate__api__layer__layer_reference_set_effects_impl(ptr, rust_vec_len, data_len),
-217 => wire__crate__api__layer__layer_reference_set_flow_enabled_impl(ptr, rust_vec_len, data_len),
-218 => wire__crate__api__layer__layer_reference_set_flow_input_rate_impl(ptr, rust_vec_len, data_len),
-219 => wire__crate__api__layer__layer_reference_set_flow_params_impl(ptr, rust_vec_len, data_len),
-220 => wire__crate__api__layer__layer_reference_set_graph_impl(ptr, rust_vec_len, data_len),
-221 => wire__crate__api__layer__layer_reference_set_interpolation_impl(ptr, rust_vec_len, data_len),
-222 => wire__crate__api__layer__layer_reference_set_label_impl(ptr, rust_vec_len, data_len),
-223 => wire__crate__api__layer__layer_reference_set_markers_impl(ptr, rust_vec_len, data_len),
-224 => wire__crate__api__layer__layer_reference_set_mask_impl(ptr, rust_vec_len, data_len),
-225 => wire__crate__api__layer__layer_reference_set_mask_path_keys_impl(ptr, rust_vec_len, data_len),
-226 => wire__crate__api__layer__layer_reference_set_matte_impl(ptr, rust_vec_len, data_len),
-227 => wire__crate__api__layer__layer_reference_set_parent_impl(ptr, rust_vec_len, data_len),
-228 => wire__crate__api__layer__layer_reference_set_retime_property_impl(ptr, rust_vec_len, data_len),
-229 => wire__crate__api__layer__layer_reference_set_shape_contents_impl(ptr, rust_vec_len, data_len),
-230 => wire__crate__api__layer__layer_reference_set_span_impl(ptr, rust_vec_len, data_len),
-231 => wire__crate__api__layer__layer_reference_set_stroke_impl(ptr, rust_vec_len, data_len),
-232 => wire__crate__api__layer__layer_reference_set_switch_impl(ptr, rust_vec_len, data_len),
-233 => wire__crate__api__layer__layer_reference_set_text_impl(ptr, rust_vec_len, data_len),
-234 => wire__crate__api__layer__layer_reference_set_text_placed_impl(ptr, rust_vec_len, data_len),
-235 => wire__crate__api__layer__layer_reference_set_transform_impl(ptr, rust_vec_len, data_len),
-236 => wire__crate__api__layer__layer_reference_set_transforms_impl(ptr, rust_vec_len, data_len),
-237 => wire__crate__api__layer__layer_reference_set_volume_db_impl(ptr, rust_vec_len, data_len),
-238 => wire__crate__api__layer__layer_reference_slide_clip_impl(ptr, rust_vec_len, data_len),
-239 => wire__crate__api__layer__layer_reference_split_at_impl(ptr, rust_vec_len, data_len),
-240 => wire__crate__api__layer__layer_reference_toggle_mask_path_key_impl(ptr, rust_vec_len, data_len),
-241 => wire__crate__api__layer__layer_reference_toggle_retime_property_impl(ptr, rust_vec_len, data_len),
-242 => wire__crate__api__layer__layer_reference_trim_clip_impl(ptr, rust_vec_len, data_len),
-243 => wire__crate__api__shell__list_autosaves_impl(ptr, rust_vec_len, data_len),
-244 => wire__crate__api__composition__list_blend_modes_impl(ptr, rust_vec_len, data_len),
-245 => wire__crate__api__effect__list_drivers_impl(ptr, rust_vec_len, data_len),
-246 => wire__crate__api__effect__list_effects_impl(ptr, rust_vec_len, data_len),
-247 => wire__crate__api__effect__list_enabled_when_impl(ptr, rust_vec_len, data_len),
-248 => wire__crate__api__effect__list_pairs_impl(ptr, rust_vec_len, data_len),
-249 => wire__crate__api__effect__list_parameter_groups_impl(ptr, rust_vec_len, data_len),
-250 => wire__crate__api__effect__list_parameters_impl(ptr, rust_vec_len, data_len),
-251 => wire__crate__api__effect__list_presets_impl(ptr, rust_vec_len, data_len),
-252 => wire__crate__api__cache__memory_report_impl(ptr, rust_vec_len, data_len),
-253 => wire__crate__api__shell__playback_tier_impl(ptr, rust_vec_len, data_len),
-254 => wire__crate__api__effect__presets_dir_path_impl(ptr, rust_vec_len, data_len),
-255 => wire__crate__api__project__project_reference_anti_aliasing_impl(ptr, rust_vec_len, data_len),
-256 => wire__crate__api__project__project_reference_anti_aliasing_in_use_impl(ptr, rust_vec_len, data_len),
-257 => wire__crate__api__project__project_reference_autosave_impl(ptr, rust_vec_len, data_len),
-258 => wire__crate__api__project__project_reference_begin_undo_group_impl(ptr, rust_vec_len, data_len),
-259 => wire__crate__api__project__project_reference_cache_location_impl(ptr, rust_vec_len, data_len),
-260 => wire__crate__api__project__project_reference_can_deliver_colour_space_impl(ptr, rust_vec_len, data_len),
-261 => wire__crate__api__project__project_reference_close_impl(ptr, rust_vec_len, data_len),
-262 => wire__crate__api__project__project_reference_colour_summary_impl(ptr, rust_vec_len, data_len),
-263 => wire__crate__api__project__project_reference_end_undo_group_impl(ptr, rust_vec_len, data_len),
-264 => wire__crate__api__project__project_reference_get_items_impl(ptr, rust_vec_len, data_len),
-265 => wire__crate__api__project__project_reference_history_impl(ptr, rust_vec_len, data_len),
-266 => wire__crate__api__project__project_reference_import_footage_impl(ptr, rust_vec_len, data_len),
-267 => wire__crate__api__project__project_reference_is_dirty_impl(ptr, rust_vec_len, data_len),
-268 => wire__crate__api__project__project_reference_new_composition_impl(ptr, rust_vec_len, data_len),
-269 => wire__crate__api__project__project_reference_new_folder_impl(ptr, rust_vec_len, data_len),
-270 => wire__crate__api__project__project_reference_next_comp_name_impl(ptr, rust_vec_len, data_len),
-271 => wire__crate__api__project__project_reference_path_impl(ptr, rust_vec_len, data_len),
-272 => wire__crate__api__project__project_reference_project_swatches_impl(ptr, rust_vec_len, data_len),
-273 => wire__crate__api__project__project_reference_redo_impl(ptr, rust_vec_len, data_len),
-274 => wire__crate__api__project__project_reference_restore_journal_impl(ptr, rust_vec_len, data_len),
-276 => wire__crate__api__project__project_reference_set_anti_aliasing_impl(ptr, rust_vec_len, data_len),
-277 => wire__crate__api__project__project_reference_set_cache_location_impl(ptr, rust_vec_len, data_len),
-278 => wire__crate__api__project__project_reference_set_colour_config_impl(ptr, rust_vec_len, data_len),
-279 => wire__crate__api__project__project_reference_set_project_swatches_impl(ptr, rust_vec_len, data_len),
-280 => wire__crate__api__project__project_reference_set_ui_state_impl(ptr, rust_vec_len, data_len),
-281 => wire__crate__api__project__project_reference_set_use_proxies_impl(ptr, rust_vec_len, data_len),
-282 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
-283 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
-284 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
-285 => wire__crate__api__project__project_reference_use_proxies_impl(ptr, rust_vec_len, data_len),
-286 => wire__crate__api__footage__proxy_cancel_impl(ptr, rust_vec_len, data_len),
-287 => wire__crate__api__footage__proxy_poll_impl(ptr, rust_vec_len, data_len),
-288 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
-289 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
-290 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
-291 => wire__crate__api__shell__reveal_in_folder_impl(ptr, rust_vec_len, data_len),
-292 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
-293 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
-294 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
-295 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
-296 => wire__crate__api__track__set_camera_solve_link_impl(ptr, rust_vec_len, data_len),
-297 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
-298 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
-299 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
-300 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
-301 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
-302 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
-303 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
-304 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
-305 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
-306 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
-307 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
-308 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
-309 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
+211 => wire__crate__api__layer__layer_reference_set_axis_mode_impl(ptr, rust_vec_len, data_len),
+212 => wire__crate__api__layer__layer_reference_set_blend_impl(ptr, rust_vec_len, data_len),
+213 => wire__crate__api__layer__layer_reference_set_camera_zoom_impl(ptr, rust_vec_len, data_len),
+214 => wire__crate__api__layer__layer_reference_set_clip_retime_impl(ptr, rust_vec_len, data_len),
+215 => wire__crate__api__layer__layer_reference_set_clip_speed_impl(ptr, rust_vec_len, data_len),
+216 => wire__crate__api__layer__layer_reference_set_effect_enabled_impl(ptr, rust_vec_len, data_len),
+217 => wire__crate__api__layer__layer_reference_set_effects_impl(ptr, rust_vec_len, data_len),
+218 => wire__crate__api__layer__layer_reference_set_flow_enabled_impl(ptr, rust_vec_len, data_len),
+219 => wire__crate__api__layer__layer_reference_set_flow_input_rate_impl(ptr, rust_vec_len, data_len),
+220 => wire__crate__api__layer__layer_reference_set_flow_params_impl(ptr, rust_vec_len, data_len),
+221 => wire__crate__api__layer__layer_reference_set_graph_impl(ptr, rust_vec_len, data_len),
+222 => wire__crate__api__layer__layer_reference_set_interpolation_impl(ptr, rust_vec_len, data_len),
+223 => wire__crate__api__layer__layer_reference_set_label_impl(ptr, rust_vec_len, data_len),
+224 => wire__crate__api__layer__layer_reference_set_markers_impl(ptr, rust_vec_len, data_len),
+225 => wire__crate__api__layer__layer_reference_set_mask_impl(ptr, rust_vec_len, data_len),
+226 => wire__crate__api__layer__layer_reference_set_mask_path_keys_impl(ptr, rust_vec_len, data_len),
+227 => wire__crate__api__layer__layer_reference_set_matte_impl(ptr, rust_vec_len, data_len),
+228 => wire__crate__api__layer__layer_reference_set_parent_impl(ptr, rust_vec_len, data_len),
+229 => wire__crate__api__layer__layer_reference_set_retime_property_impl(ptr, rust_vec_len, data_len),
+230 => wire__crate__api__layer__layer_reference_set_shape_contents_impl(ptr, rust_vec_len, data_len),
+231 => wire__crate__api__layer__layer_reference_set_span_impl(ptr, rust_vec_len, data_len),
+232 => wire__crate__api__layer__layer_reference_set_stroke_impl(ptr, rust_vec_len, data_len),
+233 => wire__crate__api__layer__layer_reference_set_switch_impl(ptr, rust_vec_len, data_len),
+234 => wire__crate__api__layer__layer_reference_set_text_impl(ptr, rust_vec_len, data_len),
+235 => wire__crate__api__layer__layer_reference_set_text_placed_impl(ptr, rust_vec_len, data_len),
+236 => wire__crate__api__layer__layer_reference_set_transform_impl(ptr, rust_vec_len, data_len),
+237 => wire__crate__api__layer__layer_reference_set_transforms_impl(ptr, rust_vec_len, data_len),
+238 => wire__crate__api__layer__layer_reference_set_volume_db_impl(ptr, rust_vec_len, data_len),
+239 => wire__crate__api__layer__layer_reference_slide_clip_impl(ptr, rust_vec_len, data_len),
+240 => wire__crate__api__layer__layer_reference_split_at_impl(ptr, rust_vec_len, data_len),
+241 => wire__crate__api__layer__layer_reference_toggle_mask_path_key_impl(ptr, rust_vec_len, data_len),
+242 => wire__crate__api__layer__layer_reference_toggle_retime_property_impl(ptr, rust_vec_len, data_len),
+243 => wire__crate__api__layer__layer_reference_trim_clip_impl(ptr, rust_vec_len, data_len),
+244 => wire__crate__api__shell__list_autosaves_impl(ptr, rust_vec_len, data_len),
+245 => wire__crate__api__composition__list_blend_modes_impl(ptr, rust_vec_len, data_len),
+246 => wire__crate__api__effect__list_drivers_impl(ptr, rust_vec_len, data_len),
+247 => wire__crate__api__effect__list_effects_impl(ptr, rust_vec_len, data_len),
+248 => wire__crate__api__effect__list_enabled_when_impl(ptr, rust_vec_len, data_len),
+249 => wire__crate__api__effect__list_pairs_impl(ptr, rust_vec_len, data_len),
+250 => wire__crate__api__effect__list_parameter_groups_impl(ptr, rust_vec_len, data_len),
+251 => wire__crate__api__effect__list_parameters_impl(ptr, rust_vec_len, data_len),
+252 => wire__crate__api__effect__list_presets_impl(ptr, rust_vec_len, data_len),
+253 => wire__crate__api__cache__memory_report_impl(ptr, rust_vec_len, data_len),
+254 => wire__crate__api__shell__playback_tier_impl(ptr, rust_vec_len, data_len),
+255 => wire__crate__api__effect__presets_dir_path_impl(ptr, rust_vec_len, data_len),
+256 => wire__crate__api__project__project_reference_anti_aliasing_impl(ptr, rust_vec_len, data_len),
+257 => wire__crate__api__project__project_reference_anti_aliasing_in_use_impl(ptr, rust_vec_len, data_len),
+258 => wire__crate__api__project__project_reference_autosave_impl(ptr, rust_vec_len, data_len),
+259 => wire__crate__api__project__project_reference_begin_undo_group_impl(ptr, rust_vec_len, data_len),
+260 => wire__crate__api__project__project_reference_cache_location_impl(ptr, rust_vec_len, data_len),
+261 => wire__crate__api__project__project_reference_can_deliver_colour_space_impl(ptr, rust_vec_len, data_len),
+262 => wire__crate__api__project__project_reference_close_impl(ptr, rust_vec_len, data_len),
+263 => wire__crate__api__project__project_reference_colour_summary_impl(ptr, rust_vec_len, data_len),
+264 => wire__crate__api__project__project_reference_end_undo_group_impl(ptr, rust_vec_len, data_len),
+265 => wire__crate__api__project__project_reference_get_items_impl(ptr, rust_vec_len, data_len),
+266 => wire__crate__api__project__project_reference_history_impl(ptr, rust_vec_len, data_len),
+267 => wire__crate__api__project__project_reference_import_footage_impl(ptr, rust_vec_len, data_len),
+268 => wire__crate__api__project__project_reference_is_dirty_impl(ptr, rust_vec_len, data_len),
+269 => wire__crate__api__project__project_reference_new_composition_impl(ptr, rust_vec_len, data_len),
+270 => wire__crate__api__project__project_reference_new_folder_impl(ptr, rust_vec_len, data_len),
+271 => wire__crate__api__project__project_reference_next_comp_name_impl(ptr, rust_vec_len, data_len),
+272 => wire__crate__api__project__project_reference_path_impl(ptr, rust_vec_len, data_len),
+273 => wire__crate__api__project__project_reference_project_swatches_impl(ptr, rust_vec_len, data_len),
+274 => wire__crate__api__project__project_reference_redo_impl(ptr, rust_vec_len, data_len),
+275 => wire__crate__api__project__project_reference_restore_journal_impl(ptr, rust_vec_len, data_len),
+277 => wire__crate__api__project__project_reference_set_anti_aliasing_impl(ptr, rust_vec_len, data_len),
+278 => wire__crate__api__project__project_reference_set_cache_location_impl(ptr, rust_vec_len, data_len),
+279 => wire__crate__api__project__project_reference_set_colour_config_impl(ptr, rust_vec_len, data_len),
+280 => wire__crate__api__project__project_reference_set_project_swatches_impl(ptr, rust_vec_len, data_len),
+281 => wire__crate__api__project__project_reference_set_ui_state_impl(ptr, rust_vec_len, data_len),
+282 => wire__crate__api__project__project_reference_set_use_proxies_impl(ptr, rust_vec_len, data_len),
+283 => wire__crate__api__project__project_reference_start_worker_impl(ptr, rust_vec_len, data_len),
+284 => wire__crate__api__project__project_reference_ui_state_impl(ptr, rust_vec_len, data_len),
+285 => wire__crate__api__project__project_reference_undo_impl(ptr, rust_vec_len, data_len),
+286 => wire__crate__api__project__project_reference_use_proxies_impl(ptr, rust_vec_len, data_len),
+287 => wire__crate__api__footage__proxy_cancel_impl(ptr, rust_vec_len, data_len),
+288 => wire__crate__api__footage__proxy_poll_impl(ptr, rust_vec_len, data_len),
+289 => wire__crate__api__shell__reset_realtime_impl(ptr, rust_vec_len, data_len),
+290 => wire__crate__api__system__resident_memory_bytes_impl(ptr, rust_vec_len, data_len),
+291 => wire__crate__api__system__restore_frozen_cursor_impl(ptr, rust_vec_len, data_len),
+292 => wire__crate__api__shell__reveal_in_folder_impl(ptr, rust_vec_len, data_len),
+293 => wire__crate__api__effect__sample_scalar_impl(ptr, rust_vec_len, data_len),
+294 => wire__crate__api__effect__sample_scalar_range_with_context_impl(ptr, rust_vec_len, data_len),
+295 => wire__crate__api__effect__sample_scalar_with_context_impl(ptr, rust_vec_len, data_len),
+296 => wire__crate__api__cache__set_cache_budget_impl(ptr, rust_vec_len, data_len),
+297 => wire__crate__api__track__set_camera_solve_link_impl(ptr, rust_vec_len, data_len),
+298 => wire__crate__api__cache__set_disk_cache_budget_impl(ptr, rust_vec_len, data_len),
+299 => wire__crate__api__cache__set_disk_cache_location_impl(ptr, rust_vec_len, data_len),
+300 => wire__crate__api__cache__set_render_profiling_impl(ptr, rust_vec_len, data_len),
+301 => wire__crate__api__cache__set_vram_cache_budget_impl(ptr, rust_vec_len, data_len),
+302 => wire__crate__api__solid__solid_reference_get_definition_impl(ptr, rust_vec_len, data_len),
+303 => wire__crate__api__solid__solid_reference_set_definition_impl(ptr, rust_vec_len, data_len),
+304 => wire__crate__api__system__system_memory_bytes_impl(ptr, rust_vec_len, data_len),
+305 => wire__crate__api__system__thaw_cursor_impl(ptr, rust_vec_len, data_len),
+306 => wire__crate__api__track__track_status_impl(ptr, rust_vec_len, data_len),
+307 => wire__crate__api__track__tracked_points_impl(ptr, rust_vec_len, data_len),
+308 => wire__crate__api__system__video_memory_bytes_impl(ptr, rust_vec_len, data_len),
+309 => wire__crate__api__cache__viewer_transport_impl(ptr, rust_vec_len, data_len),
+310 => wire__crate__api__cache__vram_cache_stats_impl(ptr, rust_vec_len, data_len),
                         _ => unreachable!(),
                     }
 }
@@ -14749,6 +14826,50 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::shell::BridgeAutosave>
     for crate::api::shell::BridgeAutosave
 {
     fn into_into_dart(self) -> crate::api::shell::BridgeAutosave {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeAxisMode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Linked => 0.into_dart(),
+            Self::Combined => 1.into_dart(),
+            Self::Separated => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::layer::BridgeAxisMode
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeAxisMode>
+    for crate::api::layer::BridgeAxisMode
+{
+    fn into_into_dart(self) -> crate::api::layer::BridgeAxisMode {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeAxisModes {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.anchor.into_into_dart().into_dart(),
+            self.position.into_into_dart().into_dart(),
+            self.scale.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::layer::BridgeAxisModes
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeAxisModes>
+    for crate::api::layer::BridgeAxisModes
+{
+    fn into_into_dart(self) -> crate::api::layer::BridgeAxisModes {
         self
     }
 }
@@ -16052,6 +16173,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerInfo {
             self.parent.into_into_dart().into_dart(),
             self.parent_name.into_into_dart().into_dart(),
             self.transform.into_into_dart().into_dart(),
+            self.axis_modes.into_into_dart().into_dart(),
             self.effects.into_into_dart().into_dart(),
             self.label.into_into_dart().into_dart(),
             self.matte.into_into_dart().into_dart(),
@@ -17576,6 +17698,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeTransform>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeTransformPair {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Anchor => 0.into_dart(),
+            Self::Position => 1.into_dart(),
+            Self::Scale => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::layer::BridgeTransformPair
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeTransformPair>
+    for crate::api::layer::BridgeTransformPair
+{
+    fn into_into_dart(self) -> crate::api::layer::BridgeTransformPair {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeTransformProp {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -18108,6 +18252,32 @@ impl SseEncode for crate::api::shell::BridgeAutosave {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u32>::sse_encode(self.slot, serializer);
         <String>::sse_encode(self.path, serializer);
+    }
+}
+
+impl SseEncode for crate::api::layer::BridgeAxisMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::layer::BridgeAxisMode::Linked => 0,
+                crate::api::layer::BridgeAxisMode::Combined => 1,
+                crate::api::layer::BridgeAxisMode::Separated => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::layer::BridgeAxisModes {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::layer::BridgeAxisMode>::sse_encode(self.anchor, serializer);
+        <crate::api::layer::BridgeAxisMode>::sse_encode(self.position, serializer);
+        <crate::api::layer::BridgeAxisMode>::sse_encode(self.scale, serializer);
     }
 }
 
@@ -18827,6 +18997,7 @@ impl SseEncode for crate::api::layer::BridgeLayerInfo {
         <Option<uuid::Uuid>>::sse_encode(self.parent, serializer);
         <Option<String>>::sse_encode(self.parent_name, serializer);
         <crate::api::layer::BridgeTransform>::sse_encode(self.transform, serializer);
+        <crate::api::layer::BridgeAxisModes>::sse_encode(self.axis_modes, serializer);
         <Vec<crate::api::effect::BridgeEffectInstanceInfo>>::sse_encode(self.effects, serializer);
         <u8>::sse_encode(self.label, serializer);
         <Option<crate::api::layer::BridgeMatte>>::sse_encode(self.matte, serializer);
@@ -19734,6 +19905,23 @@ impl SseEncode for crate::api::layer::BridgeTransform {
         <crate::api::effect::BridgeScalar>::sse_encode(self.rotation_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.rotation_y, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
+    }
+}
+
+impl SseEncode for crate::api::layer::BridgeTransformPair {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::layer::BridgeTransformPair::Anchor => 0,
+                crate::api::layer::BridgeTransformPair::Position => 1,
+                crate::api::layer::BridgeTransformPair::Scale => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 

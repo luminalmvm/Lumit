@@ -344,6 +344,11 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         rotation_x: scalar(conv, path, props, "ADBE Rotate X", 0, 0.0),
         rotation_y: scalar(conv, path, props, "ADBE Rotate Y", 0, 0.0),
         opacity: scalar(conv, path, props, "ADBE Opacity", 0, 100.0),
+        // An imported layer lands on the house defaults (K-571): AE records its
+        // own separated-dimensions and proportional-scale flags, and reading
+        // them is a follow-up — the axes' values and keyframes are already
+        // faithful either way, because both editors store them per axis.
+        axis_modes: lumit_core::model::AxisModes::default(),
         extra: serde_json::Map::new(),
     }
 }

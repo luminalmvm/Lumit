@@ -625,6 +625,59 @@ with a badge naming the error — is not built, and is carried as a known gap in
 [impl/expressions.md](impl/expressions.md) §8. `last_error` is runtime state either way, and
 is never serialised as authority.
 
+### 6.5 Separate axes (K-571)
+
+A Position is two numbers, and sometimes the two want different treatment: a bounce that
+falls and settles vertically while sliding steadily sideways is one curve on x and another
+on y. **Separating a pair's axes gives each one its own row** — its own stopwatch, its own
+lane of diamonds, its own curve in the graph editor — and recombining puts them back on one.
+
+**The storage does not change, because it never had to.** §6.1's rule is that every
+dimension is already a separate scalar property (`position_x`, `position_y`), so a
+separated Position is the same eleven properties drawn as more rows. What is stored is only
+the *choice*:
+
+```rust
+enum AxisMode {
+    Linked,      // one row, one box; an edit carries the other axis so x:y holds
+    Combined,    // one row, a box per axis, one stopwatch over all of them
+    Separated,   // a row per axis, each animating on its own
+}
+
+struct AxisModes { anchor: AxisMode, position: AxisMode, scale: AxisMode }
+```
+
+carried on `TransformGroup` as `axis_modes`. The three pairs are exactly the transform
+properties with more than one axis; Rotation is one angle and Opacity one number, so
+neither is offered a choice. A separated Position on a 3D layer is three rows, not two —
+z is an axis like the others (§9.3) — and on a 2D layer the z row is not drawn at all,
+which is what it already does.
+
+**Anchor point and Position start `Combined`; Scale starts `Linked`**, because a scale that
+has quietly stopped being proportional is nearly always a mistake rather than an intention.
+A linked row draws one box: it reads the x axis, and an edit multiplies the y axis by the
+ratio the pair already had — [K-072](02-DECISIONS.md)'s rule, now with a state to name it.
+Unlinking gives the pair a box each; separating gives it a row each.
+
+**Old projects load unchanged.** `axis_modes` is `serde(default)` and is not written while
+it holds the default, so a project saved before separate axes existed reads as
+combined/combined/linked and one saved after — having never been separated — is
+byte-identical to what the old build wrote. A newer build's extra keys survive the trip in
+`TransformGroup::extra` as they always have (§12).
+
+**Recombining merges the axes' keyframes, and does not move the picture.** Back on one row
+the axes share a stopwatch and a lane, so every *animated* axis in the pair gains a key
+wherever any other animated axis has one (`TransformGroup::unified_axes`). Each planted key
+takes the value the curve already had there, and the span it lands in is re-described around
+it — the exact cubic split of `Property::insert_key_preserving_shape` (§6.2), not a
+resample — so every value at every moment is what it was. A **static** axis is left static:
+a constant needs no keys to stay constant, and keying it would light a stopwatch nobody
+asked for. Separating merges nothing at all, because the axes are already apart.
+
+The mode is set by `Op::SetTransformAxisMode`, which carries only the mode and is trivially
+invertible; the merge rides along as ordinary `SetTransformProperty` ops in the same
+`Op::Batch`, so the whole change — mode and keys together — is **one undo step**.
+
 ---
 
 ## 7. Masks

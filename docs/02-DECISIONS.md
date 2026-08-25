@@ -16284,3 +16284,65 @@ carry keyframes, with the headings that lead down to one (`animatedFoldRows`) �
 finds the outline exactly as it was left, and a layer's twirls are inert while the filter
 is on. A layer with nothing keyed keeps its own row and lists nothing under it: hiding a
 layer is the shy switch's job, not a property filter's.
+
+
+## K-571 — The axes come apart, and the pair remembers how to come back
+
+**Status: DECIDED (2026-08-25).** A Position is two numbers and sometimes they want
+different treatment: a bounce that falls and settles vertically while sliding steadily
+sideways is one curve on x and another on y. Right-clicking **Anchor point**, **Position**
+or **Scale** now offers **Separate axes**, which gives each axis a row of its own — its own
+stopwatch, its own lane of diamonds, its own curve in the graph editor — and **Combine
+axes**, which puts them back. Scale carries the link as well: **Link axes** / **Unlink
+axes**, since it is the pair whose default is linked.
+
+**Nothing about the storage changes, because it never had to.** 03-DATA-MODEL §6.1 has
+always kept every dimension as its own scalar property — `position_x` and `position_y`, not
+a `Property<Vec2>` — which is precisely what has made a per-axis curve possible all along.
+So a separated pair is the same properties drawn as more rows, and what is stored is only
+the choice: an `AxisMode` per pair (`Linked` / `Combined` / `Separated`) in a new
+`axis_modes` field on `TransformGroup` (03-DATA-MODEL §6.5). Rotation is one angle and
+Opacity one number, so neither is offered a choice.
+
+**Anchor point and Position start combined; Scale starts linked** — a scale that has quietly
+stopped being proportional is nearly always a mistake, so it is a state you leave on
+purpose. A linked row draws **one** box: it reads the x axis, and an edit multiplies y by
+the ratio the pair already had, which is K-072's rule finally given a name and a state.
+That one box does mean a pair whose axes already disagree shows only its x — deliberate,
+and reversible in one click of *Unlink axes*, which is a smaller surprise than a link that
+silently stops holding.
+
+**Old projects load unchanged, and unchanged projects save unchanged.** `axis_modes` is
+`serde(default)` and is skipped while it holds the default, so a file written before this
+existed reads as combined/combined/linked, and a file written after — by someone who never
+separated anything — is byte-identical to what the old build wrote. Forward compatibility
+is the standing mechanism: an older reader drops the field into `TransformGroup::extra` and
+writes it back out (docs/03 §12).
+
+**Recombining merges the keyframes, exactly.** Back on one row the axes share a stopwatch
+and a lane, so a diamond has to mean the same thing on every axis under it: every *animated*
+axis gains a key wherever any other animated axis in the pair has one. Each planted key
+takes the value the curve already had there and the span it lands in is re-described around
+it — `Property::insert_key_preserving_shape`'s exact cubic split (K-221), not a resample —
+so the picture does not move by so much as a pixel. A **static** axis is left static: a
+constant needs no keys to stay constant, and keying it would light a stopwatch nobody asked
+for. Separating merges nothing at all.
+
+**One undo step, either way.** `Op::SetTransformAxisMode` carries only the mode and is
+trivially invertible; the merge a recombine owes rides along as ordinary
+`SetTransformProperty` ops in the same `Op::Batch`. Undo puts the mode and the keys back
+together, because they went in together.
+
+**Every surface followed for free.** The Timeline's fold-out, its lanes, the Effect controls
+card, the graph editor's channels and the console's Keyframe ring all build their rows from
+one list — `transformGroups` in `transform_rows_frb.dart` — so handing that function the
+pair modes was the whole wiring. The graph editor already gave each axis of a pair its own
+channel and its own colour, which is why a separated Position needed nothing there but the
+rows to hang them on. The **Viewer's gizmo is unaffected by design**: it reads the resolved
+transform, and the resolved transform has always been per-axis scalars, so a box and a
+handle behave identically whatever the rows say.
+
+**Not built here, and deliberately:** the AE importer lands every layer on the house
+defaults rather than reading AE's own separated-dimensions and proportional-scale flags.
+The values and keyframes are already faithful either way — both editors store them per axis
+— so what is missing is a preference, not any part of the animation.

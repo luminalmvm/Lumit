@@ -1032,6 +1032,10 @@ pub struct BridgeLayerInfo {
     pub parent_name: Option<String>,
     /// The whole transform, one scalar per property (K-184).
     pub transform: BridgeTransform,
+    /// How each two-axis property is shown (K-571) — which decides how many
+    /// rows the Transform group has, so it is read here with the rest of the
+    /// drawing data rather than asked for per row.
+    pub axis_modes: BridgeAxisModes,
     /// Every effect on the layer, with every parameter's value (K-184). Plain
     /// data for *drawing*; an edit reads fresh instance handles at commit time.
     pub effects: Vec<crate::api::effect::BridgeEffectInstanceInfo>,
@@ -1136,6 +1140,7 @@ pub(crate) fn read_layer_info(
                 .map(|l| l.name.clone())
         }),
         transform: BridgeTransform::read_at(&layer.transform, layer.start_offset.0),
+        axis_modes: BridgeAxisModes::of(layer.transform.axis_modes),
         effects: layer
             .effects
             .iter()
@@ -1324,6 +1329,84 @@ pub enum BridgeTransformProp {
     RotationX,
     RotationY,
     Opacity,
+}
+
+/// Which two-axis transform property an axis-mode edit names (K-571,
+/// [`lumit_core::model::TransformPair`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeTransformPair {
+    Anchor,
+    Position,
+    Scale,
+}
+
+/// How one two-axis property is shown and edited (K-571,
+/// [`lumit_core::model::AxisMode`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeAxisMode {
+    /// One row, one box, the x:y ratio held on every edit.
+    Linked,
+    /// One row, a box per axis, one stopwatch over all of them.
+    Combined,
+    /// A row per axis, each with its own stopwatch and its own curve.
+    Separated,
+}
+
+/// Every pair's mode, carried in the read model so the panels can draw the
+/// right rows with no bridge call (K-184).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeAxisModes {
+    pub anchor: BridgeAxisMode,
+    pub position: BridgeAxisMode,
+    pub scale: BridgeAxisMode,
+}
+
+impl BridgeTransformPair {
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::model::TransformPair {
+        use lumit_core::model::TransformPair as P;
+        match self {
+            BridgeTransformPair::Anchor => P::Anchor,
+            BridgeTransformPair::Position => P::Position,
+            BridgeTransformPair::Scale => P::Scale,
+        }
+    }
+}
+
+impl BridgeAxisMode {
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::model::AxisMode {
+        use lumit_core::model::AxisMode as M;
+        match self {
+            BridgeAxisMode::Linked => M::Linked,
+            BridgeAxisMode::Combined => M::Combined,
+            BridgeAxisMode::Separated => M::Separated,
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn of(mode: lumit_core::model::AxisMode) -> Self {
+        use lumit_core::model::AxisMode as M;
+        match mode {
+            M::Linked => BridgeAxisMode::Linked,
+            M::Combined => BridgeAxisMode::Combined,
+            M::Separated => BridgeAxisMode::Separated,
+        }
+    }
+}
+
+impl BridgeAxisModes {
+    #[frb(ignore)]
+    pub(crate) fn of(modes: lumit_core::model::AxisModes) -> Self {
+        Self {
+            anchor: BridgeAxisMode::of(modes.anchor),
+            position: BridgeAxisMode::of(modes.position),
+            scale: BridgeAxisMode::of(modes.scale),
+        }
+    }
 }
 
 /// A document rational as the integer pair the bridge carries.
@@ -3849,6 +3932,54 @@ impl LayerReference {
             })
             .map_err(BridgeError::OpError)?;
         Ok(())
+    }
+
+    /// Set how one two-axis property is shown and edited (K-571): combined on
+    /// one row, linked (Scale), or separated onto a row per axis.
+    ///
+    /// **Coming back together merges the axes' keyframes.** A separated pair's
+    /// axes each keep their own keys; put back on one row they share a
+    /// stopwatch and a lane, so every animated axis gains a key wherever any
+    /// other animated axis in the pair has one. The planted keys take the value
+    /// the curve already had and the spans around them are re-described, so the
+    /// picture does not move — and a static axis is left static.
+    ///
+    /// The whole change is one [`lumit_core::Op::Batch`], so it is one undo
+    /// step whatever it had to merge. Separating merges nothing: the axes are
+    /// already stored apart, which is what makes a per-axis curve possible at
+    /// all.
+    #[frb(sync)]
+    pub fn set_axis_mode(
+        &self,
+        pair: BridgeTransformPair,
+        mode: BridgeAxisMode,
+    ) -> Result<(), BridgeError> {
+        let core_pair = pair.core();
+        let mut ops = vec![lumit_core::Op::SetTransformAxisMode {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            pair: core_pair,
+            mode: mode.core(),
+        }];
+        if mode != BridgeAxisMode::Separated {
+            let layer = self.item()?;
+            if layer.transform.axis_modes.get(core_pair) == lumit_core::model::AxisMode::Separated {
+                for (prop, animation) in layer.transform.unified_axes(core_pair) {
+                    ops.push(lumit_core::Op::SetTransformProperty {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                        prop,
+                        animation,
+                    });
+                }
+            }
+        }
+        let op = if ops.len() == 1 {
+            ops.into_iter().next().ok_or(BridgeError::InvalidLayer)?
+        } else {
+            lumit_core::Op::Batch { ops }
+        };
+        self.commit(op)
     }
 
     #[frb(sync)]

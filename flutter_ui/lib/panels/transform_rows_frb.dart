@@ -37,6 +37,7 @@ import '../widgets/controls.dart';
 import 'graph_editor_frb.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
 /// up down the card, which is what makes a stack of numbers readable.
@@ -61,11 +62,30 @@ class TransformAxis {
   });
 }
 
-/// One row: its label and the axes it edits.
+/// One row: its label, the axes it edits, and — on the three properties that
+/// have more than one axis — which pair it belongs to and how that pair is
+/// being shown (K-571).
 class TransformGroup {
   final String label;
   final List<TransformAxis> axes;
-  const TransformGroup(this.label, this.axes);
+
+  /// The pair this row came out of, or null on Rotation and Opacity, which have
+  /// nothing to separate. It is what the row's menu acts on.
+  final BridgeTransformPair? pair;
+
+  /// The pair's mode. [BridgeAxisMode.separated] means this row is one axis of
+  /// it; [BridgeAxisMode.linked] means the row draws one box for two axes.
+  final BridgeAxisMode mode;
+
+  const TransformGroup(
+    this.label,
+    this.axes, {
+    this.pair,
+    this.mode = BridgeAxisMode.combined,
+  });
+
+  /// A linked row draws one box and carries the other axis with it.
+  bool get isLinked => mode == BridgeAxisMode.linked && axes.length > 1;
 }
 
 /// The rows a layer shows, in order.
@@ -75,36 +95,87 @@ class TransformGroup {
 /// them. Exposed as a list rather than built inline because the Timeline has to
 /// know *how many* rows a layer will take before it draws them — its lanes have
 /// to leave exactly that much room or the bars stop lining up with the names.
-List<TransformGroup> transformGroups({required bool threeD}) => [
-      TransformGroup(l10n.transformAnchorPoint, const [
+///
+/// **Separated axes are more rows, not different data** (K-571). The axes are
+/// separate scalar properties in the document whatever the mode says; a
+/// separated pair simply hands each of them a row of its own, with its own
+/// stopwatch, its own lane and its own curve. Which is why every surface that
+/// walks this list — the fold-out, the lanes, the graph editor, the Effect
+/// controls card — follows without knowing the feature exists.
+List<TransformGroup> transformGroups({
+  required bool threeD,
+  required BridgeAxisModes modes,
+}) {
+  List<TransformGroup> pairRows(
+    BridgeTransformPair pair,
+    String label,
+    List<String> axisLabels,
+    List<TransformAxis> axes,
+  ) {
+    final mode = switch (pair) {
+      BridgeTransformPair.anchor => modes.anchor,
+      BridgeTransformPair.position => modes.position,
+      BridgeTransformPair.scale => modes.scale,
+    };
+    if (mode != BridgeAxisMode.separated) {
+      return [TransformGroup(label, axes, pair: pair, mode: mode)];
+    }
+    return [
+      for (var i = 0; i < axes.length; i++)
+        TransformGroup(axisLabels[i], [axes[i]], pair: pair, mode: mode),
+    ];
+  }
+
+  return [
+    ...pairRows(
+      BridgeTransformPair.anchor,
+      l10n.transformAnchorPoint,
+      [l10n.transformAnchorPointX, l10n.transformAnchorPointY],
+      const [
         TransformAxis(BridgeTransformProp.anchorX),
         TransformAxis(BridgeTransformProp.anchorY),
-      ]),
-      TransformGroup(l10n.transformPosition, [
+      ],
+    ),
+    ...pairRows(
+      BridgeTransformPair.position,
+      l10n.transformPosition,
+      [
+        l10n.transformPositionX,
+        l10n.transformPositionY,
+        if (threeD) l10n.transformPositionZ,
+      ],
+      [
         const TransformAxis(BridgeTransformProp.positionX),
         const TransformAxis(BridgeTransformProp.positionY),
         if (threeD) const TransformAxis(BridgeTransformProp.positionZ),
-      ]),
-      TransformGroup(l10n.transformScale, const [
+      ],
+    ),
+    ...pairRows(
+      BridgeTransformPair.scale,
+      l10n.transformScale,
+      [l10n.transformScaleX, l10n.transformScaleY],
+      const [
         TransformAxis(BridgeTransformProp.scaleX, suffix: '%'),
         TransformAxis(BridgeTransformProp.scaleY, suffix: '%'),
-      ]),
-      TransformGroup(l10n.transformRotation, const [
-        TransformAxis(BridgeTransformProp.rotation, suffix: '°', speed: 0.5),
-      ]),
-      if (threeD) ...[
-        TransformGroup(l10n.transformRotationX, const [
-          TransformAxis(BridgeTransformProp.rotationX, suffix: '°', speed: 0.5),
-        ]),
-        TransformGroup(l10n.transformRotationY, const [
-          TransformAxis(BridgeTransformProp.rotationY, suffix: '°', speed: 0.5),
-        ]),
       ],
-      TransformGroup(l10n.transformOpacity, [
-        TransformAxis(BridgeTransformProp.opacity,
-            suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+    ),
+    TransformGroup(l10n.transformRotation, const [
+      TransformAxis(BridgeTransformProp.rotation, suffix: '°', speed: 0.5),
+    ]),
+    if (threeD) ...[
+      TransformGroup(l10n.transformRotationX, const [
+        TransformAxis(BridgeTransformProp.rotationX, suffix: '°', speed: 0.5),
       ]),
-    ];
+      TransformGroup(l10n.transformRotationY, const [
+        TransformAxis(BridgeTransformProp.rotationY, suffix: '°', speed: 0.5),
+      ]),
+    ],
+    TransformGroup(l10n.transformOpacity, [
+      TransformAxis(BridgeTransformProp.opacity,
+          suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+    ]),
+  ];
+}
 
 /// A layer's transform rows, all of them.
 ///
@@ -119,6 +190,9 @@ class TransformRowsFrb extends StatelessWidget {
   /// drawing the rows costs no bridge calls.
   final BridgeTransform transform;
   final bool threeD;
+
+  /// How each pair is shown (K-571) — which decides how many rows there are.
+  final BridgeAxisModes axisModes;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
   final VoidCallback onChanged;
@@ -143,6 +217,7 @@ class TransformRowsFrb extends StatelessWidget {
     required this.layer,
     required this.transform,
     required this.threeD,
+    required this.axisModes,
     required this.playheadFrame,
     required this.onSeek,
     required this.onChanged,
@@ -155,7 +230,8 @@ class TransformRowsFrb extends StatelessWidget {
   /// One widget per transform row — for a caller that has to put each row in its
   /// own chrome (the Effect controls panel's hairline-separated rows).
   List<Widget> rows(BuildContext context) => [
-        for (final group in transformGroups(threeD: threeD))
+        for (final group
+            in transformGroups(threeD: threeD, modes: axisModes))
           TransformRowFrb(
             comp: comp,
             layer: layer,
@@ -252,6 +328,28 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// so the pointer's last position always reaches the picture.
   final PreviewThrottle _throttle = PreviewThrottle();
 
+  /// A linked row's y:x ratio, taken once per gesture (K-571). Once, because
+  /// re-reading it every tick would read the value the tick before had just
+  /// written — the ratio would hold trivially and the link would do nothing —
+  /// and because sampling costs a crossing the drag does not need to pay
+  /// sixty times a second.
+  double? _linkRatio;
+
+  /// The partner axis's value for `value` on the leading one, holding the
+  /// ratio the pair already had. A leading axis sitting at zero has no ratio to
+  /// keep, so the partner simply matches it.
+  double _linked(BridgeTransformProp lead, BridgeTransformProp partner,
+      double value, int frame) {
+    final ratio = _linkRatio ??= () {
+      final time = timeOfFrame(widget.comp, frame);
+      final x = sampleScalar(scalar: read(widget.transform, lead), time: time);
+      final y =
+          sampleScalar(scalar: read(widget.transform, partner), time: time);
+      return x == 0 ? 1.0 : y / x;
+    }();
+    return value * ratio;
+  }
+
   /// Held rather than read through the context on the way past, because
   /// [dispose] needs it after the context is no longer a place to look things
   /// up — and the notifier itself outlives every row.
@@ -314,6 +412,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
   Widget _row(BridgeTransform transform, TransformGroup group, int frame) {
     final t = ThemeScope.of(context).theme;
+    // A linked row draws one box for two axes (K-571): the second follows the
+    // first through [_ratio], so a box for it would be a box that can only ever
+    // be told what it already knows. The stopwatch above still covers both.
+    final cells = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
     // One stopwatch, every axis in the row — and one undo step, because
     // `setTransforms` commits them as a batch.
     final keyframes = KeyframeControlsFrb(
@@ -337,10 +439,16 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     );
 
     // The name is the row's handle for the graph editor, so it is built once
-    // and drawn by whichever layout the row takes.
+    // and drawn by whichever layout the row takes. Right-clicking it opens the
+    // axis menu (K-571) — on the name rather than the whole row, for the reason
+    // the left click is on the name: grabbing a value box must never be a
+    // gesture about the property's shape.
     final label = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onLabelTap,
+      onSecondaryTapUp: group.pair == null
+          ? null
+          : (details) => _axisMenu(context, details.globalPosition, group),
       child: Row(
         children: [
           ...flatGroupPrefix(t, widget.nameGroup),
@@ -383,9 +491,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         control: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (var i = 0; i < group.axes.length; i++) ...[
+            for (var i = 0; i < cells.length; i++) ...[
               if (i > 0) const SizedBox(width: 6),
-              _cell(transform, group.axes[i], frame),
+              _cell(transform, cells[i], frame, group: group),
             ],
           ],
         ),
@@ -406,20 +514,20 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
               width: col.width,
               child: Row(
                 children: [
-                  for (var i = 0; i < group.axes.length; i++) ...[
+                  for (var i = 0; i < cells.length; i++) ...[
                     if (i > 0) const SizedBox(width: 4),
                     Expanded(
-                        child: _cell(transform, group.axes[i], frame,
-                            fixed: false)),
+                        child: _cell(transform, cells[i], frame,
+                            fixed: false, group: group)),
                   ],
                 ],
               ),
             ),
             SizedBox(width: col.rightInset),
           ] else
-            for (final axis in group.axes) ...[
+            for (final axis in cells) ...[
               const SizedBox(width: 6),
-              _cell(transform, axis, frame),
+              _cell(transform, axis, frame, group: group),
             ],
         ],
       ),
@@ -429,8 +537,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 
   Widget _cell(BridgeTransform transform, TransformAxis axis, int frame,
-      {bool fixed = true}) {
+      {bool fixed = true, required TransformGroup group}) {
     final scalar = read(transform, axis.prop);
+    // The axis this box drags along with it, or null when it drags alone.
+    final partner = group.isLinked ? group.axes[1].prop : null;
 
     // An animated property stays editable (docs/07 §4.3): the field shows the
     // value under the playhead, and a change writes it into the key sitting
@@ -490,12 +600,13 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           speed: axis.speed,
           decimals: axis.decimals,
           suffix: axis.suffix,
-          onChanged: (v) => _commit(axis.prop, v.toDouble()),
+          onChanged: (v) => _commit(axis.prop, v.toDouble(), partner, frame),
           onChangeStart: () => _staged = transform,
-          onChangeLive: (v) => _live(axis.prop, v.toDouble()),
-          onChangeEnd: (v) => _commit(axis.prop, v.toDouble()),
+          onChangeLive: (v) => _live(axis.prop, v.toDouble(), partner, frame),
+          onChangeEnd: (v) => _commit(axis.prop, v.toDouble(), partner, frame),
           onDragCancel: () {
             _clearLive();
+            _linkRatio = null;
             setState(() => _staged = null);
           },
           setExpression: () {
@@ -514,7 +625,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       return TurnsAndDegreesField(
         keyName: '${widget.keyPrefix}-${axis.prop.name}',
         degrees: sampled,
-        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame),
+        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partner),
       );
     }
     return SizedBox(
@@ -527,8 +638,8 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         speed: axis.speed,
         decimals: axis.decimals,
         suffix: axis.suffix,
-        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame),
-        onLive: (v) => _liveKeyed(axis.prop, scalar, v, frame),
+        onCommit: (v) => _commitKeyed(axis.prop, scalar, v, frame, partner),
+        onLive: (v) => _liveKeyed(axis.prop, scalar, v, frame, partner),
         onStart: () => _keyOnDragStart(axis.prop, scalar, sampled, frame),
       ),
     );
@@ -556,19 +667,29 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   /// will write — the key at the playhead moved, or a linear one planted there
   /// — without writing it (K-333). The same patched-clone door a static drag
   /// uses, carrying a whole animation instead of one number.
-  void _liveKeyed(
-      BridgeTransformProp prop, BridgeScalar scalar, double value, int frame) {
+  void _liveKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
+      int frame, BridgeTransformProp? partner) {
     rowValueDrag.value = RowValueDrag(
       layer: widget.layer.internallayerId.toString(),
       prop: prop.name,
       frame: frame,
       value: value,
     );
-    final staged = writeScalar(
+    var staged = writeScalar(
       widget.transform,
       prop,
       scalarWithValueAt(scalar, value, widget.comp, frame),
     );
+    // A linked row previews both axes, or the release would move the picture
+    // one last time on a drag that looked finished (K-571).
+    if (partner != null) {
+      staged = writeScalar(
+        staged,
+        partner,
+        scalarWithValueAt(read(widget.transform, partner),
+            _linked(prop, partner, value, frame), widget.comp, frame),
+      );
+    }
     // The provisional truth, for anything drawing this layer. A keyed property
     // draws no box today — the boxes want a static value and this one is a
     // curve — so this changes nothing on screen yet; it is published because
@@ -584,24 +705,40 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 
   /// Write `value` into the animated property's key at `frame` (or plant one
-  /// there) — one op, one undo step.
-  void _commitKeyed(
-      BridgeTransformProp prop, BridgeScalar scalar, double value, int frame) {
+  /// there) — one op, one undo step. A linked row (K-571) writes its partner
+  /// axis in the same breath, and `setTransforms` batches the pair so it stays
+  /// one step.
+  void _commitKeyed(BridgeTransformProp prop, BridgeScalar scalar, double value,
+      int frame, BridgeTransformProp? partner) {
     // The write is the last word: a held preview tick after it would put the
     // provisional picture back, and the graph reads the document again.
     _throttle.cancel();
     _clearLive();
     rowValueDrag.value = null;
-    widget.layer.setTransform(
-      prop: prop,
-      value: scalarWithValueAt(scalar, value, widget.comp, frame),
-    );
+    final written = scalarWithValueAt(scalar, value, widget.comp, frame);
+    if (partner == null) {
+      widget.layer.setTransform(prop: prop, value: written);
+    } else {
+      widget.layer.setTransforms(props: [
+        prop,
+        partner
+      ], values: [
+        written,
+        scalarWithValueAt(read(widget.transform, partner),
+            _linked(prop, partner, value, frame), widget.comp, frame),
+      ]);
+    }
+    _linkRatio = null;
     widget.onChanged();
   }
 
   /// A drag tick: hold the new value locally and render it, without committing.
-  void _live(BridgeTransformProp prop, double value) {
-    final staged = write(_staged ?? widget.transform, prop, value);
+  void _live(BridgeTransformProp prop, double value,
+      [BridgeTransformProp? partner, int frame = 0]) {
+    var staged = write(_staged ?? widget.transform, prop, value);
+    if (partner != null) {
+      staged = write(staged, partner, _linked(prop, partner, value, frame));
+    }
     setState(() => _staged = staged);
     // The wireframe follows the picture: both are drawn from this value until
     // the drag is let go.
@@ -630,15 +767,77 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         ));
   }
 
-  /// Release, or a typed value: one op for the one property that changed.
-  void _commit(BridgeTransformProp prop, double value) {
+  /// Release, or a typed value: one op for the one property that changed — or,
+  /// on a linked row (K-571), one batch for the pair, which is still one step.
+  void _commit(BridgeTransformProp prop, double value,
+      [BridgeTransformProp? partner, int frame = 0]) {
     // The commit is the last word on this gesture: a held preview tick after it
     // would put the provisional picture back.
     _throttle.cancel();
     _clearLive();
-    widget.layer.setTransform(prop: prop, value: BridgeScalar.static_(value));
+    if (partner == null) {
+      widget.layer.setTransform(prop: prop, value: BridgeScalar.static_(value));
+    } else {
+      widget.layer.setTransforms(props: [
+        prop,
+        partner
+      ], values: [
+        BridgeScalar.static_(value),
+        BridgeScalar.static_(_linked(prop, partner, value, frame)),
+      ]);
+    }
+    _linkRatio = null;
     setState(() => _staged = null);
     widget.onChanged();
+  }
+
+  /// The row's axis menu (K-571): tell the pair's axes apart, or put them back
+  /// together. Scale carries the link as well, because a scale that has stopped
+  /// being proportional is nearly always a mistake — so it is a state you leave
+  /// on purpose rather than one you fall out of.
+  ///
+  /// Every entry commits one op or one batch, so each is one undo step.
+  void _axisMenu(BuildContext context, Offset at, TransformGroup group) {
+    final pair = group.pair;
+    if (pair == null) return;
+    final separated = group.mode == BridgeAxisMode.separated;
+    void set(void Function(BridgeAxisMode?) close, BridgeAxisMode mode) {
+      close(null);
+      widget.layer.setAxisMode(pair: pair, mode: mode);
+      widget.onChanged();
+    }
+
+    showMenuAt<BridgeAxisMode>(
+      context: context,
+      position: at,
+      rows: (close) => [
+        if (pair == BridgeTransformPair.scale && !separated)
+          MenuRow(
+            key: ValueKey<String>('${widget.keyPrefix}-axis-link'),
+            onPressed: () => set(
+                close,
+                group.mode == BridgeAxisMode.linked
+                    ? BridgeAxisMode.combined
+                    : BridgeAxisMode.linked),
+            child: Text(group.mode == BridgeAxisMode.linked
+                ? l10n.transformUnlinkAxes
+                : l10n.transformLinkAxes),
+          ),
+        MenuRow(
+          key: ValueKey<String>('${widget.keyPrefix}-axis-separate'),
+          onPressed: () => set(
+              close,
+              separated
+                  ? (pair == BridgeTransformPair.scale
+                      ? BridgeAxisMode.linked
+                      : BridgeAxisMode.combined)
+                  : BridgeAxisMode.separated),
+          child: Text(separated
+              ? l10n.transformCombineAxes
+              : l10n.transformSeparateAxes),
+        ),
+      ],
+    );
   }
 
   void _commitExpression(BridgeTransformProp prop, String value) {

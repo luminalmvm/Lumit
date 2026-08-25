@@ -360,8 +360,103 @@ pub struct TransformGroup {
     pub rotation_y: Property,
     /// Percent, 0..100.
     pub opacity: Property,
+    /// How each two-axis property is shown and edited (K-571, docs/03 §6.5).
+    /// Absent in every project written before separate axes existed, which is
+    /// exactly the default — so old files load unchanged, and a project that
+    /// has never been separated writes nothing.
+    #[serde(default, skip_serializing_if = "AxisModes::is_default")]
+    pub axis_modes: AxisModes,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// How one two-axis transform property is shown and edited (K-571).
+///
+/// The axes are always stored as separate scalar properties (§6.1) — this says
+/// nothing about storage and everything about the rows the panels draw and how
+/// an edit to one axis reaches the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AxisMode {
+    /// One row, one value box, and an edit carries the other axis with it so
+    /// the x:y ratio holds. Scale's default; meaningless on the other pairs.
+    Linked,
+    /// One row, one box per axis, each edited on its own. One stopwatch, so
+    /// keying the row keys every axis in it.
+    Combined,
+    /// A row per axis, each with its own stopwatch, keyframes and graph curve.
+    Separated,
+}
+
+/// The mode of each pair that has one. Anchor point and Position start
+/// `Combined`; Scale starts `Linked`, because a scale that stops being
+/// proportional is nearly always a mistake rather than an intention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AxisModes {
+    pub anchor: AxisMode,
+    pub position: AxisMode,
+    pub scale: AxisMode,
+}
+
+impl Default for AxisModes {
+    fn default() -> Self {
+        Self {
+            anchor: AxisMode::Combined,
+            position: AxisMode::Combined,
+            scale: AxisMode::Linked,
+        }
+    }
+}
+
+impl AxisModes {
+    /// Nothing to write: every pair is where a fresh layer leaves it.
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn get(&self, pair: TransformPair) -> AxisMode {
+        match pair {
+            TransformPair::Anchor => self.anchor,
+            TransformPair::Position => self.position,
+            TransformPair::Scale => self.scale,
+        }
+    }
+
+    pub fn set(&mut self, pair: TransformPair, mode: AxisMode) {
+        match pair {
+            TransformPair::Anchor => self.anchor = mode,
+            TransformPair::Position => self.position = mode,
+            TransformPair::Scale => self.scale = mode,
+        }
+    }
+}
+
+/// Which multi-axis transform property an axis-mode edit names (K-571).
+///
+/// Rotation is one angle and Opacity one number, so neither is here: a pair is
+/// exactly a property whose axes could be told apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TransformPair {
+    Anchor,
+    Position,
+    Scale,
+}
+
+impl TransformPair {
+    /// The properties this pair covers, in row order. Position's z is one of
+    /// them: a separated Position on a 3D layer is three rows, not two — and on
+    /// a 2D layer the z row is not drawn at all, exactly as it is not today.
+    pub fn props(self) -> &'static [TransformProp] {
+        match self {
+            Self::Anchor => &[TransformProp::AnchorX, TransformProp::AnchorY],
+            Self::Position => &[
+                TransformProp::PositionX,
+                TransformProp::PositionY,
+                TransformProp::PositionZ,
+            ],
+            Self::Scale => &[TransformProp::ScaleX, TransformProp::ScaleY],
+        }
+    }
 }
 
 impl Default for TransformGroup {
@@ -378,6 +473,7 @@ impl Default for TransformGroup {
             rotation_x: Property::fixed(0.0),
             rotation_y: Property::fixed(0.0),
             opacity: Property::fixed(100.0),
+            axis_modes: AxisModes::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -400,6 +496,46 @@ pub enum TransformProp {
 }
 
 impl TransformGroup {
+    /// The animations a pair's axes need in order to be shown on **one** row
+    /// again (K-571): every animated axis gains a key wherever any other
+    /// animated axis in the pair has one, so a diamond on the recombined row
+    /// means the same thing on every axis under it.
+    ///
+    /// Exact, not resampled: the planted key takes the value the curve already
+    /// had there and the span it lands in is re-described around it
+    /// ([`Property::insert_key_preserving_shape`]), so the picture does not
+    /// move. A **static** axis is left alone — a constant needs no keys to stay
+    /// constant, and keying it would light a stopwatch nobody asked for.
+    ///
+    /// Returns only the axes that actually changed, so a recombine of a pair
+    /// with nothing to merge is a single mode edit.
+    pub fn unified_axes(
+        &self,
+        pair: TransformPair,
+    ) -> Vec<(TransformProp, crate::anim::Animation)> {
+        let mut times: Vec<Rational> = Vec::new();
+        for prop in pair.props() {
+            if let crate::anim::Animation::Keyframed(keys) = &self.get(*prop).animation {
+                times.extend(keys.iter().map(|k| k.time));
+            }
+        }
+        let mut out = Vec::new();
+        for prop in pair.props() {
+            let mut property = self.get(*prop).clone();
+            if !property.is_animated() {
+                continue;
+            }
+            let mut changed = false;
+            for t in &times {
+                changed |= property.insert_key_preserving_shape(*t);
+            }
+            if changed {
+                out.push((*prop, property.animation));
+            }
+        }
+        out
+    }
+
     pub fn get(&self, prop: TransformProp) -> &Property {
         match prop {
             TransformProp::AnchorX => &self.anchor_x,
@@ -3631,5 +3767,143 @@ mod tests {
             elapsed < std::time::Duration::from_millis(250),
             "a whole-panel sweep took {elapsed:?} — time to cache after all"
         );
+    }
+
+    /// **Old projects load unchanged** (K-571). A transform written before
+    /// separate axes existed carries no `axis_modes` at all, and reads as the
+    /// default: both pairs combined, Scale linked.
+    #[test]
+    fn a_transform_without_axis_modes_reads_as_the_default() {
+        let json = r#"{
+            "anchor_x": {"animation": {"Static": 0.0}},
+            "anchor_y": {"animation": {"Static": 0.0}},
+            "position_x": {"animation": {"Static": 0.0}},
+            "position_y": {"animation": {"Static": 0.0}},
+            "scale_x": {"animation": {"Static": 100.0}},
+            "scale_y": {"animation": {"Static": 100.0}},
+            "rotation": {"animation": {"Static": 0.0}},
+            "opacity": {"animation": {"Static": 100.0}}
+        }"#;
+        let group: TransformGroup = serde_json::from_str(json).unwrap();
+        assert_eq!(group.axis_modes, AxisModes::default());
+        assert_eq!(group.axis_modes.get(TransformPair::Scale), AxisMode::Linked);
+        assert_eq!(
+            group.axis_modes.get(TransformPair::Position),
+            AxisMode::Combined
+        );
+    }
+
+    /// And a default one writes nothing, so a project that never separated
+    /// anything is byte-identical to the one the old build wrote.
+    #[test]
+    fn default_axis_modes_are_not_written_and_separated_ones_round_trip() {
+        let plain = TransformGroup::default();
+        let text = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !text.contains("axis_modes"),
+            "the default is absence, not a field: {text}"
+        );
+
+        let mut separated = TransformGroup::default();
+        separated
+            .axis_modes
+            .set(TransformPair::Position, AxisMode::Separated);
+        let back: TransformGroup =
+            serde_json::from_str(&serde_json::to_string(&separated).unwrap()).unwrap();
+        assert_eq!(back, separated);
+    }
+
+    /// An unknown key from a newer build survives a load and save beside the
+    /// new field (docs/03 §12's forward-compatibility rule).
+    #[test]
+    fn an_unknown_transform_field_survives_beside_the_axis_modes() {
+        let mut group = TransformGroup::default();
+        group
+            .axis_modes
+            .set(TransformPair::Anchor, AxisMode::Separated);
+        let mut value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&group).unwrap()).unwrap();
+        value["some_future_field"] = serde_json::json!(7);
+        let back: TransformGroup = serde_json::from_value(value).unwrap();
+        assert_eq!(back.axis_modes.anchor, AxisMode::Separated);
+        assert_eq!(
+            back.extra.get("some_future_field"),
+            Some(&serde_json::json!(7))
+        );
+    }
+
+    /// **Coming back together does not move the picture** (K-571). Two axes
+    /// keyed at different times gain each other's key times, and every axis
+    /// reads exactly what it read before at every moment.
+    #[test]
+    fn recombining_unions_the_key_times_without_changing_a_value() {
+        use crate::anim::{Animation, Keyframe, SideInterp};
+        let key = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Bezier {
+                speed: 0.0,
+                influence: 1.0 / 3.0,
+            },
+            interp_out: SideInterp::Bezier {
+                speed: 0.0,
+                influence: 1.0 / 3.0,
+            },
+        };
+        let mut group = TransformGroup::default();
+        group.position_x.animation = Animation::Keyframed(vec![key(0, 0.0), key(4, 100.0)]);
+        group.position_y.animation = Animation::Keyframed(vec![key(1, 10.0), key(3, 50.0)]);
+
+        let before: Vec<[f64; 2]> = (0..=40)
+            .map(|i| {
+                let t = f64::from(i) / 10.0;
+                [group.position_x.value_at(t), group.position_y.value_at(t)]
+            })
+            .collect();
+
+        let unified = group.unified_axes(TransformPair::Position);
+        assert_eq!(unified.len(), 2, "both axes gained the other's times");
+        for (prop, animation) in unified {
+            group.get_mut(prop).animation = animation;
+        }
+
+        let times = |a: &Animation| match a {
+            Animation::Keyframed(keys) => keys.iter().map(|k| k.time.to_f64()).collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        assert_eq!(times(&group.position_x.animation), vec![0.0, 1.0, 3.0, 4.0]);
+        assert_eq!(times(&group.position_y.animation), vec![0.0, 1.0, 3.0, 4.0]);
+
+        for (i, expected) in before.iter().enumerate() {
+            let t = f64::from(i as i32) / 10.0;
+            let x = group.position_x.value_at(t);
+            let y = group.position_y.value_at(t);
+            assert!(
+                (x - expected[0]).abs() < 1e-9,
+                "x at {t}: {x} vs {}",
+                expected[0]
+            );
+            assert!(
+                (y - expected[1]).abs() < 1e-9,
+                "y at {t}: {y} vs {}",
+                expected[1]
+            );
+        }
+    }
+
+    /// A static axis is left static: a constant needs no keys to stay constant.
+    #[test]
+    fn recombining_leaves_a_static_axis_alone() {
+        use crate::anim::{Animation, Keyframe, SideInterp};
+        let mut group = TransformGroup::default();
+        group.scale_x.animation = Animation::Keyframed(vec![Keyframe {
+            time: Rational::new(2, 1).unwrap(),
+            value: 50.0,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        }]);
+        let unified = group.unified_axes(TransformPair::Scale);
+        assert!(unified.is_empty(), "nothing to merge onto a constant");
+        assert!(!group.scale_y.is_animated());
     }
 }

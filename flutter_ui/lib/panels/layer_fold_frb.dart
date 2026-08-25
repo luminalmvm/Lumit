@@ -1030,7 +1030,7 @@ List<LayerFoldRow> layerFoldRows({
   // than passed in because the lanes build their rows from this same list and
   // must leave room for the same ones (docs/07 §4.3).
   final transformOpen = open.contains(transformPath(id));
-  final groups = transformGroups(threeD: info.switches.threeD);
+  final groups = transformGroups(threeD: info.switches.threeD, modes: info.axisModes);
   final soloed = !transformOpen &&
       groups.any((g) => open.contains(transformGroupPath(id, g)));
 

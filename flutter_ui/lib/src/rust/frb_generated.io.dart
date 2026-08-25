@@ -281,6 +281,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAutosave dco_decode_bridge_autosave(dynamic raw);
 
   @protected
+  BridgeAxisMode dco_decode_bridge_axis_mode(dynamic raw);
+
+  @protected
+  BridgeAxisModes dco_decode_bridge_axis_modes(dynamic raw);
+
+  @protected
   BridgeBezierSide dco_decode_bridge_bezier_side(dynamic raw);
 
   @protected
@@ -608,6 +614,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTransform dco_decode_bridge_transform(dynamic raw);
+
+  @protected
+  BridgeTransformPair dco_decode_bridge_transform_pair(dynamic raw);
 
   @protected
   BridgeTransformProp dco_decode_bridge_transform_prop(dynamic raw);
@@ -1199,6 +1208,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeAutosave sse_decode_bridge_autosave(SseDeserializer deserializer);
 
   @protected
+  BridgeAxisMode sse_decode_bridge_axis_mode(SseDeserializer deserializer);
+
+  @protected
+  BridgeAxisModes sse_decode_bridge_axis_modes(SseDeserializer deserializer);
+
+  @protected
   BridgeBezierSide sse_decode_bridge_bezier_side(SseDeserializer deserializer);
 
   @protected
@@ -1569,6 +1584,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTransform sse_decode_bridge_transform(SseDeserializer deserializer);
+
+  @protected
+  BridgeTransformPair sse_decode_bridge_transform_pair(
+      SseDeserializer deserializer);
 
   @protected
   BridgeTransformProp sse_decode_bridge_transform_prop(
@@ -2226,6 +2245,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeAutosave self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_axis_mode(
+      BridgeAxisMode self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_axis_modes(
+      BridgeAxisModes self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
 
@@ -2645,6 +2672,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_transform(
       BridgeTransform self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_transform_pair(
+      BridgeTransformPair self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_transform_prop(

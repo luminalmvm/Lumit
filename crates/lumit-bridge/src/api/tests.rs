@@ -1974,6 +1974,72 @@ fn setting_one_property_leaves_the_others_alone_and_undoes_alone() {
     );
 }
 
+/// **Separate axes, and back again, is one undo step each way** (K-571).
+///
+/// Separating merges nothing — the axes are already stored apart — so it is a
+/// single mode op. Recombining owes the pair a keyframe union, and that union
+/// rides in the same batch, so the whole change still undoes at once and puts
+/// back both the mode and the keys.
+#[test]
+fn separating_and_recombining_a_pair_is_one_undo_step_each_way() {
+    use crate::api::effect::{BridgeKeyframe, BridgeRational, BridgeScalar, BridgeSideInterp};
+    use crate::api::layer::{BridgeAxisMode, BridgeTransformPair, BridgeTransformProp};
+
+    let (project, layer) = project_with_layer();
+    let at = |secs: i64| BridgeRational { num: secs, den: 1 };
+    let key = |secs: i64, value: f64| BridgeKeyframe {
+        time: at(secs),
+        value,
+        interp_in: BridgeSideInterp::Linear,
+        interp_out: BridgeSideInterp::Linear,
+    };
+
+    layer
+        .set_axis_mode(BridgeTransformPair::Position, BridgeAxisMode::Separated)
+        .expect("separated");
+    assert_eq!(
+        layer.get_info().expect("info").axis_modes.position,
+        BridgeAxisMode::Separated
+    );
+
+    // A key each, at times the other axis knows nothing about.
+    layer
+        .set_transform(
+            BridgeTransformProp::PositionX,
+            BridgeScalar::Keyframed(vec![key(0, 0.0), key(4, 100.0)]),
+        )
+        .expect("x keyed");
+    layer
+        .set_transform(
+            BridgeTransformProp::PositionY,
+            BridgeScalar::Keyframed(vec![key(1, 10.0), key(3, 50.0)]),
+        )
+        .expect("y keyed");
+
+    layer
+        .set_axis_mode(BridgeTransformPair::Position, BridgeAxisMode::Combined)
+        .expect("recombined");
+
+    let keys = |scalar: &BridgeScalar| match scalar {
+        BridgeScalar::Keyframed(keys) => keys.iter().map(|k| k.time.num).collect::<Vec<_>>(),
+        _ => Vec::new(),
+    };
+    let after = layer.get_transform().expect("transform");
+    assert_eq!(keys(&after.position_x), vec![0, 1, 3, 4]);
+    assert_eq!(keys(&after.position_y), vec![0, 1, 3, 4]);
+
+    // One step back: the mode and the merged keys go together, because they
+    // were one batch.
+    project.undo().expect("undone");
+    let back = layer.get_transform().expect("transform");
+    assert_eq!(
+        layer.get_info().expect("info").axis_modes.position,
+        BridgeAxisMode::Separated
+    );
+    assert_eq!(keys(&back.position_x), vec![0, 4]);
+    assert_eq!(keys(&back.position_y), vec![1, 3]);
+}
+
 /// The Audio group's one control (docs/07 §4.3). Volume is a property like any
 /// other — one op, invertible — and a layer that cannot be heard says so, which
 /// is what decides whether the group is offered at all.

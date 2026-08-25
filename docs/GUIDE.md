@@ -9423,6 +9423,39 @@ whole of it, and both the lane handles and the graph's edges ask it. Time is mea
 frames; value is measured in **pixels on screen**, so that a scale meaning "half" means
 half of what you can see whatever units the curve is in.
 
+### Telling a Position's two numbers apart
+
+A Position is two numbers, x and y, and they sit on one row sharing one stopwatch. Most of
+the time that is what you want: you key "where the layer is", and both numbers get a key.
+
+Sometimes it is not. A ball that bounces is falling and settling on the way down and
+sliding evenly along sideways — two different shapes, on the same property. So
+right-clicking the name **Position** (or **Anchor point**, or **Scale**) offers **Separate
+axes**, and the one row becomes two: *Position x* and *Position y*, each with its own
+stopwatch, its own diamonds on its own lane, and its own curve in the graph editor. Key one
+without keying the other; ease one and leave the other straight.
+
+Nothing in the saved file changes shape when you do this. Lumit has always kept the two
+numbers as two separate properties under the bonnet — that is what makes a curve for x
+alone possible in the first place — so all that is stored is your choice about how they are
+shown. A project made before this existed opens with everything as it was, and a project
+where you never touched the menu saves exactly the same bytes as before.
+
+**Combine axes** puts them back on one row. Here Lumit has a small tidying job to do: back
+on one row the two axes share a stopwatch, so a diamond on that row has to mean something
+for both of them. If x has keys at frames 0 and 96 and y has one at frame 24, each gains
+the other's times — x picks up a key at 24, y picks up keys at 0 and 96. The new keys are
+not guesses. Each takes the value its curve already had at that moment, and the curve
+either side of it is re-described so that it still passes through everything it passed
+through before. The picture does not move. (A number that was never animated is left alone:
+a constant does not need keys to stay constant.)
+
+Scale has one extra state, and it starts there. A scale is normally meant to stay
+proportional, so its row shows **one** box with the two axes **linked**: type 50 and both
+halves become 50% of what they were, keeping the shape. **Unlink axes** gives you a box
+each — a squash or a stretch — and **Separate axes** goes the whole way to a row each. All
+of it is one undo step, whichever direction you go, including the keyframe tidying.
+
 ### Typing a keyframe's numbers
 
 Double-click a keyframe in the graph and a small box opens holding four numbers: which

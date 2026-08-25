@@ -198,7 +198,13 @@ Future<void> main() async {
   await tapKey('tl-twirl-$chapterId');
   await tapKey('tl-twirl-${transformPath(chapterId)}');
   await pause(1.5);
-  final positionGroup = transformGroups(threeD: false)
+  final positionGroup = transformGroups(
+          threeD: false,
+          modes: const BridgeAxisModes(
+            anchor: BridgeAxisMode.combined,
+            position: BridgeAxisMode.combined,
+            scale: BridgeAxisMode.linked,
+          ))
       .firstWhere((g) => g.axes.first.prop.name.startsWith('position'));
   ui.requestSelectProperty(transformGroupPath(chapterId, positionGroup));
   await pause(0.8);

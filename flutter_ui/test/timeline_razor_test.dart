@@ -64,6 +64,11 @@ void main() {
           rotationY: const BridgeScalar.static_(0),
           opacity: const BridgeScalar.static_(100),
         ),
+        axisModes: const BridgeAxisModes(
+          anchor: BridgeAxisMode.combined,
+          position: BridgeAxisMode.combined,
+          scale: BridgeAxisMode.linked,
+        ),
         effects: const [],
         label: 0,
         masks: const [],

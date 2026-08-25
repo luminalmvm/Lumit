@@ -1701,7 +1701,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     };
     if (axis != null) {
       return [
-        for (final group in transformGroups(threeD: entry.info.switches.threeD))
+        for (final group in transformGroups(threeD: entry.info.switches.threeD, modes: entry.info.axisModes))
           if (group.axes.first.prop.name.startsWith(axis))
             transformGroupPath(id, group),
       ];

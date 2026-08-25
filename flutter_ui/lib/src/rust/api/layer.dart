@@ -18,8 +18,8 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// One window of a source's waveform, summarised to exactly the buckets the
@@ -84,6 +84,46 @@ class BridgeAudioPeaks {
           bands == other.bands &&
           buckets == other.buckets &&
           values == other.values;
+}
+
+/// How one two-axis property is shown and edited (K-571,
+/// [`lumit_core::model::AxisMode`]).
+enum BridgeAxisMode {
+  /// One row, one box, the x:y ratio held on every edit.
+  linked,
+
+  /// One row, a box per axis, one stopwatch over all of them.
+  combined,
+
+  /// A row per axis, each with its own stopwatch and its own curve.
+  separated,
+  ;
+}
+
+/// Every pair's mode, carried in the read model so the panels can draw the
+/// right rows with no bridge call (K-184).
+class BridgeAxisModes {
+  final BridgeAxisMode anchor;
+  final BridgeAxisMode position;
+  final BridgeAxisMode scale;
+
+  const BridgeAxisModes({
+    required this.anchor,
+    required this.position,
+    required this.scale,
+  });
+
+  @override
+  int get hashCode => anchor.hashCode ^ position.hashCode ^ scale.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAxisModes &&
+          runtimeType == other.runtimeType &&
+          anchor == other.anchor &&
+          position == other.position &&
+          scale == other.scale;
 }
 
 /// The shape one dab of the brush leaves (K-548). Not a brush-tip system:
@@ -238,6 +278,11 @@ class BridgeLayerInfo {
   /// The whole transform, one scalar per property (K-184).
   final BridgeTransform transform;
 
+  /// How each two-axis property is shown (K-571) — which decides how many
+  /// rows the Transform group has, so it is read here with the rest of the
+  /// drawing data rather than asked for per row.
+  final BridgeAxisModes axisModes;
+
   /// Every effect on the layer, with every parameter's value (K-184). Plain
   /// data for *drawing*; an edit reads fresh instance handles at commit time.
   final List<BridgeEffectInstanceInfo> effects;
@@ -301,6 +346,7 @@ class BridgeLayerInfo {
     this.parent,
     this.parentName,
     required this.transform,
+    required this.axisModes,
     required this.effects,
     required this.label,
     this.matte,
@@ -327,6 +373,7 @@ class BridgeLayerInfo {
       parent.hashCode ^
       parentName.hashCode ^
       transform.hashCode ^
+      axisModes.hashCode ^
       effects.hashCode ^
       label.hashCode ^
       matte.hashCode ^
@@ -355,6 +402,7 @@ class BridgeLayerInfo {
           parent == other.parent &&
           parentName == other.parentName &&
           transform == other.transform &&
+          axisModes == other.axisModes &&
           effects == other.effects &&
           label == other.label &&
           matte == other.matte &&
@@ -1167,6 +1215,15 @@ class BridgeTransform {
           opacity == other.opacity;
 }
 
+/// Which two-axis transform property an axis-mode edit names (K-571,
+/// [`lumit_core::model::TransformPair`]).
+enum BridgeTransformPair {
+  anchor,
+  position,
+  scale,
+  ;
+}
+
 /// Which transform property an edit names ([`lumit_core::model::TransformProp`]).
 enum BridgeTransformProp {
   anchorX,
@@ -1905,6 +1962,25 @@ class LayerReference {
   /// the flag off, all in one batch, which is one undo step.
   void setAdjustment({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
+
+  /// Set how one two-axis property is shown and edited (K-571): combined on
+  /// one row, linked (Scale), or separated onto a row per axis.
+  ///
+  /// **Coming back together merges the axes' keyframes.** A separated pair's
+  /// axes each keep their own keys; put back on one row they share a
+  /// stopwatch and a lane, so every animated axis gains a key wherever any
+  /// other animated axis in the pair has one. The planted keys take the value
+  /// the curve already had and the spans around them are re-described, so the
+  /// picture does not move — and a static axis is left static.
+  ///
+  /// The whole change is one [`lumit_core::Op::Batch`], so it is one undo
+  /// step whatever it had to merge. Separating merges nothing: the axes are
+  /// already stored apart, which is what makes a per-axis curve possible at
+  /// all.
+  void setAxisMode(
+          {required BridgeTransformPair pair, required BridgeAxisMode mode}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetAxisMode(
+          that: this, pair: pair, mode: mode);
 
   void setBlend({required int index}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetBlend(that: this, index: index);

@@ -371,7 +371,7 @@ List<RadialEntry> fxConsoleKeyframeRing(
   if (entry == null) return const [];
   final transform = entry.info.transform;
   return [
-    for (final group in transformGroups(threeD: entry.info.switches.threeD))
+    for (final group in transformGroups(threeD: entry.info.switches.threeD, modes: entry.info.axisModes))
       if (group.axes.first.prop.name != 'rotationX' &&
           group.axes.first.prop.name != 'rotationY')
         RadialEntry(

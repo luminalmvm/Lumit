@@ -245,7 +245,7 @@ List<GraphChannel> graphChannels({
 
     if (path.startsWith('${transformPath(layerId)}/')) {
       final lead = path.substring(path.lastIndexOf('/') + 1);
-      for (final group in transformGroups(threeD: entry.info.switches.threeD)) {
+      for (final group in transformGroups(threeD: entry.info.switches.threeD, modes: entry.info.axisModes)) {
         if (group.axes.first.prop.name != lead) continue;
         for (final axis in group.axes) {
           out.add(GraphChannel(

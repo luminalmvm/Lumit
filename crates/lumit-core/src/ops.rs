@@ -4,7 +4,8 @@
 
 use crate::anim::Animation;
 use crate::model::{
-    BlendMode, Document, Layer, LinearColour, MatteRef, ProjectItem, TransformProp,
+    AxisMode, BlendMode, Document, Layer, LinearColour, MatteRef, ProjectItem, TransformPair,
+    TransformProp,
 };
 use crate::time::{CompTime, Duration, FrameRate};
 use serde::{Deserialize, Serialize};
@@ -371,6 +372,19 @@ pub enum Op {
         prop: TransformProp,
         animation: Animation,
     },
+    /// Set how one two-axis transform property is shown and edited — combined
+    /// on one row, linked, or separated onto a row per axis (K-571).
+    ///
+    /// Only the mode: the keyframe union a recombine owes its axes rides along
+    /// as ordinary `SetTransformProperty` ops in the same [`Op::Batch`], so
+    /// this op stays trivially invertible and the whole change is one undo
+    /// step.
+    SetTransformAxisMode {
+        comp: Uuid,
+        layer: Uuid,
+        pair: TransformPair,
+        mode: AxisMode,
+    },
     /// Replace a Camera layer's zoom animation (same coarse-grained shape as
     /// SetTransformProperty, for the same invertibility reason).
     SetCameraZoom {
@@ -568,6 +582,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerMatte { comp, layer, .. }
         | Op::SetLayerParent { comp, layer, .. }
         | Op::SetTransformProperty { comp, layer, .. }
+        | Op::SetTransformAxisMode { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
@@ -1377,6 +1392,27 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 layer: *layer,
                 prop: *prop,
                 animation: previous,
+            })
+        }
+        Op::SetTransformAxisMode {
+            comp,
+            layer,
+            pair,
+            mode,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = l.transform.axis_modes.get(*pair);
+            l.transform.axis_modes.set(*pair, *mode);
+            Ok(Op::SetTransformAxisMode {
+                comp: *comp,
+                layer: *layer,
+                pair: *pair,
+                mode: previous,
             })
         }
         Op::SetCameraZoom {

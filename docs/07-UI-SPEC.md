@@ -1350,7 +1350,14 @@ measurement — the panel shows the numbers, it does not turn them on.
     source and plays at source rate again rather than freezing on a single frame. A freeze is
     still asked for the way After Effects asks — a map with one key holds that moment.
   - **Transform**, always: one row per property group with the stopwatch, the ◄ ◆ ► navigator,
-    the label, and a scrub-drag/click-to-type value per axis.
+    the label, and a scrub-drag/click-to-type value per axis. **Right-clicking the name of
+    Anchor point, Position or Scale offers Separate axes** (K-571, docs/03 §6.5): each axis
+    takes a row of its own, with its own stopwatch, its own lane and its own curve, and
+    *Combine axes* puts them back — merging the axes' key times as it goes, exactly, so the
+    picture does not move. **Scale is linked by default** and draws one box, an edit holding
+    the x:y ratio (K-072); *Unlink axes* gives it a box per axis. Each command is one undo
+    step. The Viewer's gizmo is unchanged by any of it: it reads the resolved transform,
+    which has always been per-axis.
   - **Effects**, only when the layer has any: one row per effect, opening onto that effect's
     parameters — the same rows, with the same controls, that the Effect controls panel shows.
   - **Audio**, only when the layer's source actually carries sound (`LayerReference::has_audio`

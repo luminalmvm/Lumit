@@ -567,6 +567,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       layer: layer,
                       comp: comp,
                       transform: info.transform,
+                      axisModes: info.axisModes,
                       // A camera is 3D by construction whatever its switch
                       // says (K-023) — its z and rotation rows must always
                       // draw. Decided here from the model the panel already
@@ -1592,6 +1593,9 @@ class _TransformSection extends StatelessWidget {
   final BridgeTransform transform;
   final bool threeD;
 
+  /// How each two-axis property is shown (K-571).
+  final BridgeAxisModes axisModes;
+
   /// Whether this layer is a Camera — the one kind whose transform can be
   /// **derived** rather than held (K-417), and so the one kind whose heading
   /// carries a link badge.
@@ -1608,6 +1612,7 @@ class _TransformSection extends StatelessWidget {
     required this.comp,
     required this.transform,
     required this.threeD,
+    required this.axisModes,
     required this.isCamera,
     required this.playheadFrame,
     required this.onSeek,
@@ -1640,6 +1645,7 @@ class _TransformSection extends StatelessWidget {
           layer: layer,
           transform: transform,
           threeD: threeD,
+          axisModes: axisModes,
           playheadFrame: playheadFrame,
           onSeek: onSeek,
           onChanged: onChanged,

@@ -6213,6 +6213,22 @@
   "@transformAnchorPoint": {
     "description": "The point a layer rotates and scales about."
   },
+  "transformAnchorPointX": "Anchor point x",
+  "@transformAnchorPointX": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the sideways half of the anchor point, shown once its axes have been separated."
+  },
+  "transformAnchorPointY": "Anchor point y",
+  "@transformAnchorPointY": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the up-and-down half of the anchor point, shown once its axes have been separated."
+  },
+  "transformCombineAxes": "Combine axes",
+  "@transformCombineAxes": {
+    "description": "Entry in the menu opened by right-clicking a Transform row's name: puts a separated property's axes back on one row."
+  },
+  "transformLinkAxes": "Link axes",
+  "@transformLinkAxes": {
+    "description": "Entry in the menu opened by right-clicking the Scale row's name: one value box again, with edits holding the x to y ratio."
+  },
   "transformOpacity": "Opacity",
   "@transformOpacity": {
     "description": "How solid a layer is."
@@ -6220,6 +6236,18 @@
   "transformPosition": "Position",
   "@transformPosition": {
     "description": "Where a layer sits."
+  },
+  "transformPositionX": "Position x",
+  "@transformPositionX": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the sideways half of the position, shown once its axes have been separated."
+  },
+  "transformPositionY": "Position y",
+  "@transformPositionY": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the up-and-down half of the position, shown once its axes have been separated."
+  },
+  "transformPositionZ": "Position z",
+  "@transformPositionZ": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the depth half of a 3D layer's position, shown once its axes have been separated."
   },
   "transformRotation": "Rotation",
   "@transformRotation": {
@@ -6237,9 +6265,25 @@
   "@transformScale": {
     "description": "How large a layer is drawn."
   },
+  "transformScaleX": "Scale x",
+  "@transformScaleX": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the width half of the scale, shown once its axes have been separated."
+  },
+  "transformScaleY": "Scale y",
+  "@transformScaleY": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the height half of the scale, shown once its axes have been separated."
+  },
   "transformSection": "Transform",
   "@transformSection": {
     "description": "Heading over a layer's position, scale, rotation and opacity."
+  },
+  "transformSeparateAxes": "Separate axes",
+  "@transformSeparateAxes": {
+    "description": "Entry in the menu opened by right-clicking a Transform row's name: gives each axis of the property a row of its own, with its own keyframes."
+  },
+  "transformUnlinkAxes": "Unlink axes",
+  "@transformUnlinkAxes": {
+    "description": "Entry in the menu opened by right-clicking the Scale row's name: a value box per axis, each edited on its own."
   },
   "transportDmaBuf": "DMA-BUF, no copy",
   "@transportDmaBuf": {
