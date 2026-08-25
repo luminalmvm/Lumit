@@ -184,13 +184,14 @@
       // the whole field rather than a single band of it.
       col = mix(col, wine, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
-      // Grain: one value per pixel, which is as fine as grain can be drawn.
-      // Anything built on a lattice, however small, is grain a pixel and a bit
-      // across and reads coarser than the tiled grain it replaced. It goes on
-      // the field's own colour, so it thins out with the field and never lands
-      // on the page's black.
+      // Grain: one value per rendered pixel, which is as fine as grain can be
+      // drawn. On a screen that has more device pixels than CSS pixels the
+      // canvas is rendered at the higher count, so the grain gets finer with
+      // the screen rather than staying a CSS pixel across. It goes on the
+      // field's own colour, so it thins out with the field and never lands on
+      // the page's black.
       vec2 gp = gl_FragCoord.xy;
-      col += (phash(gp) - 0.5) * 0.05;
+      col += (phash(gp) - 0.5) * 0.036;
 
       // One level of dither underneath it, well below anything the eye reads
       // as texture, so the smooth parts of the field cannot step either.
@@ -297,12 +298,16 @@
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
-    // One canvas pixel per CSS pixel. The field alone would be happy at half
-    // that and scaled up, but grain that has been through a bilinear resize is
-    // mush, and so is a dissolve.
+    // One canvas pixel per device pixel, up to two of them per CSS pixel. The
+    // field alone would be happy at half the CSS count and scaled up, but grain
+    // that has been through a bilinear resize is mush, and so is a dissolve;
+    // and the grain is one pixel across by definition, so how fine it looks is
+    // decided here rather than in the shader. The cap is there because the
+    // cost is per pixel and a phone at three would pay it three times over.
+    const dpr = Math.min(2, devicePixelRatio || 1);
     const resize = () => {
-      canvas.width = Math.max(1, canvas.clientWidth);
-      canvas.height = Math.max(1, canvas.clientHeight);
+      canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+      canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
       gl.viewport(0, 0, canvas.width, canvas.height);
     };
     new ResizeObserver(() => {
