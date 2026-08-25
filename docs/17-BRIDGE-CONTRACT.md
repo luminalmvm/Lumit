@@ -452,6 +452,100 @@ Nothing here does the work; this is the doorway.
   (K-184) already carries every layer's every effect, so the interface finds the layer whose
   stack holds an enabled Camera track with Show points on, from data it is already holding.
 
+### The export dialogue's settings cross flat (K-479, K-485, K-503)
+
+`BridgeExportSpec` is `lumit_render::export::ExportSpec` **flattened**: no engine enum
+crosses, every choice is a number or a short stable string, and **every field added since
+the struct was first drawn carries a generated default**, so a caller that sets none of
+them asks for the export Lumit has always written. That is not tidiness — a required field
+would break every existing call site the moment the engine grew an option, which is a seam
+dictating a frontend change it has no business dictating.
+
+The flattening rules, in the order they matter:
+
+- **Zero is "today's answer", never "no answer".** `audio_rate: 0` is 48 kHz,
+    `audio_depth: 0` is sixteen bits, `audio_channels: 0` is stereo, `width`/`height` of
+    zero are the composition's own frame, `fps: 0.0` is its own rate. One convention, so a
+    field nobody touched cannot change a byte of the file.
+- **An answer this build does not recognise is today's answer too.** `motion_blur: 99` is
+    the compositions' own settings; `resample: "bicubic"` is the bilinear default. A number
+    out of range must not refuse an export over a field the user never set — a stored preset
+    or a Dart side one version ahead is exactly where such a number comes from.
+- **An enum crosses as the number the rows are drawn in**, with `0` the default row:
+    `motion_blur` 0/1/2 = current settings / on for checked layers / off for all layers;
+    `retime_blend` 0/1 = current settings / off for all layers, and there is deliberately no
+    third answer (K-502).
+- **A colour space crosses as its stored name**, not as a label: `""` (sRGB / Rec. 709),
+    `linear`, `rec709`, `rec2020`, `display-p3`, or an OCIO config's own name. The wording
+    belongs in `app_en.arb` like every other string (K-005), and a name this build does not
+    know is shown as it arrived, exactly as a codec name is (K-303).
+- **`resample`** is `"high"` for Lanczos-3 and anything else — blank included — for the
+    bilinear filter every export has always used (K-498).
+
+`BridgeFormatCaps` is the same treatment of `FormatCaps`, and it is what the dialogue
+**disables** rows from; the engine refuses the same combinations again before a frame is
+rendered, so the two cannot disagree about what a file will hold. Two of its rows are
+deliberately not lists:
+
+- `audio_24_bit` is a flag, because the engine's list is `AudioDepth::ALL` and has exactly
+    two members. `the_caps_row_says_what_the_engine_says` asserts the flag against
+    `FormatCaps::audio_depths` for every format *and* fails the moment a third sample width
+    exists, at which point it becomes a `Vec<u32>` like `depths`.
+- The sample **rates** are not a caps row at all: they do not vary by format, so
+    `export_audio_rates()` answers them once and the existing `audio` flag decides whether
+    the row is live. The same test holds the two in step. Channel layout needs no row either
+    — every format that carries sound carries both mono and stereo.
+
+**Reordering the queue carries no undo (K-503).** `export_queue_move(id, index)` sits beside
+`export_queue_cancel`/`export_queue_remove` and commits no op: the queue is not in the `.lum`,
+it does not survive a restart, and its order is interaction state of the kind the frontend
+would hold if it were not process-wide. It refuses in the export's own words — "that export is
+already running", "that export has already run", "that export is no longer in the queue" — and
+an `index` past the end lands the row last, which is what dragging one off the bottom means.
+
+### A footage item's second file: the proxy (K-501)
+
+A proxy is a second `MediaRef` on a footage item, so it reads and writes the same way the
+original does — but it is three questions, not one, and the panel draws a different row for
+each:
+
+- `FootageReference::get_proxy()` — one call, `None` for an item with no proxy, otherwise the
+    path to show, this item's own tick (`enabled`), and whether the document actually reads it
+    (`in_use`: the project's master switch **and** the item's tick). Three row states from one
+    read, which is the one-call-per-structure rule (K-451).
+- Writes are ordinary commits: `set_proxy(path)` (attach or replace, switched on),
+    `clear_proxy()`, `set_use_proxy(on)` — refused on an item with nothing attached, because
+    the panel does not draw that tick — and `ProjectReference::set_use_proxies(on)` for the
+    project-wide master. Attaching and switching on together is the frontend's
+    `beginUndoGroup`/`endUndoGroup` round two calls, not a plural entry point.
+- **Whether the proxy *file* is usable is not on the seam.** The renderer answers that itself
+    (`lumit_render::source::effective_media`) and falls back to the original without reporting
+    missing media — a present clip must not open the relink dialogue. A panel wanting a "proxy
+    is broken" mark would need a new query over the renderer; there is none.
+
+**MAKE-PROXY is the export's own three-call shape**, for the same reason: it is minutes of
+work with nothing to look at. `FootageReference::proxy_path()` says where the file would go
+(so a file already there can be pointed out first), `make_proxy()` starts the transcode and
+returns as soon as it is running, `proxy_poll()` reports `Idle`/`Running`/`Done`/`Failed`, and
+`proxy_cancel()` stops it — a cancelled job leaves no half-written file. One runs at a time;
+a second is a calm refusal, because two transcodes share one disk.
+
+One thing that call shape does *not* share with the export: **polling is what finishes the
+job.** `lumit_render::proxy` writes a file and never sees a document, so the bridge commits the
+`Op::SetItemProxy` itself when the file lands — from the item the job was started for, held in
+the job rather than passed in, so the proxy arrives whether or not the panel that asked for it
+is still on screen. The document's lock is taken after the job's own is dropped, never across
+it (the one-lock-held-briefly rule above).
+
+### The layer switches (K-497)
+
+`BridgeLayerSwitches` is one read of every switch, and `set_switch(BridgeLayerSwitch, on)` is
+one write per switch — one op each, so a click is one undo step and toggling one never
+disturbs another. `Guide` joined them: reference-only, drawn in the Viewer and absent from
+every delivered file at every depth. It is the one switch in the group that a **locked** layer
+refuses, and the reason is the line the group divides on — shy changes what the Timeline
+lists, guide changes what the file carries, and a lock is a lock against the second.
+
 ### The After Effects import crosses once, as a report
 
 `LumitBridgeState::import_ae_bundle(path, on_change_stream)` is the whole surface of

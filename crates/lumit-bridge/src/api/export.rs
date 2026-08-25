@@ -57,6 +57,24 @@ pub struct BridgeExportSpec {
     pub include_audio: bool,
     /// Audio bits per second; zero takes the delivery-preset rate.
     pub audio_bit_rate: i64,
+    /// The sound's sample rate in hertz — one of [`export_audio_rates`]
+    /// (K-493). Zero means the customary 48 kHz, so a caller that never sets
+    /// it writes the file Lumit has always written.
+    #[frb(default = 0)]
+    pub audio_rate: u32,
+    /// Bits a sound sample: 16 or 24 (K-493). Anything below 24 reads as
+    /// sixteen, which is what an unset field has always meant. A format whose
+    /// sound cannot carry the choice (AAC stores coefficients, not samples) is
+    /// refused rather than handed the identical file either way —
+    /// [`BridgeFormatCaps::audio_24_bit`] is the row that says which.
+    #[frb(default = 0)]
+    pub audio_depth: u32,
+    /// Channels in the written sound: `1` folds the composition's stereo mix
+    /// down to mono, anything else (zero included) keeps it stereo (K-493).
+    /// Every format that carries sound carries both, so there is no capability
+    /// row for it.
+    #[frb(default = 0)]
+    pub audio_channels: u32,
     /// Bits per channel in the written file: 8 or 16.
     pub depth: u32,
     /// Write the composite's own coverage as an alpha channel, rather than an
@@ -65,10 +83,20 @@ pub struct BridgeExportSpec {
     /// Un-multiply the colour on the way out (docs/06 §3.4). Meaningless
     /// without `alpha_channel`, and ignored there.
     pub straight_alpha: bool,
-    /// The output colour space: empty for the built-in sRGB / Rec.709
-    /// transform, otherwise the name of an OCIO output space (post-v1; an
-    /// export that asks for one before OCIO exists is refused).
+    /// The output colour space, by the stable name
+    /// [`BridgeFormatCaps::colour_spaces`] lists: empty for the default sRGB /
+    /// Rec. 709 (a genuine pass-through), `linear`, `rec709`, `rec2020`,
+    /// `display-p3`, or the name of an OCIO output space (post-v1; an export
+    /// that asks for one before OCIO exists is refused). A space the chosen
+    /// container cannot *state* is refused too, rather than written unlabelled
+    /// (K-498).
     pub colour_space: String,
+    /// The filter a resized frame is resampled with (K-498): `high` for
+    /// Lanczos-3, anything else — blank included — for the bilinear default
+    /// every Lumit export has always used. Blank rather than `fast` as the
+    /// unset value, so a caller that never sets it cannot change a byte.
+    #[frb(default = "")]
+    pub resample: String,
     /// Pixels taken off each edge, at composition size (K-419).
     pub crop_top: u32,
     pub crop_left: u32,
@@ -91,6 +119,29 @@ pub struct BridgeExportSpec {
     pub effects: bool,
     /// Honour solo switches (K-105).
     pub honour_solo: bool,
+    /// Deliver the guide layers too (K-497). Off — the default — is what a
+    /// guide layer is: drawn in the Viewer, absent from the file, at every
+    /// depth.
+    #[frb(default = false)]
+    pub render_guides: bool,
+    /// Motion blur at export (K-502): `0` the compositions' own settings, `1`
+    /// on for checked layers, `2` off for all layers. An unknown number is the
+    /// compositions' own settings — an answer nobody recognises is not a
+    /// reason to refuse an export.
+    #[frb(default = 0)]
+    pub motion_blur: u32,
+    /// Retime blend at export (K-502): `0` the compositions' own settings, `1`
+    /// off for all layers. There is **no** *on for checked layers*: a layer's
+    /// interpolation policy is its own check, so that answer would write the
+    /// identical file as the first.
+    #[frb(default = 0)]
+    pub retime_blend: u32,
+    /// Read the proxies instead of the originals (K-501). Off by default
+    /// whatever the project is set to work at: delivery is the one moment a
+    /// proxy must not apply, and a draft for review is the only export it is
+    /// right for.
+    #[frb(default = false)]
+    pub use_proxies: bool,
     /// Play the completion sound when this export lands. Silent — never an
     /// error — when no sound has been supplied.
     pub make_a_noise: bool,
@@ -125,10 +176,14 @@ impl Default for BridgeExportSpec {
             range_end_frame: -1,
             include_audio: true,
             audio_bit_rate: crate::export::PRESET_AUDIO_BPS,
+            audio_rate: 0,
+            audio_depth: 0,
+            audio_channels: 0,
             depth: 8,
             alpha_channel: false,
             straight_alpha: false,
             colour_space: String::new(),
+            resample: String::new(),
             crop_top: 0,
             crop_left: 0,
             crop_bottom: 0,
@@ -140,6 +195,10 @@ impl Default for BridgeExportSpec {
             disk_cache_read_only: false,
             effects: true,
             honour_solo: true,
+            render_guides: false,
+            motion_blur: 0,
+            retime_blend: 0,
+            use_proxies: false,
             make_a_noise: false,
             open_folder: false,
         }
@@ -169,8 +228,30 @@ pub struct BridgeFormatCaps {
     /// An audio bitrate applies — AAC has one, uncompressed PCM is exactly
     /// what it is.
     pub audio_bit_rate: bool,
+    /// This format's sound can be written twenty-four bits a sample as well as
+    /// sixteen (K-493) — true for uncompressed PCM, false for AAC and for
+    /// every format with no sound at all.
+    ///
+    /// A flag rather than a list, because the engine's list is
+    /// `AudioDepth::ALL` and has exactly two members. ponytail: if a third
+    /// sample width ever exists this becomes a `Vec<u32>` mirroring `depths`;
+    /// `the_caps_row_says_what_the_engine_says` fails the moment it would need
+    /// to.
+    #[frb(default = false)]
+    pub audio_24_bit: bool,
     /// The container holds metadata.
     pub metadata: bool,
+    /// The colour spaces this format's container can **state**, by the stable
+    /// names `BridgeExportSpec::colour_space` carries: `""` (sRGB / Rec. 709),
+    /// `linear`, `rec709`, `rec2020`, `display-p3` (K-498). Empty where the
+    /// format carries no picture.
+    ///
+    /// Names, not labels: a space the seam cannot translate is a space whose
+    /// wording belongs in `app_en.arb` like every other string (K-005, K-303),
+    /// and a name nobody recognises — an OCIO config's own — is shown as it
+    /// arrived, exactly as a codec name is.
+    #[frb(default = [])]
+    pub colour_spaces: Vec<String>,
 }
 
 /// The crop an export actually applies, and the frame it leaves — the answer
@@ -261,6 +342,18 @@ impl CompositionReference {
 #[frb(sync)]
 pub fn export_format_caps(codec: String) -> BridgeFormatCaps {
     crate::export::format_caps(&codec)
+}
+
+/// Every sample rate an export can write sound at, in hertz and in the order
+/// the Sound row lists them (K-493).
+///
+/// Not a capability row, because it does not vary by format: a format either
+/// carries sound — `BridgeFormatCaps::audio` — and then carries all of these,
+/// or carries none and the whole row is dead. `the_caps_row_says_what_the
+/// _engine_says` holds the two in step.
+#[frb(sync)]
+pub fn export_audio_rates() -> Vec<u32> {
+    crate::export::audio_rates()
 }
 
 /// Refuse a spec the chosen format cannot honour, in the dialogue's own words —
@@ -531,6 +624,22 @@ pub fn export_queue_cancel(id: u32) {
 #[frb(sync)]
 pub fn export_queue_remove(id: u32) {
     crate::export::queue_remove(id);
+}
+
+/// Move one waiting item to `index` in the queue — the drag the queue window's
+/// list offers, so the order work runs in is the order it is looked at in.
+///
+/// The queue's order is **transient state, not document state**: it is not in
+/// the `.lum`, it does not survive a restart, and it is no more undoable than
+/// removing an item is. So this commits no op and journals nothing, exactly as
+/// [`export_queue_remove`] does.
+///
+/// Three calm refusals rather than a silent no-op, because a row that will not
+/// move should say why: an item that is running, one that has already run, and
+/// an id no longer in the list. An `index` past the end lands it last.
+#[frb(sync)]
+pub fn export_queue_move(id: u32, index: u32) -> Result<(), BridgeError> {
+    crate::export::queue_move(id, index as usize).map_err(BridgeError::ExportFailed)
 }
 
 #[frb(ignore)]

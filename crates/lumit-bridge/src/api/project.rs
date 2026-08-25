@@ -527,6 +527,37 @@ impl ProjectReference {
         Ok(())
     }
 
+    /// The project-wide *use proxies* master switch (K-501).
+    ///
+    /// On — the default, and what every project written before proxies existed
+    /// opens as — means each item's own tick decides. Off reads the originals
+    /// everywhere, however many proxies are attached: the one switch for "show
+    /// me what I am actually delivering".
+    ///
+    /// **An export ignores it entirely** and delivers full resolution unless
+    /// asked otherwise (`BridgeExportSpec::use_proxies`), so turning proxies on
+    /// to work cannot quietly ship the small picture.
+    #[frb(sync)]
+    pub fn use_proxies(&self) -> Result<bool, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(state.store.snapshot().use_proxies)
+    }
+
+    /// Set the project-wide *use proxies* switch. An ordinary op, so it is
+    /// undoable and travels in the `.lum` — it changes which file the pixels
+    /// come out of, which is an edit like any other.
+    #[frb(sync)]
+    pub fn set_use_proxies(&self, use_proxies: bool) -> Result<(), BridgeError> {
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        state
+            .store
+            .commit(Op::SetUseProxies { use_proxies })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// How the interface was arranged when this project was last saved, as the
     /// JSON the frontend itself wrote (K-245), or `None` for a project that has
     /// never carried one.

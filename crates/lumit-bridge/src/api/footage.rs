@@ -399,3 +399,245 @@ impl FootageReference {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Proxies (K-501): the second media reference, its two switches, and the
+// MAKE-PROXY job that fills it in.
+// ---------------------------------------------------------------------------
+
+/// The stand-in file attached to one footage item, as the Project panel's row
+/// reads it (K-501).
+///
+/// Three row states, all readable from here: no proxy at all (`None` from
+/// [`FootageReference::get_proxy`]), one attached and being read (`in_use`), and
+/// one attached but switched off — either by this item's own tick or by the
+/// project's master switch.
+///
+/// Whether the file on the end of it is *usable* is a different question, about
+/// media rather than about the document, and nothing here answers it: the
+/// renderer falls back to the original on its own when a proxy is missing or
+/// disagrees about the footage's length, deliberately without reporting it as
+/// missing media.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeProxy {
+    /// Where the stand-in is, in the same form the Path column shows for the
+    /// original: the relative path a saved project carries, else the absolute
+    /// one (K-173).
+    pub path: String,
+    /// This item's own *use proxy* tick.
+    pub enabled: bool,
+    /// Whether the document actually reads it — this item's tick and the
+    /// project's master switch both on.
+    pub in_use: bool,
+}
+
+/// How a MAKE-PROXY transcode is getting on. One runs at a time, so this is a
+/// process-wide reading exactly as `export_poll` is.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BridgeProxyState {
+    /// Nothing has run since start-up.
+    Idle,
+    Running {
+        frame: u64,
+        /// Zero until the source's length has been read.
+        total: u64,
+    },
+    /// The finished file — already attached to its item by the time this is
+    /// read.
+    Done {
+        path: String,
+    },
+    Failed {
+        error: String,
+    },
+}
+
+impl FootageReference {
+    /// The proxy attached to this item, or `None` when there is none.
+    #[frb(sync)]
+    pub fn get_proxy(&self) -> Result<Option<BridgeProxy>, BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = proj.store.snapshot();
+        let Some(proxy) = doc.proxy(self.id) else {
+            return Ok(None);
+        };
+        Ok(Some(BridgeProxy {
+            path: proxy.media.display_path().to_owned(),
+            enabled: proxy.enabled,
+            in_use: doc.proxy_in_use(self.id).is_some(),
+        }))
+    }
+
+    /// Attach `path` as this item's proxy, replacing any proxy already there,
+    /// and switch it on.
+    ///
+    /// One undo step: the op carries the whole reference, so attaching and
+    /// detaching invert each other exactly as a relink does.
+    #[frb(sync)]
+    pub fn set_proxy(&self, path: String) -> Result<(), BridgeError> {
+        if path.trim().is_empty() {
+            return Err(BridgeError::MediaPathUnresolved);
+        }
+        attach_proxy(self.project, self.id, std::path::Path::new(&path))
+    }
+
+    /// Detach this item's proxy. The file on disk is left alone — a proxy took
+    /// minutes to make, and forgetting it in the project is not a reason to
+    /// delete it.
+    #[frb(sync)]
+    pub fn clear_proxy(&self) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetItemProxy {
+                id: self.id,
+                proxy: None,
+            })
+            .map(|_| ())
+            .map_err(BridgeError::OpError)
+    }
+
+    /// This item's own *use proxy* tick, leaving the proxy attached — how one
+    /// clip is checked at full quality without giving up the proxy.
+    ///
+    /// Refused on an item with no proxy: the panel does not draw the tick on a
+    /// row that has nothing to tick.
+    #[frb(sync)]
+    pub fn set_use_proxy(&self, on: bool) -> Result<(), BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetItemUseProxy {
+                id: self.id,
+                use_proxy: on,
+            })
+            .map(|_| ())
+            .map_err(BridgeError::OpError)
+    }
+
+    /// Where MAKE-PROXY would write this item's proxy: beside the original,
+    /// with `_proxy` before a `.mov` extension.
+    ///
+    /// Shown before the job starts, so a file already there can be pointed out
+    /// rather than silently overwritten.
+    #[frb(sync)]
+    pub fn proxy_path(&self) -> Result<String, BridgeError> {
+        let source = self.source_path()?;
+        Ok(lumit_render::proxy::proxy_path_for(&source)
+            .to_string_lossy()
+            .into_owned())
+    }
+
+    /// Make this item's proxy: transcode the original half as wide, and attach
+    /// the result when it lands.
+    ///
+    /// Returns as soon as the job is *running*; ask [`proxy_poll`] how it is
+    /// getting on. A second one while the first runs is a calm refusal — two
+    /// transcodes share one disk.
+    #[frb(sync)]
+    pub fn make_proxy(&self) -> Result<(), BridgeError> {
+        let source = self.source_path()?;
+        let dest = lumit_render::proxy::proxy_path_for(&source);
+        crate::proxy::start(self.project, self.id, source, dest).map_err(BridgeError::ExportFailed)
+    }
+
+    /// The original's own file, which is what a proxy is made from and what the
+    /// proxy's name is derived from.
+    #[frb(ignore)]
+    fn source_path(&self) -> Result<PathBuf, BridgeError> {
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = proj.store.snapshot();
+        let Some(lumit_core::model::ProjectItem::Footage(footage)) = doc.item(self.id) else {
+            return Err(BridgeError::InvalidItem);
+        };
+        Self::resolve_path(&proj, footage).ok_or(BridgeError::MediaPathUnresolved)
+    }
+}
+
+/// Point `item`'s proxy at `path`, switched on — the one place a proxy is
+/// attached, whether by the picker or by a transcode that has just landed.
+///
+/// The reference is built exactly as a relink builds one: the absolute path for
+/// this session, the project-relative path where there is a project directory to
+/// be relative to, and a content fingerprint so a moved file can be found again.
+#[frb(ignore)]
+pub(crate) fn attach_proxy(
+    project: Uuid,
+    item: Uuid,
+    path: &std::path::Path,
+) -> Result<(), BridgeError> {
+    let proj = {
+        let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
+        projects
+            .get(&project)
+            .ok_or(BridgeError::InvalidProject)?
+            .clone()
+    };
+
+    let media = {
+        let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = p.store.snapshot();
+        if !matches!(
+            doc.item(item),
+            Some(lumit_core::model::ProjectItem::Footage(_))
+        ) {
+            return Err(BridgeError::InvalidItem);
+        }
+        let mut media = lumit_core::model::MediaRef {
+            relative_path: String::new(),
+            absolute_path: path.to_string_lossy().into_owned(),
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        };
+        if let Some(dir) = p.path.as_deref().and_then(|p| p.parent()) {
+            if let Some(rel) = lumit_project::relative_between(dir, path) {
+                media.relative_path = rel;
+            }
+        }
+        media.fingerprint = lumit_project::fingerprint_path(path).ok();
+        media
+    };
+
+    let p = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+    p.store
+        .commit(lumit_core::Op::SetItemProxy {
+            id: item,
+            proxy: Some(Box::new(lumit_core::model::ProxyRef {
+                media,
+                enabled: true,
+                extra: serde_json::Map::new(),
+            })),
+        })
+        .map(|_| ())
+        .map_err(BridgeError::OpError)
+}
+
+/// How the running MAKE-PROXY job is getting on. Safe to call on the
+/// interface's own cadence: it drains a channel and reads two numbers.
+///
+/// Reading is also what *finishes* the job: a transcode that has just landed is
+/// attached to its item here, so an item gains its proxy whether or not the
+/// panel that asked for it is still on screen.
+#[frb(sync)]
+pub fn proxy_poll() -> BridgeProxyState {
+    match crate::proxy::poll() {
+        crate::proxy::State::Idle => BridgeProxyState::Idle,
+        crate::proxy::State::Running { frame, total } => BridgeProxyState::Running {
+            frame: frame as u64,
+            total: total as u64,
+        },
+        crate::proxy::State::Done { path } => BridgeProxyState::Done { path },
+        crate::proxy::State::Failed { error } => BridgeProxyState::Failed { error },
+    }
+}
+
+/// Ask the running MAKE-PROXY job to stop. The half-written file is removed — a
+/// cancelled proxy leaves nothing pretending to be a finished one.
+#[frb(sync)]
+pub fn proxy_cancel() {
+    crate::proxy::cancel();
+}

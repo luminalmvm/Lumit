@@ -427,6 +427,11 @@ enum BridgeLayerSwitch {
 
   /// K-361: whether the comp's Light layers shade this one.
   acceptsLights,
+
+  /// K-497: reference-only — the Viewer draws it, no delivered file carries
+  /// it. A locked layer refuses this one, unlike shy: it changes what the
+  /// export writes.
+  guide,
   ;
 }
 
@@ -456,6 +461,12 @@ class BridgeLayerSwitches {
   /// shy filter is on. Never changes what renders.
   final bool shy;
 
+  /// Guide (K-497): drawn in the Viewer and absent from every delivered
+  /// file, at every depth — a reference the file does not carry. The one
+  /// switch here that changes what an export writes without changing what
+  /// the Viewer shows.
+  final bool guide;
+
   /// Accepts lights (K-361): whether the comp's Light layers shade this one.
   /// Defaults on, and does nothing at all in a comp with no lights.
   final bool acceptsLights;
@@ -470,6 +481,7 @@ class BridgeLayerSwitches {
     required this.motionBlur,
     required this.collapse,
     required this.shy,
+    this.guide = false,
     required this.acceptsLights,
   });
 
@@ -484,6 +496,7 @@ class BridgeLayerSwitches {
       motionBlur.hashCode ^
       collapse.hashCode ^
       shy.hashCode ^
+      guide.hashCode ^
       acceptsLights.hashCode;
 
   @override
@@ -500,6 +513,7 @@ class BridgeLayerSwitches {
           motionBlur == other.motionBlur &&
           collapse == other.collapse &&
           shy == other.shy &&
+          guide == other.guide &&
           acceptsLights == other.acceptsLights;
 }
 

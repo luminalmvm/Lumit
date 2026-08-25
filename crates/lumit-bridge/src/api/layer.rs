@@ -40,6 +40,12 @@ pub struct BridgeLayerSwitches {
     /// Shy (docs/07 §4.2): hidden from the Timeline's list while the comp's
     /// shy filter is on. Never changes what renders.
     pub shy: bool,
+    /// Guide (K-497): drawn in the Viewer and absent from every delivered
+    /// file, at every depth — a reference the file does not carry. The one
+    /// switch here that changes what an export writes without changing what
+    /// the Viewer shows.
+    #[frb(default = false)]
+    pub guide: bool,
     /// Accepts lights (K-361): whether the comp's Light layers shade this one.
     /// Defaults on, and does nothing at all in a comp with no lights.
     pub accepts_lights: bool,
@@ -503,6 +509,10 @@ pub enum BridgeLayerSwitch {
     Shy,
     /// K-361: whether the comp's Light layers shade this one.
     AcceptsLights,
+    /// K-497: reference-only — the Viewer draws it, no delivered file carries
+    /// it. A locked layer refuses this one, unlike shy: it changes what the
+    /// export writes.
+    Guide,
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.
@@ -831,6 +841,7 @@ pub(crate) fn read_layer_info(
             motion_blur: s.motion_blur,
             collapse: s.collapse,
             shy: s.shy,
+            guide: s.guide,
             accepts_lights: s.accepts_lights,
         },
         blend: lumit_core::model::BlendMode::ALL
@@ -2639,6 +2650,7 @@ impl LayerReference {
             motion_blur: s.motion_blur,
             collapse: s.collapse,
             shy: s.shy,
+            guide: s.guide,
             accepts_lights: s.accepts_lights,
         })
     }
@@ -2697,6 +2709,11 @@ impl LayerReference {
                 comp,
                 layer,
                 accepts_lights: on,
+            },
+            BridgeLayerSwitch::Guide => lumit_core::Op::SetLayerGuide {
+                comp,
+                layer,
+                guide: on,
             },
         })
     }

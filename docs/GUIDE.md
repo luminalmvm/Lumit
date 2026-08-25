@@ -5580,6 +5580,16 @@ checked in but are *output* — change `api/`, then run
 the next run, and CI's `codegen-fresh` job fails if the committed files differ
 from what the generator produces.
 
+**A structure at the seam only ever grows by fields with a default.** When the
+engine learns a new export setting, that setting becomes another field on the
+flat structure the dialogue hands over. If it were a *required* field, every
+place in Dart that builds one would stop compiling — including screens nobody is
+working on that day. So each new field says what it means when nobody sets it,
+and the answer is always "what Lumit did before this field existed". The result
+is that adding an option to the engine changes no interface code at all until
+somebody chooses to draw it, and an old saved preset that has never heard of the
+option still exports exactly the file it always did.
+
 **Dart holds handles, not copies.** A `LayerReference` is an opaque token
 standing for one layer in the engine; the handle *is* the identity, so renaming
 is `layer.rename(name: 'hero shot')` with no document to re-read and no Dart-side

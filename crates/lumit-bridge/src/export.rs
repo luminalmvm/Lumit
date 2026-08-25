@@ -265,13 +265,27 @@ pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
         // Uncompressed PCM is exactly what it is; everything else Lumit writes
         // sound into is AAC, which has a rate to choose.
         audio_bit_rate: caps.audio && codec != "wav",
+        audio_24_bit: caps
+            .audio_depths
+            .contains(&lumit_render::export::AudioDepth::TwentyFour),
         metadata: caps.metadata,
+        colour_spaces: caps
+            .colour_spaces
+            .iter()
+            .map(lumit_render::export::ColourSpace::stored_name)
+            .collect(),
     }
 }
 
 #[cfg(not(feature = "media"))]
 pub(crate) fn format_caps(_codec: &str) -> BridgeFormatCaps {
     BridgeFormatCaps::default()
+}
+
+/// Every sample rate an export can write sound at — the engine's own list, so
+/// the Sound row offers what the encoder was actually asked for.
+pub(crate) fn audio_rates() -> Vec<u32> {
+    lumit_render::export::EXPORT_AUDIO_RATES.to_vec()
 }
 
 /// Without a media build there is no encoder to name, so an export cannot be
@@ -300,8 +314,8 @@ pub(crate) fn to_export_spec(
 ) -> Result<lumit_render::export::ExportSpec, String> {
     use lumit_media::encode::{BitDepth, Metadata};
     use lumit_render::export::{
-        AlphaMode, Bitrate, Channels, ColourSpace, DiskCachePolicy, ExportSpec, RenderOptions,
-        WhenDone,
+        AlphaMode, AudioDepth, AudioLayout, Bitrate, Channels, ColourSpace, DiskCachePolicy,
+        ExportSpec, MotionBlurOverride, RenderOptions, RetimeBlendOverride, WhenDone,
     };
     let default_spec = ExportSpec::default();
     let mut metadata = Metadata::new();
@@ -333,13 +347,23 @@ pub(crate) fn to_export_spec(
         } else {
             PRESET_AUDIO_BPS
         },
-        // The sound rate, width and layout are real in the engine and are not
-        // on the seam yet, so they take today's answer — 48 kHz, sixteen bits,
-        // stereo — exactly as K-479 left the fields it had not yet exposed.
-        // One line to change when the dialogue's three faces come alive.
-        audio_rate: default_spec.audio_rate,
-        audio_depth: default_spec.audio_depth,
-        audio_layout: default_spec.audio_layout,
+        // Zero is "whatever Lumit has always written" for all three, so a
+        // caller that sets none of them exports the file it always did.
+        audio_rate: if spec.audio_rate > 0 {
+            spec.audio_rate
+        } else {
+            default_spec.audio_rate
+        },
+        audio_depth: if spec.audio_depth >= 24 {
+            AudioDepth::TwentyFour
+        } else {
+            AudioDepth::Sixteen
+        },
+        audio_layout: if spec.audio_channels == 1 {
+            AudioLayout::Mono
+        } else {
+            AudioLayout::Stereo
+        },
         depth: if spec.depth >= 16 {
             BitDepth::Sixteen
         } else {
@@ -356,10 +380,13 @@ pub(crate) fn to_export_spec(
             AlphaMode::Premultiplied
         },
         colour_space: ColourSpace::from_stored_name(&spec.colour_space),
-        // The seam has no resample face yet: the drawing's Resize row still
-        // shows one filter, so the engine's own default — bilinear, what every
-        // export has always used — stands until the dialog carries the choice.
-        resample: lumit_core::pixels::Resample::default(),
+        // Anything but "high" is the bilinear default, blank included — an
+        // unrecognised filter name must not silently change what is written.
+        resample: if spec.resample == "high" {
+            lumit_core::pixels::Resample::High
+        } else {
+            lumit_core::pixels::Resample::Fast
+        },
         crop: spec_crop(spec, comp_w, comp_h),
         metadata,
         render: RenderOptions {
@@ -374,14 +401,20 @@ pub(crate) fn to_export_spec(
             },
             effects: spec.effects,
             honour_solo: spec.honour_solo,
-            // The dialogue has no *render guide layers* tick yet (K-497): the
-            // engine's default — a guide layer is reference-only — stands
-            // until the seam carries the override.
-            render_guides: false,
-            // Nor a *use proxies* tick (K-501). The engine's default is the
-            // one an export must have if the seam is silent: full resolution,
-            // whatever the project is set to work at.
-            ..RenderOptions::default()
+            render_guides: spec.render_guides,
+            // An answer nobody recognises is the composition's own answer:
+            // a number out of range must not refuse an export (K-502).
+            motion_blur: match spec.motion_blur {
+                1 => MotionBlurOverride::OnForChecked,
+                2 => MotionBlurOverride::OffForAll,
+                _ => MotionBlurOverride::CompSetting,
+            },
+            retime_blend: if spec.retime_blend == 1 {
+                RetimeBlendOverride::OffForAll
+            } else {
+                RetimeBlendOverride::CompSetting
+            },
+            use_proxies: spec.use_proxies,
         },
         // The two ticks are one enum in the engine, and showing the folder is
         // the louder of the two — the queue honours both flags itself.
@@ -401,7 +434,9 @@ pub(crate) fn to_export_spec(
 #[cfg(feature = "media")]
 fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExportSpec> {
     use lumit_media::encode::BitDepth;
-    use lumit_render::export::{AlphaMode, Bitrate, Channels, DiskCachePolicy};
+    use lumit_render::export::{
+        AlphaMode, Bitrate, Channels, DiskCachePolicy, MotionBlurOverride, RetimeBlendOverride,
+    };
     let (bitrate_auto, bitrate_mbps, peak_mbps) = match spec.bitrate {
         Bitrate::Auto => (true, 0, 0),
         Bitrate::EncoderDefault => (false, 0, 0),
@@ -430,6 +465,9 @@ fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExp
         range_end_frame,
         include_audio: spec.include_audio,
         audio_bit_rate: spec.audio_bit_rate,
+        audio_rate: spec.audio_rate,
+        audio_depth: spec.audio_depth.bits(),
+        audio_channels: u32::from(spec.audio_layout.channels()),
         depth: match spec.depth {
             BitDepth::Eight => 8,
             BitDepth::Sixteen => 16,
@@ -437,6 +475,10 @@ fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExp
         alpha_channel: spec.channels == Channels::RgbAlpha,
         straight_alpha: spec.alpha == AlphaMode::Straight,
         colour_space: spec.colour_space.stored_name(),
+        resample: match spec.resample {
+            lumit_core::pixels::Resample::High => "high".to_owned(),
+            lumit_core::pixels::Resample::Fast => String::new(),
+        },
         crop_top: spec.crop.top,
         crop_left: spec.crop.left,
         crop_bottom: spec.crop.bottom,
@@ -457,6 +499,17 @@ fn from_export_spec(spec: &lumit_render::export::ExportSpec) -> Option<BridgeExp
         disk_cache_read_only: spec.render.disk_cache == DiskCachePolicy::ReadOnly,
         effects: spec.render.effects,
         honour_solo: spec.render.honour_solo,
+        render_guides: spec.render.render_guides,
+        motion_blur: match spec.render.motion_blur {
+            MotionBlurOverride::CompSetting => 0,
+            MotionBlurOverride::OnForChecked => 1,
+            MotionBlurOverride::OffForAll => 2,
+        },
+        retime_blend: match spec.render.retime_blend {
+            RetimeBlendOverride::CompSetting => 0,
+            RetimeBlendOverride::OffForAll => 1,
+        },
+        use_proxies: spec.render.use_proxies,
         // *When done* is what this export does, not what the preset is for.
         make_a_noise: false,
         open_folder: false,
@@ -705,6 +758,16 @@ pub(crate) fn queue_remove(id: u32) {
     driving::queue_remove(id);
 }
 
+/// Move one waiting item to `index`, oldest-first, so the order the list is
+/// read in is the order the work runs in.
+///
+/// Transient state, like removal: the queue is not in the `.lum`, so this
+/// commits no op and there is nothing to undo. Refuses an item that is running
+/// or has already run, in the engine's own words.
+pub(crate) fn queue_move(id: u32, index: usize) -> Result<(), String> {
+    driving::queue_move(id, index)
+}
+
 mod driving {
     use super::{err_json, to_export_spec, BridgeExportSpec};
     use lumit_render::export::{ExportEvent, ExportHandle};
@@ -746,7 +809,7 @@ mod driving {
     /// Where an item is in its life. Progress is not held here: the in-flight
     /// item's frame count is [`State::Running`], one place rather than two that
     /// could disagree.
-    enum ItemState {
+    pub(super) enum ItemState {
         Waiting,
         Running,
         Done,
@@ -964,6 +1027,40 @@ mod driving {
         guard
             .queue
             .retain(|item| item.id != id || !matches!(item.state, ItemState::Waiting));
+    }
+
+    /// What [`queue_move`] says about an item it will not move, or `None` when
+    /// it will. Its own function so the four answers can be checked without a
+    /// process-wide queue — and without starting one, which on a machine with a
+    /// graphics card would launch a real encoder.
+    pub(super) fn move_refusal(state: &ItemState) -> Option<&'static str> {
+        match state {
+            ItemState::Waiting => None,
+            ItemState::Running => Some("that export is already running"),
+            ItemState::Done | ItemState::Failed(_) => Some("that export has already run"),
+        }
+    }
+
+    /// What it says about an id the list no longer holds.
+    pub(super) const GONE: &str = "that export is no longer in the queue";
+
+    /// Move a waiting item to `index`. The pump is not turned here: reordering
+    /// changes which item is *next*, and starting one is what `queue_list`
+    /// already does on the interface's own tick.
+    pub(super) fn queue_move(id: u32, index: usize) -> Result<(), String> {
+        let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        let Some(from) = guard.queue.iter().position(|item| item.id == id) else {
+            return Err(GONE.to_owned());
+        };
+        if let Some(refusal) = move_refusal(&guard.queue[from].state) {
+            return Err(refusal.to_owned());
+        }
+        // Past the end lands it last, which is what dragging a row off the
+        // bottom of the list means.
+        let to = index.min(guard.queue.len() - 1);
+        let item = guard.queue.remove(from);
+        guard.queue.insert(to, item);
+        Ok(())
     }
 
     pub(super) fn queue_remove(id: u32) {
@@ -1341,8 +1438,15 @@ mod tests {
             disk_cache_read_only: true,
             effects: false,
             honour_solo: false,
-            make_a_noise: false,
-            open_folder: false,
+            // The sound settings come back *resolved*, never as the zero that
+            // asked for the default: a preset the dialogue loads has to fill a
+            // dropdown, and "whatever the default is" selects nothing. So the
+            // round trip is exact only from a spec that states them, which is
+            // exactly what a saved preset is.
+            audio_rate: 48_000,
+            audio_depth: 16,
+            audio_channels: 2,
+            ..BridgeExportSpec::default()
         };
         let resolved = to_export_spec(&spec, 1920, 1080).unwrap();
         let back = from_export_spec(&resolved).unwrap();
@@ -1352,5 +1456,254 @@ mod tests {
             ["title", "artist"],
             "metadata keeps the order it was given — the order lands in the file"
         );
+    }
+
+    /// Every option the six engine changes landed crosses the seam, reaches the
+    /// engine's own type, and comes back as the field that set it (K-493,
+    /// K-497, K-498, K-501, K-502).
+    ///
+    /// One test rather than six, because they share the one question: is the
+    /// flat field the seam carries the same answer the engine acts on? A
+    /// per-option test would assert the same conversion six times.
+    #[test]
+    #[cfg(feature = "media")]
+    fn every_new_option_reaches_the_engine_and_comes_back() {
+        use lumit_render::export::{
+            AudioDepth, AudioLayout, MotionBlurOverride, RetimeBlendOverride,
+        };
+
+        let spec = BridgeExportSpec {
+            codec: "wav".to_owned(),
+            audio_rate: 96_000,
+            audio_depth: 24,
+            audio_channels: 1,
+            resample: "high".to_owned(),
+            colour_space: "rec2020".to_owned(),
+            render_guides: true,
+            motion_blur: 1,
+            retime_blend: 1,
+            use_proxies: true,
+            ..BridgeExportSpec::default()
+        };
+        let resolved = to_export_spec(&spec, 1920, 1080).unwrap();
+        assert_eq!(resolved.audio_rate, 96_000);
+        assert_eq!(resolved.audio_depth, AudioDepth::TwentyFour);
+        assert_eq!(resolved.audio_layout, AudioLayout::Mono);
+        assert_eq!(resolved.resample, lumit_core::pixels::Resample::High);
+        assert!(resolved.render.render_guides);
+        assert_eq!(
+            resolved.render.motion_blur,
+            MotionBlurOverride::OnForChecked
+        );
+        assert_eq!(resolved.render.retime_blend, RetimeBlendOverride::OffForAll);
+        assert!(resolved.render.use_proxies);
+
+        // A preset saved from these fields comes back as the fields that saved
+        // it — the codec is a wav, so the picture settings are the defaults.
+        let back = from_export_spec(&resolved).unwrap();
+        assert_eq!(back.audio_rate, 96_000);
+        assert_eq!(back.audio_depth, 24);
+        assert_eq!(back.audio_channels, 1);
+        assert_eq!(back.resample, "high");
+        assert_eq!(back.colour_space, "rec2020");
+        assert!(back.render_guides);
+        assert_eq!(back.motion_blur, 1);
+        assert_eq!(back.retime_blend, 1);
+        assert!(back.use_proxies);
+
+        // *Off for all layers* is the other motion-blur answer, and it is the
+        // only one of the three that is neither the default nor the first.
+        let off = to_export_spec(
+            &BridgeExportSpec {
+                motion_blur: 2,
+                ..BridgeExportSpec::default()
+            },
+            0,
+            0,
+        )
+        .unwrap();
+        assert_eq!(off.render.motion_blur, MotionBlurOverride::OffForAll);
+    }
+
+    /// An answer nobody recognises is today's answer, never a refusal.
+    ///
+    /// The seam carries these as flat numbers and strings, so a Dart side one
+    /// version ahead — or a stored preset from one — can hand over a value this
+    /// build has no name for. Falling back writes the file that has always been
+    /// written; erroring would refuse an export over a field the user never
+    /// touched.
+    #[test]
+    #[cfg(feature = "media")]
+    fn an_option_this_build_does_not_know_is_the_one_it_always_had() {
+        use lumit_render::export::{
+            AudioDepth, AudioLayout, MotionBlurOverride, RetimeBlendOverride,
+        };
+
+        let odd = BridgeExportSpec {
+            audio_rate: 0,
+            audio_depth: 0,
+            audio_channels: 0,
+            resample: "bicubic".to_owned(),
+            motion_blur: 99,
+            retime_blend: 99,
+            ..BridgeExportSpec::default()
+        };
+        let resolved = to_export_spec(&odd, 0, 0).unwrap();
+        let default_spec = lumit_render::export::ExportSpec::default();
+        assert_eq!(resolved.audio_rate, default_spec.audio_rate, "48 kHz");
+        assert_eq!(resolved.audio_depth, AudioDepth::Sixteen);
+        assert_eq!(resolved.audio_layout, AudioLayout::Stereo);
+        assert_eq!(resolved.resample, lumit_core::pixels::Resample::Fast);
+        assert_eq!(resolved.render.motion_blur, MotionBlurOverride::CompSetting);
+        assert_eq!(
+            resolved.render.retime_blend,
+            RetimeBlendOverride::CompSetting
+        );
+
+        // And an untouched spec is byte-for-byte the export Lumit has always
+        // written: the whole point of every new field defaulting to zero.
+        let untouched = to_export_spec(&BridgeExportSpec::default(), 0, 0).unwrap();
+        assert_eq!(untouched.audio_rate, default_spec.audio_rate);
+        assert_eq!(untouched.audio_depth, default_spec.audio_depth);
+        assert_eq!(untouched.audio_layout, default_spec.audio_layout);
+        assert_eq!(untouched.resample, default_spec.resample);
+        assert_eq!(untouched.render, default_spec.render);
+    }
+
+    /// The capability rows the dialogue reads are the engine's own answers, and
+    /// the two the seam *flattens* cannot drift from the lists they flatten.
+    ///
+    /// `audio_24_bit` is a flag standing in for a two-member list and
+    /// `export_audio_rates` is one list standing in for every format's, so both
+    /// are asserted against `FormatCaps` itself for every format there is —
+    /// which is what makes the flattening safe rather than merely tidy.
+    #[test]
+    #[cfg(feature = "media")]
+    fn the_caps_row_says_what_the_engine_says() {
+        use lumit_render::export::{AudioDepth, EXPORT_AUDIO_RATES};
+
+        assert_eq!(audio_rates(), EXPORT_AUDIO_RATES.to_vec());
+
+        for codec in ["h264", "hevc", "png", "tiff", "m4a", "wav"] {
+            let caps = format_caps(codec);
+            let engine = export_format(codec).unwrap().caps();
+
+            assert_eq!(
+                caps.audio_24_bit,
+                engine.audio_depths.contains(&AudioDepth::TwentyFour),
+                "{codec}: the 24-bit flag is the engine's own depth list"
+            );
+            // The flag only stands in for the list while the list has two
+            // members; the moment a third width exists this row must become a
+            // `Vec<u32>` like `depths` (the ponytail note on the field).
+            assert!(
+                engine.audio_depths.len() <= AudioDepth::ALL.len() && AudioDepth::ALL.len() == 2,
+                "{codec}: a third sample width means the flag is no longer enough"
+            );
+
+            // Rates do not vary by format: a format either carries sound and
+            // carries all of them, or carries none — which is what lets
+            // `export_audio_rates` be one call rather than a caps row.
+            if engine.audio {
+                assert_eq!(engine.audio_rates, EXPORT_AUDIO_RATES, "{codec}");
+            } else {
+                assert!(engine.audio_rates.is_empty(), "{codec}");
+            }
+
+            assert_eq!(
+                caps.colour_spaces,
+                engine
+                    .colour_spaces
+                    .iter()
+                    .map(lumit_render::export::ColourSpace::stored_name)
+                    .collect::<Vec<_>>(),
+                "{codec}: the colour list is the engine's, by stored name"
+            );
+        }
+
+        // The names are the ones `colour_space` is set with, and the default
+        // space is the empty string so a spec that never sets one is the space
+        // every export has always written in.
+        assert!(format_caps("h264").colour_spaces.contains(&String::new()));
+        assert!(format_caps("h264")
+            .colour_spaces
+            .contains(&"rec2020".to_owned()));
+        assert!(format_caps("png").colour_spaces == vec![String::new()]);
+        assert!(format_caps("wav").colour_spaces.is_empty());
+    }
+
+    /// The refusals the engine already had reach the dialogue's footer as the
+    /// engine's own sentence, with no new call to make them (K-485).
+    #[test]
+    #[cfg(feature = "media")]
+    fn a_format_that_cannot_carry_a_setting_says_so_in_the_footers_own_words() {
+        let deep_mp4 = BridgeExportSpec {
+            codec: "h264".to_owned(),
+            audio_depth: 24,
+            ..BridgeExportSpec::default()
+        };
+        let refusal = spec_check(&deep_mp4);
+        assert!(
+            refusal.contains("24"),
+            "the footer is told which setting is the problem: {refusal}"
+        );
+
+        // The same settings in a wav are fine, which is what makes the refusal
+        // a fact about the format rather than about the setting.
+        assert_eq!(
+            spec_check(&BridgeExportSpec {
+                codec: "wav".to_owned(),
+                audio_depth: 24,
+                audio_rate: 96_000,
+                audio_channels: 1,
+                ..BridgeExportSpec::default()
+            }),
+            ""
+        );
+
+        // A still sequence cannot state a wide gamut, so it refuses one rather
+        // than writing an unlabelled file that reads back as sRGB.
+        let wide_png = BridgeExportSpec {
+            codec: "png".to_owned(),
+            colour_space: "rec2020".to_owned(),
+            ..BridgeExportSpec::default()
+        };
+        assert!(
+            !spec_check(&wide_png).is_empty(),
+            "a png cannot state Rec. 2020"
+        );
+
+        // And a rate nobody offers is refused wherever it is asked for.
+        assert!(!spec_check(&BridgeExportSpec {
+            codec: "wav".to_owned(),
+            audio_rate: 22_050,
+            ..BridgeExportSpec::default()
+        })
+        .is_empty());
+    }
+
+    /// The three answers `export_queue_move` gives about an item it will not move.
+    ///
+    /// Checked against the states directly rather than by running the queue: a
+    /// queue that is running would launch a real encoder on a machine with a
+    /// graphics card, which is not what a reordering test should do.
+    #[test]
+    fn the_queue_says_why_it_will_not_reorder_a_row() {
+        use super::driving::{move_refusal, ItemState, GONE};
+
+        assert_eq!(move_refusal(&ItemState::Waiting), None);
+        assert_eq!(
+            move_refusal(&ItemState::Running),
+            Some("that export is already running")
+        );
+        assert_eq!(
+            move_refusal(&ItemState::Done),
+            Some("that export has already run")
+        );
+        assert_eq!(
+            move_refusal(&ItemState::Failed("nope".into())),
+            Some("that export has already run")
+        );
+        assert_eq!(GONE, "that export is no longer in the queue");
     }
 }

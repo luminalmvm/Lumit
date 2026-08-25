@@ -13669,3 +13669,78 @@ blending inside an export that said it would not.
 **Both default to the composition's own settings**, so an `ExportSpec` written before these
 fields existed — and every saved preset — deserialises to exactly the export it always
 produced, and the common export still clones no document at all.
+
+## K-503 — Six engine decisions cross the seam flat, defaults and all, and the export queue reorders without an undo step
+
+**DECIDED 2026-08-25.** K-493, K-497, K-498, K-501 and K-502 each landed an engine half and
+left the same sentence behind: *nothing crosses yet*. This is the crossing — the sound's
+rate, width and layout; the guide switch and the *render guide layers* override; the
+resampler and the colour-space list; proxies, their two switches and MAKE-PROXY; and the two
+Time overrides — plus one thing of its own, reordering the export queue. One codegen run for
+the lot, because the generated glue carries a content hash of the whole declared surface and
+six separate runs would have been six chances for two of them to disagree.
+
+**Every field added to a seam struct carries a generated default.** `#[frb(default = …)]`
+makes the Dart constructor parameter optional, so a call site that predates the field still
+compiles and still asks for what it always asked for. Without it, growing `BridgeExportSpec`
+by one field breaks every construction of it in Dart — which would mean the engine's own
+decisions force edits to a dialog owned by a later stage, in a commit that has no business
+touching it. The rule is now general: **a seam struct grows only by defaulted fields**, and
+the default is always today's behaviour. The one place it could not be honoured is a `Vec`
+whose Dart form is a typed list (`Uint32List`), which has no constant literal to default to;
+that is why the sound depths cross as a flag and the sound rates as their own call rather
+than as two more lists on `BridgeFormatCaps`.
+
+**Zero is today's answer, and so is an answer this build does not recognise.** `audio_rate:
+0` is 48 kHz, `motion_blur: 99` is the compositions' own settings, `resample: "bicubic"` is
+bilinear. The alternative — refusing an export because a field carries a number this build
+has no name for — punishes the user for a stored preset or a Dart side one version ahead,
+over a setting they never touched. Refusals are reserved for what the *file* cannot hold,
+where the engine already refuses (a 24-bit `.mp4`, a Rec. 2020 `.png`), and those arrive
+through `export_spec_check` with no new call.
+
+**Colour spaces cross as stored names, not as labels.** K-498 proposed `(stored_name,
+label)` pairs so the dropdown would be the engine's answer rather than a second opinion. The
+*list* is the engine's answer and crosses as such; the *wording* is not, and sending five
+English strings from Rust for Dart to look up in `engine_labels.dart` would put five
+ordinary interface strings on the one path built for text the engine genuinely owns —
+effect names and keymap descriptions, which are schema data (K-303). Five fixed names are
+`app_en.arb` keys like every other string (K-005). An OCIO config's own name is the
+exception and needs no table: it is the user's word, shown as it arrived, exactly as a codec
+name is.
+
+**Two capability rows are flattened, and a test forbids the flattening from lying.**
+`FormatCaps::audio_depths` becomes the flag `audio_24_bit` because `AudioDepth::ALL` has two
+members; `FormatCaps::audio_rates` does not cross at all because it does not vary by format,
+so `export_audio_rates()` answers it once and the existing `audio` flag decides whether the
+row is live. `the_caps_row_says_what_the_engine_says` asserts both against `FormatCaps`
+itself for every format there is, and fails outright the day a third sample width exists or
+a format's rates diverge — at which point each becomes a list, and the test is what will
+say so.
+
+**Reordering the export queue carries no undo, because the queue is not the document.**
+`export_queue_move(id, index)` commits no op and journals nothing, exactly as
+`export_queue_cancel` and `export_queue_remove` do not. The queue is not in the `.lum`, does
+not survive a restart, and holds a *document snapshot* per item (docs/06 §7.1) rather than
+being part of one; an undo step that reordered a list nobody could see after a restart would
+be an edit to nothing. It refuses in the export's own words — "that export is already
+running", "that export has already run", "that export is no longer in the queue" — and an
+index past the end lands the row last, which is what dragging one off the bottom of a list
+means. The refusal is its own function so all four answers are checked without starting a
+queue, which on a machine with a graphics card would launch a real encoder inside a test
+about list order.
+
+**MAKE-PROXY's finished file is attached by the bridge, on the poll that sees it land.**
+`lumit_render::proxy` writes a file and never sees a document, so somebody has to commit the
+`Op::SetItemProxy` — and it cannot be the caller, because the panel that pressed the button
+may be gone by the time the transcode finishes. The job therefore remembers which project
+and which item it belongs to, and `proxy_poll` attaches on the drain that reads *Done*,
+after the job's own lock is dropped and before the document's is taken (docs/14 §3). The
+same reasoning the export queue already used for its *when done* ticks: work that outlives
+the window that asked for it must still do what it was asked to.
+
+**What the seam still does not answer**: whether a proxy *file* is usable. The renderer
+decides that itself and falls back to the original without reporting missing media (K-501),
+deliberately, so a present clip cannot open the relink dialogue. A panel wanting a "proxy is
+broken" mark needs a new query over the renderer; there is none, and inventing one in Dart
+would be a second opinion about media the engine has already formed.

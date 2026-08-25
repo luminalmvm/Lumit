@@ -185,6 +185,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dco_decode_box_autoadd_bridge_project_cache_location(dynamic raw);
 
   @protected
+  BridgeProxy dco_decode_box_autoadd_bridge_proxy(dynamic raw);
+
+  @protected
   BridgeRational dco_decode_box_autoadd_bridge_rational(dynamic raw);
 
   @protected
@@ -508,6 +511,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeProxy dco_decode_bridge_proxy(dynamic raw);
+
+  @protected
+  BridgeProxyState dco_decode_bridge_proxy_state(dynamic raw);
+
+  @protected
   BridgeRational dco_decode_bridge_rational(dynamic raw);
 
   @protected
@@ -825,6 +834,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dco_decode_opt_box_autoadd_bridge_project_cache_location(dynamic raw);
 
   @protected
+  BridgeProxy? dco_decode_opt_box_autoadd_bridge_proxy(dynamic raw);
+
+  @protected
   BridgeRational? dco_decode_opt_box_autoadd_bridge_rational(dynamic raw);
 
   @protected
@@ -1032,6 +1044,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeProjectCacheLocation
       sse_decode_box_autoadd_bridge_project_cache_location(
           SseDeserializer deserializer);
+
+  @protected
+  BridgeProxy sse_decode_box_autoadd_bridge_proxy(SseDeserializer deserializer);
 
   @protected
   BridgeRational sse_decode_box_autoadd_bridge_rational(
@@ -1407,6 +1422,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeProxy sse_decode_bridge_proxy(SseDeserializer deserializer);
+
+  @protected
+  BridgeProxyState sse_decode_bridge_proxy_state(SseDeserializer deserializer);
+
+  @protected
   BridgeRational sse_decode_bridge_rational(SseDeserializer deserializer);
 
   @protected
@@ -1779,6 +1800,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           SseDeserializer deserializer);
 
   @protected
+  BridgeProxy? sse_decode_opt_box_autoadd_bridge_proxy(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeRational? sse_decode_opt_box_autoadd_bridge_rational(
       SseDeserializer deserializer);
 
@@ -1997,6 +2022,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_project_cache_location(
       BridgeProjectCacheLocation self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_proxy(
+      BridgeProxy self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_rational(
@@ -2412,6 +2441,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeProjectCacheLocation self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_proxy(BridgeProxy self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_proxy_state(
+      BridgeProxyState self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_rational(
       BridgeRational self, SseSerializer serializer);
 
@@ -2804,6 +2840,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_project_cache_location(
       BridgeProjectCacheLocation? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_proxy(
+      BridgeProxy? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_rational(

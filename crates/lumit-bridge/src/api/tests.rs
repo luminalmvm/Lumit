@@ -2195,6 +2195,7 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
         S::Collapse,
         S::Shy,
         S::AcceptsLights,
+        S::Guide,
     ] {
         let start = layer.get_switches().expect("switches");
         let now = match switch {
@@ -2208,6 +2209,7 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
             S::Collapse => start.collapse,
             S::Shy => start.shy,
             S::AcceptsLights => start.accepts_lights,
+            S::Guide => start.guide,
         };
         layer.set_switch(switch, !now).expect("toggled");
         assert_ne!(
@@ -7232,4 +7234,228 @@ fn a_driver_this_build_does_not_know_is_refused() {
     let (_project, layer) = layer_to_wire();
     assert!(layer.new_driver("nonesuch".into()).is_err());
     assert!(layer.get_graph_drivers().expect("drivers").is_empty());
+}
+
+/// The queue can be reordered, so the order it is read in is the order the work
+/// runs in — and it refuses, calmly, anything that has already started.
+///
+/// Only the ids this test queued are asserted about: the queue is process-wide
+/// and the suite runs in parallel, so their *relative* order is the fact, never
+/// their absolute positions.
+#[test]
+fn the_queue_reorders_what_is_still_waiting() {
+    use crate::api::export::{
+        export_queue_list, export_queue_move, export_queue_remove, BridgeExportSpec,
+    };
+
+    let (project, layer) = project_with_layer();
+    let comp = CompositionReference::new(project.id, layer.comp_id());
+    let spec = BridgeExportSpec::default();
+
+    let first = comp
+        .queue_export(spec.clone(), "reorder-one.mp4".into(), false)
+        .expect("queued");
+    let second = comp
+        .queue_export(spec.clone(), "reorder-two.mp4".into(), false)
+        .expect("queued");
+    let third = comp
+        .queue_export(spec, "reorder-three.mp4".into(), false)
+        .expect("queued");
+
+    let mine = |rows: &[crate::api::export::BridgeExportQueueItem]| -> Vec<u32> {
+        rows.iter()
+            .map(|row| row.id)
+            .filter(|id| [first, second, third].contains(id))
+            .collect()
+    };
+    assert_eq!(mine(&export_queue_list()), vec![first, second, third]);
+
+    // Move the last one to where the first sits, absolute index and all.
+    let rows = export_queue_list();
+    let target = rows
+        .iter()
+        .position(|row| row.id == first)
+        .expect("the first item is in the list");
+    export_queue_move(third, target as u32).expect("a waiting item moves");
+    assert_eq!(
+        mine(&export_queue_list()),
+        vec![third, first, second],
+        "the row lands where it was dropped and the rest close up"
+    );
+
+    // Past the end lands it last rather than erroring — what dragging a row off
+    // the bottom of the list means.
+    export_queue_move(third, u32::MAX).expect("past the end is last");
+    let after = mine(&export_queue_list());
+    assert_eq!(after.last(), Some(&third));
+
+    // An id the list no longer holds is a calm sentence, not a panic.
+    let refusal = export_queue_move(u32::MAX, 0).expect_err("no such item");
+    let BridgeError::ExportFailed(words) = refusal else {
+        panic!("the queue refuses in the export's own words");
+    };
+    assert_eq!(words, "that export is no longer in the queue");
+
+    for id in [first, second, third] {
+        export_queue_remove(id);
+    }
+}
+
+/// The guide switch crosses like its siblings, and a **locked** layer refuses
+/// it — unlike shy, which a lock still accepts (K-497).
+///
+/// The difference is the whole point of the switch: shy changes what the
+/// Timeline lists, guide changes what the file carries, and a locked layer is
+/// locked against the second.
+#[test]
+fn a_locked_layer_refuses_the_guide_switch_and_still_takes_shy() {
+    use crate::api::layer::BridgeLayerSwitch as S;
+
+    let (_project, layer) = project_with_layer();
+    layer.set_switch(S::Guide, true).expect("guide goes on");
+    assert!(layer.get_switches().expect("switches").guide);
+
+    layer.set_switch(S::Locked, true).expect("locked");
+    assert!(
+        layer.set_switch(S::Guide, false).is_err(),
+        "a locked layer will not change what the export writes"
+    );
+    layer
+        .set_switch(S::Shy, true)
+        .expect("shy is about the Timeline, so a lock still takes it");
+    assert!(layer.get_switches().expect("switches").guide);
+}
+
+/// A proxy is attached, switched and detached over the seam, and every row
+/// state the Project panel draws is readable from one call (K-501).
+#[test]
+fn a_proxy_is_attached_switched_and_detached_over_the_seam() {
+    let (project, _folder, filed, _loose) = project_with_folder();
+    let ItemReference::Footage(footage) = &filed else {
+        panic!("the fixture filed a footage item");
+    };
+
+    assert_eq!(
+        footage.get_proxy().expect("read"),
+        None,
+        "an item with no proxy has no row to draw"
+    );
+    assert!(
+        footage.set_use_proxy(true).is_err(),
+        "there is no tick to set on a row with no proxy"
+    );
+    assert!(
+        matches!(
+            footage.set_proxy("   ".into()),
+            Err(BridgeError::MediaPathUnresolved)
+        ),
+        "a blank path is refused rather than attached"
+    );
+
+    footage
+        .set_proxy("clips/filed_proxy.mov".into())
+        .expect("attached");
+    let attached = footage.get_proxy().expect("read").expect("a proxy");
+    assert!(attached.path.ends_with("filed_proxy.mov"));
+    assert!(attached.enabled, "attaching switches it on");
+    assert!(attached.in_use, "and the project switch starts on");
+
+    // The project's master switch turns the reading off without disturbing the
+    // item's own tick — the "show me what I am delivering" switch.
+    project.set_use_proxies(false).expect("master off");
+    assert!(!project.use_proxies().expect("read"));
+    let off = footage.get_proxy().expect("read").expect("still attached");
+    assert!(off.enabled, "the item's own tick is untouched");
+    assert!(!off.in_use, "but nothing reads it");
+
+    project.set_use_proxies(true).expect("master on");
+    footage.set_use_proxy(false).expect("this one item off");
+    let one_off = footage.get_proxy().expect("read").expect("still attached");
+    assert!(!one_off.enabled);
+    assert!(!one_off.in_use);
+
+    footage.clear_proxy().expect("detached");
+    assert_eq!(footage.get_proxy().expect("read"), None);
+
+    // Each of those was one op, so one undo puts the proxy back.
+    project.undo().expect("undone");
+    assert!(footage.get_proxy().expect("read").is_some());
+}
+
+/// MAKE-PROXY refuses calmly when there is nothing to transcode, and polling or
+/// cancelling is safe whenever it is called.
+///
+/// The fixture's footage carries a relative path in a project that has never
+/// been saved, so there is nothing on disk to read — which is exactly the case
+/// the panel must not be able to start a job for.
+#[test]
+fn make_proxy_refuses_footage_that_is_not_on_this_machine() {
+    use crate::api::footage::{proxy_cancel, proxy_poll, BridgeProxyState};
+
+    let (_project, _folder, filed, _loose) = project_with_folder();
+    let ItemReference::Footage(footage) = &filed else {
+        panic!("the fixture filed a footage item");
+    };
+
+    assert!(matches!(
+        footage.proxy_path(),
+        Err(BridgeError::MediaPathUnresolved)
+    ));
+    assert!(matches!(
+        footage.make_proxy(),
+        Err(BridgeError::MediaPathUnresolved)
+    ));
+
+    // Poll always answers one of the four states, and cancelling is safe
+    // whether or not anything is running. Never "nothing has run yet": the job
+    // slot is process-wide and the suite runs in parallel.
+    assert!(matches!(
+        proxy_poll(),
+        BridgeProxyState::Idle
+            | BridgeProxyState::Running { .. }
+            | BridgeProxyState::Done { .. }
+            | BridgeProxyState::Failed { .. }
+    ));
+    proxy_cancel();
+    proxy_cancel();
+}
+
+/// Where a proxy would be written is the engine's answer, so the panel can show
+/// it — and point out a file already there — before minutes of work start.
+#[test]
+fn the_proxy_path_is_named_beside_the_original() {
+    let project = crate::api::state::LumitBridgeState::new_project(None).expect("a new project");
+    let here = std::env::temp_dir().join("lumit-proxy-path-probe.mp4");
+    std::fs::write(&here, b"not really a film").expect("a file to point at");
+
+    let id = Uuid::now_v7();
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        state
+            .store
+            .commit(Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(FootageItem {
+                    id,
+                    name: "probe.mp4".into(),
+                    media: MediaRef {
+                        relative_path: String::new(),
+                        absolute_path: here.to_string_lossy().into_owned(),
+                        fingerprint: None,
+                        extra: serde_json::Map::new(),
+                    },
+                    extra: serde_json::Map::new(),
+                })),
+            })
+            .expect("seeded");
+    }
+
+    let footage = FootageReference::new(project.id, id);
+    let path = footage.proxy_path().expect("a place to write");
+    assert!(
+        path.ends_with("lumit-proxy-path-probe_proxy.mov"),
+        "beside the original, with _proxy before a .mov extension: {path}"
+    );
+    std::fs::remove_file(&here).ok();
 }

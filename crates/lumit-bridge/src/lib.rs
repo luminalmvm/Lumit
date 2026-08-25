@@ -79,6 +79,7 @@ mod playback;
 mod prefetch;
 mod probe;
 mod profiling;
+mod proxy;
 mod realtime;
 mod render;
 

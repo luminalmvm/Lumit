@@ -297,6 +297,13 @@ class ProjectReference {
   void setUiState({String? uiState}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSetUiState(that: this, uiState: uiState);
 
+  /// Set the project-wide *use proxies* switch. An ordinary op, so it is
+  /// undoable and travels in the `.lum` — it changes which file the pixels
+  /// come out of, which is an edit like any other.
+  void setUseProxies({required bool useProxies}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetUseProxies(
+          that: this, useProxies: useProxies);
+
   Stream<WorkerResponse> startWorker() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceStartWorker(
         that: this,
@@ -315,6 +322,21 @@ class ProjectReference {
       );
 
   void undo() => BridgeLib.instance.api.crateApiProjectProjectReferenceUndo(
+        that: this,
+      );
+
+  /// The project-wide *use proxies* master switch (K-501).
+  ///
+  /// On — the default, and what every project written before proxies existed
+  /// opens as — means each item's own tick decides. Off reads the originals
+  /// everywhere, however many proxies are attached: the one switch for "show
+  /// me what I am actually delivering".
+  ///
+  /// **An export ignores it entirely** and delivers full resolution unless
+  /// asked otherwise (`BridgeExportSpec::use_proxies`), so turning proxies on
+  /// to work cannot quietly ship the small picture.
+  bool useProxies() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceUseProxies(
         that: this,
       );
 

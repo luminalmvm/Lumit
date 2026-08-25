@@ -17,6 +17,16 @@ part 'export.freezed.dart';
 BridgeFormatCaps exportFormatCaps({required String codec}) =>
     BridgeLib.instance.api.crateApiExportExportFormatCaps(codec: codec);
 
+/// Every sample rate an export can write sound at, in hertz and in the order
+/// the Sound row lists them (K-493).
+///
+/// Not a capability row, because it does not vary by format: a format either
+/// carries sound — `BridgeFormatCaps::audio` — and then carries all of these,
+/// or carries none and the whole row is dead. `the_caps_row_says_what_the
+/// _engine_says` holds the two in step.
+Uint32List exportAudioRates() =>
+    BridgeLib.instance.api.crateApiExportExportAudioRates();
+
 /// Refuse a spec the chosen format cannot honour, in the dialogue's own words —
 /// empty when the spec is exportable.
 ///
@@ -109,6 +119,20 @@ void exportQueueCancel({required int id}) =>
 /// Forget one item, cancelling it first if it is the one running.
 void exportQueueRemove({required int id}) =>
     BridgeLib.instance.api.crateApiExportExportQueueRemove(id: id);
+
+/// Move one waiting item to `index` in the queue — the drag the queue window's
+/// list offers, so the order work runs in is the order it is looked at in.
+///
+/// The queue's order is **transient state, not document state**: it is not in
+/// the `.lum`, it does not survive a restart, and it is no more undoable than
+/// removing an item is. So this commits no op and journals nothing, exactly as
+/// [`export_queue_remove`] does.
+///
+/// Three calm refusals rather than a silent no-op, because a row that will not
+/// move should say why: an item that is running, one that has already run, and
+/// an id no longer in the list. An `index` past the end lands it last.
+void exportQueueMove({required int id, required int index}) =>
+    BridgeLib.instance.api.crateApiExportExportQueueMove(id: id, index: index);
 
 /// The crop an export actually applies, and the frame it leaves — the answer
 /// `crop_for` gives for the typed insets and the Viewer's region together.
@@ -353,6 +377,24 @@ class BridgeExportSpec {
   /// Audio bits per second; zero takes the delivery-preset rate.
   final PlatformInt64 audioBitRate;
 
+  /// The sound's sample rate in hertz — one of [`export_audio_rates`]
+  /// (K-493). Zero means the customary 48 kHz, so a caller that never sets
+  /// it writes the file Lumit has always written.
+  final int audioRate;
+
+  /// Bits a sound sample: 16 or 24 (K-493). Anything below 24 reads as
+  /// sixteen, which is what an unset field has always meant. A format whose
+  /// sound cannot carry the choice (AAC stores coefficients, not samples) is
+  /// refused rather than handed the identical file either way —
+  /// [`BridgeFormatCaps::audio_24_bit`] is the row that says which.
+  final int audioDepth;
+
+  /// Channels in the written sound: `1` folds the composition's stereo mix
+  /// down to mono, anything else (zero included) keeps it stereo (K-493).
+  /// Every format that carries sound carries both, so there is no capability
+  /// row for it.
+  final int audioChannels;
+
   /// Bits per channel in the written file: 8 or 16.
   final int depth;
 
@@ -364,10 +406,20 @@ class BridgeExportSpec {
   /// without `alpha_channel`, and ignored there.
   final bool straightAlpha;
 
-  /// The output colour space: empty for the built-in sRGB / Rec.709
-  /// transform, otherwise the name of an OCIO output space (post-v1; an
-  /// export that asks for one before OCIO exists is refused).
+  /// The output colour space, by the stable name
+  /// [`BridgeFormatCaps::colour_spaces`] lists: empty for the default sRGB /
+  /// Rec. 709 (a genuine pass-through), `linear`, `rec709`, `rec2020`,
+  /// `display-p3`, or the name of an OCIO output space (post-v1; an export
+  /// that asks for one before OCIO exists is refused). A space the chosen
+  /// container cannot *state* is refused too, rather than written unlabelled
+  /// (K-498).
   final String colourSpace;
+
+  /// The filter a resized frame is resampled with (K-498): `high` for
+  /// Lanczos-3, anything else — blank included — for the bilinear default
+  /// every Lumit export has always used. Blank rather than `fast` as the
+  /// unset value, so a caller that never sets it cannot change a byte.
+  final String resample;
 
   /// Pixels taken off each edge, at composition size (K-419).
   final int cropTop;
@@ -399,6 +451,29 @@ class BridgeExportSpec {
   /// Honour solo switches (K-105).
   final bool honourSolo;
 
+  /// Deliver the guide layers too (K-497). Off — the default — is what a
+  /// guide layer is: drawn in the Viewer, absent from the file, at every
+  /// depth.
+  final bool renderGuides;
+
+  /// Motion blur at export (K-502): `0` the compositions' own settings, `1`
+  /// on for checked layers, `2` off for all layers. An unknown number is the
+  /// compositions' own settings — an answer nobody recognises is not a
+  /// reason to refuse an export.
+  final int motionBlur;
+
+  /// Retime blend at export (K-502): `0` the compositions' own settings, `1`
+  /// off for all layers. There is **no** *on for checked layers*: a layer's
+  /// interpolation policy is its own check, so that answer would write the
+  /// identical file as the first.
+  final int retimeBlend;
+
+  /// Read the proxies instead of the originals (K-501). Off by default
+  /// whatever the project is set to work at: delivery is the one moment a
+  /// proxy must not apply, and a draft for review is the only export it is
+  /// right for.
+  final bool useProxies;
+
   /// Play the completion sound when this export lands. Silent — never an
   /// error — when no sound has been supplied.
   final bool makeANoise;
@@ -419,10 +494,14 @@ class BridgeExportSpec {
     required this.rangeEndFrame,
     required this.includeAudio,
     required this.audioBitRate,
+    this.audioRate = 0,
+    this.audioDepth = 0,
+    this.audioChannels = 0,
     required this.depth,
     required this.alphaChannel,
     required this.straightAlpha,
     required this.colourSpace,
+    this.resample = r"",
     required this.cropTop,
     required this.cropLeft,
     required this.cropBottom,
@@ -434,6 +513,10 @@ class BridgeExportSpec {
     required this.diskCacheReadOnly,
     required this.effects,
     required this.honourSolo,
+    this.renderGuides = false,
+    this.motionBlur = 0,
+    this.retimeBlend = 0,
+    this.useProxies = false,
     required this.makeANoise,
     required this.openFolder,
   });
@@ -457,10 +540,14 @@ class BridgeExportSpec {
       rangeEndFrame.hashCode ^
       includeAudio.hashCode ^
       audioBitRate.hashCode ^
+      audioRate.hashCode ^
+      audioDepth.hashCode ^
+      audioChannels.hashCode ^
       depth.hashCode ^
       alphaChannel.hashCode ^
       straightAlpha.hashCode ^
       colourSpace.hashCode ^
+      resample.hashCode ^
       cropTop.hashCode ^
       cropLeft.hashCode ^
       cropBottom.hashCode ^
@@ -472,6 +559,10 @@ class BridgeExportSpec {
       diskCacheReadOnly.hashCode ^
       effects.hashCode ^
       honourSolo.hashCode ^
+      renderGuides.hashCode ^
+      motionBlur.hashCode ^
+      retimeBlend.hashCode ^
+      useProxies.hashCode ^
       makeANoise.hashCode ^
       openFolder.hashCode;
 
@@ -492,10 +583,14 @@ class BridgeExportSpec {
           rangeEndFrame == other.rangeEndFrame &&
           includeAudio == other.includeAudio &&
           audioBitRate == other.audioBitRate &&
+          audioRate == other.audioRate &&
+          audioDepth == other.audioDepth &&
+          audioChannels == other.audioChannels &&
           depth == other.depth &&
           alphaChannel == other.alphaChannel &&
           straightAlpha == other.straightAlpha &&
           colourSpace == other.colourSpace &&
+          resample == other.resample &&
           cropTop == other.cropTop &&
           cropLeft == other.cropLeft &&
           cropBottom == other.cropBottom &&
@@ -507,6 +602,10 @@ class BridgeExportSpec {
           diskCacheReadOnly == other.diskCacheReadOnly &&
           effects == other.effects &&
           honourSolo == other.honourSolo &&
+          renderGuides == other.renderGuides &&
+          motionBlur == other.motionBlur &&
+          retimeBlend == other.retimeBlend &&
+          useProxies == other.useProxies &&
           makeANoise == other.makeANoise &&
           openFolder == other.openFolder;
 }
@@ -563,8 +662,30 @@ class BridgeFormatCaps {
   /// what it is.
   final bool audioBitRate;
 
+  /// This format's sound can be written twenty-four bits a sample as well as
+  /// sixteen (K-493) — true for uncompressed PCM, false for AAC and for
+  /// every format with no sound at all.
+  ///
+  /// A flag rather than a list, because the engine's list is
+  /// `AudioDepth::ALL` and has exactly two members. ponytail: if a third
+  /// sample width ever exists this becomes a `Vec<u32>` mirroring `depths`;
+  /// `the_caps_row_says_what_the_engine_says` fails the moment it would need
+  /// to.
+  final bool audio24Bit;
+
   /// The container holds metadata.
   final bool metadata;
+
+  /// The colour spaces this format's container can **state**, by the stable
+  /// names `BridgeExportSpec::colour_space` carries: `""` (sRGB / Rec. 709),
+  /// `linear`, `rec709`, `rec2020`, `display-p3` (K-498). Empty where the
+  /// format carries no picture.
+  ///
+  /// Names, not labels: a space the seam cannot translate is a space whose
+  /// wording belongs in `app_en.arb` like every other string (K-005, K-303),
+  /// and a name nobody recognises — an OCIO config's own — is shown as it
+  /// arrived, exactly as a codec name is.
+  final List<String> colourSpaces;
 
   const BridgeFormatCaps({
     required this.video,
@@ -573,7 +694,9 @@ class BridgeFormatCaps {
     required this.depths,
     required this.bitRate,
     required this.audioBitRate,
+    this.audio24Bit = false,
     required this.metadata,
+    this.colourSpaces = const [],
   });
 
   static Future<BridgeFormatCaps> default_() =>
@@ -587,7 +710,9 @@ class BridgeFormatCaps {
       depths.hashCode ^
       bitRate.hashCode ^
       audioBitRate.hashCode ^
-      metadata.hashCode;
+      audio24Bit.hashCode ^
+      metadata.hashCode ^
+      colourSpaces.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -600,7 +725,9 @@ class BridgeFormatCaps {
           depths == other.depths &&
           bitRate == other.bitRate &&
           audioBitRate == other.audioBitRate &&
-          metadata == other.metadata;
+          audio24Bit == other.audio24Bit &&
+          metadata == other.metadata &&
+          colourSpaces == other.colourSpaces;
 }
 
 /// One key/value pair written into the container.

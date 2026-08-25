@@ -576,23 +576,24 @@ cannot carry. The picture's two remaining dead rows are backed as well (K-498): 
 picks its filter (Fast bilinear, High Lanczos-3), and the colour space is a family of five
 built-ins the container is stamped with. What is left:
 
-- **The resampler face and the colour-space list do not cross the seam yet** (K-498).
-  `ExportSpec::resample` and the four new `ColourSpace` variants are on the engine's type;
-  `BridgeExportSpec` still carries only the colour space's *name* and no resample field, so
-  `to_export_spec` fills the filter from `ExportSpec::default()` (Fast) and the dialog's
-  Resize row stays drawn dead. The dialog stage needs: a `resample` field on
-  `BridgeExportSpec` (`"fast"`/`"high"`), and `export_colour_spaces(format)` answering the
-  capability table's list as `(stored name, label)` pairs so the Colour row's dropdown is
-  the engine's answer rather than a second opinion. Both labels — the five space names and
-  the two filter names — are engine strings and need `app_en.arb` keys when they land.
+- ~~The resampler face and the colour-space list do not cross the seam~~ — **landed
+  2026-08-25** (K-503). Every row's engine half now crosses: `resample`, the sound's rate,
+  width and layout, the two Time overrides, *render guide layers* and *use proxies* are
+  fields on `BridgeExportSpec`; `BridgeFormatCaps` carries `audio_24_bit` and the
+  `colour_spaces` list; `export_audio_rates()` answers the three rates. The spaces cross as
+  **stored names**, not labels, so their wording is ordinary `app_en.arb` work for the
+  dialog stage rather than engine strings — as are the two filter names (`exportResampleHigh`
+  exists; *Fast* does not) and the sound row's 44.1/96 kHz, 24 bit and Mono siblings.
 
 - **The *Still* output type is withdrawn** (K-485): a still is an image sequence of one
   frame, which the span already says, so the fourth chip the drawing offered is gone rather
   than pending. What is genuinely missing is only the *naming* — a one-frame sequence is
   written `shot.00001.png` rather than `shot.png` — and that is a rule in the encoder's
   file naming, not an output type.
-- **Reordering the queue** (docs/07 §11: "items are reorderable"). The engine holds the
-  list in the order things were added; nothing moves a row up it.
+- ~~Reordering the queue~~ (docs/07 §11: "items are reorderable") — **landed 2026-08-25**
+  (K-503): `export_queue_move(id, index)`, undo-free like removal because the queue is not
+  in the `.lum`, refusing an item that is running or has already run. The queue window's
+  drag is the interface half and is not drawn yet.
 - **A disk-cache policy with something to govern.** The setting exists and defaults to Off,
   which is what happens: the export renderer is a fresh `HeadlessRenderer` with no disk
   tier at all. *Read-only* becomes a real choice the day the export path gains one.
@@ -607,22 +608,25 @@ background transcode that makes one (`name_proxy.mov` beside the original, half 
 Viewer is working at. A proxy that disagrees with the original about frame count or rate is
 refused and falls back.
 
-What is left is entirely interface, and none of it exists over the seam yet:
+The seam landed with it on 2026-08-25 (K-503). What is left is entirely interface — every
+call below exists and is tested:
 
 - **The Project panel's proxy controls.** Set a proxy (a file picker), clear it, and the
   per-item *use proxy* tick; the project-wide *use proxies* switch; and the row state that
-  says an item has one — attached and read, attached and off, or none. The engine ops are
-  `SetItemProxy`, `SetItemUseProxy` and `SetUseProxies`.
-- **MAKE-PROXY as an action**, with its progress. `lumit_render::proxy::start` returns a
-  handle that streams `Progress`/`Done`/`Failed` exactly as an export does; the seam needs
-  the same start/poll/cancel shape the export queue already has, and the *Done* path should
-  attach the finished file with `SetItemProxy`.
-- **The export dialog's proxies row**, which is drawn dead with a reason on hover (K-485).
-  It is waiting only for `BridgeExportSpec` to carry `use_proxies`; the guide-layer row
-  beside it is waiting the same way for `RenderOptions::render_guides`.
-
-The **motion blur** and **Retime blend** rows beside them are backed: `RenderOptions` carries
-both overrides now (K-502), and each is waiting only for `BridgeExportSpec` to carry it.
+  says an item has one — attached and read, attached and off, or none. The calls are
+  `FootageReference::{get_proxy, set_proxy, clear_proxy, set_use_proxy}` and
+  `ProjectReference::{use_proxies, set_use_proxies}`. Nothing yet says whether the proxy
+  *file* is broken; that would need a new query over the renderer.
+- **MAKE-PROXY as an action**, with its progress: `FootageReference::proxy_path()` says
+  where it would go, `make_proxy()` starts it, `proxy_poll()`/`proxy_cancel()` drive it, and
+  the finished file attaches itself. The panel owes the button, the progress row and the
+  words for both.
+- **The export dialog's rows** — proxies, guide layers, motion blur, Retime blend, resize
+  and colour — are all backed and all still drawn dead with a reason on hover (K-485). Each
+  is now a field on `BridgeExportSpec`; what they want is the dialog stage.
+- **The Timeline's guide column and its glyph** (K-497). The switch crosses as
+  `BridgeLayerSwitch::Guide` and reads back as `get_switches().guide`; docs/07 §4 names the
+  cell's home, beside shy.
 
 **Two small settings follow-ups** — the "Show shortcut hints" switch exists in the
 drawing but nothing consumes a hints flag yet (the menu bar and tooltips must read it

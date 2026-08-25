@@ -7,12 +7,27 @@ import '../api.dart';
 import '../frb_generated.dart';
 import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 import 'state.dart';
+part 'footage.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `project`, `resolve_path`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `eq`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `attach_proxy`, `project`, `resolve_path`, `source_path`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
+
+/// How the running MAKE-PROXY job is getting on. Safe to call on the
+/// interface's own cadence: it drains a channel and reads two numbers.
+///
+/// Reading is also what *finishes* the job: a transcode that has just landed is
+/// attached to its item here, so an item gains its proxy whether or not the
+/// panel that asked for it is still on screen.
+BridgeProxyState proxyPoll() =>
+    BridgeLib.instance.api.crateApiFootageProxyPoll();
+
+/// Ask the running MAKE-PROXY job to stop. The half-written file is removed — a
+/// cancelled proxy leaves nothing pretending to be a finished one.
+void proxyCancel() => BridgeLib.instance.api.crateApiFootageProxyCancel();
 
 /// A footage file's own vital statistics, as the container declares them.
 ///
@@ -99,6 +114,74 @@ class BridgeMediaInfo {
           isStill == other.isStill;
 }
 
+/// The stand-in file attached to one footage item, as the Project panel's row
+/// reads it (K-501).
+///
+/// Three row states, all readable from here: no proxy at all (`None` from
+/// [`FootageReference::get_proxy`]), one attached and being read (`in_use`), and
+/// one attached but switched off — either by this item's own tick or by the
+/// project's master switch.
+///
+/// Whether the file on the end of it is *usable* is a different question, about
+/// media rather than about the document, and nothing here answers it: the
+/// renderer falls back to the original on its own when a proxy is missing or
+/// disagrees about the footage's length, deliberately without reporting it as
+/// missing media.
+class BridgeProxy {
+  /// Where the stand-in is, in the same form the Path column shows for the
+  /// original: the relative path a saved project carries, else the absolute
+  /// one (K-173).
+  final String path;
+
+  /// This item's own *use proxy* tick.
+  final bool enabled;
+
+  /// Whether the document actually reads it — this item's tick and the
+  /// project's master switch both on.
+  final bool inUse;
+
+  const BridgeProxy({
+    required this.path,
+    required this.enabled,
+    required this.inUse,
+  });
+
+  @override
+  int get hashCode => path.hashCode ^ enabled.hashCode ^ inUse.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeProxy &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          enabled == other.enabled &&
+          inUse == other.inUse;
+}
+
+@freezed
+sealed class BridgeProxyState with _$BridgeProxyState {
+  const BridgeProxyState._();
+
+  /// Nothing has run since start-up.
+  const factory BridgeProxyState.idle() = BridgeProxyState_Idle;
+  const factory BridgeProxyState.running({
+    required BigInt frame,
+
+    /// Zero until the source's length has been read.
+    required BigInt total,
+  }) = BridgeProxyState_Running;
+
+  /// The finished file — already attached to its item by the time this is
+  /// read.
+  const factory BridgeProxyState.done({
+    required String path,
+  }) = BridgeProxyState_Done;
+  const factory BridgeProxyState.failed({
+    required String error,
+  }) = BridgeProxyState_Failed;
+}
+
 class FootageReference {
   final UuidValue internalproject;
   final UuidValue internalid;
@@ -107,6 +190,14 @@ class FootageReference {
     required this.internalproject,
     required this.internalid,
   });
+
+  /// Detach this item's proxy. The file on disk is left alone — a proxy took
+  /// minutes to make, and forgetting it in the project is not a reason to
+  /// delete it.
+  void clearProxy() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceClearProxy(
+        that: this,
+      );
 
   /// Where this item's file is, as the *project* records it: the relative
   /// path a saved project actually carries (K-173), falling back to the
@@ -121,13 +212,40 @@ class FootageReference {
         that: this,
       );
 
+  /// The proxy attached to this item, or `None` when there is none.
+  BridgeProxy? getProxy() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceGetProxy(
+        that: this,
+      );
+
   Future<LumitMediaStatus> getStatus() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceGetStatus(
         that: this,
       );
 
+  /// Make this item's proxy: transcode the original half as wide, and attach
+  /// the result when it lands.
+  ///
+  /// Returns as soon as the job is *running*; ask [`proxy_poll`] how it is
+  /// getting on. A second one while the first runs is a calm refusal — two
+  /// transcodes share one disk.
+  void makeProxy() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceMakeProxy(
+        that: this,
+      );
+
   Future<BridgeMediaInfo?> mediaInfo() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceMediaInfo(
+        that: this,
+      );
+
+  /// Where MAKE-PROXY would write this item's proxy: beside the original,
+  /// with `_proxy` before a `.mov` extension.
+  ///
+  /// Shown before the job starts, so a file already there can be pointed out
+  /// rather than silently overwritten.
+  String proxyPath() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceProxyPath(
         that: this,
       );
 
@@ -141,6 +259,22 @@ class FootageReference {
   /// picked one, so a healthy item is never repointed.
   void relink({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceRelink(that: this, path: path);
+
+  /// Attach `path` as this item's proxy, replacing any proxy already there,
+  /// and switch it on.
+  ///
+  /// One undo step: the op carries the whole reference, so attaching and
+  /// detaching invert each other exactly as a relink does.
+  void setProxy({required String path}) => BridgeLib.instance.api
+      .crateApiFootageFootageReferenceSetProxy(that: this, path: path);
+
+  /// This item's own *use proxy* tick, leaving the proxy attached — how one
+  /// clip is checked at full quality without giving up the proxy.
+  ///
+  /// Refused on an item with no proxy: the panel does not draw the tick on a
+  /// row that has nothing to tick.
+  void setUseProxy({required bool on_}) => BridgeLib.instance.api
+      .crateApiFootageFootageReferenceSetUseProxy(that: this, on_: on_);
 
   Future<BridgeRenderedFrame?> thumbnail({required int maxEdge}) => BridgeLib
       .instance.api
