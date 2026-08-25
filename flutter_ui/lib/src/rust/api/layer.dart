@@ -18,7 +18,7 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `empty`, `item`, `map_end_value`, `project`, `rational_of`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
@@ -432,6 +432,11 @@ enum BridgeLayerSwitch {
   /// it. A locked layer refuses this one, unlike shy: it changes what the
   /// export writes.
   guide,
+
+  /// K-537: the layer sets its own picture aside and grades the composite
+  /// beneath it. Refused ([`BridgeError::NotConvertible`]) on the four kinds
+  /// with no picture to set aside — Camera, Light, Null, Audio.
+  adjustment,
   ;
 }
 
@@ -471,6 +476,13 @@ class BridgeLayerSwitches {
   /// Defaults on, and does nothing at all in a comp with no lights.
   final bool acceptsLights;
 
+  /// The adjustment switch (K-537): the layer's own picture is set aside and
+  /// its effect stack runs on the composite beneath it.
+  ///
+  /// True for a layer born an adjustment as well as one switched into being
+  /// one — the frontend draws the cell from this and never from the kind.
+  final bool adjustment;
+
   const BridgeLayerSwitches({
     required this.visible,
     required this.audible,
@@ -483,6 +495,7 @@ class BridgeLayerSwitches {
     required this.shy,
     this.guide = false,
     required this.acceptsLights,
+    this.adjustment = false,
   });
 
   @override
@@ -497,7 +510,8 @@ class BridgeLayerSwitches {
       collapse.hashCode ^
       shy.hashCode ^
       guide.hashCode ^
-      acceptsLights.hashCode;
+      acceptsLights.hashCode ^
+      adjustment.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -514,7 +528,8 @@ class BridgeLayerSwitches {
           collapse == other.collapse &&
           shy == other.shy &&
           guide == other.guide &&
-          acceptsLights == other.acceptsLights;
+          acceptsLights == other.acceptsLights &&
+          adjustment == other.adjustment;
 }
 
 /// One mask on a layer: a bezier path that gates the layer's alpha before its
@@ -1521,7 +1536,7 @@ class LayerReference {
         that: this,
       );
 
-  /// All eight switches at once.
+  /// All the switches at once.
   BridgeLayerSwitches getSwitches() =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceGetSwitches(
         that: this,
@@ -1691,21 +1706,28 @@ class LayerReference {
   String savePreset({required String name}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSavePreset(that: this, name: name);
 
-  /// Make this layer an adjustment layer, or turn it back into a solid — the
-  /// Modes column's adjustment toggle (K-484).
+  /// The adjustment switch (K-537): set this layer's own picture aside and
+  /// run its effect stack on the composite beneath it, or give it back.
   ///
-  /// **Only Solid ⇄ Adjustment**, and asking for the kind the layer already
-  /// is writes nothing at all, so a redundant click leaves no undo step to
-  /// walk back through. Any other kind is refused calmly
-  /// ([`BridgeError::NotConvertible`]): a footage layer has a source and a
-  /// camera has no pixels, and the toggle is not drawn on either row.
+  /// **On every layer that shows something in the Viewer** — footage, solid,
+  /// precomp, text, shape, sequence — and refused calmly
+  /// ([`BridgeError::NotConvertible`]) on the four with no picture to set
+  /// aside: a Camera, a Light, a Null and an Audio layer. A layer whose own
+  /// visibility switch is off still takes it: what a layer *is* and whether
+  /// it is being shown are two answers. Asking for the state the layer is
+  /// already in writes nothing at all, so a redundant click leaves no undo
+  /// step to walk back through.
   ///
-  /// Turning the toggle **off** has to give the layer a picture again, so it
-  /// adds a fresh comp-sized white solid asset in the same batch — the same
-  /// asset **New solid** makes, from the same helper. One batch is one undo
-  /// step, and undoing the *on* direction is exactly invertible instead: the
-  /// op hands back the solid's own `def`, so a layer that was a solid a
-  /// moment ago points at the asset it always did.
+  /// **Nothing is lost while it is on**, which is the whole reason this is a
+  /// flag and not the kind flip K-484 built: the source, the masks and the
+  /// transform stay put, so switching back is the layer exactly as it was.
+  ///
+  /// The one asymmetry is a layer *born* an adjustment
+  /// ([`lumit_core::model::LayerKind::Adjustment`], what **New adjustment
+  /// layer** makes): it has no picture to give back, so turning the switch
+  /// off hands it a fresh comp-sized white solid — the asset **New solid**
+  /// makes, from the helper both share — and normalises it to a solid with
+  /// the flag off, all in one batch, which is one undo step.
   void setAdjustment({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
 

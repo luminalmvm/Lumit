@@ -1059,6 +1059,14 @@ fn feed_source(
     // parameter of its own: one fewer thing two call paths can disagree about.
     let comp_fps = owner.frame_rate.fps();
     match &layer.kind {
+        // The adjustment switch (K-537) sets the layer's own source aside, so
+        // the frame's name must not mention it: a footage layer switched on
+        // and off again would otherwise be served the frame it rendered before
+        // the switch. It names itself exactly as the Adjustment kind below
+        // does — the same tag on purpose, because the two render alike.
+        _ if layer.adjustment => {
+            h.update(b"adjust");
+        }
         LayerKind::Footage { item } => {
             // The retime maps local time → source time; the cache key must key
             // the RETIMED source frame, so two different ramps never collide.
@@ -1471,6 +1479,7 @@ mod tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

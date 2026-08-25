@@ -97,11 +97,11 @@ const double switchesGroupWidth = 6 * switchCellWidth;
 /// value cells to exactly this span (docs/07 §4.3); they are simply as wide as
 /// the column they sit under.
 ///
-/// **Five cells** (K-484). Accepts lights vacated the fifth on the owner's
-/// ruling (K-483) and the column stood at four until the engine grew a kind
-/// flip; the **adjustment toggle** now has it. The span is the same on every
-/// row, including the rows the toggle is not drawn on: a column that changed
-/// width by layer kind would take the pickers with it.
+/// **Five cells** (K-537). Accepts lights vacated the fifth on the owner's
+/// ruling (K-483) and the column stood at four until the engine grew the
+/// switch; the **adjustment switch** now has it. The span is the same on every
+/// row, including the four kinds the switch is not drawn on: a column that
+/// changed width by layer kind would take the pickers with it.
 const double renderGroupWidth = 5 * switchCellWidth;
 
 /// The compose group's cells — **the mockup's own dropdown widths** (K-461):

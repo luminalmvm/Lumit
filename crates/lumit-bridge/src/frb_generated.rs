@@ -11563,6 +11563,7 @@ impl SseDecode for crate::api::layer::BridgeLayerSwitch {
             8 => crate::api::layer::BridgeLayerSwitch::Shy,
             9 => crate::api::layer::BridgeLayerSwitch::AcceptsLights,
             10 => crate::api::layer::BridgeLayerSwitch::Guide,
+            11 => crate::api::layer::BridgeLayerSwitch::Adjustment,
             _ => unreachable!("Invalid variant for BridgeLayerSwitch: {}", inner),
         };
     }
@@ -11582,6 +11583,7 @@ impl SseDecode for crate::api::layer::BridgeLayerSwitches {
         let mut var_shy = <bool>::sse_decode(deserializer);
         let mut var_guide = <bool>::sse_decode(deserializer);
         let mut var_acceptsLights = <bool>::sse_decode(deserializer);
+        let mut var_adjustment = <bool>::sse_decode(deserializer);
         return crate::api::layer::BridgeLayerSwitches {
             visible: var_visible,
             audible: var_audible,
@@ -11594,6 +11596,7 @@ impl SseDecode for crate::api::layer::BridgeLayerSwitches {
             shy: var_shy,
             guide: var_guide,
             accepts_lights: var_acceptsLights,
+            adjustment: var_adjustment,
         };
     }
 }
@@ -15947,6 +15950,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerSwitch {
             Self::Shy => 8.into_dart(),
             Self::AcceptsLights => 9.into_dart(),
             Self::Guide => 10.into_dart(),
+            Self::Adjustment => 11.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -15977,6 +15981,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerSwitches {
             self.shy.into_into_dart().into_dart(),
             self.guide.into_into_dart().into_dart(),
             self.accepts_lights.into_into_dart().into_dart(),
+            self.adjustment.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -18621,6 +18626,7 @@ impl SseEncode for crate::api::layer::BridgeLayerSwitch {
                 crate::api::layer::BridgeLayerSwitch::Shy => 8,
                 crate::api::layer::BridgeLayerSwitch::AcceptsLights => 9,
                 crate::api::layer::BridgeLayerSwitch::Guide => 10,
+                crate::api::layer::BridgeLayerSwitch::Adjustment => 11,
                 _ => {
                     unimplemented!("");
                 }
@@ -18644,6 +18650,7 @@ impl SseEncode for crate::api::layer::BridgeLayerSwitches {
         <bool>::sse_encode(self.shy, serializer);
         <bool>::sse_encode(self.guide, serializer);
         <bool>::sse_encode(self.accepts_lights, serializer);
+        <bool>::sse_encode(self.adjustment, serializer);
     }
 }
 

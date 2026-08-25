@@ -604,6 +604,20 @@ every delivered file at every depth. It is the one switch in the group that a **
 refuses, and the reason is the line the group divides on — shy changes what the Timeline
 lists, guide changes what the file carries, and a lock is a lock against the second.
 
+`Adjustment` joined them next (K-537): the layer sets its own picture aside and runs its
+effect stack on the composite beneath it. It is read like the rest — `BridgeLayerSwitches
+::adjustment`, which answers **true for a layer born an adjustment as well as one switched
+into being one**, so the frontend draws the cell from the switch and never from the kind —
+and written like the rest, `set_switch(Adjustment, on)`. Two things make it the odd one in
+the group, both of them engine-side rather than seam-side. It is **refused** on the four
+kinds with no picture to set aside — camera, light, null, audio — with
+`BridgeError::NotConvertible`, where the other switches take any layer. And turning it
+**off on a layer born an adjustment** ([`LayerKind::Adjustment`], what *New adjustment
+layer* makes) is not one op but a batch: that layer has no picture to give back, so it is
+handed a fresh comp-sized white solid and normalised to a solid with the switch off — still
+one undo step. `set_switch` delegates to `set_adjustment(on)` rather than repeating any of
+that, so the Timeline's plural switch handler and the direct call cannot disagree.
+
 ### The After Effects import crosses once, as a report
 
 `LumitBridgeState::import_ae_bundle(path, on_change_stream)` is the whole surface of

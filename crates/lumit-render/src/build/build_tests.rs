@@ -37,6 +37,7 @@ fn footage_geometry_uses_native_size_not_decoded_size() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -124,6 +125,7 @@ fn collapsed_precomp_splices_inner_draws_with_parent_placement() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -267,6 +269,7 @@ fn patch_layer_prop_overrides_the_previewed_value() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -345,6 +348,7 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -431,6 +435,117 @@ fn a_live_adjustment_layer_emits_a_staging_draw() {
     }
 }
 
+/// **The adjustment switch and the Adjustment kind build the same draw**
+/// (K-537), and switching it off gives the layer its own picture back
+/// exactly.
+///
+/// The whole point of the flag is that it round-trips a layer with a
+/// source, which a kind flip could not: so the layer under test here is a
+/// **solid** carrying the flag, checked against a layer that is an
+/// adjustment by kind, and then checked again with the flag off.
+#[test]
+fn the_adjustment_flag_builds_the_same_draw_as_the_adjustment_kind() {
+    let solid_def = Uuid::now_v7();
+    let base = Layer {
+        graph: Default::default(),
+        markers: Vec::new(),
+        id: Uuid::now_v7(),
+        name: "under".into(),
+        kind: LayerKind::Solid { def: solid_def },
+        in_point: CompTime(Rational::ZERO),
+        out_point: CompTime(Rational::new(10, 1).unwrap()),
+        start_offset: CompTime(Rational::ZERO),
+        transform: TransformGroup::default(),
+        matte: None,
+        parent: None,
+        label: 0,
+        volume_db: lumit_core::anim::Property::zero(),
+        audio_only: false,
+        adjustment: false,
+        retime: None,
+        interpolation: Default::default(),
+        parked_flow: None,
+        blend: Default::default(),
+        masks: Vec::new(),
+        paint: Vec::new(),
+        effects: Vec::new(),
+        switches: Switches::default(),
+        extra: serde_json::Map::new(),
+    };
+    let mut doc = Document::new();
+    doc.items.push(lumit_core::model::ProjectItem::Solid(
+        lumit_core::model::SolidDef {
+            id: solid_def,
+            name: "red".into(),
+            colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+            width: 1920,
+            height: 1080,
+            extra: serde_json::Map::new(),
+        },
+    ));
+    let doc = std::sync::Arc::new(doc);
+
+    // The layer on top, once as a kind and once as a flagged solid. Same id,
+    // same effect, same everything else, so any difference in the draw is the
+    // one thing under test.
+    let top_id = Uuid::now_v7();
+    let mut by_kind = base.clone();
+    by_kind.id = top_id;
+    by_kind.name = "adjust".into();
+    by_kind.kind = LayerKind::Adjustment;
+    by_kind
+        .effects
+        .push(lumit_core::fx::instantiate("saturation").unwrap());
+    let mut by_flag = by_kind.clone();
+    by_flag.kind = LayerKind::Solid { def: solid_def };
+    by_flag.adjustment = true;
+
+    let comp_of = |top: Layer| Composition {
+        id: Uuid::now_v7(),
+        name: "Comp".into(),
+        width: 1920,
+        height: 1080,
+        frame_rate: FrameRate::new(60, 1).unwrap(),
+        duration: Duration(Rational::new(10, 1).unwrap()),
+        background: LinearColour::BLACK,
+        work_area: None,
+        layers: vec![top, base.clone()],
+        markers: Vec::new(),
+        motion_blur: Default::default(),
+        extra: serde_json::Map::new(),
+    };
+    let map: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+    let draws_of = |comp: &Composition| {
+        let mut visited = vec![comp.id];
+        build_comp_draws(&doc, comp, 0.0, &map, &mut visited)
+    };
+
+    let kind_draws = draws_of(&comp_of(by_kind));
+    let flag_draws = draws_of(&comp_of(by_flag.clone()));
+    assert_eq!(kind_draws.len(), 2);
+    assert_eq!(flag_draws.len(), 2, "the flagged solid stages, not draws");
+    assert!(matches!(flag_draws[1].source, DrawSource::Adjust));
+    assert_eq!(flag_draws[1].natural_size, (1920.0, 1080.0));
+    assert_eq!(
+        flag_draws[1].fx.len(),
+        kind_draws[1].fx.len(),
+        "the same stack resolves either way"
+    );
+    assert_eq!(flag_draws[1].natural_size, kind_draws[1].natural_size);
+    assert_eq!(flag_draws[1].opacity, kind_draws[1].opacity);
+
+    // Off again: the solid is a solid, with its own colour back — the
+    // round-trip a kind flip could never do for a layer with a source.
+    let mut off = by_flag;
+    off.adjustment = false;
+    let off_draws = draws_of(&comp_of(off));
+    assert_eq!(off_draws.len(), 2);
+    assert!(
+        matches!(off_draws[1].source, DrawSource::Pixels { .. }),
+        "with the switch off the layer draws its own picture again"
+    );
+}
+
 /// **A Lens flare on an adjustment layer flares the picture below it**
 /// (K-288). The regression: the flare's Matte source could only name
 /// *another* layer, and an adjustment layer has no picture of its own, so
@@ -466,6 +581,7 @@ fn a_flare_matte_pointed_at_its_own_layer_reads_this_layers_input() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -608,6 +724,7 @@ fn a_paint_stroke_reaches_the_layers_pixels() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -721,6 +838,7 @@ fn the_matte_list_is_one_slot_per_resolved_op() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,
@@ -850,6 +968,7 @@ fn the_mask_path_list_is_one_to_one_with_the_ops_that_declare_a_path() {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,

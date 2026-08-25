@@ -1034,6 +1034,7 @@ mod tests {
             label: 0,
             volume_db: crate::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -1510,6 +1511,7 @@ mod tests {
                     label: 0,
                     volume_db: crate::anim::Property::zero(),
                     audio_only: false,
+                    adjustment: false,
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,
@@ -1548,12 +1550,15 @@ mod tests {
         assert_eq!(n(&store.snapshot()), 1);
     }
 
-    /// **The adjustment toggle's op** (K-484): a solid becomes an adjustment
-    /// and an adjustment becomes a solid, each flip is one undo step, and the
-    /// undone flip hands the solid back the `def` it always had rather than a
-    /// fresh one. Every other kind is refused with the document untouched —
-    /// the footage layer here is the case the Modes column never draws a cell
-    /// on, and the op has to say no to it anyway.
+    /// **The one kind flip** (K-484): a solid becomes an adjustment and an
+    /// adjustment becomes a solid, each flip is one undo step, and the undone
+    /// flip hands the solid back the `def` it always had rather than a fresh
+    /// one. Every other kind is refused with the document untouched.
+    ///
+    /// Since K-537 the adjustment switch is a flag rather than this flip, and
+    /// the only edit that still reaches here is normalising a layer *born* an
+    /// adjustment when its switch goes off — it has no picture to give back,
+    /// so it is handed a solid. The op is otherwise unchanged, and so is this.
     #[test]
     fn layer_kind_op_flips_solid_and_adjustment_and_refuses_everything_else() {
         let store = DocumentStore::new(Document::new());
@@ -1624,6 +1629,76 @@ mod tests {
             "and a solid does not become a null on the way past"
         );
         assert_eq!(kind(solid_id), LayerKind::Solid { def: other });
+    }
+
+    /// **The adjustment switch** (K-537): it goes on and off on a layer with a
+    /// source of its own, one undo step each way, and the layer keeps
+    /// everything while it is on — which is the whole reason it is a flag and
+    /// not the kind flip above. Refused on the kinds with no picture to set
+    /// aside, with the document untouched.
+    #[test]
+    fn the_adjustment_switch_round_trips_on_a_layer_with_a_source() {
+        let store = DocumentStore::new(Document::new());
+        let (ops, comp_id) = scripted_ops(&store.snapshot());
+        for op in ops {
+            store.commit(op).unwrap();
+        }
+        let layer = |id: Uuid| {
+            store
+                .snapshot()
+                .comp(comp_id)
+                .unwrap()
+                .layers
+                .iter()
+                .find(|l| l.id == id)
+                .unwrap()
+                .clone()
+        };
+        let set = |id: Uuid, on: bool| Op::SetLayerAdjustment {
+            comp: comp_id,
+            layer: id,
+            adjustment: on,
+        };
+
+        let footage_id = store.snapshot().comp(comp_id).unwrap().layers[0].id;
+        let before = layer(footage_id);
+        assert!(!before.is_adjustment(), "layers start as themselves");
+
+        store.commit(set(footage_id, true)).unwrap();
+        let on = layer(footage_id);
+        assert!(on.is_adjustment());
+        assert_eq!(
+            on.kind, before.kind,
+            "the source is still there while the switch is on"
+        );
+
+        store.undo().unwrap();
+        assert_eq!(
+            layer(footage_id),
+            before,
+            "off again is the layer exactly as it was, not a rebuilt one"
+        );
+
+        // No picture to set aside: refused, and nothing written.
+        let mut camera = test_layer(Uuid::now_v7());
+        camera.kind = LayerKind::Camera {
+            zoom: crate::anim::Property::zero(),
+            solve_link: None,
+        };
+        let camera_id = camera.id;
+        store
+            .commit(Op::AddLayer {
+                comp: comp_id,
+                index: 0,
+                layer: Box::new(camera),
+            })
+            .unwrap();
+        assert_eq!(
+            store.commit(set(camera_id, true)),
+            Err(crate::ops::OpError::KindNotConvertible),
+            "a camera has no picture to set aside"
+        );
+        assert!(!layer(camera_id).adjustment);
     }
 
     /// The frame-interpolation policy round-trips through undo, and it is a
@@ -1779,6 +1854,7 @@ mod tests {
                     label: 0,
                     volume_db: crate::anim::Property::zero(),
                     audio_only: false,
+                    adjustment: false,
                     retime: None,
                     interpolation: Default::default(),
                     parked_flow: None,

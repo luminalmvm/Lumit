@@ -2831,6 +2831,7 @@ mod tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2937,6 +2938,7 @@ mod tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -3514,6 +3516,7 @@ mod tests {
                 label: 0,
                 volume_db: Property::zero(),
                 audio_only: false,
+                adjustment: false,
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
@@ -4630,6 +4633,7 @@ surfaces:
             label: 0,
             volume_db: Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -5137,18 +5141,37 @@ surfaces:
         let half_speed = || {
             lumit_core::model::Layer::identity_retime(Rational::ZERO, Rational::new(2, 1).unwrap())
         };
-        let rows: Vec<(&str, Option<lumit_core::anim::Property>, Interpolation, u64)> = vec![
-            ("plain footage", None, Interpolation::Nearest, 10),
-            ("retime blend", Some(half_speed()), Interpolation::Blend, 7),
+        // The last element is K-537's adjustment switch: a footage layer that
+        // has set its own picture aside and is grading the composite below it.
+        // It earns a row of its own because the switch changes what the *decode
+        // plan* asks for as well as what the draw builder makes, and those are
+        // the two halves the swap could get out of step.
+        let rows: Vec<(
+            &str,
+            Option<lumit_core::anim::Property>,
+            Interpolation,
+            u64,
+            bool,
+        )> = vec![
+            ("plain footage", None, Interpolation::Nearest, 10, false),
+            (
+                "retime blend",
+                Some(half_speed()),
+                Interpolation::Blend,
+                7,
+                false,
+            ),
             (
                 "retime flow",
                 Some(half_speed()),
                 Interpolation::Flow(FlowParams::default()),
                 7,
+                false,
             ),
+            ("adjustment switch", None, Interpolation::Nearest, 10, true),
         ];
 
-        for (name, retime, interpolation, frame) in rows {
+        for (name, retime, interpolation, frame, adjustment) in rows {
             let mut doc = Document::new();
             let item = Uuid::now_v7();
             doc.items
@@ -5168,6 +5191,20 @@ surfaces:
             let mut layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
             layer.retime = retime;
             layer.interpolation = interpolation;
+            layer.adjustment = adjustment;
+            if adjustment {
+                // A dead stack stages nothing at all, so the row would prove
+                // nothing without one live effect on it.
+                layer
+                    .effects
+                    .push(lumit_core::fx::instantiate("saturation").expect("saturation"));
+            }
+            // Something for it to grade. The same clip, plainly placed: the
+            // flagged layer's own frames are never decoded, this one's are.
+            let mut layers = vec![layer];
+            if adjustment {
+                layers.push(matrix_layer("Under", LayerKind::Footage { item }, 320, 240));
+            }
             doc.items.push(ProjectItem::Composition(Composition {
                 id: comp_id,
                 name: "Scene".into(),
@@ -5177,7 +5214,7 @@ surfaces:
                 duration: Duration(Rational::new(2, 1).unwrap()),
                 background: LinearColour::BLACK,
                 work_area: None,
-                layers: vec![layer],
+                layers,
                 markers: Vec::new(),
                 motion_blur: lumit_core::model::MotionBlur::default(),
                 extra: serde_json::Map::new(),

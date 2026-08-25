@@ -3349,6 +3349,20 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   for that precomp (the switch dims) — its effects must see only its own comp's contents,
   which splicing into the parent cannot honour. It still reuses the solid's glyph for the
   moment; a distinct icon is a small later touch.
+- **Any layer can *act* as an adjustment layer** — the fifth switch in the Timeline's Modes
+  column, on every row that puts something on screen. Switch it on and that layer stops
+  showing its own picture and starts treating everything below it instead: a shot you had
+  already colour-corrected becomes the thing that colour-corrects the shots under it.
+  Switch it off and the layer is simply itself again — the footage, the masks, the
+  position, the effects, all exactly where they were. That "exactly where they were" is the
+  whole reason it is a switch rather than a conversion. Turning a layer into another *kind*
+  of layer would mean throwing its source away, and there would be nothing to give back
+  when you changed your mind; a switch changes only what draws, so it costs nothing to try.
+  Two small consequences worth knowing. It is drawn on hidden layers too, because "is this
+  an adjustment layer" and "am I looking at it right now" are two different questions. And
+  a layer *created* as an adjustment layer has no picture of its own to give back, so
+  switching it off hands it a fresh white solid — the same one the *New solid* command
+  makes — in one undoable step.
 - **Null layers** (Composition → Add null layer) — an invisible layer that is nothing but a
   transform: no source, no size, no pixels, and it never appears in the picture. Its whole
   job is to be something to parent *to*. Park a null in a comp, parent five layers to it,

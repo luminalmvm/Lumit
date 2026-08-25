@@ -442,8 +442,9 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetCompMarkers { comp, .. }
         // A layer that becomes an adjustment starts acting on everything
         // beneath it, and one that stops leaves those layers alone again — so
-        // the comp is the honest scope, not the one row whose kind changed.
-        | Op::SetLayerKind { comp, .. } => (Some(*comp), None, false),
+        // the comp is the honest scope, not the one row that changed.
+        | Op::SetLayerKind { comp, .. }
+        | Op::SetLayerAdjustment { comp, .. } => (Some(*comp), None, false),
 
         // One layer's own contents.
         Op::SetLayerSpan { comp, layer, .. }

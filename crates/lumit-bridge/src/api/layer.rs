@@ -49,6 +49,13 @@ pub struct BridgeLayerSwitches {
     /// Accepts lights (K-361): whether the comp's Light layers shade this one.
     /// Defaults on, and does nothing at all in a comp with no lights.
     pub accepts_lights: bool,
+    /// The adjustment switch (K-537): the layer's own picture is set aside and
+    /// its effect stack runs on the composite beneath it.
+    ///
+    /// True for a layer born an adjustment as well as one switched into being
+    /// one — the frontend draws the cell from this and never from the kind.
+    #[frb(default = false)]
+    pub adjustment: bool,
 }
 
 /// One vertex of a mask's path (K-222): where it sits in **layer space**, and
@@ -513,6 +520,10 @@ pub enum BridgeLayerSwitch {
     /// it. A locked layer refuses this one, unlike shy: it changes what the
     /// export writes.
     Guide,
+    /// K-537: the layer sets its own picture aside and grades the composite
+    /// beneath it. Refused ([`BridgeError::NotConvertible`]) on the four kinds
+    /// with no picture to set aside — Camera, Light, Null, Audio.
+    Adjustment,
 }
 
 /// Where a layer sits on the comp timeline, in exact rational seconds.
@@ -580,6 +591,32 @@ pub(crate) fn bridge_kind(layer: &lumit_core::model::Layer) -> BridgeLayerKind {
         K::Shape { .. } => BridgeLayerKind::Shape,
         K::Null => BridgeLayerKind::NullLayer,
         K::Light { .. } => BridgeLayerKind::Light,
+    }
+}
+
+/// A layer's switches as the frontend reads them.
+///
+/// One function rather than a struct literal at each call site, so the read
+/// model and [`LayerReference::get_switches`] can never disagree — the trap
+/// [`bridge_kind`] exists to close, on the group beside it.
+#[frb(ignore)]
+pub(crate) fn bridge_switches(layer: &lumit_core::model::Layer) -> BridgeLayerSwitches {
+    let s = layer.switches;
+    BridgeLayerSwitches {
+        visible: s.visible,
+        audible: s.audible,
+        locked: s.locked,
+        solo: s.solo,
+        three_d: s.three_d,
+        fx: s.fx,
+        motion_blur: s.motion_blur,
+        collapse: s.collapse,
+        shy: s.shy,
+        guide: s.guide,
+        accepts_lights: s.accepts_lights,
+        // Not in `Switches` — it is a field on the layer (K-537), and this is
+        // the one answer for both the flag and the legacy Adjustment kind.
+        adjustment: layer.is_adjustment(),
     }
 }
 
@@ -827,23 +864,10 @@ pub(crate) fn read_layer_info(
             .collect(),
         _ => Vec::new(),
     };
-    let s = layer.switches;
     BridgeLayerInfo {
         name: layer.name.clone(),
         kind: bridge_kind(layer),
-        switches: BridgeLayerSwitches {
-            visible: s.visible,
-            audible: s.audible,
-            locked: s.locked,
-            solo: s.solo,
-            three_d: s.three_d,
-            fx: s.fx,
-            motion_blur: s.motion_blur,
-            collapse: s.collapse,
-            shy: s.shy,
-            guide: s.guide,
-            accepts_lights: s.accepts_lights,
-        },
+        switches: bridge_switches(layer),
         blend: lumit_core::model::BlendMode::ALL
             .iter()
             .position(|b| *b == layer.blend)
@@ -2460,49 +2484,64 @@ impl LayerReference {
         })
     }
 
-    /// Make this layer an adjustment layer, or turn it back into a solid — the
-    /// Modes column's adjustment toggle (K-484).
+    /// The adjustment switch (K-537): set this layer's own picture aside and
+    /// run its effect stack on the composite beneath it, or give it back.
     ///
-    /// **Only Solid ⇄ Adjustment**, and asking for the kind the layer already
-    /// is writes nothing at all, so a redundant click leaves no undo step to
-    /// walk back through. Any other kind is refused calmly
-    /// ([`BridgeError::NotConvertible`]): a footage layer has a source and a
-    /// camera has no pixels, and the toggle is not drawn on either row.
+    /// **On every layer that shows something in the Viewer** — footage, solid,
+    /// precomp, text, shape, sequence — and refused calmly
+    /// ([`BridgeError::NotConvertible`]) on the four with no picture to set
+    /// aside: a Camera, a Light, a Null and an Audio layer. A layer whose own
+    /// visibility switch is off still takes it: what a layer *is* and whether
+    /// it is being shown are two answers. Asking for the state the layer is
+    /// already in writes nothing at all, so a redundant click leaves no undo
+    /// step to walk back through.
     ///
-    /// Turning the toggle **off** has to give the layer a picture again, so it
-    /// adds a fresh comp-sized white solid asset in the same batch — the same
-    /// asset **New solid** makes, from the same helper. One batch is one undo
-    /// step, and undoing the *on* direction is exactly invertible instead: the
-    /// op hands back the solid's own `def`, so a layer that was a solid a
-    /// moment ago points at the asset it always did.
+    /// **Nothing is lost while it is on**, which is the whole reason this is a
+    /// flag and not the kind flip K-484 built: the source, the masks and the
+    /// transform stay put, so switching back is the layer exactly as it was.
+    ///
+    /// The one asymmetry is a layer *born* an adjustment
+    /// ([`lumit_core::model::LayerKind::Adjustment`], what **New adjustment
+    /// layer** makes): it has no picture to give back, so turning the switch
+    /// off hands it a fresh comp-sized white solid — the asset **New solid**
+    /// makes, from the helper both share — and normalises it to a solid with
+    /// the flag off, all in one batch, which is one undo step.
     #[frb(sync)]
     pub fn set_adjustment(&self, on: bool) -> Result<(), BridgeError> {
         use lumit_core::model::LayerKind;
 
         let layer = self.item()?;
-        match (&layer.kind, on) {
-            (LayerKind::Adjustment, true) | (LayerKind::Solid { .. }, false) => return Ok(()),
-            (LayerKind::Solid { .. }, true) => self.commit(lumit_core::Op::SetLayerKind {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                kind: Box::new(LayerKind::Adjustment),
-            }),
-            (LayerKind::Adjustment, false) => {
-                let comp = self.composition()?;
-                let (def, _, mut ops) = {
-                    let proj = self.project()?;
-                    let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
-                    crate::edits::white_solid_ops(&state.store.snapshot(), comp.width, comp.height)
-                };
-                ops.push(lumit_core::Op::SetLayerKind {
-                    comp: self.comp_id,
-                    layer: self.layer_id,
-                    kind: Box::new(LayerKind::Solid { def }),
-                });
-                self.commit(lumit_core::Op::Batch { ops })
-            }
-            _ => Err(BridgeError::NotConvertible),
+        if !layer.can_adjust() {
+            return Err(BridgeError::NotConvertible);
         }
+        if layer.is_adjustment() == on {
+            return Ok(());
+        }
+        let (comp_id, layer_id) = (self.comp_id, self.layer_id);
+        let off = lumit_core::Op::SetLayerAdjustment {
+            comp: comp_id,
+            layer: layer_id,
+            adjustment: on,
+        };
+        if on || !matches!(layer.kind, LayerKind::Adjustment) {
+            return self.commit(off);
+        }
+        // Born an adjustment and being switched off: it needs a picture.
+        let comp = self.composition()?;
+        let (def, _, mut ops) = {
+            let proj = self.project()?;
+            let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            crate::edits::white_solid_ops(&state.store.snapshot(), comp.width, comp.height)
+        };
+        ops.push(lumit_core::Op::SetLayerKind {
+            comp: comp_id,
+            layer: layer_id,
+            kind: Box::new(LayerKind::Solid { def }),
+        });
+        // Clears the flag too, so the layer leaves this batch as an ordinary
+        // solid however it came in — one shape of "not an adjustment", not two.
+        ops.push(off);
+        self.commit(lumit_core::Op::Batch { ops })
     }
 
     /// The clips, the index of the one under `frame`, and the layer-local time
@@ -2636,23 +2675,10 @@ impl LayerReference {
         Ok(bridge_kind(&self.item()?))
     }
 
-    /// All eight switches at once.
+    /// All the switches at once.
     #[frb(sync)]
     pub fn get_switches(&self) -> Result<BridgeLayerSwitches, BridgeError> {
-        let s = self.item()?.switches;
-        Ok(BridgeLayerSwitches {
-            visible: s.visible,
-            audible: s.audible,
-            locked: s.locked,
-            solo: s.solo,
-            three_d: s.three_d,
-            fx: s.fx,
-            motion_blur: s.motion_blur,
-            collapse: s.collapse,
-            shy: s.shy,
-            guide: s.guide,
-            accepts_lights: s.accepts_lights,
-        })
+        Ok(bridge_switches(&self.item()?))
     }
 
     /// Set one switch. One op each, so each click is one undo step.
@@ -2715,6 +2741,12 @@ impl LayerReference {
                 layer,
                 guide: on,
             },
+            // The one switch whose write is not always a single op: turning it
+            // off on a layer born an adjustment has to give it a picture again
+            // (K-537). Delegated rather than copied, so the Timeline's plural
+            // switch handler and [`Self::set_adjustment`] cannot come to
+            // different answers.
+            BridgeLayerSwitch::Adjustment => return self.set_adjustment(on),
         })
     }
 

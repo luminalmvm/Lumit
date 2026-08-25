@@ -922,6 +922,35 @@ impl Layer {
     pub fn is_light(&self) -> bool {
         matches!(self.kind, LayerKind::Light { .. })
     }
+
+    /// Whether this layer acts as an adjustment layer (K-537) — the one answer
+    /// every picture path asks, so the [`Layer::adjustment`] flag and the
+    /// legacy [`LayerKind::Adjustment`] take a single path and cannot drift.
+    ///
+    /// True means: ignore this layer's own source, composite everything below
+    /// it, and run this layer's effect stack on that.
+    #[must_use]
+    pub fn is_adjustment(&self) -> bool {
+        self.adjustment || matches!(self.kind, LayerKind::Adjustment)
+    }
+
+    /// Whether the adjustment switch means anything on this layer (K-537):
+    /// **any layer that shows something in the Viewer**.
+    ///
+    /// A Camera is a viewpoint, a Light is something other layers see, a Null
+    /// is a transform and nothing else, and an Audio layer (K-435) is sound —
+    /// none of the four has a picture to set aside, so none of them can grade
+    /// what is under it either. Everything else can, including a layer whose
+    /// own visibility switch is off: hiding a layer and making it an adjustment
+    /// are two separate answers, and the switch is drawn either way.
+    #[must_use]
+    pub fn can_adjust(&self) -> bool {
+        !self.audio_only
+            && !matches!(
+                self.kind,
+                LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Null
+            )
+    }
 }
 
 /// Whether any layer in `comp` is soloed (K-105). When true, the compositor
@@ -996,9 +1025,7 @@ pub fn collapse_state(doc: &Document, comp: &Composition, layer: &Layer, lt: f64
         nested.layers.iter().any(|l| {
             l.switches.visible
                 && (l.matte.is_some()
-                    || (matches!(l.kind, LayerKind::Adjustment)
-                        && l.switches.fx
-                        && l.effects.iter().any(|e| e.enabled)))
+                    || (l.is_adjustment() && l.switches.fx && l.effects.iter().any(|e| e.enabled)))
         })
     });
     let forced = !layer.masks.is_empty()
@@ -1579,6 +1606,27 @@ pub struct Layer {
     /// skips a hidden one, and why the audio path does not look at it at all.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub audio_only: bool,
+    /// This layer is acting as an **adjustment layer** (K-537): its own picture
+    /// is set aside and its effect stack runs on the composite of everything
+    /// beneath it instead.
+    ///
+    /// **In plain terms.** An adjustment layer is a layer that grades what is
+    /// under it: you put a colour correction on it and everything below picks
+    /// the correction up. This flag turns any layer that draws into one —
+    /// footage, a solid, a precomp, a text layer — and turning it off makes the
+    /// layer itself again. Nothing is thrown away while it is on: the footage
+    /// item, the masks, the transform and the effects all sit where they were,
+    /// which is what lets the switch be flicked back and forth.
+    ///
+    /// A flag rather than a [`LayerKind`] of its own for exactly the reason
+    /// [`Self::audio_only`] is one: a kind flip cannot round-trip a footage
+    /// layer, because the kind is where the source lives, so switching would
+    /// have to throw the source away and switching back could not get it back.
+    /// [`LayerKind::Adjustment`] stays as the kind *New adjustment layer*
+    /// makes — a comp-sized container with no source at all — and every picture
+    /// path asks [`Layer::is_adjustment`], which answers for both.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub adjustment: bool,
     /// Retime (K-197): layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
@@ -2696,6 +2744,64 @@ mod tests {
         assert_eq!(serde_json::from_str::<Layer>(&old).unwrap(), layer);
     }
 
+    /// **The adjustment switch survives a save/load, and an old file is
+    /// byte-identical** (K-537): a layer that is not an adjustment writes no
+    /// key at all, so a project saved before the flag existed loads exactly as
+    /// it did — and reads back with the switch off.
+    ///
+    /// The legacy [`LayerKind::Adjustment`] is not migrated on load (the
+    /// decision entry says why), so an old adjustment layer keeps its kind and
+    /// still answers [`Layer::is_adjustment`] — the one question every picture
+    /// path asks.
+    #[test]
+    fn the_adjustment_flag_round_trips_and_old_projects_load_unchanged() {
+        let mut layer = comp_with_cameras().layers.remove(0);
+        layer.kind = LayerKind::Solid {
+            def: uuid::Uuid::now_v7(),
+        };
+
+        // Off: no key, and an old file (which has none either) reads the same.
+        let old = serde_json::to_string(&layer).unwrap();
+        assert!(
+            !old.contains("adjustment"),
+            "a layer that is not an adjustment writes nothing"
+        );
+        let back: Layer = serde_json::from_str(&old).unwrap();
+        assert_eq!(back, layer);
+        assert!(!back.is_adjustment());
+
+        // On: written, read back, and the source is still there.
+        layer.adjustment = true;
+        let json = serde_json::to_string(&layer).unwrap();
+        let back: Layer = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, layer);
+        assert!(back.is_adjustment());
+        assert!(matches!(back.kind, LayerKind::Solid { .. }));
+
+        // A layer born an adjustment answers the same question, with the flag
+        // never set — the two paths meet at `is_adjustment`.
+        let mut born = layer.clone();
+        born.adjustment = false;
+        born.kind = LayerKind::Adjustment;
+        assert!(born.is_adjustment());
+
+        // And the four with no picture refuse the switch.
+        for kind in [
+            LayerKind::Camera {
+                zoom: Property::zero(),
+                solve_link: None,
+            },
+            LayerKind::Null,
+        ] {
+            let mut nothing = layer.clone();
+            nothing.kind = kind;
+            assert!(!nothing.can_adjust());
+        }
+        let mut sound = layer.clone();
+        sound.audio_only = true;
+        assert!(!sound.can_adjust(), "an Audio layer has no picture either");
+    }
+
     fn comp_with_cameras() -> Composition {
         let mut comp = Composition {
             id: Uuid::now_v7(),
@@ -2732,6 +2838,7 @@ mod tests {
             label: 0,
             volume_db: crate::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -3066,6 +3173,7 @@ mod tests {
             label: 0,
             volume_db: crate::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

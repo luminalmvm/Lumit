@@ -59,6 +59,7 @@ fn solid_layer(def: Uuid) -> Layer {
         label: 2,
         volume_db: Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,

@@ -39,7 +39,7 @@ and a blend mode.
 | **Text layer** | Editable styled text. |
 | **Shape layer** | Vector shape groups with fills, strokes, and path operations. |
 | **Null layer** | An invisible transform-only layer used for parenting rigs. |
-| **Adjustment layer** | An invisible layer whose effect stack is applied to the composite of everything below it. |
+| **Adjustment layer** | A layer whose effect stack is applied to the composite of everything below it rather than to a picture of its own. It is a **switch** any layer that draws can carry (K-537), and also a kind — the one *New adjustment layer* makes, which has nothing else to show. |
 | **Audio layer** | A layer whose source is an audio item (or the audio channel of footage). Multiple audio layers per comp; see [09-AUDIO.md](09-AUDIO.md). |
 | **Camera layer** | A 3D viewpoint. Only affects 3D layers. See 2.5D in [03-DATA-MODEL.md](03-DATA-MODEL.md). |
 | **Light layer** | A 3D light source. Only affects 3D layers with lighting enabled. |

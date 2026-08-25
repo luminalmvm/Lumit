@@ -1218,10 +1218,14 @@ preserve-underlying-transparency still await their backing machinery (K-168);
 hide-per-workspace and the optional in/out/duration columns remain open. Right-clicking a
 layer row opens the **layer menu** — duplicate, reorder, delete, and the ticked **Accepts
 lights** entry (K-361), which is where that setting lives now that it has no cell in the
-Modes column (K-483). The freed fifth cell is the **adjustment toggle** (K-484): it makes
-a Solid layer an Adjustment layer and back — the engine's one kind flip, one undo step
-each way — and it is drawn on those two kinds only, blank on every other row, because no
-other kind converts. The Modes group is five cells wide on every row all the same.
+Modes column (K-483). The freed fifth cell is the **adjustment switch** (K-537): on, the
+layer's own picture is set aside and its effect stack runs on the composite beneath it;
+off, the layer is itself again with everything — source, masks, transform, effects — where
+it was. It is drawn on **every row that shows something in the Viewer**, whatever its own
+visibility switch says, and left blank only on the four kinds with no picture to set aside
+(camera, light, null, audio). Lit `text_primary` on, `text_muted` off, one undo step each
+way, and applied to the whole selection like the switches beside it (K-523). The Modes
+group is five cells wide on every row all the same.
 
 **The render-time column (K-276, [13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §7.1)**
 shows what each layer's own picture cost in the frame at the playhead, and — on a layer

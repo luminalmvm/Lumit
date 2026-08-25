@@ -112,10 +112,10 @@ pub enum BridgeError {
     NotSequence,
     /// Only a Footage layer converts to a Sequence layer.
     NotFootage,
-    /// The adjustment toggle (K-484) was asked of a layer that is neither a
-    /// Solid nor an Adjustment. Those two differ by whether the layer has a
-    /// picture of its own and by nothing else, which is what makes the flip a
-    /// toggle; no other kind converts, and the cell is not drawn on one.
+    /// The adjustment switch (K-537) was asked of a layer with no picture to
+    /// set aside — a Camera, a Light, a Null or an Audio layer. Every layer
+    /// that shows something in the Viewer takes it; the cell is not drawn on
+    /// the four that do not.
     NotConvertible,
     /// A Sequence layer's retiming belongs to its clips, not to the layer
     /// (K-075), so it has no Retime channel to switch on.
@@ -223,7 +223,10 @@ impl fmt::Display for BridgeError {
                 write!(f, "Only footage layers convert to sequenced")
             }
             BridgeError::NotConvertible => {
-                write!(f, "Only solid and adjustment layers convert to one another")
+                write!(
+                    f,
+                    "Only a layer with a picture of its own can become an adjustment layer"
+                )
             }
             BridgeError::NotRetimeable => write!(
                 f,

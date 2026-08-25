@@ -7415,8 +7415,22 @@ class _OutlineRowState extends State<_OutlineRow> {
   /// when the row can act on it, and blank otherwise. The flow slot is the
   /// spec's flow-or-collapse cell (K-168) — a Precomp shows its collapse
   /// switch, **footage shows its Flow switch** (K-088/K-331), everything else
-  /// leaves it empty; the adjustment cell (K-484) is drawn on solid and
-  /// adjustment rows alone, the only two kinds that convert.
+  /// leaves it empty; the adjustment cell (K-537) is drawn on every row that
+  /// shows something in the Viewer, which is all of them but the four that
+  /// draw nothing.
+  /// Whether the adjustment cell is drawn on a row of this kind (K-537): every
+  /// kind that puts something in the Viewer, which is everything except the
+  /// four with no picture of their own.
+  ///
+  /// The frontend's half of `Layer::can_adjust`, listed as the kinds that are
+  /// *out* rather than the ones that are in, so a new drawing kind gets the
+  /// cell by existing rather than by being remembered here.
+  static bool _canAdjust(BridgeLayerKind kind) =>
+      kind != BridgeLayerKind.camera &&
+      kind != BridgeLayerKind.light &&
+      kind != BridgeLayerKind.nullLayer &&
+      kind != BridgeLayerKind.audio;
+
   Widget _renderCells(BuildContext context, BridgeLayerInfo info) {
     final id = layer.internallayerId.toString();
     final switches = info.switches;
@@ -7454,26 +7468,24 @@ class _OutlineRowState extends State<_OutlineRow> {
           _switch(context, id, '3d', LumitIcon.cube3d, switches.threeD,
               BridgeLayerSwitch.threeD,
               tip: l10n.switchThreeD),
-          // The adjustment cell (K-484), where accepts lights used to stand
-          // (K-483). It writes a layer **kind**, not a switch, so it is drawn
-          // like the Flow cell: the switch's clothes over its own write.
+          // The adjustment cell (K-537), where accepts lights used to stand
+          // (K-483). An ordinary switch cell like the three before it: it
+          // writes `BridgeLayerSwitch.adjustment`, so it inherits the plural
+          // handler and applies to the whole selection (K-523).
           //
-          // **Only on the two rows it can move.** A solid and an adjustment
-          // differ by whether the layer has a picture of its own and by nothing
-          // else, which is what makes this a toggle; footage, text, camera and
-          // the rest do not convert, and a cell that did nothing on most rows
-          // would be noise in a column read at a glance. Those rows keep the
-          // empty width so the pickers after it stay in one column.
-          if (info.kind == BridgeLayerKind.solid ||
-              info.kind == BridgeLayerKind.adjustment)
+          // **On every row that shows something in the Viewer** — footage,
+          // solid, precomp, text, shape, sequence and a layer born an
+          // adjustment. Only the four with no picture to set aside leave it
+          // empty (camera, light, null, audio), and they keep the width so the
+          // pickers after it stay in one column. Drawn regardless of the row's
+          // own visibility switch: what a layer *is* and whether it is being
+          // shown are two answers, and hiding one must not hide the other.
+          if (_canAdjust(info.kind))
             _switch(context, id, 'adjust', LumitIcon.adjustment,
-                info.kind == BridgeLayerKind.adjustment, null,
-                tip: info.kind == BridgeLayerKind.adjustment
+                switches.adjustment, BridgeLayerSwitch.adjustment,
+                tip: switches.adjustment
                     ? l10n.tipAdjustmentOn
-                    : l10n.tipAdjustmentOff, onTap: () {
-              layer.setAdjustment(on_: info.kind != BridgeLayerKind.adjustment);
-              widget.onChanged();
-            })
+                    : l10n.tipAdjustmentOff)
           else
             const SizedBox(width: switchCellWidth),
         ],

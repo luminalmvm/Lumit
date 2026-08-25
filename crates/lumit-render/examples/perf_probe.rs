@@ -41,6 +41,7 @@ fn layer(kind: LayerKind, name: &str) -> lumit_core::model::Layer {
         label: 0,
         volume_db: Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: Default::default(),
         parked_flow: None,

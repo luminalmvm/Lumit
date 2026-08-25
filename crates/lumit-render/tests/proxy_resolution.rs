@@ -77,6 +77,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         label: 0,
         volume_db: lumit_core::anim::Property::zero(),
         audio_only: false,
+        adjustment: false,
         retime: None,
         interpolation: lumit_core::retime::Interpolation::default(),
         parked_flow: None,

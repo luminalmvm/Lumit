@@ -126,7 +126,7 @@ pub fn posterize_sample_times(layers: &[Layer], t_comp: f64) -> Vec<f64> {
         // grid onto the running below-hold so nested holds snap the
         // already-held time again.
         if let Some(p) = &here {
-            if matches!(layer.kind, crate::model::LayerKind::Adjustment) {
+            if layer.is_adjustment() {
                 below_hold = posterize_held_time(below_hold, p.rate, p.phase);
             }
         }

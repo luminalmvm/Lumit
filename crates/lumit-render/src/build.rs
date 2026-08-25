@@ -444,6 +444,12 @@ pub fn build_comp_draws_at(
             current_depth: 0,
         });
 
+        // A layer acting as an adjustment (K-537) has no picture of its own to
+        // give — by kind or by the flag, the same answer, so a footage layer
+        // switched on stops handing its frames to a matte too.
+        if layer.is_adjustment() {
+            return None;
+        }
         let raw = match &layer.kind {
             // Neither kind has pixels of its own. An Adjustment layer is a
             // pass-through until its effect stack exists; a Null never draws at
@@ -982,7 +988,9 @@ pub fn build_comp_draws_at(
         let tr = &layer.transform;
 
         let (source, natural) = match &layer.kind {
-            LayerKind::Precomp { comp: nested_id } => {
+            // Guarded so a Precomp acting as an adjustment (K-537) falls
+            // through to the adjustment arm below rather than drawing its comp.
+            LayerKind::Precomp { comp: nested_id } if !layer.is_adjustment() => {
                 if visited.contains(nested_id) {
                     continue; // cycle guard
                 }
@@ -1098,7 +1106,12 @@ pub fn build_comp_draws_at(
                     (nested.width as f32, nested.height as f32),
                 )
             }
-            LayerKind::Adjustment => {
+            // **The one adjustment path** (K-537). Reached both by the layer
+            // kind *New adjustment layer* makes and by any drawing layer with
+            // the adjustment switch on: either way the layer's own source is
+            // set aside, so there is one behaviour here and no second copy of
+            // it to drift.
+            _ if layer.is_adjustment() => {
                 // A staging point, not a picture (docs/06 §1.5): realise
                 // composites everything below, runs this stack on it, and
                 // blends back by coverage — masks × opacity, placed by the
@@ -1733,7 +1746,7 @@ pub fn posterize_below(
     let p = lumit_core::fx::stack_posterize(&layer.effects, layer.switches.fx, lt)?;
     // The below-render reach is implied by the carrier (K-166): only an
     // adjustment layer's Posterize holds the composite beneath it.
-    if !matches!(layer.kind, lumit_core::model::LayerKind::Adjustment) {
+    if !layer.is_adjustment() {
         return None;
     }
     let tau = lumit_core::fx::posterize_held_time(t_comp, p.rate, p.phase);
@@ -1865,6 +1878,7 @@ mod parent_placement_tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2025,6 +2039,7 @@ mod render_below_at_tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2449,6 +2464,7 @@ mod render_below_at_tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -2769,6 +2785,7 @@ mod render_below_at_tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

@@ -14942,3 +14942,61 @@ effect's **topic headings and declared-empty slots are not things a person lost*
 never a value in them. One real project produced 1,907 such rows against 509 rows worth
 reading, and a report nobody can scroll through says nothing at all. The undecoded *data*
 blobs are still named, one row each, and the placeholder itself always names the effect.
+
+## K-537 — The adjustment layer is a switch on any layer that draws, not a kind you convert to
+
+**DECIDED 2026-08-25** (owner ruling: *"the adjustment layer toggle in the overview area
+should be visible and toggleable on all layers that display something in the viewer
+(including invisible ones etc.)"*). **Supersedes K-484's model** — the Solid ⇄ Adjustment
+kind flip and the only-on-two-kinds cell rule — and with it K-483's reason for leaving the
+fifth cell empty. K-483's other half, *Accepts lights* living in the layer menu, is
+untouched.
+
+**A kind cannot round-trip, so it was the wrong shape.** K-484 made the toggle write
+`LayerKind`, which works exactly as far as solids: a solid's whole content is a `def`, so
+the flip could hand it back on undo. A footage layer's content is its *source*, and the
+source is part of the kind — so switching a shot to an adjustment would have to throw the
+source away, and switching back could not get it back. The owner's ruling asks for the
+After Effects semantics, where adjustment is a **per-layer switch on any visual layer**:
+on, the layer's own picture is set aside and its effect stack runs on the composite
+beneath it; off, the layer is itself again, remembering everything. That is `Layer::
+adjustment: bool` — a flag beside `audio_only`, for the same reason K-435 gave: the source
+stays where it is and the only thing that differs is what draws.
+
+**One path, asked as one question.** `Layer::is_adjustment()` is the flag or the legacy
+kind, and every place that used to ask the kind now asks it: the draw builder's adjustment
+arm, the decode plan, the frame key, the evaluation graph, the occlusion cull, the
+Posterize below-hold, and the collapse-forcing rule. There is no second behaviour to keep
+in step, because there is no second implementation — a flagged footage layer and a layer
+born an adjustment produce the same plan.
+
+**The legacy kind is kept, not migrated.** `LayerKind::Adjustment` stays as the kind *New
+adjustment layer* makes: a comp-sized container with nothing of its own to show. Migrating
+it on load was considered and refused — the kind carries no solid `def`, so normalising it
+would have to *invent* a project item at load time, which is a document edit disguised as
+opening a file, and every old project would gain an asset it never had. Kept as it is, old
+files load byte-identical and the flag defaults false, so nothing about them changes. The
+one asymmetry is where it belongs, at the moment the user asks for it: turning the switch
+**off** on a layer born an adjustment hands it a fresh comp-sized white solid and
+normalises it to `Solid` with the flag off — K-484's batch, kept for exactly this case,
+still one undo step. From then on it is an ordinary solid with a switch, and switching it
+back on never touches the kind again.
+
+**The op joins the switch family and the cell joins the switch column.** `Op::
+SetLayerAdjustment` is shaped like `SetLayerGuide` beside it, refused with
+`KindNotConvertible` on the four kinds with no picture to set aside — Camera, Light, Null,
+and an Audio layer (`Layer::can_adjust`). Over the seam it is
+`BridgeLayerSwitch::Adjustment`, read from `BridgeLayerSwitches::adjustment` (which answers
+true for the kind as well), and `set_switch` delegates to `set_adjustment` rather than
+repeating the born-an-adjustment batch. The frontend gains nothing bespoke: the cell is a
+plain `_switch`, so it lights `text_primary` on and `text_muted` off like the four beside
+it and applies to the **whole selection** through the choke point all six switches already
+pass through (K-523).
+
+**Drawn on every row that shows something, including a hidden one.** K-484 drew the cell on
+solid and adjustment rows only, because those were the two that converted; with a switch
+that reason is gone, and the owner's ruling is explicit that a layer's own visibility is a
+separate answer — hiding a layer must not hide what it *is*. So footage, solid, precomp,
+text, shape, sequence and adjustment rows all carry it, camera, light, null and audio rows
+leave it empty, and the Modes group stays `5 × switchCellWidth` on every row so the pickers
+after it never step sideways.

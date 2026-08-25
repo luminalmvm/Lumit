@@ -2210,6 +2210,7 @@ mod tests {
                 label: 0,
                 volume_db: lumit_core::anim::Property::zero(),
                 audio_only: false,
+                adjustment: false,
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,

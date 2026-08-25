@@ -12,7 +12,7 @@ import 'package:uuid/uuid.dart';
 import 'state.dart';
 part 'footage.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `source_path`
+// These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `source_path`, `stored_path`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
@@ -269,6 +269,17 @@ class FootageReference {
   /// by hand should not mean relinking forty. A sibling is only touched when it
   /// currently fails to resolve *and* a file of its name exists beside the
   /// picked one, so a healthy item is never repointed.
+  ///
+  /// It sweeps **two** ways, because footage is not usually one flat folder.
+  /// A clip that moved from `old/a/b/clip.mov` to `new/a/b/clip.mov` says
+  /// where the whole tree went — that is
+  /// [`lumit_project::path_mapping`], docs/10 §2's "relinking one file
+  /// automatically relinks siblings that resolve under the same path
+  /// mapping" — so every sibling under the old root is looked for at the same
+  /// place under the new one, subfolders and all. A sibling the mapping does
+  /// not cover (or a rename, which cannot generalise) falls back to the flat
+  /// look beside the picked file. Either way the file has to actually be
+  /// there.
   void relink({required String path}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceRelink(that: this, path: path);
 

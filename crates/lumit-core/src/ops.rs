@@ -226,6 +226,19 @@ pub enum Op {
         layer: Uuid,
         kind: Box<crate::model::LayerKind>,
     },
+    /// The adjustment switch (K-537): the layer sets its own picture aside and
+    /// runs its effect stack on the composite beneath it instead.
+    ///
+    /// A switch like the ten beside it, not a kind flip: the layer keeps its
+    /// source, its masks and its transform while it is on, which is what lets
+    /// a footage layer be switched to an adjustment and back. Refused with
+    /// [`OpError::KindNotConvertible`] on a layer with no picture to set aside
+    /// — a Camera, a Light, a Null, an Audio layer ([`crate::model::Layer::can_adjust`]).
+    SetLayerAdjustment {
+        comp: Uuid,
+        layer: Uuid,
+        adjustment: bool,
+    },
     /// Mute or unmute a layer's audio (the audible switch).
     SetLayerAudible {
         comp: Uuid,
@@ -530,6 +543,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerThreeD { comp, layer, .. }
         | Op::SetSequenceClips { comp, layer, .. }
         | Op::SetLayerKind { comp, layer, .. }
+        | Op::SetLayerAdjustment { comp, layer, .. }
         | Op::SetLayerAudible { comp, layer, .. }
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
@@ -969,6 +983,29 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 kind: Box::new(previous),
+            })
+        }
+        Op::SetLayerAdjustment {
+            comp,
+            layer,
+            adjustment,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            // Checked before anything is written: a layer with no picture of
+            // its own has nothing to set aside, and the document is untouched.
+            if !l.can_adjust() {
+                return Err(OpError::KindNotConvertible);
+            }
+            let previous = std::mem::replace(&mut l.adjustment, *adjustment);
+            Ok(Op::SetLayerAdjustment {
+                comp: *comp,
+                layer: *layer,
+                adjustment: previous,
             })
         }
         Op::SetLayerThreeD {

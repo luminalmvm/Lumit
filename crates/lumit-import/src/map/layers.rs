@@ -135,6 +135,7 @@ pub(crate) fn map_layer(
         markers: markers(conv, &ae.markers),
         volume_db: LumProperty::zero(),
         audio_only: false,
+        adjustment: false,
         retime,
         interpolation,
         parked_flow: None,

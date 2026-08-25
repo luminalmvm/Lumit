@@ -199,6 +199,12 @@ pub fn collect_comp_jobs(
         if l.audio_only {
             continue;
         }
+        // A layer acting as an adjustment (K-537) draws the composite beneath
+        // it, so its own frames are never asked for — decoding them would be
+        // a video decode nobody looks at.
+        if l.is_adjustment() {
+            continue;
+        }
         if l.switches.visible && in_span(l) {
             wanted.push(l.id);
             if let Some(m) = &l.matte {
@@ -781,6 +787,7 @@ mod tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -928,6 +935,7 @@ mod tests {
             label: 0,
             volume_db: Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,
@@ -1041,6 +1049,7 @@ mod tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: lumit_core::retime::Interpolation::default(),
             parked_flow: None,

@@ -246,9 +246,25 @@ struct Switches {
     accepts_lights: bool,              // K-361: the comp's Light layers shade this one (default on)
 }
 // Future switches (K-168, deferred): `quality` (Draft|Full — needs a bicubic
-// sampler choice). `adjustment` is not a
-// switch — an adjustment layer is a LayerKind (§5.2).
+// sampler choice).
 ```
+
+**The adjustment switch is a field on the layer, not a member of `Switches` (K-537):**
+
+```rust
+adjustment: bool,   // K-537: set this layer's own picture aside; its effect stack
+                    // runs on the composite of everything beneath it. Default false.
+```
+
+It sits beside `audio_only` and for the same reason (K-435): a *kind* cannot round-trip,
+because the kind is where the source lives, so switching a footage layer to an adjustment
+and back would have to throw the source away and could not get it back. As a flag, nothing
+is lost while it is on — source, masks, transform and effects all stay put. It is accepted
+on **every layer that shows something in the Viewer** and refused on the four that show
+nothing (Camera, Light, Null, and an Audio layer): `Layer::can_adjust`. `LayerKind::
+Adjustment` (§5.2) stays as the kind *New adjustment layer* makes, and **every picture path
+asks `Layer::is_adjustment`**, which answers for the flag and the kind together — one path,
+so the two cannot drift.
 
 Invariants:
 - A layer sits freely across the comp boundaries (K-153): `in_point` may be **negative**
@@ -281,7 +297,7 @@ Invariants:
 | `Solid { def: Uuid }` | yes | A SolidDef | |
 | `Text { document: TextDocument }` | yes | §9.1 | v1: one run. |
 | `Camera { zoom: Property, solve_link: Option<Uuid> }` | yes | — | AE camera: `zoom` is focal distance in comp pixels (z=0 maps 1:1). Only affects 3D-switch layers; the topmost visible camera is active. `solve_link` is §5.6's solve link (K-417); `None` — the usual case — is a camera the user drives by hand. |
-| `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. (There is no `adjustment` switch — it is this kind.) |
+| `Adjustment` | yes | — | No source of its own; its masks + effect stack apply to the composite of every layer beneath it, within its span. What *New adjustment layer* makes. **Any layer can behave this way** — that is the `adjustment` switch in §5.1 — and this kind is simply the one that was born with nothing else to show. Turning the switch off on one hands it a fresh comp-sized white solid and normalises it to `Solid`, because it has no picture to give back. |
 | `Null` | yes | — | No source and no size; carries only a transform, so layers parent to it and move as a rig. Never draws, emits no node in the evaluation graph, and reports no picture — so it is not offered as a matte or a layer-valued effect parameter. Masks and effects can be added to it but never run (as on a Camera). The bridge enum names this kind `NullLayer` for Dart's sake only (K-206). |
 | `Shape { contents: Vec<ShapeItem> }` | yes | Its vector art | §7.2 (K-237). Flat list; nested groups and modifiers are future (§9.2). |
 | `Light { light: Box<LightDef> }` | yes | §5.5 | A source of light other layers see (K-360). Draws no pixels of its own, like a Camera; its placement is the ordinary layer transform. |

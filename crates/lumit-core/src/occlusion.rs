@@ -48,13 +48,18 @@ pub fn occluder_index(doc: &Document, comp: &Composition, t: f64) -> Option<usiz
             && (!any_solo || l.switches.solo)
     };
     let candidate = comp.layers.iter().enumerate().find(|(_, l)| {
-        drawn(l) && matches!(l.kind, LayerKind::Solid { .. }) && covers_frame(doc, comp, l, t)
+        drawn(l)
+            // A solid acting as an adjustment (K-537) has set its own colour
+            // aside — it shows what is under it, so it hides nothing.
+            && !l.is_adjustment()
+            && matches!(l.kind, LayerKind::Solid { .. })
+            && covers_frame(doc, comp, l, t)
     })?;
     let (idx, _) = candidate;
     let below = |id: uuid::Uuid| comp.layers.iter().skip(idx + 1).any(|l| l.id == id);
     let above = comp.layers.iter().take(idx).filter(|l| drawn(l));
     for l in above {
-        if matches!(l.kind, LayerKind::Adjustment) {
+        if l.is_adjustment() {
             return None;
         }
         if l.matte.as_ref().is_some_and(|m| below(m.layer)) {
@@ -218,6 +223,7 @@ mod tests {
             label: 0,
             volume_db: Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

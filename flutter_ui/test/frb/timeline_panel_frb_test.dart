@@ -4333,19 +4333,22 @@ void main() {
       expect(layer.getSwitches().acceptsLights, isTrue);
     });
 
-    /// **The adjustment toggle is the Modes column's fifth cell** (K-484), and
-    /// it is drawn on the two kinds that convert and nowhere else: a solid and
-    /// an adjustment layer have it, footage, text and a camera do not. A cell
-    /// that did nothing on most rows would be noise in a column read at a
-    /// glance, and the flow cell has followed that rule since K-168.
-    testWidgets(
-        'the adjustment cell is drawn on solid and adjustment rows only',
+    /// **The adjustment switch is the Modes column's fifth cell** (K-537), and
+    /// it is drawn on **every row that shows something in the Viewer** —
+    /// footage, solid, precomp, text, and a layer born an adjustment. Only the
+    /// four kinds with no picture to set aside leave it empty. A hidden layer
+    /// keeps it: what a layer *is* and whether it is being shown are two
+    /// answers, and hiding one must not hide the other.
+    testWidgets('the adjustment cell is drawn on every visual kind',
         (tester) async {
       final p = withComp();
       final solid = p.comp.addSolidLayer();
       final adjustment = p.comp.addAdjustmentLayer();
       final text = p.comp.addTextLayer();
       final camera = p.comp.addCameraLayer();
+      final nul = p.comp.addNullLayer();
+      final hidden = p.comp.addSolidLayer();
+      hidden.setSwitch(switch_: BridgeLayerSwitch.visible, on_: false);
       p.uiState.model.refresh();
       await mount(tester, p);
 
@@ -4353,18 +4356,24 @@ void main() {
           find.byKey(ValueKey<String>('tl-adjust-${l.internallayerId}'));
 
       expect(cell(solid), findsOneWidget, reason: 'a solid can become one');
-      expect(cell(adjustment), findsOneWidget, reason: 'and back again');
-      expect(cell(text), findsNothing, reason: 'text does not convert');
-      expect(cell(camera), findsNothing, reason: 'nor does a camera');
+      expect(cell(adjustment), findsOneWidget, reason: 'and so can this one');
+      expect(cell(text), findsOneWidget, reason: 'text draws, so text takes it');
+      expect(cell(hidden), findsOneWidget,
+          reason: 'a hidden layer is still a layer that draws');
+      expect(cell(camera), findsNothing, reason: 'a camera shows nothing');
+      expect(cell(nul), findsNothing, reason: 'nor does a null');
     });
 
     /// The cell lights the way the rest of the column does — `text_primary`
-    /// when the layer **is** an adjustment layer, `text_muted` when it is a
-    /// solid — and it writes the flip both ways, one click each.
-    testWidgets('the adjustment cell lights by kind and writes both ways',
+    /// when the layer is acting as an adjustment, `text_muted` when it is not —
+    /// and it writes both ways, one click each. On a **footage** layer, which
+    /// is the case the K-484 kind flip could not express at all.
+    testWidgets('the adjustment cell lights by state and writes both ways',
         (tester) async {
       final p = withComp();
-      final layer = p.comp.addSolidLayer();
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      p.comp.addFootageLayer(footage: footage, asSequence: false);
+      final layer = p.comp.getLayers()[0];
       p.uiState.model.refresh();
       await mount(tester, p);
       final t = LumitTheme.dark();
@@ -4376,22 +4385,46 @@ void main() {
               find.descendant(of: cell, matching: find.byType(SvgPicture)))
           .colorFilter;
 
-      expect(layer.getKind(), BridgeLayerKind.solid);
+      expect(layer.getSwitches().adjustment, isFalse);
       expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn),
-          reason: 'a solid rests at text_muted');
+          reason: 'an ordinary layer rests at text_muted');
 
       await tester.tap(cell);
       await tester.pumpAndSettle();
-      expect(layer.getKind(), BridgeLayerKind.adjustment,
+      expect(layer.getSwitches().adjustment, isTrue,
           reason: 'the click reached the document');
+      expect(layer.getKind(), BridgeLayerKind.footage,
+          reason: 'and it is still the shot — a switch, not a conversion');
       expect(tint(), ColorFilter.mode(t.textPrimary, BlendMode.srcIn),
-          reason: 'and an adjustment layer lights at text_primary');
+          reason: 'and it lights at text_primary');
 
-      // And back: the same cell writes the other direction.
+      // And back: the same cell writes the other direction, and the layer is
+      // itself again with its source where it was.
       await tester.tap(cell);
       await tester.pumpAndSettle();
-      expect(layer.getKind(), BridgeLayerKind.solid);
+      expect(layer.getSwitches().adjustment, isFalse);
+      expect(layer.getSourceItem(), isNotNull);
       expect(tint(), ColorFilter.mode(t.textMuted, BlendMode.srcIn));
+    });
+
+    /// **The switch applies to the whole selection** (K-523): it is an ordinary
+    /// `_switch` cell, so it joins the choke point the other five already pass
+    /// through rather than writing the clicked row alone.
+    testWidgets('the adjustment cell applies to every selected layer',
+        (tester) async {
+      final p = withComp();
+      final a = p.comp.addSolidLayer();
+      final b = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      p.uiState.setSelection([a, b]);
+      await mount(tester, p);
+
+      await tester
+          .tap(find.byKey(ValueKey<String>('tl-adjust-${a.internallayerId}')));
+      await tester.pumpAndSettle();
+      expect(a.getSwitches().adjustment, isTrue);
+      expect(b.getSwitches().adjustment, isTrue,
+          reason: 'the unclicked selected row went with it');
     });
 
     /// **The guide switch (K-497)**, the sixth cell in the A/V column. Unlike

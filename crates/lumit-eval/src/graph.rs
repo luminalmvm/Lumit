@@ -130,7 +130,7 @@ pub fn compile(comp: &Composition) -> EvalGraph {
     for layer in comp.layers.iter().rev() {
         // An adjustment layer has no source of its own — it processes the
         // composite beneath it. With nothing below there is nothing to adjust.
-        if matches!(layer.kind, LayerKind::Adjustment) {
+        if layer.is_adjustment() {
             let Some(below) = acc else {
                 continue;
             };
@@ -250,6 +250,7 @@ mod tests {
             label: 0,
             volume_db: lumit_core::anim::Property::zero(),
             audio_only: false,
+            adjustment: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

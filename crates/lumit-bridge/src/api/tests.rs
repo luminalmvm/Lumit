@@ -2198,6 +2198,9 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
         S::Shy,
         S::AcceptsLights,
         S::Guide,
+        // K-537: the switch whose write is a batch on a layer born an
+        // adjustment — still one undo step, like the ten beside it.
+        S::Adjustment,
     ] {
         let start = layer.get_switches().expect("switches");
         let now = match switch {
@@ -2212,6 +2215,7 @@ fn the_switches_are_independent_and_each_is_one_undo_step() {
             S::Shy => start.shy,
             S::AcceptsLights => start.accepts_lights,
             S::Guide => start.guide,
+            S::Adjustment => start.adjustment,
         };
         layer.set_switch(switch, !now).expect("toggled");
         assert_ne!(
@@ -2498,68 +2502,15 @@ fn the_sequence_ops_refuse_the_wrong_kind_of_layer() {
     );
 }
 
-/// **The Modes column's adjustment toggle** (K-484) writes both ways, each in
-/// one undo step: a solid becomes an adjustment, and an adjustment turned back
-/// gets a picture of its own again — a fresh comp-sized white solid, filed like
-/// every other. Asking for the kind the layer already is commits nothing at
-/// all, and a kind that cannot flip is refused calmly.
+/// **The Modes column's adjustment switch** (K-537) writes both ways on a
+/// layer with a source of its own, each in one undo step, and the layer keeps
+/// everything while the switch is on — which is the whole reason it is a flag
+/// and not the kind flip K-484 built. Asking for the state the layer is
+/// already in commits nothing at all.
 #[test]
-fn the_adjustment_toggle_flips_a_solid_and_an_adjustment_both_ways() {
+fn the_adjustment_switch_writes_both_ways_on_a_layer_with_a_source() {
     use crate::api::layer::BridgeLayerKind;
 
-    let project = LumitBridgeState::new_project(None).expect("a new project");
-    let comp = project.new_composition("Scene".into(), None).expect("comp");
-    let solid = comp.add_solid_layer().expect("solid");
-    assert_eq!(solid.get_kind().expect("kind"), BridgeLayerKind::Solid);
-
-    solid.set_adjustment(true).expect("made an adjustment");
-    assert_eq!(solid.get_kind().expect("kind"), BridgeLayerKind::Adjustment);
-    assert!(
-        solid.get_source_item().expect("source").is_none(),
-        "an adjustment layer has no source of its own"
-    );
-
-    project.undo().expect("undone");
-    assert_eq!(
-        solid.get_kind().expect("kind"),
-        BridgeLayerKind::Solid,
-        "the flip is one undo step"
-    );
-
-    // Redundant either way: the layer is already a solid, so nothing is
-    // committed and the one undo left goes back past the layer itself.
-    solid.set_adjustment(false).expect("already a solid");
-    project.undo().expect("undone");
-    assert!(
-        comp.get_layers().expect("layers").is_empty(),
-        "a click that changed nothing left no undo step to walk back through"
-    );
-
-    // And the other way, on a layer that was born an adjustment.
-    let (born, adjustment) = project_with_layer();
-    assert_eq!(
-        adjustment.get_kind().expect("kind"),
-        BridgeLayerKind::Adjustment
-    );
-    adjustment.set_adjustment(false).expect("made a solid");
-    assert_eq!(adjustment.get_kind().expect("kind"), BridgeLayerKind::Solid);
-    assert!(
-        adjustment.get_source_item().expect("source").is_some(),
-        "and it was handed a solid asset to draw"
-    );
-    born.undo().expect("undone");
-    assert_eq!(
-        adjustment.get_kind().expect("kind"),
-        BridgeLayerKind::Adjustment,
-        "the asset and the flip are one undo step together"
-    );
-}
-
-/// Only solids and adjustments flip. Every other kind is a calm refusal rather
-/// than a panic — the toggle is not drawn on those rows, but the seam is a
-/// trust boundary and the engine says no on its own.
-#[test]
-fn the_adjustment_toggle_refuses_every_other_kind() {
     let project = LumitBridgeState::new_project(None).expect("a new project");
     let comp = project.new_composition("Scene".into(), None).expect("comp");
     let footage = project
@@ -2567,15 +2518,122 @@ fn the_adjustment_toggle_refuses_every_other_kind() {
         .expect("imported");
     comp.add_footage_layer(&footage, false).expect("placed");
     let layer = comp.get_layers().expect("layers").remove(0);
+    let source = layer.get_source_item().expect("source").is_some();
+    assert!(source, "the shot is there to begin with");
+    assert!(!layer.get_switches().expect("switches").adjustment);
 
+    layer.set_adjustment(true).expect("switched on");
+    assert!(layer.get_switches().expect("switches").adjustment);
+    assert_eq!(
+        layer.get_kind().expect("kind"),
+        BridgeLayerKind::Footage,
+        "it is still the shot — the switch changes what draws, not what it is"
+    );
+    assert!(
+        layer.get_source_item().expect("source").is_some(),
+        "and the source is still named, so switching back gets it back"
+    );
+
+    // Off again, by the switch this time, which is the write the Timeline
+    // makes: the same layer, unchanged.
+    layer
+        .set_switch(crate::api::layer::BridgeLayerSwitch::Adjustment, false)
+        .expect("switched off");
+    assert!(!layer.get_switches().expect("switches").adjustment);
+    assert!(layer.get_source_item().expect("source").is_some());
+
+    // Redundant: nothing committed, so the one undo left goes back past the
+    // switch-on rather than past a no-op.
+    layer.set_adjustment(false).expect("already off");
+    project.undo().expect("undone");
+    assert!(
+        layer.get_switches().expect("switches").adjustment,
+        "a click that changed nothing left no undo step to walk back through"
+    );
+}
+
+/// **A layer born an adjustment is handed a picture when its switch goes off**
+/// (K-537, keeping K-484's batch for the one case that still needs it): it has
+/// nothing of its own to give back, so it gets a fresh comp-sized white solid
+/// and becomes an ordinary solid, all in one undo step. Switching it back on
+/// never touches the kind again.
+#[test]
+fn a_layer_born_an_adjustment_gets_a_solid_when_it_is_switched_off() {
+    use crate::api::layer::BridgeLayerKind;
+
+    let (project, adjustment) = project_with_layer();
+    assert_eq!(
+        adjustment.get_kind().expect("kind"),
+        BridgeLayerKind::Adjustment
+    );
+    assert!(
+        adjustment.get_switches().expect("switches").adjustment,
+        "the kind answers the switch, so the cell is lit without a flag set"
+    );
+
+    adjustment.set_adjustment(false).expect("switched off");
+    assert_eq!(adjustment.get_kind().expect("kind"), BridgeLayerKind::Solid);
+    assert!(!adjustment.get_switches().expect("switches").adjustment);
+    assert!(
+        adjustment.get_source_item().expect("source").is_some(),
+        "and it was handed a solid asset to draw"
+    );
+
+    project.undo().expect("undone");
+    assert_eq!(
+        adjustment.get_kind().expect("kind"),
+        BridgeLayerKind::Adjustment,
+        "the asset, the kind and the flag are one undo step together"
+    );
+
+    // On again from the solid side: a flag, no kind flip.
+    adjustment.set_adjustment(false).expect("switched off");
+    adjustment.set_adjustment(true).expect("switched on");
+    assert_eq!(
+        adjustment.get_kind().expect("kind"),
+        BridgeLayerKind::Solid,
+        "switching on writes the flag and leaves the kind alone"
+    );
+    assert!(adjustment.get_switches().expect("switches").adjustment);
+}
+
+/// Only a layer with a picture to set aside takes the switch. The four that
+/// draw nothing are a calm refusal rather than a panic — the cell is not drawn
+/// on those rows, but the seam is a trust boundary and the engine says no on
+/// its own.
+#[test]
+fn the_adjustment_switch_refuses_the_kinds_with_no_picture() {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let camera = comp.add_camera_layer().expect("camera");
     assert!(matches!(
-        layer.set_adjustment(true),
+        camera.set_adjustment(true),
         Err(BridgeError::NotConvertible)
     ));
+    // Refused through the switch handler too, which is the write the Timeline
+    // makes: `set_switch` delegates rather than repeating the rule.
     assert!(matches!(
-        layer.set_adjustment(false),
+        camera.set_switch(crate::api::layer::BridgeLayerSwitch::Adjustment, true),
         Err(BridgeError::NotConvertible)
     ));
+
+    let null = comp.add_null_layer().expect("null");
+    assert!(matches!(
+        null.set_adjustment(true),
+        Err(BridgeError::NotConvertible)
+    ));
+
+    // But every kind that draws takes it, including a hidden one: what a layer
+    // is and whether it is being shown are two answers.
+    let solid = comp.add_solid_layer().expect("solid");
+    solid
+        .set_switch(crate::api::layer::BridgeLayerSwitch::Visible, false)
+        .expect("hidden");
+    solid
+        .set_adjustment(true)
+        .expect("a hidden layer still takes it");
+    assert!(solid.get_switches().expect("switches").adjustment);
+    assert!(!solid.get_switches().expect("switches").visible);
 }
 
 /// The razor cuts in two without moving anything: a cut that shifted what comes
