@@ -265,7 +265,8 @@ struct Layer {
                                        // absent from the file when empty.
     switches: Switches,
 }
-// Future (not in v1): `stretch` (uniform rate multiplier).
+// No `stretch` field, and there never will be one: stretch is a *command* that
+// rewrites the Retime map and the layer's span (K-584, docs/04 §11.2).
 // Mute stays the `audible` switch, and audio comes only from a footage layer's own
 // stream (§5.2, docs/09); the once-sketched `audio: AudioProps` grouping collapsed
 // to the single `volume_db` property when it shipped (K-172) — fades are its
@@ -1112,6 +1113,4 @@ migration (they are logged in 02-DECISIONS instead). A registry lands as 1.0 nea
 
 - Maximum comp size: 16384² is the common GPU texture limit; do we macro-tile to exceed it
   (AE allows 30000²) or cap and revisit?
-- Should `stretch` survive long-term, or is it sugar the UI lowers into Retime? (It rescales
-  keyframes, which Retime deliberately does not — kept for AE compatibility for now.)
 - Gradient model for text stroke/fill v1 or tier 2?

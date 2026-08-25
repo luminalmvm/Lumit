@@ -42,6 +42,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb;
 import '../shell/splash.dart';
+import '../shell/stretch_dialog_frb.dart';
 import '../state/comp_model.dart';
 import '../state/comp_time.dart';
 import '../state/dock.dart';
@@ -8583,6 +8584,27 @@ class _OutlineRowState extends State<_OutlineRow> {
                 key: const ValueKey('tl-row-from-sequence'),
                 onPressed: () => close('from-sequence'),
                 child: Text(l10n.menuConvertToFootageLayer)),
+          // **Retime's own commands** (docs/04 §12.1), on the layers that have
+          // a Retime to command. A Sequence layer's maps belong to its clips
+          // (K-075) and are commanded from the clips' own menu in the sequence
+          // view, so offering them on the row would be offering something the
+          // engine is right to refuse.
+          if (widget.entry.info.kind != BridgeLayerKind.sequence) ...[
+            MenuRow(
+                key: const ValueKey('tl-row-retime'),
+                onPressed: () => close('retime'),
+                child: Text(widget.entry.info.retime == null
+                    ? l10n.menuEnableRetime
+                    : l10n.menuDisableRetime)),
+            MenuRow(
+                key: const ValueKey('tl-row-stretch'),
+                onPressed: () => close('stretch'),
+                child: Text(l10n.menuStretch)),
+            MenuRow(
+                key: const ValueKey('tl-row-freeze'),
+                onPressed: () => close('freeze'),
+                child: Text(l10n.menuFreezeFrame)),
+          ],
         ],
         // The shape — the cuts, the gaps and the ramps, with no media in
         // it — from the layer itself, so carrying a cut onto a depth pass
@@ -8689,6 +8711,47 @@ class _OutlineRowState extends State<_OutlineRow> {
           if (target.info.switches.locked) continue;
           try {
             target.layer.convertFromSequenced();
+          } catch (_) {}
+        }
+      case 'retime':
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.toggleRetimeProperty();
+          } catch (_) {}
+        }
+      case 'stretch':
+        // The dialogue reads the length this row has now; every other picked
+        // layer is stretched by the same *speed*, which is the number the
+        // question was asked in — matching their durations instead would make
+        // one command mean two different things.
+        final settings = widget.comp.getSettings();
+        final info = widget.entry.info;
+        if (!mounted) return;
+        final percent = await showStretchDialogFrb(
+          // The row's own context, not the one the menu was opened from: the
+          // menu has already been awaited, so `mounted` is the guard that
+          // applies.
+          context: this.context,
+          durationFrames: info.outFrame - info.inFrame,
+          fps: settings.fpsNum / settings.fpsDen,
+        );
+        if (percent == null || !mounted) return;
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.stretch(speedPercent: percent);
+          } catch (_) {}
+        }
+      case 'freeze':
+        if (!mounted) return;
+        final frame = Provider.of<LumitUiState>(this.context, listen: false)
+            .playheadFrame
+            .value;
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.freezeAtPlayhead(frame: frame);
           } catch (_) {}
         }
       case 'copy-shape':

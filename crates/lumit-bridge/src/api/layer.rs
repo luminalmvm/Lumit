@@ -3882,6 +3882,231 @@ impl LayerReference {
         })
     }
 
+    /// The map this layer plays by, or the identity one it would play by if it
+    /// were retimed — so a command that writes a map need not care which of the
+    /// two states it started in.
+    ///
+    /// The identity runs over the layer's **own** span (K-213), the same two
+    /// keys Ctrl+Alt+T installs.
+    #[frb(ignore)]
+    fn retime_or_identity(&self, layer: &Layer, from: Rational, to: Rational) -> Property {
+        match &layer.retime {
+            // A map that is one constant is not a map (see `set_retime_property`):
+            // there is nothing to scale or split, so the identity stands in.
+            Some(p) if matches!(p.animation, Animation::Keyframed(ref k) if k.len() > 1) => {
+                p.clone()
+            }
+            _ => Layer::identity_retime(from, to),
+        }
+    }
+
+    /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
+    /// rate it plays at now, and give it the length that implies — 50% is half
+    /// speed and twice as long.
+    ///
+    /// **Stretch is sugar over Retime** (K-584). It is not a second rate
+    /// multiplier hiding behind the map: the map itself is rescaled, so the
+    /// graph editor goes on showing the true curve and nothing about playback
+    /// consults a stretch factor. That is the same lowering the After Effects
+    /// importer already does with an imported layer's stretch, from the other
+    /// direction.
+    ///
+    /// **Anchored at the in point**, which is the simplest honest default:
+    /// After Effects offers three anchors (in point, current frame, out point)
+    /// and Lumit offers the one that needs no extra question — the layer starts
+    /// where it started and its end moves. The start offset is untouched, so
+    /// the frame showing at the in point is the frame that stays there.
+    ///
+    /// The existing curve is kept: every key's time is scaled about the in
+    /// point and every stored side speed is divided by the same factor, which
+    /// is the shape said over a longer or shorter stretch rather than a new
+    /// shape. A layer with no map yet gets the identity one first, so stretching
+    /// an ordinary layer means what it looks like it means.
+    ///
+    /// One undo step — the span and the map move together or not at all.
+    /// Refused on a Sequence layer (K-075: its clips carry the maps, and
+    /// `set_clip_speed` is their road) and on a speed that is not a positive,
+    /// finite number.
+    #[frb(sync)]
+    pub fn stretch(&self, speed_percent: f64) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        if matches!(layer.kind, lumit_core::model::LayerKind::Sequence { .. }) {
+            return Err(BridgeError::NotRetimeable);
+        }
+        if !speed_percent.is_finite() || speed_percent <= 0.0 {
+            return Err(BridgeError::InvalidTime);
+        }
+        let bad = |_| BridgeError::InvalidTime;
+        // The factor the layer's *length* is multiplied by, which is the
+        // reciprocal of the speed: at half speed it takes twice as long.
+        let k =
+            Rational::from_f64_on_grid(100.0 / speed_percent, Rational::FLICK_DEN).map_err(bad)?;
+        let in_local = layer
+            .in_point
+            .0
+            .checked_sub(layer.start_offset.0)
+            .map_err(bad)?;
+        let out_local = layer
+            .out_point
+            .0
+            .checked_sub(layer.start_offset.0)
+            .map_err(bad)?;
+        let stretched = out_local
+            .checked_sub(in_local)
+            .and_then(|span| span.checked_mul(k))
+            .and_then(|span| in_local.checked_add(span))
+            .map_err(bad)?;
+        let out_point = CompTime(layer.start_offset.0.checked_add(stretched).map_err(bad)?);
+
+        let map = self.retime_or_identity(&layer, in_local, out_local);
+        let Animation::Keyframed(keys) = &map.animation else {
+            return Err(BridgeError::NotRetimed);
+        };
+        let kf = k.to_f64();
+        // A stored side speed is value-units per **second** of local time, so
+        // stretching the times divides it. Influence is a fraction of the span
+        // and so survives untouched.
+        let slower = |side: lumit_core::anim::SideInterp| match side {
+            lumit_core::anim::SideInterp::Bezier { speed, influence } => {
+                lumit_core::anim::SideInterp::Bezier {
+                    speed: speed / kf,
+                    influence,
+                }
+            }
+            lumit_core::anim::SideInterp::Auto {
+                clamped,
+                speed,
+                influence,
+            } => lumit_core::anim::SideInterp::Auto {
+                clamped,
+                speed: speed / kf,
+                influence,
+            },
+            other => other,
+        };
+        let mut scaled = Vec::with_capacity(keys.len());
+        for key in keys {
+            scaled.push(Keyframe {
+                time: key
+                    .time
+                    .checked_sub(in_local)
+                    .and_then(|d| d.checked_mul(k))
+                    .and_then(|d| in_local.checked_add(d))
+                    .map_err(bad)?,
+                value: key.value,
+                interp_in: slower(key.interp_in),
+                interp_out: slower(key.interp_out),
+            });
+        }
+
+        self.commit(lumit_core::Op::Batch {
+            ops: vec![
+                lumit_core::Op::SetLayerSpan {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    in_point: layer.in_point,
+                    out_point,
+                    start_offset: layer.start_offset,
+                },
+                lumit_core::Op::SetRetimeProperty {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    retime: Some(Property {
+                        animation: Animation::Keyframed(scaled),
+                        extra: map.extra.clone(),
+                    }),
+                },
+            ],
+        })
+    }
+
+    /// **Insert a freeze at the playhead** (docs/04 §7.3,
+    /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
+    /// one second, everything after it is pushed that far later, and the map is
+    /// cropped back to the layer's own out point — so the layer's length never
+    /// changes and the beat-sync covenant holds (K-022). The tail may newly
+    /// overrun, which is drawn rather than repaired.
+    ///
+    /// One second is the specified default; the hold is two ordinary keyframes
+    /// afterwards, so it is dragged like anything else.
+    ///
+    /// A layer with no map yet gets the identity one first — freezing a frame
+    /// is a reasonable first retime to ask for, and refusing it because the
+    /// stopwatch had not been touched would be a rule with no purpose.
+    ///
+    /// Refused on a Sequence layer (its clips carry the maps) and at a moment
+    /// on or outside the layer's own ends, where there is nothing to split.
+    #[frb(sync)]
+    pub fn freeze_at_playhead(&self, frame: i64) -> Result<(), BridgeError> {
+        use lumit_core::anim::SideInterp;
+
+        let layer = self.item()?;
+        if matches!(layer.kind, lumit_core::model::LayerKind::Sequence { .. }) {
+            return Err(BridgeError::NotRetimeable);
+        }
+        let bad = |_| BridgeError::InvalidTime;
+        let rate = self.composition()?.frame_rate;
+        let at = rate.time_of_frame(frame).map_err(bad)?;
+        let local = |t: CompTime| t.0.checked_sub(layer.start_offset.0).map_err(bad);
+        let (in_local, out_local, at_local) =
+            (local(layer.in_point)?, local(layer.out_point)?, local(at)?);
+        if at_local <= in_local || at_local >= out_local {
+            return Err(BridgeError::InvalidTime);
+        }
+        // The hold's length: one second of local time, per §7.3.
+        let hold = Rational::new(1, 1).map_err(bad)?;
+        let resume = at_local.checked_add(hold).map_err(bad)?;
+
+        let mut map = self.retime_or_identity(&layer, in_local, out_local);
+        // Split the curve where the freeze begins without changing it — the
+        // razor's own move (K-221) — so the moment held is exactly the moment
+        // that was showing.
+        map.insert_key_preserving_shape(at_local);
+        let Animation::Keyframed(keys) = &mut map.animation else {
+            return Err(BridgeError::NotRetimed);
+        };
+        let split = at_local.to_f64();
+        let Some(i) = keys
+            .iter()
+            .position(|k| (k.time.to_f64() - split).abs() < 1e-12)
+        else {
+            return Err(BridgeError::InvalidTime);
+        };
+        // What the curve did after this moment, handed to the key the freeze
+        // ends on: the movement resumes where it left off rather than restarting
+        // as a straight line.
+        let resumes = keys[i].interp_out;
+        let held = keys[i].value;
+        keys[i].interp_out = SideInterp::Hold;
+        for key in keys.iter_mut().skip(i + 1) {
+            key.time = key.time.checked_add(hold).map_err(bad)?;
+        }
+        keys.insert(
+            i + 1,
+            Keyframe {
+                time: resume,
+                value: held,
+                interp_in: SideInterp::Hold,
+                interp_out: resumes,
+            },
+        );
+        // Crop back to the layer's own out point: what the freeze pushed past
+        // the end is gone, and the span straddling the end is split there so
+        // the part that survives is the part that was already drawn.
+        if keys.last().is_some_and(|k| k.time > out_local) {
+            map.insert_key_preserving_shape(out_local);
+            if let Animation::Keyframed(keys) = &mut map.animation {
+                keys.retain(|k| k.time <= out_local);
+            }
+        }
+
+        self.commit(lumit_core::Op::SetRetimeProperty {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            retime: Some(map),
+        })
+    }
+
     /// This layer's Volume, in dB (docs/09 §6): 0 is unity.
     #[frb(sync)]
     pub fn get_volume_db(&self) -> Result<BridgeScalar, BridgeError> {

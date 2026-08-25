@@ -10986,3 +10986,57 @@ One drag is one undo. A drop carrying six files opens an *undo group* — a mark
 "treat everything until I close it as a single step" — so one Ctrl-Z takes all six away
 again. Selecting six files in the import dialogue now behaves the same way, because both go
 through that one function.
+
+## 28. Stretch and freeze, in plain terms
+
+Two commands on a layer's right-click that both come down to the same thing: rewriting the
+layer's **Retime map**.
+
+The Retime map is worth restating, because everything here rests on it. A retimed layer
+carries one extra animated number, and that number is *which moment of its source it is
+showing*. At two seconds into the layer the number might read 1.0, meaning "show the frame
+one second into the clip" — which is a layer running at half speed. Speed is not stored
+anywhere; it is the steepness of that line. Flat line, frozen frame. Twice as steep, twice
+as fast. That is the whole model (K-197, K-249).
+
+### Stretch
+
+**Stretch asks one question in two ways.** "Play this at 50%" and "make this twice as long"
+are the same instruction, so the dialogue shows both wells and moves each when you type in
+the other. There is only one number underneath — the speed — and the duration well is worked
+out from it, because two stored numbers that must agree are two numbers that eventually will
+not.
+
+Pressing Apply does two things at once: the layer's **end** moves to the new length, and its
+Retime map is rescaled to match. They go in as a single edit, so one Ctrl-Z undoes both —
+half a stretch would be a layer whose length and whose map disagree, which shows up as the
+wrong footage playing.
+
+**Nothing is stored called "stretch".** Older editors keep a stretch percentage on the layer
+and multiply by it while playing. Lumit does not: after the command there is no trace of it
+beyond a longer layer and a different map, so what the graph editor draws is what actually
+plays. This is why stretching twice, or stretching a layer that already has a hand-drawn
+speed ramp, needs no special case — the second stretch just rescales whatever the map says
+now, keeping the shape of the ramp and stretching its timing.
+
+**The in point is the anchor.** Stretching pulls the *end* of the layer about; the start
+stays put. After Effects lets you choose which end holds; Lumit picks the one that needs no
+extra question, and the dialogue says so under the wells rather than leaving you to find out.
+
+### Freeze frame at the playhead
+
+Park the playhead on a moment and pick **Freeze frame at playhead**, and that moment is held
+for a second. What happens to the map: a keyframe is put exactly where the playhead is —
+using a trick called a *curve split*, which puts a key in without bending the curve it lands
+in, the same move the razor makes — that key is told to **hold** its value, a second key is
+put a second later at the same value, and everything after it slides a second down the line.
+
+The layer does **not** get longer. That is a promise the whole editing surface rests on: an
+edit point already sitting on a beat must stay on that beat, so no retime edit is ever
+allowed to move a layer's ends (K-022). The cost is that a second's worth of the tail is
+pushed off the end and no longer plays. If the map then asks for footage past what the clip
+holds, the last frame is held — that is called *overrun*, it is legal, and the Timeline
+hatches it so you can see it happening rather than wondering where the movement went.
+
+Afterwards the freeze is two ordinary keyframes. Drag either one and the hold gets longer or
+shorter; there is no special "freeze object" to learn.

@@ -118,6 +118,10 @@
   "@clipResetSpeed": {
     "description": "Context-menu item: put a clip back to playing at its normal speed."
   },
+  "clipSpeedTitle": "Clip speed",
+  "@clipSpeedTitle": {
+    "description": "Title of the small dialogue that asks for a Sequence clip's playback speed. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
   "clipboardValueColumn": "Value",
   "@clipboardValueColumn": {
     "description": "Column heading in the keyframe data copied to the clipboard."
@@ -3563,6 +3567,10 @@
   "@menuClearBeatMarkers": {
     "description": "Menu item."
   },
+  "menuClipSpeed": "Speed…",
+  "@menuClipSpeed": {
+    "description": "Context-menu item on a Sequence clip: opens a small dialogue asking for a new playback speed."
+  },
   "menuCloseProject": "Close project",
   "@menuCloseProject": {
     "description": "Menu item."
@@ -3646,6 +3654,10 @@
   "menuFlow": "Flow",
   "@menuFlow": {
     "description": "Menu item."
+  },
+  "menuFreezeFrame": "Freeze frame at playhead",
+  "@menuFreezeFrame": {
+    "description": "Layer context-menu item: hold the moment showing at the playhead for a second, without changing the layer's length."
   },
   "menuFull": "Full",
   "@menuFull": {
@@ -3854,6 +3866,10 @@
   "menuSplitLayer": "Split layer",
   "@menuSplitLayer": {
     "description": "Menu item."
+  },
+  "menuStretch": "Stretch…",
+  "@menuStretch": {
+    "description": "Layer context-menu item: opens a small dialogue asking for a new speed or a new duration for the layer."
   },
   "menuText": "Text",
   "@menuText": {
@@ -6104,6 +6120,22 @@
   "shapeTrimOffset": "Trim offset",
   "@shapeTrimOffset": {
     "description": "Timeline row under a shape layer's art: how far the trimmed piece is slid along the path, in degrees."
+  },
+  "stretchTitle": "Stretch",
+  "@stretchTitle": {
+    "description": "Title of the small dialogue that stretches a layer: a new speed, or the duration that speed implies."
+  },
+  "stretchNewSpeed": "New speed",
+  "@stretchNewSpeed": {
+    "description": "Stretch dialogue: the well holding the speed the layer will play at, as a percentage. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "stretchNewDuration": "New duration",
+  "@stretchNewDuration": {
+    "description": "Stretch dialogue: the well holding the length the layer will have, in frames. Linked to the speed well above it."
+  },
+  "stretchAnchor": "The in point holds; the end of the layer moves.",
+  "@stretchAnchor": {
+    "description": "Stretch dialogue: a note under the wells saying which end of the layer stays put when it is stretched."
   },
   "strokeStart": "Start",
   "@strokeStart": {

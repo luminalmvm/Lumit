@@ -600,4 +600,10 @@ sealed class WorkerResponse with _$WorkerResponse {
   const factory WorkerResponse.frameProfile(
     BridgeFrameProfile field0,
   ) = WorkerResponse_FrameProfile;
+
+  /// The graphics device was lost and a new one has been built in its place
+  /// (K-583, budget B9). Carries nothing: the worker has already put the
+  /// picture back, and the frontend's whole part is one calm line in the
+  /// status bar saying why the preview blinked.
+  const factory WorkerResponse.deviceReset() = WorkerResponse_DeviceReset;
 }

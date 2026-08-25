@@ -31,13 +31,20 @@ BigInt residentMemoryBytes() =>
 BigInt systemMemoryBytes() =>
     BridgeLib.instance.api.crateApiSystemSystemMemoryBytes();
 
-/// The primary adapter's dedicated video memory in bytes, or 0 where it
-/// cannot be asked.
+/// The graphics card's memory in bytes, or 0 where it cannot be asked.
 ///
-/// The *first* adapter DXGI enumerates, which is the one the renderer takes
-/// too. A machine with a discrete card behind an integrated one would report
-/// the integrated adapter's memory; that is a smaller ceiling than the truth,
-/// which errs the safe way for a budget.
+/// On Windows, the *first* adapter DXGI enumerates, which is the one the
+/// renderer takes too. A machine with a discrete card behind an integrated one
+/// would report the integrated adapter's memory; that is a smaller ceiling than
+/// the truth, which errs the safe way for a budget.
+///
+/// macOS and Linux answer through the graphics API the engine already links —
+/// Metal's recommended working-set size, or the largest device-local Vulkan
+/// heap — so the answer comes from [`lumit_render::video_memory_bytes`] rather
+/// than from a second copy of that knowledge here. See it for the details and
+/// for what returns 0. Linux's answer needs an adapter, which only the renderer
+/// opens, so it is 0 until one exists; the frontend's fallback covers that
+/// exactly as it covers a platform with no implementation at all.
 BigInt videoMemoryBytes() =>
     BridgeLib.instance.api.crateApiSystemVideoMemoryBytes();
 

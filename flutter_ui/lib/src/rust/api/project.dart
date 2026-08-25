@@ -5,6 +5,7 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
+import '../lib.dart';
 import 'cache.dart';
 import 'colour.dart';
 import 'composition.dart';

@@ -16866,57 +16866,6 @@ two that answer with no renderer open, and deliberately asserts nothing on Linux
 healthy machine's honest answer. macOS and Linux compile under `cfg` on any host but can only
 *run* on their own, so CI on those two is the runtime proof.
 
-## K-583 — Stretch is a command that lowers into Retime, anchored at the in point
-
-**DECIDED 2026-08-26.** This resolves the standing open question in
-[03-DATA-MODEL.md](03-DATA-MODEL.md) ("should `stretch` survive long-term, or is it sugar the
-UI lowers into Retime?"). **It is sugar.** There is no `stretch` field on a layer, no runtime
-rate multiplier, and nothing in playback consults a stretch factor. Layer ▸ Stretch… is a
-*command*: it asks for a speed, works out the length that speed implies, and writes the
-layer's span and its Retime map together as one undo step.
-
-That is the same lowering the After Effects importer has always done from the other
-direction — an imported layer's `stretch` becomes the equivalent Retime ramp and reports
-`StretchAsRetime` — so the two directions now agree, and the graph editor always shows the
-true curve because the curve is all there is.
-
-**Anchored at the in point.** After Effects offers three anchors (in point, current frame,
-out point); Lumit offers the one that needs no extra question. The in point and the start
-offset hold, so the frame showing at the start of the layer is the frame that stays there,
-and the end moves. This is a deliberate simplification and is stated in the dialogue itself
-("the in point holds; the end of the layer moves"), not left to be discovered.
-
-**The existing curve survives the stretch.** Every key's time is scaled about the in point
-and every stored side speed is divided by the same factor — the shape said over a longer or
-shorter stretch, not a new shape — which is docs/04 §11.2's rule expressed on the property
-path K-249 left behind. A layer with no map yet is given the identity one first, so
-stretching an ordinary layer means what it looks like it means. Refused on a Sequence layer
-(K-075: its clips carry the maps, and `set_clip_speed` is their road) and on a speed that is
-not a positive finite number.
-
-**Freeze at the playhead arrives with it** (docs/04 §7.3, `retime.freeze_at_playhead`): the
-moment showing is held for one second, everything after it is pushed that far later, and the
-map is cropped back to the layer's own out point — so the layer's length never changes and
-the beat-sync covenant holds (K-022). The hold is two ordinary keyframes afterwards, dragged
-like anything else, and the tail may newly overrun, which is drawn rather than repaired. The
-segment engine's `Retime::insert_freeze` is **not** what runs: it operates on the segment
-store that K-249 reduced to a load-time conversion, and reaching it would mean building a
-property-to-segments converter. The freeze is done on the keyframes directly, through the
-same `insert_key_preserving_shape` split the razor uses (K-221).
-
-**Where the commands live.** A layer's right-click carries Retime's own set — Enable/Disable
-Retime, Stretch…, Freeze frame at playhead — and applies each to the whole picked set
-(K-523). A Sequence layer is offered none of them; its clips' menu gains the numeric speed
-entry (docs/04 §12.1's `retime.set_segment_speed`) as **Speed…**, sharing the Stretch
-dialogue with the duration well hidden, because a clip's place and length are fixed by the
-covenant and a duration to type would be a promise the engine is right to refuse.
-
-**Still engine-less, and deliberately not built here**: `retime.add_boundary`,
-`retime.trim_to_source_end` / `…_start`, `retime.quantise_boundaries_to_beats`,
-`retime.apply_preset` (including the Hold preset, which needs a segment's entry speed that
-nothing reads out), and `retime.toggle_reverse_allowed` (whose `allow_reverse` flag went with
-the segment store).
-
 ## K-583 — A stroke carries the pressure it was drawn with, and pressure sets width alone
 
 **DECIDED.** A `PaintStroke` gains `pressures`, a list of 0..1 beside `points`, one per point:
@@ -16973,3 +16922,54 @@ angle, and the stylus's tilt fields are read by nothing today. Recorded in
 
 **GPU stamping is still the separate item it was.** This changes the CPU rasteriser only; the
 stored stroke it stamps is the one a GPU path would upload, unchanged in shape.
+
+## K-584 — Stretch is a command that lowers into Retime, anchored at the in point
+
+**DECIDED 2026-08-26.** This resolves the standing open question in
+[03-DATA-MODEL.md](03-DATA-MODEL.md) ("should `stretch` survive long-term, or is it sugar the
+UI lowers into Retime?"). **It is sugar.** There is no `stretch` field on a layer, no runtime
+rate multiplier, and nothing in playback consults a stretch factor. Layer ▸ Stretch… is a
+*command*: it asks for a speed, works out the length that speed implies, and writes the
+layer's span and its Retime map together as one undo step.
+
+That is the same lowering the After Effects importer has always done from the other
+direction — an imported layer's `stretch` becomes the equivalent Retime ramp and reports
+`StretchAsRetime` — so the two directions now agree, and the graph editor always shows the
+true curve because the curve is all there is.
+
+**Anchored at the in point.** After Effects offers three anchors (in point, current frame,
+out point); Lumit offers the one that needs no extra question. The in point and the start
+offset hold, so the frame showing at the start of the layer is the frame that stays there,
+and the end moves. This is a deliberate simplification and is stated in the dialogue itself
+("the in point holds; the end of the layer moves"), not left to be discovered.
+
+**The existing curve survives the stretch.** Every key's time is scaled about the in point
+and every stored side speed is divided by the same factor — the shape said over a longer or
+shorter stretch, not a new shape — which is docs/04 §11.2's rule expressed on the property
+path K-249 left behind. A layer with no map yet is given the identity one first, so
+stretching an ordinary layer means what it looks like it means. Refused on a Sequence layer
+(K-075: its clips carry the maps, and `set_clip_speed` is their road) and on a speed that is
+not a positive finite number.
+
+**Freeze at the playhead arrives with it** (docs/04 §7.3, `retime.freeze_at_playhead`): the
+moment showing is held for one second, everything after it is pushed that far later, and the
+map is cropped back to the layer's own out point — so the layer's length never changes and
+the beat-sync covenant holds (K-022). The hold is two ordinary keyframes afterwards, dragged
+like anything else, and the tail may newly overrun, which is drawn rather than repaired. The
+segment engine's `Retime::insert_freeze` is **not** what runs: it operates on the segment
+store that K-249 reduced to a load-time conversion, and reaching it would mean building a
+property-to-segments converter. The freeze is done on the keyframes directly, through the
+same `insert_key_preserving_shape` split the razor uses (K-221).
+
+**Where the commands live.** A layer's right-click carries Retime's own set — Enable/Disable
+Retime, Stretch…, Freeze frame at playhead — and applies each to the whole picked set
+(K-523). A Sequence layer is offered none of them; its clips' menu gains the numeric speed
+entry (docs/04 §12.1's `retime.set_segment_speed`) as **Speed…**, sharing the Stretch
+dialogue with the duration well hidden, because a clip's place and length are fixed by the
+covenant and a duration to type would be a promise the engine is right to refuse.
+
+**Still engine-less, and deliberately not built here**: `retime.add_boundary`,
+`retime.trim_to_source_end` / `…_start`, `retime.quantise_boundaries_to_beats`,
+`retime.apply_preset` (including the Hold preset, which needs a segment's entry speed that
+nothing reads out), and `retime.toggle_reverse_allowed` (whose `allow_reverse` flag went with
+the segment store).

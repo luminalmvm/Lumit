@@ -5,12 +5,12 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
+import '../lib.dart';
 import 'assets.dart';
 import 'effect.dart';
 import 'export.dart';
 import 'footage.dart';
 import 'layer.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'state.dart';
@@ -1180,18 +1180,4 @@ class CompositionReference {
           runtimeType == other.runtimeType &&
           internalproject == other.internalproject &&
           internalid == other.internalid;
-}
-
-class F32Array4 extends NonGrowableListView<double> {
-  static const arraySize = 4;
-
-  @internal
-  Float32List get inner => _inner;
-  final Float32List _inner;
-
-  F32Array4(this._inner)
-      : assert(_inner.length == arraySize),
-        super(_inner);
-
-  F32Array4.init() : this(Float32List(arraySize));
 }

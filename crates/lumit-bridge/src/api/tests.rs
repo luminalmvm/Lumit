@@ -5109,6 +5109,151 @@ fn a_sequence_layer_refuses_a_retime_of_its_own() {
     );
 }
 
+/// One ordinary Footage layer in a fresh comp — the un-sequenced twin of
+/// [`sequenced_layer`], for the commands that act on a layer's own map.
+fn footage_layer() -> (ProjectReference, CompositionReference, LayerReference) {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/shot.mov".into())
+        .expect("imported");
+    comp.add_footage_layer(&footage, false).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    (project, comp, layer)
+}
+
+/// The keys of a layer's Retime map, or a failure saying it has none.
+fn retime_keys(layer: &LayerReference) -> Vec<BridgeKeyframe> {
+    match layer.get_retime_property().expect("read") {
+        Some(BridgeScalar::Keyframed(keys)) => keys,
+        other => panic!("expected a keyed map, got {other:?}"),
+    }
+}
+
+/// **Stretch is sugar over Retime** (K-584): half speed makes the layer twice
+/// as long, anchored at its in point, and the map that comes out plays the
+/// same stretch of source over the longer span.
+#[test]
+fn a_stretch_halves_the_speed_and_doubles_the_length() {
+    let (project, comp, layer) = footage_layer();
+    let settings = comp.get_settings().expect("settings");
+    let fps = f64::from(settings.fps_num) / f64::from(settings.fps_den);
+    let before = layer.get_info().expect("info");
+    let span = before.out_frame - before.in_frame;
+
+    layer.stretch(50.0).expect("stretched");
+
+    let after = layer.get_info().expect("info");
+    assert_eq!(
+        after.in_frame, before.in_frame,
+        "the in point is the anchor"
+    );
+    assert_eq!(
+        after.out_frame - after.in_frame,
+        span * 2,
+        "half speed is twice as long"
+    );
+    let keys = retime_keys(&layer);
+    assert_eq!(keys.len(), 2, "an identity ramp, stretched");
+    // The last key still asks for the same source moment: the layer plays the
+    // same footage, just over twice the time.
+    let last = keys.last().expect("two keys");
+    assert!(
+        (last.value - (span as f64) / fps).abs() < 1e-6,
+        "the same stretch of source, at {}",
+        last.value
+    );
+
+    // One undo step puts both halves back.
+    project.undo().expect("undo");
+    let back = layer.get_info().expect("info");
+    assert_eq!(back.out_frame, before.out_frame);
+    assert!(
+        layer.get_retime_property().expect("read").is_none(),
+        "and the map went with the length"
+    );
+}
+
+/// A Sequence layer's retiming belongs to its clips (K-075), so it has no
+/// stretch of its own; and a speed that is not a positive number is refused
+/// rather than turned into a layer of no length.
+#[test]
+fn a_stretch_refuses_a_sequence_layer_and_a_nonsense_speed() {
+    let (_project, _comp, sequence) = sequenced_layer();
+    assert!(matches!(
+        sequence.stretch(50.0),
+        Err(BridgeError::NotRetimeable)
+    ));
+    let (_p, _c, layer) = footage_layer();
+    assert!(matches!(layer.stretch(0.0), Err(BridgeError::InvalidTime)));
+    assert!(matches!(
+        layer.stretch(f64::NAN),
+        Err(BridgeError::InvalidTime)
+    ));
+}
+
+/// **Freeze at the playhead holds the frame and leaves the layer's length
+/// alone** (docs/04 §7.3, K-022): a second of hold goes in, everything after
+/// it is pushed later, and the tail past the out point is cropped off.
+#[test]
+fn a_freeze_holds_the_frame_and_keeps_the_length() {
+    let (project, comp, layer) = footage_layer();
+    let settings = comp.get_settings().expect("settings");
+    let fps = f64::from(settings.fps_num) / f64::from(settings.fps_den);
+    let before = layer.get_info().expect("info");
+    let at = (before.in_frame + before.out_frame) / 2;
+
+    layer.freeze_at_playhead(at).expect("frozen");
+
+    let after = layer.get_info().expect("info");
+    assert_eq!(after.in_frame, before.in_frame);
+    assert_eq!(after.out_frame, before.out_frame, "the length never moved");
+
+    let keys = retime_keys(&layer);
+    // The hold is an ordinary pair of keys a second apart at one value.
+    let held = keys
+        .windows(2)
+        .find(|w| (w[0].value - w[1].value).abs() < 1e-9)
+        .expect("a pair holding one moment");
+    let seconds = |k: &BridgeKeyframe| k.time.num as f64 / k.time.den as f64;
+    assert!(
+        (seconds(&held[1]) - seconds(&held[0]) - 1.0).abs() < 1e-6,
+        "one second of hold"
+    );
+    assert!(
+        keys.iter()
+            .all(|k| seconds(k) * fps <= after.out_frame as f64 + 1e-6),
+        "nothing was left past the out point"
+    );
+
+    project.undo().expect("undo");
+    assert!(
+        layer.get_retime_property().expect("read").is_none(),
+        "one undo step, and the layer is un-retimed again"
+    );
+}
+
+/// A moment on or outside the layer's own ends is not a freeze: there is
+/// nothing to split there.
+#[test]
+fn a_freeze_refuses_the_ends_and_a_sequence_layer() {
+    let (_project, _comp, layer) = footage_layer();
+    let info = layer.get_info().expect("info");
+    assert!(matches!(
+        layer.freeze_at_playhead(info.in_frame),
+        Err(BridgeError::InvalidTime)
+    ));
+    assert!(matches!(
+        layer.freeze_at_playhead(info.out_frame + 10),
+        Err(BridgeError::InvalidTime)
+    ));
+    let (_p, _c, sequence) = sequenced_layer();
+    assert!(matches!(
+        sequence.freeze_at_playhead(1),
+        Err(BridgeError::NotRetimeable)
+    ));
+}
+
 /// Dragging a clip back past the start of the row carries the **layer**
 /// earlier, the way dragging any other layer's bar before the start of the
 /// composition does — and every other clip stays exactly where it was on the

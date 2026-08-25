@@ -608,11 +608,22 @@ In/out edits are boundary edits, not retime edits; they crop or extend the map p
 
 ### 11.2 Stretch
 
-Stretch (glossary §4) rescales the layer's keyframes — including Retime. Applying stretch
-factor k rewrites the store: every boundary t multiplies by k, every speed (v, m) divides by
-k, influences unchanged. Exact rational operations; no hidden runtime multiplier, so the
-graph editor always shows the true curve. Stretch on a Sequence layer applies to the layer's
-output as a whole and does not rewrite per-clip Retimes ([03-DATA-MODEL.md](03-DATA-MODEL.md)).
+**Stretch is a command, not a field** (K-584). There is no stretch factor stored on a layer
+and nothing at playback consults one: Layer ▸ Stretch… asks for a speed, works out the length
+that speed implies, and writes the layer's span and its Retime map together as one undo step
+(`LayerReference::stretch`). The same lowering the AE importer already does from the other
+direction, so the two agree and the graph editor always shows the true curve.
+
+Applying stretch factor k rewrites the map: every key time t multiplies by k **about the in
+point**, every stored side speed divides by k, influences unchanged. Times are exact
+rationals. A layer with no map yet is given the identity one first.
+
+**Anchored at the in point** — the in point and the start offset hold, the end moves. AE
+offers three anchors; Lumit offers the one that needs no extra question, and the dialogue says
+so on its face.
+
+Refused on a Sequence layer: its clips carry the maps (K-075), and a clip's own numeric speed
+entry (§12.1) is its road ([03-DATA-MODEL.md](03-DATA-MODEL.md)).
 
 ### 11.3 Precomps
 
@@ -692,6 +703,15 @@ semantics, and proposed defaults are normative here.
 | `retime.select_prev/next_segment` | Walk segments of the focused clip | `[` / `]` |
 | `retime.quantise_boundaries_to_beats` | Snap every boundary of the selection to the nearest beat marker (bounded by neighbours) | none |
 | `retime.toggle_lens` | Value / speed / stacked | `Tab` (graph editor) |
+| `retime.stretch` | Stretch… — a new speed, or the duration it implies (§11.2) | none (Layer right-click) |
+
+**What is wired today** (K-584). A layer's right-click carries Enable/Disable Retime,
+**Stretch…** and **Freeze frame at playhead**, each applying to the whole picked set (K-523);
+a Sequence clip's right-click carries **Speed…** (`retime.set_segment_speed`) beside Reset
+speed, Copy/Paste shape and Delete. The rest of the table above has no engine behind it yet:
+`add_boundary`, `trim_to_source_end` / `…_start`, `quantise_boundaries_to_beats`,
+`apply_preset` (Hold included — it needs a segment's entry speed nothing reads out) and
+`toggle_reverse_allowed`, whose `allow_reverse` flag went with the segment store at K-249.
 
 ### 12.2 Preset ramp shapes
 

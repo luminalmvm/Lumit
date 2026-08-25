@@ -4,7 +4,19 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import 'frb_generated.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<EffectInstance>>
-abstract class EffectInstance implements RustOpaqueInterface {}
+class F32Array4 extends NonGrowableListView<double> {
+  static const arraySize = 4;
+
+  @internal
+  Float32List get inner => _inner;
+  final Float32List _inner;
+
+  F32Array4(this._inner)
+      : assert(_inner.length == arraySize),
+        super(_inner);
+
+  F32Array4.init() : this(Float32List(arraySize));
+}

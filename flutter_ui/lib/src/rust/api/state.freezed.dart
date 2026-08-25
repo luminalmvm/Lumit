@@ -59,6 +59,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult Function(WorkerResponse_CacheFilled value)? cacheFilled,
     TResult Function(WorkerResponse_RenderProgress value)? renderProgress,
     TResult Function(WorkerResponse_FrameProfile value)? frameProfile,
+    TResult Function(WorkerResponse_DeviceReset value)? deviceReset,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -80,6 +81,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return renderProgress(_that);
       case WorkerResponse_FrameProfile() when frameProfile != null:
         return frameProfile(_that);
+      case WorkerResponse_DeviceReset() when deviceReset != null:
+        return deviceReset(_that);
       case _:
         return orElse();
     }
@@ -111,6 +114,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     required TResult Function(WorkerResponse_RenderProgress value)
         renderProgress,
     required TResult Function(WorkerResponse_FrameProfile value) frameProfile,
+    required TResult Function(WorkerResponse_DeviceReset value) deviceReset,
   }) {
     final _that = this;
     switch (_that) {
@@ -130,6 +134,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return renderProgress(_that);
       case WorkerResponse_FrameProfile():
         return frameProfile(_that);
+      case WorkerResponse_DeviceReset():
+        return deviceReset(_that);
     }
   }
 
@@ -156,6 +162,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult? Function(WorkerResponse_CacheFilled value)? cacheFilled,
     TResult? Function(WorkerResponse_RenderProgress value)? renderProgress,
     TResult? Function(WorkerResponse_FrameProfile value)? frameProfile,
+    TResult? Function(WorkerResponse_DeviceReset value)? deviceReset,
   }) {
     final _that = this;
     switch (_that) {
@@ -176,6 +183,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return renderProgress(_that);
       case WorkerResponse_FrameProfile() when frameProfile != null:
         return frameProfile(_that);
+      case WorkerResponse_DeviceReset() when deviceReset != null:
+        return deviceReset(_that);
       case _:
         return null;
     }
@@ -203,6 +212,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult Function()? cacheFilled,
     TResult Function(BridgeRenderProgress field0)? renderProgress,
     TResult Function(BridgeFrameProfile field0)? frameProfile,
+    TResult Function()? deviceReset,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -224,6 +234,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return renderProgress(_that.field0);
       case WorkerResponse_FrameProfile() when frameProfile != null:
         return frameProfile(_that.field0);
+      case WorkerResponse_DeviceReset() when deviceReset != null:
+        return deviceReset();
       case _:
         return orElse();
     }
@@ -253,6 +265,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     required TResult Function() cacheFilled,
     required TResult Function(BridgeRenderProgress field0) renderProgress,
     required TResult Function(BridgeFrameProfile field0) frameProfile,
+    required TResult Function() deviceReset,
   }) {
     final _that = this;
     switch (_that) {
@@ -272,6 +285,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return renderProgress(_that.field0);
       case WorkerResponse_FrameProfile():
         return frameProfile(_that.field0);
+      case WorkerResponse_DeviceReset():
+        return deviceReset();
     }
   }
 
@@ -297,6 +312,7 @@ extension WorkerResponsePatterns on WorkerResponse {
     TResult? Function()? cacheFilled,
     TResult? Function(BridgeRenderProgress field0)? renderProgress,
     TResult? Function(BridgeFrameProfile field0)? frameProfile,
+    TResult? Function()? deviceReset,
   }) {
     final _that = this;
     switch (_that) {
@@ -317,6 +333,8 @@ extension WorkerResponsePatterns on WorkerResponse {
         return renderProgress(_that.field0);
       case WorkerResponse_FrameProfile() when frameProfile != null:
         return frameProfile(_that.field0);
+      case WorkerResponse_DeviceReset() when deviceReset != null:
+        return deviceReset();
       case _:
         return null;
     }
@@ -757,6 +775,27 @@ class _$WorkerResponse_FrameProfileCopyWithImpl<$Res>
           : field0 // ignore: cast_nullable_to_non_nullable
               as BridgeFrameProfile,
     ));
+  }
+}
+
+/// @nodoc
+
+class WorkerResponse_DeviceReset extends WorkerResponse {
+  const WorkerResponse_DeviceReset() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is WorkerResponse_DeviceReset);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'WorkerResponse.deviceReset()';
   }
 }
 

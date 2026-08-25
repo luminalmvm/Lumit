@@ -4815,6 +4815,97 @@ void main() {
       expect(layer.getSwitches().acceptsLights, isTrue);
     });
 
+    /// **Retime's own commands live on the layer's right-click** (docs/04
+    /// §12.1): switching Retime on or off, Stretch, and a freeze at the
+    /// playhead. A Sequence layer is offered none of them — its clips carry
+    /// the maps (K-075) and are commanded from the sequence view.
+    testWidgets('the row menu carries the Retime commands', (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>('tl-row-$id'))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tl-row-retime')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tl-row-stretch')), findsOneWidget);
+      expect(find.byKey(const ValueKey('tl-row-freeze')), findsOneWidget);
+      expect(find.text('Enable Retime'), findsOneWidget,
+          reason: 'the command names what it will do');
+    });
+
+    /// **Stretch asks once and writes both halves** (docs/04 §11.2): half speed
+    /// is twice as long, the in point is the anchor, and the map comes with it.
+    testWidgets('Stretch asks for a speed and lengthens the layer',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      await mount(tester, p);
+      final id = layer.internallayerId;
+      final before = layer.getInfo();
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>('tl-row-$id'))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tl-row-stretch')));
+      await tester.pumpAndSettle();
+
+      // The two wells are one number seen twice: asking for half speed puts
+      // twice the frames in the duration well before anything is committed.
+      expect(find.byKey(const ValueKey('stretch-duration')), findsOneWidget);
+      tester
+          .widget<DragValueField>(find.byKey(const ValueKey('stretch-speed')))
+          .onChanged(50);
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<DragValueField>(
+                  find.byKey(const ValueKey('stretch-duration')))
+              .value,
+          (before.outFrame - before.inFrame) * 2,
+          reason: 'the duration well follows the speed well');
+
+      await tester.tap(find.byKey(const ValueKey('stretch-confirm')));
+      await tester.pumpAndSettle();
+
+      final after = layer.getInfo();
+      expect(after.inFrame, before.inFrame, reason: 'anchored at the in point');
+      expect(after.outFrame - after.inFrame,
+          (before.outFrame - before.inFrame) * 2);
+      expect(layer.getRetimeProperty(), isNotNull,
+          reason: 'the stretch is the map, not a hidden multiplier');
+    });
+
+    /// **Freeze at the playhead holds a second and leaves the length alone**
+    /// (docs/04 §7.3, K-022).
+    testWidgets('the row menu freezes the frame at the playhead',
+        (tester) async {
+      final p = withComp();
+      final layer = p.comp.addSolidLayer();
+      final before = layer.getInfo();
+      p.uiState.playheadFrame.value =
+          (before.inFrame + before.outFrame) ~/ 2;
+      await mount(tester, p);
+      final id = layer.internallayerId;
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(ValueKey<String>('tl-row-$id'))),
+        buttons: kSecondaryButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tl-row-freeze')));
+      await tester.pumpAndSettle();
+
+      final after = layer.getInfo();
+      expect(after.outFrame, before.outFrame, reason: 'the length never moved');
+      expect(layer.getRetimeProperty(), isNotNull);
+    });
+
     /// **The adjustment switch is the Modes column's fifth cell** (K-537), and
     /// it is drawn on **every row that shows something in the Viewer** —
     /// footage, solid, precomp, text, and a layer born an adjustment. Only the

@@ -32,6 +32,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../l10n/strings.dart';
+import '../shell/stretch_dialog_frb.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'graph_maths.dart';
@@ -586,6 +587,14 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
             child: Text(l10n.clipCopyRowShape)),
         MenuRow(
             onPressed: () => close('paste'), child: Text(l10n.clipPasteShape)),
+        // The numeric speed entry (docs/04 §12.1's `retime.set_segment_speed`),
+        // beside the reset that was already here. No duration well: a clip's
+        // place and length are fixed by the covenant (K-022), so its speed
+        // decides what it plays rather than how long it runs.
+        MenuRow(
+            key: ValueKey<String>('seq-clip-speed-${clip.id}'),
+            onPressed: () => close('speed'),
+            child: Text(l10n.menuClipSpeed)),
         MenuRow(
             onPressed: () => close('reset'), child: Text(l10n.clipResetSpeed)),
         MenuRow(onPressed: () => close('delete'), child: Text(l10n.clipDelete)),
@@ -599,6 +608,17 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
       case 'reset':
         widget.entry.layer
             .setClipSpeed(clip: clip.id, percent: 100, endPercent: 100);
+      case 'speed':
+        final percent = await showStretchDialogFrb(
+          context: context,
+          durationFrames: null,
+          fps: widget.fps,
+        );
+        if (percent == null || !mounted) return;
+        // Constant, not a ramp: the dialogue asks one number, and a ramp is
+        // what the envelope beneath the clips is for.
+        widget.entry.layer
+            .setClipSpeed(clip: clip.id, percent: percent, endPercent: percent);
       // The shape — where the cuts fall and how each piece is ramped — with
       // no media in it, so pasting it onto a depth pass cuts and ramps that
       // pass to match without touching what it plays (K-248).

@@ -98,7 +98,7 @@ two views of Retime.
 | **Freeze** | A retime region of speed 0. |
 | **Overrun** | The state where a retime map requests source time beyond the media's end (or before its start). Lumit renders a hold of the boundary frame and marks the region visibly in the timeline. Overrun never moves clip boundaries or edit points. |
 | **Frame interpolation** | How non-integer source frames are synthesised: **nearest** (duplicate), **blend** (crossfade), or **flow** (optical-flow synthesis). A per-clip/per-layer render policy, independent of the retime map itself. |
-| **Stretch** | A layer-level uniform rate multiplier (AE's time stretch). Unlike Retime, stretch rescales the layer's keyframes. |
+| **Stretch** | A layer-level *command* (AE's time stretch): a new speed, and the length that speed implies. It is not a stored multiplier — it rewrites the layer's Retime map and its span (K-584, docs/04 §11.2). |
 
 ## 5. Rendering, preview, and export
 

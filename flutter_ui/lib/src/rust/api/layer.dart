@@ -18,7 +18,7 @@ import 'retime.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `empty`, `item`, `map_end_value`, `of`, `of`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read`, `read`, `reanchored_span`, `retime_or_identity`, `source_length`, `unretime_op`, `with_effects`, `write_at`, `write_at`, `write_item`, `write_over`, `write`, `write`, `write`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
@@ -1594,6 +1594,26 @@ class LayerReference {
   bool equals({required LayerReference layer}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceEquals(that: this, layer: layer);
 
+  /// **Insert a freeze at the playhead** (docs/04 §7.3,
+  /// `retime.freeze_at_playhead`): the moment showing at `frame` is held for
+  /// one second, everything after it is pushed that far later, and the map is
+  /// cropped back to the layer's own out point — so the layer's length never
+  /// changes and the beat-sync covenant holds (K-022). The tail may newly
+  /// overrun, which is drawn rather than repaired.
+  ///
+  /// One second is the specified default; the hold is two ordinary keyframes
+  /// afterwards, so it is dragged like anything else.
+  ///
+  /// A layer with no map yet gets the identity one first — freezing a frame
+  /// is a reasonable first retime to ask for, and refusing it because the
+  /// stopwatch had not been touched would be a rule with no purpose.
+  ///
+  /// Refused on a Sequence layer (its clips carry the maps) and at a moment
+  /// on or outside the layer's own ends, where there is nothing to split.
+  void freezeAtPlayhead({required PlatformInt64 frame}) => BridgeLib
+      .instance.api
+      .crateApiLayerLayerReferenceFreezeAtPlayhead(that: this, frame: frame);
+
   /// This layer's blend mode, as an index into [`list_blend_modes`].
   int getBlend() => BridgeLib.instance.api.crateApiLayerLayerReferenceGetBlend(
         that: this,
@@ -2325,6 +2345,37 @@ class LayerReference {
   /// zero-length layer nobody asked for.
   void splitAt({required PlatformInt64 frame}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSplitAt(that: this, frame: frame);
+
+  /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
+  /// rate it plays at now, and give it the length that implies — 50% is half
+  /// speed and twice as long.
+  ///
+  /// **Stretch is sugar over Retime** (K-584). It is not a second rate
+  /// multiplier hiding behind the map: the map itself is rescaled, so the
+  /// graph editor goes on showing the true curve and nothing about playback
+  /// consults a stretch factor. That is the same lowering the After Effects
+  /// importer already does with an imported layer's stretch, from the other
+  /// direction.
+  ///
+  /// **Anchored at the in point**, which is the simplest honest default:
+  /// After Effects offers three anchors (in point, current frame, out point)
+  /// and Lumit offers the one that needs no extra question — the layer starts
+  /// where it started and its end moves. The start offset is untouched, so
+  /// the frame showing at the in point is the frame that stays there.
+  ///
+  /// The existing curve is kept: every key's time is scaled about the in
+  /// point and every stored side speed is divided by the same factor, which
+  /// is the shape said over a longer or shorter stretch rather than a new
+  /// shape. A layer with no map yet gets the identity one first, so stretching
+  /// an ordinary layer means what it looks like it means.
+  ///
+  /// One undo step — the span and the map move together or not at all.
+  /// Refused on a Sequence layer (K-075: its clips carry the maps, and
+  /// `set_clip_speed` is their road) and on a speed that is not a positive,
+  /// finite number.
+  void stretch({required double speedPercent}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceStretch(
+          that: this, speedPercent: speedPercent);
 
   /// Key this mask's **shape** at `time`, or take the key already there away
   /// (K-339, K-340) — the ◆ on the mask's Path row.
