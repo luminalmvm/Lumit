@@ -122,12 +122,15 @@ List<RadialEntry> fxConsoleRadial(
       RadialEntry(
         label: target?.enabled ?? true ? l10n.tipDisable : l10n.tipEnable,
         enabled: target != null,
+        // Every picked effect, not just the one the label read from
+        // (K-523): the ring is raised on a selection, so the slice acts on
+        // the selection. They all take the state the label promised, which
+        // is also what makes the switch a switch rather than an inverter.
         run: () {
+          final wanted = !(target?.enabled ?? true);
           for (final instance in effectsLayer.getEffects()) {
-            if (instance.id() == picked.first) {
-              effectsLayer.setEffectEnabled(
-                  effect: instance, enabled: !(target?.enabled ?? true));
-              break;
+            if (picked.contains(instance.id())) {
+              effectsLayer.setEffectEnabled(effect: instance, enabled: wanted);
             }
           }
           done();
@@ -143,9 +146,8 @@ List<RadialEntry> fxConsoleRadial(
         enabled: target != null,
         run: () {
           for (final instance in effectsLayer.getEffects()) {
-            if (instance.id() == picked.first) {
+            if (picked.contains(instance.id())) {
               effectsLayer.removeEffect(effect: instance);
-              break;
             }
           }
           done();
@@ -220,8 +222,14 @@ List<RadialEntry> fxConsoleRadial(
     return [
       RadialEntry(
         label: l10n.menuDuplicate,
+        // Every selected layer (K-523). Pre-compose two slices along already
+        // takes `selectedLayers`; these two read the anchor alone, so the
+        // same ring meant "these four" in one direction and "this one" in
+        // another.
         run: () {
-          layer.duplicate();
+          for (final l in ui.selectedLayers.value) {
+            l.duplicate();
+          }
           done();
         },
       ),
@@ -242,7 +250,10 @@ List<RadialEntry> fxConsoleRadial(
       RadialEntry(
         label: l10n.delete,
         run: () {
-          layer.delete();
+          for (final l in ui.selectedLayers.value) {
+            l.delete();
+          }
+          ui.clearSelection();
           done();
         },
       ),

@@ -4,6 +4,7 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/shell/fx_console_context.dart';
@@ -49,8 +50,7 @@ void main() {
   group('FX console keyframe ring (frb)', () {
     test('one slice per everyday transform row, and never the 3D extras', () {
       final p = withLayer();
-      final ring =
-          fxConsoleKeyframeRing(p.state, p.uiState, p.layer, p.comp);
+      final ring = fxConsoleKeyframeRing(p.state, p.uiState, p.layer, p.comp);
       expect(ring.map((e) => e.label).toList(),
           ['Anchor point', 'Position', 'Scale', 'Rotation', 'Opacity'],
           reason: 'five rows — a ring is capped at six (docs/07 §12.2)');
@@ -59,8 +59,7 @@ void main() {
     test('a slice plants a key at the playhead and shows the row', () {
       final p = withLayer();
       p.uiState.playheadFrame.value = 12;
-      final ring =
-          fxConsoleKeyframeRing(p.state, p.uiState, p.layer, p.comp);
+      final ring = fxConsoleKeyframeRing(p.state, p.uiState, p.layer, p.comp);
       ring.firstWhere((e) => e.label == 'Position').run!();
 
       expect(positionKeyFrames(p.uiState, p.layer, p.comp), [12],
@@ -95,8 +94,7 @@ void main() {
           prop: BridgeTransformProp.positionX,
           value: const BridgeScalar.expression('time'));
       p.uiState.model.refresh();
-      final ring =
-          fxConsoleKeyframeRing(p.state, p.uiState, p.layer, p.comp);
+      final ring = fxConsoleKeyframeRing(p.state, p.uiState, p.layer, p.comp);
       expect(ring.firstWhere((e) => e.label == 'Position').enabled, isFalse,
           reason: 'writing keys over an expression would delete it');
       expect(ring.firstWhere((e) => e.label == 'Scale').enabled, isTrue,
@@ -120,8 +118,7 @@ void main() {
     testWidgets('footage offers Add to comp, and choosing it places a layer',
         (tester) async {
       final p = withLayer();
-      final footage =
-          p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
       p.uiState.selectedProjectItem.value = ItemReference.footage(footage);
       p.uiState.activePanel.value = Panel.project;
 
@@ -159,8 +156,7 @@ void main() {
     testWidgets('the slice keeps its place, dimmed, when it cannot run',
         (tester) async {
       final p = freshProject();
-      final footage =
-          p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
       p.uiState.selectedProjectItem.value = ItemReference.footage(footage);
       p.uiState.activePanel.value = Panel.project;
 
@@ -172,11 +168,11 @@ void main() {
       expect(ring.single.enabled, isFalse);
     });
 
-    testWidgets('the item counts only while the Project panel is where you '
+    testWidgets(
+        'the item counts only while the Project panel is where you '
         'stand', (tester) async {
       final p = withLayer();
-      final footage =
-          p.state.project!.importFootage(path: 'C:/clips/shot.mov');
+      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
       p.uiState.selectedProjectItem.value = ItemReference.footage(footage);
       p.uiState.selectedLayer.value = p.layer;
       p.uiState.activePanel.value = Panel.timeline;
@@ -220,6 +216,80 @@ void main() {
           .requestRevealProperty(p.layer.internallayerId, 'reveal.position');
       await tester.pump();
       expect(find.text('Position'), findsOneWidget);
+    });
+  });
+
+  /// **A ring raised on a multi-selection acts on all of it** (K-523).
+  ///
+  /// The console's own Pre-compose slice always took `selectedLayers`; the ones
+  /// beside it read the anchor alone, so the same ring meant "these four" in
+  /// one direction and "this one" in another. The effect slices had the same
+  /// split: they walked the stack looking for `picked.first` and stopped.
+  group('the ring acts on the whole selection (frb)', () {
+    /// A context to raise the ring from — only Pre-compose uses it, and these
+    /// tests do not press that slice.
+    Future<BuildContext> mount(WidgetTester tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(Builder(builder: (context) {
+        ctx = context;
+        return const SizedBox();
+      }));
+      return ctx;
+    }
+
+    RadialEntry slice(List<RadialEntry> ring, String label) =>
+        ring.firstWhere((e) => e.label == label);
+
+    testWidgets('Delete and Duplicate take every selected layer',
+        (tester) async {
+      final p = withLayer();
+      final second = p.comp.addSolidLayer();
+      p.uiState.setSelection([p.layer, second]);
+      p.uiState.model.refresh();
+      final ctx = await mount(tester);
+
+      slice(fxConsoleRadial(ctx, p.state, p.uiState), l10n.menuDuplicate)
+          .run!();
+      expect(p.comp.getLayers(), hasLength(4),
+          reason: 'both selected layers were duplicated, not just the anchor');
+
+      p.uiState.setSelection(p.comp.getLayers());
+      slice(fxConsoleRadial(ctx, p.state, p.uiState), l10n.delete).run!();
+      expect(p.comp.getLayers(), isEmpty);
+      expect(p.uiState.selectedLayers.value, isEmpty,
+          reason: 'nothing is left selected that no longer exists');
+    });
+
+    testWidgets('Disable and Remove take every picked effect', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'blur');
+      p.layer.addEffect(name: 'vignette');
+      p.uiState.model.refresh();
+      final all = [
+        for (final e
+            in p.uiState.model.byId(p.layer.internallayerId)!.info.effects)
+          e.id
+      ];
+      expect(all, hasLength(2));
+      p.uiState.setEffectSelection(p.layer, all);
+      final ctx = await mount(tester);
+
+      slice(fxConsoleRadial(ctx, p.state, p.uiState), l10n.tipDisable).run!();
+      p.uiState.model.refresh();
+      expect(
+        [
+          for (final e
+              in p.uiState.model.byId(p.layer.internallayerId)!.info.effects)
+            e.enabled
+        ],
+        [false, false],
+        reason: 'both picked effects went off, not just the first',
+      );
+
+      slice(fxConsoleRadial(ctx, p.state, p.uiState), l10n.tipRemove).run!();
+      p.uiState.model.refresh();
+      expect(
+          p.uiState.model.byId(p.layer.internallayerId)!.info.effects, isEmpty);
     });
   });
 }

@@ -14377,3 +14377,28 @@ Timeline's answer and the Edit menu row's.
 The keymap is unchanged: `Mod+A` was already bound to `edit.select.all` in the Global
 context and the engine stays the one place a binding is written down (K-199). What changed
 is only what the action means once it has been looked up.
+
+## K-523 — An action on a multi-selection applies to every selected thing that can do it
+
+**DECIDED 2026-08-25** (owner, desk test).
+The principle, stated once so it stops being re-decided per surface: **if several things are
+selected, an action invoked on the selection runs on all of them** — every one that can
+perform it. Rename is the standing exception, because renaming is singular by nature and
+each surface already refuses it with more than one picked. An action that genuinely cannot
+be done in bulk (a proxy transcode, one at a time by its own design) says so where it is
+written rather than quietly doing one.
+
+The failure mode is always the same shape and always looks like a typo: a per-row widget
+holds a handle to *its* row and calls the document with that handle, never asking the shell
+what is selected. The Edit menu's Delete loops; the Timeline row menu's Delete does not.
+The Project panel has a `_targets` helper that means "the whole selection if this row is in
+it, else this row alone", and uses it for label colour and Move to folder but not for
+Delete. So the fix is nearly always to route the row's handle through the same
+selection-aware helper the surface already has, at the one place the action is written.
+
+Landed with this entry: the FX console's radial ring, whose Duplicate, Delete, Disable and
+Remove read the anchor alone while Pre-compose two slices away already took the whole
+selection. The rest of the audit — the Timeline's switches, label colour and row menu, the
+Effect controls card's `_withHandle`, and the Project panel's context menu — is recorded in
+docs/TODO.md with the file and line of each, because those files were being edited by other
+work in the same round and a collision there would have cost more than the delay.

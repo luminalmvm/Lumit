@@ -102,6 +102,43 @@ hand-written `BUILTINS` literal are all deleted, and with them the migration-onl
 Flutter is the only frontend (K-174, K-182); git history is the parity reference.
 These are v1-scope surfaces it does not yet match.
 
+**Multi-selection actions that still act on one thing (K-523).** The principle is
+decided; these are the surfaces that had not caught up when it landed, each left
+here rather than fixed because the file was being edited by other work in the same
+round. Every one is the same shape - a per-row widget calling the document with
+*its* handle instead of asking the surface what is selected - and every one has a
+selection-aware helper a few lines away to route through.
+
+- **Timeline row, `flutter_ui/lib/panels/timeline_panel_frb.dart`.** Label colour
+    (`layer.setLabel` in `_labelSwatch`'s picker callback); the six switches - visible,
+    audible, solo, locked, shy, guide - which all pass through the default `onTap` of
+    one `_switch` helper, so that is a single choke point; and the row menu's Duplicate,
+    Delete, Accepts lights, Bring forward / Send backward, Clear markers, Convert to and
+    from sequence, and Paste sequence shape. One `_menuTargets()` at the top of
+    `_showRowMenu` - the whole selection when this row is in it, else this row - covers
+    the menu; reorder and convert should keep their per-item `try`/`catch` so one
+    refusal does not abort the rest. The Project panel's `_setLabel` is the reference
+    for the swatch.
+- **Effect controls card, `flutter_ui/lib/panels/effect_controls_panel_frb.dart`.** The
+    `_withHandle` helper matches one effect id and returns after the first hit, so the
+    enable checkbox, the x remove, the context menu's Remove effect and its four Move
+    commands are all singular. Giving it the id *set* from `LumitUiState.effectsToCopy`
+    - which already computes "the picked run if this effect is in it, else just this
+    one", and which `_copyEffect` already uses - fixes all four in one edit.
+    Move-to-index with several picked needs a rule for the order they land in; enable
+    and remove do not.
+- **Project panel context menu, `flutter_ui/lib/panels/project_panel_frb.dart`.** Delete,
+    Move to root, Use proxy and Clear proxy act on the clicked item alone, while Move to
+    folder two entries away already takes `_targets(item)`. The menu is a free function
+    that receives only the item; hand it the targets the row already computes. Make
+    proxy stays singular and says why.
+- **Node graph, `flutter_ui/lib/panels/graph_panel.dart`.** Delete, bypass, expose and
+    rename are singular because the *selection* is: `_selectedNode` is one node, not a
+    set. This is a model change rather than a loop - Ctrl/Shift rules in `_down`, a set
+    of node keys, and a multi-node delete that computes the kept edges against every
+    victim at once so it stays one undo step. It is also what `Ctrl+A` in that panel is
+    waiting for (K-522).
+
 **Timeline outline ([07-UI-SPEC.md](07-UI-SPEC.md) §4.2):**
 - **A switch cell on a locked layer throws.** `lock_guards` refuses every switch
     but the lock, shy and the label (`lumit-core/src/ops.rs`), and the outline's
