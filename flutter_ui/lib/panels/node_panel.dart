@@ -172,6 +172,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
               p
             ),
           BridgeOutputRef_SourceMatte() => ('source', 'matte'),
+          // A points wire's source is a *stack effect* (K-492).
+          BridgeOutputRef_EffectData(:final effect, :final port) => (
+              graphNodeKey(BridgeNodeRef.effect(effect)),
+              port
+            ),
         };
         final source = byRef[fromKey];
         if (source == null) continue;

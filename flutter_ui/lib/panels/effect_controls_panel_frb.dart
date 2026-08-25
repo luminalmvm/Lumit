@@ -169,6 +169,12 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 p
               ),
             BridgeOutputRef_SourceMatte() => ('source', 'matte'),
+            // A points wire's source is a *stack effect* (K-492), so the
+            // row names the effect that hands the data over.
+            BridgeOutputRef_EffectData(:final effect, :final port) => (
+                graphNodeKey(BridgeNodeRef.effect(effect)),
+                port
+              ),
           };
           final source = byRef[fromKey];
           if (source == null) continue;

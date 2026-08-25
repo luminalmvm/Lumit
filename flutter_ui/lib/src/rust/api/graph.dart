@@ -227,6 +227,14 @@ sealed class BridgeOutputRef with _$BridgeOutputRef {
 
   /// The layer's own masked source alpha at that point in the chain (§1.4).
   const factory BridgeOutputRef.sourceMatte() = BridgeOutputRef_SourceMatte;
+
+  /// A **stack effect's** declared data output — Particulate's Points stream
+  /// (K-492). The effect goes on making its picture for the chain; this taps
+  /// the data it declares beside it, and carries no picture itself.
+  const factory BridgeOutputRef.effectData({
+    required UuidValue effect,
+    required String port,
+  }) = BridgeOutputRef_EffectData;
 }
 
 /// One socket on a box: the id the document writes down, the English word drawn

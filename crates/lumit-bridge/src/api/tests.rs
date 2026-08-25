@@ -6996,6 +6996,190 @@ fn a_colour_and_a_number_refuse_each_other() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// The points edge (K-492; docs/impl/points-stream.md §1, §4.2).
+// ---------------------------------------------------------------------------
+
+/// **Particulate's teal Points socket reaches the canvas** (§4.2), and it does
+/// so with no Particulate-specific code at the seam: the effect box's outputs
+/// are its picture plus whatever data outputs its signature declares, so an
+/// effect that declares none is untouched.
+#[test]
+fn an_effect_box_draws_the_data_outputs_its_signature_declares() {
+    let (_project, layer) = layer_to_wire();
+    layer.add_effect("particulate".into()).expect("particulate");
+    layer.add_effect("blur".into()).expect("a blur");
+    let stack = layer.get_effects().expect("stack");
+    let (particulate, blur) = (stack[0].id(), stack[1].id());
+
+    let graph = layer.get_graph().expect("graph");
+    let box_of = |id: Uuid| {
+        graph
+            .nodes
+            .iter()
+            .find(|n| n.node == BridgeNodeRef::Effect(id))
+            .expect("the box")
+    };
+
+    let outputs = &box_of(particulate).outputs;
+    assert_eq!(outputs.len(), 2, "the picture, and the data beside it");
+    assert_eq!(outputs[0].id, "output");
+    assert_eq!(outputs[0].port_type, BridgePortType::Image);
+    assert_eq!(outputs[1].id, "points");
+    assert_eq!(
+        outputs[1].label, "Points",
+        "declared beside the port in the engine, so it rides the K-303 chain"
+    );
+    assert_eq!(outputs[1].port_type, BridgePortType::Points);
+    assert!(!outputs[1].wired, "nothing reads it yet");
+
+    let outputs = &box_of(blur).outputs;
+    assert_eq!(
+        outputs.len(),
+        1,
+        "an effect that declares no data output grows no socket"
+    );
+    assert_eq!(outputs[0].id, "output");
+}
+
+/// The edge itself crosses both ways, and a socket with a wire on it says so.
+///
+/// The wire is installed in the document directly rather than through
+/// `set_graph`, because the first thing that *declares* a Points input — the
+/// Points sample driver — arrives in its own package; this is the arm and the
+/// read model, which are what the panel and that driver both build on.
+#[test]
+fn a_points_wire_crosses_both_ways_and_fills_its_socket() {
+    let (project, layer) = layer_to_wire();
+    layer.add_effect("particulate".into()).expect("particulate");
+    let particulate = layer.get_effects().expect("stack")[0].id();
+    let sample = Uuid::now_v7();
+
+    let edge = lumit_core::graph::Edge {
+        from: lumit_core::graph::OutputRef::EffectData {
+            effect: particulate,
+            port: "points".into(),
+        },
+        to: lumit_core::graph::InputRef::Param {
+            node: lumit_core::graph::NodeRef::Driver(sample),
+            port: "points".into(),
+        },
+    };
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        let mut doc = lumit_core::Document::clone(&state.store.snapshot());
+        doc.comp_mut(layer.comp_id)
+            .expect("the comp")
+            .layers
+            .iter_mut()
+            .find(|l| l.id == layer.layer_id)
+            .expect("the layer")
+            .graph
+            .edges = vec![edge.clone()];
+        state.store.replace_document(doc);
+    }
+
+    let graph = layer.get_graph().expect("graph");
+    assert_eq!(
+        graph.wiring.edges[0].from,
+        BridgeOutputRef::EffectData {
+            effect: particulate,
+            port: "points".into(),
+        },
+        "the engine's arm crosses as the bridge's"
+    );
+    assert!(
+        graph
+            .nodes
+            .iter()
+            .find(|n| n.node == BridgeNodeRef::Effect(particulate))
+            .expect("the box")
+            .outputs
+            .iter()
+            .any(|p| p.id == "points" && p.wired),
+        "and the socket is filled now something reads it"
+    );
+
+    // And back down: the edited wiring returns to the engine's own shape, which
+    // is what makes the panel's commit a faithful one.
+    assert_eq!(
+        crate::api::graph::wiring_into(graph.wiring, Vec::new()).edges,
+        vec![edge]
+    );
+}
+
+/// A points stream is not a number, and the refusal is the engine's own calm
+/// sentence.
+#[test]
+fn a_points_stream_into_a_number_socket_is_refused() {
+    let (_project, layer) = layer_to_wire();
+    layer.add_effect("particulate".into()).expect("particulate");
+    let particulate = layer.get_effects().expect("stack")[0].id();
+    let smooth = layer.new_driver("smooth".into()).expect("a smooth");
+    let smooth_id = smooth.id();
+
+    assert_eq!(
+        layer
+            .set_graph(
+                vec![smooth],
+                BridgeGraphWiring {
+                    edges: vec![BridgeGraphEdge {
+                        from: BridgeOutputRef::EffectData {
+                            effect: particulate,
+                            port: "points".into(),
+                        },
+                        to: BridgeInputRef::Param {
+                            node: BridgeNodeRef::Driver(smooth_id),
+                            port: "value".into(),
+                        },
+                    }],
+                    layout: Vec::new(),
+                    exposed: Vec::new(),
+                },
+            )
+            .expect_err("a stream is not a number")
+            .to_string(),
+        "a wire joins two ports of different types"
+    );
+}
+
+/// The K-492 carve-out at the seam: a stack-to-stack points wire drawn back
+/// **up** the stack is refused, with the loop sentence — because that is what it
+/// asks for, the consumer's own output being part of its input.
+#[test]
+fn a_points_wire_drawn_up_the_stack_is_refused() {
+    let (_project, layer) = layer_to_wire();
+    layer.add_effect("blur".into()).expect("a blur");
+    layer.add_effect("particulate".into()).expect("particulate");
+    let stack = layer.get_effects().expect("stack");
+    let (blur, particulate) = (stack[0].id(), stack[1].id());
+
+    assert_eq!(
+        layer
+            .set_graph(
+                Vec::new(),
+                BridgeGraphWiring {
+                    edges: vec![BridgeGraphEdge {
+                        from: BridgeOutputRef::EffectData {
+                            effect: particulate,
+                            port: "points".into(),
+                        },
+                        to: BridgeInputRef::Param {
+                            node: BridgeNodeRef::Effect(blur),
+                            port: "radius".into(),
+                        },
+                    }],
+                    layout: Vec::new(),
+                    exposed: Vec::new(),
+                },
+            )
+            .expect_err("the producer is below its consumer")
+            .to_string(),
+        "the wire would close a loop"
+    );
+}
+
 /// **The one new capability the drawing shows** (§1.4): the layer's own masked
 /// source alpha, wired into an effect's matte input.
 #[test]

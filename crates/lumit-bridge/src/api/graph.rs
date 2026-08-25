@@ -163,6 +163,10 @@ pub enum BridgeOutputRef {
     Driver { node: Uuid, port: String },
     /// The layer's own masked source alpha at that point in the chain (§1.4).
     SourceMatte,
+    /// A **stack effect's** declared data output — Particulate's Points stream
+    /// (K-492). The effect goes on making its picture for the chain; this taps
+    /// the data it declares beside it, and carries no picture itself.
+    EffectData { effect: Uuid, port: String },
 }
 
 /// Where a wire goes.
@@ -194,6 +198,10 @@ impl BridgeGraphEdge {
                     port: port.clone(),
                 },
                 OutputRef::SourceMatte => BridgeOutputRef::SourceMatte,
+                OutputRef::EffectData { effect, port } => BridgeOutputRef::EffectData {
+                    effect: *effect,
+                    port: port.clone(),
+                },
             },
             to: match &edge.to {
                 InputRef::Param { node, port } => BridgeInputRef::Param {
@@ -211,6 +219,9 @@ impl BridgeGraphEdge {
             from: match self.from {
                 BridgeOutputRef::Driver { node, port } => OutputRef::Driver { node, port },
                 BridgeOutputRef::SourceMatte => OutputRef::SourceMatte,
+                BridgeOutputRef::EffectData { effect, port } => {
+                    OutputRef::EffectData { effect, port }
+                }
             },
             to: match self.to {
                 BridgeInputRef::Param { node, port } => InputRef::Param {
@@ -293,10 +304,14 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
     // wires, in document order — no map iteration, so two machines report the
     // same graph.
     let input_wired = |to: InputRef| g.edges.iter().any(|e| e.to == to);
-    let output_wired = |node: Uuid, port: &str| {
-        g.edges.iter().any(|e| {
-            matches!(&e.from, OutputRef::Driver { node: n, port: p } if *n == node && p == port)
-        })
+    let output_wired = |from: &OutputRef| g.edges.iter().any(|e| &e.from == from);
+    let driver_out = |node: Uuid, port: &str| OutputRef::Driver {
+        node,
+        port: port.to_owned(),
+    };
+    let effect_out = |effect: Uuid, port: &str| OutputRef::EffectData {
+        effect,
+        port: port.to_owned(),
     };
 
     let mut nodes = Vec::with_capacity(layer.effects.len() + g.nodes.len() + 2);
@@ -310,10 +325,7 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
         inputs: Vec::new(),
         outputs: vec![
             BridgePort::of(graph::IMAGE_PORT, true),
-            BridgePort::of(
-                graph::MATTE_PORT,
-                g.edges.iter().any(|e| e.from == OutputRef::SourceMatte),
-            ),
+            BridgePort::of(graph::MATTE_PORT, output_wired(&OutputRef::SourceMatte)),
         ],
     });
 
@@ -344,7 +356,21 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             custom_name: effect.custom_name.clone(),
             enabled: effect.enabled,
             inputs,
-            outputs: vec![BridgePort::of(graph::OUTPUT_PORT, true)],
+            // The picture, always — plus whatever **data** outputs the effect's
+            // signature declares beside it (K-492). That second half is how
+            // Particulate's teal Points socket reaches the canvas with no
+            // Particulate-specific code at the seam: it declares the port, and
+            // every effect that declares none is untouched.
+            outputs: std::iter::once(BridgePort::of(graph::OUTPUT_PORT, true))
+                .chain(
+                    def.map(|d| d.signature().outputs())
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|port| {
+                            BridgePort::of(*port, output_wired(&effect_out(effect.id, port.id)))
+                        }),
+                )
+                .collect(),
         });
     }
 
@@ -372,12 +398,30 @@ pub(crate) fn read_layer_graph(layer: &Layer) -> BridgeLayerGraph {
             label: schema.map_or_else(|| driver.effect.match_name.clone(), |s| s.label.to_owned()),
             custom_name: driver.custom_name.clone(),
             enabled: driver.enabled,
-            inputs: param_ports(schema, NodeRef::Driver(driver.id), &input_wired).collect(),
+            // The parameter sockets, then the signature's **data inputs** — the
+            // wire-only ones with no stored value and no panel row (K-492), of
+            // which Points sample's Points is the first.
+            inputs: param_ports(schema, NodeRef::Driver(driver.id), &input_wired)
+                .chain(
+                    def.map(|d| d.signature().inputs())
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|port| {
+                            BridgePort::of(
+                                *port,
+                                input_wired(InputRef::Param {
+                                    node: NodeRef::Driver(driver.id),
+                                    port: port.id.to_owned(),
+                                }),
+                            )
+                        }),
+                )
+                .collect(),
             outputs: def
                 .map(|d| d.signature().outputs())
                 .unwrap_or_default()
                 .iter()
-                .map(|port| BridgePort::of(*port, output_wired(driver.id, port.id)))
+                .map(|port| BridgePort::of(*port, output_wired(&driver_out(driver.id, port.id))))
                 .collect(),
         });
     }
@@ -401,7 +445,14 @@ pub(crate) fn catalogue_ports(match_name: &str) -> (Vec<BridgePort>, Vec<BridgeP
     let Some(def) = lumit_core::fx::BUILTIN_DEFS.get(match_name) else {
         return (Vec::new(), Vec::new());
     };
-    let inputs = param_ports(Some(def.schema()), NodeRef::Source, &|_| false).collect();
+    let inputs = param_ports(Some(def.schema()), NodeRef::Source, &|_| false)
+        .chain(
+            def.signature()
+                .inputs()
+                .iter()
+                .map(|port| BridgePort::of(*port, false)),
+        )
+        .collect();
     let outputs = def
         .signature()
         .outputs()

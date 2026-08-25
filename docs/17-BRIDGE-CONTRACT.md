@@ -381,6 +381,23 @@ the second segment names the group on the layer, as `transform`, `masks`, `effec
 path — nothing about it crosses the bridge — but it is spelled here so the two panels that
 will draw a driver row agree, and `effectIdOfPath` cannot mistake one for the other.
 
+**A points wire is an edge like any other, and its source is an effect** (K-492,
+[impl/points-stream.md](impl/points-stream.md) §1). `BridgeOutputRef` has a third arm,
+`EffectData { effect, port }` — the first wire whose source is a *stack* effect rather
+than a driver or the layer's own alpha. It carries **data, never a picture**: it cannot
+reorder, branch or skip the image chain, so filtering `nodes` to its `Effect` boxes is
+still the effect stack and the stack view still has nothing to lie about. An effect box's
+`outputs` are its picture **plus whatever data outputs its signature declares**, which is
+how Particulate's teal Points socket reaches the canvas with no Particulate-specific code
+at this seam; a driver box's `inputs` likewise gain its signature's **data inputs** — the
+wire-only ones with no stored value, no keyframes and no panel row. Two refusals are its
+own: a points stream into a socket of another type is the ordinary type mismatch, and a
+stack-to-stack points wire drawn back **up** the stack gets the loop sentence, because the
+consumer's own output would be part of its input. A *reorder* that inverts such a wire is
+not refused at all — a stack edit cannot be refused on the wiring's behalf, so the edge is
+dropped inside the same commit and the same undo step, exactly as deleting the producer
+drops it.
+
 **A refusal is a calm sentence, not a broken document** (§1.5 of the note). A wire to a
 missing node or port, a type mismatch, a second wire on one socket, or a loop among the
 drivers each arrives as `OpError::InvalidGraph` carrying the engine's own words, and the

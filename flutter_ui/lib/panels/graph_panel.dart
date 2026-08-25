@@ -637,6 +637,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       BridgeOutputRef_Driver(:final node) =>
         graphNodeKey(BridgeNodeRef.driver(node)),
       BridgeOutputRef_SourceMatte() => 'source',
+      BridgeOutputRef_EffectData(:final effect) =>
+        graphNodeKey(BridgeNodeRef.effect(effect)),
     };
     final to = switch (edge.to) {
       BridgeInputRef_Param(:final node) => graphNodeKey(node),
@@ -1539,6 +1541,10 @@ class _GraphPainter extends CustomPainter {
           port
         ),
       BridgeOutputRef_SourceMatte() => ('source', 'matte'),
+      BridgeOutputRef_EffectData(:final effect, :final port) => (
+          graphNodeKey(BridgeNodeRef.effect(effect)),
+          port
+        ),
     };
     final (toKey, toPort) = switch (edge.to) {
       BridgeInputRef_Param(:final node, :final port) => (

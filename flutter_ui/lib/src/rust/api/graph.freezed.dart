@@ -795,6 +795,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeOutputRef_Driver value)? driver,
     TResult Function(BridgeOutputRef_SourceMatte value)? sourceMatte,
+    TResult Function(BridgeOutputRef_EffectData value)? effectData,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -803,6 +804,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return driver(_that);
       case BridgeOutputRef_SourceMatte() when sourceMatte != null:
         return sourceMatte(_that);
+      case BridgeOutputRef_EffectData() when effectData != null:
+        return effectData(_that);
       case _:
         return orElse();
     }
@@ -825,6 +828,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeOutputRef_Driver value) driver,
     required TResult Function(BridgeOutputRef_SourceMatte value) sourceMatte,
+    required TResult Function(BridgeOutputRef_EffectData value) effectData,
   }) {
     final _that = this;
     switch (_that) {
@@ -832,6 +836,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return driver(_that);
       case BridgeOutputRef_SourceMatte():
         return sourceMatte(_that);
+      case BridgeOutputRef_EffectData():
+        return effectData(_that);
     }
   }
 
@@ -851,6 +857,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeOutputRef_Driver value)? driver,
     TResult? Function(BridgeOutputRef_SourceMatte value)? sourceMatte,
+    TResult? Function(BridgeOutputRef_EffectData value)? effectData,
   }) {
     final _that = this;
     switch (_that) {
@@ -858,6 +865,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return driver(_that);
       case BridgeOutputRef_SourceMatte() when sourceMatte != null:
         return sourceMatte(_that);
+      case BridgeOutputRef_EffectData() when effectData != null:
+        return effectData(_that);
       case _:
         return null;
     }
@@ -879,6 +888,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function(UuidValue node, String port)? driver,
     TResult Function()? sourceMatte,
+    TResult Function(UuidValue effect, String port)? effectData,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -887,6 +897,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return driver(_that.node, _that.port);
       case BridgeOutputRef_SourceMatte() when sourceMatte != null:
         return sourceMatte();
+      case BridgeOutputRef_EffectData() when effectData != null:
+        return effectData(_that.effect, _that.port);
       case _:
         return orElse();
     }
@@ -909,6 +921,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
   TResult when<TResult extends Object?>({
     required TResult Function(UuidValue node, String port) driver,
     required TResult Function() sourceMatte,
+    required TResult Function(UuidValue effect, String port) effectData,
   }) {
     final _that = this;
     switch (_that) {
@@ -916,6 +929,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return driver(_that.node, _that.port);
       case BridgeOutputRef_SourceMatte():
         return sourceMatte();
+      case BridgeOutputRef_EffectData():
+        return effectData(_that.effect, _that.port);
     }
   }
 
@@ -935,6 +950,7 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function(UuidValue node, String port)? driver,
     TResult? Function()? sourceMatte,
+    TResult? Function(UuidValue effect, String port)? effectData,
   }) {
     final _that = this;
     switch (_that) {
@@ -942,6 +958,8 @@ extension BridgeOutputRefPatterns on BridgeOutputRef {
         return driver(_that.node, _that.port);
       case BridgeOutputRef_SourceMatte() when sourceMatte != null:
         return sourceMatte();
+      case BridgeOutputRef_EffectData() when effectData != null:
+        return effectData(_that.effect, _that.port);
       case _:
         return null;
     }
@@ -1039,6 +1057,80 @@ class BridgeOutputRef_SourceMatte extends BridgeOutputRef {
   @override
   String toString() {
     return 'BridgeOutputRef.sourceMatte()';
+  }
+}
+
+/// @nodoc
+
+class BridgeOutputRef_EffectData extends BridgeOutputRef {
+  const BridgeOutputRef_EffectData({required this.effect, required this.port})
+      : super._();
+
+  final UuidValue effect;
+  final String port;
+
+  /// Create a copy of BridgeOutputRef
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeOutputRef_EffectDataCopyWith<BridgeOutputRef_EffectData>
+      get copyWith =>
+          _$BridgeOutputRef_EffectDataCopyWithImpl<BridgeOutputRef_EffectData>(
+              this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeOutputRef_EffectData &&
+            (identical(other.effect, effect) || other.effect == effect) &&
+            (identical(other.port, port) || other.port == port));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, effect, port);
+
+  @override
+  String toString() {
+    return 'BridgeOutputRef.effectData(effect: $effect, port: $port)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeOutputRef_EffectDataCopyWith<$Res>
+    implements $BridgeOutputRefCopyWith<$Res> {
+  factory $BridgeOutputRef_EffectDataCopyWith(BridgeOutputRef_EffectData value,
+          $Res Function(BridgeOutputRef_EffectData) _then) =
+      _$BridgeOutputRef_EffectDataCopyWithImpl;
+  @useResult
+  $Res call({UuidValue effect, String port});
+}
+
+/// @nodoc
+class _$BridgeOutputRef_EffectDataCopyWithImpl<$Res>
+    implements $BridgeOutputRef_EffectDataCopyWith<$Res> {
+  _$BridgeOutputRef_EffectDataCopyWithImpl(this._self, this._then);
+
+  final BridgeOutputRef_EffectData _self;
+  final $Res Function(BridgeOutputRef_EffectData) _then;
+
+  /// Create a copy of BridgeOutputRef
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? effect = null,
+    Object? port = null,
+  }) {
+    return _then(BridgeOutputRef_EffectData(
+      effect: null == effect
+          ? _self.effect
+          : effect // ignore: cast_nullable_to_non_nullable
+              as UuidValue,
+      port: null == port
+          ? _self.port
+          : port // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
   }
 }
 
