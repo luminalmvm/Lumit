@@ -16495,3 +16495,28 @@ abandoned inside a window shut the window too. The window now claims the dialogu
 a window can leave by having the tree taken down under it, and a claim only the close path
 released would go on eating Escape for the rest of the session. What dismissing *means* is
 unchanged: close with null, exactly as a click on the scrim does.
+
+## K-576 — The work-area handles are thicker, quieter, and stop under the clock
+
+**Status: DECIDED (2026-08-25).** The two drawn tabs on the work-area edges are **4px wide with
+a 1px corner**, in `animated` at 0.6 (0.8 under the pointer), and they **top out 18px down the
+ruler** — below the clock's labels — rather than at its top. What a handle *grabs* is untouched:
+the ten pixels either side of an edge still run the ruler's whole height, so an edge is caught
+exactly where it always was. This amends the drawn half of K-529 ([15-DESIGN.md](15-DESIGN.md)
+§12A.1) and leaves the rest of it standing.
+
+**Why.** The owner ran the previous tab on a real composition (2026-08-25) and asked for all
+four changes by hand: thicker, darker, shorter, and still a rectangle. Three pixels of tab read
+as the band's own edge drawn twice rather than as something to take hold of, and widening it
+carried more of the colour — so the strength ladder drops one rung to keep the pair from reading
+as two lit bars standing over the clock. The rounding was half the tab's width, which at three
+px rounded nothing visible and at four would have made a stadium; a pill is a pull-tab from
+another interface, so the corner is 1px and the shape stays a rectangle. Stopping under the
+labels keeps the handle standing up out of the band and into the ruler's upper row, where the
+hand is, without a bar running alongside the numbers.
+
+**The order the mockup and the owner sit in, for this one.** K-450 puts the drawings above the
+arguments, and the mockups' Timeline artboard draws the band but no handles at all — the tab
+came from a reference image (K-529), and these four adjustments came from the owner's own word
+after testing. That word is above the drawings, which is the owner's standing instruction and
+the reason this entry exists rather than a note that the mockup was matched.

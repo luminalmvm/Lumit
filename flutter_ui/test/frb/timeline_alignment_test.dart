@@ -417,12 +417,32 @@ void main() {
 
       // The tab is drawn, and it is the band's own colour a step stronger —
       // derived, never a second hex (K-529, the owner's reference image).
-      final tab = tester.widget<DecoratedBox>(find.descendant(
+      final tabFinder = find.descendant(
           of: find.byKey(const ValueKey('tl-work-start')),
-          matching: find.byType(DecoratedBox)));
+          matching: find.byType(DecoratedBox));
+      final tab = tester.widget<DecoratedBox>(tabFinder);
       final t = LumitTheme.dark();
       expect((tab.decoration as BoxDecoration).color,
           workAreaHandleColour(t, hovered: false));
+
+      // Thicker, shorter, and still a rectangle (K-576, the owner's ruling
+      // from desktop testing): the drawn tab stops under the clock's labels
+      // while the grab above it stays the whole ruler's.
+      final drawn = tester.getRect(tabFinder);
+      expect(drawn.width, closeTo(workAreaHandleTabWidth, 0.01));
+      expect(drawn.top, closeTo(ruler.top + workAreaHandleTopInset, 0.5),
+          reason: 'the tab tops out below the time labels');
+      expect(drawn.bottom, closeTo(ruler.bottom, 0.5),
+          reason: 'and still reaches the ruler\'s floor');
+      expect(
+          drawn.top,
+          greaterThan(
+              tester.getRect(find.byKey(const ValueKey('tl-work-start'))).top),
+          reason: 'what is grabbed reaches higher than what is drawn');
+      expect((tab.decoration as BoxDecoration).borderRadius,
+          BorderRadius.circular(workAreaHandleRadius));
+      expect(workAreaHandleRadius, lessThan(workAreaHandleTabWidth / 2),
+          reason: 'a corner taken off, not a pill');
       expect(workAreaHandleColour(t, hovered: false).a,
           greaterThan(workAreaEdgeColour(t).a),
           reason: 'a step stronger than the band\'s edge, in the same hue');

@@ -950,9 +950,13 @@ judged under Sharp first, and Round (§12) is revisited once the Sharp redesign 
   the ruler's whole height** (K-529, reversing that half of K-513): a wash over the clock
   makes the numbers harder to read and says nothing the lower row was not already saying,
   while a handle is a thing to take hold of and should stand where the hand is. Each handle
-  is **drawn**, as a small vertical rounded tab in the band's own colour a step stronger
+  is **drawn**, as a small vertical tab in the band's own colour a step stronger
   than its edge, with another step under the pointer — derived from the band, never a second
-  hex. The **double-click that gives the whole comp back** is the one
+  hex. The tab is **4px wide with a 1px corner** — a rectangle with its corners taken off,
+  never a pill — and it **tops out below the clock's labels** rather than at the ruler's
+  top, in a colour one step quieter than it first shipped (K-576, the owner's ruling from
+  desktop testing). What the handle *grabs* is unchanged: the ruler's whole height either
+  side of the edge is still the edge's to catch. The **double-click that gives the whole comp back** is the one
   gesture the waist still divides — below it clears the work area, above it makes a
   marker — because a comp nobody has narrowed has a work area of the whole comp, and a
   band-wide double-click would leave nowhere on the ruler to make a marker. A marker is an upward triangle sitting on the cache bar, half

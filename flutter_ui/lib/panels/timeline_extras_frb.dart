@@ -1557,20 +1557,30 @@ class _TimelineRulerState extends State<TimelineRuler> {
                       // second row: an edge drawn on the lower row cannot be
                       // the visible half of a handle that reaches the top of
                       // the ruler. So the tab is drawn, and it is drawn over
-                      // both rows, which is exactly the reach it grabs.
-                      child: Center(
-                        child: SizedBox(
-                          width: _workHandleTabWidth,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: workAreaHandleColour(t,
-                                  hovered: _hoveredHandleIsStart == isStart ||
-                                      _dragFrame != null &&
-                                          _dragIsStart == isStart),
-                              borderRadius: BorderRadius.circular(
-                                  _workHandleTabWidth / 2),
+                      // both rows — up to just under the clock, rather than
+                      // the whole of the reach it grabs.
+                      //
+                      // The tab is drawn from below the clock's labels down
+                      // (owner, 2026-08-25); the grab is still the ruler's
+                      // whole height, so nothing about taking hold of an edge
+                      // changes with the mark on it.
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.only(top: workAreaHandleTopInset),
+                        child: Center(
+                          child: SizedBox(
+                            width: workAreaHandleTabWidth,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: workAreaHandleColour(t,
+                                    hovered: _hoveredHandleIsStart == isStart ||
+                                        _dragFrame != null &&
+                                            _dragIsStart == isStart),
+                                borderRadius:
+                                    BorderRadius.circular(workAreaHandleRadius),
+                              ),
+                              child: const SizedBox.expand(),
                             ),
-                            child: const SizedBox.expand(),
                           ),
                         ),
                       ),
@@ -2195,13 +2205,35 @@ Color workAreaEdgeColour(LumitTheme t) => t.animated.withValues(alpha: 0.5);
 /// a line to look at. Hover takes another step, which is the only thing that
 /// changes under the pointer — the shape and the width do not, so nothing
 /// jumps as the hand arrives.
+///
+/// **One step down the ladder** since the owner ran it on a real composition
+/// (2026-08-25): a wider tab carries more of its colour, and at the old
+/// strengths the pair read as two lit bars standing over the clock. The ladder
+/// is the same one, a tenth apart — edge, tab, tab under the pointer.
 Color workAreaHandleColour(LumitTheme t, {required bool hovered}) =>
-    t.animated.withValues(alpha: hovered ? 0.9 : 0.7);
+    t.animated.withValues(alpha: hovered ? 0.8 : 0.6);
 
 /// How wide the drawn tab is, inside the [_workHandleWidth] it grabs across.
-/// Narrow, because it is a mark on an edge rather than a bar of its own — and
-/// rounded to its own half-width, which is what makes it read as a tab.
-const double _workHandleTabWidth = 3;
+/// Narrow, because it is a mark on an edge rather than a bar of its own —
+/// **four rather than three** (owner, 2026-08-25): three was thin enough to
+/// look like the band's edge doubled, and the tab has to read as the thing you
+/// take hold of.
+const double workAreaHandleTabWidth = 4;
+
+/// The tab's corner (owner, 2026-08-25): **a rectangle with the corners taken
+/// off**, not a stadium. It was half the tab's own width, which at three px
+/// was a hairline's worth of rounding and at four would have made a pill — and
+/// a pill reads as a pull-tab from a different interface. One pixel is enough
+/// to stop the corners looking cut.
+const double workAreaHandleRadius = 1;
+
+/// Where the tab starts, measured down from the ruler's top (owner,
+/// 2026-08-25): **below the clock's labels**, which are painted four px in
+/// and set at nine. The handle still stands up out of the band and into the
+/// ruler's upper row — that is the half of K-513 that stands — but it stops
+/// short of the numbers rather than running alongside them. What it *grabs*
+/// is unchanged: the whole ruler height is still the edge's to catch.
+const double workAreaHandleTopInset = 18;
 
 /// What a marker's label is set in: mono at 8, the mockup's own size (K-451) —
 /// a marker's label is a cue read at a glance beside a clock, and it sets in
