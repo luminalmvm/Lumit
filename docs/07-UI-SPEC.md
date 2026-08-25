@@ -2486,6 +2486,15 @@ Every field lands together, as **one undo step**, including the two that need op
 layer keeps its timing, and nothing plays faster or slower — the comp is simply shown at more
 (or fewer) frames per second. This has a regression test on both sides of the bridge.
 
+**The playhead keeps its moment, not its number** (K-572). A frame count means nothing without
+the rate it was counted at, so the time the playhead sits at is read *before* the new rate is
+written and the **nearest** frame of the new grid asked for after: one second in at 60 fps is
+one second in at 24. Nearest rather than the frame it lands inside, because a moment that no
+new frame falls on would otherwise walk backwards every time the rate was touched. Only the
+comp being looked at moves — there is one playhead, and changing a background comp's rate is
+not its business. Markers and the work area need no conversion at all: both are stored as
+rational time rather than as frame numbers, so they keep their moments untouched.
+
 ### 13.4 The Pre-compose dialogue
 
 `Ctrl+Shift+C` in the Timeline, or `Layer ▸ Pre-compose…`, packs the selected layers into a

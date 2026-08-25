@@ -673,6 +673,20 @@ class CompositionReference {
         that: this,
       );
 
+  /// The frame **nearest** `time` — the same inverse as
+  /// [`Self::frame_at_time`], rounded instead of floored.
+  ///
+  /// What the playhead is moved by when this comp's frame rate changes
+  /// (K-566). The moment it sits at is read as a time before the rate is
+  /// written and asked for again after, so it stays where it was on the
+  /// clock; the new grid rarely contains that moment exactly, and rounding
+  /// keeps the playhead within half a frame of it instead of dragging it
+  /// earlier every time the rate is touched.
+  PlatformInt64 nearestFrameAtTime({required BridgeRational time}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceNearestFrameAtTime(
+              that: this, time: time);
+
   /// Paste a layer copied by [`crate::api::layer::LayerReference::copy_layer`]
   /// into this composition, at the top of the stack (K-275).
   ///

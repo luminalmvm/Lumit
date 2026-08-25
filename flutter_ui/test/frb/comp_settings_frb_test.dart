@@ -11,10 +11,12 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/icons/lumit_icon.dart' as glyph;
 import 'package:lumit_flutter/icons/lumit_icons.dart';
+import 'package:lumit_flutter/panels/timeline_extras_frb.dart' show addMarkerFrb;
 import 'package:lumit_flutter/shell/comp_settings_frb.dart';
 import 'package:lumit_flutter/shell/dialog_frame.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeSpan;
 import 'package:lumit_flutter/state/timecode.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
@@ -260,6 +262,150 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(comp.getSettings().name, before.name);
+    });
+
+    /// The other half of "a rate is not a speed" (K-572): the comp keeps its
+    /// length, and the playhead keeps its **moment**. Writing the old frame
+    /// number back at the new rate moved the playhead through the comp — at
+    /// half the rate it landed twice as far in.
+    testWidgets('changing the rate leaves the playhead at the same moment',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      p.uiState.setSelectedComp(comp);
+      // One second in, at the default 60 fps.
+      p.uiState.playheadFrame.value = 60;
+
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => GestureDetector(
+            key: const ValueKey('open'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showCompSettingsFrb(context: context, comp: comp),
+            child: const SizedBox(width: 200, height: 40),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('comp-fps')), '24');
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      expect(p.uiState.playheadFrame.value, 24,
+          reason: 'still one second in, counted at 24');
+    });
+
+    /// A moment that no frame of the new rate lands on goes to the nearest one,
+    /// not to the frame before it — otherwise every touch of the rate field
+    /// walks the playhead backwards.
+    testWidgets('a moment between frames takes the nearest', (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      p.uiState.setSelectedComp(comp);
+      // 62/60 s — 24.8 frames at 24 fps, so frame 25, where a floor gives 24.
+      p.uiState.playheadFrame.value = 62;
+
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => GestureDetector(
+            key: const ValueKey('open'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showCompSettingsFrb(context: context, comp: comp),
+            child: const SizedBox(width: 200, height: 40),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('comp-fps')), '24');
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      expect(p.uiState.playheadFrame.value, 25);
+    });
+
+    /// There is one playhead, and it belongs to the comp being looked at. The
+    /// Project panel can open settings for any comp in the bin; changing one of
+    /// those must not move the playhead of the comp on screen.
+    testWidgets('another comp\'s rate leaves this playhead alone',
+        (tester) async {
+      final p = freshProject();
+      final fronted = p.state.project!.newComposition(name: 'Fronted');
+      final other = p.state.project!.newComposition(name: 'Other');
+      p.uiState.setSelectedComp(fronted);
+      p.uiState.playheadFrame.value = 60;
+
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => GestureDetector(
+            key: const ValueKey('open'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showCompSettingsFrb(context: context, comp: other),
+            child: const SizedBox(width: 200, height: 40),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('comp-fps')), '24');
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      expect((other.getSettings().fpsNum, other.getSettings().fpsDen), (24, 1));
+      expect(p.uiState.playheadFrame.value, 60);
+    });
+
+    /// Markers and the work area are stored as rational time, not as frame
+    /// numbers, so a rate change is not their business at all. Asserted rather
+    /// than assumed: the moment either of them starts counting frames, the
+    /// playhead is not the only thing that needs converting.
+    testWidgets('markers and the work area keep their moments', (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      p.uiState.setSelectedComp(comp);
+      addMarkerFrb(comp, frame: 90);
+      comp.setWorkArea(
+        span: BridgeSpan(
+          inPoint: const BridgeRational(num: 1, den: 2),
+          outPoint: const BridgeRational(num: 2, den: 1),
+          startOffset: const BridgeRational(num: 0, den: 1),
+        ),
+      );
+      final markerBefore = comp.getMarkers().single.time;
+      final areaBefore = comp.getWorkArea()!;
+
+      await tester.pumpWidget(hostPanel(
+        child: Builder(
+          builder: (context) => GestureDetector(
+            key: const ValueKey('open'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => showCompSettingsFrb(context: context, comp: comp),
+            child: const SizedBox(width: 200, height: 40),
+          ),
+        ),
+        state: p.state,
+        uiState: p.uiState,
+      ));
+      await tester.tap(find.byKey(const ValueKey('open')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('comp-fps')), '24');
+      await tester.tap(find.byKey(const ValueKey('comp-apply')));
+      await tester.pumpAndSettle();
+
+      expect(comp.getMarkers().single.time, markerBefore,
+          reason: 'a marker is a time, and the time did not change');
+      final areaAfter = comp.getWorkArea()!;
+      expect(
+          (areaAfter.inPoint, areaAfter.outPoint),
+          (areaBefore.inPoint, areaBefore.outPoint),
+          reason: 'and so are both ends of the work area');
     });
   });
 

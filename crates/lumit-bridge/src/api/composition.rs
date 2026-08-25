@@ -1948,6 +1948,25 @@ impl CompositionReference {
             .frame_at(lumit_core::time::CompTime(rational)))
     }
 
+    /// The frame **nearest** `time` — the same inverse as
+    /// [`Self::frame_at_time`], rounded instead of floored.
+    ///
+    /// What the playhead is moved by when this comp's frame rate changes
+    /// (K-572). The moment it sits at is read as a time before the rate is
+    /// written and asked for again after, so it stays where it was on the
+    /// clock; the new grid rarely contains that moment exactly, and rounding
+    /// keeps the playhead within half a frame of it instead of dragging it
+    /// earlier every time the rate is touched.
+    #[frb(sync)]
+    pub fn nearest_frame_at_time(&self, time: BridgeRational) -> Result<i64, BridgeError> {
+        let comp = self.composition()?;
+        let rational = lumit_core::time::Rational::new(time.num, time.den)
+            .map_err(|_| BridgeError::InvalidComp)?;
+        Ok(comp
+            .frame_rate
+            .nearest_frame_at(lumit_core::time::CompTime(rational)))
+    }
+
     /// Ask the worker for a scope trace of `frame`.
     ///
     /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.

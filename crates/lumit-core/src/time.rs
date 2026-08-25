@@ -305,6 +305,26 @@ impl FrameRate {
         let den = i128::from(t.0.den()) * i128::from(self.den);
         i64::try_from(num.div_euclid(den)).unwrap_or(i64::MAX)
     }
+
+    /// The frame **nearest** time t, rather than the one containing it.
+    ///
+    /// In plain terms: a moment rarely lands exactly on a frame boundary, and
+    /// there are two honest answers — the frame it is inside, and the frame it
+    /// is closest to. [`Self::frame_at`] gives the first, which is what drawing
+    /// a keyframe wants. This gives the second, which is what the **playhead**
+    /// wants when the composition's rate changes under it (K-572): the moment
+    /// it sits at has to be re-expressed on a grid that does not contain it,
+    /// and always taking the frame before would drag the playhead earlier every
+    /// time the rate was touched.
+    ///
+    /// `floor(t·rate + ½)`, done in integers, so 29.97's 1001/30000 boundaries
+    /// round the way the arithmetic says rather than the way a float lands.
+    pub fn nearest_frame_at(self, t: CompTime) -> i64 {
+        let num = i128::from(t.0.num()) * i128::from(self.num) * 2
+            + i128::from(t.0.den()) * i128::from(self.den);
+        let den = i128::from(t.0.den()) * i128::from(self.den) * 2;
+        i64::try_from(num.div_euclid(den)).unwrap_or(i64::MAX)
+    }
 }
 
 #[cfg(test)]
@@ -344,6 +364,30 @@ mod tests {
         // and the next flick-grid point still round-trips through f64 quantisation
         let q = Rational::from_f64_on_grid(t.0.to_f64(), Rational::FLICK_DEN).unwrap();
         assert!((q.to_f64() - t.0.to_f64()).abs() < 1e-9);
+    }
+
+    /// The playhead's arithmetic when a comp's rate changes under it (K-572):
+    /// the same moment, on the nearest frame of the new grid.
+    #[test]
+    fn the_nearest_frame_rounds_rather_than_floors() {
+        let at_60 = FrameRate::new(60, 1).unwrap();
+        let at_24 = FrameRate::new(24, 1).unwrap();
+        // One second is one second at any rate, and lands exactly.
+        let one = at_60.time_of_frame(60).unwrap();
+        assert_eq!(at_24.nearest_frame_at(one), 24);
+        // Frame 61 of 60 fps is 61/60 s — 24.4 frames at 24, so frame 24 …
+        assert_eq!(at_24.nearest_frame_at(at_60.time_of_frame(61).unwrap()), 24);
+        // … while frame 62 is 24.8, which rounds up where a floor would not.
+        assert_eq!(at_24.nearest_frame_at(at_60.time_of_frame(62).unwrap()), 25);
+        assert_eq!(at_24.frame_at(at_60.time_of_frame(62).unwrap()), 24);
+        // Exactly half a frame rounds up, and does so on an NTSC grid too.
+        let ntsc = FrameRate::new(30000, 1001).unwrap();
+        let half = CompTime(rat(1001, 60000));
+        assert_eq!(ntsc.nearest_frame_at(half), 1);
+        // Time before zero is real (a layer may start early) and rounds the
+        // same way rather than clamping.
+        assert_eq!(at_24.nearest_frame_at(CompTime(rat(-1, 24))), -1);
+        assert_eq!(at_24.nearest_frame_at(CompTime(rat(-1, 240))), 0);
     }
 
     #[test]

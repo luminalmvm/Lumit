@@ -33,6 +33,8 @@
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/main.dart';
+import 'package:provider/provider.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -111,7 +113,23 @@ Future<bool> showCompSettingsFrb({
       confirm: l10n.save,
       initial: comp.getSettings(),
       onConfirm: (settings) {
+        // **The playhead keeps its moment, not its number** (K-572). A frame
+        // count means nothing without the rate it was counted at, so the time
+        // under the playhead is read *before* the rate is written and the
+        // nearest frame of the new grid asked for after — the engine does both
+        // conversions, exactly, because 29.97's boundaries do not survive a
+        // float. Markers and the work area need none of this: both are stored
+        // as rational time already, so they keep their moments untouched.
+        //
+        // Only when this comp is the one being looked at: there is one
+        // playhead, and changing a background comp's rate must not move it.
+        final ui = Provider.of<LumitUiState>(context, listen: false);
+        final mine = ui.selectedComp?.internalid == comp.internalid;
+        final was = mine ? comp.timeOfFrame(frame: ui.playheadFrame.value) : null;
         comp.setSettings(settings: settings);
+        if (was != null) {
+          ui.playheadFrame.value = comp.nearestFrameAtTime(time: was);
+        }
         close(true);
       },
       onCancel: () => close(false),

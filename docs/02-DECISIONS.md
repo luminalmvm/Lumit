@@ -16346,3 +16346,36 @@ handle behave identically whatever the rows say.
 defaults rather than reading AE's own separated-dimensions and proportional-scale flags.
 The values and keyframes are already faithful either way — both editors store them per axis
 — so what is missing is a preference, not any part of the animation.
+
+## K-572 — Changing a comp's frame rate leaves the playhead where it was in time
+
+**Status: DECIDED (2026-08-25).** K-180 settled that a composition's duration is a length of
+time and the frame rate only a way of counting it, which is why changing the rate no longer
+stretches the comp under its layers. The playhead was the piece that never followed: it is a
+frame *number*, and a number means nothing without the rate it was counted at, so a comp taken
+from 60 fps to 24 left the playhead sitting at frame 60 — one second in before, two and a half
+seconds in after. Nothing had moved except what you were looking at.
+
+**The moment survives, not the number.** The composition settings dialogue reads the time under
+the playhead before it writes the new rate, and asks for the frame of the new grid nearest that
+time afterwards. Both conversions are the engine's own — `FrameRate::time_of_frame` and the new
+`FrameRate::nearest_frame_at` — because 29.97 is 30000/1001 and a rate change worked out in
+floating point places the playhead a frame off the moment it was on (docs/14 §2).
+
+**Nearest, not the frame it falls inside.** `frame_at` floors, which is right for drawing a
+keyframe: a key belongs to the frame it is in. A playhead is not in a frame, it is *at* a
+moment, and flooring would walk it earlier every time the rate field was touched — three
+changes of mind about the rate would drag it three frames back through the comp for no reason
+the user could see. Rounding keeps it within half a frame of where it was, and returning to the
+original rate returns it to the original frame.
+
+**One playhead, and it belongs to the comp on screen.** Composition settings can be opened for
+any comp in the Project panel, including ones not fronted. Only a change to the fronted comp's
+rate moves the playhead; a background comp's rate is not the playhead's business.
+
+**Markers and the work area need nothing.** Both are stored as rational time — `Marker::time`
+is a `CompTime` and `Composition::work_area` a pair of them — so a rate change never touched
+them and does not now. A spanning marker's `duration_frames` is derived at read time from a
+rational duration, so it too keeps its real length and simply counts it more finely. That is
+asserted rather than assumed: the moment either of them starts storing a frame number, the
+playhead stops being the only thing that needs converting.
