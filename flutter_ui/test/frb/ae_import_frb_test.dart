@@ -19,6 +19,7 @@
 // an offline item with a row saying so, and must never hold the import up
 // (docs/11 §2.5).
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
@@ -52,7 +53,6 @@ void main() {
     Future<({LumitState state, LumitUiState uiState})> mount(
       WidgetTester tester, {
       Future<String?> Function()? aeProjectPicker,
-      Future<String?> Function()? bundlePicker,
     }) async {
       final p = freshProject();
       await tester.pumpWidget(hostPanel(
@@ -63,7 +63,6 @@ void main() {
           return LumitMenuBarFrb(
             app: state,
             aeProjectPicker: aeProjectPicker,
-            bundlePicker: bundlePicker,
           );
         }),
         state: p.state,
@@ -94,20 +93,22 @@ void main() {
             ]
           ];
       return [
-        for (final i in walk(state.project?.getItems() ?? const []))
-          i.name(),
+        for (final i in walk(state.project?.getItems() ?? const [])) i.name(),
       ];
     }
 
     testWidgets('a folder that is not a bundle leaves the project alone',
         (tester) async {
       final elsewhere = Directory.systemTemp.createTempSync('lumit-not-bundle');
-      final p = await mount(tester, bundlePicker: () async => elsewhere.path);
+      final p = await mount(tester);
       final before = p.state.project;
 
-      await choose(tester, 'File', l10n.menuImportAeBundle);
-      await settleFrb(tester,
-          until: () => p.state.notice.value != null);
+      // The bundle entry left the File menu (K-536 trail); the capability
+      // stays, driven directly.
+      final ctx = tester.element(find.byType(LumitMenuBarFrb));
+      unawaited(
+          importAeBundleFrb(ctx, p.state, picker: () async => elsewhere.path));
+      await settleFrb(tester, until: () => p.state.notice.value != null);
 
       expect(identical(p.state.project, before), isTrue,
           reason: 'the open project stands; an import that cannot read its '
@@ -145,10 +146,11 @@ void main() {
     // their own.
     testWidgets('a bundle folder imports through the second item',
         (tester) async {
-      final p = await mount(tester, bundlePicker: () async => _bundle);
+      final p = await mount(tester);
       final before = p.state.project;
 
-      await choose(tester, 'File', l10n.menuImportAeBundle);
+      final ctx = tester.element(find.byType(LumitMenuBarFrb));
+      unawaited(importAeBundleFrb(ctx, p.state, picker: () async => _bundle));
       await settleFrb(tester,
           until: () => find.text(l10n.aeReportTitle).evaluate().isNotEmpty);
 
