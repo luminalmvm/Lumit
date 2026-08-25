@@ -113,10 +113,22 @@ const double _numberCellWidth = 18;
 /// control, and Sharp's square corners have nothing to say about a bullet.
 const double _labelDotSize = 6;
 
-/// The horizontal scrollbar that rides in the bottom bar — 7 (K-451, docs/15
-/// §12A.6, where it is named for the graph side; the lanes' bar carries the
-/// same one, so the two modes do not swap bar shapes on the switch).
-const double _hScrollbarHeight = 7;
+/// How thick a scrollbar thumb is — 7 (K-451, docs/15 §12A.6, where it is
+/// named for the graph side's horizontal bar; the lanes' bar carries the same
+/// one, so the two modes do not swap bar shapes on the switch).
+///
+/// **The vertical thumbs in the gutters are the same 7** (§6.15). They were
+/// whatever [scrollGutterWidth] left after a 3px margin each side, which came
+/// out 6 — one pixel thinner than the bar along the bottom of the very same
+/// view, for no reason beyond the two being written in different units. The
+/// gutter keeps its width; the thumb is centred in it.
+const double scrollbarThickness = 7;
+
+/// Where a [scrollbarThickness] thumb starts across a bar or gutter of
+/// [extent], on whole pixels: an odd remainder is floored rather than split,
+/// since a filled block with a half-pixel edge draws that edge grey.
+double scrollbarInset(double extent) =>
+    ((extent - scrollbarThickness) / 2).floorToDouble().clamp(0.0, extent);
 
 /// Half a keyframe's height on a property's own lane — **the same in Layers
 /// mode and in Keys mode** (K-459). The drawing measures the key 11px point
@@ -6880,9 +6892,12 @@ class _GutterScrollbar extends StatelessWidget {
                 onHorizontalDragUpdate:
                     axis == Axis.horizontal ? (d) => dragBy(d.delta.dx) : null,
                 child: Container(
+                  // The 3 is along the thumb's length only: its thickness is
+                  // set by the Positioned below, at [scrollbarThickness] in
+                  // both directions.
                   margin: axis == Axis.horizontal
                       ? const EdgeInsets.symmetric(horizontal: 3)
-                      : const EdgeInsets.all(3),
+                      : const EdgeInsets.symmetric(vertical: 3),
                   decoration: BoxDecoration(
                     // `surface_4`, the mockup's own thumb value: a raised
                     // block, not a rule. `hairline_strong` is for lines.
@@ -6898,8 +6913,16 @@ class _GutterScrollbar extends StatelessWidget {
                 axis == Axis.vertical
                     ? Positioned(
                         top: offset,
-                        left: 0,
-                        right: 0,
+                        // The same 7 the horizontal bar wears (§6.15),
+                        // centred in the gutter — not the gutter's width less
+                        // a margin, which came out a pixel thinner than the
+                        // bar under the same view.
+                        // Floored, because the 12px gutter cannot centre a 7
+                        // on whole pixels and a block edge on a half pixel is
+                        // a smear: half a pixel off centre is invisible, a
+                        // soft edge is not.
+                        left: scrollbarInset(constraints.maxWidth),
+                        width: scrollbarThickness,
                         height: extent,
                         child: thumb)
                     : Positioned(
@@ -6908,9 +6931,8 @@ class _GutterScrollbar extends StatelessWidget {
                         // centred in whatever bar carries it — not a thumb
                         // grown from the bar's own height, which is how it
                         // came out 14 and read as a second toolbar.
-                        top: ((constraints.maxHeight - _hScrollbarHeight) / 2)
-                            .clamp(0.0, constraints.maxHeight),
-                        height: _hScrollbarHeight,
+                        top: scrollbarInset(constraints.maxHeight),
+                        height: scrollbarThickness,
                         width: extent,
                         child: thumb),
               ],
