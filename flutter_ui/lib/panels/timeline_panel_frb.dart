@@ -131,9 +131,15 @@ enum KeyShape { diamond, hourglass, square }
 /// half of the mark (K-457), so nothing here has to choose between them: a key
 /// that eases in and holds out is half hourglass and half square, which is the
 /// truth about it and was previously unsayable.
+/// An **automatic** side is an eased one — the hourglass half — because that
+/// is what the shape says: the movement is curved through this key. Which of
+/// the three tangent modes shaped the curve is not a lane's business; the mark
+/// says how the motion runs, not who decided it.
 KeyShape keyShapeOfSide(BridgeSideInterp side) => switch (side) {
       BridgeSideInterp_Hold() => KeyShape.square,
-      BridgeSideInterp_Bezier() => KeyShape.hourglass,
+      BridgeSideInterp_Bezier() ||
+      BridgeSideInterp_Auto() =>
+        KeyShape.hourglass,
       _ => KeyShape.diamond,
     };
 
@@ -2196,6 +2202,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     ui.model.refresh();
   }
 
+  /// Put the selected keys' sides into a tangent mode — the bottom bar's
+  /// Tangents Auto / Clamp / Free (§6.3). The selection is resolved exactly as
+  /// [_applyInterp] resolves it, so the two runs of chips act on one set of
+  /// keys.
+  void _applyTangentMode(TangentMode mode) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final channels = _selectionChannels(ui);
+    final selection = _actionKeySelection(channels);
+    if (selection.isEmpty) return;
+    applyTangentModeToSelection(
+      channels: channels,
+      selectedKeys: selection,
+      mode: mode,
+    );
+    ui.model.refresh();
+  }
+
   /// Stamp a shaped ease onto the selection — the easing editor's Apply.
   ///
   /// The selection is resolved the same way [_applyInterp] resolves it, so the
@@ -3675,6 +3698,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           autoFit: _graphAutoFit,
           onToggleAutoFit: () => setState(() => _graphAutoFit = !_graphAutoFit),
           onInterp: (side) => _applyInterp(side),
+          onTangentMode: _applyTangentMode,
           onOpenEasing: _openEasing,
         ),
       ],
@@ -10422,6 +10446,9 @@ class _LaneBottomBar extends StatelessWidget {
   final VoidCallback? onToggleAutoFit;
   final ValueChanged<BridgeSideInterp>? onInterp;
 
+  /// A tangent mode chosen for the selected keys — Auto / Clamp / Free (§6.3).
+  final ValueChanged<TangentMode>? onTangentMode;
+
   /// The Easing… button pressed, with the button's own context so a popup can
   /// be anchored to it. Whether that is a popup or a docked panel is the
   /// panel's decision, not this bar's (K-349).
@@ -10459,6 +10486,7 @@ class _LaneBottomBar extends StatelessWidget {
     this.autoFit = true,
     this.onToggleAutoFit,
     this.onInterp,
+    this.onTangentMode,
     this.onOpenEasing,
     this.keys = false,
     this.onEaseBlock,
@@ -10647,6 +10675,38 @@ class _LaneBottomBar extends StatelessWidget {
                                     onOpenEasing?.call(buttonContext)),
                           ),
                         ],
+                        const SizedBox(width: 12),
+                        // Tangents — Auto / Clamp / Free (§6.3), between the
+                        // ease presets and the lens pair. A run of three like
+                        // the eases beside them, and unlit for the same
+                        // reason: these are things to *do* to the selection,
+                        // and a selection spanning two modes has no one answer
+                        // to light. Which mode a side is in is legible where
+                        // it matters — in the handle, which stops following
+                        // its neighbours the moment it is dragged.
+                        _graphButton(t,
+                            keyName: 'graph-tangent-auto',
+                            label: l10n.graphTangentAuto,
+                            tip: l10n.tipTangentAuto,
+                            on: false,
+                            onPressed: () =>
+                                onTangentMode?.call(TangentMode.auto)),
+                        const SizedBox(width: 2),
+                        _graphButton(t,
+                            keyName: 'graph-tangent-clamp',
+                            label: l10n.graphTangentClamp,
+                            tip: l10n.tipTangentClamp,
+                            on: false,
+                            onPressed: () =>
+                                onTangentMode?.call(TangentMode.clamp)),
+                        const SizedBox(width: 2),
+                        _graphButton(t,
+                            keyName: 'graph-tangent-free',
+                            label: l10n.graphTangentFree,
+                            tip: l10n.tipTangentFree,
+                            on: false,
+                            onPressed: () =>
+                                onTangentMode?.call(TangentMode.free)),
                         const SizedBox(width: 12),
                         _graphButton(t,
                             keyName: 'graph-lens-value',

@@ -496,8 +496,16 @@ enum SideInterp {
     Hold,
     Linear,
     Bezier { speed: f64, influence: f64 },   // speed: value-units/sec; influence: a fraction in (0, 1]
+    Auto { clamped: bool, speed: f64, influence: f64 },  // speed/influence: the remembered free ease
 }
 ```
+
+The **`Auto` arm** is the graph strip's Auto (`clamped: false`) and Clamp (`clamped: true`)
+tangent modes (K-506): the side's *speed* is computed from the key's two neighbours on
+every read rather than stored, while its influence is its own. The `speed` and `influence`
+it carries are **not evaluated** — they are the ease the side had when it was last free,
+so that returning it to Free hands the custom ease back. The arithmetic, and why the
+memory lives inside the arm, are [impl/keyframe-eval.md](impl/keyframe-eval.md) §6.
 
 Between two keys `(t1,v1) → (t2,v2)` with bezier sides, the value curve is the cubic bezier
 with control points at

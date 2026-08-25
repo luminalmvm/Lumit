@@ -246,20 +246,22 @@ impl Clip {
         if keys.len() < 2 {
             return None;
         }
-        let side = |s: &SideInterp, chord: f64| match s {
-            SideInterp::Bezier { speed, .. } => *speed,
+        // Through `resolved_side`, so an automatic tangent reads as the speed
+        // its neighbours give it rather than as the ease it is remembering.
+        let side = |s: SideInterp, chord: f64| match s {
+            SideInterp::Bezier { speed, .. } => speed,
             SideInterp::Hold => 0.0,
-            SideInterp::Linear => chord,
+            SideInterp::Linear | SideInterp::Auto { .. } => chord,
         };
         let mut out = Vec::with_capacity((keys.len() - 1) * 2);
-        for pair in keys.windows(2) {
-            let dt = pair[1].time.checked_sub(pair[0].time).ok()?.to_f64();
+        for i in 0..keys.len() - 1 {
+            let dt = keys[i + 1].time.checked_sub(keys[i].time).ok()?.to_f64();
             if dt <= 0.0 {
                 return None;
             }
-            let chord = (pair[1].value - pair[0].value) / dt;
-            out.push(side(&pair[0].interp_out, chord));
-            out.push(side(&pair[1].interp_in, chord));
+            let chord = (keys[i + 1].value - keys[i].value) / dt;
+            out.push(side(crate::anim::resolved_side(keys, i, true), chord));
+            out.push(side(crate::anim::resolved_side(keys, i + 1, false), chord));
         }
         Some(out)
     }

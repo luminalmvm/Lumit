@@ -436,8 +436,7 @@ does not gate the four. Delete each phase here when it lands, as with everything
     rows to K-499 (layer number, stopwatch, navigator, value wells); TI-5 graph handles
     (dashed lines, hollow rings, handles travel with a dragged key, value hint pill);
     TI-6 Graph mode's drawn surface (colour-ticked outline, Normalise, Key readout row,
-    right-hand value gutter); TI-8 tangent
-    modes Auto/Clamp/Free (engine seam); TI-9 snapping + ruler completion (bar/work-area/
+    right-hand value gutter); TI-9 snapping + ruler completion (bar/work-area/
     marker snap, double-click reset/create, B/N actions, edge-follow, `=`/`-`/`\`);
     TI-10 the hover, cursor and modifier-ladder-hint pass. Delete each TI line from here
     as it lands.

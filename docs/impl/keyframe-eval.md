@@ -101,3 +101,76 @@ in rationals; free-influence ones round the new boundary to the flick grid **by 
    1e-12; boundary s values exact for native segments.
 5. Bench gate: 10⁶ scalar evaluations < 20 ms on the reference CPU (it is ~50 flops; if
    this fails something is allocating).
+6. Tangent modes: the six sentences in §6 below, asserted on both ports of the evaluator
+   (`crates/lumit-core/src/anim.rs`, `flutter_ui/lib/panels/graph_maths.dart`) against the
+   same hand-computed numbers, so the two cannot drift.
+
+## 6. Tangent modes: Auto, Clamp and Free
+
+The graph's tangent strip (docs/impl/timeline-interaction.md §6.3) offers three modes per
+**key side**. Free is everything above: the side stores a speed and an influence, and they
+are what the curve uses. Auto and Clamp store the influence but **compute the speed from
+the key's neighbours on every read**, so the shape stays smooth as the curve is edited
+around it.
+
+**In plain terms.** An automatic tangent points the way the curve is already going. The
+plain one aims straight from the key before to the key after. The clamped one is the same
+aim with the swing taken out of it: where the key is a peak or a trough it lies flat,
+because any tilt would send the curve past a neighbour on one side or the other, and
+elsewhere it is held to a slope the span cannot overshoot with.
+
+### 6.1 The arithmetic (binding)
+
+For key `i` with neighbours `i−1` and `i+1`, times `tp < tk < tn` and values `vp, vk, vn`:
+
+```
+smooth  = (vn − vp) / (tn − tp)                    # Catmull-Rom, non-uniform
+before  = (vk − vp) / (tk − tp)
+after   = (vn − vk) / (tn − tk)
+
+Auto  :  smooth
+Clamp :  0                                   if before·after ≤ 0     (peak or trough)
+         clamp(smooth, ±3·min(|before|,|after|))  otherwise
+```
+
+- The **±3·min** bound is the Fritsch–Carlson condition for a monotone cubic: inside it a
+  span whose two ends are both within the bound cannot leave the box its keys make, which
+  is exactly "no overshoot". Do not substitute a smaller constant to be safe — 3 is the
+  tight bound, and anything less flattens curves that were never going to overshoot.
+- **An end key's automatic tangent is 0.** It has no pair to aim between, so the curve
+  arrives and leaves level, which is what an automatic ease means there.
+- Clamp is defined for the *value* being clamped, not the tangent's length: the influence
+  is untouched. An automatic tangent decides which way the handle points; it does not
+  lengthen it.
+- Resolution happens at **read**, never at write: `resolved_side(keys, i, out)` turns an
+  automatic side into the bezier its neighbours dictate, and every reader — the evaluator,
+  the speed lens, the handle geometry, the range fit — goes through it. Nothing recomputes
+  a stored value, so there is no "recompute after every edit" hook to forget.
+
+### 6.2 Where the custom ease lives (binding)
+
+The mode is stored **inside the side**, as a fourth `SideInterp` arm:
+
+```rust
+SideInterp::Auto { clamped: bool, speed: f64, influence: f64 }
+```
+
+`speed` and `influence` there are **not evaluated**. They are the ease the side carried
+when it was last Free, and they are what makes the study's bar — *switching Free → Auto →
+Free keeps the custom ease* — true without any merge step: the memory travels inside the
+thing that owns it, so a key list can cross the bridge, be rebuilt by the interface and
+come back, and the ease is still there. The alternative designs both cost more: a separate
+mode field beside the side needs the write path to consult what was there before (and
+every write path to remember to), and recomputing-and-storing needs a second pair of
+fields to remember the ease with anyway.
+
+Two consequences, both deliberate:
+
+- **A side that was straight or held returns from Auto as an easy ease** (speed 0,
+  influence ⅓). It had no ease of its own to keep, and it has had a tangent all the time
+  it was automatic; handing back a straight side would take the handle away under the
+  user's hand.
+- **Shaping a handle takes its side back to Free.** The handle drag, the influence wells
+  and the ease presets all write a plain bezier side, which is a Free side by definition.
+  That is the honest answer to "the neighbours choose this tangent" meeting "no, *this*
+  is the tangent", and it needs no extra rule: it falls out of what the modes are.

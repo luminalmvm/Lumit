@@ -21,6 +21,7 @@ BridgeKeyframe key(
 void main() {
   envelopeTests();
   envelopeShapeTests();
+  tangentModeTests();
   group('evaluateKeys', () {
     test('clamps past the ends and lerps a straight span', () {
       final keys = [key(0, 1, 10), key(1, 1, 20)];
@@ -299,6 +300,130 @@ void main() {
 // The Vegas speed envelope (K-247).
 // ---------------------------------------------------------------------------
 
+/// Tangent modes — Auto / Clamp / Free (docs/impl/keyframe-eval.md §6,
+/// docs/impl/timeline-interaction.md §6.3). The numbers here are the ones
+/// `crates/lumit-core/src/anim.rs`'s own tests assert, so the two ports are
+/// held to one answer.
+void tangentModeTests() {
+  BridgeSideInterp auto({bool clamped = false}) => BridgeSideInterp.auto(
+      BridgeAutoSide(clamped: clamped, speed: 0, influence: 1 / 3));
+
+  group('automatic tangents', () {
+    test('aim between the neighbours, and lie flat at an end key', () {
+      final keys = [
+        key(0, 1, 0, interpOut: auto()),
+        key(1, 1, 10, interpIn: auto(), interpOut: auto()),
+        key(2, 1, 30, interpIn: auto()),
+      ];
+      expect(autoSpeedAt(keys, 1, clamped: false), closeTo(15, 1e-12));
+      expect(autoSpeedAt(keys, 0, clamped: false), 0);
+      expect(autoSpeedAt(keys, 2, clamped: false), 0);
+    });
+
+    test('resolve to the bezier their neighbours dictate, keeping the reach',
+        () {
+      final keys = [
+        key(0, 1, 0, interpOut: auto()),
+        key(1, 1, 10,
+            interpOut: BridgeSideInterp.auto(BridgeAutoSide(
+                // A remembered ease, never evaluated.
+                clamped: false,
+                speed: 99,
+                influence: 0.5))),
+        key(2, 1, 30),
+      ];
+      final side = resolvedSide(keys, 1, isOut: true);
+      expect(side, isA<BridgeSideInterp_Bezier>());
+      expect(
+          (side as BridgeSideInterp_Bezier).field0.speed, closeTo(15, 1e-12));
+      expect(side.field0.influence, closeTo(0.5, 1e-12));
+      expect(sideSpeedAtKey(keys, 1, isOut: true), closeTo(15, 1e-12));
+      expect(sideInfluence(keys[1].interpOut), closeTo(0.5, 1e-12));
+    });
+
+    test('follow a moved neighbour, where a free side would not', () {
+      List<BridgeKeyframe> at(double last, BridgeSideInterp side) => [
+            key(0, 1, 0, interpOut: side),
+            key(1, 1, 10, interpIn: side, interpOut: side),
+            key(2, 1, last, interpIn: side),
+          ];
+      final before = evaluateKeys(at(30, auto()), 1.5);
+      final after = evaluateKeys(at(200, auto()), 1.5);
+      expect(
+          autoSpeedAt(at(200, auto()), 1, clamped: false), closeTo(100, 1e-12));
+      expect((after - before).abs(), greaterThan(1));
+
+      const free = BridgeSideInterp.bezier(
+          BridgeBezierSide(speed: 15, influence: 1 / 3));
+      expect(sideSpeedAtKey(at(200, free), 1, isOut: true), closeTo(15, 1e-12));
+    });
+
+    test('clamped, they do not overshoot a peak', () {
+      List<BridgeKeyframe> peak(BridgeSideInterp side) => [
+            key(0, 1, 0),
+            key(1, 1, 10, interpIn: side, interpOut: side),
+            key(2, 1, 9),
+          ];
+      final clamped = peak(auto(clamped: true));
+      expect(autoSpeedAt(clamped, 1, clamped: true), 0);
+      for (var i = 0; i <= 100; i++) {
+        expect(evaluateKeys(clamped, i / 50), lessThanOrEqualTo(10 + 1e-9));
+      }
+      // The unclamped aim tilts uphill past the peak, and does overshoot.
+      final smooth = peak(auto());
+      expect(autoSpeedAt(smooth, 1, clamped: false), closeTo(4.5, 1e-12));
+      var high = double.negativeInfinity;
+      for (var i = 0; i <= 100; i++) {
+        final v = evaluateKeys(smooth, i / 50);
+        if (v > high) high = v;
+      }
+      expect(high, greaterThan(10 + 1e-6));
+    });
+
+    test('clamped, they keep the smooth aim where it is safe', () {
+      final gentle = [key(0, 1, 0), key(1, 1, 10), key(2, 1, 30)];
+      expect(autoSpeedAt(gentle, 1, clamped: true), closeTo(15, 1e-12));
+      // Held to three times the gentler chord where the aim is too steep.
+      final steep = [key(0, 1, 0), key(1, 1, 0.1), key(2, 1, 100)];
+      expect(autoSpeedAt(steep, 1, clamped: true), closeTo(0.3, 1e-12));
+    });
+  });
+
+  group('tangent mode switching', () {
+    test('Free → Auto → Free keeps the custom ease', () {
+      const custom = BridgeSideInterp.bezier(
+          BridgeBezierSide(speed: 7.25, influence: .82));
+      expect(tangentModeOf(custom), TangentMode.free);
+      final automatic = withTangentMode(custom, TangentMode.auto);
+      expect(tangentModeOf(automatic), TangentMode.auto);
+      final clamped = withTangentMode(automatic, TangentMode.clamp);
+      expect(tangentModeOf(clamped), TangentMode.clamp);
+      expect(withTangentMode(clamped, TangentMode.free), custom);
+    });
+
+    test('a straight side returns eased, and a free one is left alone', () {
+      final wasStraight =
+          withTangentMode(const BridgeSideInterp.linear(), TangentMode.auto);
+      expect(
+          withTangentMode(wasStraight, TangentMode.free),
+          const BridgeSideInterp.bezier(
+              BridgeBezierSide(speed: 0, influence: 1 / 3)));
+      expect(withTangentMode(const BridgeSideInterp.hold(), TangentMode.free),
+          const BridgeSideInterp.hold());
+    });
+
+    test('an automatic side survives the keyframe clipboard', () {
+      final side = BridgeSideInterp.auto(
+          const BridgeAutoSide(clamped: true, speed: 2.5, influence: 0.4));
+      final back = easeFromText(easeToText(side));
+      expect(back, isA<BridgeSideInterp_Auto>());
+      expect((back as BridgeSideInterp_Auto).field0.clamped, isTrue);
+      expect(back.field0.speed, closeTo(2.5, 1e-9));
+      expect(back.field0.influence, closeTo(0.4, 1e-9));
+    });
+  });
+}
+
 void envelopeTests() {
   group('the Vegas speed envelope', () {
     test('an identity retime reads as 100% throughout', () {
@@ -396,11 +521,14 @@ void envelopeTests() {
       final moved = moveEnvelopePoint(ramped, 1, rat(3, 1));
 
       expect(rationalSeconds(moved[1].time), closeTo(3.0, 1e-9));
-      expect(envelopeSpeeds(moved), [
-        closeTo(speedsBefore[0], 1e-6),
-        closeTo(speedsBefore[1], 1e-6),
-        closeTo(speedsBefore[2], 1e-6),
-      ], reason: 'the point keeps the speed it had');
+      expect(
+          envelopeSpeeds(moved),
+          [
+            closeTo(speedsBefore[0], 1e-6),
+            closeTo(speedsBefore[1], 1e-6),
+            closeTo(speedsBefore[2], 1e-6),
+          ],
+          reason: 'the point keeps the speed it had');
 
       // And every span reads as the straight line between its two points —
       // sampled inside each one, which is where a bulge would show.
@@ -412,7 +540,8 @@ void envelopeTests() {
         for (var i = 1; i < 8; i++) {
           final f = i / 8;
           final t = t0 + (t1 - t0) * f;
-          expect(evaluateKeysSpeed(moved, t) * 100, closeTo(v0 + (v1 - v0) * f, 1e-4),
+          expect(evaluateKeysSpeed(moved, t) * 100,
+              closeTo(v0 + (v1 - v0) * f, 1e-4),
               reason: 'span \$span at t=\$t sits on its own straight line');
         }
       }

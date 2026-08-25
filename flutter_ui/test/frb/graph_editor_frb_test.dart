@@ -475,6 +475,52 @@ void main() {
           reason: 'F9 easy-eases the selection');
     });
 
+    /// The bottom bar's Tangents run — Auto / Clamp / Free (§6.3). The mode is
+    /// stored per key side, and the round trip out to Auto and back hands the
+    /// custom ease over untouched, which is the study's explicit bar.
+    testWidgets('the Tangents buttons set the mode and keep the custom ease',
+        (tester) async {
+      final p = withLayer();
+      animateOpacity(p.comp, p.layer);
+      await mountGraph(tester, p);
+
+      await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
+      await tester.pump();
+
+      // Shape the side by hand first: an ease the automatic modes must not eat.
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-interp-bezier')));
+      await tester.tap(find.byKey(const ValueKey('graph-interp-bezier')));
+      await tester.pumpAndSettle();
+      final custom = opacityKeys(p.layer)[0].interpOut;
+      expect(custom, isA<BridgeSideInterp_Bezier>());
+
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-tangent-auto')));
+      await tester.tap(find.byKey(const ValueKey('graph-tangent-auto')));
+      await tester.pumpAndSettle();
+      final automatic = opacityKeys(p.layer)[0].interpOut;
+      expect(automatic, isA<BridgeSideInterp_Auto>());
+      expect((automatic as BridgeSideInterp_Auto).field0.clamped, isFalse);
+
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-tangent-clamp')));
+      await tester.tap(find.byKey(const ValueKey('graph-tangent-clamp')));
+      await tester.pumpAndSettle();
+      final clamped = opacityKeys(p.layer)[0].interpOut;
+      expect(clamped, isA<BridgeSideInterp_Auto>());
+      expect((clamped as BridgeSideInterp_Auto).field0.clamped, isTrue);
+
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('graph-tangent-free')));
+      await tester.tap(find.byKey(const ValueKey('graph-tangent-free')));
+      await tester.pumpAndSettle();
+      expect(opacityKeys(p.layer)[0].interpOut, custom,
+          reason: 'Free → Auto → Free gives the shaped ease back');
+      expect(opacityKeys(p.layer)[0].interpIn, isA<BridgeSideInterp_Bezier>(),
+          reason: 'the mode is per side, and the strip sets both');
+    });
+
     /// The shaped ease (K-348): a curve drawn once in the unit box, stamped on
     /// every **span** whose two ends are selected — and only from the value
     /// lens, because the shape is drawn against value travel.

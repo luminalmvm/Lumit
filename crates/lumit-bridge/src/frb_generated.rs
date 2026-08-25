@@ -10307,6 +10307,20 @@ impl SseDecode for crate::api::layer::BridgeAudioPeaks {
     }
 }
 
+impl SseDecode for crate::api::effect::BridgeAutoSide {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_clamped = <bool>::sse_decode(deserializer);
+        let mut var_speed = <f64>::sse_decode(deserializer);
+        let mut var_influence = <f64>::sse_decode(deserializer);
+        return crate::api::effect::BridgeAutoSide {
+            clamped: var_clamped,
+            speed: var_speed,
+            influence: var_influence,
+        };
+    }
+}
+
 impl SseDecode for crate::api::shell::BridgeAutosave {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -12194,6 +12208,10 @@ impl SseDecode for crate::api::effect::BridgeSideInterp {
                 let mut var_field0 =
                     <crate::api::effect::BridgeBezierSide>::sse_decode(deserializer);
                 return crate::api::effect::BridgeSideInterp::Bezier(var_field0);
+            }
+            3 => {
+                let mut var_field0 = <crate::api::effect::BridgeAutoSide>::sse_decode(deserializer);
+                return crate::api::effect::BridgeSideInterp::Auto(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -14250,6 +14268,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeAudioPeaks>
     for crate::api::layer::BridgeAudioPeaks
 {
     fn into_into_dart(self) -> crate::api::layer::BridgeAudioPeaks {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeAutoSide {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.clamped.into_into_dart().into_dart(),
+            self.speed.into_into_dart().into_dart(),
+            self.influence.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::effect::BridgeAutoSide
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeAutoSide>
+    for crate::api::effect::BridgeAutoSide
+{
+    fn into_into_dart(self) -> crate::api::effect::BridgeAutoSide {
         self
     }
 }
@@ -16684,6 +16724,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeSideInterp {
             crate::api::effect::BridgeSideInterp::Bezier(field0) => {
                 [2.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::effect::BridgeSideInterp::Auto(field0) => {
+                [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -17465,6 +17508,15 @@ impl SseEncode for crate::api::layer::BridgeAudioPeaks {
         <u32>::sse_encode(self.bands, serializer);
         <u32>::sse_encode(self.buckets, serializer);
         <Vec<f32>>::sse_encode(self.values, serializer);
+    }
+}
+
+impl SseEncode for crate::api::effect::BridgeAutoSide {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.clamped, serializer);
+        <f64>::sse_encode(self.speed, serializer);
+        <f64>::sse_encode(self.influence, serializer);
     }
 }
 
@@ -18863,6 +18915,10 @@ impl SseEncode for crate::api::effect::BridgeSideInterp {
             crate::api::effect::BridgeSideInterp::Bezier(field0) => {
                 <i32>::sse_encode(2, serializer);
                 <crate::api::effect::BridgeBezierSide>::sse_encode(field0, serializer);
+            }
+            crate::api::effect::BridgeSideInterp::Auto(field0) => {
+                <i32>::sse_encode(3, serializer);
+                <crate::api::effect::BridgeAutoSide>::sse_encode(field0, serializer);
             }
             _ => {
                 unimplemented!("");

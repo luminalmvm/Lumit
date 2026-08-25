@@ -127,6 +127,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  BridgeAutoSide dco_decode_box_autoadd_bridge_auto_side(dynamic raw);
+
+  @protected
   BridgeBezierSide dco_decode_box_autoadd_bridge_bezier_side(dynamic raw);
 
   @protected
@@ -269,6 +272,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAudioPeaks dco_decode_bridge_audio_peaks(dynamic raw);
+
+  @protected
+  BridgeAutoSide dco_decode_bridge_auto_side(dynamic raw);
 
   @protected
   BridgeAutosave dco_decode_bridge_autosave(dynamic raw);
@@ -974,6 +980,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  BridgeAutoSide sse_decode_box_autoadd_bridge_auto_side(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeBezierSide sse_decode_box_autoadd_bridge_bezier_side(
       SseDeserializer deserializer);
 
@@ -1149,6 +1159,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeAudioPeaks sse_decode_bridge_audio_peaks(SseDeserializer deserializer);
+
+  @protected
+  BridgeAutoSide sse_decode_bridge_auto_side(SseDeserializer deserializer);
 
   @protected
   BridgeAutosave sse_decode_bridge_autosave(SseDeserializer deserializer);
@@ -1950,6 +1963,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_auto_side(
+      BridgeAutoSide self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
 
@@ -2131,6 +2148,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_audio_peaks(
       BridgeAudioPeaks self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_auto_side(
+      BridgeAutoSide self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_autosave(

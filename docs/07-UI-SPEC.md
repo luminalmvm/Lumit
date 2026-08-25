@@ -1595,6 +1595,12 @@ instead (K-248, §4.4).
   `Ctrl` already suspends the magnet).
 - **Handle editing** with per-side independence; `Alt+drag` breaks tangent continuity;
   a *Continuous* lock keeps in/out speeds equal.
+- **Tangent modes** — Auto / Clamp / Free, a run of three on the footer strip, stored per
+  key side (K-506). An automatic side takes its speed from the key's neighbours on every
+  read (Clamp additionally cannot overshoot them); Free is a side shaped by hand. Shaping
+  a handle, an influence field or an ease preset takes its side back to Free, and a side
+  returning to Free is given back the exact ease it had before it went automatic. The
+  arithmetic is [impl/keyframe-eval.md](impl/keyframe-eval.md) §6.
 - **Numeric entry**: double-click a keyframe for exact **frame, value and In/Out
   influence** fields (K-505; a side's speed is what the tangent handle drags and what the
   influence field writes at, so it is not a fifth number).

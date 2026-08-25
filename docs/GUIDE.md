@@ -8665,6 +8665,40 @@ a keyframe back until it was sure a second was not coming, and a visible delay o
 commonest gesture on the pane is a much worse thing than a slightly hand-rolled
 double-click.
 
+### Tangents that aim themselves — Auto, Clamp and Free
+
+Every keyframe has two sides, and each side has a tangent: the little handle that says how
+fast the movement is going as it arrives at the key, or as it leaves. Normally you put
+that handle where you want it and it stays there. The three buttons on the graph's bottom
+strip — **Auto**, **Clamp**, **Free** — say who is holding it.
+
+**Free** is the familiar one: the handle is where you last dragged it, and it stays there
+whatever happens to the keys around it.
+
+**Auto** hands the handle to the neighbours. Instead of storing a direction, the side works
+one out every time the curve is read, by aiming from the key *before* this one straight at
+the key *after* it. That is the direction the movement is already travelling in, so the
+curve runs through the key without a kink — and, because it is worked out fresh each time,
+moving a neighbouring key re-aims it at once. Nothing has to be recalculated and saved: it
+was never stored in the first place. The first and last keys of a curve have no pair to aim
+between, so their automatic tangents lie flat, which reads as easing in and out of the ends.
+
+**Clamp** is Auto with the overshoot taken out. A smooth aim can push the curve past the
+value of a neighbouring key on its way — animate 0, 10, 9 and the curve will bulge above 10
+before coming down — which is fine for a bouncing ball and wrong for a value that must not
+exceed what you keyed. Clamp lies the tangent flat wherever the key is a peak or a trough
+(any tilt would swing past one neighbour or the other) and otherwise limits how steep it
+may be. The limit is a known one from the numerical-analysis literature, not a guess:
+three times the gentler of the two slopes into and out of the key is exactly the point past
+which a cubic can leave the box its keys make.
+
+The mode belongs to a **side**, not to a key, and one thing about the switching is worth
+knowing. If you shape a handle by hand and then press Auto, the ease you shaped is not
+thrown away — it is filed inside the automatic side, unused, and pressing Free hands it
+straight back. So Free → Auto → Free is a round trip, not a reset. The other direction is
+simpler: dragging a handle at all takes that side back to Free, because you have just
+overruled the neighbours, and there is no sense in the curve arguing with your hand.
+
 ### The Ease popover
 
 A small box with four lines. **Curve** picks the shape by name — Easy ease, Slow start,

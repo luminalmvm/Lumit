@@ -800,6 +800,22 @@ pub struct BridgeBezierSide {
     pub influence: f64,
 }
 
+/// An **automatic** bezier side ([`SideInterp::Auto`]): its speed is computed
+/// from the key's neighbours, `clamped` saying whether the computation is the
+/// plain smooth one or the one that cannot overshoot them.
+///
+/// `speed` and `influence` are the ease the side carried when it was last
+/// free. They cross in both directions untouched, which is what makes
+/// Free → Auto → Free give the custom ease back without the write path having
+/// to consult what was there before.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeAutoSide {
+    pub clamped: bool,
+    pub speed: f64,
+    pub influence: f64,
+}
+
 /// How a keyframe joins its neighbour on one side ([`SideInterp`]).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -807,6 +823,7 @@ pub enum BridgeSideInterp {
     Hold,
     Linear,
     Bezier(BridgeBezierSide),
+    Auto(BridgeAutoSide),
 }
 
 impl BridgeSideInterp {
@@ -818,6 +835,15 @@ impl BridgeSideInterp {
             SideInterp::Bezier { speed, influence } => {
                 BridgeSideInterp::Bezier(BridgeBezierSide { speed, influence })
             }
+            SideInterp::Auto {
+                clamped,
+                speed,
+                influence,
+            } => BridgeSideInterp::Auto(BridgeAutoSide {
+                clamped,
+                speed,
+                influence,
+            }),
         }
     }
 
@@ -827,6 +853,11 @@ impl BridgeSideInterp {
             BridgeSideInterp::Hold => SideInterp::Hold,
             BridgeSideInterp::Linear => SideInterp::Linear,
             BridgeSideInterp::Bezier(side) => SideInterp::Bezier {
+                speed: side.speed,
+                influence: side.influence,
+            },
+            BridgeSideInterp::Auto(side) => SideInterp::Auto {
+                clamped: side.clamped,
                 speed: side.speed,
                 influence: side.influence,
             },

@@ -110,21 +110,111 @@ class CubicSpan {
   }
 }
 
-/// A side's effective (speed, influence): a bezier side carries its own; a
-/// linear (or hold-in) side lies on the chord with influence ⅓ (anim.rs
-/// `side_params`).
-(double, double) sideParams(BridgeSideInterp side, double chordSlope) =>
+/// A side's effective (speed, influence): a bezier side carries its own; an
+/// automatic one is pointed by its neighbours ([autoSpeedAt], passed in as
+/// [autoSpeed] by the caller that knows where the key sits); a linear (or
+/// hold-in) side lies on the chord with influence ⅓ (anim.rs `side_params`
+/// and `resolved_side`).
+(double, double) sideParams(BridgeSideInterp side, double chordSlope,
+        [double? autoSpeed]) =>
     switch (side) {
       BridgeSideInterp_Bezier(:final field0) => (
           field0.speed,
           field0.influence.clamp(1e-3, 1.0)
         ),
+      BridgeSideInterp_Auto(:final field0) => (
+          autoSpeed ?? chordSlope,
+          field0.influence.clamp(1e-3, 1.0)
+        ),
       _ => (chordSlope, 1.0 / 3.0),
     };
 
-/// The span of a sorted key list holding `t` — its two keys and their times.
-/// Callers have already handled `t` outside the keys, so a span always exists.
-(BridgeKeyframe, BridgeKeyframe, double, double) _spanAt(
+// ---------------------------------------------------------------------------
+// Tangent modes — Auto / Clamp / Free (docs/impl/keyframe-eval.md §6).
+// ---------------------------------------------------------------------------
+
+/// The three tangent modes a keyframe side can be in — the graph strip's
+/// buttons. Mirrors `lumit_core::anim::TangentMode`.
+enum TangentMode { auto, clamp, free }
+
+/// Which mode [side] is in.
+TangentMode tangentModeOf(BridgeSideInterp side) => switch (side) {
+      BridgeSideInterp_Auto(:final field0) =>
+        field0.clamped ? TangentMode.clamp : TangentMode.auto,
+      _ => TangentMode.free,
+    };
+
+/// [side] put into [mode] — the engine's `SideInterp::with_tangent_mode`,
+/// ported.
+///
+/// The ease survives the switch: going automatic files the side's speed and
+/// influence inside the automatic side, and coming back to free hands them
+/// out again, so Free → Auto → Free returns the custom ease. A straight or
+/// held side has no ease of its own, so it files the easy-ease pair.
+BridgeSideInterp withTangentMode(BridgeSideInterp side, TangentMode mode) {
+  final (speed, influence) = switch (side) {
+    BridgeSideInterp_Bezier(:final field0) => (field0.speed, field0.influence),
+    BridgeSideInterp_Auto(:final field0) => (field0.speed, field0.influence),
+    _ => (0.0, 1.0 / 3.0),
+  };
+  return switch (mode) {
+    TangentMode.auto => BridgeSideInterp.auto(
+        BridgeAutoSide(clamped: false, speed: speed, influence: influence)),
+    TangentMode.clamp => BridgeSideInterp.auto(
+        BridgeAutoSide(clamped: true, speed: speed, influence: influence)),
+    TangentMode.free => side is BridgeSideInterp_Auto
+        ? BridgeSideInterp.bezier(
+            BridgeBezierSide(speed: speed, influence: influence))
+        : side,
+  };
+}
+
+/// The speed an automatic side takes at `keys[index]` — anim.rs `auto_speed`,
+/// ported.
+///
+/// In plain terms: an automatic tangent points the way the curve is already
+/// going. The plain one aims straight from the key before to the key after;
+/// the clamped one lies flat where the key is a peak or a trough (any tilt
+/// would overshoot a neighbour) and is otherwise held to three times the
+/// gentler of the two chords. An end key has no pair to aim between, so its
+/// automatic tangent is flat.
+double autoSpeedAt(List<BridgeKeyframe> keys, int index,
+    {required bool clamped}) {
+  if (index <= 0 || index + 1 >= keys.length) return 0;
+  final p = keys[index - 1], k = keys[index], n = keys[index + 1];
+  final tp = rationalSeconds(p.time),
+      tk = rationalSeconds(k.time),
+      tn = rationalSeconds(n.time);
+  if (tn - tp <= 0) return 0;
+  final smooth = (n.value - p.value) / (tn - tp);
+  if (!clamped) return smooth;
+  if (tk - tp <= 0 || tn - tk <= 0) return 0;
+  final before = (k.value - p.value) / (tk - tp);
+  final after = (n.value - k.value) / (tn - tk);
+  if (before * after <= 0) return 0;
+  final limit = 3 * (before.abs() < after.abs() ? before.abs() : after.abs());
+  return smooth.clamp(-limit, limit).toDouble();
+}
+
+/// One side of `keys[index]` as every reader should see it — anim.rs
+/// `resolved_side`: an automatic side becomes the bezier its neighbours
+/// dictate, keeping its own influence; everything else is itself.
+BridgeSideInterp resolvedSide(List<BridgeKeyframe> keys, int index,
+    {required bool isOut}) {
+  final side = isOut ? keys[index].interpOut : keys[index].interpIn;
+  return switch (side) {
+    BridgeSideInterp_Auto(:final field0) => BridgeSideInterp.bezier(
+        BridgeBezierSide(
+            speed: autoSpeedAt(keys, index, clamped: field0.clamped),
+            influence: field0.influence)),
+    _ => side,
+  };
+}
+
+/// The span of a sorted key list holding `t` — the index of its first key, its
+/// two keys and their times. Callers have already handled `t` outside the
+/// keys, so a span always exists.
+(int, BridgeKeyframe, BridgeKeyframe, double, double) _spanAt(
     List<BridgeKeyframe> keys, double t) {
   var idx = keys.length - 2;
   for (var i = 0; i + 1 < keys.length; i++) {
@@ -134,16 +224,31 @@ class CubicSpan {
     }
   }
   final a = keys[idx], b = keys[idx + 1];
-  return (a, b, rationalSeconds(a.time), rationalSeconds(b.time));
+  return (idx, a, b, rationalSeconds(a.time), rationalSeconds(b.time));
 }
 
-/// The cubic across one span, its sides read through [sideParams].
-CubicSpan _cubicOf(BridgeKeyframe a, BridgeKeyframe b, double t1, double t2) {
+/// The cubic across the span leaving `keys[i]`, its sides read through
+/// [sideParams] with an automatic one resolved against its neighbours
+/// (anim.rs `span_cubic`).
+CubicSpan _cubicOf(List<BridgeKeyframe> keys, int i) {
+  final a = keys[i], b = keys[i + 1];
+  final t1 = rationalSeconds(a.time), t2 = rationalSeconds(b.time);
   final chord = (b.value - a.value) / (t2 - t1);
-  final (s1, b1) = sideParams(a.interpOut, chord);
-  final (s2, b2) = sideParams(b.interpIn, chord);
+  final (s1, b1) =
+      sideParams(a.interpOut, chord, _autoOf(keys, i, isOut: true));
+  final (s2, b2) =
+      sideParams(b.interpIn, chord, _autoOf(keys, i + 1, isOut: false));
   return CubicSpan.fromAe(t1, a.value, t2, b.value,
       speedOut: s1, inflOut: b1, speedIn: s2, inflIn: b2);
+}
+
+/// The automatic speed for one side, or null where the side is not automatic
+/// — so an ordinary curve pays nothing for the feature.
+double? _autoOf(List<BridgeKeyframe> keys, int index, {required bool isOut}) {
+  final side = isOut ? keys[index].interpOut : keys[index].interpIn;
+  return side is BridgeSideInterp_Auto
+      ? autoSpeedAt(keys, index, clamped: side.field0.clamped)
+      : null;
 }
 
 /// Evaluate a sorted key list at `t` seconds — the engine's `evaluate`,
@@ -152,7 +257,7 @@ double evaluateKeys(List<BridgeKeyframe> keys, double t) {
   if (keys.isEmpty) return 0;
   if (t <= rationalSeconds(keys.first.time)) return keys.first.value;
   if (t >= rationalSeconds(keys.last.time)) return keys.last.value;
-  final (a, b, t1, t2) = _spanAt(keys, t);
+  final (i, a, b, t1, t2) = _spanAt(keys, t);
   final dt = t2 - t1;
   if (dt <= 0) return a.value;
   if (a.interpOut is BridgeSideInterp_Hold) return a.value;
@@ -160,7 +265,7 @@ double evaluateKeys(List<BridgeKeyframe> keys, double t) {
       b.interpIn is BridgeSideInterp_Linear) {
     return a.value + (b.value - a.value) * ((t - t1) / dt);
   }
-  return _cubicOf(a, b, t1, t2).valueAt(t);
+  return _cubicOf(keys, i).valueAt(t);
 }
 
 /// The value of a scalar at `t` seconds — a static one is itself everywhere.
@@ -182,7 +287,7 @@ double evaluateKeysSpeed(List<BridgeKeyframe> keys, double t) {
       t >= rationalSeconds(keys.last.time)) {
     return 0;
   }
-  final (a, b, t1, t2) = _spanAt(keys, t);
+  final (i, a, b, t1, t2) = _spanAt(keys, t);
   final dt = t2 - t1;
   if (dt <= 0) return 0;
   if (a.interpOut is BridgeSideInterp_Hold) return 0;
@@ -190,7 +295,7 @@ double evaluateKeysSpeed(List<BridgeKeyframe> keys, double t) {
       b.interpIn is BridgeSideInterp_Linear) {
     return (b.value - a.value) / dt;
   }
-  return _cubicOf(a, b, t1, t2).speedAt(t);
+  return _cubicOf(keys, i).speedAt(t);
 }
 
 /// The speed a key's chosen side reads *at the key* — what the speed graph's
@@ -215,15 +320,21 @@ double sideSpeedAtKey(List<BridgeKeyframe> keys, int index,
   final side = isOut ? key.interpOut : key.interpIn;
   return switch (side) {
     BridgeSideInterp_Bezier(:final field0) => field0.speed,
+    // Automatic: the neighbours decide, not the remembered ease.
+    BridgeSideInterp_Auto(:final field0) =>
+      autoSpeedAt(keys, index, clamped: field0.clamped),
     BridgeSideInterp_Hold() => 0,
     _ => chord,
   };
 }
 
 /// A side's influence, defaulting to ⅓ where the side is not a bezier —
-/// what a handle shows before its first drag.
+/// what a handle shows before its first drag. An automatic side keeps its own
+/// reach: the neighbours point the tangent, they do not lengthen it.
 double sideInfluence(BridgeSideInterp side) => switch (side) {
       BridgeSideInterp_Bezier(:final field0) =>
+        field0.influence.clamp(1e-3, 1.0).toDouble(),
+      BridgeSideInterp_Auto(:final field0) =>
         field0.influence.clamp(1e-3, 1.0).toDouble(),
       _ => 1.0 / 3.0,
     };
@@ -317,13 +428,16 @@ const double minTangentReach = 1e-3;
             : (i > 0 ? keys[i - 1] : null);
         if (nb == null) continue;
         final side = isOut ? k.interpOut : k.interpIn;
-        if (side is! BridgeSideInterp_Bezier) continue;
+        if (side is! BridgeSideInterp_Bezier &&
+            side is! BridgeSideInterp_Auto) {
+          continue;
+        }
         final e = handleEndpoint(
           keyTime: t,
           keyValue: k.value,
           neighbourTime: rationalSeconds(nb.time),
           isOut: isOut,
-          speed: side.field0.speed,
+          speed: sideSpeedAtKey(keys, i, isOut: isOut),
           influence: sideInfluence(side),
         );
         grow(e.value);
@@ -402,12 +516,17 @@ class LumitClipRow {
   });
 }
 
-/// How a side's easing is written in the clipboard text: `linear`, `hold`, or
-/// `bezier(speed,influence)`.
+/// How a side's easing is written in the clipboard text: `linear`, `hold`,
+/// `bezier(speed,influence)`, or — for an automatic side —
+/// `auto(speed,influence)` / `clamp(speed,influence)`, carrying the ease it is
+/// remembering so a copied key pastes in the mode it was in.
 String easeToText(BridgeSideInterp side) => switch (side) {
       BridgeSideInterp_Hold() => 'hold',
       BridgeSideInterp_Bezier(:final field0) =>
         'bezier(${_number(field0.speed)},${_number(field0.influence)})',
+      BridgeSideInterp_Auto(:final field0) =>
+        '${field0.clamped ? 'clamp' : 'auto'}'
+            '(${_number(field0.speed)},${_number(field0.influence)})',
       _ => 'linear',
     };
 
@@ -417,16 +536,19 @@ String easeToText(BridgeSideInterp side) => switch (side) {
 BridgeSideInterp easeFromText(String text) {
   final cell = text.trim().toLowerCase();
   if (cell == 'hold') return const BridgeSideInterp.hold();
-  if (cell.startsWith('bezier(') && cell.endsWith(')')) {
-    final parts = cell.substring(7, cell.length - 1).split(',');
-    if (parts.length == 2) {
-      final speed = double.tryParse(parts[0]);
-      final influence = double.tryParse(parts[1]);
-      if (speed != null && influence != null) {
-        return BridgeSideInterp.bezier(BridgeBezierSide(
-            speed: speed, influence: influence.clamp(1e-3, 1.0)));
-      }
-    }
+  for (final name in const ['bezier', 'auto', 'clamp']) {
+    if (!cell.startsWith('$name(') || !cell.endsWith(')')) continue;
+    final parts = cell.substring(name.length + 1, cell.length - 1).split(',');
+    if (parts.length != 2) break;
+    final speed = double.tryParse(parts[0]);
+    final influence = double.tryParse(parts[1]);
+    if (speed == null || influence == null) break;
+    final reach = influence.clamp(1e-3, 1.0).toDouble();
+    return name == 'bezier'
+        ? BridgeSideInterp.bezier(
+            BridgeBezierSide(speed: speed, influence: reach))
+        : BridgeSideInterp.auto(BridgeAutoSide(
+            clamped: name == 'clamp', speed: speed, influence: reach));
   }
   return const BridgeSideInterp.linear();
 }
@@ -648,7 +770,8 @@ List<BridgeKeyframe> envelopeToKeys(
   // against the chord of the span it governs.
   final values = <double>[keys.first.value];
   for (var i = 1; i < keys.length; i++) {
-    final dt = rationalSeconds(keys[i].time) - rationalSeconds(keys[i - 1].time);
+    final dt =
+        rationalSeconds(keys[i].time) - rationalSeconds(keys[i - 1].time);
     // Non-positive only for keys sharing a time, which the editing ops
     // forbid; treated as no advance rather than as a reason to fail.
     values.add(dt > 0
@@ -679,9 +802,7 @@ List<BridgeKeyframe> envelopeToKeys(
         value: values[i],
         // The first key has no span before it and the last none after it;
         // those sides govern nothing, so they stay as plain as possible.
-        interpIn: i == 0
-            ? const BridgeSideInterp.linear()
-            : side(i, i - 1, i),
+        interpIn: i == 0 ? const BridgeSideInterp.linear() : side(i, i - 1, i),
         interpOut: i == keys.length - 1
             ? const BridgeSideInterp.linear()
             : side(i, i, i + 1),

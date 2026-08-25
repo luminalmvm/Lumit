@@ -552,6 +552,42 @@ void applyInterpToSelection({
   if (edits.isNotEmpty) commitChannelEdits(edits);
 }
 
+/// Put both sides of every selected key into [mode] — the bottom bar's
+/// Tangents Auto / Clamp / Free (docs/impl/timeline-interaction.md §6.3).
+///
+/// The mode is stored **per side**, and this sets both, because the strip's
+/// unit is the key: a side is aimed one at a time by dragging its handle,
+/// which is also what takes it back to Free. The ease each side is carrying
+/// travels inside the automatic side ([withTangentMode]), so a round trip out
+/// to Auto and back hands the custom ease over unchanged.
+void applyTangentModeToSelection({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+  required TangentMode mode,
+}) {
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    final keys = channel.keys;
+    var touched = false;
+    final next = <BridgeKeyframe>[];
+    for (var i = 0; i < keys.length; i++) {
+      if (!selectedKeys.contains('${channel.id}#$i')) {
+        next.add(keys[i]);
+        continue;
+      }
+      touched = true;
+      next.add(BridgeKeyframe(
+        time: keys[i].time,
+        value: keys[i].value,
+        interpIn: withTangentMode(keys[i].interpIn, mode),
+        interpOut: withTangentMode(keys[i].interpOut, mode),
+      ));
+    }
+    if (touched) edits[channel] = BridgeScalar.keyframed(next);
+  }
+  if (edits.isNotEmpty) commitChannelEdits(edits);
+}
+
 /// Plant a key at [frame] on every channel here, each taking the value its own
 /// curve already reads there — so the picture does not move. Adding a key is a
 /// place to grab, not an edit (docs/07 §4.3, K-500 §2.1's lane gesture).
@@ -2385,10 +2421,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       neighbourTime:
           nb == null ? rationalSeconds(key.time) : rationalSeconds(nb.time),
       isOut: isOut,
-      speed: switch (side) {
-        BridgeSideInterp_Bezier(:final field0) => field0.speed,
-        _ => sideSpeedAtKey(keys, index, isOut: isOut),
-      },
+      speed: sideSpeedAtKey(keys, index, isOut: isOut),
       influence: sideInfluence(side),
     );
   }
@@ -2400,18 +2433,22 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final key = keys[index];
     final side = isOut ? key.interpOut : key.interpIn;
     final other = isOut ? key.interpIn : key.interpOut;
-    // Joined when both sides are beziers moving at the same speed; `Alt` held
-    // as the drag begins flips it — break them apart, or join them back. A
-    // side with no span on the other flank has nothing to join to.
-    final joined = side is BridgeSideInterp_Bezier &&
-        other is BridgeSideInterp_Bezier &&
-        (side.field0.speed - other.field0.speed).abs() < 1e-9;
+    // Joined when both sides have a tangent and it moves at the same speed;
+    // `Alt` held as the drag begins flips it — break them apart, or join them
+    // back. A side with no span on the other flank has nothing to join to.
+    // A pair of automatic sides is joined by construction: the neighbours give
+    // both of them the same aim.
+    bool eased(BridgeSideInterp s) =>
+        s is BridgeSideInterp_Bezier || s is BridgeSideInterp_Auto;
+    final joined = eased(side) &&
+        eased(other) &&
+        (sideSpeedAtKey(keys, index, isOut: isOut) -
+                    sideSpeedAtKey(keys, index, isOut: !isOut))
+                .abs() <
+            1e-9;
     final alt = altActuallyHeld();
     final hasOther = _neighbour(keys, index, !isOut) != null;
-    final speed = switch (side) {
-      BridgeSideInterp_Bezier(:final field0) => field0.speed,
-      _ => sideSpeedAtKey(keys, index, isOut: isOut),
-    };
+    final speed = sideSpeedAtKey(keys, index, isOut: isOut);
 
     setState(() {
       _handleDrag = _HandleDrag(
@@ -2421,10 +2458,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         mirrored: hasOther && (alt ? !joined : joined),
         speed: speed,
         influence: sideInfluence(side),
-        partnerSpeed: switch (other) {
-          BridgeSideInterp_Bezier(:final field0) => field0.speed,
-          _ => sideSpeedAtKey(keys, index, isOut: !isOut),
-        },
+        partnerSpeed: sideSpeedAtKey(keys, index, isOut: !isOut),
         partnerInfluence: sideInfluence(other),
         partnerLenPx: _handleLength(channel, index, !isOut, range, height),
         range: range,
@@ -3587,14 +3621,18 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final key = keys[index];
     final side = isOut ? key.interpOut : key.interpIn;
     if (widget.lens == GraphLens.value) {
-      // Handles belong to eased sides; a linear side has none to show.
-      if (side is! BridgeSideInterp_Bezier) return null;
+      // Handles belong to eased sides; a linear side has none to show. An
+      // automatic side has one — its neighbours simply choose where it points,
+      // and dragging it is how the side is taken back to Free.
+      if (side is! BridgeSideInterp_Bezier && side is! BridgeSideInterp_Auto) {
+        return null;
+      }
       final e = handleEndpoint(
         keyTime: rationalSeconds(key.time),
         keyValue: key.value,
         neighbourTime: rationalSeconds(nb.time),
         isOut: isOut,
-        speed: side.field0.speed,
+        speed: sideSpeedAtKey(keys, index, isOut: isOut),
         influence: sideInfluence(side),
       );
       return (e.time, e.value);
@@ -4123,9 +4161,13 @@ class _KeyGlyphPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = colour;
     final half = size.width / 2;
+    // An automatic side is an eased side: it has a tangent, so its key is a
+    // circle like any other eased one.
     if (speedDot ||
         key_.interpIn is BridgeSideInterp_Bezier ||
-        key_.interpOut is BridgeSideInterp_Bezier) {
+        key_.interpOut is BridgeSideInterp_Bezier ||
+        key_.interpIn is BridgeSideInterp_Auto ||
+        key_.interpOut is BridgeSideInterp_Auto) {
       canvas.drawCircle(Offset(half, half), half - 1, paint);
       return;
     }

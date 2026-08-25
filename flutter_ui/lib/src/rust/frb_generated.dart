@@ -9479,6 +9479,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeAutoSide dco_decode_box_autoadd_bridge_auto_side(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_auto_side(raw);
+  }
+
+  @protected
   BridgeBezierSide dco_decode_box_autoadd_bridge_bezier_side(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_bezier_side(raw);
@@ -9783,6 +9789,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       bands: dco_decode_u_32(arr[3]),
       buckets: dco_decode_u_32(arr[4]),
       values: dco_decode_list_prim_f_32_strict(arr[5]),
+    );
+  }
+
+  @protected
+  BridgeAutoSide dco_decode_bridge_auto_side(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return BridgeAutoSide(
+      clamped: dco_decode_bool(arr[0]),
+      speed: dco_decode_f_64(arr[1]),
+      influence: dco_decode_f_64(arr[2]),
     );
   }
 
@@ -11237,6 +11256,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeSideInterp_Bezier(
           dco_decode_box_autoadd_bridge_bezier_side(raw[1]),
         );
+      case 3:
+        return BridgeSideInterp_Auto(
+          dco_decode_box_autoadd_bridge_auto_side(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -12281,6 +12304,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeAutoSide sse_decode_box_autoadd_bridge_auto_side(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_auto_side(deserializer));
+  }
+
+  @protected
   BridgeBezierSide sse_decode_box_autoadd_bridge_bezier_side(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -12616,6 +12646,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         bands: var_bands,
         buckets: var_buckets,
         values: var_values);
+  }
+
+  @protected
+  BridgeAutoSide sse_decode_bridge_auto_side(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_clamped = sse_decode_bool(deserializer);
+    var var_speed = sse_decode_f_64(deserializer);
+    var var_influence = sse_decode_f_64(deserializer);
+    return BridgeAutoSide(
+        clamped: var_clamped, speed: var_speed, influence: var_influence);
   }
 
   @protected
@@ -14116,6 +14156,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         var var_field0 =
             sse_decode_box_autoadd_bridge_bezier_side(deserializer);
         return BridgeSideInterp_Bezier(var_field0);
+      case 3:
+        var var_field0 = sse_decode_box_autoadd_bridge_auto_side(deserializer);
+        return BridgeSideInterp_Auto(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -15603,6 +15646,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_box_autoadd_bridge_auto_side(
+      BridgeAutoSide self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_auto_side(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -15930,6 +15980,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.bands, serializer);
     sse_encode_u_32(self.buckets, serializer);
     sse_encode_list_prim_f_32_strict(self.values, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_auto_side(
+      BridgeAutoSide self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.clamped, serializer);
+    sse_encode_f_64(self.speed, serializer);
+    sse_encode_f_64(self.influence, serializer);
   }
 
   @protected
@@ -17090,6 +17149,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       case BridgeSideInterp_Bezier(field0: final field0):
         sse_encode_i_32(2, serializer);
         sse_encode_box_autoadd_bridge_bezier_side(field0, serializer);
+      case BridgeSideInterp_Auto(field0: final field0):
+        sse_encode_i_32(3, serializer);
+        sse_encode_box_autoadd_bridge_auto_side(field0, serializer);
     }
   }
 

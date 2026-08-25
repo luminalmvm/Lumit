@@ -13868,3 +13868,56 @@ until its timer expires, and selecting a key is the commonest gesture on the pan
 frame field is bounded by the key's two neighbours, because the popover holds an index
 into a list that a re-sort would shuffle underneath it, and the channel is looked up by id
 at each write rather than held, because a channel is a snapshot of the read model.
+
+## K-506 — Tangent modes are an arm of the side, and the side remembers the ease it was given
+
+*Status: DECIDED. Resolves the engine-seam question docs/impl/timeline-interaction.md §6.3
+left open ("a tangent-mode field on `BridgeSideInterp`'s bezier arm or a sibling,
+designed inside its work package"). The maths is docs/impl/keyframe-eval.md §6. See
+K-333/K-334 (handle drags), K-457/K-459 (a key's shape says its interpolation).*
+
+The graph's tangent strip offers three modes per keyframe side — **Auto**, **Clamp**,
+**Free** — and the study set one bar that the seam had to be designed around: *switching
+Free → Auto → Free keeps the custom ease*. This entry records how, because the obvious
+shapes all fail it.
+
+**The mode is a fourth arm of `SideInterp`, not a field beside the existing ones.**
+`Auto { clamped, speed, influence }` joins `Hold`, `Linear` and `Bezier`. Its `speed` and
+`influence` are **never evaluated**: they are the ease the side carried when it was last
+Free, filed inside the automatic side and handed back when the side returns to it. That is
+what makes the round trip true with no merge step anywhere — the memory travels inside the
+thing that owns it, so a key list can cross the bridge, be rebuilt whole by the interface,
+and come back with the ease intact. A mode field *beside* the side would have needed the
+write path to consult what was there before, at every write site and for ever; recomputing
+the tangent and storing it would have needed a second pair of remembered fields anyway,
+plus a hook on every edit that moves a neighbour. It also costs the seam nothing but one
+variant: no new field means no new required argument at the forty-odd places that build a
+keyframe.
+
+**Automatic tangents resolve at read, never at write.** `resolved_side(keys, i, out)` is
+the one funnel: an automatic side becomes the bezier its neighbours dictate, and the
+evaluator, the speed lens, the handle geometry and the range fit all go through it. So
+"Auto recomputes whenever a neighbour moves" is not a hook that can be forgotten — there
+is nothing stored to go stale. Auto is the non-uniform Catmull-Rom slope through the two
+neighbours; Clamp is that slope flattened at a peak or trough and otherwise held to three
+times the gentler adjacent chord, which is the Fritsch–Carlson bound and therefore the
+*tight* one — a smaller constant would flatten curves that were never going to overshoot.
+An end key has no pair to aim between, so its automatic tangent is flat. The influence is
+the side's own in every mode: the neighbours point the tangent, they do not lengthen it.
+
+**Shaping takes a side back to Free, and the strip sets both sides.** The handle drag, the
+In/Out influence wells and the ease presets all write a plain bezier side, which *is* a
+Free side — so "the user has overruled the neighbours" needs no rule of its own. The
+strip's three chips act on both sides of each selected key, because the strip's unit is
+the key and a single side is re-aimed by dragging its own handle. The chips draw unlit,
+like the Linear / Bezier / Hold run beside them: a selection spanning two modes has no one
+answer to light, and what is legible instead is the handle itself. A side that was
+straight or held returns from Auto as an easy ease rather than as a straight side, since
+it had no ease of its own to keep and has had a tangent the whole time it was automatic.
+
+**A key with an automatic side is an eased key wherever it is drawn** — a circle in the
+graph, an hourglass half in the lanes and on the Keys sheet (K-457). The mark says how the
+motion runs, not which mode decided it. And planting a key inside a span leaves an
+automatic neighbour automatic: preserving the curve's shape (K-221) cannot mean freezing a
+tangent whose whole definition is "wherever the neighbours put it", one of which has just
+moved.

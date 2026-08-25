@@ -24,6 +24,78 @@ pub enum SideInterp {
         speed: f64,
         influence: f64,
     },
+    /// A side whose **speed is computed from the key's neighbours** on every
+    /// read rather than stored (docs/impl/keyframe-eval.md §6): Auto is the
+    /// Catmull-Rom slope through the two neighbouring keys, and `clamped` is
+    /// the same slope limited so the span cannot overshoot them.
+    ///
+    /// `speed` and `influence` are **not** evaluated. They are the ease this
+    /// side carried when it was last Free, held here so that Free → Auto →
+    /// Free hands the custom ease back exactly (the study's explicit bar,
+    /// §6.3 of docs/impl/timeline-interaction.md). Carrying them inside the
+    /// side is what lets a key list cross the bridge and come back without a
+    /// merge step: the memory travels with the thing that owns it.
+    Auto {
+        clamped: bool,
+        speed: f64,
+        influence: f64,
+    },
+}
+
+/// Which of the three tangent modes a side is in — the graph strip's
+/// Auto / Clamp / Free (docs/impl/timeline-interaction.md §6.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TangentMode {
+    Auto,
+    Clamp,
+    Free,
+}
+
+impl SideInterp {
+    /// Which mode this side is in.
+    #[must_use]
+    pub fn tangent_mode(self) -> TangentMode {
+        match self {
+            SideInterp::Auto { clamped: false, .. } => TangentMode::Auto,
+            SideInterp::Auto { clamped: true, .. } => TangentMode::Clamp,
+            _ => TangentMode::Free,
+        }
+    }
+
+    /// This side put into [`mode`](TangentMode) — the strip's three buttons.
+    ///
+    /// The ease is never destroyed by the switch: going automatic files the
+    /// side's current speed and influence inside the [`SideInterp::Auto`] arm,
+    /// and coming back to Free hands them out again. A side that was straight
+    /// or held has no ease of its own to keep, so it files the easy-ease pair
+    /// and returns as an eased key — which is what an automatic side has been
+    /// in the meantime.
+    #[must_use]
+    pub fn with_tangent_mode(self, mode: TangentMode) -> SideInterp {
+        let (speed, influence) = match self {
+            SideInterp::Bezier { speed, influence }
+            | SideInterp::Auto {
+                speed, influence, ..
+            } => (speed, influence),
+            SideInterp::Hold | SideInterp::Linear => (0.0, 1.0 / 3.0),
+        };
+        match mode {
+            TangentMode::Auto => SideInterp::Auto {
+                clamped: false,
+                speed,
+                influence,
+            },
+            TangentMode::Clamp => SideInterp::Auto {
+                clamped: true,
+                speed,
+                influence,
+            },
+            TangentMode::Free => match self {
+                SideInterp::Auto { .. } => SideInterp::Bezier { speed, influence },
+                other => other,
+            },
+        }
+    }
 }
 
 /// A scalar keyframe. Time lives in the owner's timebase (kept rational so
@@ -81,10 +153,16 @@ impl Keyframe {
     }
 
     /// True when either side is a bezier (an eased key), so the UI can show it
-    /// as a circle and give it tangent handles.
+    /// as a circle and give it tangent handles. An automatic side counts: it
+    /// has a tangent, the neighbours simply choose where it points.
     pub fn is_bezier(&self) -> bool {
-        matches!(self.interp_in, SideInterp::Bezier { .. })
-            || matches!(self.interp_out, SideInterp::Bezier { .. })
+        matches!(
+            self.interp_in,
+            SideInterp::Bezier { .. } | SideInterp::Auto { .. }
+        ) || matches!(
+            self.interp_out,
+            SideInterp::Bezier { .. } | SideInterp::Auto { .. }
+        )
     }
 
     /// True when the out-side holds, so the value steps at the next key rather
@@ -111,8 +189,69 @@ pub fn evaluate(keys: &[Keyframe], t: f64) -> Option<f64> {
         .windows(2)
         .position(|w| t < w[1].time.to_f64())
         .unwrap_or(keys.len() - 2);
-    let (a, b) = (&keys[idx], &keys[idx + 1]);
-    Some(evaluate_span(a, b, t))
+    Some(evaluate_span(keys, idx, t))
+}
+
+/// The speed an automatic side takes at `keys[i]` (docs/impl/keyframe-eval.md
+/// §6), in value-units per second.
+///
+/// In plain terms: an automatic tangent points the way the curve is already
+/// going. The plain one aims straight from the key before to the key after —
+/// the Catmull-Rom slope — which is smooth but can bulge past a neighbour on
+/// the way. The clamped one is the same aim with two limits that make the
+/// bulge impossible: it lies flat where the key is a peak or a trough (the two
+/// neighbours are on the same side of it, so any tilt would overshoot one of
+/// them), and elsewhere it is held to three times the gentler of the two
+/// chords, which is the classical monotone-cubic bound.
+///
+/// An end key has no pair to aim between, so its automatic tangent is flat —
+/// the curve arrives and leaves level, which is what "auto ease" means there.
+pub fn auto_speed(keys: &[Keyframe], i: usize, clamped: bool) -> f64 {
+    if i == 0 || i + 1 >= keys.len() {
+        return 0.0;
+    }
+    let (p, k, n) = (&keys[i - 1], &keys[i], &keys[i + 1]);
+    let (tp, tk, tn) = (p.time.to_f64(), k.time.to_f64(), n.time.to_f64());
+    if tn - tp <= 0.0 {
+        return 0.0;
+    }
+    let smooth = (n.value - p.value) / (tn - tp);
+    if !clamped {
+        return smooth;
+    }
+    if tk - tp <= 0.0 || tn - tk <= 0.0 {
+        return 0.0;
+    }
+    let before = (k.value - p.value) / (tk - tp);
+    let after = (n.value - k.value) / (tn - tk);
+    if before * after <= 0.0 {
+        return 0.0;
+    }
+    let limit = 3.0 * before.abs().min(after.abs());
+    smooth.clamp(-limit, limit)
+}
+
+/// One side of `keys[i]` as the evaluator sees it: an automatic side becomes
+/// the bezier its neighbours dictate, everything else is itself.
+///
+/// The influence is the side's own — an automatic tangent decides which way
+/// the handle points, not how far it reaches.
+#[must_use]
+pub fn resolved_side(keys: &[Keyframe], i: usize, out: bool) -> SideInterp {
+    let side = if out {
+        keys[i].interp_out
+    } else {
+        keys[i].interp_in
+    };
+    match side {
+        SideInterp::Auto {
+            clamped, influence, ..
+        } => SideInterp::Bezier {
+            speed: auto_speed(keys, i, clamped),
+            influence,
+        },
+        other => other,
+    }
 }
 
 /// The instantaneous speed dv/dt at time `t` (value-units per second) — the
@@ -130,14 +269,14 @@ pub fn evaluate_speed(keys: &[Keyframe], t: f64) -> Option<f64> {
         .windows(2)
         .position(|w| t < w[1].time.to_f64())
         .unwrap_or(keys.len() - 2);
-    let (a, b) = (&keys[idx], &keys[idx + 1]);
-    Some(evaluate_speed_span(a, b, t))
+    Some(evaluate_speed_span(keys, idx, t))
 }
 
 /// One span's slope, matching [`evaluate_span`]'s side handling: a Hold-out span
 /// is flat (0), a straight span is the chord slope, and a bezier span is the
 /// value curve's exact derivative.
-fn evaluate_speed_span(a: &Keyframe, b: &Keyframe, t: f64) -> f64 {
+fn evaluate_speed_span(keys: &[Keyframe], i: usize, t: f64) -> f64 {
+    let (a, b) = (&keys[i], &keys[i + 1]);
     let (t1, t2) = (a.time.to_f64(), b.time.to_f64());
     let dt = t2 - t1;
     if dt <= 0.0 {
@@ -146,18 +285,14 @@ fn evaluate_speed_span(a: &Keyframe, b: &Keyframe, t: f64) -> f64 {
     match (a.interp_out, b.interp_in) {
         (SideInterp::Hold, _) => 0.0,
         (SideInterp::Linear, SideInterp::Linear) => (b.value - a.value) / dt,
-        (out_side, in_side) => {
-            let chord = (b.value - a.value) / dt;
-            let (s1, b1) = side_params(out_side, chord);
-            let (s2, b2) = side_params(in_side, chord);
-            CubicSpan::from_ae(t1, a.value, t2, b.value, s1, b1, s2, b2).speed_at(t)
-        }
+        _ => span_cubic(keys, i).speed_at(t),
     }
 }
 
 /// One span, honouring the pair of adjacent sides. Hold-out wins the span
 /// (docs/impl/keyframe-eval.md §2).
-fn evaluate_span(a: &Keyframe, b: &Keyframe, t: f64) -> f64 {
+fn evaluate_span(keys: &[Keyframe], i: usize, t: f64) -> f64 {
+    let (a, b) = (&keys[i], &keys[i + 1]);
     let (t1, t2) = (a.time.to_f64(), b.time.to_f64());
     let dt = t2 - t1;
     if dt <= 0.0 {
@@ -166,18 +301,28 @@ fn evaluate_span(a: &Keyframe, b: &Keyframe, t: f64) -> f64 {
     match (a.interp_out, b.interp_in) {
         (SideInterp::Hold, _) => a.value,
         (SideInterp::Linear, SideInterp::Linear) => a.value + (b.value - a.value) * ((t - t1) / dt),
-        (out_side, in_side) => {
-            // Mixed linear/bezier sides: a linear side is a bezier whose
-            // handle lies on the chord (speed = chord slope, influence ⅓).
-            let chord = (b.value - a.value) / dt;
-            let (s1, b1) = side_params(out_side, chord);
-            let (s2, b2) = side_params(in_side, chord);
-            let cubic = CubicSpan::from_ae(t1, a.value, t2, b.value, s1, b1, s2, b2);
-            cubic.value_at(t)
-        }
+        _ => span_cubic(keys, i).value_at(t),
     }
 }
 
+/// The cubic across the span leaving `keys[i]`, its two sides resolved
+/// ([`resolved_side`]) so an automatic tangent is the one the neighbours
+/// dictate.
+fn span_cubic(keys: &[Keyframe], i: usize) -> CubicSpan {
+    let (a, b) = (&keys[i], &keys[i + 1]);
+    let (t1, t2) = (a.time.to_f64(), b.time.to_f64());
+    // Mixed linear/bezier sides: a linear side is a bezier whose handle lies
+    // on the chord (speed = chord slope, influence ⅓).
+    let chord = (b.value - a.value) / (t2 - t1);
+    let (s1, b1) = side_params(resolved_side(keys, i, true), chord);
+    let (s2, b2) = side_params(resolved_side(keys, i + 1, false), chord);
+    CubicSpan::from_ae(t1, a.value, t2, b.value, s1, b1, s2, b2)
+}
+
+/// A side's (speed, influence). Takes a side that has already been through
+/// [`resolved_side`], so an automatic one never reaches here as itself; the
+/// fallback treats one that does as straight, which is the calmest wrong
+/// answer rather than a panic in an engine crate.
 fn side_params(side: SideInterp, chord_slope: f64) -> (f64, f64) {
     match side {
         SideInterp::Bezier { speed, influence } => (speed, influence.clamp(1e-3, 1.0)),
@@ -468,8 +613,7 @@ impl Property {
         }) else {
             return false;
         };
-        let (a, b) = (keys[i], keys[i + 1]);
-        let (t1, t2) = (a.time.to_f64(), b.time.to_f64());
+        let a = keys[i];
 
         // A held span is flat by definition: the key takes the held value and
         // holds on, and neither neighbour needs touching.
@@ -486,18 +630,24 @@ impl Property {
             return true;
         }
 
-        let chord = (b.value - a.value) / (t2 - t1);
-        let (s1, b1) = side_params(a.interp_out, chord);
-        let (s2, b2) = side_params(b.interp_in, chord);
-        let cubic = CubicSpan::from_ae(t1, a.value, t2, b.value, s1, b1, s2, b2);
+        let cubic = span_cubic(keys, i);
         let u = cubic.solve_u(tf);
         let (left, right) = cubic.split_at(u);
 
         // The split point is the curve's own value there, taken from the split
         // rather than re-evaluated, so the two halves meet exactly.
         let value = left.y[3];
-        keys[i].interp_out = left.out_side();
-        keys[i + 1].interp_in = right.in_side();
+        // An **automatic** neighbour keeps its mode rather than being frozen
+        // into the shape it happened to have: its tangent is a function of its
+        // neighbours, and one of those has just changed. The shape either side
+        // of the new key is preserved wherever the side stored one; where it
+        // did not, the side goes on recomputing, which is what it is for.
+        if !matches!(keys[i].interp_out, SideInterp::Auto { .. }) {
+            keys[i].interp_out = left.out_side();
+        }
+        if !matches!(keys[i + 1].interp_in, SideInterp::Auto { .. }) {
+            keys[i + 1].interp_in = right.in_side();
+        }
         keys.insert(
             i + 1,
             Keyframe {
@@ -830,5 +980,207 @@ mod tests {
         assert!(acc.is_finite());
         // Debug-build headroom: impl note budgets 20 ms release; allow 40× debug.
         assert!(elapsed.as_millis() < 800, "1M evals took {elapsed:?}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tangent modes — Auto / Clamp / Free (docs/impl/keyframe-eval.md §6).
+    // -----------------------------------------------------------------------
+
+    fn auto(clamped: bool) -> SideInterp {
+        SideInterp::Auto {
+            clamped,
+            speed: 0.0,
+            influence: 1.0 / 3.0,
+        }
+    }
+
+    /// Three keys 0, 10, 30 at one second apart: the automatic tangent at the
+    /// middle one aims from the first to the last — (30 − 0) / 2 s = 15.
+    #[test]
+    fn an_automatic_tangent_aims_between_the_neighbours() {
+        let keys = [
+            key(rat(0, 1), 0.0, auto(false)),
+            key(rat(1, 1), 10.0, auto(false)),
+            key(rat(2, 1), 30.0, auto(false)),
+        ];
+        assert!((auto_speed(&keys, 1, false) - 15.0).abs() < 1e-12);
+        // An end key has no pair to aim between, so it lies flat.
+        assert_eq!(auto_speed(&keys, 0, false), 0.0);
+        assert_eq!(auto_speed(&keys, 2, false), 0.0);
+    }
+
+    /// Auto's smooth slope is what the evaluator uses: the resolved side is a
+    /// bezier at that speed, keeping the side's own influence.
+    #[test]
+    fn an_automatic_side_resolves_to_the_bezier_its_neighbours_dictate() {
+        let keys = [
+            key(rat(0, 1), 0.0, auto(false)),
+            key(
+                rat(1, 1),
+                10.0,
+                SideInterp::Auto {
+                    clamped: false,
+                    speed: 99.0, // remembered ease, never evaluated
+                    influence: 0.5,
+                },
+            ),
+            key(rat(2, 1), 30.0, auto(false)),
+        ];
+        assert_eq!(
+            resolved_side(&keys, 1, true),
+            SideInterp::Bezier {
+                speed: 15.0,
+                influence: 0.5
+            }
+        );
+    }
+
+    /// **Auto recomputes whenever a neighbour moves.** The same key, the same
+    /// mode, a moved neighbour — a different tangent, and so a different
+    /// curve. A free side would have gone on reading the speed it stored.
+    #[test]
+    fn an_automatic_tangent_follows_a_moved_neighbour() {
+        let mut keys = [
+            key(rat(0, 1), 0.0, auto(false)),
+            key(rat(1, 1), 10.0, auto(false)),
+            key(rat(2, 1), 30.0, auto(false)),
+        ];
+        let before = evaluate(&keys, 1.5).unwrap();
+        keys[2].value = 200.0;
+        let after = evaluate(&keys, 1.5).unwrap();
+        assert!((auto_speed(&keys, 1, false) - 100.0).abs() < 1e-12);
+        assert!((after - before).abs() > 1.0);
+
+        // With both sides free the stored speed is all there is, so moving the
+        // neighbour's *value* changes the span's ends but not the tangent.
+        let free = SideInterp::Bezier {
+            speed: 15.0,
+            influence: 1.0 / 3.0,
+        };
+        let frozen = [
+            key(rat(0, 1), 0.0, free),
+            key(rat(1, 1), 10.0, free),
+            key(rat(2, 1), 200.0, free),
+        ];
+        assert!((side_params(resolved_side(&frozen, 1, true), 0.0).0 - 15.0).abs() < 1e-12);
+    }
+
+    /// **Clamp is Auto with no overshoot.** A peak key — both neighbours
+    /// below it — gets a flat tangent, so no sample in either span rises above
+    /// it; the smooth tangent tilts and does overshoot.
+    #[test]
+    fn a_clamped_tangent_does_not_overshoot_its_neighbours() {
+        let peak = |side: SideInterp| {
+            [
+                key(rat(0, 1), 0.0, SideInterp::Linear),
+                key(rat(1, 1), 10.0, side),
+                key(rat(2, 1), 9.0, SideInterp::Linear),
+            ]
+        };
+        let clamped = peak(auto(true));
+        assert_eq!(auto_speed(&clamped, 1, true), 0.0);
+        for i in 0..=100 {
+            let t = i as f64 / 50.0;
+            assert!(
+                evaluate(&clamped, t).unwrap() <= 10.0 + 1e-9,
+                "clamped overshot at t={t}"
+            );
+        }
+        // The unclamped one aims from 0 to 9 across two seconds — uphill past
+        // the peak — and does rise above it.
+        let smooth = peak(auto(false));
+        assert!((auto_speed(&smooth, 1, false) - 4.5).abs() < 1e-12);
+        let over = (0..=100)
+            .map(|i| evaluate(&smooth, i as f64 / 50.0).unwrap())
+            .fold(f64::MIN, f64::max);
+        assert!(over > 10.0 + 1e-6, "smooth tangent should overshoot");
+    }
+
+    /// A clamped tangent that is *not* at a peak keeps the smooth aim, held to
+    /// three times the gentler chord (the monotone bound).
+    #[test]
+    fn a_clamped_tangent_keeps_the_smooth_aim_where_it_is_safe() {
+        let keys = [
+            key(rat(0, 1), 0.0, auto(true)),
+            key(rat(1, 1), 10.0, auto(true)),
+            key(rat(2, 1), 30.0, auto(true)),
+        ];
+        assert!((auto_speed(&keys, 1, true) - 15.0).abs() < 1e-12);
+
+        // A near-flat step followed by a leap: the smooth aim is steeper than
+        // three times the gentler chord (0.1), so it is held to 0.3.
+        let steep = [
+            key(rat(0, 1), 0.0, auto(true)),
+            key(rat(1, 1), 0.1, auto(true)),
+            key(rat(2, 1), 100.0, auto(true)),
+        ];
+        assert!((auto_speed(&steep, 1, true) - 0.3).abs() < 1e-12);
+    }
+
+    /// **Free → Auto → Free keeps the custom ease** (the study's explicit
+    /// bar). The mode switch files the ease inside the automatic side and
+    /// hands it back untouched.
+    #[test]
+    fn a_round_trip_through_auto_keeps_the_custom_ease() {
+        let custom = SideInterp::Bezier {
+            speed: 7.25,
+            influence: 0.82,
+        };
+        assert_eq!(custom.tangent_mode(), TangentMode::Free);
+        let automatic = custom.with_tangent_mode(TangentMode::Auto);
+        assert_eq!(automatic.tangent_mode(), TangentMode::Auto);
+        let clamped = automatic.with_tangent_mode(TangentMode::Clamp);
+        assert_eq!(clamped.tangent_mode(), TangentMode::Clamp);
+        assert_eq!(clamped.with_tangent_mode(TangentMode::Free), custom);
+
+        // A straight side has no ease of its own to keep; it returns eased,
+        // which is what it has been while automatic.
+        let straight = SideInterp::Linear.with_tangent_mode(TangentMode::Auto);
+        assert_eq!(
+            straight.with_tangent_mode(TangentMode::Free),
+            SideInterp::Bezier {
+                speed: 0.0,
+                influence: 1.0 / 3.0
+            }
+        );
+        // Free asked of an already-free side changes nothing at all.
+        assert_eq!(
+            SideInterp::Hold.with_tangent_mode(TangentMode::Free),
+            SideInterp::Hold
+        );
+    }
+
+    /// An automatic side survives the file format, and a key carrying one is
+    /// an eased key as far as the interface is concerned.
+    #[test]
+    fn an_automatic_side_serialises_and_counts_as_eased() {
+        let k = key(rat(1, 2), 5.0, auto(true));
+        let text = serde_json::to_string(&k).unwrap();
+        assert_eq!(serde_json::from_str::<Keyframe>(&text).unwrap(), k);
+        assert!(k.is_bezier());
+        assert!(!k.is_hold());
+    }
+
+    /// Planting a key inside a span leaves an automatic neighbour automatic —
+    /// its tangent is a function of its neighbours, and one has just changed.
+    #[test]
+    fn inserting_a_key_leaves_an_automatic_neighbour_automatic() {
+        let mut property = Property {
+            animation: Animation::Keyframed(vec![
+                key(rat(0, 1), 0.0, auto(false)),
+                key(rat(1, 1), 10.0, auto(false)),
+                key(rat(2, 1), 30.0, auto(false)),
+            ]),
+            extra: serde_json::Map::new(),
+        };
+        assert!(property.insert_key_preserving_shape(rat(1, 2)));
+        let Animation::Keyframed(keys) = &property.animation else {
+            panic!("still keyframed");
+        };
+        assert_eq!(keys.len(), 4);
+        assert!(matches!(keys[0].interp_out, SideInterp::Auto { .. }));
+        assert!(matches!(keys[2].interp_in, SideInterp::Auto { .. }));
+        // The new key is an ordinary free one, taking the shape of the split.
+        assert!(matches!(keys[1].interp_out, SideInterp::Bezier { .. }));
     }
 }

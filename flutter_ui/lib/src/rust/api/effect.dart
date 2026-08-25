@@ -13,7 +13,7 @@ import 'package:uuid/uuid.dart';
 part 'effect.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `animation_at`, `bridge_unit`, `catalogue`, `document_for`, `param`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -177,6 +177,38 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// Refused when `value` is of a different kind from the parameter, so a
   /// control can never quietly change what a parameter *is*.
   void setValue({required String id, required BridgeEffectValue value});
+}
+
+/// An **automatic** bezier side ([`SideInterp::Auto`]): its speed is computed
+/// from the key's neighbours, `clamped` saying whether the computation is the
+/// plain smooth one or the one that cannot overshoot them.
+///
+/// `speed` and `influence` are the ease the side carried when it was last
+/// free. They cross in both directions untouched, which is what makes
+/// Free → Auto → Free give the custom ease back without the write path having
+/// to consult what was there before.
+class BridgeAutoSide {
+  final bool clamped;
+  final double speed;
+  final double influence;
+
+  const BridgeAutoSide({
+    required this.clamped,
+    required this.speed,
+    required this.influence,
+  });
+
+  @override
+  int get hashCode => clamped.hashCode ^ speed.hashCode ^ influence.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeAutoSide &&
+          runtimeType == other.runtimeType &&
+          clamped == other.clamped &&
+          speed == other.speed &&
+          influence == other.influence;
 }
 
 /// A bezier side's After Effects-compatible handle: `speed` in value-units per
@@ -846,6 +878,9 @@ sealed class BridgeSideInterp with _$BridgeSideInterp {
   const factory BridgeSideInterp.bezier(
     BridgeBezierSide field0,
   ) = BridgeSideInterp_Bezier;
+  const factory BridgeSideInterp.auto(
+    BridgeAutoSide field0,
+  ) = BridgeSideInterp_Auto;
 }
 
 /// The unit a parameter's number is in (K-443) — what the row draws as its

@@ -443,9 +443,29 @@ middle of **every** key, same-shape pairs included.
   (Catmull-Rom-style) tangent whenever a neighbour moves, Clamp is Auto with the value
   clamped inside the neighbours (no overshoot), Free is today's behaviour. The mode is
   **per key side**, stored with the key; switching Free → Auto → Free keeps the custom
-  ease (the study's explicit bar). This needs an engine/bridge seam (a tangent-mode field
-  on `BridgeSideInterp`'s bezier arm or a sibling), designed inside its work package
-  under docs/impl/keyframe-eval.md's maths.
+  ease (the study's explicit bar). **Built in TI-8**, and the engine seam it needed is a
+  **fourth `SideInterp` arm**, not a field beside the bezier one:
+  `Auto { clamped, speed, influence }`, whose speed and influence are the ease the side
+  last had while Free and are never evaluated. The maths and the reasoning are
+  docs/impl/keyframe-eval.md §6, which binds; the sentences that govern this panel are:
+  - An automatic side's speed is read from its neighbours, its **influence is its own**,
+    and an **end key's automatic tangent is flat**.
+  - The strip's three chips act on **both sides** of every selected key, because the
+    strip's unit is the key; a single side is re-aimed by dragging its own handle.
+  - **Shaping a tangent takes its side back to Free** — the handle drag, the In/Out
+    influence wells and the ease presets all write a plain bezier side, so no separate
+    rule is needed for "the user has overruled the neighbours".
+  - The chips draw **unlit**, like the Linear / Bezier / Hold run beside them: they are
+    things to do to a selection, and a selection spanning two modes has no one answer to
+    light. What is legible instead is the handle, which stops following its neighbours
+    the moment it is dragged.
+  - A key with an automatic side is an **eased key everywhere it is drawn** — a circle in
+    the graph, an hourglass half in the lanes and on the Keys sheet. The mark says how
+    the motion runs, not which mode decided it.
+  - Planting a key inside a span (`insert_key_preserving_shape`) **leaves an automatic
+    neighbour automatic**: its tangent is a function of its neighbours and one of them
+    has just changed, so freezing it into the shape it happened to have would be the
+    wrong kind of preservation.
 - **Value labels live in a fixed right-hand gutter** (§12A.2; the drawing's 34px strip on
   a translucent ground — `graphGutterWidth`). Pinned to the **viewport's** right edge, not
   the canvas's: the pane is as wide as the whole composition inside the Timeline's
@@ -520,8 +540,10 @@ claim; missing is drawn/ruled but absent; polish is the study's slickness bar.
 9. **[missing] Dashed handle lines, hollow endpoint rings** (drawing). (§6.1)
 10. **[missing] Value hint pill** beside a selected/dragged graph key, and the lane
     drag's `f · value` badge (drawing; study §3 "live readout"). (§4.2, §6.2)
-11. **[missing] Tangents Auto / Clamp / Free** strip with per-side modes that survive a
-    round-trip through Free (drawing strip; study §2.1). Engine seam required. (§6.3)
+11. ~~**[missing] Tangents Auto / Clamp / Free**~~ — **landed, TI-8**: the strip's three
+    chips, the per-side modes, and the round trip through Free that keeps the custom
+    ease. The engine seam is a fourth `SideInterp` arm carrying that ease; the maths is
+    docs/impl/keyframe-eval.md §6. (§6.3)
 12. ~~**[missing] Graph selection transform box**~~ — **landed, TI-7**: the four edge
     grabs, time and value scaled about the opposite edge, `Shift` rounding what the scale
     lands on with its readout pill, the badge, one undo step and the Escape revert. No
@@ -624,10 +646,13 @@ anything the engine names (K-303, K-005); PRs list the new keys for Crowdin.
   (§6.2, K-505). Files: `graph_editor_frb.dart`, `key_block.dart` (`scaledAbout`, the
   shared block maths), `timeline_panel_frb.dart` (the Key readout row's influence write
   moved to the shared `sideWithInfluence`), arb keys.
-- **TI-8 — Tangent modes** (§6.3; gap 11). The per-side Auto/Clamp/Free field through
-  engine, bridge and strip, with the Free-round-trip-keeps-the-ease test; the maths lands
-  in docs/impl/keyframe-eval.md in the same commit. Files: `crates/lumit-core` (keyframe
-  store), `crates/lumit-bridge`, codegen, `graph_editor_frb.dart`. Runs **after TI-5**.
+- **TI-8 — Tangent modes** (§6.3; gap 11). **Landed.** The per-side Auto/Clamp/Free mode
+  through engine, bridge and strip, with the Free-round-trip-keeps-the-ease test; the
+  maths is docs/impl/keyframe-eval.md §6 (K-506). It is an arm of `SideInterp` rather
+  than a field beside it, which is what lets the remembered ease cross the bridge and
+  come back without a merge on the write path. Files: `crates/lumit-core/src/anim.rs`
+  (+`sequence.rs`), `crates/lumit-bridge/src/api/effect.rs`, codegen,
+  `graph_maths.dart`, `graph_editor_frb.dart`, `timeline_panel_frb.dart`, arb keys.
 - **TI-9 — Snapping and ruler completion** (§4.5, §7; gaps 18, 20–21, 23). Bar/work-area/
   marker snapping with capture lines, double-click reset/create, `B`/`N` actions (engine
   labels + arb), edge-follow during playback, `=`/`-`/`\`. Files:

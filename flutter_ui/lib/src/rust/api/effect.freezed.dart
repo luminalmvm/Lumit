@@ -3194,6 +3194,7 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
     TResult Function(BridgeSideInterp_Hold value)? hold,
     TResult Function(BridgeSideInterp_Linear value)? linear,
     TResult Function(BridgeSideInterp_Bezier value)? bezier,
+    TResult Function(BridgeSideInterp_Auto value)? auto,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -3204,6 +3205,8 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
         return linear(_that);
       case BridgeSideInterp_Bezier() when bezier != null:
         return bezier(_that);
+      case BridgeSideInterp_Auto() when auto != null:
+        return auto(_that);
       case _:
         return orElse();
     }
@@ -3227,6 +3230,7 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
     required TResult Function(BridgeSideInterp_Hold value) hold,
     required TResult Function(BridgeSideInterp_Linear value) linear,
     required TResult Function(BridgeSideInterp_Bezier value) bezier,
+    required TResult Function(BridgeSideInterp_Auto value) auto,
   }) {
     final _that = this;
     switch (_that) {
@@ -3236,6 +3240,8 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
         return linear(_that);
       case BridgeSideInterp_Bezier():
         return bezier(_that);
+      case BridgeSideInterp_Auto():
+        return auto(_that);
     }
   }
 
@@ -3256,6 +3262,7 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
     TResult? Function(BridgeSideInterp_Hold value)? hold,
     TResult? Function(BridgeSideInterp_Linear value)? linear,
     TResult? Function(BridgeSideInterp_Bezier value)? bezier,
+    TResult? Function(BridgeSideInterp_Auto value)? auto,
   }) {
     final _that = this;
     switch (_that) {
@@ -3265,6 +3272,8 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
         return linear(_that);
       case BridgeSideInterp_Bezier() when bezier != null:
         return bezier(_that);
+      case BridgeSideInterp_Auto() when auto != null:
+        return auto(_that);
       case _:
         return null;
     }
@@ -3287,6 +3296,7 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
     TResult Function()? hold,
     TResult Function()? linear,
     TResult Function(BridgeBezierSide field0)? bezier,
+    TResult Function(BridgeAutoSide field0)? auto,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -3297,6 +3307,8 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
         return linear();
       case BridgeSideInterp_Bezier() when bezier != null:
         return bezier(_that.field0);
+      case BridgeSideInterp_Auto() when auto != null:
+        return auto(_that.field0);
       case _:
         return orElse();
     }
@@ -3320,6 +3332,7 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
     required TResult Function() hold,
     required TResult Function() linear,
     required TResult Function(BridgeBezierSide field0) bezier,
+    required TResult Function(BridgeAutoSide field0) auto,
   }) {
     final _that = this;
     switch (_that) {
@@ -3329,6 +3342,8 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
         return linear();
       case BridgeSideInterp_Bezier():
         return bezier(_that.field0);
+      case BridgeSideInterp_Auto():
+        return auto(_that.field0);
     }
   }
 
@@ -3349,6 +3364,7 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
     TResult? Function()? hold,
     TResult? Function()? linear,
     TResult? Function(BridgeBezierSide field0)? bezier,
+    TResult? Function(BridgeAutoSide field0)? auto,
   }) {
     final _that = this;
     switch (_that) {
@@ -3358,6 +3374,8 @@ extension BridgeSideInterpPatterns on BridgeSideInterp {
         return linear();
       case BridgeSideInterp_Bezier() when bezier != null:
         return bezier(_that.field0);
+      case BridgeSideInterp_Auto() when auto != null:
+        return auto(_that.field0);
       case _:
         return null;
     }
@@ -3465,6 +3483,71 @@ class _$BridgeSideInterp_BezierCopyWithImpl<$Res>
           ? _self.field0
           : field0 // ignore: cast_nullable_to_non_nullable
               as BridgeBezierSide,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeSideInterp_Auto extends BridgeSideInterp {
+  const BridgeSideInterp_Auto(this.field0) : super._();
+
+  final BridgeAutoSide field0;
+
+  /// Create a copy of BridgeSideInterp
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeSideInterp_AutoCopyWith<BridgeSideInterp_Auto> get copyWith =>
+      _$BridgeSideInterp_AutoCopyWithImpl<BridgeSideInterp_Auto>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeSideInterp_Auto &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  @override
+  String toString() {
+    return 'BridgeSideInterp.auto(field0: $field0)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeSideInterp_AutoCopyWith<$Res>
+    implements $BridgeSideInterpCopyWith<$Res> {
+  factory $BridgeSideInterp_AutoCopyWith(BridgeSideInterp_Auto value,
+          $Res Function(BridgeSideInterp_Auto) _then) =
+      _$BridgeSideInterp_AutoCopyWithImpl;
+  @useResult
+  $Res call({BridgeAutoSide field0});
+}
+
+/// @nodoc
+class _$BridgeSideInterp_AutoCopyWithImpl<$Res>
+    implements $BridgeSideInterp_AutoCopyWith<$Res> {
+  _$BridgeSideInterp_AutoCopyWithImpl(this._self, this._then);
+
+  final BridgeSideInterp_Auto _self;
+  final $Res Function(BridgeSideInterp_Auto) _then;
+
+  /// Create a copy of BridgeSideInterp
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? field0 = null,
+  }) {
+    return _then(BridgeSideInterp_Auto(
+      null == field0
+          ? _self.field0
+          : field0 // ignore: cast_nullable_to_non_nullable
+              as BridgeAutoSide,
     ));
   }
 }

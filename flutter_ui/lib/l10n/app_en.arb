@@ -8783,5 +8783,29 @@
   "graphKeyValueField": "Value",
   "@graphKeyValueField": {
     "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact value, in the small box that opens when a keyframe is double-clicked."
+  },
+  "graphTangentAuto": "Auto",
+  "graphTangentClamp": "Clamp",
+  "graphTangentFree": "Free",
+  "@graphTangentAuto": {
+    "description": "Timeline, Graph mode: a small button on the strip along the bottom of the graph, in a run of three labelled Auto, Clamp and Free. It makes the selected keyframes' tangents automatic — the curve's shape through a key is worked out from its neighbours instead of being held where it was put."
+  },
+  "@graphTangentClamp": {
+    "description": "Timeline, Graph mode: the second of the three tangent buttons on the strip along the bottom of the graph. Same as Auto, but the curve is kept from swinging past the neighbouring keyframes' values."
+  },
+  "@graphTangentFree": {
+    "description": "Timeline, Graph mode: the third of the three tangent buttons on the strip along the bottom of the graph. It hands the selected keyframes' tangents back to the user, at the shape they were last given by hand."
+  },
+  "tipTangentAuto": "Automatic tangents",
+  "@tipTangentAuto": {
+    "description": "Timeline, Graph mode: the tooltip on the Auto tangent button."
+  },
+  "tipTangentClamp": "Automatic tangents, no overshoot",
+  "@tipTangentClamp": {
+    "description": "Timeline, Graph mode: the tooltip on the Clamp tangent button. 'Overshoot' is the curve swinging past the values of the keyframes on either side."
+  },
+  "tipTangentFree": "Free tangents",
+  "@tipTangentFree": {
+    "description": "Timeline, Graph mode: the tooltip on the Free tangent button — tangents shaped by hand rather than worked out from the neighbouring keyframes."
   }
 }
