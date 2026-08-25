@@ -19,17 +19,18 @@
 ---
 
 <div class="field" aria-hidden="true">
-  <div class="ground"></div>
-  <canvas data-field></canvas>
+  <div class="wash">
+    <div class="ground"></div>
+    <canvas data-field></canvas>
+  </div>
   <div class="grain"></div>
 </div>
 
 <style>
   /* The field is taller than the band it sits in - it runs 280 px past the
-     bottom and fades out over the last third, so the colour dies away behind
-     the section below instead of stopping at an edge. The overhang is why it
-     sits on a negative z-index. The grain rides inside
-     the same box and fades with it, so grain and colour end together. */
+     bottom and the colour fades out over the last third, so it dies away
+     behind the section below instead of stopping at an edge. The overhang is
+     why it sits on a negative z-index. */
   .field {
     position: absolute;
     inset: 0 0 -280px 0;
@@ -38,15 +39,18 @@
        the field overhangs the section below, and must pass under its words
        rather than over them. */
     z-index: -1;
-    -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
   }
-  .field > * {
+  .field > *,
+  .wash > * {
     position: absolute;
     inset: 0;
     display: block;
     width: 100%;
     height: 100%;
+  }
+  .wash {
+    -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
   }
   /* The ground the canvas is drawn over, and the whole of the fallback for a
      browser that gives us no WebGL: the wash this field replaced. */
@@ -57,10 +61,27 @@
       radial-gradient(100% 90% at 60% 95%, #6a2f3f 0%, rgba(106, 47, 63, 0) 60%),
       #0f1422;
   }
+  /* The grain does not share the wash's fade. The fading part of a dark
+     gradient is exactly where it bands worst, so the grain has to be at full
+     strength there; it holds almost to the bottom and then goes in one short
+     step of its own. */
   .grain {
     opacity: 0.9;
     mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.10 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.18 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+    -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
+  }
+  /* The field arrives when its first frame does, not when the page does: the
+     canvas is invisible until the shader has something to show, and then comes
+     up over three frames' worth of time. Until then the static wash underneath
+     is what the visitor sees, so nothing flashes. */
+  canvas {
+    opacity: 0;
+    transition: opacity 90ms linear;
+  }
+  canvas.lit {
+    opacity: 1;
   }
 </style>
 
@@ -144,22 +165,45 @@
       // hide: the whole field is faded out there by its mask.
       col = mix(ink, col, 0.35 + 0.65 * smoothstep(0.0, 0.14, uv.y));
 
+      // A dark, slow gradient quantised to 8 bits a channel bands into visible
+      // arcs. A couple of levels of noise per pixel - fixed rather than
+      // animated, so it cannot shimmer - break the steps into something the
+      // eye reads as smooth. The grain over the top finishes the job.
+      col += (hash(gl_FragCoord.xy) - 0.5) * (2.5 / 255.0);
+
       gl_FragColor = vec4(col, 1.0);
     }
   `;
 
-  const canvas = document.querySelector<HTMLCanvasElement>("[data-field]");
-  const gl = canvas?.getContext("webgl", { antialias: false, alpha: false });
+  // Nothing here runs while the page is still loading. Compiling a shader and
+  // drawing the first frame in the middle of a page load is what made the
+  // field stutter as it came up: it was competing with the fonts, the images
+  // and the layout for the same main thread. Waiting for load and then for the
+  // browser to say it is idle costs a few hundred milliseconds of static wash,
+  // which nobody notices, and buys a first frame that lands cleanly.
+  const whenIdle = (fn: () => void) => {
+    const idle = (window as any).requestIdleCallback as
+      | ((cb: () => void, o?: { timeout: number }) => void)
+      | undefined;
+    if (idle) idle(fn, { timeout: 1500 });
+    else setTimeout(fn, 200);
+  };
 
-  // No WebGL, no canvas: the CSS gradient underneath is the whole fallback.
-  if (!canvas || !gl) {
-    canvas?.remove();
-  } else {
+  const start = () => {
+    const canvas = document.querySelector<HTMLCanvasElement>("[data-field]");
+    const gl = canvas?.getContext("webgl", { antialias: false, alpha: false });
+
+    // No WebGL, no canvas: the static wash underneath is the whole fallback.
+    if (!canvas || !gl) {
+      canvas?.remove();
+      return;
+    }
+
     const compile = (type: number, src: string) => {
-      const s = gl.createShader(type)!;
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      return s;
+      const sh = gl.createShader(type)!;
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      return sh;
     };
     const prog = gl.createProgram()!;
     gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
@@ -168,57 +212,69 @@
 
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       canvas.remove();
-    } else {
-      gl.useProgram(prog);
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-      gl.bufferData(
-        gl.ARRAY_BUFFER,
-        new Float32Array([-1, -1, 3, -1, -1, 3]),
-        gl.STATIC_DRAW,
-      );
-      const a = gl.getAttribLocation(prog, "a");
-      gl.enableVertexAttribArray(a);
-      gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
-      const uRes = gl.getUniformLocation(prog, "u_res");
-      const uT = gl.getUniformLocation(prog, "u_t");
-
-      const draw = (t: number) => {
-        gl.uniform2f(uRes, canvas.width, canvas.height);
-        gl.uniform1f(uT, t);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-      };
-
-      const resize = () => {
-        canvas.width = Math.max(1, Math.round(canvas.clientWidth * 0.5));
-        canvas.height = Math.max(1, Math.round(canvas.clientHeight * 0.5));
-        gl.viewport(0, 0, canvas.width, canvas.height);
-      };
-      new ResizeObserver(() => {
-        resize();
-        draw(0);
-      }).observe(canvas);
-      resize();
-
-      // Reduced motion gets the field, held still - the colour is part of the
-      // page, the movement is the part that is optional.
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        draw(0);
-      } else {
-        // The clock only runs while the hero is on screen; scrolled past, the
-        // page costs nothing. requestAnimationFrame already stops on a hidden
-        // tab, so that case needs no code.
-        let frame = 0;
-        const tick = (ms: number) => {
-          draw(ms / 1000);
-          frame = requestAnimationFrame(tick);
-        };
-        new IntersectionObserver((entries) => {
-          for (const e of entries) {
-            cancelAnimationFrame(frame);
-            if (e.isIntersecting) frame = requestAnimationFrame(tick);
-          }
-        }).observe(canvas);
-      }
+      return;
     }
-  }
+
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 3, -1, -1, 3]),
+      gl.STATIC_DRAW,
+    );
+    const a = gl.getAttribLocation(prog, "a");
+    gl.enableVertexAttribArray(a);
+    gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+    const uRes = gl.getUniformLocation(prog, "u_res");
+    const uT = gl.getUniformLocation(prog, "u_t");
+
+    // The canvas is transparent until there is a frame in it, and then fades up
+    // over the 90 ms the stylesheet gives it. Lighting it from inside the frame
+    // that drew is what makes the fade read as the field switching itself on.
+    const draw = (t: number) => {
+      gl.uniform2f(uRes, canvas.width, canvas.height);
+      gl.uniform1f(uT, t);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      canvas.classList.add("lit");
+    };
+
+    const resize = () => {
+      canvas.width = Math.max(1, Math.round(canvas.clientWidth * 0.5));
+      canvas.height = Math.max(1, Math.round(canvas.clientHeight * 0.5));
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    };
+    new ResizeObserver(() => {
+      resize();
+      draw(0);
+    }).observe(canvas);
+    resize();
+    // The first frame is drawn here rather than left to the observer above, so
+    // the field lights up even if that callback never comes.
+    draw(0);
+
+    // Reduced motion gets the field, held still - the colour is part of the
+    // page, the movement is the part that is optional.
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      draw(0);
+      return;
+    }
+
+    // The clock only runs while the hero is on screen; scrolled past, the page
+    // costs nothing. requestAnimationFrame already stops on a hidden tab, so
+    // that case needs no code.
+    let frame = 0;
+    const tick = (ms: number) => {
+      draw(ms / 1000);
+      frame = requestAnimationFrame(tick);
+    };
+    new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        cancelAnimationFrame(frame);
+        if (e.isIntersecting) frame = requestAnimationFrame(tick);
+      }
+    }).observe(canvas);
+  };
+
+  if (document.readyState === "complete") whenIdle(start);
+  else addEventListener("load", () => whenIdle(start), { once: true });
 </script>
