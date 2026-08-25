@@ -27,8 +27,8 @@
   .no-gl .ground {
     background:
       radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
-      radial-gradient(90% 80% at 85% 30%, #2a6b4a 0%, rgba(42, 107, 74, 0) 55%),
-      radial-gradient(100% 90% at 60% 95%, #2f9e6a 0%, rgba(47, 158, 106, 0) 60%),
+      radial-gradient(90% 80% at 85% 30%, #3a2a6b 0%, rgba(58, 42, 107, 0) 55%),
+      radial-gradient(100% 90% at 60% 95%, #35785e 0%, rgba(53, 120, 94, 0) 60%),
       #0f1422;
     -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
     mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
@@ -111,22 +111,22 @@
       );
       float f = fbm(p + 2.0 * r);
 
-      // The blue wash is untouched. The other two were a violet and a wine - the
-      // accent's family - and are two greens now. The wine became a moss by
-      // rearranging its channels, which kept its saturation but put it in the
-      // yellow-brown corner and made it the ugliest thing on the page; fern is
-      // a straight green instead, and the low weighting it inherits lifts the
-      // bottom of the field rather than dirtying it.
+      // Only one of these three was ever red. The blue and the violet are the
+      // originals, untouched - the violet is a long way from the accent and
+      // greening it took the depth out of the whole field, which is what went
+      // wrong when all three moved at once. The wine was the red one, and it is
+      // the accent itself now: same darkness, same job, weighted low as the
+      // wine was, so the bottom of the field carries the brand's own green.
       vec3 ink    = vec3(0.059, 0.078, 0.133);  // #0f1422
       vec3 indigo = vec3(0.173, 0.247, 0.478);  // #2c3f7a
-      vec3 jade   = vec3(0.165, 0.420, 0.290);  // #2a6b4a
-      vec3 fern   = vec3(0.184, 0.620, 0.416);  // #2f9e6a
+      vec3 violet = vec3(0.227, 0.165, 0.420);  // #3a2a6b
+      vec3 spruce = vec3(0.208, 0.471, 0.369);  // #35785e - the accent
 
       vec3 col = ink;
       col = mix(col, indigo, smoothstep(0.30, 0.60, f));
-      col = mix(col, jade, smoothstep(0.55, 0.82, length(q)) * 0.85);
-      col = mix(col, fern, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
-      col = mix(col, fern, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
+      col = mix(col, violet, smoothstep(0.55, 0.82, length(q)) * 0.85);
+      col = mix(col, spruce, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
+      col = mix(col, spruce, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
       vec2 gp = gl_FragCoord.xy;
       col += (phash(gp) - 0.5) * 0.036;
