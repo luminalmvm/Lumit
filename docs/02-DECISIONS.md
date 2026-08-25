@@ -14365,7 +14365,10 @@ so `Ctrl+A` in the Project panel selected things that were not on screen and lef
 in front of the user untouched.
 
 **What "everything" is now depends on the focused panel**: items in the Project panel,
-layers in the Timeline, effects in the Effect controls panel, nodes in the Node graph. The
+layers in the Timeline, effects in the Effect controls panel, and — once its selection is a
+set rather than a single node — nodes in the Node graph. A panel is listed as claiming the
+chord only once it can answer it, so Ctrl+A is never a dead key: the Node graph falls back
+to the layer meaning until its model changes. The
 shell routes rather than decides: it bumps a notifier and each panel answers only while it
 is the focused one — the same arrangement `Ctrl+F` already used for the search boxes
 (docs/07 §15). Where no panel claims it the chord still means every layer, which is the

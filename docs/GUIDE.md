@@ -7206,8 +7206,9 @@ composition. In the Project panel that was plainly wrong — it selected things
 you could not see and left the list in front of you untouched.
 
 What "everything" is now depends on which panel has the focus ring: items in the
-Project panel, layers in the Timeline, effects in the Effect controls panel,
-nodes in the Node graph. The shell does not decide any of that. It bumps a
+Project panel, layers in the Timeline, effects in the Effect controls panel, and
+— when its selection grows from one node to a set — nodes in the Node graph. The
+shell does not decide any of that. It bumps a
 counter that every panel can watch, and each panel answers only if it is the
 focused one — the same arrangement `Ctrl+F` already used to put the cursor in
 the right search box. Where no panel claims the chord, it still means every

@@ -23,16 +23,14 @@ void main() {
     /// and which leave it to mean "every layer".
     test('only the panels that keep a selection claim the chord', () {
       final p = freshProject();
-      for (final panel in [
-        Panel.project,
-        Panel.effectControls,
-        Panel.graph,
-      ]) {
+      for (final panel in [Panel.project, Panel.effectControls]) {
         p.uiState.activePanel.value = panel;
         expect(p.uiState.requestSelectAll(), isTrue,
             reason: '${panel.name} answers Ctrl+A itself');
       }
-      for (final panel in [Panel.timeline, Panel.viewer, null]) {
+      // The Node graph is not here yet: a single-node selection has nothing to
+      // select all of, so the chord must not be swallowed there.
+      for (final panel in [Panel.timeline, Panel.viewer, Panel.graph, null]) {
         p.uiState.activePanel.value = panel;
         expect(p.uiState.requestSelectAll(), isFalse,
             reason: 'the shell still means every layer in ${panel?.name}');

@@ -688,10 +688,12 @@ class LumitUiState extends ChangeNotifier {
   ///
   /// The Timeline is deliberately absent: its selection *is* the composition's
   /// layers, which the shell already holds, so the shell answers for it.
+  /// The Node graph is deliberately not here yet: its selection is a single
+  /// node rather than a set, so it has nothing to select *all* of. Listing it
+  /// before it can answer would only make Ctrl+A a dead key there.
   static const Set<Panel> _selectAllPanels = {
     Panel.project,
     Panel.effectControls,
-    Panel.graph,
   };
 
   /// Ask the focused panel to select everything, and say whether one was asked.
