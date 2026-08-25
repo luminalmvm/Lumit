@@ -1,6 +1,0 @@
-#include "../../Flutter/Flutter-Release.xcconfig"
-#include "Warnings.xcconfig"
-
-// One architecture per machine (see the Podfile post_install note): a
-// universal Runner cannot embed the single-arch bridge framework anyway.
-ONLY_ACTIVE_ARCH = YES

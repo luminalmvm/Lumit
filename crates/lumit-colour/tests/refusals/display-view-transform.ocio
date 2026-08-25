@@ -1,6 +1,0 @@
-# refuses: DisplayViewTransform
-ocio_profile_version: 2
-colorspaces:
-  - !<ColorSpace>
-    name: viewed
-    to_scene_reference: !<DisplayViewTransform> {src: a, display: sRGB, view: Standard}

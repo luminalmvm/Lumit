@@ -8,11 +8,14 @@
 //!
 //! - **Factorised** — when every step in the chain treats red, green and blue
 //!   separately (curves) or is a matrix, the artefact is just those: a sampled
-//!   curve, a matrix, another curve if the chain asks for one. This is exact to
-//!   the sampling density and it keeps working on values outside the sampled
-//!   range, because the original steps are kept alongside and evaluated there.
-//!   Camera input transforms — a transfer curve then a primaries matrix — are
-//!   this shape by construction.
+//!   curve, a matrix, another curve if the chain asks for one. Camera input
+//!   transforms — a transfer curve then a primaries matrix — are this shape by
+//!   construction. The curve is not sampled evenly across 0–1: it is sampled
+//!   across the **shaper's own signed range**, so the negatives wide-gamut
+//!   working carries and the highlights above 1 land on real samples, densely
+//!   near black and sparsely out in the tail. That is what lets one table
+//!   answer a question the graphics card can also answer, with the same
+//!   arithmetic, off the end of the ordinary range (§5.1, §5.4).
 //! - **Shaper + cube** — for everything else. Scene-linear light has no top end,
 //!   so it is first squeezed into 0–1 by a **shaper** (a logarithmic squash, so
 //!   the dark end gets as many samples as the bright end), and then a 65×65×65
@@ -27,16 +30,34 @@ use crate::matrix::{self, Matrix34};
 use crate::op::{Chain, Op};
 use crate::sample::{Cube, Curve};
 
-/// Sample count for a factorised curve stage. At 4096 points the error against
-/// exact evaluation is ≤ 1 × 10⁻⁵ for the smooth curves configs ship (§5.4).
-pub const CURVE_SAMPLES: usize = 4096;
+/// Sample count for a factorised curve stage. **Odd on purpose**: the signed
+/// shaper puts linear zero at exactly 0.5, so an odd count puts a grid sample
+/// there rather than interpolating across it — and black is the one value a
+/// display transform must not smear. `16384 + 1`, so WP3's upload wraps it
+/// into rows of 1024 with a shift and a mask rather than a division.
+pub const CURVE_SAMPLES: usize = 16_385;
 
-/// Edge length of a baked cube. 65³ × 3 × fp16 ≈ 1.6 MiB on the GPU (§5.3).
+/// The shaper a factorised curve stage is sampled through — **not** the
+/// config's own `allocation` variables.
+///
+/// Those state where a *cube's* three axes should sit, and are chosen for a
+/// grid of 65 points that has to spend them wisely. A curve has 16385 to spend
+/// on one axis, so it can simply cover everything the working format can hold:
+/// fp16 tops out at 65504, hence a ceiling of 2^16, and a floor of 2^-8 that
+/// still leaves the first stop of black densely sampled. Both signs, so the
+/// negatives a wider gamut leaves behind in Rec.709 working (§2.1) are
+/// answered rather than clamped.
+pub const CURVE_SHAPER: Shaper = Shaper::Lg2 {
+    min_log2: -8.0,
+    max_log2: 16.0,
+    offset: 0.003_906_25,
+};
+
+/// Edge length of a baked cube. 65³ × 4 × f32 ≈ 4.4 MiB on the GPU (§5.3).
 pub const CUBE_SIZE: usize = 65;
 
-/// The domain a factorised curve stage is sampled over. Outside it the stage
-/// evaluates its own steps exactly, which is how negatives and high dynamic
-/// range survive the factorised form (§5.1).
+/// The domain a factorised curve stage's table is indexed over: shaper space,
+/// signed, so 0.5 is linear zero. See [`Shaper::forward_signed`].
 pub const CURVE_DOMAIN: [f32; 2] = [0.0, 1.0];
 
 /// How scene-linear light is squeezed into the 0–1 a cube can index.
@@ -93,8 +114,45 @@ impl Shaper {
         }
     }
 
-    /// And back out again — the map the bake walks to find each grid point's
-    /// linear input.
+    /// The same squeeze, mirrored about zero: `[-2^max, 2^max]` onto `[0, 1]`
+    /// with linear zero at exactly 0.5.
+    ///
+    /// In plain terms: [`Shaper::forward`] throws away everything below zero,
+    /// which is fine for a cube's three axes (§5.4 states that cost) but not
+    /// for a factorised curve, whose whole reason to exist is answering
+    /// honestly off the end of the ordinary range — the negatives a wider
+    /// gamut leaves behind in a Rec.709 working space, and the highlights
+    /// above 1. Folding the map about zero costs one grid sample and buys the
+    /// negative side at the same density as the positive one.
+    ///
+    /// This is the map the graphics card runs too. It has to be: the tail
+    /// cannot be "evaluate the original steps" on one side and a table on the
+    /// other, or the Viewer and the export stop agreeing where it matters most
+    /// (K-031, docs/impl/ocio.md §5.1).
+    #[must_use]
+    pub fn forward_signed(&self, x: f32) -> f32 {
+        if x.is_nan() {
+            0.5
+        } else if x >= 0.0 {
+            0.5 + 0.5 * self.forward(x)
+        } else {
+            0.5 - 0.5 * self.forward(-x)
+        }
+    }
+
+    /// And back: the map the bake walks to find each grid point's linear input.
+    #[must_use]
+    pub fn inverse_signed(&self, t: f32) -> f32 {
+        let t = if t.is_nan() { 0.5 } else { t.clamp(0.0, 1.0) };
+        if t >= 0.5 {
+            self.inverse((t - 0.5) * 2.0)
+        } else {
+            -self.inverse((0.5 - t) * 2.0)
+        }
+    }
+
+    /// And back out again — the map the cube bake walks to find each grid
+    /// point's linear input.
     #[must_use]
     pub fn inverse(&self, y: f32) -> f32 {
         let y = if y.is_nan() { 0.0 } else { y.clamp(0.0, 1.0) };
@@ -116,38 +174,32 @@ pub enum Stage {
     Matrix(Matrix34),
 }
 
-/// A sampled per-channel curve, plus the steps it was sampled from so values
-/// off either end of the domain are answered exactly rather than clamped.
+/// A sampled per-channel curve, indexed through the signed shaper that decided
+/// where its samples went.
+///
+/// The pair is the whole point. Sampling evenly across 0–1 and evaluating the
+/// original steps beyond it would be exact on the processor and impossible on
+/// the graphics card — the card would have to re-implement every logarithm and
+/// power in the chain, and agree with Rust to the last bit. Sampling across
+/// the shaper's signed range instead makes the tail a table lookup like
+/// everything else, so both sides run the same two lines and K-031 holds off
+/// the end of the range as well as inside it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CurveStage {
+    /// Indexed over `[0, 1]` in **shaper space**, not in linear light.
     pub table: Curve,
-    /// The channel-independent steps this table was built from.
-    pub exact: Vec<Op>,
+    /// The map from linear light to this table's index.
+    pub shaper: Shaper,
 }
 
 impl CurveStage {
     #[must_use]
     pub fn eval(&self, rgb: [f32; 3]) -> [f32; 3] {
-        let out_of_domain = rgb
-            .iter()
-            .any(|c| *c < self.table.domain[0] || *c > self.table.domain[1] || c.is_nan());
-        if !out_of_domain {
-            return self.table.sample(rgb);
-        }
-        // The steps are channel-independent, so evaluating the whole triple and
-        // picking each channel's own answer is exact.
-        let exact = self.exact.iter().fold(rgb, |c, op| op.eval(c));
-        let sampled = self.table.sample(rgb);
-        let mut out = [0.0_f32; 3];
-        for (c, o) in out.iter_mut().enumerate() {
-            let x = rgb[c];
-            *o = if x < self.table.domain[0] || x > self.table.domain[1] || x.is_nan() {
-                exact[c]
-            } else {
-                sampled[c]
-            };
-        }
-        out
+        self.table.sample([
+            self.shaper.forward_signed(rgb[0]),
+            self.shaper.forward_signed(rgb[1]),
+            self.shaper.forward_signed(rgb[2]),
+        ])
     }
 }
 
@@ -159,6 +211,31 @@ pub enum Artefact {
 }
 
 impl Artefact {
+    /// The factorised form as the fixed `curve → matrix → curve` shape the
+    /// render passes execute, or `None` for the cube form.
+    ///
+    /// A chain could in principle factorise into any alternation of curves and
+    /// matrices; every real one is at most this. [`bake`] guarantees the shape
+    /// by falling back to the cube when a chain would exceed it, so the shader
+    /// has three fixed slots rather than a loop over a variable-length list —
+    /// and, more to the point, so the choice is made **once**, in the bake,
+    /// where the processor and the graphics card both read it.
+    #[must_use]
+    pub fn fixed_shape(&self) -> Option<(Option<&CurveStage>, Matrix34, Option<&CurveStage>)> {
+        let Artefact::Factorised { stages } = self else {
+            return None;
+        };
+        match stages.as_slice() {
+            [] => Some((None, matrix::IDENTITY, None)),
+            [Stage::Curve(a)] => Some((Some(a), matrix::IDENTITY, None)),
+            [Stage::Matrix(m)] => Some((None, *m, None)),
+            [Stage::Curve(a), Stage::Matrix(m)] => Some((Some(a), *m, None)),
+            [Stage::Matrix(m), Stage::Curve(b)] => Some((None, *m, Some(b))),
+            [Stage::Curve(a), Stage::Matrix(m), Stage::Curve(b)] => Some((Some(a), *m, Some(b))),
+            _ => None,
+        }
+    }
+
     /// The CPU sampler: what the Viewer and the export must both agree with
     /// (docs/08 §1.6's oracle, and this crate's conformance engine).
     #[must_use]
@@ -184,10 +261,16 @@ impl Artefact {
 /// cube otherwise (§5.1).
 pub fn bake(chain: &Chain, shaper: Shaper) -> Result<Artefact> {
     if chain.is_factorable() {
-        factorise(chain)
-    } else {
-        bake_cube(chain, shaper)
+        let factorised = factorise(chain)?;
+        // A chain that factorises into more than curve-matrix-curve takes the
+        // cube instead: the cube is always available and always correct, and
+        // one shape the render passes can execute beats a second shape they
+        // would have to loop over.
+        if factorised.fixed_shape().is_some() {
+            return Ok(factorised);
+        }
     }
+    bake_cube(chain, shaper)
 }
 
 /// The factorised form: consecutive channel-independent steps collapse into one
@@ -202,14 +285,16 @@ pub fn factorise(chain: &Chain) -> Result<Artefact> {
         }
         let ops = std::mem::take(pending);
         let last = CURVE_SAMPLES - 1;
-        let span = CURVE_DOMAIN[1] - CURVE_DOMAIN[0];
         let mut data = Vec::with_capacity(CURVE_SAMPLES);
         for i in 0..CURVE_SAMPLES {
-            let x = CURVE_DOMAIN[0] + span * (i as f32 / last as f32);
+            let x = CURVE_SHAPER.inverse_signed(i as f32 / last as f32);
             data.push(ops.iter().fold([x; 3], |c, op| op.eval(c)));
         }
         let table = Curve::new("a baked curve", CURVE_DOMAIN, data)?;
-        stages.push(Stage::Curve(CurveStage { table, exact: ops }));
+        stages.push(Stage::Curve(CurveStage {
+            table,
+            shaper: CURVE_SHAPER,
+        }));
         Ok(())
     };
 
@@ -392,8 +477,15 @@ mod tests {
     use super::*;
     use crate::op::{CdlParams, Direction};
 
-    fn close(a: [f32; 3], b: [f32; 3], tol: f32) -> bool {
-        a.iter().zip(b).all(|(x, y)| (x - y).abs() <= tol)
+    /// §5.4's factorised bound, which is stated **relative**: the curve is now
+    /// sampled across the shaper's whole signed range rather than across 0–1,
+    /// so a sample out at 27 is as far from its neighbour, proportionally, as
+    /// one at 0.27 — and an absolute bound would be measuring the range, not
+    /// the error.
+    fn close_relative(a: [f32; 3], b: [f32; 3], tol: f32) -> bool {
+        a.iter()
+            .zip(b)
+            .all(|(x, y)| (x - y).abs() <= tol * y.abs().max(1.0))
     }
 
     #[test]
@@ -442,7 +534,7 @@ mod tests {
 
     #[test]
     fn the_factorised_bake_matches_exact_evaluation_to_the_stated_bound() {
-        // §5.4's factorised bound: ≤ 1e-5 against exact evaluation.
+        // §5.4's factorised bound: ≤ 1e-5 relative against exact evaluation.
         let chain = srgb_chain();
         let baked = bake(&chain, Shaper::DEFAULT).expect("bakes");
         for i in 0..=500 {
@@ -450,19 +542,87 @@ mod tests {
             let c = [x, 1.0 - x, (x * 0.7 + 0.1).min(1.0)];
             let got = baked.eval(c);
             let want = chain.eval(c);
-            assert!(close(got, want, 1e-5), "at {c:?}: {got:?} vs {want:?}");
+            assert!(
+                close_relative(got, want, 1e-5),
+                "at {c:?}: {got:?} vs {want:?}"
+            );
         }
     }
 
     #[test]
     fn the_factorised_bake_still_answers_outside_its_sampled_range() {
+        // The seam WP1 left open, closed: outside 0–1 the artefact is still a
+        // table lookup, at the same stated bound, so the graphics card can run
+        // exactly what the processor runs.
         let chain = srgb_chain();
         let baked = bake(&chain, Shaper::DEFAULT).expect("bakes");
-        for c in [[-0.2_f32, 0.5, 0.5], [4.0, 0.5, -1.0], [12.0, 12.0, 12.0]] {
+        for c in [
+            [-0.2_f32, 0.5, 0.5],
+            [4.0, 0.5, -1.0],
+            [12.0, 12.0, 12.0],
+            [-0.05, -0.002, 30.0],
+        ] {
             let got = baked.eval(c);
             let want = chain.eval(c);
-            assert!(close(got, want, 1e-4), "at {c:?}: {got:?} vs {want:?}");
+            assert!(
+                close_relative(got, want, 1e-5),
+                "at {c:?}: {got:?} vs {want:?}"
+            );
         }
+    }
+
+    #[test]
+    fn linear_zero_lands_on_a_grid_sample_rather_than_between_two() {
+        // Black is the one value a display transform must not smear, so the
+        // sample count is odd and the signed shaper puts zero at exactly 0.5.
+        assert_eq!(CURVE_SAMPLES % 2, 1);
+        assert_eq!(CURVE_SHAPER.forward_signed(0.0), 0.5);
+        let index = 0.5 * (CURVE_SAMPLES - 1) as f32;
+        assert_eq!(index, index.floor(), "zero must be a grid point");
+
+        // And it goes through the bake exactly, not nearly.
+        let chain = srgb_chain();
+        let baked = bake(&chain, Shaper::DEFAULT).expect("bakes");
+        assert_eq!(baked.eval([0.0; 3]), chain.eval([0.0; 3]));
+    }
+
+    #[test]
+    fn the_signed_shaper_is_the_ordinary_one_folded_about_zero() {
+        let s = Shaper::DEFAULT;
+        for x in [0.0_f32, 0.001, 0.18, 1.0, 8.0, 31.0] {
+            assert!((s.inverse_signed(s.forward_signed(x)) - x).abs() <= 1e-3 * x.max(1.0));
+            assert!((s.inverse_signed(s.forward_signed(-x)) + x).abs() <= 1e-3 * x.max(1.0));
+            // Symmetric about 0.5 by construction.
+            assert!((s.forward_signed(x) + s.forward_signed(-x) - 1.0).abs() <= 1e-6);
+        }
+        // Beyond the shaper's own ceiling both ends clamp, which is §5.4's
+        // stated bound rather than a surprise.
+        assert_eq!(s.forward_signed(1e9), 1.0);
+        assert_eq!(s.forward_signed(-1e9), 0.0);
+    }
+
+    #[test]
+    fn a_chain_that_will_not_fit_the_fixed_shape_takes_the_cube_instead() {
+        // Curve, matrix, curve, matrix: factorable on paper, but more stages
+        // than the render passes execute, so the bake picks the other form.
+        let curve = Op::Exponent {
+            exp: [2.0; 3],
+            dir: Direction::Forward,
+        };
+        let m = Op::Matrix([
+            1.1, -0.05, -0.05, 0.0, -0.02, 1.03, -0.01, 0.0, 0.0, -0.1, 1.1, 0.0,
+        ]);
+        let chain = Chain::new(vec![curve.clone(), m.clone(), curve, m]);
+        assert!(chain.is_factorable());
+        let baked = bake(&chain, Shaper::DEFAULT).expect("bakes");
+        assert!(
+            matches!(baked, Artefact::ShaperCube { .. }),
+            "expected the cube form, got {baked:?}"
+        );
+        // And everything the passes do execute reports its three slots.
+        let fitted = bake(&srgb_chain(), Shaper::DEFAULT).expect("bakes");
+        let (pre, _, post) = fitted.fixed_shape().expect("fits");
+        assert!(pre.is_some() && post.is_none());
     }
 
     /// A chain that mixes channels, so it cannot factorise — and smooth, so

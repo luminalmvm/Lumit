@@ -1,7 +1,0 @@
-# refuses: invert a 3D look-up table
-ocio_profile_version: 1
-search_path: luts
-colorspaces:
-  - !<ColorSpace>
-    name: cubed
-    from_reference: !<FileTransform> {src: tiny.spi3d}

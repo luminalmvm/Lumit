@@ -1,7 +1,0 @@
-# refuses: does not rise or fall consistently
-ocio_profile_version: 1
-search_path: luts
-colorspaces:
-  - !<ColorSpace>
-    name: bumpy
-    from_reference: !<FileTransform> {src: bumpy.spi1d}

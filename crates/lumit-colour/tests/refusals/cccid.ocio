@@ -1,7 +1,0 @@
-# refuses: selects a grade by cccid
-ocio_profile_version: 1
-search_path: luts
-colorspaces:
-  - !<ColorSpace>
-    name: graded
-    to_reference: !<FileTransform> {src: grades.ccc, cccid: shot01}

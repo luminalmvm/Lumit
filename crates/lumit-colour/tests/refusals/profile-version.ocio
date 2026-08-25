@@ -1,5 +1,0 @@
-# refuses: OCIO profile version 3
-ocio_profile_version: 3
-colorspaces:
-  - !<ColorSpace>
-    name: future

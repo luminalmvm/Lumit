@@ -1,6 +1,0 @@
-# refuses: ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-VIDEO_1.0
-ocio_profile_version: 2
-colorspaces:
-  - !<ColorSpace>
-    name: aces_output
-    from_scene_reference: !<BuiltinTransform> {style: ACES-OUTPUT - ACES2065-1_to_CIE-XYZ-D65 - SDR-VIDEO_1.0}

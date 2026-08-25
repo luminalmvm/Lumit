@@ -1,6 +1,0 @@
-# refuses: negativeStyle mirror
-ocio_profile_version: 2
-colorspaces:
-  - !<ColorSpace>
-    name: mirrored
-    to_scene_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], negativeStyle: mirror}

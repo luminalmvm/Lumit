@@ -1,6 +1,0 @@
-# refuses: AllocationTransform
-ocio_profile_version: 1
-colorspaces:
-  - !<ColorSpace>
-    name: allocated
-    to_reference: !<AllocationTransform> {allocation: lg2, vars: [-8, 5]}

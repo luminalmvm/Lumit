@@ -1,6 +1,0 @@
-# refuses: LookTransform
-ocio_profile_version: 2
-colorspaces:
-  - !<ColorSpace>
-    name: looked
-    to_scene_reference: !<LookTransform> {src: a, dst: b, looks: warm}

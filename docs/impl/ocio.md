@@ -335,11 +335,32 @@ Everything the pipeline executes is one of two **baked artefact** shapes, produc
 config load on the CPU:
 
 - **Factorised** — for chains containing only channel-independent ops (exponent, log,
-  1D LUT, range) and matrices: a per-channel forward curve sampled at 4096 points +
-  a 3×4 matrix, alternating as the chain dictates (in practice: curve, matrix). Exact
-  to sampling density, **passes negatives and HDR values through analytically** where
-  the ops are defined there. This is the preferred input-transform form, and camera
-  IDTs — transfer curve then primaries matrix — factorise by construction.
+  1D LUT, range) and matrices: a per-channel forward curve sampled at 16385 points +
+  a 3×4 matrix, in the fixed shape **curve → matrix → curve** (any slot may be
+  absent). This is the preferred input-transform form, and camera IDTs — transfer
+  curve then primaries matrix — factorise by construction.
+
+  The curve is **not** sampled evenly across [0, 1]. It is sampled through a *signed*
+  lg2 shaper fixed at `min_log2 = −8`, `max_log2 = 16`, `offset = 2⁻⁸`, mirrored about
+  zero — so one table covers ±65536 (everything the fp16 working format can hold),
+  densely near black and sparsely out in the tail, with linear zero on an exact grid
+  sample (hence the odd count). Values beyond ±2¹⁶ clamp, as the cube form's do.
+
+  **Why not evaluate the ops analytically outside the sampled range** — the shape WP1
+  first landed, and the seam it left open. A tail computed from the live ops is exact
+  on the CPU and unreachable on the GPU: the shader would have to re-implement every
+  logarithm, power and 1D table in the chain *and* agree with Rust's transcendentals,
+  and a 1D table inside the chain has no analytic form at all. Preview would then
+  differ from the CPU oracle exactly where wide-gamut negatives and HDR highlights
+  live, which is where a colour pipeline is judged. Sampling the tail instead makes
+  both sides run the same two lines — `shaper.forward_signed`, then the table lerp —
+  so K-031 holds off the end of the range as well as inside it. The cost is stated in
+  §5.4 and it is small; the alternative had no cost that could be stated at all.
+
+  A chain that would factorise into more stages than `curve → matrix → curve` takes
+  the cube form instead. Real chains never do; the guard exists so the shader has
+  three fixed slots and the choice is made **once**, in the bake, where both the CPU
+  and the GPU read it.
 - **Shaper + cube** — for everything else (views, CDLs, 3D file LUTs): a shaper curve
   mapping working-linear to [0,1], then a 65³ RGB cube sampled tetrahedrally, output
   fp16. The shaper is the lg2 allocation `y = (log2(x + o) − log2(o)) / (hi − log2(o))`
@@ -387,24 +408,32 @@ never the hardware filter, which breaks CPU/GPU equality).
 
 ### 5.3 Budgets and caching
 
-An artefact is small (cube: 65³ × 3 × 2 B ≈ 1.6 MiB; curves: 48 KiB) and baking one is
-274k chain evaluations — milliseconds. Bakes happen off the render thread at config
+An artefact is small (cube: 65³ × 4 × 4 B = 4.4 MiB as an `Rgba32Float` texture;
+curves: 16385 × 4 × 4 B = 256 KiB per stage, uploaded as rows of 1024) and baking one
+is 275k chain evaluations — milliseconds. f32 rather than fp16 on the card, so the CPU
+oracle and the shader compare against each other tightly rather than across a
+conversion; 4 MiB of texture is not worth a looser gate. Bakes happen off the render thread at config
 load or first use, cached in RAM keyed by `(config content hash, transform identity)`,
 counted under the existing allocation budgets. GPU uploads ride the existing 3D/1D
 texture paths and the texture pool.
 
 ### 5.4 The error bound — and the biggest fidelity risk, named
 
-For the factorised form the error is sampling density only: ≤ 1 × 10⁻⁵ against exact
-evaluation for smooth curves at 4096 points (asserted, not assumed). For the shaper +
+For the factorised form the error is sampling density only: ≤ 1 × 10⁻⁵ **relative**
+against exact evaluation for smooth curves at 16385 points, across the whole signed
+range (asserted, not assumed — relative because the range now reaches 2¹⁶, so an
+absolute bound would be measuring the range rather than the error). For the shaper +
 cube form the bound is interpolation error on a 65-point log-spaced grid: for the
 smooth view transforms real configs ship, ≤ 2 × 10⁻³ on the display-encoded [0,1]
 output — half an 8-bit code value — asserted in-domain by the golden suite (§7).
 
-**The risk that cannot be bounded away is the domain edge.** A baked cube clamps what
-its shaper cannot reach: scene-linear values above the shaper ceiling (`2^hi`), and —
-the sharper case — **negative components**, which edges-only Rec.709 working uses to
-carry wide-gamut colour (§2.1) and which a lg2 shaper cannot represent below `−o`.
+**The risk that cannot be bounded away is the domain edge — of the cube form.** A baked
+cube clamps what its shaper cannot reach: scene-linear values above the shaper ceiling
+(`2^hi`), and — the sharper case — **negative components**, which edges-only Rec.709
+working uses to carry wide-gamut colour (§2.1) and which a lg2 shaper cannot represent
+below `−o`. The factorised form no longer shares this: its signed shaper covers both
+signs out to the working format's own limits, which is most of why it is preferred
+wherever a chain allows it.
 Through a baked view, out-of-gamut saturation clamps to the gamut edge; the reference
 library's exact CPU path would have rolled some of it through the view's own gamut
 handling. This is v1's honestly-stated approximation: identical in preview and export
