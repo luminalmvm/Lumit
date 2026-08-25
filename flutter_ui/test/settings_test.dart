@@ -43,6 +43,39 @@ void main() {
     expect(i.retimeInSeconds, isFalse);
   });
 
+  /// K-560's one migration. `ui_scale` held the whole scale; the user's own
+  /// factor is now `ui_scale_user`, drawn over the ×1.1 presentation baseline.
+  /// A file from before the rebase must come back the same *size* it was —
+  /// which means a smaller number, exactly once, and never again.
+  group('the scale rebase (K-560)', () {
+    test('a stored scale from before the baseline divides by it once', () {
+      final old = InterfaceSettings.fromJson(const {'ui_scale': 1.0});
+      expect(old.uiScale, closeTo(1 / uiScaleBaseline, 1e-9));
+      // The size on screen is what has to be unchanged, and it is.
+      expect(effectiveUiScale(old.uiScale), closeTo(1.0, 1e-9));
+
+      // Written back and read again, it does not divide a second time.
+      final again = InterfaceSettings.fromJson(old.toJson());
+      expect(again.uiScale, closeTo(old.uiScale, 1e-9));
+    });
+
+    test('a settings file with neither key is the shipped 100%', () {
+      final fresh = InterfaceSettings.fromJson(const {});
+      expect(fresh.uiScale, closeTo(1.0, 1e-9));
+      expect(effectiveUiScale(fresh.uiScale), closeTo(uiScaleBaseline, 1e-9));
+    });
+
+    test('the slider reads the user factor, not what is drawn', () {
+      // What the Settings row shows is `uiScale * 100` — 100% for a new user,
+      // whose interface is meanwhile drawn at 110%.
+      expect((InterfaceSettings().uiScale * 100).round(), 100);
+      expect((InterfaceSettings.fromJson(const {'ui_scale_user': 1.25}).uiScale *
+              100)
+          .round(),
+          125);
+    });
+  });
+
   /// The tone map button is asked for (K-314): hidden by default, and hidden
   /// for a settings file written before the field existed.
   test('the tone map button is hidden unless a settings file asks for it', () {

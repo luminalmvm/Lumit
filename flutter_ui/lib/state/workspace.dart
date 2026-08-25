@@ -306,6 +306,13 @@ class Workspace extends ChangeNotifier {
   /// Master takes the theme colour; with it on the whole graph is themed.
   bool themedEffectGraphs = false;
 
+  /// The side of a Curves plot, in logical pixels — the graph-size option After
+  /// Effects offers as small, medium and large (item 6.32). A preference rather
+  /// than a view state, for the reason the favourites are: the size someone
+  /// grades at is theirs, and having to set it again every session is the
+  /// annoyance the option exists to remove.
+  double curvePlotSize = 150;
+
   /// Whether the Viewer's surround takes the theme's own surface rather than
   /// the neutral grey (K-203). Off by default, and for the same reason the
   /// scopes toggle is: a grade cannot be judged against a tinted surround
@@ -632,6 +639,11 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setCurvePlotSize(double pixels) {
+    curvePlotSize = pixels;
+    settingsChanged();
+  }
+
   void setThemedViewerSurround(bool on) {
     themedViewerSurround = on;
     settingsChanged();
@@ -843,6 +855,7 @@ class Workspace extends ChangeNotifier {
         'themed_scopes': themedScopes,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'themed_effect_graphs': themedEffectGraphs,
+        'curve_plot_size': curvePlotSize,
         'themed_viewer_surround': themedViewerSurround,
         'smooth_zoomed_viewer': smoothZoomedViewer,
         'precompose_move_attributes': precomposeMoveAttributes,
@@ -913,6 +926,8 @@ class Workspace extends ChangeNotifier {
             if (key is String) key,
       ]);
     themedEffectGraphs = j['themed_effect_graphs'] == true;
+    // Absent means a file written before the size could be chosen: medium.
+    curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;
     themedViewerSurround = j['themed_viewer_surround'] == true;
     smoothZoomedViewer = j['smooth_zoomed_viewer'] == true;
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;

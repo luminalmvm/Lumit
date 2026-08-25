@@ -25,8 +25,11 @@
 // widget just reflects whatever `scale` the workspace currently holds.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/state/settings.dart' show effectiveUiScale;
 
 class UiScaleView extends StatelessWidget {
+  /// The user's own factor (Settings → Interface → Scale). What is drawn is
+  /// this over the presentation baseline — see [effectiveUiScale] (K-560).
   final double scale;
   final Widget child;
 
@@ -34,9 +37,14 @@ class UiScaleView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1× is the common case and a plain pass-through — no Transform in the tree,
-    // so nothing to scale and tests at native scale see the bare shell.
-    if ((scale - 1.0).abs() < 1e-3) return child;
+    // The baseline (K-560) means the shipped 100% is a real scale of 1.1, so
+    // the pass-through is now the rare case rather than the common one: it is
+    // the *effective* scale that has to be 1 for there to be nothing to do.
+    // A user who scales back down to the old size gets it, as does anything
+    // mounting this view at an effective 1× — a Transform in the tree that
+    // multiplies by one is only a matrix to invert on every pointer.
+    final drawn = effectiveUiScale(scale);
+    if ((drawn - 1.0).abs() < 1e-3) return child;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -47,8 +55,8 @@ class UiScaleView extends StatelessWidget {
         }
         final w = constraints.maxWidth;
         final h = constraints.maxHeight;
-        final lw = w / scale;
-        final lh = h / scale;
+        final lw = w / drawn;
+        final lh = h / drawn;
 
         // Correct MediaQuery.size for descendants that read it, when one exists
         // above us (the app runs without a WidgetsApp, so guard with maybeOf).
@@ -62,7 +70,7 @@ class UiScaleView extends StatelessWidget {
         }
 
         return Transform.scale(
-          scale: scale,
+          scale: drawn,
           alignment: Alignment.topLeft,
           child: OverflowBox(
             alignment: Alignment.topLeft,

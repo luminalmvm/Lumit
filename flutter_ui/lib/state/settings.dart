@@ -149,9 +149,25 @@ enum ChromeLabels {
   iconsEverywhere,
 }
 
+/// The presentation baseline the whole interface is drawn on top of (K-560).
+///
+/// In plain terms: the owner tested Lumit at 110% and ruled that size right, so
+/// **what 110% showed is what 100% now draws**. The drawings stay authoritative
+/// at their logical sizes (K-450) and no metric, manifest or mockup moves — the
+/// interface is simply presented a tenth larger than it lays out, underneath
+/// whatever factor the user sets for themselves.
+const double uiScaleBaseline = 1.1;
+
+/// What the interface is actually scaled by: the user's own factor over the
+/// baseline. The Settings slider reads [InterfaceSettings.uiScale], the user's
+/// half, so its percentages are against the new 100% rather than the old one.
+double effectiveUiScale(double userScale) => userScale * uiScaleBaseline;
+
 /// Interface (Settings → Interface): UI scale and tooltips (K-117), plus the
 /// two editing preferences that make Lumit behave the Vegas way (K-246).
 class InterfaceSettings {
+  /// The user's own scale factor, 1.0 being the shipped size — *not* what the
+  /// interface is scaled by, which is this over [uiScaleBaseline] (K-560).
   double uiScale;
   bool showTooltips;
 
@@ -324,7 +340,10 @@ class InterfaceSettings {
   Map<String, dynamic> toJson() => {
         if (language != null) 'language': language,
         'chrome_labels': chromeLabels.name,
-        'ui_scale': uiScale,
+        // The user's factor under its own key: the old `ui_scale` held the
+        // whole scale, and reading one as the other would resize every
+        // interface written before K-560 by a tenth. See `fromJson`.
+        'ui_scale_user': uiScale,
         'show_tooltips': showTooltips,
         'transform_in_effect_controls': transformInEffectControls,
         'retime_opens_to_speed': retimeOpensToSpeed,
@@ -353,7 +372,16 @@ class InterfaceSettings {
           (c) => c.name == j['chrome_labels'],
           orElse: () => ChromeLabels.icons,
         ),
-        uiScale: (j['ui_scale'] as num?)?.toDouble() ?? 1.0,
+        // K-560's one migration, and it is a key rename rather than a file
+        // version because it is one number: `ui_scale` was the whole scale,
+        // `ui_scale_user` is the user's half of it. A file written before the
+        // rebase divides by the baseline once — so an interface that was at
+        // 100% stays exactly the size it was, at a user factor of about 91% —
+        // and because the old key is never written again it can never divide
+        // twice. Neither key means a new user: 1.0, the shipped size.
+        uiScale: (j['ui_scale_user'] as num?)?.toDouble() ??
+            ((j['ui_scale'] as num?)?.toDouble() ?? uiScaleBaseline) /
+                uiScaleBaseline,
         showTooltips: j['show_tooltips'] as bool? ?? true,
         transformInEffectControls:
             j['transform_in_effect_controls'] as bool? ?? false,

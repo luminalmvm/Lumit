@@ -562,6 +562,8 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         onToggleGroup: _toggleGroup,
                         pressed: _actionPressed,
                         themedGraphs: ui.workspace.themedEffectGraphs,
+                        curvePlotSize: ui.workspace.curvePlotSize,
+                        onCurvePlotSize: ui.workspace.setCurvePlotSize,
                         onAction: (effect, param) {
                           try {
                             fireEffectAction(
@@ -764,6 +766,11 @@ class _EffectSection extends StatelessWidget {
   /// card asks nothing of its own in a rebuild.
   final bool themedGraphs;
 
+  /// The Curves plot's side and where a change to it is written (item 6.32).
+  /// Read from the workspace once here, for the same reason [themedGraphs] is.
+  final double curvePlotSize;
+  final ValueChanged<double>? onCurvePlotSize;
+
   const _EffectSection({
     super.key,
     required this.info,
@@ -792,6 +799,8 @@ class _EffectSection extends StatelessWidget {
     required this.onAction,
     required this.pressed,
     this.themedGraphs = false,
+    this.curvePlotSize = curvePlotSizeDefault,
+    this.onCurvePlotSize,
   });
 
   /// Freshly read handles for **everything a command on this card acts on**
@@ -1138,6 +1147,8 @@ class _EffectSection extends StatelessWidget {
           ],
           resetLabel: l10n.reset,
           resetTip: l10n.tipResetCurve,
+          plotSize: curvePlotSize,
+          onPlotSize: onCurvePlotSize,
           onLive: (c, points) => onLive(id, run[c].id, curveValue(points)),
           onCommit: (c, points) => onWrite(id, run[c].id, curveValue(points)),
         );

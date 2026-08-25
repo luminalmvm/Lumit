@@ -69,11 +69,15 @@ void main() {
       await mount(tester, p);
       final id = p.layer.getEffects().single.id();
 
-      // Five channels, one editor: the tabs name them, and there is exactly
-      // one plot rather than one per channel (docs/08 §3.30).
-      for (final channel in ['Master', 'Red', 'Green', 'Blue', 'Alpha']) {
-        expect(find.text(channel), findsOneWidget, reason: '$channel is a tab');
+      // Five channels, one editor: a button each beside the plot — the
+      // channel's own initial, with the word on its tooltip (item 6.32) — and
+      // exactly one plot rather than one per channel (docs/08 §3.30).
+      for (final channel in ['M', 'R', 'G', 'B', 'A']) {
+        expect(find.text(channel), findsOneWidget,
+            reason: '$channel is a channel button');
       }
+      expect(find.text('Master'), findsNothing,
+          reason: 'the channel strip above the plot is gone');
       expect(find.byType(CurveEditor), findsOneWidget,
           reason: 'five curves, one plot');
       expect(

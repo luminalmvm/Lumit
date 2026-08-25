@@ -5497,6 +5497,22 @@
   "@tipResetCurve": {
     "description": "Tooltip on the reset action above the Curves effect's curve editor. It restores only the channel showing, not the whole effect. Under five words."
   },
+  "tipCurveGraphSize": "Graph size",
+  "@tipCurveGraphSize": {
+    "description": "Tooltip on the graph-size button above the Curves effect's curve editor, in the Effect controls panel. Pressing it steps the plot through small, medium and large. Under five words."
+  },
+  "curveGraphSizeSmall": "Small",
+  "@curveGraphSizeSmall": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its smallest. One word."
+  },
+  "curveGraphSizeMedium": "Medium",
+  "@curveGraphSizeMedium": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its middle size. One word."
+  },
+  "curveGraphSizeLarge": "Large",
+  "@curveGraphSizeLarge": {
+    "description": "The word on the graph-size button above the Curves effect's curve editor when the plot is at its largest. One word."
+  },
   "tipResetParameters": "Reset all parameters",
   "@tipResetParameters": {
     "description": "Tooltip on the effect's Reset button. Under five words."

@@ -26,6 +26,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/widgets.dart';
 
+import '../l10n/strings.dart';
 import 'controls.dart';
 
 /// The most control points a curve may carry (docs/08 §1.2). The engine drops
@@ -410,10 +411,33 @@ class _CurvePainter extends CustomPainter {
   }
 }
 
-/// Several curves behind channel tabs — Curves' five, drawn as one editor
+/// The three plot sides the graph-size control steps through, in logical
+/// pixels — After Effects' small, medium and large, which is the shape of the
+/// option people already know (item 6.32). A pixel height rather than an enum
+/// on the wire, so the preference file keeps a number and a fourth step can be
+/// added later without a migration.
+const List<double> curvePlotSizes = [110, 150, 210];
+
+/// The step the workspace starts on, and what a caller that does not persist
+/// the choice gets.
+const double curvePlotSizeDefault = 150;
+
+/// The side of a channel button beside the plot — one icon square (docs/15
+/// §3.1), because the letter is the whole label.
+const double _channelButton = 16;
+
+/// How wide the column gets when the labels are not single words and the
+/// button has to carry the phrase instead of an initial — Particulate's two
+/// over-life curves, which fold into this editor as well.
+const double _channelPhrase = 84;
+
+/// The gap between the plot and the channel column.
+const double _channelGap = 4;
+
+/// Several curves behind channel buttons — Curves' five, drawn as one editor
 /// rather than five stacked widgets (K-412, docs/08 §3.30).
 ///
-/// [labels] names the tabs; [curves] is one point list each, same order.
+/// [labels] names the channels; [curves] is one point list each, same order.
 class CurveChannelEditor extends StatefulWidget {
   final List<String> labels;
   final List<List<List<double>>> curves;
@@ -424,8 +448,17 @@ class CurveChannelEditor extends StatefulWidget {
   /// A committed edit on the channel at this index.
   final void Function(int channel, List<List<double>> points) onCommit;
 
-  /// A stable prefix for the tab and plot keys, so a test can point at one.
+  /// A stable prefix for the channel and plot keys, so a test can point at one.
   final String keyPrefix;
+
+  /// The plot's side in logical pixels — one of [curvePlotSizes], read back
+  /// from the workspace so the choice survives a restart.
+  final double plotSize;
+
+  /// The user stepped the graph size: persist it. Null leaves the control
+  /// keeping its own state for the life of the widget, which is what a caller
+  /// with nowhere to write it gets.
+  final ValueChanged<double>? onPlotSize;
 
   /// The word on the per-channel reset action.
   final String resetLabel;
@@ -450,6 +483,8 @@ class CurveChannelEditor extends StatefulWidget {
     required this.resetLabel,
     required this.resetTip,
     this.channelColours,
+    this.plotSize = curvePlotSizeDefault,
+    this.onPlotSize,
   });
 
   @override
@@ -458,6 +493,50 @@ class CurveChannelEditor extends StatefulWidget {
 
 class _CurveChannelEditorState extends State<CurveChannelEditor> {
   int _channel = 0;
+
+  /// The size while no caller is persisting it; null defers to the widget's.
+  double? _localSize;
+
+  double get _size => _localSize ?? widget.plotSize;
+
+  /// Which step [_size] is nearest — a size read back from a preference file
+  /// written by an older build need not be one of ours.
+  int get _sizeStep {
+    var best = 0;
+    for (var i = 1; i < curvePlotSizes.length; i++) {
+      if ((curvePlotSizes[i] - _size).abs() <
+          (curvePlotSizes[best] - _size).abs()) {
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  /// Small → medium → large → small. One button rather than a picker: three
+  /// steps is a cycle, and a dropdown for three words is a popup nobody wants
+  /// in a row this small.
+  void _stepSize() {
+    final next = curvePlotSizes[(_sizeStep + 1) % curvePlotSizes.length];
+    final persist = widget.onPlotSize;
+    if (persist == null) {
+      setState(() => _localSize = next);
+    } else {
+      persist(next);
+    }
+  }
+
+  String get _sizeWord => switch (_sizeStep) {
+        0 => l10n.curveGraphSizeSmall,
+        1 => l10n.curveGraphSizeMedium,
+        _ => l10n.curveGraphSizeLarge,
+      };
+
+  /// The letter on a channel button: the label's own initial, so Red is R and
+  /// a translated label is still its own word's initial rather than an English
+  /// one. The full label rides on the tooltip, so the letter is never the only
+  /// thing the user has to go on.
+  String _initial(String label) =>
+      label.isEmpty ? '?' : label.characters.first.toUpperCase();
 
   /// The channel's own colour, or null for the ones drawn in the theme's.
   Color? _colourOf(int channel) {
@@ -471,26 +550,41 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final channel = _channel.clamp(0, widget.curves.length - 1);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              for (var i = 0; i < widget.labels.length; i++)
-                Padding(
-                  padding: const EdgeInsets.only(right: 2),
-                  child: HouseButton(
-                    key: ValueKey<String>('${widget.keyPrefix}-tab-$i'),
-                    frameless: i != channel,
-                    small: true,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    onPressed: () => setState(() => _channel = i),
+    // **The channels sit beside the graph, not above it** (item 6.32). A strip
+    // of tabs over the plot pushed the graph down the panel and read as five
+    // words competing with the effect's own rows; a column of one-letter kicker
+    // buttons against the plot's edge belongs to the graph it switches.
+    //
+    // A channel named by one word is its initial on an icon square — R is
+    // red, and the word rides on the tooltip. Curve parameters that are not
+    // channels come through this same fold, though (Particulate's two
+    // over-life curves), and "S" for "Size over life" would be a riddle: those
+    // keep the phrase, on a wider column.
+    final letters = widget.labels.every((l) => !l.trim().contains(' '));
+    final columnWidth = letters ? _channelButton : _channelPhrase;
+    final channels = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < widget.labels.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: LumitTooltip(
+              message: widget.labels[i],
+              child: SizedBox(
+                width: columnWidth,
+                height: _channelButton,
+                child: HouseButton(
+                  key: ValueKey<String>('${widget.keyPrefix}-tab-$i'),
+                  frameless: i != channel,
+                  small: true,
+                  padding: EdgeInsets.symmetric(horizontal: letters ? 0 : 3),
+                  onPressed: () => setState(() => _channel = i),
+                  child: Center(
                     child: Text(
-                      widget.labels[i],
-                      style: t.small.copyWith(
+                      letters ? _initial(widget.labels[i]) : widget.labels[i],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.kicker.copyWith(
                         color: i == channel
                             ? (_colourOf(i) ?? t.textPrimary)
                             : t.textMuted,
@@ -498,6 +592,41 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
                     ),
                   ),
                 ),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Flexible, because a narrow panel must clip the size word
+              // rather than overflow the row — Reset is the one of the two
+              // that has to stay readable.
+              Flexible(
+                child: LumitTooltip(
+                  message: l10n.tipCurveGraphSize,
+                  child: HouseButton(
+                    key: ValueKey<String>('${widget.keyPrefix}-size'),
+                    frameless: true,
+                    small: true,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    onPressed: _stepSize,
+                    child: Text(
+                      _sizeWord,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.small.copyWith(color: t.textMuted),
+                    ),
+                  ),
+                ),
+              ),
               const Spacer(),
               LumitTooltip(
                 message: widget.resetTip,
@@ -515,12 +644,33 @@ class _CurveChannelEditorState extends State<CurveChannelEditor> {
             ],
           ),
           const SizedBox(height: 4),
-          CurveEditor(
-            key: ValueKey<String>('${widget.keyPrefix}-plot-$channel'),
-            points: widget.curves[channel],
-            line: _colourOf(channel),
-            onLive: (p) => widget.onLive(channel, p),
-            onCommit: (p) => widget.onCommit(channel, p),
+          LayoutBuilder(
+            builder: (context, box) {
+              // Which edge the column takes is a question of room: on the right
+              // where the panel is wide enough to hold the plot at its chosen
+              // size and the buttons beside it, on the left when the plot has
+              // to give the column its width back.
+              final beside = columnWidth + _channelGap;
+              final room =
+                  box.maxWidth.isFinite ? box.maxWidth : _size + beside;
+              final onRight = room >= _size + beside;
+              final plot = math.max(40.0, math.min(_size, room - beside));
+              final graph = CurveEditor(
+                key: ValueKey<String>('${widget.keyPrefix}-plot-$channel'),
+                points: widget.curves[channel],
+                line: _colourOf(channel),
+                size: plot,
+                onLive: (p) => widget.onLive(channel, p),
+                onCommit: (p) => widget.onCommit(channel, p),
+              );
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: onRight
+                    ? [graph, const SizedBox(width: _channelGap), channels]
+                    : [channels, const SizedBox(width: _channelGap), graph],
+              );
+            },
           ),
         ],
       ),
