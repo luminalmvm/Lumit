@@ -27,7 +27,7 @@
   .no-gl .ground {
     background:
       radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
-      radial-gradient(90% 80% at 85% 30%, #3a2a6b 0%, rgba(58, 42, 107, 0) 55%),
+      radial-gradient(90% 80% at 85% 30%, #23606b 0%, rgba(35, 96, 107, 0) 55%),
       radial-gradient(100% 90% at 60% 95%, #35785e 0%, rgba(53, 120, 94, 0) 60%),
       #0f1422;
     -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
@@ -111,20 +111,23 @@
       );
       float f = fbm(p + 2.0 * r);
 
-      // Only one of these three was ever red. The blue and the violet are the
-      // originals, untouched - the violet is a long way from the accent and
-      // greening it took the depth out of the whole field, which is what went
-      // wrong when all three moved at once. The wine was the red one, and it is
-      // the accent itself now: same darkness, same job, weighted low as the
-      // wine was, so the bottom of the field carries the brand's own green.
+      // Blue, teal, spruce: three steps along one stretch of the wheel, so the
+      // field reads as one colour moving rather than three arguing. The blue is
+      // the original. The teal replaces the violet, which sat on the far side
+      // of the blue from the accent and pulled against it. The spruce replaces
+      // the wine - it is the accent itself, and it keeps the wine's low
+      // weighting, so the brand's green is the bottom of the field.
+      //
+      // All three hold the darkness the wash they replace had. That is what the
+      // field's depth was made of, and it survives the hues changing.
       vec3 ink    = vec3(0.059, 0.078, 0.133);  // #0f1422
       vec3 indigo = vec3(0.173, 0.247, 0.478);  // #2c3f7a
-      vec3 violet = vec3(0.227, 0.165, 0.420);  // #3a2a6b
+      vec3 teal   = vec3(0.137, 0.376, 0.420);  // #23606b
       vec3 spruce = vec3(0.208, 0.471, 0.369);  // #35785e - the accent
 
       vec3 col = ink;
       col = mix(col, indigo, smoothstep(0.30, 0.60, f));
-      col = mix(col, violet, smoothstep(0.55, 0.82, length(q)) * 0.85);
+      col = mix(col, teal, smoothstep(0.55, 0.82, length(q)) * 0.85);
       col = mix(col, spruce, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
       col = mix(col, spruce, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
