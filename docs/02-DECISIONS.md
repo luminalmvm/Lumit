@@ -16201,3 +16201,21 @@ the user did type is a choice and stands untouched — `montage.backup` saves as
 `montage.backup` — because guessing that a typed extension is a mistake is worse than
 leaving one odd filename alone. The rule lives on the one save path both Save and Save as
 go through, so neither can drift from the other.
+
+## K-567 — A folder's label colour tints what it holds
+
+**Status: DECIDED (2026-08-25).** A colour tag on a Project folder is a claim about the
+folder *and* everything filed under it: the tag tints its descendants' row glyphs, so
+filing a shoot into a tagged folder colours the shoot. An item with a tag of its own
+overrides what it inherits, and where folders nest, the nearest tagged ancestor wins — so
+a tagged folder inside a tagged folder recolours only its own branch. The engine's store is
+unchanged: an item's label is still the `u8` it always was, `0` for untagged, and
+inheritance is worked out in the Project panel from the tree it already walks to draw the
+rows. That is display logic, not a document fact — nothing is written when a folder is
+tagged beyond the folder's own label, so undo, save and the chip filter (which still
+narrows on an item's *own* tag) all keep their existing meaning.
+
+Because `0` now reads as *inherit* rather than plainly *untagged*, the row menu's neutral
+chip says which it is: **Inherit from folder** inside a tagged folder, **No colour**
+outside one. Same chip, same one click back — only the word changes, so the strip stays the
+mockup's nine chips rather than gaining a tenth.
