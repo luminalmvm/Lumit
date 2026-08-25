@@ -1397,7 +1397,8 @@ measurement — the panel shows the numbers, it does not turn them on.
   animated / what has been modified / nothing, on the selected layer or — with nothing
   selected — on every layer in the comp. Mask rows are in that same selection (K-234), and
   `Delete` with one picked deletes the mask rather than its layer: a panel holding a finer
-  selection than the layer one is asked before the shell's `Delete` removes anything. Still to
+  selection than the layer one is asked before the shell's `Delete` removes anything.
+  Still to
   build here: moving/deleting a whole *lane* selection, and the expression toggle.
 
 ### 4.4 Sequence layers
@@ -1566,6 +1567,17 @@ two, and `Shift+=`.
 
 - Layer drag moves in time; vertical drag reorders the stack. `[`/`]` move the selected
   layer's in/out to the playhead; `Alt+[`/`Alt+]` trim in/out at the playhead.
+
+  **The two pairs differ in what happens to the animation** (A8 — the Caddis study's slide
+  and trim as two gestures). A **move** carries the layer's content with the bar, and a
+  keyframe's time is the layer's own: it reaches the composition's clock through the start
+  offset (K-213), which travels with a move — so `[` and `]` slide every keyframe on the
+  layer along with it. A **trim** moves one edge over content that has not moved, so
+  `Alt+[` and `Alt+]` leave every keyframe exactly where it was. That is what the bar drag
+  has always done at each end (`barDragPreview`), and the keys read the bar drag's own
+  clamp (`clampBarDelta`), so a key and a drag cannot come to different answers about where
+  a layer may end. Both pairs were already bound and already behaved this way; the claim is
+  pinned by `shortcuts_frb_test.dart`.
 
   **Shipped (K-193):** dragging a layer's **bar** moves it in time, and dragging a layer's
   **name** in the outline moves it up or down the stack — drop it on a row and it takes
@@ -2746,8 +2758,8 @@ app-wide, so a list, a field or a canvas is free to use them for moving within i
 | Timeline | `E` / `M` | Reveal effects / masks |
 | Timeline | `U` / `UU` | Reveal animated / modified properties |
 | Timeline | `L` / `LL` / `LLL` | Reveal Audio / and its waveform / shut again (K-281; `Shift+L` does the same). Inside the Timeline this takes `L` from the shuttle transport, which keeps it everywhere else |
-| Timeline | `[` / `]` | Move layer in / out to playhead |
-| Timeline | `Alt+[` / `Alt+]` | Trim layer in / out at playhead |
+| Timeline | `[` / `]` | Move layer in / out to playhead — the whole bar, keyframes sliding with it (A8, §4.7) |
+| Timeline | `Alt+[` / `Alt+]` | Trim layer in / out at playhead — one edge only, keyframes staying where they are |
 | Timeline | `Ctrl+Shift+D` | Split layer / cut clip at playhead |
 | Timeline | `Ctrl+D` | Duplicate selection |
 | Timeline | `Ctrl+Shift+C` | Precompose |

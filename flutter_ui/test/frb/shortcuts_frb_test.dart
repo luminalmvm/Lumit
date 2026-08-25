@@ -11,6 +11,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -687,6 +689,124 @@ void main() {
           find.byKey(const ValueKey('project-search')));
       expect(field.focusNode?.hasFocus, isTrue,
           reason: 'the cursor is in the Project panel\'s search field');
+    });
+
+    /// **Slide and trim are two key pairs** (A8, docs/07 §4.4). `[` and `]`
+    /// put the layer's in or out point on the playhead by **moving the whole
+    /// layer**, and a layer's keyframes are timed against its own clock — they
+    /// reach the composition's through the start offset (K-213), which travels
+    /// with a move — so the animation goes with the bar. `Alt` makes it a trim:
+    /// one edge moves over content that stays put, and every keyframe is
+    /// exactly where it was.
+    ///
+    /// The pair reads as one claim and is asserted as one: a `[` that carried
+    /// no keyframes, or an `Alt+[` that carried them, would each be the whole
+    /// distinction gone.
+    testWidgets('[ slides the layer with its keyframes, Alt+[ trims without',
+        (tester) async {
+      final p = await mount(tester);
+      final comp = p.uiState.selectedComp!;
+      final layer = comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          for (final f in [10, 40])
+            BridgeKeyframe(
+              time: comp.timeOfFrame(frame: f),
+              value: f.toDouble(),
+              interpIn: const BridgeSideInterp.linear(),
+              interpOut: const BridgeSideInterp.linear(),
+            ),
+        ]),
+      );
+      p.uiState.setSelection([layer]);
+      p.uiState.model.refresh();
+      await tester.pump();
+
+      List<int> keyFrames() => [
+            for (final k
+                in (layer.getTransform().opacity as BridgeScalar_Keyframed)
+                    .field0)
+              comp.frameAtTime(time: k.time)
+          ];
+      int inFrame() => comp.frameAtTime(time: layer.getSpan().inPoint);
+      int outFrame() => comp.frameAtTime(time: layer.getSpan().outPoint);
+
+      expect(inFrame(), 0);
+      final was = outFrame();
+      expect(keyFrames(), [10, 40]);
+
+      // `[` — the whole layer moves so its head lands on the playhead, and the
+      // animation comes with it.
+      p.uiState.playheadFrame.value = 20;
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.bracketLeft);
+      await tester.pump();
+      expect(inFrame(), 20);
+      expect(outFrame(), was + 20, reason: 'the tail travelled the same way');
+      expect(keyFrames(), [30, 60], reason: 'the keyframes slid with the bar');
+
+      // `Alt+[` — the head is cut back to the playhead over content that has
+      // not moved, so the keys stay where they are on the comp's clock.
+      p.uiState.playheadFrame.value = 25;
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.bracketLeft);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      expect(inFrame(), 25, reason: 'the head was trimmed to the playhead');
+      expect(outFrame(), was + 20, reason: 'and the tail was left alone');
+      expect(keyFrames(), [30, 60], reason: 'a trim moves no keyframes');
+    });
+
+    /// The other end, the same two rules — so neither key pair can be right by
+    /// accident of the in point being at zero.
+    testWidgets('] slides the tail with its keyframes, Alt+] trims without',
+        (tester) async {
+      final p = await mount(tester);
+      final comp = p.uiState.selectedComp!;
+      final layer = comp.addSolidLayer();
+      layer.setTransform(
+        prop: BridgeTransformProp.opacity,
+        value: BridgeScalar.keyframed([
+          BridgeKeyframe(
+            time: comp.timeOfFrame(frame: 10),
+            value: 10,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          ),
+        ]),
+      );
+      p.uiState.setSelection([layer]);
+      p.uiState.model.refresh();
+      await tester.pump();
+
+      int keyFrame() => comp.frameAtTime(
+          time: (layer.getTransform().opacity as BridgeScalar_Keyframed)
+              .field0
+              .single
+              .time);
+      final was = comp.frameAtTime(time: layer.getSpan().outPoint);
+
+      p.uiState.playheadFrame.value = was - 30;
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.bracketRight);
+      await tester.pump();
+      expect(comp.frameAtTime(time: layer.getSpan().outPoint), was - 30);
+      expect(comp.frameAtTime(time: layer.getSpan().inPoint), -30,
+          reason: 'the whole layer moved, head and all');
+      expect(keyFrame(), -20, reason: 'the keyframe slid with the bar');
+
+      p.uiState.playheadFrame.value = was - 50;
+      await tester.pump();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.bracketRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+      await tester.pump();
+      expect(comp.frameAtTime(time: layer.getSpan().outPoint), was - 50);
+      expect(comp.frameAtTime(time: layer.getSpan().inPoint), -30,
+          reason: 'a trim leaves the other end where it was');
+      expect(keyFrame(), -20, reason: 'a trim moves no keyframes');
     });
   }, skip: !engineAvailable);
 }
