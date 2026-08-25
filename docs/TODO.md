@@ -578,16 +578,6 @@ does not gate the four. Delete each phase here when it lands, as with everything
     windows, and last the satellite tear-off panels - which is where the old
     pop-out-panel-windows rebuild item (K-182) is folded in.
 
-### Owed from the 2026-08-25 desktop-testing batch (K-529)
-
-- **Tab-hop between value wells** (15-DESIGN §12A.3): tabbing into a well must arrive with
-    its text selected so the first keystroke replaces it, and tabbing off a row's last well
-    must continue to the next row's first (wrapping down; `Shift+Tab` mirroring up). Today
-    the hop is ordinary focus traversal and the text arrives unselected. The fix belongs in
-    `DragValueField` (`flutter_ui/lib/widgets/controls.dart`), which is the one place a
-    well's focus is decided - a well gaining focus by traversal should begin its edit, which
-    is the call that already selects the whole value. Regression tests for both halves.
-
 ## Next - colour management: OCIO (K-489, K-490, docs/impl/ocio.md)
 
 The owner has ruled OCIO support in scope; the design step has landed
