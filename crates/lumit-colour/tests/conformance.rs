@@ -212,8 +212,78 @@ fn the_aces_cg_config_matches_the_reference() {
     unreachable!("no fixture data yet");
 }
 
+// ---------------------------------------------------------------------------
+// The CLF suite (§7.3). Not ignored, and not waiting for anything: these are
+// the specification's own published documents, and every expected value is
+// either a formula the file itself states or arithmetic on the file's own
+// numbers. `fixtures/clf/clf.fixture` carries the derivation, file by file.
+// ---------------------------------------------------------------------------
+
+/// The vendored documents, by name, so a row naming a file that is not here
+/// fails loudly rather than being skipped.
+fn clf_document(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "matrix_3x4_example.clf" => include_str!("fixtures/clf/matrix_3x4_example.clf"),
+        "lut1d_example.clf" => include_str!("fixtures/clf/lut1d_example.clf"),
+        "lut3d_identity_12i_16f.clf" => {
+            include_str!("fixtures/clf/lut3d_identity_12i_16f.clf")
+        }
+        "tabulation_support.clf" => include_str!("fixtures/clf/tabulation_support.clf"),
+        "range.clf" => include_str!("fixtures/clf/range.clf"),
+        "range_test1_noclamp.clf" => include_str!("fixtures/clf/range_test1_noclamp.clf"),
+        "difficult_syntax.clf" => include_str!("fixtures/clf/difficult_syntax.clf"),
+        "info_example.clf" => include_str!("fixtures/clf/info_example.clf"),
+        _ => return None,
+    })
+}
+
+/// §7.3: the specification's implementation-test files, parsed and evaluated
+/// against their published expectations.
 #[test]
-#[ignore = "pending: fixtures/clf/, the CLF specification's own implementation-test files vendored with their published expectations (docs/impl/ocio.md §7.3)"]
 fn the_clf_specification_test_files_pass() {
-    unreachable!("no fixture data yet");
+    for row in read_fixture(include_str!("fixtures/clf/clf.fixture")) {
+        let text = clf_document(&row.id)
+            .unwrap_or_else(|| panic!("line {}: no vendored file named {:?}", row.line, row.id));
+        let chain = lumit_colour::clf::parse_clf(&row.id, text)
+            .unwrap_or_else(|e| panic!("line {}: {} did not parse ({e})", row.line, row.id));
+        let got = chain.eval(row.input);
+        for k in 0..3 {
+            let off = (got[k] - row.expected[k]).abs();
+            assert!(
+                off <= row.tolerance,
+                "line {} ({}): {:?} → {got:?}, expected {:?}, off by {off}",
+                row.line,
+                row.id,
+                row.input,
+                row.expected
+            );
+        }
+    }
+}
+
+/// Every vendored document is exercised by at least one row. A file nobody
+/// evaluates is decoration, and this is what stops one being added as such.
+#[test]
+fn every_vendored_clf_document_carries_rows() {
+    let rows = read_fixture(include_str!("fixtures/clf/clf.fixture"));
+    for entry in std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/clf"))
+        .expect("the clf fixture directory")
+    {
+        let name = entry
+            .expect("an entry")
+            .file_name()
+            .to_string_lossy()
+            .into_owned();
+        if !name.ends_with(".clf") {
+            continue;
+        }
+        assert!(
+            clf_document(&name).is_some(),
+            "{name} is vendored but this test does not know it"
+        );
+        assert!(
+            rows.iter().any(|r| r.id == name),
+            "{name} is vendored but no fixture row evaluates it"
+        );
+    }
 }

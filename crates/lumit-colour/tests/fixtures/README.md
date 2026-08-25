@@ -21,6 +21,21 @@ They are a floor, not the plan: they catch a transposed matrix, a swapped
 exponent, a mis-derived break point. They do not prove agreement with the
 reference implementation across a real config, which is what §7.1 is for.
 
+`clf/` — the **CLF suite** (§7.3): eight documents from the Common LUT Format
+specification's own example and implementation-test set, vendored byte for byte,
+each evaluated against expected values that are published rather than measured.
+`clf/clf.fixture` states the derivation file by file — a spec example's own
+worked numbers, a generating formula the document itself prints in a
+`Description`, an identity that holds by construction, or arithmetic on the
+document's own coefficients. No reference library is involved anywhere in it,
+which is why this part of §7 could land while §7.1 waits.
+
+Two reader faults surfaced the day these landed, both of the kind only a real
+published document produces: vendor elements inside an `Info` block were being
+read as process nodes, and an XML comment in the middle of an `Array` glued the
+numbers either side of it into one token. Both are fixed and both are held by
+the rows.
+
 ## What is pending, and precisely what it needs
 
 These are **not** written down as guesses. Fabricating an expected value would
@@ -29,9 +44,8 @@ turn the suite from a proof into a decoration, so each is an `#[ignore]`d test i
 
 | Fixture | Waits for |
 |---|---|
-| `aces-1.2.fixture` | The legacy ACES 1.2 config, run through the reference OpenColorIO library offline (§7.1). Needs: the config, the library at a recorded version, and the generation script, all named in the file header. |
-| `aces-cg.fixture` | The same for the OCIO v2 ACES CG config, whose views are `BuiltinTransform` styles — so this fixture and the vendored builtin bakes (`../../vendored/`) come from one run. |
-| `clf/` | The CLF specification's own implementation-test files, vendored with their published expectations (§7.3). These are published data, not a reference run, so they can land as soon as someone fetches them. |
+| `aces-1.2.fixture` | The legacy ACES 1.2 config, run through the reference OpenColorIO library offline (§7.1). The config itself loads today — the legacy configs are pure data — so this waits only on somebody producing the expected values. |
+| `aces-cg.fixture` | The same for the OCIO v2 ACES CG config, whose views are `BuiltinTransform` styles — so this fixture and the vendored builtin bakes (`../../vendored/`) come from one run, and until it happens those styles refuse by name and the v2 configs do not resolve end to end. |
 
 CI never builds OpenColorIO; it reads whatever table is here. The regeneration
 recipe belongs in each fixture's header when it lands, so a later reader can
@@ -47,4 +61,6 @@ One row per line, four fields separated by `|`:
 
 `#` starts a comment. The chain ids are built in `conformance.rs`; a fixture
 naming an id the test does not know fails loudly rather than being skipped,
-because a silently skipped golden is not a golden.
+because a silently skipped golden is not a golden. `clf/clf.fixture` uses the
+same four fields, with the vendored document's file name in place of the chain
+id.

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ProcessList xmlns="http://www.smpte-ra.org/ns/2136-1/2024" id="exmat1" name="transform example matrix" compCLFversion="3.0">
+<Description> Matrix example </Description>
+<Description> Used by unit tests </Description>
+<Matrix id="mat-25" name="colorspace conversion" inBitDepth="10i" outBitDepth="12i" >
+<Description> 3x4 Matrix , 4th column is offset </Description>
+<Array dim="3 4">
+3.6    0.1 -0.2       0.3
+0.2    3.5 +0.1      -0.05
+1E-01 -0.3  0.34e+01 -4e-1
+</Array>
+</Matrix>
+</ProcessList>

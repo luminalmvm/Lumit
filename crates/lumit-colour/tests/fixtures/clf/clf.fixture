@@ -1,0 +1,111 @@
+# The CLF suite (docs/impl/ocio.md §7.3). Every row's expected output is
+# PUBLISHED — either the specification's own worked example, a formula the file
+# itself states, or arithmetic on the file's own published numbers. Nothing here
+# was produced by lumit-colour, and nothing here needs the reference library.
+#
+# The `.clf` files beside this one are verbatim, byte-for-byte, as the
+# OpenColorIO project distributes the Common LUT Format specification's example
+# and implementation-test documents (BSD-3-Clause; the documents themselves are
+# the Academy/SMPTE ST 2136-1 examples). They are not edited — a vendored file
+# that someone tidied is no longer the published file — so their provenance is
+# stated here rather than inside them.
+#
+# PROVENANCE AND DERIVATION, PER FILE
+#
+#   matrix_3x4_example.clf
+#     Spec example `exmat1` ("transform example matrix"). A 3×4 matrix at
+#     10i in, 12i out. Expected = M·rgb × (1023/4095) + offset/4095, the
+#     bit-depth scaling the specification defines. Exact arithmetic on the
+#     file's own coefficients.
+#
+#   lut1d_example.clf
+#     Spec example `exlut1`. 65 entries, 8i in, 12i out, and the file states
+#     its own generating formula in a Description: `flipud(1.25 - 1.5*x^2.2)`.
+#     Expected = that formula at x = 1 − t (the flip), which is why entry 0 is
+#     −1023.75 (= −0.25 × 4095) and entry 64 is 5118.75 (= 1.25 × 4095). The
+#     published formula and the published table agree to eight decimals, so the
+#     row gates the reader rather than the table.
+#
+#   lut3d_identity_12i_16f.clf
+#     Spec example `exlut2`. A 2³ cube that is the identity — published by
+#     construction, and the sharpest possible test of CLF's blue-fastest
+#     storage order: read in file order the red and blue axes swap, and the
+#     identity becomes a transpose that still looks like a plausible grade.
+#
+#   tabulation_support.clf
+#     The implementation-test file for tab separators. A 3³ cube at 10i/10i
+#     whose samples deliberately run outside 0–1023. Expected at a grid node =
+#     that node's own published triple ÷ 1023 — a look-up at an exact grid
+#     point returns the stored sample, so no interpolation enters the row. The
+#     three rows are chosen at three different corners, so a transposed axis
+#     cannot pass.
+#
+#   range.clf
+#     The implementation-test file for a Range with no `style` attribute: the
+#     specification's default is to clamp, and the file's own Description says
+#     so. 16i in and out with equal in and out bounds, i.e. identity inside
+#     [16320, 32640]/65535 and a clamp outside it.
+#
+#   range_test1_noclamp.clf
+#     The same node with `style="noClamp"`, 8i in and 32f out, and bounds
+#     deliberately outside the 8-bit range. Expected = the affine map the
+#     specification defines, (x − minIn)·(maxOut − minOut)/(maxIn − minIn) +
+#     minOut, evaluated past both ends to prove nothing clamps.
+#
+#   difficult_syntax.clf
+#     The specification's syntax torture document: XML comments inside an
+#     Array and inside a Description, entity escapes, tabs as separators,
+#     multi-line attribute values, `+` signs and exponent notation, an unknown
+#     attribute, an `Info` block with vendor elements. Its maths is the
+#     published `xyz_to_rgb` example — the XYZ→sRGB matrix, a clamping Range,
+#     then a 128×3 table the file describes as `x^1/1.8, with 0.95 and 0.9
+#     scaling for G and B`. Both rows are chosen to clamp hard at an end of the
+#     Range, so the expected value is a published table endpoint exactly and no
+#     interpolation is involved: the row measures the *reading*, which is the
+#     whole point of this file.
+#
+#   info_example.clf
+#     The implementation-test file for the `Info` element, whose contents are
+#     application-specific by definition and must be skipped whole. Its
+#     transform is a 32f→12i matrix of 4095s, i.e. the identity once the output
+#     bit depth comes out. Anything but the identity here means the bit-depth
+#     scaling was dropped; a parse error means the vendor elements inside
+#     `Info` were read as process nodes.
+#
+# Format: <clf file> | <r g b in> | <R G B expected> | <tolerance>
+
+matrix_3x4_example.clf   | 1.0 0.0 0.0   | 0.89941392 0.04995116 0.02488400   | 1e-6
+matrix_3x4_example.clf   | 0.0 1.0 0.0   | 0.02505495 0.87434676 -0.07504274  | 1e-6
+matrix_3x4_example.clf   | 0.2 0.5 0.8   | 0.15246154 0.46714530 0.64692796   | 1e-6
+# The offsets alone, which is where a writer that forgot to divide them by the
+# output depth is off by a factor of 4095 and nothing else moves.
+matrix_3x4_example.clf   | 0.0 0.0 0.0   | 0.00007326 -0.00001221 -0.00009768 | 1e-7
+
+lut1d_example.clf        | 0.0 0.0 0.0   | -0.25 -0.25 -0.25                  | 1e-6
+lut1d_example.clf        | 0.5 0.5 0.5   | 0.92354354 0.92354354 0.92354354   | 1e-6
+lut1d_example.clf        | 1.0 1.0 1.0   | 1.25 1.25 1.25                     | 1e-6
+lut1d_example.clf        | 0.25 0.25 0.25 | 0.45342616 0.45342616 0.45342616  | 1e-5
+
+lut3d_identity_12i_16f.clf | 0.0 0.0 0.0 | 0.0 0.0 0.0                        | 1e-6
+lut3d_identity_12i_16f.clf | 1.0 0.0 0.0 | 1.0 0.0 0.0                        | 1e-6
+lut3d_identity_12i_16f.clf | 0.0 0.0 1.0 | 0.0 0.0 1.0                        | 1e-6
+lut3d_identity_12i_16f.clf | 0.2 0.5 0.8 | 0.2 0.5 0.8                        | 1e-6
+
+tabulation_support.clf   | 0.0 0.0 0.0   | -0.05865103 0.00488759 0.07331378  | 1e-6
+tabulation_support.clf   | 1.0 0.0 0.0   | 1.62267840 -0.04887586 -0.09775171 | 1e-6
+tabulation_support.clf   | 0.0 0.0 1.0   | 0.00000000 0.09775171 1.17302053   | 1e-6
+tabulation_support.clf   | 1.0 1.0 1.0   | 1.08504399 0.87976540 1.17302053   | 1e-6
+
+range.clf                | 0.3 0.3 0.3   | 0.3 0.3 0.3                        | 1e-6
+range.clf                | 0.1 0.1 0.1   | 0.24902724 0.24902724 0.24902724   | 1e-6
+range.clf                | 0.9 0.9 0.9   | 0.49805447 0.49805447 0.49805447   | 1e-6
+
+range_test1_noclamp.clf  | 0.0 0.0 0.0   | 0.01111111 0.01111111 0.01111111   | 1e-6
+range_test1_noclamp.clf  | 1.0 1.0 1.0   | 0.98506944 0.98506944 0.98506944   | 1e-6
+range_test1_noclamp.clf  | 2.0 2.0 2.0   | 1.95902778 1.95902778 1.95902778   | 1e-6
+range_test1_noclamp.clf  | -1.0 -1.0 -1.0 | -0.96284722 -0.96284722 -0.96284722 | 1e-6
+
+difficult_syntax.clf     | 10.0 10.0 10.0 | 1.0 0.95 0.9                      | 1e-6
+difficult_syntax.clf     | -1.0 -1.0 -1.0 | 0.0 0.0 0.0                       | 1e-6
+
+info_example.clf         | 0.2 0.5 0.8   | 0.2 0.5 0.8                        | 1e-6

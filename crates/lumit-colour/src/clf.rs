@@ -422,6 +422,12 @@ pub fn parse_clf(what: &str, text: &str) -> Result<Chain> {
     let mut node: Option<Node> = None;
     let mut open_child: Option<String> = None;
     let mut child_text = String::new();
+    // How deep we are inside an `Info` element. Its contents are
+    // application-specific by definition — the specification's own example
+    // puts `<Copyright>`, `<Category>` and a vendor colour-space block in
+    // there — so everything between `<Info>` and its close is skipped whole
+    // rather than being read as a process node.
+    let mut info_depth = 0_usize;
 
     loop {
         let event = reader
@@ -441,6 +447,18 @@ pub fn parse_clf(what: &str, text: &str) -> Result<Chain> {
                 let elem = String::from_utf8_lossy(e.name().as_ref()).into_owned();
                 // An empty element carries no text and closes on the spot.
                 let empty = matches!(event, Event::Empty(_));
+                if info_depth > 0 {
+                    if !empty {
+                        info_depth += 1;
+                    }
+                    continue;
+                }
+                if elem == "Info" {
+                    if !empty {
+                        info_depth = 1;
+                    }
+                    continue;
+                }
                 let mut attrs = BTreeMap::new();
                 for attr in e.attributes() {
                     let attr = attr.map_err(|err| {
@@ -498,11 +516,26 @@ pub fn parse_clf(what: &str, text: &str) -> Result<Chain> {
                     let chunk = t
                         .xml_content()
                         .map_err(|e| bad(what, format!("text could not be read ({e})")))?;
+                    // A comment inside an Array splits the text into two
+                    // events, and the reader trims each one — so the last
+                    // number before the comment and the first number after it
+                    // would be glued into a single token unless a separator
+                    // goes back in. The specification's own syntax example
+                    // does exactly this, and the symptom is a table four
+                    // values short rather than anything that looks like a
+                    // parsing fault.
+                    if !child_text.is_empty() {
+                        child_text.push(' ');
+                    }
                     child_text.push_str(chunk.as_ref());
                 }
             }
             Event::End(ref e) => {
                 let elem = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                if info_depth > 0 {
+                    info_depth -= 1;
+                    continue;
+                }
                 if node.as_ref().is_some_and(|n| n.kind == elem) {
                     if let Some(finished) = node.take() {
                         ops.push(node_to_op(what, &finished)?);
