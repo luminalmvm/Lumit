@@ -12,6 +12,11 @@
 // letter's local box so the colour runs continuously across both arms; the
 // right element's stops are reversed so the flipped t reads violet at its top.
 //
+// The green is on the L and the blue on the flipped t - the two arms swapped
+// families, so the lockup opens green and closes blue. The blue is the same
+// cyan-to-blue it always was; the green replaces a violet-to-pink, which was
+// the accent's own family and went with it.
+//
 // No tittle - the t's overhang owns the i's dot position.
 //
 // The glow rides the diamond exactly: its scale is a fixed multiple of the
@@ -31,11 +36,11 @@ const { class: klass } = Astro.props;
   <defs>
     <linearGradient id="wm-a" gradientUnits="userSpaceOnUse"
         x1="0" y1="-70.31" x2="47.18" y2="0">
-      <stop offset="0" stop-color="#86e2ff" /><stop offset="1" stop-color="#2f6fe0" />
+      <stop offset="0" stop-color="#6fdca8" /><stop offset="1" stop-color="#b6e84f" />
     </linearGradient>
     <linearGradient id="wm-b" gradientUnits="userSpaceOnUse"
         x1="47.18" y1="0" x2="0" y2="-70.31">
-      <stop offset="0" stop-color="#8a70ff" /><stop offset="1" stop-color="#ff4f9e" />
+      <stop offset="0" stop-color="#86e2ff" /><stop offset="1" stop-color="#2f6fe0" />
     </linearGradient>
     <radialGradient id="wm-glow">
       <stop offset="0" stop-color="#fff" stop-opacity="0.55" />

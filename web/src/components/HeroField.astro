@@ -27,8 +27,8 @@
   .no-gl .ground {
     background:
       radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
-      radial-gradient(90% 80% at 85% 30%, #3a2a6b 0%, rgba(58, 42, 107, 0) 55%),
-      radial-gradient(100% 90% at 60% 95%, #6a2f3f 0%, rgba(106, 47, 63, 0) 60%),
+      radial-gradient(90% 80% at 85% 30%, #2a6b4a 0%, rgba(42, 107, 74, 0) 55%),
+      radial-gradient(100% 90% at 60% 95%, #6a5f2f 0%, rgba(106, 95, 47, 0) 60%),
       #0f1422;
     -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
     mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
@@ -111,16 +111,21 @@
       );
       float f = fbm(p + 2.0 * r);
 
+      // The blue wash is untouched. The other two were a violet and a wine - the
+      // accent's family - and are a jade and a moss now: each is its
+      // predecessor's channels rearranged, so it keeps the saturation it had
+      // and the distance it had from the blue, and only the half of the wheel
+      // it sits in moves. moss is the warm one, as the wine was.
       vec3 ink    = vec3(0.059, 0.078, 0.133);  // #0f1422
       vec3 indigo = vec3(0.173, 0.247, 0.478);  // #2c3f7a
-      vec3 violet = vec3(0.227, 0.165, 0.420);  // #3a2a6b
-      vec3 wine   = vec3(0.416, 0.184, 0.247);  // #6a2f3f
+      vec3 jade   = vec3(0.165, 0.420, 0.290);  // #2a6b4a
+      vec3 moss   = vec3(0.416, 0.373, 0.184);  // #6a5f2f
 
       vec3 col = ink;
       col = mix(col, indigo, smoothstep(0.30, 0.60, f));
-      col = mix(col, violet, smoothstep(0.55, 0.82, length(q)) * 0.85);
-      col = mix(col, wine, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
-      col = mix(col, wine, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
+      col = mix(col, jade, smoothstep(0.55, 0.82, length(q)) * 0.85);
+      col = mix(col, moss, smoothstep(0.36, 0.58, r.x) * (0.4 + 0.6 * (1.0 - uv.y)));
+      col = mix(col, moss, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
       vec2 gp = gl_FragCoord.xy;
       col += (phash(gp) - 0.5) * 0.036;
