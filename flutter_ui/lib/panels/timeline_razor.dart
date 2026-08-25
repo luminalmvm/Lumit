@@ -61,8 +61,10 @@ List<BridgeLayerEntry> razorTargets(
 /// single op, so each is a single undo step (docs/07 §4.7) — a Shift-cut across
 /// five layers is five steps, which is honest: it is five edits.
 ///
-/// A refusal is silence, not an error: the engine declines a clip an eased ramp
-/// cannot be cut through, and a razor that threw a dialogue at the user for
+/// A refusal is silence, not an error. An eased speed ramp is no longer one of
+/// them — the engine splits the map's curve and both halves play what the whole
+/// clip played (K-573) — so what is left to refuse is a click on an edit point
+/// that is already there, and a razor that threw a dialogue at the user for
 /// clicking slightly wrong would be worse than one that does nothing.
 bool razorCut(List<BridgeLayerEntry> targets, int frame) {
   var cut = false;

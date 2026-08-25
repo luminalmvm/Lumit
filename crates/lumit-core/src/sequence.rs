@@ -353,9 +353,20 @@ impl Clip {
         let Some(map) = self.retime.as_ref() else {
             return Some((None, None, self.source_in.checked_add(tau).ok()?));
         };
+        // **An expression cannot be cut in two.** The source positions it
+        // produces are computed rather than stored, so splitting one means
+        // rewriting what the user typed — `(expr)` on the left and `(expr)`
+        // shifted on the right — which is not a cut, it is an edit of their
+        // work. Refused, exactly as [`Self::slip`] refuses one. Unreachable
+        // today: only transform and effect properties can carry an expression,
+        // and this wants deciding properly if Retime ever offers one.
+        if matches!(map.animation, Animation::Expression(_)) {
+            return None;
+        }
         let on_grid = |v: f64| Rational::from_f64_on_grid(v, Rational::FLICK_DEN).ok();
 
         let mut whole = map.clone();
+        freeze_auto_around(&mut whole, tau);
         whole.insert_key_preserving_shape(tau);
         let Animation::Keyframed(keys) = &whole.animation else {
             // A static map holds one source moment throughout, so both halves
@@ -384,10 +395,20 @@ impl Clip {
     }
 
     /// Cut this clip at layer-local time `at` into two clips whose retimes
-    /// exactly partition the original (docs/03-DATA-MODEL.md §5.3, the
-    /// beat-sync covenant: `place` never moves, source positions stay exact).
-    /// None when `at` is not strictly inside the clip, or the retime can't be
-    /// split exactly there ([`Retime::split_at`]).
+    /// exactly partition the original (docs/03-DATA-MODEL.md §5.3,
+    /// docs/04-RETIMING.md §8.1, the beat-sync covenant: `place` never moves,
+    /// source positions stay exact).
+    ///
+    /// **An eased speed ramp cuts like anything else** (K-573). A span is one
+    /// cubic, and a cubic splits into two cubics that *are* the original curve
+    /// rather than an approximation of it, so the razor through the middle of a
+    /// ramp leaves two clips whose speeds concatenate to the speed that was
+    /// there before — sampled at every frame across the span, the halves and
+    /// the original agree to the last bit.
+    ///
+    /// None when `at` is not strictly inside the clip — an end is not a cut —
+    /// or when the map is expression-driven, which cannot be split without
+    /// rewriting it ([`Self::map_split`]).
     pub fn cut(&self, at: Rational) -> Option<(Clip, Clip)> {
         let tau_clip = at.checked_sub(self.place_start).ok()?;
         if tau_clip <= Rational::ZERO || tau_clip >= self.place_duration {
@@ -663,6 +684,53 @@ impl Clip {
             }
         }
         Rational::from_f64_on_grid(lo, Rational::FLICK_DEN).ok()
+    }
+}
+
+/// Write down the **automatic** tangents either side of `tau` as the beziers
+/// they currently resolve to, so a cut there can keep the curve (K-573).
+///
+/// In plain terms: an automatic tangent does not store a direction, it works
+/// one out from the keys on either side of it (K-506). A cut changes exactly
+/// those neighbours — the key before the cut gains the cut as its new
+/// neighbour, and the key after it ends up first in a clip of its own with
+/// nothing to its left — so an automatic side would quietly re-aim itself and
+/// the two halves would stop playing what the whole clip played. Said out loud
+/// as the bezier it already was, the tangent cannot drift.
+///
+/// Only the pair the cut lands between is touched: every other key goes on
+/// aiming itself, because nothing about its neighbours changed. An automatic
+/// speed depends on its neighbours' *times and values*, never on their sides,
+/// so writing these two down does not disturb the ones left automatic.
+///
+/// A no-op when the property is not keyframed, or when `tau` is outside the
+/// keyed range — there is no span for the cut to land in.
+fn freeze_auto_around(map: &mut Property, tau: Rational) {
+    let Animation::Keyframed(keys) = &mut map.animation else {
+        return;
+    };
+    let t = tau.to_f64();
+    let Some(i) = keys
+        .windows(2)
+        .position(|w| t > w[0].time.to_f64() && t < w[1].time.to_f64())
+    else {
+        return;
+    };
+    // Both keys read before either is written: each side is resolved against
+    // the map as it stands, not against a half-frozen one.
+    let sides = [
+        (
+            crate::anim::resolved_side(keys, i, false),
+            crate::anim::resolved_side(keys, i, true),
+        ),
+        (
+            crate::anim::resolved_side(keys, i + 1, false),
+            crate::anim::resolved_side(keys, i + 1, true),
+        ),
+    ];
+    for (offset, (interp_in, interp_out)) in sides.into_iter().enumerate() {
+        keys[i + offset].interp_in = interp_in;
+        keys[i + offset].interp_out = interp_out;
     }
 }
 
@@ -1192,6 +1260,173 @@ mod tests {
         // A cut outside the clip refuses.
         assert!(c.cut(rat(2, 1)).is_none());
         assert!(c.cut(rat(6, 1)).is_none());
+    }
+
+    /// **The razor goes through an eased ramp** (K-573, docs/04 §8.1). The two
+    /// halves' maps, laid end to end, must be the curve that was there before —
+    /// not close to it, the same. Sampled across the whole span at a fine
+    /// stride, which is what "the speed curve is preserved" actually means.
+    #[test]
+    fn cutting_an_eased_ramp_keeps_the_speed_curve_exactly() {
+        let ease = |speed: f64, influence: f64| SideInterp::Bezier { speed, influence };
+        // A clip at layer [2,6) whose map eases out of a standstill and back
+        // into one — hard influence at both ends, which is the shape a Vegas
+        // envelope draws when a montage slams to a stop.
+        let mut clip = Clip::new(
+            ClipSource::Footage(Uuid::now_v7()),
+            rat(0, 1),
+            rat(4, 1),
+            rat(2, 1),
+            rat(4, 1),
+        );
+        clip.retime = Some(Property {
+            animation: Animation::Keyframed(vec![
+                Keyframe {
+                    time: Rational::ZERO,
+                    value: 0.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: ease(0.0, 0.8),
+                },
+                Keyframe {
+                    time: rat(4, 1),
+                    value: 4.0,
+                    interp_in: ease(0.0, 0.8),
+                    interp_out: SideInterp::Linear,
+                },
+            ]),
+            extra: serde_json::Map::new(),
+        });
+
+        // Cut anywhere inside it, including well off the middle of the ease.
+        for cut in [rat(5, 2), rat(4, 1), rat(11, 2)] {
+            let (left, right) = clip.cut(cut).expect("an eased ramp cuts");
+            assert_eq!(left.place_start, clip.place_start, "beat-sync: no move");
+            assert_eq!(right.place_end(), clip.place_end());
+            assert_eq!(left.source_out, right.source_in, "and they meet exactly");
+
+            let mut worst: f64 = 0.0;
+            for step in 0..=4000 {
+                let lt = 2.0 + 4.0 * f64::from(step) / 4000.0;
+                let half = if lt < cut.to_f64() { &left } else { &right };
+                worst = worst.max((clip.source_time(lt) - half.source_time(lt)).abs());
+            }
+            assert!(worst < 1e-9, "the halves are the original curve: {worst:e}");
+        }
+    }
+
+    /// The same, for a map whose middle key **aims itself** (K-506). This is
+    /// the case that was silently wrong: an automatic tangent is a function of
+    /// its neighbours, and a cut changes the neighbours, so both halves drifted
+    /// — by a sixth of a second of source on the map below, which is four
+    /// frames of the wrong picture either side of the edit point.
+    #[test]
+    fn cutting_a_self_aiming_ramp_keeps_the_speed_curve_too() {
+        let auto = || SideInterp::Auto {
+            clamped: false,
+            speed: 0.0,
+            influence: 1.0 / 3.0,
+        };
+        let mut clip = Clip::new(
+            ClipSource::Footage(Uuid::now_v7()),
+            rat(0, 1),
+            rat(4, 1),
+            rat(2, 1),
+            rat(4, 1),
+        );
+        clip.retime = Some(Property {
+            animation: Animation::Keyframed(vec![
+                Keyframe {
+                    time: Rational::ZERO,
+                    value: 0.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Bezier {
+                        speed: 0.0,
+                        influence: 0.8,
+                    },
+                },
+                Keyframe {
+                    time: rat(2, 1),
+                    value: 1.0,
+                    interp_in: auto(),
+                    interp_out: auto(),
+                },
+                Keyframe {
+                    time: rat(4, 1),
+                    value: 4.0,
+                    interp_in: SideInterp::Bezier {
+                        speed: 0.0,
+                        influence: 0.8,
+                    },
+                    interp_out: SideInterp::Linear,
+                },
+            ]),
+            extra: serde_json::Map::new(),
+        });
+
+        // Either side of the automatic key, so both spans get a turn.
+        for cut in [rat(3, 1), rat(5, 1)] {
+            let (left, right) = clip.cut(cut).expect("cuts");
+            let mut worst: f64 = 0.0;
+            for step in 0..=4000 {
+                let lt = 2.0 + 4.0 * f64::from(step) / 4000.0;
+                let half = if lt < cut.to_f64() { &left } else { &right };
+                worst = worst.max((clip.source_time(lt) - half.source_time(lt)).abs());
+            }
+            assert!(worst < 1e-9, "the halves are the original curve: {worst:e}");
+        }
+    }
+
+    /// A Hold span has no shape to keep, and must not gain one: the frozen
+    /// frame stays frozen on both sides of the cut.
+    #[test]
+    fn cutting_a_held_span_keeps_it_held() {
+        let mut clip = Clip::new(
+            ClipSource::Footage(Uuid::now_v7()),
+            rat(0, 1),
+            rat(4, 1),
+            rat(0, 1),
+            rat(4, 1),
+        );
+        clip.retime = Some(Property {
+            animation: Animation::Keyframed(vec![
+                Keyframe {
+                    time: Rational::ZERO,
+                    value: 1.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Hold,
+                },
+                Keyframe {
+                    time: rat(4, 1),
+                    value: 3.0,
+                    interp_in: SideInterp::Linear,
+                    interp_out: SideInterp::Linear,
+                },
+            ]),
+            extra: serde_json::Map::new(),
+        });
+        let (left, right) = clip.cut(rat(2, 1)).expect("a freeze cuts");
+        for step in 0..40 {
+            let lt = 4.0 * f64::from(step) / 40.0;
+            let half = if lt < 2.0 { &left } else { &right };
+            assert!((clip.source_time(lt) - half.source_time(lt)).abs() < 1e-12);
+        }
+    }
+
+    /// What is left genuinely uncuttable, so the refusal keeps its meaning: an
+    /// end (there is no second clip to make) and an expression-driven map
+    /// (splitting one means rewriting what was typed).
+    #[test]
+    fn an_end_and_an_expression_are_what_still_refuse() {
+        let plain = clip(Uuid::now_v7(), 2, 4);
+        assert!(plain.cut(rat(2, 1)).is_none(), "the clip's own start");
+        assert!(plain.cut(rat(6, 1)).is_none(), "and its own end");
+
+        let mut scripted = plain.clone();
+        scripted.retime = Some(Property {
+            animation: Animation::Expression("time * 2".into()),
+            extra: serde_json::Map::new(),
+        });
+        assert!(scripted.cut(rat(4, 1)).is_none());
     }
 
     /// The frame-pinning invariant (Mack's note): a clip's first frame is its

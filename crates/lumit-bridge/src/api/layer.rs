@@ -2649,9 +2649,12 @@ impl LayerReference {
     /// Razor: cut the clip under `frame` in two, at the playhead.
     ///
     /// The two halves keep their places — a cut must not shift what comes after
-    /// it, which is the beat-sync covenant (K-071). An eased ramp that cannot be
-    /// split cleanly at this time is a calm error, exactly as the egui razor
-    /// reports it, rather than a cut that silently changes the speed curve.
+    /// it, which is the beat-sync covenant (K-071). An **eased speed ramp cuts
+    /// like anything else** (K-573): the map's cubic is split at the cut, so
+    /// the two halves concatenate to the speed curve that was there before.
+    /// What still refuses is a moment on one of the clip's own ends, and a
+    /// retime driven by an expression — both calm errors rather than a cut that
+    /// changes what plays.
     #[frb(sync)]
     pub fn cut_clip_at(&self, frame: i64) -> Result<(), BridgeError> {
         let (mut clips, index, tau) = self.clip_under(frame)?;

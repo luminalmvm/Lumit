@@ -16379,3 +16379,40 @@ them and does not now. A spanning marker's `duration_frames` is derived at read 
 rational duration, so it too keeps its real length and simply counts it more finely. That is
 asserted rather than assumed: the moment either of them starts storing a frame number, the
 playhead stops being the only thing that needs converting.
+
+## K-573 — The razor goes through an eased speed ramp
+
+**Status: DECIDED (2026-08-25).** Cutting a Sequence clip that carried a speed ramp raised
+`UncuttableClip` and the razor answered with silence, which was exactly the wrong way round:
+the reason to cut is usually a beat, and a ramped clip is the one most likely to be sitting on
+one. The refusal was a leftover from the segment store — K-249 made a clip's retime an ordinary
+keyframed property, and a keyframe span is one cubic, so the cut is a cubic split. Two cubics
+from a de Casteljau split *are* the original curve rather than an approximation of it
+(`Property::insert_key_preserving_shape`, K-221, already used by the razor through a retimed
+*layer*), so the two halves concatenate to the speed that was there before. Sampled at every
+frame across the span, the halves and the original agree to the last bit; that sampling is the
+test, not a spot check at the cut.
+
+**Automatic tangents are written down before the cut, not after.** This was the part that was
+quietly wrong rather than merely refused. An automatic tangent (K-506) stores no direction — it
+works one out from the keys either side — and a cut changes precisely those neighbours: the key
+before it gains the cut as its new neighbour, and the key after it ends up first in a clip of
+its own with nothing to its left. Left alone they re-aim themselves and both halves drift off
+the curve, by a sixth of a second of source on a plausible map, which is four frames of the
+wrong picture either side of the edit point. Resolving the two keys the cut lands between into
+the beziers they already were is the same curve said explicitly; every other key goes on aiming
+itself, because an automatic speed depends on its neighbours' times and values and never on
+their sides.
+
+**A Hold span keeps its freeze.** There is no shape to preserve in a held span, so the key goes
+in flat and the freeze continues either side of the cut rather than acquiring a ramp.
+
+**What stays uncuttable, and why the error keeps its name.** Two things. A moment on one of the
+clip's own ends — an end is not a cut, and there is no second clip to make — and a retime
+driven by an **expression**, whose source positions are computed rather than stored, so
+splitting one means rewriting what the user typed (`(expr)` and `(expr)` shifted, compounding
+on every cut). That is refused rather than silently rewritten, exactly as `Clip::slip` refuses
+one, and it is unreachable today: only transform and effect properties can carry an expression.
+`UncuttableClip` therefore survives, saying "There is no cut to make at that moment" instead of
+"That eased ramp cannot be cut here yet", and the razor goes on answering both with silence —
+a dialogue for clicking slightly wrong would be worse than doing nothing.

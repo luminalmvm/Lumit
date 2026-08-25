@@ -3019,6 +3019,48 @@ fn the_adjustment_switch_refuses_the_kinds_with_no_picture() {
     assert!(!solid.get_switches().expect("switches").visible);
 }
 
+/// The razor goes through a speed ramp (K-573, docs/04 §8.1). It used to refuse
+/// one — the whole point of a montage cut is to land on the beat, and a clip
+/// that had been ramped was the one place the blade would not bite.
+#[test]
+fn the_razor_cuts_through_a_ramped_clip() {
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = project.new_composition("Scene".into(), None).expect("comp");
+    let footage = project
+        .import_footage("C:/clips/shot.mov".into())
+        .expect("imported");
+    comp.add_footage_layer(&footage, false).expect("placed");
+    let layer = comp.get_layers().expect("layers").remove(0);
+    layer.convert_to_sequenced().expect("converted");
+    let layer = comp.get_layers().expect("layers").remove(0);
+
+    // 100% accelerating to 300% across the clip — a ramp, so no single speed.
+    let clip = layer.get_clips().expect("clips").remove(0);
+    layer.set_clip_speed(clip.id, 100.0, 300.0).expect("ramped");
+    let ramped = layer.get_clips().expect("clips").remove(0);
+    assert!(ramped.speed_percent.is_none(), "a ramp, not one speed");
+
+    layer.cut_clip_at(30).expect("the razor cuts a ramp");
+    let after = layer.get_clips().expect("clips");
+    assert_eq!(after.len(), 2, "one ramped clip became two");
+    assert_eq!(
+        after[0].place_start, ramped.place_start,
+        "beat-sync: the cut moved nothing"
+    );
+    assert_eq!(after[1].end_frame, ramped.end_frame);
+    assert_eq!(
+        after[0].end_frame, after[1].start_frame,
+        "and the halves abut on the frame the blade fell"
+    );
+    assert!(after[0].retimed && after[1].retimed, "both keep a map");
+
+    // The clip's own ends are still not cuts: there is no second clip to make.
+    assert!(matches!(
+        layer.cut_clip_at(after[1].start_frame),
+        Err(BridgeError::UncuttableClip)
+    ));
+}
+
 /// The razor cuts in two without moving anything: a cut that shifted what comes
 /// after it would break every edit already in time with the music (K-071).
 #[test]

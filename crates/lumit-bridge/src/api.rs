@@ -139,8 +139,12 @@ pub enum BridgeError {
     /// The razor was pointed at a time outside the layer's span, or at one of
     /// its ends — either way there is no second layer to make.
     NothingToSplit,
-    /// The clip under the playhead is an eased ramp that cannot be split
-    /// cleanly at this time — cutting it would silently change its speed curve.
+    /// There is no cut to make in the clip under the playhead. An eased speed
+    /// ramp is no longer one of these (K-573): a cubic splits into two cubics
+    /// that are the same curve, so the razor goes through a ramp exactly. What
+    /// is left is the moment landing on one of the clip's own ends — an end is
+    /// not a cut — and a retime driven by an expression, which cannot be split
+    /// without rewriting what was typed.
     UncuttableClip,
     /// A staged effect stack no longer matches the document's — something else
     /// added, removed or reordered an effect while it was being edited.
@@ -246,7 +250,7 @@ impl fmt::Display for BridgeError {
                 write!(f, "That time is not inside the layer")
             }
             BridgeError::UncuttableClip => {
-                write!(f, "That eased ramp cannot be cut here yet")
+                write!(f, "There is no cut to make at that moment")
             }
             BridgeError::StaleEffectStack => {
                 write!(f, "The effect stack changed while it was being edited")

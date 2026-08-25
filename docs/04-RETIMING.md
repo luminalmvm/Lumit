@@ -394,22 +394,48 @@ so in the status line.
 
 ### 8.1 Razor through a ramped clip
 
+**An eased ramp cuts like anything else** (K-573). The blade never used to bite on a clip
+that had been ramped, which was exactly backwards: the point of a montage cut is to land on
+the beat, and a ramped clip is the one most likely to be sitting on one. Since K-249 a clip's
+map is an ordinary keyframed property, and a keyframe span is one cubic — so the cut is a
+cubic split, and two cubics from a de Casteljau split *are* the original curve rather than an
+approximation of it. Sampled at every frame across the span, the halves and the original
+agree to the last bit.
+
 Cutting a clip at local time t_c (t_c on the comp frame grid, hence rational):
 
-1. Evaluate s_c = f(t_c) and split the containing segment per §5.3 (exact for native
-   segments; bounded rounding only for imported free-influence Maps).
-2. The left clip keeps boundaries with t ≤ t_c plus the new terminal boundary (t_c, s_c).
-   The right clip takes the rest, re-based: t′ = t − t_c for every boundary (exact rational
-   subtraction). Its first boundary is (0, s_c).
-3. Both halves keep the **full original source trim window** [src_in, src_out] — the cut
-   does not trim source. Each half is thereafter completely independent: editing one half's
-   retime never affects the other. This is the Vegas behaviour montage editors expect.
-4. `allow_reverse`, interpolation policy, and all flags copy to both halves.
+1. Evaluate s_c = f(t_c) and split the containing span at it, exactly
+   (`Property::insert_key_preserving_shape`, the same cubic split a razor through a retimed
+   *layer* uses — K-221, §5.3). Where the span is a Hold there is no shape to keep: the key
+   goes in flat and the freeze continues on both sides.
+2. The left clip keeps keys with t ≤ t_c, ending on the new key (t_c, s_c). The right clip
+   takes the rest, re-based: t′ = t − t_c for every key (exact rational subtraction). Its
+   first key is (0, s_c).
+3. **Automatic tangents either side of the cut are written down first.** An automatic
+   tangent (K-506) stores no direction — it works one out from the keys on each side — and a
+   cut changes precisely those neighbours, so left alone it would re-aim itself and both
+   halves would drift off the curve. Resolving the two keys the cut lands between into the
+   beziers they already were is the same curve said explicitly; every other key goes on
+   aiming itself.
+4. The trim window partitions at the meeting point: the left clip's `source_out` and the
+   right clip's `source_in` are both s_c. Each half is thereafter completely independent —
+   editing one half's retime never affects the other, which is the Vegas behaviour montage
+   editors expect — and the frame-pinning invariant holds, so re-speeding the right half
+   leaves its *first* frame exactly where it was and ripples forward only.
+5. Interpolation policy and all flags copy to both halves.
 
 The cut point becomes an edit point; playback across it is frame-exact: the last frame of the
 left clip and the first frame of the right clip resolve to the same source position s_c, and
 the right clip's first rendered frame is the first frame *after* the edit point on the comp
 grid. There is no duplicated or dropped frame.
+
+**What still refuses.** A moment on one of the clip's own ends — an end is not a cut, and
+there is no second clip to make — and a retime driven by an expression, whose source
+positions are computed rather than stored, so splitting one means rewriting what the user
+typed. The second is unreachable today (only transform and effect properties take
+expressions) and wants deciding properly if Retime ever offers one; slip refuses one for the
+same reason. Both reach the razor as `UncuttableClip`, and the razor answers with silence
+rather than a dialogue.
 
 ### 8.2 Trim, slip, slide, copy, paste
 

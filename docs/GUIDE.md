@@ -3058,6 +3058,19 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   nowhere else — no edit point beyond the drop moves, and nothing ripples. The
   pieces left either side keep playing the frames they played, because the
   trims and the split go through the same arithmetic the razor uses.
+  **The razor goes through a ramp.** A clip that has been sped up or slowed down over its
+  length used to turn the blade away, which was the wrong way round: the reason to cut is
+  usually a beat, and a ramped clip is the one most likely to be sitting on one. It cuts now,
+  and the two pieces play exactly what the one piece played. The reason it can is worth a
+  sentence, because the same trick is behind several things here: the speed line between two
+  points is a *curve of a particular family* (a cubic), and cutting a curve of that family in
+  half gives two curves of the same family that, laid end to end, are not merely close to the
+  original — they are the original. So nothing is resampled, nothing is fitted, and no frame
+  either side of the new edit point shows a different picture than it did. The one thing that
+  needed care was a point that **aims itself**: such a point works its direction out from the
+  points on either side of it, and a cut changes what is on either side, so the two nearest
+  the blade have their directions written down first — the same direction, just stated rather
+  than inferred (K-573).
   **A clip dragged back past the start takes the layer with it.** A clip's place is measured
   in the layer's own time, which cannot go negative — so dragging one before the start of the
   row carries the whole layer earlier instead, exactly as dragging any other layer's bar
