@@ -9504,6 +9504,16 @@ accurate to well under one part in five hundred for ordinary colours and about a
 off at a fully saturated blue. That number is written down and tested against, so the
 day someone writes the code version, the improvement is measurable rather than claimed.
 
+**Where those tables live.** The five ACES tables are big — 47 megabytes between them —
+and for a while they were baked into the program file itself, which meant every copy of
+the engine carried them whether it needed colour management or not. They now travel as
+ordinary files in a small `colour` folder that ships beside the application (inside the
+app bundle on a Mac), and the engine reads them the first time a config asks for one.
+Nothing changes if the folder is missing except honesty: the styles that need those
+tables refuse by name, the same refusal as any other feature that is not there, never a
+wrong picture. On a development machine the engine simply reads them straight out of the
+source tree.
+
 And when a config uses some feature we have not built, Lumit refuses it *by name* — it
 tells you what it cannot do — rather than quietly producing almost-right colours, because
 a plausible wrong picture is the one failure this design refuses to ship.

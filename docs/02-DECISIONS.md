@@ -14500,3 +14500,26 @@ what a heading is for.
 Landed alongside: the panel's search box had no placeholder at all, so an empty field beside
 the panel's star said nothing about what typing in it would do. It now reads *Search
 effects & presets*, and it searches both.
+
+## K-527 — The vendored bakes ship beside the binary, not inside it
+
+**DECIDED 2026-08-25** (`crates/lumit-colour/src/builtin.rs`, the three packaging
+scripts, docs/impl/ocio.md §4.1).
+K-518's five artefacts were `include_str!`ed into `lumit-colour`, which put 47 MiB into
+every binary that links it — the bridge, the bench tools, every test executable. They are
+now read at runtime, style name as file name, from the first directory that exists:
+`data/colour/` beside the executable (a shipped Windows or Linux build, where Flutter's
+own `data/` already sits), `Contents/Resources/colour/` (a shipped macOS bundle — only
+executables belong in `Contents/MacOS`), then the crate's own `vendored/` directory (a
+development checkout, which is what CI and the conformance gates read). The same
+beside-the-executable convention the export done-sound already used.
+
+Nothing about K-518 moves: the artefacts stay checked in with their provenance,
+`VendoredArtefact::from_text` still refuses a file without its header, and a style whose
+file is absent, truncated or hand-edited refuses the config **by name**, exactly as if it
+had never been vendored — a missing data directory degrades to a refusal, never to a
+wrong picture. Only styles the `VENDORED` list names are ever looked up on disk, so a
+config-supplied name cannot reach the filesystem. The packaging scripts carry the files:
+`build-installer.ps1` (the Windows installer and, downstream, the update zip),
+`make-dmg.sh` (before the signing pass), and release.yml's Linux staging step (which the
+Flatpak repacks wholesale).

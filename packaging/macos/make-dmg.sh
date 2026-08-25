@@ -61,6 +61,14 @@ export FLUTTER_XCODE_ARCHS
 app="$root/flutter_ui/build/macos/Build/Products/Release/Lumit.app"
 [ -d "$app" ] || { echo "No app at $app" >&2; exit 1; }
 
+# The vendored ACES bakes are read at runtime from Contents/Resources/colour
+# (crates/lumit-colour/src/builtin.rs) rather than compiled into the binary —
+# Resources, not MacOS, because only executables belong in MacOS and the
+# signature seals data files fine where they are. Before the codesign below,
+# obviously.
+mkdir -p "$app/Contents/Resources/colour"
+cp "$root/crates/lumit-colour/vendored/"*.artefact "$app/Contents/Resources/colour/"
+
 # Every Mach-O in the app that still links a Homebrew path gets handed to
 # dylibbundler. The bridge dylib is the expected hit; the loop rather than a
 # hardcoded path so a renamed framework cannot silently ship keg links.

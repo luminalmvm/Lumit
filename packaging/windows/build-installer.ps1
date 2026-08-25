@@ -40,6 +40,15 @@ if ($null -eq $ffbin) {
 Copy-Item "$ffbin\*.dll" $release -Force
 Write-Host "Bundled FFmpeg DLLs from $ffbin"
 
+# The vendored ACES bakes are read at runtime from data\colour beside the exe
+# (crates/lumit-colour/src/builtin.rs) rather than compiled into the binary,
+# so they must travel with the app the same way the FFmpeg DLLs do. The .iss
+# packages the Release directory recursively and release.yml's update zip
+# copies it wholesale, so this one copy covers both.
+New-Item -ItemType Directory -Force "$release\data\colour" | Out-Null
+Copy-Item "$root\crates\lumit-colour\vendored\*.artefact" "$release\data\colour" -Force
+Write-Host "Bundled the vendored colour artefacts"
+
 $iscc = Get-Command iscc -ErrorAction SilentlyContinue
 if ($null -ne $iscc) {
     $iscc = $iscc.Source
