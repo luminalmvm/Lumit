@@ -4260,6 +4260,32 @@ is (B1, B2) needs the real window; export speed (B8) needs the encoder; recoveri
 graphics driver reset (B9) and audio/picture sync (B10) need a running application. Those
 stay manual checks, tracked in [TODO.md](TODO.md).
 
+**Three of the numbers time one effect rather than a whole composition.** The particle
+system has budgets of its own, because its cost is a number *you* set — the Max particles
+dial — rather than one the engine has to guess, and burying that inside a comp average
+would hide it. So three more scenarios run the particle pass on its own at 1080p and time
+it, needing no video and no composition at all.
+
+Measuring one effect turned up a small honesty problem worth knowing about. Every effect
+pass copies the picture it was handed before it draws anything on top, and at 1080p that
+copy costs about a tenth of a millisecond whatever the effect then does. For a big effect
+that is nothing; for "three hundred particles", which is meant to cost about two tenths, it
+is a third of the reading. The budget was being missed by an amount that was mostly the
+copy. There were two ways to close the gap — raise the number, or stop charging the effect
+for the frame's own paperwork — and the second is the honest one, so the harness times a
+fourth run with **nothing to draw** and subtracts it from all three. What is reported is
+the particles' own work.
+
+**And some of what is checked is not a stopwatch at all.** Beside the timings sits a file
+of expected numbers for the particle system: where a pinned set of particles is, how fast
+each is moving, and what the three drawing styles put on a small canvas. Those are compared
+exactly (to a part in a hundred thousand), and unlike a timing they mean the same thing on
+every machine, so they run everywhere. The reason they exist is subtle: there were already
+tests holding the graphics card's answer to the processor's, but if a change moved *both*
+in the same direction — a rearranged formula, a different noise pattern — those tests would
+have gone on passing while the picture quietly changed. A file of expected numbers is what
+notices that. It is regenerated on purpose, and the change is read before it is committed.
+
 ### Making pictures out of nothing — `crates/lumit-core/src/fx/noise.rs` (K-398)
 
 Every effect described so far takes a picture and changes it. Four new ones don't: **Fill**
@@ -9184,6 +9210,26 @@ knowing. The list only offers boxes the wire could actually plug into, so pickin
 always connects. And the box and its wire arrive together as one change, so one undo
 takes both away — which is only possible because the engine can say what sockets a driver
 has before that driver exists.
+
+**A wire cannot put a parameter somewhere you could not type it.** Every parameter has a
+range it is not allowed past — a blur radius stops at 2000 pixels, and never goes below
+nought — and typing has always been held to it. A *wire* was not, until now, and one
+driver made that visible in an unpleasant way. The Points sample driver answers "how far
+is the nearest particle" and, when nothing is wired into it yet, answers a deliberately
+enormous number: it means "nothing is anywhere near", which is the honest answer for the
+usual use (the closer a particle gets, the brighter the lamp). But wire that into a blur
+before you have wired the particles in, and the blur sat at a billion pixels — past a
+limit no typed number can reach, in code written for two thousand. Now the number is
+clamped where it lands, so the parameter sits at its own maximum instead. The panel still
+tells you *why*: a driver with nothing feeding it wears a small warning mark, and every
+row it drives says **no stream** where it would otherwise say *driven*.
+
+Two details, because both were deliberate choices. The clamp is on the **effect's** end of
+the wire, not on a driver's own settings: Remap exists precisely to take a wide number and
+squeeze it into a small range, so clamping *its* input would break the one box written for
+the problem. And it happens in the single piece of code both the Viewer and the exporter
+run, so a clamped picture on screen is the clamped picture in the file — there is no
+second opinion to drift.
 
 **Points** are the fifth kind of thing a wire carries: not a picture but a crowd of
 positions — where every particle of a particle system is this frame, how fast each is

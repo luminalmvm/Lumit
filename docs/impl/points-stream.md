@@ -377,15 +377,53 @@ Particulate's rows render with the curve and seed rows present; 0 bridge calls i
 rebuild paths. Run only the affected test files.
 **Binds**: this note §4.3; particulate.md §2; the NodeGraph drawing (K-458).
 
-### PS7 — Conformance, goldens, budget gates
+### PS7 — Conformance, goldens, budget gates ✅ landed
 
 Golden frames for the three render modes at pinned seeds; the four K-475 numbers as perf
 -harness gates on the reference-desktop runner (docs/13 §7.3): default look ≲ 0.2 ms,
 20 000 discs ≤ 1 ms desktop / ≤ 4 ms laptop, the 1 000 000 hard cap ≤ 16 ms with the
 cancellation check, degradation determinism (newest `cap/2`).
+Also **the clamp question K-509 left open**: whether a driven value should be clamped
+to its parameter's hard range engine-side, as a typed value is. It is not today, which is
+what makes an unwired Points sample show up as a parameter pinned *past* its limits
+rather than at them; PS6 marks the cause in the panel and deliberately does not treat the
+symptom. It touches every driver rather than this one, and it changes rendered output, so
+it is answered here — with its own appended entry — or recorded as deliberate.
 **Tests**: particulate.md §9 item 12; the golden suite.
 **Binds**: particulate.md §7, §9; docs/13 §7.3; docs/16's verification-beats-assertion
-standing rule.
+standing rule; K-509.
+
+**What landed.** Four things, and one of them changed a number in docs/13 rather than
+meeting it:
+
+- **The goldens** are `crates/lumit-render/particulate-golden.txt`, regenerated on purpose
+  like `fx-reference.json`: the pinned fixture's ids (exact), its eight stream attributes,
+  and the CPU reference's drawn frame in each of disc, sprite and streak. Everything is
+  held to K-508's 10⁻⁵-of-range bound. Two tests read it — the CPU one, which needs no
+  graphics adapter and so gates on every runner there is, and the card's, which puts the
+  `particulate_stream` read-back against the same numbers. The existing twin test says the
+  two paths agree with each other; the goldens say what they agree *on*, which is the one
+  failure a twin test cannot see.
+- **The budget gates** are three scenarios in `lumit-bench` (`scenarios::particulate`),
+  which is how every other B-number gates: emit a `Measurement`, ride the checked-in
+  per-OS baseline and its ratio factor, assert the absolute budget only under
+  `LUMIT_REFERENCE_HW=1`. They time one pass at 1080p rather than a comp, so they need no
+  ffmpeg and no reference comp.
+- **B12's resolution is recorded in docs/13 §2's row, not hidden**: the three numbers are
+  measured **above the pass floor** — the same call with nothing to emit, which is one
+  full-frame copy and one round trip to the queue. Measured whole, B12 was 0.266 ms against
+  ≲ 0.2 ms with 0.062 ms of that being the copy; the floor is real work but it is the
+  frame's, not the effect's. §7.3's other convention then applies unchanged: B12 and B13
+  are under a millisecond, so the ratio gate stays quiet on them.
+- **The clamp is answered, K-510**: a driven value is held to its parameter's hard range at
+  the substitution in `resolve_into_arena` — which is the walk both the preview and the
+  export take, so the two clamp identically by construction. On an **effect's** sockets
+  only: a driver's own row exists to be handed numbers from outside its range, and Remap is
+  the proof. K-509's "no stream" mark stays exactly as PS6 built it; this is the backstop
+  beneath it, not a replacement for it.
+- **The degradation rung** is pinned as the guarantee it is:
+  `particulate_exports_its_whole_declared_field` holds the export walk's picture identical
+  to the interactive one and different from a comp declaring half the cap.
 
 ## 6. Test plan — the core invariants
 
