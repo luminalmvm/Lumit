@@ -1612,7 +1612,7 @@ class _DropperLayerState extends State<DropperLayer> {
                 _region = nextDropperRegion(_region, scroll < 0 ? 1 : -1));
             _viewfinderEntry?.markNeedsBuild();
           },
-          onPointerDown: (e) => _pressed(arm, e.localPosition),
+          onPointerDown: (e) => _pressed(arm, e.localPosition, e.position),
           onPointerUp: (e) => _released(arm, e.localPosition),
           onPointerCancel: (_) => _abandon(),
           child: const SizedBox.expand(),
@@ -1739,11 +1739,20 @@ class _DropperLayerState extends State<DropperLayer> {
   ///
   /// Nothing is written here. The press only stages what is under it, so that a
   /// click that never moves still has a value to commit on release.
-  void _pressed(DropperArm arm, Offset local) {
+  ///
+  /// **A press is a position too.** The magnifier used to be put up by the
+  /// hover alone, which is fine for a mouse and nothing at all for a pointer
+  /// that has no hover — a touch, a stylus, or a pointer that arrives over the
+  /// picture already down. The pick then ran with no grid to aim by. The press
+  /// says where it is like any other movement does.
+  void _pressed(DropperArm arm, Offset local, Offset global) {
     if (!widget.fitted.contains(local)) {
       widget.uiState.disarmDropper();
       return;
     }
+    _noteOverlayPosition(global);
+    setState(() => _cursor = local);
+    _syncViewfinder(arm);
     _dragging = true;
     _staged = null;
     _stage(arm, local);

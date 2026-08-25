@@ -249,6 +249,130 @@ void main() {
           reason: 'and it is still following the pointer');
     });
 
+    /// **The magnifier is on screen for the whole pick, and it shows what the
+    /// release will commit** (docs/07 §6.1). The owner reported it missing
+    /// after the redesign; nothing had been taken out of it, but a pick drag
+    /// panned the picture out from under the pointer while every window read
+    /// cost a fresh composite, so the grid a pick was aimed with was a grid of
+    /// empty cells. This pins the part the arithmetic can promise: the centre
+    /// cell of the grid, at the region on show, IS the committed value.
+    testWidgets('the magnifier follows a pick drag and shows what it commits',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final picked = <DropperSample>[];
+      p.uiState.armDropper(DropperArm(
+        id: 'test',
+        reads: DropperReads.colour,
+        label: 'Key colour',
+        onPick: picked.add,
+      ));
+      p.uiState.dropperPatch.value = wholePicture();
+      await tester.pump();
+
+      final centre = tester.getCenter(find.byType(DropperLayer));
+      final gesture = await tester.startGesture(centre);
+      await tester.pump();
+      expect(find.byType(DropperViewfinder), findsOneWidget,
+          reason: 'the grid is up while the pick is being made');
+
+      await gesture.moveTo(centre + const Offset(30, 0));
+      await tester.pump();
+      final shown =
+          tester.widget<DropperViewfinder>(find.byType(DropperViewfinder));
+      expect(find.byType(DropperViewfinder), findsOneWidget,
+          reason: 'and it followed the drag rather than being left behind');
+
+      // What the grid is drawing at its centre, worked out the way the grid
+      // itself works it out — from the window it holds, at the region it shows.
+      final atCentre = sampleFromWindow(
+          shown.window!, shown.region, shown.centre.$1, shown.centre.$2);
+
+      await gesture.up();
+      await tester.pump();
+
+      expect(picked.length, 1);
+      expect(picked.single.r, closeTo(atCentre.r, 1e-9),
+          reason: 'the committed colour is the one under the centre cell');
+      expect(picked.single.region, atCentre.region);
+
+      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
+    });
+
+    /// **Shift+scroll sizes the sample, and nothing else** (docs/07 §6.1):
+    /// 1×1 → 3×3 → 5×5 → 7×7 → 9×9 and back, holding at both ends rather than
+    /// wrapping, never zooming the picture out from under the pixel being
+    /// aimed at, and never costing the engine a thing — the window in hand
+    /// already holds every pixel a wider region could want.
+    testWidgets('Shift+scroll steps the sampled region under the magnifier',
+        (tester) async {
+      final p = withLayer();
+      await mount(tester, p);
+
+      final picked = <DropperSample>[];
+      p.uiState.armDropper(DropperArm(
+        id: 'test',
+        reads: DropperReads.colour,
+        label: 'Key colour',
+        onPick: picked.add,
+      ));
+      p.uiState.dropperPatch.value = wholePicture();
+      await tester.pump();
+
+      Rect picture() =>
+          tester.widget<DropperLayer>(find.byType(DropperLayer)).fitted;
+      int region() => tester
+          .widget<DropperViewfinder>(find.byType(DropperViewfinder))
+          .region;
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+      final centre = tester.getCenter(find.byType(DropperLayer));
+      await gesture.moveTo(centre);
+      await tester.pump();
+      expect(region(), 1, reason: 'this pixel and no other, to start with');
+
+      final unzoomed = picture();
+      Future<void> notch(double dy) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendEventToBinding(
+          PointerScrollEvent(position: centre, scrollDelta: Offset(0, dy)),
+        );
+        await tester.pump();
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      }
+
+      await notch(-60);
+      expect(region(), 3);
+      await notch(-60);
+      expect(region(), 5);
+      expect(picture(), unzoomed,
+          reason: 'sizing the sample must not zoom the picture');
+
+      await notch(60);
+      expect(region(), 3, reason: 'and the other way steps back down');
+
+      // The ends hold: a size settled on is not lost to one extra notch.
+      for (var i = 0; i < 6; i++) {
+        await notch(60);
+      }
+      expect(region(), 1);
+      for (var i = 0; i < 8; i++) {
+        await notch(-60);
+      }
+      expect(region(), dropperGrid,
+          reason: 'the region can never exceed the grid it is drawn in');
+
+      // And the size on show is the size the pick takes.
+      await tester.tapAt(centre);
+      await tester.pump();
+      expect(picked.single.region, dropperGrid);
+
+      await settleFrb(tester, until: () => p.uiState.previewProgress.idle);
+    });
+
     /// **A pick is a drag** (K-532, docs/07 §6.1). The press writes nothing; it
     /// starts a gesture that stages the sample under the pointer and previews
     /// it, and the release commits **once** — the value where the pointer let

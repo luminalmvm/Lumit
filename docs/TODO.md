@@ -61,10 +61,6 @@ settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
   rendered the same comp, a full composite per pointer move when it has not.
 - Work-area end handles: thicker, darker, capped a little below the time labels,
   near-rectangles with a tiny corner radius (owner overrules the drawing here).
-- The Viewer dropper must claim the drag exclusively - picking must not pan the
-  preview; and the 9x9 magnifier grid with its colour preview and scroll behaviour
-  returns (it existed before the redesign - recover the old widget from git history
-  rather than redesigning it). Waits on the crash verdict; same files.
 
 **FP3 - engine features.**
 - The three Settings pages, engine first (K-465's omitted nav entries): audio output
