@@ -234,7 +234,7 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     // no twirl), shown only while Source type is Matte.
     ParamGroup {
         label: "",
-        params: &["matte", "threshold", "threshold_softness"],
+        params: &["matte", "matte_invert", "threshold", "threshold_softness"],
         collapsed: false,
         visible_when: Some(("source_type", &[1])),
         visible_when_lens_elements: None,
@@ -258,7 +258,11 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     // 12: Ghost softness crossed from a per cent of the frame diagonal to
     // px@comp (K-558). `migrate_percent_to_px` converts an older instance on
     // load, against the comp's own diagonal.
-    version = 12,
+    // 13: the Matte row grew its Invert, the one every other matte row has
+    // (K-395). It defaults off, which is what every flare saved before it
+    // rendered, so `backfill_builtin_params` alone reads an old save forward
+    // and nothing moves (K-258).
+    version = 13,
     category = Stylise,
     // The one effect that owns a render pass.
     cost = Heavy,
@@ -724,6 +728,24 @@ pub struct LensFlare {
     #[layer(label = "Matte", self_default = true)]
     pub matte: bool,
 
+    /// The uniform matte row's **Invert** (K-395), which this row was the last
+    /// one missing. On, detection reads `1 − rgb` of the matte, so the DARK
+    /// parts of it are the lights: a black-on-white shape flares its shape
+    /// without anyone having to add an Invert effect to the matte layer.
+    ///
+    /// Applied where the flare's matte is read — the detect kernel and its CPU
+    /// oracle — rather than at the dispatch seam's `matte_prepare`, because the
+    /// flare's matte is a *picture* it takes colour from, not a strength ramp:
+    /// the seam's pass would flatten it to grey and clamp its over-range
+    /// highlights away, and Threshold is an absolute scene-linear luma. One
+    /// line, both twins, per K-425's rule that an effect owning its matte reads
+    /// the raw RGBA and does its own Invert (Displacement map does the same).
+    ///
+    /// Off by default: what every flare saved before v13 detected, it still
+    /// detects (K-258).
+    #[toggle(label = "Invert", default = false)]
+    pub matte_invert: bool,
+
     /// The absolute scene-linear luma a pixel must EXCEED to flare (K-363): at 1.0
     /// only over-range highlights, at 0.0 anything brighter than black — black
     /// itself never. The slider is normalised 0–1; typing goes above.
@@ -954,6 +976,7 @@ impl LensFlare {
                 self.light_tint[2].max(0.0),
             ],
             use_source_colour: self.use_source_colour,
+            matte_invert: self.matte_invert,
             anamorphic: self.anamorphic.clamp(0.5, 3.0),
             quality: self.quality.min(3),
             detail: self.detail.clamp(0.25, 4.0),

@@ -789,6 +789,24 @@ void main() {
       expect(find.text('Threshold'), findsOneWidget);
       expect(find.text('Threshold softness'), findsOneWidget);
 
+      // The Matte row carries its Invert, like every other one (K-395): drawn
+      // inside the picker's row and never given one of its own, folded by the
+      // same id convention the injected rows use — and it belongs to the
+      // Matte-only group, so the rows under it stay conditional.
+      final fxId = p.layer.getEffects().single.id();
+      expect(find.text('Invert'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey<String>('fx-row-$fxId-matte')),
+          matching: find.byKey(ValueKey<String>('fx-bool-$fxId-matte_invert')),
+        ),
+        findsOneWidget,
+        reason: 'the flare Invert sits beside its picker, on the same row',
+      );
+      expect(find.byKey(ValueKey<String>('fx-row-$fxId-matte_invert')),
+          findsNothing,
+          reason: 'and so has no row of its own to sit on');
+
       // The Matte starts pointed at the layer the effect is ON
       // (K-288), and the picker says so. Before this it defaulted to None
       // and the effect sat there detecting nothing until you went hunting
@@ -812,6 +830,8 @@ void main() {
       expect(find.text('Light tint'), findsOneWidget);
       expect(find.text('Use source colour'), findsNothing);
       expect(find.text('Matte'), findsNothing);
+      expect(find.text('Invert'), findsNothing,
+          reason: 'the Invert is part of the Matte-only group, not a stray row');
     });
 
     // Blend (K-289): the Transparent/Black Background pair became a blend

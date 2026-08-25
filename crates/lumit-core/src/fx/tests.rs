@@ -6680,7 +6680,7 @@ fn lens_flare_detects_area_sources_as_summed_flux() {
     }
     // Threshold below the sources' luma: K-363's gate is "brighter than",
     // so a white (1.0) source at threshold 1.0 is at the line, not over it.
-    let lights = detect_lights(&matte, w, h, 0.5, 0.25, true, [1.0, 1.0, 1.0]);
+    let lights = detect_lights(&matte, w, h, 0.5, 0.25, true, [1.0, 1.0, 1.0], false);
     assert_eq!(lights.len(), 2, "one disc anchor, one dot anchor");
     // The disc's anchor sits inside the disc, the dot's on the dot.
     let disc = &lights[0];
@@ -7541,25 +7541,25 @@ fn lens_flare_light_tint_and_source_colour_toggle() {
     matte[i + 3] = 1.0;
 
     // Source colour ON, tint white: the light is the source colour.
-    let on = detect_lights(&matte, w, h, 0.5, 0.0, true, [1.0; 3]);
+    let on = detect_lights(&matte, w, h, 0.5, 0.0, true, [1.0; 3], false);
     assert_eq!(on.len(), 1);
     assert_eq!(on[0].rgb, [0.5, 2.0, 4.0]);
 
     // Source colour OFF: white through the tint alone — the "this matte only
     // says where" case.
-    let off = detect_lights(&matte, w, h, 0.5, 0.0, false, [1.0; 3]);
+    let off = detect_lights(&matte, w, h, 0.5, 0.0, false, [1.0; 3], false);
     assert_eq!(off[0].rgb, [1.0, 1.0, 1.0]);
-    let off_tinted = detect_lights(&matte, w, h, 0.5, 0.0, false, [1.0, 0.5, 0.25]);
+    let off_tinted = detect_lights(&matte, w, h, 0.5, 0.0, false, [1.0, 0.5, 0.25], false);
     assert_eq!(off_tinted[0].rgb, [1.0, 0.5, 0.25]);
     // …and its position is unchanged by either (only the colour differs).
     assert_eq!(off[0].pos, on[0].pos);
 
     // Source colour ON with a tint: the two multiply.
-    let both = detect_lights(&matte, w, h, 0.5, 0.0, true, [1.0, 0.5, 0.25]);
+    let both = detect_lights(&matte, w, h, 0.5, 0.0, true, [1.0, 0.5, 0.25], false);
     assert_eq!(both[0].rgb, [0.5, 1.0, 1.0]);
 
     // A black tint kills the flare without touching detection.
-    let dark = detect_lights(&matte, w, h, 0.5, 0.0, true, [0.0; 3]);
+    let dark = detect_lights(&matte, w, h, 0.5, 0.0, true, [0.0; 3], false);
     assert_eq!(dark[0].rgb, [0.0, 0.0, 0.0]);
 
     // The tint is NOT a bake input: changing it must not re-key the bake
@@ -7572,6 +7572,86 @@ fn lens_flare_light_tint_and_source_colour_toggle() {
             ..p
         })
     );
+}
+
+// The Matte row's Invert (K-395), the row's last missing half: with it on the
+// flare detects the matte's DARK parts, which is exactly the flare the
+// complementary matte draws with it off. Asserted as that equality rather than
+// as a hand-computed position, because "inverted" has to mean `1 − rgb` at
+// every read — luma, gate, source colour and the flux moments that place the
+// light — and one number could be right while another was not.
+#[test]
+fn lens_flare_matte_invert_reads_the_dark_parts_as_the_lights() {
+    use crate::fx::lens_flare::detect_lights;
+    let (w, h) = (64u32, 64u32);
+    // A white field with one black square, and its exact complement.
+    let mut white_field = vec![0.0f32; (w * h * 4) as usize];
+    let mut black_field = vec![0.0f32; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let dark = (18..23).contains(&x) && (18..23).contains(&y);
+            let v = f32::from(!dark);
+            white_field[i] = v;
+            white_field[i + 1] = v;
+            white_field[i + 2] = v;
+            white_field[i + 3] = 1.0;
+            black_field[i] = 1.0 - v;
+            black_field[i + 1] = 1.0 - v;
+            black_field[i + 2] = 1.0 - v;
+            black_field[i + 3] = 1.0;
+        }
+    }
+    let inverted = detect_lights(&white_field, w, h, 0.5, 0.0, true, [1.0; 3], true);
+    let complement = detect_lights(&black_field, w, h, 0.5, 0.0, true, [1.0; 3], false);
+    assert_eq!(inverted.len(), 1, "the black square is the one light");
+    assert_eq!(
+        inverted, complement,
+        "Invert must read the matte as its complement, position and colour alike"
+    );
+    // And it is not a no-op: read straight, the whole white field is the light
+    // — one source at the field's own centre, nowhere near the black square.
+    let straight = detect_lights(&white_field, w, h, 0.5, 0.0, true, [1.0; 3], false);
+    assert!(!straight.is_empty(), "the lit field must flare");
+    assert!(
+        !straight.iter().any(|l| l.pos == inverted[0].pos),
+        "the black square cannot be a light with Invert off"
+    );
+}
+
+// K-258, for the switch above: a flare saved before v13 carries no
+// `matte_invert`, gains it at the default on load, and detects exactly the
+// lights it always did — the default is off, so nothing anyone had built moves.
+#[test]
+fn lens_flare_saved_before_the_matte_invert_detects_what_it_always_did() {
+    use crate::fx::lens_flare::detect_lights;
+    let mut inst = instantiate("lens_flare").unwrap();
+    inst.effect.version = 12;
+    inst.params.retain(|p| p.id != "matte_invert");
+    let mut effects = vec![inst];
+    backfill_builtin_params(&mut effects);
+    let loaded = match effects[0].param("matte_invert") {
+        Some(EffectValue::Bool(b)) => *b,
+        other => panic!("the switch must be backfilled, not {other:?}"),
+    };
+    assert!(!loaded, "an old save must load with Invert off");
+
+    // …and off is the picture: detection on the loaded value is the same list,
+    // light for light, as the call the effect made before the switch existed.
+    let (w, h) = (64u32, 64u32);
+    let mut matte = vec![0.0f32; (w * h * 4) as usize];
+    for (n, px) in matte.chunks_exact_mut(4).enumerate() {
+        let (x, y) = (n as u32 % w, n as u32 / w);
+        let v = if (10..14).contains(&x) && (40..44).contains(&y) {
+            2.0
+        } else {
+            0.1
+        };
+        px.copy_from_slice(&[v, v * 0.5, v * 0.25, 1.0]);
+    }
+    let before = detect_lights(&matte, w, h, 0.5, 0.25, true, [1.0; 3], false);
+    let after = detect_lights(&matte, w, h, 0.5, 0.25, true, [1.0; 3], loaded);
+    assert_eq!(before, after);
 }
 
 // The thin-lens focus shift (K-260): zero at infinity, growing as focus
@@ -7858,6 +7938,7 @@ fn default_flare_params() -> crate::fx::lens_flare::LensFlareParams {
         threshold_softness: 0.25,
         light_tint: [1.0, 1.0, 1.0],
         use_source_colour: true,
+        matte_invert: false,
         anamorphic: 1.0,
         quality: 1,
         detail: 1.0,
@@ -7888,7 +7969,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
     put(28, 24, [3.0, 3.0, 3.0]);
     put(100, 70, [1.5, 1.0, 0.5]);
 
-    let lights = detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3]);
+    let lights = detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3], false);
     assert_eq!(
         lights.len(),
         2,
@@ -7915,19 +7996,19 @@ fn lens_flare_detects_matte_sources_deterministically() {
     // The soft gate scales (K-363: luma 4 against a gate opening 3 → 5
     // lands half-way, 0.5), and a threshold above every source finds none —
     // including one AT a source's luma, which "brighter than" excludes.
-    let gated = detect_lights(&matte, w, h, 3.0, 2.0, true, [1.0; 3]);
+    let gated = detect_lights(&matte, w, h, 3.0, 2.0, true, [1.0; 3], false);
     assert!(!gated.is_empty());
     assert!(gated[0].rgb[0] < 4.0, "the gate must attenuate: {gated:?}");
-    assert!(detect_lights(&matte, w, h, 10.0, 0.0, true, [1.0; 3]).is_empty());
+    assert!(detect_lights(&matte, w, h, 10.0, 0.0, true, [1.0; 3], false).is_empty());
     assert!(
-        detect_lights(&matte, w, h, 4.0, 0.0, true, [1.0; 3]).is_empty(),
+        detect_lights(&matte, w, h, 4.0, 0.0, true, [1.0; 3], false).is_empty(),
         "a threshold at the brightest source's own luma finds nothing:          the gate is 'brighter than', not 'at least'"
     );
 
     // Determinism: two runs agree bit-for-bit.
     assert_eq!(
         lights,
-        detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3])
+        detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3], false)
     );
 
     // The gate itself (K-363, one-sided): closed at and below the threshold,
@@ -7985,7 +8066,7 @@ fn lens_flare_centres_an_area_source_on_its_light() {
             matte[i + 3] = 1.0;
         }
     }
-    let lights = detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3]);
+    let lights = detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3], false);
     assert_eq!(lights.len(), 1, "one source: {lights:?}");
 
     // Every lit pixel is weighed, so the answer is the square's exact centre
@@ -8007,7 +8088,7 @@ fn lens_flare_centres_an_area_source_on_its_light() {
     for c in 0..3 {
         sparkle[i + c] = 40.0;
     }
-    let jumped = detect_lights(&sparkle, w, h, 1.0, 0.0, true, [1.0; 3]);
+    let jumped = detect_lights(&sparkle, w, h, 1.0, 0.0, true, [1.0; 3], false);
     assert_eq!(jumped.len(), 1);
     let jx = jumped[0].pos[0] * w as f32 - 0.5;
     let jy = jumped[0].pos[1] * h as f32 - 0.5;
@@ -8047,7 +8128,7 @@ fn lens_flare_centres_an_area_source_on_its_light() {
     dot[i + 1] = 4.0;
     dot[i + 2] = 4.0;
     dot[i + 3] = 1.0;
-    let point = detect_lights(&dot, w, h, 1.0, 0.0, true, [1.0; 3]);
+    let point = detect_lights(&dot, w, h, 1.0, 0.0, true, [1.0; 3], false);
     assert_eq!(point.len(), 1);
     assert!((point[0].pos[0] - 20.5 / w as f32).abs() < 1e-6);
     assert!((point[0].pos[1] - 70.5 / h as f32).abs() < 1e-6);

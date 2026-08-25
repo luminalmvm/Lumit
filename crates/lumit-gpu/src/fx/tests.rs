@@ -4204,6 +4204,7 @@ fn flare_params() -> lumit_core::fx::lens_flare::LensFlareParams {
         threshold_softness: 0.25,
         light_tint: [1.0, 1.0, 1.0],
         use_source_colour: true,
+        matte_invert: false,
         anamorphic: 1.0,
         quality: 0,
         detail: 1.0,
@@ -4271,6 +4272,7 @@ fn flare_op(p: &lumit_core::fx::lens_flare::LensFlareParams, w: u32, h: u32) -> 
         threshold_softness: p.threshold_softness,
         light_tint: p.light_tint,
         use_source_colour: p.use_source_colour,
+        matte_invert: p.matte_invert,
         blend: p.blend,
         mix: p.mix,
         bake_key: lf::bake_key(p),
@@ -6153,6 +6155,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         p.threshold_softness,
         p.use_source_colour,
         p.light_tint,
+        p.matte_invert,
     );
     assert_eq!(lights.len(), 2, "both sources must be found: {lights:?}");
     let (_, _, div) = lf::quality_ladder(p.quality);
@@ -6227,6 +6230,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         tinted.threshold_softness,
         tinted.use_source_colour,
         tinted.light_tint,
+        tinted.matte_invert,
     );
     assert_eq!(t_lights.len(), 2);
     for l in &t_lights {
@@ -6258,6 +6262,37 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
         .sum::<f32>()
         / t_cpu.len() as f32;
     assert!(t_mean < 2e-3, "tinted matte mean |Δ| {t_mean}");
+
+    // The Matte row's Invert (K-395), in the detect kernel: reading a matte
+    // inverted must be reading its complement straight, which is the WGSL
+    // twin of the lumit-core assertion — and here it is checked on the
+    // rendered frame, so a `1 − rgb` applied at one of the two loads and not
+    // the other would show up as a different flare.
+    let complement: Vec<f32> = matte
+        .chunks_exact(4)
+        .flat_map(|px| [1.0 - px[0], 1.0 - px[1], 1.0 - px[2], px[3]])
+        .map(|v| f16_to_f32(f16_bits(v)))
+        .collect();
+    let complement_tex = upload_linear_f32(&ctx, &complement, w, h);
+    let inverted_op = crate::fx::lens_flare::LensFlareOp {
+        matte_invert: true,
+        ..flare_op(&p, w, h)
+    };
+    let i_out = fx.lens_flare(
+        &ctx,
+        &tex,
+        w,
+        h,
+        &inverted_op,
+        Some(&complement_tex),
+        &(std::sync::Arc::new(move || flare_bake_data(&p)) as crate::fx::FlareBake),
+        &flare_probe(&p, w, h),
+    );
+    let i_gpu = readback_linear_f32(&ctx, &i_out, w, h).unwrap();
+    assert_eq!(
+        i_gpu, gpu,
+        "the complement read inverted must be the matte read straight"
+    );
 }
 /// Render every bundled lens through the real GPU pipeline into one tiled
 /// montage (K-264) — the harness the curation was chosen with, kept because

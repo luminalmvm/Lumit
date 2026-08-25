@@ -258,7 +258,14 @@ function panelNotes(effect) {
     ).trim();
     const stop = meaning.endsWith(".") ? "" : ".";
     const invert = effect.params.find((p) => p.kind === "bool" && p.label === "Invert");
-    const swap = invert ? ` **${invert.label}** inverts the mattes for calculating strength.` : "";
+    // "for calculating strength" is only true of the generic semantic: an
+    // effect that claims its matte (the sentence above says what it means by
+    // it) inverts the picture it reads, not a strength ramp.
+    const swap = invert
+      ? effect.matte?.meaning
+        ? ` **${invert.label}** reads that matte inverted.`
+        : ` **${invert.label}** inverts the mattes for calculating strength.`
+      : "";
     out.push(`- **${matteRow.label}** ${meaning}${stop}${swap}`);
   }
 

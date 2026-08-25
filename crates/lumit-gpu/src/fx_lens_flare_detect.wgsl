@@ -63,7 +63,9 @@ struct DetectParams {
     // 1 = a detected source's own colour tints its flare; 0 = white through
     // the tint alone (K-259).
     use_source_colour: u32,
-    _pad0: f32,
+    // 1 = read the matte inverted (1 - rgb), the Matte row's Invert (K-395);
+    // the twin of `detect_lights`'s `invert`, applied at every load below.
+    invert: u32,
     // Scene-linear Light tint, multiplied into every detected light.
     tint_r: f32,
     tint_g: f32,
@@ -86,6 +88,17 @@ const SUPPRESS_TILES: i32 = 2;
 // The soft gate (== lens_flare::threshold_gate, K-363): one-sided — closed
 // at and below the threshold, fully open a softness above it. Declared
 // before its first use, which WGSL requires.
+// The Matte row's Invert, at the one place the matte is read (K-395): the
+// flare owns its matte, so it inverts the raw RGBA itself rather than through
+// the dispatch seam's grey `matte_prepare` pass.
+fn matte_rgb(xy: vec2<i32>) -> vec3<f32> {
+    let c = textureLoad(matte_tex, xy, 0).rgb;
+    if (dp.invert != 0u) {
+        return vec3<f32>(1.0) - c;
+    }
+    return c;
+}
+
 fn gate(luma: f32) -> f32 {
     if (dp.softness <= 0.0) {
         return f32(luma > dp.threshold);
@@ -130,7 +143,7 @@ fn detect_tiles(
             if (x >= dp.w) {
                 continue;
             }
-            let c = textureLoad(matte_tex, vec2<i32>(i32(x), i32(y)), 0);
+            let c = matte_rgb(vec2<i32>(i32(x), i32(y)));
             let luma = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
             let index = y * dp.w + x;
             if (luma > best_luma || (luma == best_luma && index < best_index)) {
@@ -142,7 +155,7 @@ fn detect_tiles(
             if (g > 0.0) {
                 let f = luma * g;
                 wsum = wsum + g;
-                csum = csum + max(c.rgb, vec3<f32>(0.0)) * g;
+                csum = csum + max(c, vec3<f32>(0.0)) * g;
                 fsum = fsum + f;
                 fx = fx + f32(x) * f;
                 fy = fy + f32(y) * f;
@@ -302,8 +315,8 @@ fn detect_pick(@builtin(global_invocation_id) gid: vec3<u32>) {
                 } else {
                     let px = tl.index % dp.w;
                     let py = tl.index / dp.w;
-                    let c = textureLoad(matte_tex, vec2<i32>(i32(px), i32(py)), 0);
-                    src = max(c.rgb, vec3<f32>(0.0));
+                    let c = matte_rgb(vec2<i32>(i32(px), i32(py)));
+                    src = max(c, vec3<f32>(0.0));
                 }
             }
             acc_r[nearest] = acc_r[nearest] + src.r * weight;

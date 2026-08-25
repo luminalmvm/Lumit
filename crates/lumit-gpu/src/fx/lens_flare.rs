@@ -103,6 +103,9 @@ pub struct LensFlareOp {
     pub light_tint: [f32; 3],
     /// Matte/Lights: whether a detected source's own colour tints its flare.
     pub use_source_colour: bool,
+    /// Matte mode: read the matte inverted (`1 − rgb`) when detecting, so its
+    /// dark parts are the lights — the uniform matte row's Invert (K-395).
+    pub matte_invert: bool,
     /// How the flare element combines with the layer under it — an index
     /// into `lumit_core::fx::lens_flare::BLEND_OPTIONS` (K-289).
     pub blend: u32,
@@ -603,7 +606,9 @@ struct DetectParams {
     threshold: f32,
     softness: f32,
     use_source_colour: u32,
-    _pad0: f32,
+    /// 1 = read the matte inverted (`1 − rgb`), the Matte row's Invert
+    /// (K-395); mirrors `lumit_core`'s `detect_lights` argument.
+    invert: u32,
     tint: [f32; 3],
     _pad1: f32,
 }
@@ -1778,7 +1783,7 @@ impl FxEngine {
                             threshold: op.threshold,
                             softness: op.threshold_softness,
                             use_source_colour: u32::from(op.use_source_colour),
-                            _pad0: 0.0,
+                            invert: u32::from(op.matte_invert),
                             tint: op.light_tint,
                             _pad1: 0.0,
                         }),

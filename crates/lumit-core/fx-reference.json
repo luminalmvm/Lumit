@@ -12367,7 +12367,7 @@
       "slug": "lens-flare",
       "match_name": "lens_flare",
       "label": "Lens flare",
-      "version": 12,
+      "version": 13,
       "category": "Stylise",
       "category_slug": "stylise",
       "params": [
@@ -13059,6 +13059,13 @@
           "self_default": true
         },
         {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
           "id": "threshold",
           "label": "Threshold",
           "kind": "float",
@@ -13334,6 +13341,7 @@
           "label": "",
           "params": [
             "matte",
+            "matte_invert",
             "threshold",
             "threshold_softness"
           ],

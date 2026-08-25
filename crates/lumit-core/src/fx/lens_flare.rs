@@ -123,6 +123,10 @@ pub struct LensFlareParams {
     /// what a matte used purely as a position mask wants. Ignored in Manual
     /// (there is no source colour to take).
     pub use_source_colour: bool,
+    /// Matte mode: read the matte inverted (`1 − rgb`), so its DARK parts are
+    /// the lights — the uniform matte row's Invert (K-395). Off is every flare
+    /// saved before the switch existed (K-258).
+    pub matte_invert: bool,
     /// Horizontal stretch of the whole flare about the frame centre
     /// (1 = spherical, 1.33/2 = anamorphic looks).
     pub anamorphic: f32,
@@ -579,6 +583,7 @@ impl TileStat {
     };
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn detect_lights(
     matte: &[f32],
     w: u32,
@@ -587,6 +592,7 @@ pub fn detect_lights(
     softness: f32,
     use_source_colour: bool,
     tint: [f32; 3],
+    invert: bool,
 ) -> Vec<FlareLight> {
     if w == 0 || h == 0 || matte.len() < (w * h * 4) as usize {
         return Vec::new();
@@ -594,12 +600,24 @@ pub fn detect_lights(
     let tx = w.div_ceil(DETECT_TILE) as usize;
     let ty = h.div_ceil(DETECT_TILE) as usize;
     let mut tiles: Vec<TileStat> = vec![TileStat::EMPTY; tx * ty];
+    // The Matte row's Invert (K-395), and the only place the flare's matte is
+    // read — so `1 − rgb` here IS the switch, for luma, gate and source colour
+    // alike. The WGSL twin inverts at the same two loads.
+    let rgb = |i: usize| {
+        let c = [matte[i], matte[i + 1], matte[i + 2]];
+        if invert {
+            [1.0 - c[0], 1.0 - c[1], 1.0 - c[2]]
+        } else {
+            c
+        }
+    };
     for y in 0..h {
         for x in 0..w {
             let i = ((y * w + x) * 4) as usize;
-            let luma = super::cpu::LUMA[0] * matte[i]
-                + super::cpu::LUMA[1] * matte[i + 1]
-                + super::cpu::LUMA[2] * matte[i + 2];
+            let c = rgb(i);
+            let luma = super::cpu::LUMA[0] * c[0]
+                + super::cpu::LUMA[1] * c[1]
+                + super::cpu::LUMA[2] * c[2];
             let t = (y / DETECT_TILE) as usize * tx + (x / DETECT_TILE) as usize;
             let tile = &mut tiles[t];
             if luma > tile.luma_max {
@@ -612,9 +630,9 @@ pub fn detect_lights(
             if g > 0.0 {
                 let f = luma * g;
                 tile.wsum += g;
-                tile.csum[0] += matte[i].max(0.0) * g;
-                tile.csum[1] += matte[i + 1].max(0.0) * g;
-                tile.csum[2] += matte[i + 2].max(0.0) * g;
+                tile.csum[0] += c[0].max(0.0) * g;
+                tile.csum[1] += c[1].max(0.0) * g;
+                tile.csum[2] += c[2].max(0.0) * g;
                 tile.fsum += f;
                 tile.fx += x as f32 * f;
                 tile.fy += y as f32 * f;
@@ -698,12 +716,8 @@ pub fn detect_lights(
                     stat.csum[2] / stat.wsum,
                 ]
             } else {
-                let i = (stat.index * 4) as usize;
-                [
-                    matte[i].max(0.0),
-                    matte[i + 1].max(0.0),
-                    matte[i + 2].max(0.0),
-                ]
+                let c = rgb((stat.index * 4) as usize);
+                [c[0].max(0.0), c[1].max(0.0), c[2].max(0.0)]
             };
             for c in 0..3 {
                 acc[nearest][c] += src[c] * weight;
@@ -3262,6 +3276,9 @@ pub fn bake_with(p: &LensFlareParams, lens_text: Option<&str>) -> FlareBaked {
         threshold_softness: 0.25,
         light_tint: [1.0, 1.0, 1.0],
         use_source_colour: true,
+        // The probe detects nothing — it is one Manual point — so the Matte
+        // row's Invert is inert here, and off keeps the probe a bake input.
+        matte_invert: false,
         anamorphic: 1.0,
         quality: 0,
         detail: 1.0,

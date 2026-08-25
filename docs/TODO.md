@@ -830,13 +830,6 @@ every clip of that footage, and why deleting the folder is always safe). Owed
 rather than written because GUIDE.md was another session's file when stages 1 and
 2 landed.
 
-**The Lens flare's Matte row has no Invert.** Every other matte row carries one
-(K-395); the flare's predates the uniform row and it has no `matte_invert`, so
-the row draws the picker alone. Adding one is a parameter, a version bump and a
-line in the detect kernel — small, but it changes what a saved flare renders if
-done carelessly, so it wants its own K-258 test.
-
-
 **Fast motion blur only works on footage layers.** docs/08 §3.2 says the effect
 is "applied per layer or, **most commonly, on an adjustment layer over the whole
 montage**", and that case is a silent passthrough — as is a Precomp layer. Only
