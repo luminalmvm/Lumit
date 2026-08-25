@@ -1482,6 +1482,24 @@ impl HeadlessRenderer {
         self.gpu.reclaim();
     }
 
+    /// Has the graphics device under this renderer been lost (K-585)?
+    ///
+    /// Nothing here can be mended once it is true — every texture, pipeline and
+    /// cached frame went with the device — so the only answer is to drop this
+    /// renderer and build another. The render worker asks once a turn and does
+    /// exactly that; see [`lumit_gpu::GpuContext::device_lost`].
+    #[must_use]
+    pub fn device_lost(&self) -> bool {
+        self.gpu.device_lost()
+    }
+
+    /// Lose the device on purpose, so the recovery path can be tested without a
+    /// driver crash to hand — [`lumit_gpu::GpuContext::simulate_device_loss`]
+    /// through the handle the bridge already holds.
+    pub fn simulate_device_loss(&self) {
+        self.gpu.simulate_device_loss();
+    }
+
     /// Wait for the card to catch up and then reclaim — see
     /// [`lumit_gpu::GpuContext::settle`]. For measuring what is held at rest,
     /// and for an engine with nothing left to draw; never on a frame path.

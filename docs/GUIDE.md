@@ -6010,6 +6010,49 @@ ago — so the worker stops there and builds nothing, which is what lets a queue
 of eighty drain in an instant rather than building eighty devices for projects
 that have been and gone.
 
+### When the graphics card is taken away (K-585)
+
+A graphics device can stop existing under a program that has done nothing wrong.
+Windows updates a display driver while you are working. A shader runs long
+enough that the watchdog decides it has hung and resets the card. A laptop with
+two GPUs switches from one to the other, or an external card is unplugged. From
+the program's point of view all of these look the same: one moment there is a
+device, and the next moment everything made from it — every texture, every
+compiled shader, every finished frame the preview had banked on the card — is
+gone, and nothing that touches it will ever work again.
+
+There is no repairing that. The only cure is replacement: notice, throw the
+renderer away, build a new one, carry on. So the pieces are small.
+
+The graphics library tells us the device has gone by calling a function we left
+with it. That call arrives whenever the driver feels like making it, on whatever
+thread it likes, which is no use to something in the middle of drawing — so all
+it does is **raise a flag**. The render worker looks at that flag once each time
+round its loop, before it asks the renderer for anything, and if it is up it
+builds a replacement on exactly the road it used at startup: the same
+one-at-a-time queue from the section above, the same settings, and the way you
+were *looking* at the picture — exposure, tone map, the region of interest, the
+colour view — put back on the new renderer, so recovering from a driver reset
+does not also silently reset your view.
+
+The frames the card was holding went with the card, so the top cache tier starts
+empty and its meter goes back to zero. **The other two tiers are untouched**, and
+that is the whole reason this is quick rather than starting from nothing: the
+frames in ordinary memory and on disk are the recovery data, exactly as the
+performance rules intend. The worker then draws the frame you were looking at
+again — nobody asked it to, because from the front end's side nothing happened —
+and sends one calm line to the status bar: *the graphics device was reset; the
+preview is rebuilding*. No dialogue, nothing to dismiss, nothing lost.
+
+Testing this without a real driver crash sounds impossible, and is not: the
+graphics library has a `destroy` call that takes the device away for real. The
+test uses it, so the loss is genuine rather than a pretend flag — the device
+really is destroyed, the real callback really does fire, and the renderer built
+afterwards really is drawing on a device that did not exist a moment earlier. It
+then draws the same picture and compares it pixel for pixel with the one from
+before the loss. What the test cannot say is *how long* recovery takes on a card
+that has genuinely fallen over; that number still needs a real device to lose.
+
 ### Finding the beat, without stopping everything else
 
 Beat detection is the same story one size up. Asking a composition where its
@@ -11040,3 +11083,4 @@ hatches it so you can see it happening rather than wondering where the movement 
 
 Afterwards the freeze is two ordinary keyframes. Drag either one and the hold gets longer or
 shorter; there is no special "freeze object" to learn.
+

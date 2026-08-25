@@ -109,6 +109,24 @@ pub struct GpuContext {
     /// whichever thread the render is running on; relaxed throughout, since it
     /// is a counter read between frames and never a happens-before edge.
     submits: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Raised, once and for ever, when this device is lost — a driver reset, a
+    /// hung dispatch the watchdog killed, a card taken away by a hot-unplug or
+    /// a laptop switching GPUs. Read it with [`Self::device_lost`].
+    ///
+    /// **In plain terms.** A graphics device can die under a program that has
+    /// done nothing wrong. Everything on the card goes with it: every texture,
+    /// every compiled shader, every cached frame. Nothing that used the old
+    /// device will ever work again, so the only cure is to build a new one and
+    /// start over. This flag is how the rest of the engine hears that, because
+    /// the driver tells us through a callback on a thread of its choosing, at a
+    /// moment of its choosing — which is no use to a render loop. The callback
+    /// raises this; the loop looks at it between frames and rebuilds.
+    ///
+    /// Shared with every [`Self::clone_handle`], because they are handles on the
+    /// same device and it is the *device* that was lost. An `Arc` rather than a
+    /// static because a process may hold more than one device (the Viewer's and
+    /// the exporter's), and one of them dying says nothing about the other.
+    lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// The multisample counts the composite is willing to use, highest first.
@@ -375,6 +393,10 @@ impl GpuContext {
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            // No callback is installed on a device somebody else opened, so
+            // this stays down: a context built this way does not know when its
+            // device goes, and never claims to.
+            lost: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
@@ -403,7 +425,38 @@ impl GpuContext {
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
             submits: std::sync::Arc::clone(&self.submits),
+            lost: std::sync::Arc::clone(&self.lost),
         }
+    }
+
+    /// Has this device been lost? Cheap enough to ask once a turn, which is
+    /// what the render worker does.
+    ///
+    /// Never clears: a lost device does not come back, and the answer is only
+    /// useful to whoever is about to throw the context away. A rebuilt context
+    /// is a new one, with a flag of its own that starts down.
+    #[must_use]
+    pub fn device_lost(&self) -> bool {
+        self.lost.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Lose this device on purpose — the only way to test the recovery path
+    /// without a driver crash to hand.
+    ///
+    /// Not a fake: `destroy` really does take the device away, so every later
+    /// use of this context fails exactly as it would after a driver reset, and
+    /// the flag above is raised by the *real* callback rather than by this
+    /// function.
+    ///
+    /// The wait is not politeness. wgpu delivers that callback from a maintain
+    /// pass, and only once the queue has drained — so a destroy with work still
+    /// in flight is not reported until some later poll. In the engine that is
+    /// exactly right (the worker polls every turn and hears about it on one of
+    /// them); in a test it would be a race, so this waits for the queue and the
+    /// news arrives before the call returns.
+    pub fn simulate_device_loss(&self) {
+        self.device.destroy();
+        self.device.poll(wgpu::Maintain::Wait);
     }
 
     /// Hand one command buffer to the driver, counting it (see
@@ -681,8 +734,15 @@ impl GpuContext {
         device.on_uncaptured_error(Box::new(|e| {
             eprintln!("lumit-gpu: uncaptured wgpu error: {e}");
         }));
-        device.set_device_lost_callback(|reason, msg| {
+        // A lost device is survivable, but only if somebody hears about it. The
+        // driver calls this on a thread and at a moment of its own choosing, so
+        // all it may do is raise the flag; the render worker reads it between
+        // frames and rebuilds on the K-434 road (K-585, docs/13 §4).
+        let lost = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let raise = std::sync::Arc::clone(&lost);
+        device.set_device_lost_callback(move |reason, msg| {
             eprintln!("lumit-gpu: device lost ({reason:?}): {msg}");
+            raise.store(true, std::sync::atomic::Ordering::Relaxed);
         });
 
         // Ask the adapter once, here, while it is still in hand: nothing
@@ -706,6 +766,7 @@ impl GpuContext {
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            lost,
         })
     }
 }
@@ -2081,6 +2142,30 @@ mod counter_tests {
             after <= during,
             "and dropping it does not raise the count: {during} then {after}"
         );
+    }
+
+    /// A lost device is heard about (K-585).
+    ///
+    /// The whole recovery path hangs off one flag, and the flag is raised by a
+    /// callback the driver owns — so the thing worth proving is that the wiring
+    /// carries real news, not that a boolean can be set. `simulate_device_loss`
+    /// destroys the device for real; if the callback were ever unhooked, or
+    /// wgpu stopped delivering it, this goes red and the worker's rebuild
+    /// silently stops happening.
+    #[test]
+    fn a_destroyed_device_reports_itself_lost() {
+        let Ok(ctx) = GpuContext::headless() else {
+            no_adapter();
+            return;
+        };
+        assert!(!ctx.device_lost(), "a fresh device is not lost");
+        // A handle taken *before* the loss must hear it too: the realiser and
+        // the decode pool hold these, and a stale handle that still claimed to
+        // be healthy is how half an engine carries on drawing into nothing.
+        let handle = ctx.clone_handle();
+        ctx.simulate_device_loss();
+        assert!(ctx.device_lost(), "a destroyed device is lost");
+        assert!(handle.device_lost(), "and so is every handle on it");
     }
 }
 

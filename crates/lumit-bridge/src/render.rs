@@ -80,6 +80,15 @@ pub(crate) fn quality_for(scale: f32) -> lumit_render::Quality {
 fn with_ready<R>(f: impl FnOnce(&mut lumit_render::headless::HeadlessRenderer) -> R) -> Option<R> {
     let mutex = RENDERER.get_or_init(|| Mutex::new(Slot::Uninit));
     let mut guard = mutex.lock().unwrap_or_else(|poison| poison.into_inner());
+    // A device that has been lost takes this renderer with it (K-585). The
+    // worker rebuilds its own; this one is rebuilt by putting the slot back to
+    // where the first call finds it, which is the same road and no new one.
+    // Without this, one driver reset would leave the export path holding a dead
+    // renderer for the rest of the session, silently, while the Viewer beside
+    // it recovered.
+    if matches!(&*guard, Slot::Ready(renderer) if renderer.device_lost()) {
+        *guard = Slot::Uninit;
+    }
     if matches!(*guard, Slot::Uninit) {
         *guard = match lumit_render::headless::HeadlessRenderer::new() {
             Ok(renderer) => Slot::Ready(Box::new(renderer)),

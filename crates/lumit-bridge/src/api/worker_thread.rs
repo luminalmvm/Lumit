@@ -55,6 +55,13 @@ pub struct WorkerState {
     /// Where the user is looking — the comp, frame and scale last shown — the
     /// idle cache-fill's anchor (docs/06 §5.5).
     last_shown: Option<(CompositionReference, u64, f32)>,
+    /// How the Viewer is looking at the picture — exposure, tone map,
+    /// transparency, region, OCIO view. Session state the renderer holds, kept
+    /// here as well so it can be put back on a renderer built to replace one
+    /// whose device was lost (K-585). Without the copy, coming back from a
+    /// device reset would quietly *reset the view too*: full exposure, the
+    /// built-in transform, the region of interest gone.
+    look: ViewerLook,
     /// Where the Viewer is cutting a layer's effect stack short — the "at
     /// effect" chip, off when `None` (K-528).
     ///
@@ -181,6 +188,35 @@ struct LayerSample {
     width: u32,
     height: u32,
     rgba: Vec<u8>,
+}
+
+/// The Viewer's session look, as one value (K-585).
+///
+/// Exactly the five things [`WorkerRequest::SetViewerLook`] carries, kept
+/// together for the same reason that message keeps them together: **the
+/// renderer must never hold half a look**. One place to set them from means the
+/// look survives a renderer being replaced under a device loss, and cannot
+/// drift between the message that applies it and the rebuild that restores it.
+#[frb(ignore)]
+#[derive(Clone, Default)]
+struct ViewerLook {
+    stops: f64,
+    tone_map: bool,
+    transparent_background: bool,
+    region: Option<[f32; 4]>,
+    colour_view: Option<(String, String)>,
+}
+
+/// Put a look on a renderer. The only place these four setters are called.
+#[frb(ignore)]
+fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
+    renderer.set_display_view(lumit_render::DisplayParams::from_stops(
+        look.stops,
+        look.tone_map,
+    ));
+    renderer.set_transparent_background(look.transparent_background);
+    renderer.set_region(look.region);
+    renderer.set_colour_view(look.colour_view.clone());
 }
 
 /// Whose turn it is to build a renderer (K-434). Held only across
@@ -1309,6 +1345,22 @@ fn republish_after_bake(state: &mut WorkerState, stream: &mut WorkerResponseStre
     // The fill was stopped while the frames were unnameable; there is
     // something to bank again.
     state.fill_exhausted = false;
+    republish_last_frame(state, stream);
+}
+
+/// Make the frame the Viewer is showing again and send it.
+///
+/// Two callers, both of which have changed something about *how* the picture is
+/// made without the frontend asking for anything: a lens finishing its bake
+/// (K-350), and a renderer rebuilt after a device loss (K-585). Neither will be
+/// asked for a frame — from the frontend's side nothing happened — so the
+/// worker has to offer one, or the picture on screen stays as it was until the
+/// user happens to move something.
+///
+/// Nothing at all when the Viewer has never shown anything, or the project has
+/// closed under us.
+#[frb(ignore)]
+fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     let Some((comp_ref, frame, scale)) = state.last_shown.clone() else {
         return;
     };
@@ -2203,16 +2255,21 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
     std::thread::spawn(move || worker_loop(project, receive_from_app, stream));
 }
 
+/// Build the Viewer's renderer, with everything a Viewer's renderer carries —
+/// the turn-taking of K-434, the deferred flare bakes of K-350, and the two
+/// profiler sinks. `None` when there is no reason or no way to build one.
+///
+/// One function rather than a block inside [`worker_loop`] because it is done
+/// **twice**: once when the worker starts, and again after a device loss
+/// (K-585). A rebuild that missed any of this would come back subtly different
+/// from the renderer it replaced — a flare freezing the picture again, or a
+/// progress bar that never moves — which is the kind of fault nobody connects
+/// to a driver reset five minutes earlier.
 #[frb(ignore)]
-fn worker_loop(
-    project: ProjectReference,
-    receiver: Receiver<WorkerRequest>,
-    stream: WorkerResponseStream,
-) {
-    println!("Worker thread started");
-    let mut stream = stream;
-    raise_timer_resolution();
-
+fn build_viewer_renderer(
+    project: &ProjectReference,
+    stream: &WorkerResponseStream,
+) -> Option<HeadlessRenderer> {
     // **One renderer is built at a time, and none at all for a project that
     // has already gone** (K-434). Building one means a GPU device and every
     // pipeline the compositor needs — seconds of driver work where there is no
@@ -2236,10 +2293,10 @@ fn worker_loop(
     // devices inside a few seconds. Poisoning is nothing to fail over: the
     // lock guards no data, only the turn-taking.
     let building = BUILDING_RENDERER.lock().unwrap_or_else(|e| e.into_inner());
-    if !worth_building_for(&project) {
+    if !worth_building_for(project) {
         // Quietly: a project closing while its worker waited its turn is the
         // ordinary end of a session, not a fault.
-        return;
+        return None;
     }
     // No renderer means no Viewer, but the editor itself stays usable — the
     // worker just stops instead of taking the process down with it.
@@ -2247,7 +2304,7 @@ fn worker_loop(
         Ok(renderer) => renderer,
         Err(err) => {
             eprintln!("Could not create the renderer, stopping the worker: {err}");
-            return;
+            return None;
         }
     };
     drop(building);
@@ -2267,33 +2324,96 @@ fn worker_loop(
     //
     // Which frames actually use them is decided per request (`watch_frames` /
     // `measure_frames`): a scrub describes itself, a playing frame does not.
-    {
-        let progress_stream = stream.clone();
-        renderer.set_progress_sink(Some(std::sync::Arc::new(
-            move |p: lumit_render::FrameProgress| {
-                _ = progress_stream.add(WorkerResponse::RenderProgress(
-                    crate::api::state::BridgeRenderProgress {
-                        frame: p.frame,
-                        stage: p.stage.code(),
-                        fraction: f64::from(p.fraction),
-                        // The engine never sends the last word: a frame that faults
-                        // would then leave a bar standing for ever. The worker ends
-                        // every bar it started, below.
-                        done: false,
-                    },
-                ));
-            },
-        )));
-        let profile_stream = stream.clone();
-        renderer.set_profile_sink(Some(std::sync::Arc::new(
-            move |p: lumit_render::FrameProfile| {
-                // One line per switching on, never per frame — see
-                // `profiling::announce_first`.
-                crate::profiling::announce_first(p.frame, p.layers.len(), p.total_ms);
-                _ = profile_stream.add(WorkerResponse::FrameProfile(profile_of(&p)));
-            },
-        )));
+    let progress_stream = stream.clone();
+    renderer.set_progress_sink(Some(std::sync::Arc::new(
+        move |p: lumit_render::FrameProgress| {
+            _ = progress_stream.add(WorkerResponse::RenderProgress(
+                crate::api::state::BridgeRenderProgress {
+                    frame: p.frame,
+                    stage: p.stage.code(),
+                    fraction: f64::from(p.fraction),
+                    // The engine never sends the last word: a frame that faults
+                    // would then leave a bar standing for ever. The worker ends
+                    // every bar it started, below.
+                    done: false,
+                },
+            ));
+        },
+    )));
+    let profile_stream = stream.clone();
+    renderer.set_profile_sink(Some(std::sync::Arc::new(
+        move |p: lumit_render::FrameProfile| {
+            // One line per switching on, never per frame — see
+            // `profiling::announce_first`.
+            crate::profiling::announce_first(p.frame, p.layers.len(), p.total_ms);
+            _ = profile_stream.add(WorkerResponse::FrameProfile(profile_of(&p)));
+        },
+    )));
+    Some(renderer)
+}
+
+/// Come back from a lost graphics device (K-585, budget B9).
+///
+/// **In plain terms.** A graphics device can be taken away from a program that
+/// has done nothing wrong: a driver update mid-session, a dispatch the
+/// watchdog killed, a laptop switching cards. Everything on the card goes with
+/// it, so there is nothing here to mend — the renderer is thrown away and
+/// another built in its place, on the same road the worker used at startup.
+/// The frames the card was holding are gone with it, which is the one thing the
+/// caches have to be told; the RAM and disk tiers are untouched, and are what
+/// makes the picture come back quickly rather than from nothing (docs/13 §4:
+/// the lower tiers are the recovery data by design).
+///
+/// Nothing at all when the device is healthy, which is every turn but one in a
+/// session's life — an atomic load.
+#[frb(ignore)]
+fn recover_lost_device(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+    if !state.renderer.device_lost() {
+        return;
     }
+    eprintln!("The graphics device was lost; rebuilding the renderer");
+    let Some(mut renderer) = build_viewer_renderer(&state.project, stream) else {
+        // No second device to be had, or the project has closed under us. The
+        // worker stops rather than spinning on a renderer it cannot rebuild;
+        // the editor stays usable, exactly as it does when the first build
+        // fails on a machine with no adapter.
+        return;
+    };
+    // A renderer replaced is not a renderer reset: the way the user was
+    // looking at the picture is session state, not something the device owned.
+    apply_viewer_look(&mut renderer, &state.look);
+    state.renderer = renderer;
+    // The card's cache went with the card. Nothing needs clearing — a new
+    // renderer's stores are empty — but the budget must be applied again (it
+    // lives on the renderer) and the published figures must stop describing
+    // frames that no longer exist.
+    state.applied_vram_budget = 0;
+    state.published_vram = (0, 0);
+    crate::framecache::vram::publish(0, 0);
+    // Everything the idle work had concluded was concluded about a different
+    // renderer: there are frames to fill and frames to back up again, and the
+    // cache bar is drawing a card that has been emptied.
+    state.fill_exhausted = false;
+    state.backup_exhausted = false;
+    state.published_bar = None;
+    _ = stream.add(WorkerResponse::DeviceReset);
+    // And put the picture back, on the new device.
+    republish_last_frame(state, stream);
+}
+
+#[frb(ignore)]
+fn worker_loop(
+    project: ProjectReference,
+    receiver: Receiver<WorkerRequest>,
+    stream: WorkerResponseStream,
+) {
+    println!("Worker thread started");
+    let mut stream = stream;
+    raise_timer_resolution();
+
+    let Some(renderer) = build_viewer_renderer(&project, &stream) else {
+        return;
+    };
 
     let mut state = WorkerState {
         project,
@@ -2302,6 +2422,10 @@ fn worker_loop(
         playback: None,
         prefetcher: crate::prefetch::Prefetcher::default(),
         last_shown: None,
+        // The frontend sends the real look as soon as the Viewer is up; until
+        // then this is the renderer's own default, which is what it already
+        // held.
+        look: ViewerLook::default(),
         prefix: None,
         disk: lumit_render::diskio::spawn(),
         disk_wanted: std::collections::HashMap::new(),
@@ -2337,6 +2461,10 @@ fn worker_loop(
     };
 
     loop {
+        // Before anything else asks the renderer for anything: a device that
+        // has gone answers nothing, and every step below would fail one at a
+        // time until the session looked broken (K-585).
+        recover_lost_device(&mut state, &mut stream);
         sync_caches(&mut state, &mut stream);
 
         // While playing the worker has work of its own, so it must not block on
@@ -2955,14 +3083,16 @@ fn handle_requests(
                     region,
                     colour_view,
                 } => {
-                    state
-                        .renderer
-                        .set_display_view(lumit_render::DisplayParams::from_stops(stops, tone_map));
-                    state
-                        .renderer
-                        .set_transparent_background(transparent_background);
-                    state.renderer.set_region(region);
-                    state.renderer.set_colour_view(colour_view);
+                    // Kept as well as applied, so a renderer rebuilt after a
+                    // device loss is looked *through* the same way (K-585).
+                    state.look = ViewerLook {
+                        stops,
+                        tone_map,
+                        transparent_background,
+                        region,
+                        colour_view,
+                    };
+                    apply_viewer_look(&mut state.renderer, &state.look);
                     // The look is folded into every frame's name
                     // (`named_under_view`), so this message renames every
                     // frame without moving the document revision — the one
@@ -4277,6 +4407,78 @@ mod tests {
         );
     }
 
+    /// **The worker comes back from a lost graphics device and draws again**
+    /// (K-585, budget B9).
+    ///
+    /// The loss is real: `simulate_device_loss` destroys the device, so
+    /// everything the renderer held is genuinely gone and the driver's own
+    /// callback is what raises the flag. One turn of the loop's recovery step
+    /// then has to leave the worker able to render — on a device that did not
+    /// exist a moment earlier — *and* still looking at the picture the way the
+    /// user set it, which is why the look is changed first and the frame's name
+    /// is compared afterwards: the view is folded into every frame's name, so a
+    /// rebuild that quietly reset it would rename the frame.
+    #[test]
+    fn a_lost_device_is_rebuilt_and_the_worker_draws_again() {
+        let (project, comp) = project_with_solid();
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        let document = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            document.store.snapshot()
+        };
+        let quality = still_quality(1.0);
+        let bgra = super::zero_copy_wants_bgra();
+
+        // A look worth losing, applied the way the Viewer applies it.
+        state.look = super::ViewerLook {
+            stops: 1.5,
+            tone_map: true,
+            transparent_background: true,
+            region: None,
+            colour_view: None,
+        };
+        super::apply_viewer_look(&mut state.renderer, &state.look);
+        let named_under_the_look = state
+            .renderer
+            .frame_key(&document, comp, 0, quality)
+            .expect("a solid is nameable");
+
+        super::prepare_frame(&mut state, &document, comp, 0, quality, bgra, true)
+            .expect("the frame before the loss");
+        state.last_shown = Some((CompositionReference::new(state.project.id, comp), 0, 1.0));
+
+        state.renderer.simulate_device_loss();
+        assert!(
+            state.renderer.device_lost(),
+            "a destroyed device must be reported lost, or the worker never rebuilds"
+        );
+
+        super::recover_lost_device(&mut state, &mut stream);
+        assert!(
+            !state.renderer.device_lost(),
+            "the turn must leave a healthy renderer behind"
+        );
+        assert_eq!(
+            state.applied_vram_budget, 0,
+            "the card's budget is applied again to the new device"
+        );
+
+        super::prepare_frame(&mut state, &document, comp, 0, quality, bgra, true)
+            .expect("and a frame on the new device");
+        assert_eq!(
+            state
+                .renderer
+                .frame_key(&document, comp, 0, quality)
+                .expect("still nameable"),
+            named_under_the_look,
+            "the Viewer's look came across the rebuild: a device reset is not a view reset"
+        );
+    }
+
     /// A worker's state around a real renderer, built as `worker_loop` builds
     /// it. `None` where there is no graphics adapter to build one on.
     fn worker_state(project: crate::api::project::ProjectReference) -> Option<super::WorkerState> {
@@ -4291,6 +4493,7 @@ mod tests {
             playback: None,
             prefetcher: crate::prefetch::Prefetcher::default(),
             last_shown: None,
+            look: super::ViewerLook::default(),
             prefix: None,
             disk: lumit_render::diskio::spawn(),
             disk_wanted: std::collections::HashMap::new(),

@@ -2901,6 +2901,10 @@
   "@graphSpeed": {
     "description": "Graph editor: the view showing how fast a value changes. Lumit says 'speed', never 'velocity'."
   },
+  "graphicsDeviceReset": "The graphics device was reset; the preview is rebuilding",
+  "@graphicsDeviceReset": {
+    "description": "Status line notice, shown once when the graphics card has been reset under Lumit (a driver update, a watchdog reset, a laptop switching GPUs) and the engine has already rebuilt its renderer. Nothing is lost and there is nothing for the user to do."
+  },
   "hierarchyEmpty": "This composition has no layers yet",
   "@hierarchyEmpty": {
     "description": "Empty-state line in the Hierarchy panel."

@@ -332,6 +332,11 @@ pub enum WorkerResponse {
     /// What the frame just made cost, layer by layer and effect by effect —
     /// the render-time indicators (docs/13 §7.1).
     FrameProfile(BridgeFrameProfile),
+    /// The graphics device was lost and a new one has been built in its place
+    /// (K-585, budget B9). Carries nothing: the worker has already put the
+    /// picture back, and the frontend's whole part is one calm line in the
+    /// status bar saying why the preview blinked.
+    DeviceReset,
 }
 
 pub(crate) type CallbackStream = StreamSink<ScopedChange>;

@@ -57,7 +57,7 @@ All figures are 95th percentile unless stated; measured by the harness in §7.
 | B6 | Cold cache playback, reference comp, adaptive degradation allowed | sustained 60 fps | sustained ≥ 30 fps |
 | B7 | Cold cache playback, reference comp, Full resolution, no degradation | ≥ 24 fps | ≥ 10 fps |
 | B8 | Export of the reference comp (YouTube 1080p60 preset, hardware encode) | ≥ 2× realtime | ≥ 0.5× realtime |
-| B9 | GPU device loss → preview resumed | ≤ 5 s | ≤ 5 s |
+| B9 | GPU device loss → preview resumed | ≤ 5 s | ≤ 5 s |¹
 | B10 | A/V sync error during playback | ≤ ±½ video frame | ≤ ±½ video frame |
 | B11 | Background cache fill of the 20 s work area from cold, while idle | ≤ 60 s | ≤ 240 s |
 | B12 | Particulate, default parameters (≈ 300 live particles), evaluate + draw **above the pass floor** | ≲ 0.2 ms | ≲ 0.6 ms |
@@ -99,6 +99,12 @@ Notes:
 - B1 is the UI thread alone: layout, paint, input. It holds regardless of engine load because
   the UI thread never evaluates, never blocks on a render, and reads results from lock-free
   mailboxes only. Any UI-thread stall > 16 ms is a bug regardless of budget.
+- B9¹ **has a mechanism now, not a number** (K-585): loss is noticed, the renderer is rebuilt
+  and the picture republished — see §4's "what is built today". The five seconds still cannot
+  be *measured* without a real device to lose, so B9 stays on the manual list below with B1,
+  B2, B8 and B10. What CI does hold is that the recovery path works at all: the device is
+  destroyed for real and a rebuilt renderer draws the identical frame
+  (`crates/lumit-render/tests/device_loss.rs`).
 - B3 is the latest-wins path: epoch bump, degraded-quality request, cache lookup first. A
   cache hit MUST display in the next UI frame.
 - B5 is the promise the cache bars make: green means it plays, full stop.
@@ -212,6 +218,20 @@ Device loss is routine, not exceptional. Windows resets the driver on any GPU pa
   recovery data by design — recompile pipelines from the shader cache, replay the current
   request. The user sees a hiccup and a status readout entry, within budget B9. In-flight
   export items resume from the last completed frame.
+- **What is built today** (K-585). The "device-epoch object" is the renderer itself: a
+  `HeadlessRenderer` owns its device and everything made from it, so tearing down the epoch
+  *is* dropping the renderer. wgpu's device-lost callback raises a flag on the context
+  (`GpuContext::device_lost`); the render worker reads it at the top of every turn, before
+  anything else asks the renderer for anything, and rebuilds on the K-434 build road — the
+  same turn-taking and the same session settings, with the Viewer's look put back on the new
+  renderer so a reset is not also a *view* reset. The VRAM tier went with the device, so its
+  budget is applied again and its published figures return to zero; the RAM and disk tiers are
+  untouched and are what refills it. The worker then republishes the frame the Viewer was
+  showing, because from the frontend's side nothing happened and nothing will be asked for,
+  and sends `WorkerResponse::DeviceReset` — one calm status line. The export path's own
+  renderer recovers by the same rule, by returning its slot to "not yet built". Still owed
+  from the paragraph above: the shader-cache recompile, the DRED diagnostics, the repeated-loss
+  CPU fallback, and export items resuming mid-item.
 - **Diagnostics**: every device loss is logged locally with the active node list and timing
   breadcrumbs. Dev and beta builds enable DRED (breadcrumbs + page-fault data) to attribute
   the offending dispatch; release builds keep lightweight per-node GPU timing so nodes that

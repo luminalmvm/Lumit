@@ -1737,6 +1737,12 @@ class LumitUiState extends ChangeNotifier {
         // the numbers (`RenderTimings.setMeasuring`).
         case WorkerResponse_FrameProfile(:final field0):
           renderTimings.report(field0);
+        // The graphics device went and the engine has already built another
+        // (K-585). Everything that had to happen has happened by the time this
+        // arrives — the frame behind it is being made on the new device — so
+        // the only thing left is to say why the picture blinked.
+        case WorkerResponse_DeviceReset():
+          state.postNotice(l10n.graphicsDeviceReset);
       }
     });
   }

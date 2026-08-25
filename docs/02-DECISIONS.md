@@ -16973,3 +16973,56 @@ covenant and a duration to type would be a promise the engine is right to refuse
 `retime.apply_preset` (including the Hold preset, which needs a segment's entry speed that
 nothing reads out), and `retime.toggle_reverse_allowed` (whose `allow_reverse` flag went with
 the segment store).
+
+## K-585 — A lost graphics device is rebuilt, not survived by luck
+
+**Status: DECIDED (2026-08-26).** wgpu's device-lost callback did one thing — print a line —
+so a driver reset, a watchdog kill or a GPU switch left the render worker holding a device
+that answered nothing, for the rest of the session. Budget B9
+([13-PERFORMANCE-RULES.md](13-PERFORMANCE-RULES.md) §2) has always said the preview comes back
+within five seconds; there was no mechanism for it to come back at all. There is now, and
+§4's "what is built today" is its specification.
+
+**The epoch object is the renderer.** docs/13 §4 asks for "a device-epoch object" every GPU
+object belongs to. That already exists and needed no building: a `HeadlessRenderer` owns its
+device and everything compiled or allocated from it, so *tearing down the epoch is dropping
+the renderer*. The callback raises an `AtomicBool` on the context — all it may do, since the
+driver calls it on a thread and at a moment of its own choosing — and `GpuContext::device_lost`
+is how everything else reads it. The flag is per context and shared with every
+`clone_handle`, not a process-wide static: a process holds more than one device (the Viewer's
+and the exporter's), and one dying says nothing about the other.
+
+**The worker rebuilds on the road it already had.** `recover_lost_device` runs at the top of
+every worker turn, before anything else asks the renderer for anything, and is an atomic load
+on all but one turn in a session's life. When the flag is up it builds a replacement through
+the same K-434 turn-taking and the same session settings — deferred flare bakes (K-350), both
+profiler sinks — which is why that setup became one function rather than a block inside
+`worker_loop`. The VRAM tier went with the device, so its budget is applied again and its
+published figures return to zero; the RAM and disk tiers are untouched and are the recovery
+data, exactly as docs/13 §4 intends. The worker then republishes the frame the Viewer was
+showing, because from the frontend's side nothing happened and nothing will be asked for, and
+sends `WorkerResponse::DeviceReset` — one calm status line, no dialogue, nothing to dismiss.
+The export path's renderer recovers by the same rule, by returning its slot to "not yet built".
+
+**A device reset is not a view reset.** How the user is looking at the picture — exposure,
+tone map, transparent background, region of interest, OCIO view — is session state the
+renderer holds and the *device* never owned. It is now kept beside the worker as one
+`ViewerLook` and put back on the replacement, so recovering from a driver reset does not
+silently return the Viewer to full exposure and the built-in transform. It is also the only
+place those four setters are called, so the message that applies a look and the rebuild that
+restores one cannot drift.
+
+**Proved with a real loss, not a set boolean.** `GpuContext::simulate_device_loss` calls
+wgpu's `destroy` and waits for the queue, so the device genuinely goes and the *driver's own*
+callback raises the flag — if the callback were ever unhooked the tests go red rather than the
+recovery quietly stopping. Three of them:
+`a_destroyed_device_reports_itself_lost` (`crates/lumit-gpu/src/lib.rs`, the flag and every
+handle on it), `a_renderer_rebuilt_after_a_device_loss_draws_the_picture_again`
+(`crates/lumit-render/tests/device_loss.rs`, the same pixels from a device that did not exist
+a moment earlier), and `a_lost_device_is_rebuilt_and_the_worker_draws_again`
+(`crates/lumit-bridge/src/api/worker_thread.rs`, one turn of the real recovery step, and the
+look still folded into the frame's name afterwards).
+
+**What is still owed**, unchanged from docs/13 §4: the shader-cache recompile, the DRED
+diagnostics, the repeated-loss CPU fallback, and export items resuming mid-item. And B9's
+five seconds stay unmeasured — a number that needs a real device to lose.
