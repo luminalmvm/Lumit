@@ -98,6 +98,11 @@
     // has got out of it: 0 before it starts, 1 once it has covered everything.
     uniform vec4 u_box;
     uniform float u_reveal;
+    // Milliseconds since the reveal began, and how long the two halves of it
+    // last: the front's own travel, and the settle each pixel gets after the
+    // front has passed it.
+    uniform float u_ms;
+    uniform vec2 u_span;
 
     float hash(vec2 p) {
       return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -244,24 +249,30 @@
       float front = mix(inner, far + trail, 1.0 - pow(1.0 - u_reveal, 3.0));
       float vis = 1.0 - smoothstep(front - trail, front + lead, bdist);
 
-      // Just inside the front the exposure overshoots, and settles again as the
-      // front moves on: the overshoot travels with the edge instead of
-      // happening to the whole screen at once. It runs 260 px back from the
-      // front and falls off on an S-curve the whole way, so it has no edge of
-      // its own at either end - it is brightest where the front is and blends
-      // out into the field behind it. It is faded out over the last fifth of
-      // the reveal, or it would leave a bright corner behind when the front
-      // runs off the canvas.
-      float behind = clamp((front - bdist) / 260.0, 0.0, 1.0);
+      // The exposure overshoots where the front is and settles from there, and
+      // the settle is the pixel's own: it starts when the front reaches that
+      // pixel and takes the same length of time wherever it is on the page.
+      //
+      // Which means working out when the front got here. The front's position
+      // is an eased ramp - the same ramp, inverted - so a pixel's distance
+      // gives the moment it arrived, and everything after that moment is this
+      // pixel settling. It falls off on a square, so it is bright briefly and
+      // dim for a while, which is what an exposure does.
+      //
+      // Doing it this way rather than as a band travelling with the front means
+      // the settle outlives the reveal: the last pixels to be reached are still
+      // coming down long after the front has run off the canvas.
+      float e = clamp((bdist - inner) / (far + trail - inner), 0.0, 1.0);
+      float arrived = (1.0 - pow(1.0 - e, 1.0 / 3.0)) * u_span.x;
+      float age = clamp((u_ms - arrived) / u_span.y, 0.0, 1.0);
       float ring = vis
-        * smoothstep(1.0, 0.0, behind)
-        * (1.0 - smoothstep(0.8, 1.0, u_reveal))
-        // ... and by how much field there is at this pixel to overexpose. The
+        * (1.0 - age) * (1.0 - age)
+        // ... and how much field there is at this pixel to overexpose. The
         // bottom of the band is mostly page by then, and page does not glow:
         // the exposure falls away down there exactly as the field does, patch
         // by patch, rather than lighting up the black it dissolves into.
         * alpha;
-      col = col * (1.0 + ring * 1.6) + vec3(0.30, 0.28, 0.34) * ring * 0.55;
+      col = col * (1.0 + ring * 2.2) + vec3(0.30, 0.28, 0.34) * ring * 0.7;
 
       col = mix(page, col, vis);
 
@@ -271,8 +282,11 @@
 
   // The reveal takes an eighth of a second and a bit, out of the wordmark's box
   // and across the whole canvas. It starts when the lockup lands, whatever this
-  // is set to.
+  // is set to. Each pixel then takes GLOW_MS to come down from the overexposure
+  // the front left it at, which is twice as long again - the front is off the
+  // canvas well before the page has finished settling.
   const REVEAL_MS = 150;
+  const GLOW_MS = 300;
 
   // Two things have to happen before the field appears: it has to have a frame
   // in it, and the wordmark has to be home. They are independent, so the cue
@@ -354,6 +368,8 @@
     const uT = gl.getUniformLocation(prog, "u_t");
     const uBox = gl.getUniformLocation(prog, "u_box");
     const uReveal = gl.getUniformLocation(prog, "u_reveal");
+    const uMs = gl.getUniformLocation(prog, "u_ms");
+    const uSpan = gl.getUniformLocation(prog, "u_span");
 
     // The wordmark's box, measured rather than assumed, in canvas pixels with
     // the y axis the way the shader sees it. Measured on resize and once more
@@ -391,10 +407,12 @@
       gl.uniform2f(uRes, canvas.width, canvas.height);
       gl.uniform1f(uT, now / 1000);
       gl.uniform4f(uBox, box[0], box[1], box[2], box[3]);
-      gl.uniform1f(
-        uReveal,
-        revealAt === null ? 0 : Math.min(1, (now - revealAt) / REVEAL_MS),
-      );
+      gl.uniform2f(uSpan, REVEAL_MS, GLOW_MS);
+      // Before the reveal starts there is no elapsed time to report. Far enough
+      // in the past does for it: nothing is visible yet either way.
+      const since = revealAt === null ? -1e6 : now - revealAt;
+      gl.uniform1f(uMs, since);
+      gl.uniform1f(uReveal, Math.min(1, Math.max(0, since / REVEAL_MS)));
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
@@ -441,7 +459,7 @@
     // page, the movement is the part that is optional. The reveal is already
     // over by the time anything is drawn.
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      revealAt = readyAt - REVEAL_MS;
+      revealAt = readyAt - REVEAL_MS - GLOW_MS;
       draw(performance.now());
       return;
     }
