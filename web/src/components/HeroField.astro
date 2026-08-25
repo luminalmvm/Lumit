@@ -14,16 +14,15 @@
 //
 // The same three hues as the static wash it replaces, so the page's colour does
 // not change - only its stillness. The wash itself is still here, under the
-// canvas, as the whole of the fallback for a browser with no WebGL; the grain
-// rides on top, inside the same faded box, so grain and colour end together.
+// canvas, as the whole of the fallback for a browser with no WebGL. The grain
+// and the fade into the page below are both the shader's work too, for the
+// same reason: a tiled grain repeats, and a ramp between two dark colours
+// bands.
 ---
 
 <div class="field" aria-hidden="true">
-  <div class="wash">
-    <div class="ground"></div>
-    <canvas data-field></canvas>
-  </div>
-  <div class="grain"></div>
+  <div class="ground"></div>
+  <canvas data-field></canvas>
 </div>
 
 <style>
@@ -40,45 +39,39 @@
        rather than over them. */
     z-index: -1;
   }
-  .field > *,
-  .wash > * {
+  .field > * {
     position: absolute;
     inset: 0;
     display: block;
     width: 100%;
     height: 100%;
   }
-  .wash {
-    -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
-  }
-  /* The ground the canvas is drawn over, and the whole of the fallback for a
-     browser that gives us no WebGL: the wash this field replaced. */
+  /* Before the field lights there is nothing behind the wordmark but the page's
+     own black, so the hero has one look on the way in rather than a static wash
+     that is then replaced by a moving one. The wash this field replaced is
+     still here for a browser that gives us no WebGL, but only for that browser
+     - and only that path needs a mask to fade out, because the shader fades
+     itself. */
   .ground {
+    background: var(--color-ink);
+  }
+  .no-gl .ground {
     background:
       radial-gradient(120% 90% at 20% 20%, #2c3f7a 0%, rgba(44, 63, 122, 0) 55%),
       radial-gradient(90% 80% at 85% 30%, #3a2a6b 0%, rgba(58, 42, 107, 0) 55%),
       radial-gradient(100% 90% at 60% 95%, #6a2f3f 0%, rgba(106, 47, 63, 0) 60%),
       #0f1422;
+    -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
   }
-  /* The grain does not share the wash's fade. The fading part of a dark
-     gradient is exactly where it bands worst, so the grain has to be at full
-     strength there; it holds almost to the bottom and then goes in one short
-     step of its own. */
-  .grain {
-    opacity: 0.9;
-    mix-blend-mode: overlay;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.18 0'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
-    -webkit-mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 86%, transparent 100%);
-  }
-  /* The field arrives when its first frame does, not when the page does: the
-     canvas is invisible until the shader has something to show, and then comes
-     up over three frames' worth of time. Until then the static wash underneath
-     is what the visitor sees, so nothing flashes. */
+  /* The field arrives with the wordmark, not with the page: the canvas is
+     invisible until the shader has a frame ready AND the lockup has landed,
+     and then comes up in the time a frame and a half takes at thirty - a
+     lightbulb, not a fade. Until then the hero is black, so nothing flashes
+     and nothing competes with the animation. */
   canvas {
     opacity: 0;
-    transition: opacity 90ms linear;
+    transition: opacity 45ms linear;
   }
   canvas.lit {
     opacity: 1;
@@ -92,7 +85,13 @@
   `;
 
   const FRAG = `
+    // Screen coordinates run past a thousand, which mediump is not required to
+    // represent exactly; every hash here is fed one.
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
     precision mediump float;
+    #endif
     uniform vec2 u_res;
     uniform float u_t;
 
@@ -161,26 +160,52 @@
       // the whole field rather than a single band of it.
       col = mix(col, wine, smoothstep(0.95, 1.35, q.y + r.y) * 0.4);
 
-      // Only the top eases off, under the header. The bottom has no edge to
-      // hide: the whole field is faded out there by its mask.
-      col = mix(ink, col, 0.35 + 0.65 * smoothstep(0.0, 0.14, uv.y));
+      // Grain, drawn rather than tiled. A repeating noise texture is a pattern
+      // however fine it is, and the eye finds it; one random value per pixel
+      // per frame has nothing to find. It goes on the field's own colour, and
+      // only there - never on the black the field fades into.
+      vec2 jitter = vec2(mod(u_t * 91.7, 137.0), mod(u_t * 137.3, 91.0));
+      col += (hash(gl_FragCoord.xy + jitter) - 0.5) * 0.055;
 
-      // A dark, slow gradient quantised to 8 bits a channel bands into visible
-      // arcs. A couple of levels of noise per pixel - fixed rather than
-      // animated, so it cannot shimmer - break the steps into something the
-      // eye reads as smooth. The grain over the top finishes the job.
-      col += (hash(gl_FragCoord.xy) - 0.5) * (2.5 / 255.0);
+      // The bottom of the field dissolves into the page's black rather than
+      // ramping into it. A ramp between two dark colours is where 8 bits a
+      // channel runs out and the gradient steps into visible arcs; a dissolve
+      // has no ramp to quantise - each pixel is either field or page, and the
+      // proportion is what changes down the band. The dice are rolled again
+      // every frame, so it reads as the field thinning out.
+      vec3 page = vec3(0.043, 0.047, 0.055);  // #0b0c0e, the page itself
+      float fade = smoothstep(0.0, 0.42, uv.y);
+      float d = hash(gl_FragCoord.xy * 1.37 + jitter.yx);
+      col = mix(page, col, step(1.0 - fade, d));
 
       gl_FragColor = vec4(col, 1.0);
     }
   `;
 
-  // Nothing here runs while the page is still loading. Compiling a shader and
+  // Two things have to happen before the field is visible: it has to have a
+  // frame in it, and the wordmark has to be home. They are independent, so each
+  // records itself and whichever finishes last does the lighting.
+  //
+  // The listener is set up here, at the top of the module, and not inside the
+  // deferred start below - the wordmark lands about a second and a third in,
+  // which is very likely before the browser ever calls us idle.
+  let cued = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let lightUp = () => {};
+  const cue = () => {
+    cued = true;
+    lightUp();
+  };
+  document.addEventListener("wordmark:home", cue, { once: true });
+  // No wordmark on the page, or a wordmark that never got going: the field is
+  // not held hostage to an event that is not coming.
+  setTimeout(cue, 2600);
+
+  // Nothing else runs while the page is still loading. Compiling a shader and
   // drawing the first frame in the middle of a page load is what made the
   // field stutter as it came up: it was competing with the fonts, the images
   // and the layout for the same main thread. Waiting for load and then for the
-  // browser to say it is idle costs a few hundred milliseconds of static wash,
-  // which nobody notices, and buys a first frame that lands cleanly.
+  // browser to say it is idle costs a few hundred milliseconds of black, which
+  // nobody notices, and buys a first frame that lands cleanly.
   const whenIdle = (fn: () => void) => {
     const idle = (window as any).requestIdleCallback as
       | ((cb: () => void, o?: { timeout: number }) => void)
@@ -193,9 +218,14 @@
     const canvas = document.querySelector<HTMLCanvasElement>("[data-field]");
     const gl = canvas?.getContext("webgl", { antialias: false, alpha: false });
 
-    // No WebGL, no canvas: the static wash underneath is the whole fallback.
-    if (!canvas || !gl) {
+    // No WebGL: the canvas goes, and the ground below it becomes the static
+    // wash rather than staying black.
+    const giveUp = () => {
       canvas?.remove();
+      document.querySelector(".field")?.classList.add("no-gl");
+    };
+    if (!canvas || !gl) {
+      giveUp();
       return;
     }
 
@@ -211,7 +241,7 @@
     gl.linkProgram(prog);
 
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      canvas.remove();
+      giveUp();
       return;
     }
 
@@ -228,19 +258,18 @@
     const uRes = gl.getUniformLocation(prog, "u_res");
     const uT = gl.getUniformLocation(prog, "u_t");
 
-    // The canvas is transparent until there is a frame in it, and then fades up
-    // over the 90 ms the stylesheet gives it. Lighting it from inside the frame
-    // that drew is what makes the fade read as the field switching itself on.
     const draw = (t: number) => {
       gl.uniform2f(uRes, canvas.width, canvas.height);
       gl.uniform1f(uT, t);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      canvas.classList.add("lit");
     };
 
+    // One canvas pixel per CSS pixel. The field alone would be happy at half
+    // that and scaled up, but grain that has been through a bilinear resize is
+    // mush, and so is a dissolve.
     const resize = () => {
-      canvas.width = Math.max(1, Math.round(canvas.clientWidth * 0.5));
-      canvas.height = Math.max(1, Math.round(canvas.clientHeight * 0.5));
+      canvas.width = Math.max(1, canvas.clientWidth);
+      canvas.height = Math.max(1, canvas.clientHeight);
       gl.viewport(0, 0, canvas.width, canvas.height);
     };
     new ResizeObserver(() => {
@@ -249,8 +278,13 @@
     }).observe(canvas);
     resize();
     // The first frame is drawn here rather than left to the observer above, so
-    // the field lights up even if that callback never comes.
+    // the field is ready even if that callback never comes. The clock is
+    // already running by the time anyone sees it, which is what makes the fade
+    // read as the field switching on mid-motion rather than starting from a
+    // standstill.
     draw(0);
+    lightUp = () => canvas.classList.add("lit");
+    if (cued) lightUp();
 
     // Reduced motion gets the field, held still - the colour is part of the
     // page, the movement is the part that is optional.

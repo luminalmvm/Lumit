@@ -129,7 +129,17 @@ const { class: klass } = Astro.props;
         "translate(" + C.CX + " " + C.CY + ") scale(" + gs.toFixed(3) + ")");
       glow.setAttribute("opacity", (0.9*Math.pow(Math.min(1, dd/C.DMAX), 0.5)).toFixed(3));
       letters.setAttribute("opacity", t >= 45.5/46 ? 1 : t >= 44/46 ? ((t-44/46)*46/1.5).toFixed(3) : 0);
+
+      // The lockup is home by the second-to-last of the reference's 46 frames.
+      // Anything on the page that wants to arrive with the wordmark rather than
+      // before it waits for this, so the moment stays defined here, next to the
+      // timing it comes from, instead of being guessed at as a delay elsewhere.
+      if (!fired && t >= 45/46) {
+        fired = true;
+        document.dispatchEvent(new Event("wordmark:home"));
+      }
     }
+    var fired = false;
 
     apply(0);
     // The launch is stretched by 300ms: a power ramp that starts near-still and
