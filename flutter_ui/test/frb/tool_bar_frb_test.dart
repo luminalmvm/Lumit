@@ -229,6 +229,51 @@ void main() {
           reason: 'the word itself stays grey — the tick is the state');
     });
 
+    /// **The user's own workspaces are on the strip too** (docs/07 §1.4, item
+    /// 7.19), after the presets and drawn by exactly the same rules — a
+    /// workspace somebody saved is a workspace, not a lesser kind of one.
+    testWidgets('the strip lists the user\'s own after the presets',
+        (tester) async {
+      final p = await mount(tester);
+      p.uiState.workspace.applyWorkspacePreset(WorkspacePreset.colour);
+      p.uiState.workspace.saveWorkspaceAs('Grading');
+      addTearDown(() => p.uiState.workspace.deleteUserWorkspace('Grading'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('GRADING'), findsOneWidget,
+          reason: 'saved names join the strip as mono-caps kickers');
+      // After the last preset, which is where the chords count them from.
+      final last = tester.getRect(find.byKey(
+          ValueKey<String>('workspace-${WorkspacePreset.values.last.name}')));
+      final saved =
+          tester.getRect(find.byKey(const ValueKey('workspace-user-Grading')));
+      expect(saved.left, greaterThan(last.left));
+
+      // And it is the one ticked, because saving switches to what was saved.
+      final tick = (tester
+              .widget<Container>(find
+                  .descendant(
+                    of: find.byKey(const ValueKey('workspace-user-Grading')),
+                    matching: find.byType(Container),
+                  )
+                  .last)
+              .decoration as BoxDecoration?)
+          ?.border as Border?;
+      expect(tick?.bottom.color, LumitTheme.dark().accent);
+
+      await tester.tap(find.byKey(const ValueKey('workspace-edit')));
+      await tester.pump();
+      expect(p.uiState.workspace.activeUserWorkspace, isNull,
+          reason: 'picking a preset unticks the saved one');
+
+      await tester.tap(find.byKey(const ValueKey('workspace-user-Grading')));
+      await tester.pump();
+      expect(p.uiState.workspace.activeUserWorkspace, 'Grading');
+      expect(panelsIn(p.uiState.workspace.dock),
+          panelsIn(presetLayout(WorkspacePreset.colour)),
+          reason: 'and it puts back the arrangement it was saved from');
+    });
+
     testWidgets('the workspace strip rearranges the panels', (tester) async {
       final p = await mount(tester);
       expect(p.uiState.workspace.activePreset, isNull,

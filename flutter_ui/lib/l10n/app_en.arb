@@ -9508,5 +9508,106 @@
   "tipViewerSnapshotNone": "No snapshot yet",
   "@tipViewerSnapshotNone": {
     "description": "Tooltip on the Viewer bar's show-snapshot mark while it is muted, saying why it does nothing: nothing has been photographed to show. Under five words."
+  },
+  "fileTypeWorkspace": "Lumit workspace",
+  "@fileTypeWorkspace": {
+    "description": "A file type in the system's file dialogues: a .lumworkspace panel arrangement, the workspace's counterpart of the shared theme file."
+  },
+  "menuSaveWorkspaceAs": "Save as new workspace…",
+  "@menuSaveWorkspaceAs": {
+    "description": "Row in Window > Workspace. Saves the arrangement on screen under a name of the user's own and switches to it."
+  },
+  "menuRenameWorkspace": "Rename workspace…",
+  "@menuRenameWorkspace": {
+    "description": "Row in Window > Workspace. Renames the user's own workspace that is currently in force; disabled under a shipped preset."
+  },
+  "menuDeleteWorkspace": "Delete workspace",
+  "@menuDeleteWorkspace": {
+    "description": "Row in Window > Workspace. Forgets the user's own workspace that is currently in force; disabled under a shipped preset. The panels on screen do not move."
+  },
+  "menuExportWorkspace": "Export workspace…",
+  "@menuExportWorkspace": {
+    "description": "Row in Window > Workspace. Writes the workspace in force out as a .lumworkspace file that can be sent to somebody."
+  },
+  "menuImportWorkspace": "Import workspace…",
+  "@menuImportWorkspace": {
+    "description": "Row in Window > Workspace. Reads a .lumworkspace file somebody sent and adds it to the user's own."
+  },
+  "workspaceSaveAsTitle": "Name this workspace",
+  "@workspaceSaveAsTitle": {
+    "description": "Title of the small dialogue that asks what a newly saved workspace is called."
+  },
+  "workspaceRenameTitle": "Rename this workspace",
+  "@workspaceRenameTitle": {
+    "description": "Title of the dialogue that renames one of the user's own workspaces."
+  },
+  "workspaceNewName": "My workspace",
+  "@workspaceNewName": {
+    "description": "The name suggested when saving an arrangement as a workspace for the first time."
+  },
+  "workspaceSaved": "{name} saved.",
+  "@workspaceSaved": {
+    "description": "Status-line notice after saving a workspace. {name} is its name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceRenamedTo": "Renamed to {name}.",
+  "@workspaceRenamedTo": {
+    "description": "Status-line notice after renaming a workspace. {name} is the new name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceDeleted": "{name} deleted.",
+  "@workspaceDeleted": {
+    "description": "Status-line notice after deleting a workspace. {name} is its name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceExported": "{name} exported.",
+  "@workspaceExported": {
+    "description": "Status-line notice after writing a workspace out as a file. {name} is its name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceImported": "{name} imported, and selected.",
+  "@workspaceImported": {
+    "description": "Status-line notice after reading a workspace file in. {name} is its name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceNameTaken": "A workspace was already called {wanted}, so this one is {name}.",
+  "@workspaceNameTaken": {
+    "description": "Status-line notice when a save, rename or import collided with a workspace of the same name and Lumit picked a free one instead.",
+    "placeholders": {
+      "wanted": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "workspaceFileNotAWorkspace": "That file is not a Lumit workspace.",
+  "@workspaceFileNotAWorkspace": {
+    "description": "Status-line notice when the file chosen for Import workspace is not a workspace at all."
+  },
+  "workspaceFileUnwritable": "That file could not be written.",
+  "@workspaceFileUnwritable": {
+    "description": "Status-line notice when exporting a workspace failed to write the chosen file."
   }
 }

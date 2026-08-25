@@ -7552,6 +7552,40 @@ copy…** inside the colour editor, which branches a theme without first
 overwriting it. The picker also draws eight swatches of the selected theme beside
 its name, so you can recognise a theme without applying it.
 
+### Workspaces you save yourself
+
+Lumit ships six arrangements of panels — Edit, Effects, Nodes, Colour, Audio,
+Retiming — and they are the six names along the right-hand end of the toolbar.
+A **user workspace** is a seventh, or an eighth: the arrangement you happen to be
+looking at, saved under a name of your own, from Window ▸ Workspace ▸ *Save as
+new workspace…*. It then joins the strip after the shipped six and behaves
+exactly like them — you click the name and the panels move, and nothing closes,
+reloads or recalculates.
+
+- **Each one is its own small file.** They live in `workspaces/` beside the
+  settings file (`%APPDATA%\lumit\` on Windows), one readable JSON document each:
+  what it is, a version, the name, and the panel tree. Never in the project —
+  a project you send somebody carries the *edit*, not the shape of your screen.
+  Because the stored file and the shared file are the same document, **Export
+  workspace…** is a copy of it and **Import workspace…** reads one straight back.
+- **The name is the identity**, exactly as a theme's is, so nothing overwrites
+  something you already have: saving or importing a second "Grading" gives you
+  "Grading 2" and says so in the status line.
+- **A workspace you are in keeps what you drag it into.** While one of your own
+  is ticked, moving a splitter or re-docking a panel is written back to its file.
+  Under a shipped preset it is not — a preset's factory layout is not yours to
+  overwrite, so your dragging changes the arrangement on screen and leaves Edit
+  as Edit.
+- **`Alt+Shift+1…9` picks by position on the strip**: the six presets first, then
+  your own in name order, so `Alt+Shift+7` is the first workspace you saved and
+  stays the same one on the next launch.
+
+One deliberate gap, shared with the presets: after a restart **nothing is
+ticked**. What Lumit remembers across launches is the arrangement itself, which
+you are free to drag about, so a ticked name could claim a layout the panels no
+longer match. Click a name and the tick — and the write-back — come straight
+back.
+
 ### The safe triangle under a submenu (K-318)
 
 Open a menu, hover a row with an arrow on it, and a second menu flies out to the

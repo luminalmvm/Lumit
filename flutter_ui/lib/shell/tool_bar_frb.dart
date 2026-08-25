@@ -614,44 +614,81 @@ class _WorkspaceStrip extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final preset in WorkspacePreset.values)
-          LumitTooltip(
-            message: l10n.tipPanelLayout,
-            child: HouseButton(
-              key: ValueKey<String>('workspace-${preset.name}'),
-              frameless: true,
-              // The padding is what fits the name into the strip, and the strip
-              // is 14px shorter than it was (K-230): at 12 above and below,
-              // 24px of padding in a 30px band left the words with five and
-              // they were squeezed out of sight, leaving a button that could be
-              // pressed and not read (K-236).
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              active: round && preset == active,
-              onPressed: () => ui.workspace.applyWorkspacePreset(preset),
-              // Mono-caps kickers with an **accent tick under the one in
-              // force** (docs/15 §12A.1, §3.1 — the workspace tabs are what
-              // "the active tab tick" means). The word itself stays grey: the
-              // tick is the state, so the strip reads as five names with one
-              // underlined rather than as one coloured word. Under Round the
-              // filled pill above carries the state instead and there is no
-              // tick to draw under a fill.
-              child: Container(
-                padding: const EdgeInsets.only(bottom: 2),
-                decoration: preset == active && !round
-                    ? BoxDecoration(
-                        border: Border(bottom: BorderSide(color: t.accent)))
-                    : null,
-                child: Text(
-                  preset.title.toUpperCase(),
-                  style: preset == active
-                      ? (round
-                          ? t.kicker.copyWith(color: t.surface0)
-                          : t.kickerOn)
-                      : t.kicker,
-                ),
-              ),
-            ),
+          _StripEntry(
+            key: ValueKey<String>('workspace-${preset.name}'),
+            label: preset.title,
+            active: preset == active,
+            round: round,
+            onPressed: () => ui.workspace.applyWorkspacePreset(preset),
+          ),
+        // The user's own, after the presets and in the same order the chords
+        // count (docs/07 §1.4). Drawn by exactly the same rules — a workspace
+        // somebody saved is a workspace, not a lesser kind of one.
+        for (final saved in ui.workspace.userWorkspaces)
+          _StripEntry(
+            key: ValueKey<String>('workspace-user-${saved.name}'),
+            label: saved.name,
+            active: saved.name == ui.workspace.activeUserWorkspace,
+            round: round,
+            onPressed: () => ui.workspace.applyUserWorkspace(saved.name),
           ),
       ],
+    );
+  }
+}
+
+/// One name on the workspace strip — a shipped preset or one of the user's
+/// own, drawn identically because they are the same kind of thing.
+///
+/// Mono-caps kickers with an **accent tick under the one in force** (docs/15
+/// §12A.1, §3.1 — the workspace tabs are what "the active tab tick" means).
+/// The word itself stays grey: the tick is the state, so the strip reads as
+/// names with one underlined rather than as one coloured word. Under Round the
+/// filled pill (K-394, §12.1) carries the state instead, and there is no tick
+/// to draw under a fill.
+///
+/// The padding is what fits the name into the strip, and the strip is 14px
+/// shorter than it was (K-230): at 12 above and below, 24px of padding in a
+/// 30px band left the words with five and they were squeezed out of sight,
+/// leaving a button that could be pressed and not read (K-236).
+class _StripEntry extends StatelessWidget {
+  final String label;
+  final bool active;
+  final bool round;
+  final VoidCallback onPressed;
+
+  const _StripEntry({
+    super.key,
+    required this.label,
+    required this.active,
+    required this.round,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return LumitTooltip(
+      message: l10n.tipPanelLayout,
+      child: HouseButton(
+        frameless: true,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        active: round && active,
+        onPressed: onPressed,
+        child: Container(
+          padding: const EdgeInsets.only(bottom: 2),
+          decoration: active && !round
+              ? BoxDecoration(
+                  border: Border(bottom: BorderSide(color: t.accent)))
+              : null,
+          child: Text(
+            label.toUpperCase(),
+            style: active
+                ? (round ? t.kicker.copyWith(color: t.surface0) : t.kickerOn)
+                : t.kicker,
+          ),
+        ),
+      ),
     );
   }
 }

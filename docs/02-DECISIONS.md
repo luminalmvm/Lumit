@@ -16416,3 +16416,42 @@ one, and it is unreachable today: only transform and effect properties can carry
 `UncuttableClip` therefore survives, saying "There is no cut to make at that moment" instead of
 "That eased ramp cannot be cut here yet", and the razor goes on answering both with silence —
 a dialogue for clicking slightly wrong would be worse than doing nothing.
+
+## K-574 — A workspace you save is a file of its own, and the strip counts it
+
+**Status: DECIDED (2026-08-25).** The owed half of [07-UI-SPEC.md](07-UI-SPEC.md) §1.4 (item
+7.19): *Save as new workspace…*, rename, delete, export and import, the strip listing what the
+user has saved, and `Alt+Shift+1…9` reaching it.
+
+**One file each, beside the settings, never in the project.** `%APPDATA%\lumit\workspaces\`
+holds one `.lumworkspace` document per saved arrangement — format marker, version, name, panel
+tree — which is what §1.4 asks for and what makes sharing free: the stored file *is* the
+exported file, so Export is a copy and Import is a read, with no second format to keep in step
+(the shared theme's shape, K-298). The settings file itself is untouched, so a folder of
+workspaces survives a settings file being lost, and vice versa. The project keeps carrying its
+own last arrangement as it always has (K-245) — a workspace and a session are different
+questions and neither answers the other.
+
+**Name order, not a saved order.** §1.4 says user workspaces *may* be reordered; they are
+listed alphabetically instead. The store is a folder, so an insertion order would have to be a
+number written into every file and kept in step across rename, delete and import, to answer a
+question the alphabet already answers — and the alphabet is what makes `Alt+Shift+7` reach the
+same workspace on the next launch. Reordering by hand can be added the day somebody wants it,
+as an index field the reader sorts by when it is present.
+
+**The name is the identity**, as a theme's is (K-298): every route that adds one asks for a
+free name first, so a second *Grading* lands as *Grading 2* and the status line says so. An
+import can never overwrite an arrangement somebody made.
+
+**A user workspace in force keeps what it is dragged into**, which is §1.4's "layout changes
+persist automatically to the active workspace": the two layout funnels (`Workspace.touch` and
+`saveLayout`) write the tree back to its file. A **preset** in force does not — a factory
+layout is not the user's to overwrite, so dragging under Edit rearranges the screen and leaves
+Edit as Edit.
+
+**The tick stays session-only**, following the preset convention exactly: after a restart the
+strip ticks nothing, because what persists is the arrangement, which the user is free to drag
+about, and a name ticked over a layout the panels no longer match would be a lie. Clicking a
+name restores both the tick and the write-back. The chords count strip slots, presets first
+(`workspace.switch.N`, already in the engine's keymap); a slot past the end of the strip is
+left unhandled rather than swallowed, so the chord still reaches whatever else wants it.

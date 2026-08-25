@@ -7,6 +7,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
 import '../theme/theme_file.dart' show themeFileExtension;
+import 'workspace.dart' show workspaceFileExtension;
 
 /// The `.lum` project type group (docs/10 §1). The egui open filter also lists
 /// the pre-rename `kir` leftover; a fresh frontend only ever offers `.lum`.
@@ -137,6 +138,27 @@ Future<String?> pickThemeToOpen() async {
 Future<String?> pickThemeSaveLocation(String suggestedName) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_themeGroup()],
+    suggestedName: suggestedName,
+  );
+  return location?.path;
+}
+
+/// The shared-workspace type group (docs/07 §1.4), the arrangement's
+/// counterpart of the theme's.
+XTypeGroup _workspaceGroup() => XTypeGroup(
+    label: l10n.fileTypeWorkspace, extensions: const [workspaceFileExtension]);
+
+/// Pick a workspace file to import, or null when the dialogue was cancelled.
+Future<String?> pickWorkspaceToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_workspaceGroup()]);
+  return file?.path;
+}
+
+/// Choose where to write a workspace, defaulting the name to its own, or null
+/// when cancelled.
+Future<String?> pickWorkspaceSaveLocation(String suggestedName) async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [_workspaceGroup()],
     suggestedName: suggestedName,
   );
   return location?.path;

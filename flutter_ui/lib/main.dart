@@ -1088,6 +1088,9 @@ class LumitUiState extends ChangeNotifier {
   /// against the open project, which is what makes two projects able to be
   /// arranged differently (K-245).
   void saveLayout() {
+    // A workspace of the user's own keeps the arrangement they drag it into
+    // (docs/07 §1.4); a preset's factory layout is not theirs to overwrite.
+    workspace.rememberActiveWorkspaceLayout();
     workspace.save();
     rememberSession();
   }
@@ -2912,6 +2915,13 @@ class _LumitAppViewState extends State<LumitAppView> {
           );
           state.notifyDocumentChanged();
         }
+      // `Alt+Shift+1…9` switches workspace by its position on the strip
+      // (docs/07 §15) — the shipped presets first, then the user's own. A slot
+      // past the end of the strip is left unhandled: it is a key that has not
+      // been given a meaning yet, not a failure to report.
+      case final id when id.startsWith('workspace.switch.'):
+        final slot = int.tryParse(id.substring('workspace.switch.'.length));
+        handled = slot != null && ui.workspace.switchToWorkspaceSlot(slot);
       case final id when id.startsWith('marker.goto.'):
         // Nothing bound to that digit yet is not a failure to report — it is a
         // key that has not been given a meaning. Left unhandled so it still

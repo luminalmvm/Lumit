@@ -23,6 +23,8 @@
 // the menus too, and a row whose action has no binding simply shows nothing.
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -44,7 +46,7 @@ import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
 import '../state/viewer_view.dart';
-import '../state/workspace.dart' show Workspace;
+import '../state/workspace.dart' show UserWorkspace, Workspace;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
@@ -59,7 +61,102 @@ import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
+import 'theme_name_dialog.dart';
 import 'update_dialog_frb.dart';
+
+/// The machinery half of Window ▸ Workspace (docs/07 §1.4): saving the
+/// arrangement on screen under a name of the user's own, and renaming,
+/// deleting, exporting and importing what they have saved.
+///
+/// The four that act on a saved workspace are disabled unless one is in force —
+/// a preset's factory layout is not the user's to rename or delete. Every
+/// outcome is said in the status line rather than in a dialogue of its own:
+/// these are quiet acts, and the strip shows the result.
+List<MenuEntry> _userWorkspaceRows(
+  BuildContext context,
+  LumitState app,
+  LumitUiState ui,
+) {
+  final workspace = ui.workspace;
+  final active = workspace.activeUserWorkspace;
+
+  Future<void> saveAs() async {
+    // The theme's name dialogue, because a name is a name: one small field
+    // with a suggestion in it, and blank reads as cancel.
+    final asked = await askThemeName(context,
+        title: l10n.workspaceSaveAsTitle, suggested: l10n.workspaceNewName);
+    if (asked == null) return;
+    final wanted = asked.trim();
+    final name = workspace.saveWorkspaceAs(wanted);
+    app.postNotice(name == wanted
+        ? l10n.workspaceSaved(name)
+        : l10n.workspaceNameTaken(wanted, name));
+  }
+
+  Future<void> rename() async {
+    if (active == null) return;
+    final asked = await askThemeName(context,
+        title: l10n.workspaceRenameTitle,
+        suggested: active,
+        confirm: l10n.rename);
+    if (asked == null) return;
+    final now = workspace.renameUserWorkspace(active, asked);
+    if (now == null || now == active) return;
+    app.postNotice(now == asked.trim()
+        ? l10n.workspaceRenamedTo(now)
+        : l10n.workspaceNameTaken(asked.trim(), now));
+  }
+
+  Future<void> export() async {
+    if (active == null) return;
+    final saved = workspace.userWorkspaces.firstWhere((w) => w.name == active);
+    final path = await pickWorkspaceSaveLocation(
+        Workspace.userWorkspaceFile(active).uri.pathSegments.last);
+    if (path == null) return;
+    try {
+      await File(path).writeAsString(saved.encode());
+      app.postNotice(l10n.workspaceExported(active));
+    } catch (_) {
+      app.postNotice(l10n.workspaceFileUnwritable, error: true);
+    }
+  }
+
+  Future<void> import() async {
+    final path = await pickWorkspaceToOpen();
+    if (path == null) return;
+    UserWorkspace? read;
+    try {
+      read =
+          UserWorkspace.fromJson(jsonDecode(await File(path).readAsString()));
+    } catch (_) {
+      read = null;
+    }
+    if (read == null) {
+      app.postNotice(l10n.workspaceFileNotAWorkspace, error: true);
+      return;
+    }
+    final wanted = read.name;
+    final name = workspace.importUserWorkspace(read);
+    app.postNotice(name == wanted
+        ? l10n.workspaceImported(name)
+        : l10n.workspaceNameTaken(wanted, name));
+  }
+
+  return [
+    MenuEntry(l10n.menuSaveWorkspaceAs, saveAs),
+    MenuEntry(l10n.menuRenameWorkspace, active == null ? null : rename),
+    MenuEntry(
+        l10n.menuDeleteWorkspace,
+        active == null
+            ? null
+            : () {
+                workspace.deleteUserWorkspace(active);
+                app.postNotice(l10n.workspaceDeleted(active));
+              }),
+    MenuEntry(l10n.menuExportWorkspace, active == null ? null : export),
+    MenuEntry(l10n.menuImportWorkspace, import),
+  ];
+}
 
 /// One row of a menu: a label with an action, a submenu, or a divider.
 ///
@@ -863,6 +960,14 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 preset.title, () => ui.workspace.applyWorkspacePreset(preset),
                 checked: ui.workspace.activePreset == preset),
+          // The user's own, under the presets, in the strip's own order.
+          if (ui.workspace.userWorkspaces.isNotEmpty) MenuEntry.divider(),
+          for (final saved in ui.workspace.userWorkspaces)
+            MenuEntry(
+                saved.name, () => ui.workspace.applyUserWorkspace(saved.name),
+                checked: ui.workspace.activeUserWorkspace == saved.name),
+          MenuEntry.divider(),
+          ..._userWorkspaceRows(context, app, ui),
           MenuEntry.divider(),
           MenuEntry(l10n.menuResetWorkspace, ui.resetLayout),
         ]),

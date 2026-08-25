@@ -209,6 +209,69 @@ Map<String, List<double>> _regionsFromJson(Object? raw) {
   return out;
 }
 
+/// The extension one of the user's own workspaces is written under (docs/07
+/// §1.4). Lumit's own rather than a plain `.json`, so the picker can offer just
+/// workspaces — the same reasoning as the shared theme's.
+const String workspaceFileExtension = 'lumworkspace';
+
+/// What the file says it is. Checked on read, so a stray `.json` renamed to
+/// `.lumworkspace` is refused rather than half-loaded.
+const String workspaceFileFormat = 'lumit-workspace';
+
+/// One of the user's own saved arrangements (docs/07 §1.4): a name and the
+/// panel tree under it.
+///
+/// **Stored per user, never in the project** — one human-readable file each in
+/// `workspaces/` beside the settings, so a workspace can be sent to somebody.
+/// The stored file and the exported file are the same document, which is what
+/// makes *Export* a copy rather than a second format to keep in step.
+///
+/// The tree is held as raw JSON for the same reason [SavedSession.dock] is: a
+/// dock tree is mutated in place as panels are dragged, so a parsed one would
+/// quietly change under the name that saved it.
+class UserWorkspace {
+  final String name;
+  final Map<String, dynamic> dock;
+
+  const UserWorkspace(this.name, this.dock);
+
+  Map<String, dynamic> toJson() => {
+        'format': workspaceFileFormat,
+        'version': 1,
+        'name': name,
+        'dock': dock,
+      };
+
+  /// The document as text — indented, with a trailing newline, because this is
+  /// a file people are meant to be able to read and diff.
+  String encode() =>
+      '${const JsonEncoder.withIndent('  ').convert(toJson())}\n';
+
+  /// Read one back, or null when [raw] is not a workspace at all. Never
+  /// throws: picking the wrong file is a normal thing to do, and the caller
+  /// says so in a sentence rather than falling over.
+  static UserWorkspace? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final format = raw['format'];
+    if (format is String && format != workspaceFileFormat) return null;
+    final name = raw['name'];
+    final dock = raw['dock'];
+    if (name is! String || name.trim().isEmpty || dock is! Map) return null;
+    final tree = dock.cast<String, dynamic>();
+    // An arrangement that does not parse is not an arrangement. Checked here
+    // rather than on use, so a broken file is refused at the door instead of
+    // becoming a workspace that does nothing when it is picked.
+    try {
+      if (DockNode.fromJson(tree) is! DockSplit) return null;
+    } catch (_) {
+      // `DockNode.fromJson` throws on a node it does not recognise, which a
+      // hand-edited or truncated file is full of. Refused, not raised.
+      return null;
+    }
+    return UserWorkspace(name.trim(), tree);
+  }
+}
+
 /// Where a floating window was left (K-242): how far it was dragged from the
 /// centre of the app window, and how big it was made when it is one of the
 /// resizable ones. Stored as an offset from centre rather than as a corner
@@ -695,6 +758,7 @@ class Workspace extends ChangeNotifier {
     // The default arrangement is Edit's (see `presetLayout`), so the strip
     // ticks Edit rather than nothing after a reset.
     activePreset = WorkspacePreset.edit;
+    activeUserWorkspace = null;
     notifyListeners();
     save();
   }
@@ -704,6 +768,7 @@ class Workspace extends ChangeNotifier {
   void applyWorkspacePreset(WorkspacePreset preset) {
     dock = presetLayout(preset);
     activePreset = preset;
+    activeUserWorkspace = null;
     notifyListeners();
     save();
   }
@@ -717,7 +782,201 @@ class Workspace extends ChangeNotifier {
   /// one the panels may no longer match.
   WorkspacePreset? activePreset;
 
-  void touch() => settingsChanged();
+  // --- The user's own workspaces (docs/07 §1.4) ----------------------------
+
+  /// The arrangements the user has saved, in name order — which is the order
+  /// the strip lists them in, after the shipped presets.
+  ///
+  /// Name order rather than the order they were saved in, because the store is
+  /// a folder of files: an insertion order would have to be a number written
+  /// into each of them, kept in step across rename, delete and import, to
+  /// answer a question the alphabet already answers. Name order also means
+  /// `Alt+Shift+7` reaches the same workspace on the next launch.
+  final List<UserWorkspace> userWorkspaces = [];
+
+  /// Which of the user's own the arrangement was last set to, for the strip to
+  /// tick and for a drag to be written back to.
+  ///
+  /// Session-only, exactly as [activePreset] is and for the same reason: what
+  /// persists is the arrangement itself, which the user is free to drag about,
+  /// so a name ticked after a restart could claim a layout the panels no
+  /// longer match.
+  String? activeUserWorkspace;
+
+  /// The folder the user's workspaces live in — `%APPDATA%\lumit\workspaces`
+  /// in the application, a folder under [storeOverride] in a test.
+  static Directory userWorkspaceDir() => Directory(
+        '${storeFile().parent.path}${Platform.pathSeparator}workspaces',
+      );
+
+  /// The file [name] is kept in. The name is escaped rather than replaced, so
+  /// two workspaces whose names differ only in punctuation cannot land on one
+  /// file — and an ordinary name still reads as itself in the folder.
+  static File userWorkspaceFile(String name) => File(
+        '${userWorkspaceDir().path}${Platform.pathSeparator}'
+        '${Uri.encodeComponent(name).replaceAll('%20', ' ')}'
+        '.$workspaceFileExtension',
+      );
+
+  /// Read the folder. Best-effort throughout: one unreadable file costs its
+  /// workspace, never the launch.
+  void loadUserWorkspaces() {
+    userWorkspaces.clear();
+    try {
+      final dir = userWorkspaceDir();
+      if (!dir.existsSync()) return;
+      for (final entry in dir.listSync()) {
+        if (entry is! File) continue;
+        try {
+          final read = UserWorkspace.fromJson(
+            jsonDecode(entry.readAsStringSync()),
+          );
+          if (read != null && !userWorkspaces.any((w) => w.name == read.name)) {
+            userWorkspaces.add(read);
+          }
+        } catch (_) {}
+      }
+      _sortUserWorkspaces();
+    } catch (_) {}
+  }
+
+  void _sortUserWorkspaces() =>
+      userWorkspaces.sort((a, b) => a.name.compareTo(b.name));
+
+  static void _writeUserWorkspace(UserWorkspace w) {
+    try {
+      final f = userWorkspaceFile(w.name);
+      f.parent.createSync(recursive: true);
+      f.writeAsStringSync(w.encode());
+    } catch (_) {}
+  }
+
+  /// A name none of the user's workspaces holds: [wanted] when it is free,
+  /// else the same with a number after it. The name is the identity here — the
+  /// strip shows it and the store files by it — so every route that adds one
+  /// comes through here rather than overwriting somebody's arrangement.
+  String availableWorkspaceName(String wanted) {
+    final base = wanted.trim();
+    var tried = base;
+    for (var n = 2; userWorkspaces.any((w) => w.name == tried); n++) {
+      tried = '$base $n';
+    }
+    return tried;
+  }
+
+  /// Save the arrangement on screen under a name of the user's own (*Save as
+  /// new workspace…*) and switch to it. Returns the name it landed under,
+  /// which differs from [wanted] when that was taken.
+  String saveWorkspaceAs(String wanted) {
+    final saved = UserWorkspace(availableWorkspaceName(wanted), dock.toJson());
+    userWorkspaces.add(saved);
+    _sortUserWorkspaces();
+    _writeUserWorkspace(saved);
+    activePreset = null;
+    activeUserWorkspace = saved.name;
+    notifyListeners();
+    return saved.name;
+  }
+
+  /// Rearrange to one of the user's own. Only the arrangement changes, exactly
+  /// as for a preset: nothing closes, reloads or re-evaluates.
+  void applyUserWorkspace(String name) {
+    final at = userWorkspaces.indexWhere((w) => w.name == name);
+    if (at < 0) return;
+    final parsed = DockNode.fromJson(userWorkspaces[at].dock);
+    if (parsed is! DockSplit) return;
+    dock = parsed;
+    activePreset = null;
+    activeUserWorkspace = name;
+    notifyListeners();
+    save();
+  }
+
+  /// Rename one of the user's own, keeping the selection on it. Returns the
+  /// name it now has — [to] when that was free, else [to] with a number after
+  /// it — or null when [from] is not one of them.
+  String? renameUserWorkspace(String from, String to) {
+    final at = userWorkspaces.indexWhere((w) => w.name == from);
+    if (at < 0) return null;
+    final wanted = to.trim();
+    if (wanted.isEmpty || wanted == from) return from;
+    final renamed =
+        UserWorkspace(availableWorkspaceName(wanted), userWorkspaces[at].dock);
+    userWorkspaces[at] = renamed;
+    _sortUserWorkspaces();
+    _deleteUserWorkspaceFile(from);
+    _writeUserWorkspace(renamed);
+    if (activeUserWorkspace == from) activeUserWorkspace = renamed.name;
+    notifyListeners();
+    return renamed.name;
+  }
+
+  /// Forget one of the user's own. The arrangement on screen stays as it is —
+  /// deleting the name it was saved under is not a reason to move the panels.
+  void deleteUserWorkspace(String name) {
+    if (!userWorkspaces.any((w) => w.name == name)) return;
+    userWorkspaces.removeWhere((w) => w.name == name);
+    _deleteUserWorkspaceFile(name);
+    if (activeUserWorkspace == name) activeUserWorkspace = null;
+    notifyListeners();
+  }
+
+  static void _deleteUserWorkspaceFile(String name) {
+    try {
+      final f = userWorkspaceFile(name);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+  }
+
+  /// Take an imported workspace in. Returns the name it landed under, which
+  /// differs from the file's when one of the user's own already had it — an
+  /// import never overwrites an arrangement they made.
+  String importUserWorkspace(UserWorkspace imported) {
+    final landed =
+        UserWorkspace(availableWorkspaceName(imported.name), imported.dock);
+    userWorkspaces.add(landed);
+    _sortUserWorkspaces();
+    _writeUserWorkspace(landed);
+    notifyListeners();
+    return landed.name;
+  }
+
+  /// The workspace in strip slot [slot], counting the shipped presets first
+  /// and the user's own after them — what `Alt+Shift+1…9` switches by (docs/07
+  /// §1.4, §15). Answers whether there was one, so a chord pointing past the
+  /// end of the strip falls through to whatever else wants it rather than
+  /// appearing to do nothing.
+  bool switchToWorkspaceSlot(int slot) {
+    const presets = WorkspacePreset.values;
+    if (slot < 1) return false;
+    if (slot <= presets.length) {
+      applyWorkspacePreset(presets[slot - 1]);
+      return true;
+    }
+    final at = slot - presets.length - 1;
+    if (at >= userWorkspaces.length) return false;
+    applyUserWorkspace(userWorkspaces[at].name);
+    return true;
+  }
+
+  /// The arrangement moved: write it back to the user workspace in force, if
+  /// there is one (docs/07 §1.4 — layout changes persist automatically to the
+  /// active workspace). A no-op under a preset, whose factory layout is not the
+  /// user's to overwrite.
+  void rememberActiveWorkspaceLayout() {
+    final active = activeUserWorkspace;
+    if (active == null) return;
+    final at = userWorkspaces.indexWhere((w) => w.name == active);
+    if (at < 0) return;
+    final updated = UserWorkspace(active, dock.toJson());
+    userWorkspaces[at] = updated;
+    _writeUserWorkspace(updated);
+  }
+
+  void touch() {
+    rememberActiveWorkspaceLayout();
+    settingsChanged();
+  }
 
   /// Remember the file a project was just opened from or saved to, so the next
   /// launch can reopen it. Persisted immediately; no theme rebuild is needed, so
@@ -976,6 +1235,9 @@ class Workspace extends ChangeNotifier {
   }
 
   void load() {
+    // The user's own workspaces are their own files beside the settings, so
+    // they are read whether or not there is a settings file to read.
+    loadUserWorkspaces();
     try {
       final f = storeFile();
       if (!f.existsSync()) {
