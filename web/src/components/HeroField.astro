@@ -224,15 +224,18 @@
       vec2 bd = max(u_box.xy - gl_FragCoord.xy, gl_FragCoord.xy - u_box.zw);
       float bdist = length(max(bd, 0.0)) + min(max(bd.x, bd.y), 0.0);
       float far = length(max(u_box.xy, u_res - u_box.zw)) + 1.0;
-      // The front is not a line but a soft edge 110 px to either side of one,
-      // so what expands is a wash rather than a boundary. Everything else here
+      // The front is not a line but a soft edge either side of one. It was 110
+      // px of it while the reveal was a tenth of a second, to keep the arrival
+      // from reading as a boundary crossing the page; at 150 ms it does not
+      // need the help, and the narrower edge holds the shape better.
+      // Everything else here
       // is written in terms of that width: the travel ends a feather past the
       // furthest corner, so the last pixels reach full strength rather than
       // being caught half-lit, and it starts a feather inside the box for the
       // same reason at the other end - a front any later than that would have
       // the box already showing before the reveal had begun, which would read
       // as a rectangle appearing rather than a wordmark opening.
-      float feather = 110.0;
+      float feather = 16.0;
       float inner = -0.5 * min(u_box.z - u_box.x, u_box.w - u_box.y)
         - feather - 20.0;
       float front = mix(inner, far + feather, 1.0 - pow(1.0 - u_reveal, 3.0));
