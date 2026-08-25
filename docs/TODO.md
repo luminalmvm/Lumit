@@ -31,36 +31,17 @@ remainder is recorded under Next: footage simply playing beneath an adjustment s
 contributes no flow (the decode-planner FX-1 sibling), and the composite flow
 measurement carries a named ponytail: cache upgrade.
 
-**FP2 - chrome, panels, interaction.**
-- UI scale rebase and popup anchoring (K-560): the 1.1 presentation baseline, the
-  slider relabel, the stored-value migration, and every popup/context menu anchored
-  through the overlay's own box (`globalToLocal`), never raw window coordinates.
-- G: 6.7 menu-bar/toolbar divider; 6.9 append `.lum` on first save; 6.12 drop the last
-  static settings hint; 6.16 settings scrollbar drag must not pan the movable dialog;
-  6.48 tooltip sweep to one-or-two words (tighten the arb gate from five); 7.19 user
-  workspaces (save-as/rename/export, the strip, Alt+Shift+1-9).
-- H: 6.2 drag across enable switches toggles one way; 6.3 collapse follows the
-  selection; 6.13 numbered layer pickers ("1. NAME"); 6.28 selection fronts the effect
-  controls, project open/close fronts the project panel; 6.35 comp switch keeps the
-  panel unless the new comp has a selection; 6.6's effect-delete in the panel.
-- I: 6.4 collapse all selected rows; 6.5 magnify-slider end nudges; 6.20 the 1px
-  toggle offset and Round's squircles; 6.22 separate axes (anchor/position
-  right-click, linked scale with one value, unlink, separate); 6.24's lane half (drag
-  moves the whole lane selection, and delete works on it); 6.26 keyframes travel with
-  a dragged layer live; 6.27 drop the ramp/percent text beside the Sequence thumbnail;
-  6.40 frame-rate change keeps the playhead's time; 6.43 the row-level Animated filter
-  (K-441's shape); 7.7 razor through eased ramps; 6.15 equal scrollbar thumbs.
-- J: 6.32's remainder - channel buttons beside the plot (not a tab strip above) and
-  the Curves graph-size option.
-- Caddis tier A/B: A3 arithmetic in numeric fields (`(1920-100)*0.5` evaluates); A7
-  the documented Escape ladder; A8 slide/trim on `[`/`]` and Alt+`[`/`]`; A12 label
-  colours inherit from the folder, an item's own colour overriding; B2 is built.
-- R: the easing panel grows editable custom easings that persist with the user (the
-  Flow-plugin shape), on the docked panel that exists.
-- B11's shelf half (owner, 2026-08-25): a project-stored swatch list shown inside the
-  colour picker - saved colours you click to apply, stored in the `.lum`, one op, its
-  own undo step. The reference half (a parameter remembering it uses a token, edits
-  propagating) is explicitly NOT commissioned.
+**FP2 - chrome, panels, interaction: LANDED 2026-08-25**, all fourteen packages
+(K-566..K-575: the 1.1 baseline and overlay-anchored popups, arithmetic wells, the
+effect-controls run behaviours and fronting, the timeline chrome batch, the lane
+selection's move/delete and the Animated filter, bracket trim/slide labels, the
+Curves/Levels channel column and size option, folder label inheritance, custom
+easings, the project swatch shelf, separate axes, the playhead keeping its moment,
+the razor through eased ramps, user workspaces, the Escape ladder, and the two-word
+tooltip gate). Small remainders recorded: the workspace strip has no overflow
+behaviour yet; swatches carry a name and alpha in the model with no controls; the
+numbered workspace.switch.N labels share the numbered-marker translation limit;
+settingsHelpChromeLabels is an unused arb key to cull at the next Crowdin push.
 
 **FP3 - engine features.**
 - The three Settings pages, engine first (K-465's omitted nav entries): audio output
