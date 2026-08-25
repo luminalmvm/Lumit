@@ -202,13 +202,14 @@ void main() {
       expect((pill.decoration! as BoxDecoration).color, t.animated);
     });
 
-    /// 6. **The accent row.** Five swatches of 14, the one in force ringed,
-    /// and the hex of whatever the accent actually is beside them.
-    testWidgets('the accent row is five swatches and a hex', (tester) async {
+    /// 6. **The accent row.** Six swatches of 14, the one in force ringed,
+    /// and the hex of whatever the accent actually is beside them. Six since
+    /// K-511: spruce leads and the clay it replaced stayed, one click back.
+    testWidgets('the accent row is six swatches and a hex', (tester) async {
       final p = await open(tester);
       await showAppearance(tester);
 
-      expect(LumitTheme.accentPresets.length, 5);
+      expect(LumitTheme.accentPresets.length, 6);
       for (final colour in LumitTheme.accentPresets) {
         final swatch = tester.getRect(
             find.byKey(ValueKey<String>('settings-accent-${_hex(colour)}')));
@@ -222,7 +223,7 @@ void main() {
       expect(hex.style!.fontFamily, LumitTheme.monoFontFamily);
       expect(hex.style!.fontSize, 10,
           reason: '§7.1: a unit rider is 10px mono');
-      expect(hex.data, '#e05a72', reason: 'the dark scheme\'s own accent');
+      expect(hex.data, '#35785e', reason: 'the dark scheme\'s own accent');
 
       // A swatch sets the accent, and the readout follows it.
       await tester.tap(find.byKey(ValueKey<String>(

@@ -3799,7 +3799,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   the app's background is nearly black, panels sit just above it, and menus float a clear
   step higher on a soft shadow; buttons have no borders — you can tell idle from hovered
   from pressed purely by how light their fill is; scrollbars are thin and solid; panel
-  edges are single crisp 1px lines. The colours themselves (the clay accent, the cool grey
+  edges are single crisp 1px lines. The colours themselves (the spruce accent, the cool grey
   family) are still Lumit's own — we borrowed the skeleton, not the skin.
   *(A note on the Settings window paragraphs below: they record the full design as the
   egui shell shipped it. The Flutter Settings window is now the same shape — a sidebar of
@@ -3836,7 +3836,7 @@ Two mechanisms make this safe, and you'll see them by name in the code:
   **Animation** picks how much motion the UI's own chrome shows (All / Minimal / None) —
   this reaches things like a collapsing section's arrow or a dialog's fade-in, not (yet) the
   app's own dropdown menus, which don't animate at all today regardless of this setting. All
-  five persist with your workspace; Reset returns the clay default for Accent.
+  five persist with your workspace; Reset returns the spruce default for Accent.
   The **Performance** page of the same window is where you tell Lumit how hard to work your
   machine: how much memory its frame cache may hold, how much disk the on-disk cache may use,
   and how much video memory (VRAM, the graphics card's own memory) the cache of
@@ -7071,7 +7071,7 @@ all in the Flutter frontend and none of them touching the engine:
 - **A theme is a file.** `flutter_ui/lib/theme/theme_file.dart` writes one out as
   `.lumtheme` — a short, indented JSON document you can read: what it is, a
   version number, the theme's name, whether it is a light or a dark theme, and
-  every colour as a hex code like `#e05a72`. Settings → Appearance has **Export…**
+  every colour as a hex code like `#35785e`. Settings → Appearance has **Export…**
   and **Import…** beside the other theme buttons. Export works from a built-in
   scheme too, because "the stock dark with my accent changed" is a perfectly good
   thing to send somebody.

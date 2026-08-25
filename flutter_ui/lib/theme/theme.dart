@@ -528,8 +528,13 @@ class LumitTheme {
     return Color.fromARGB(0xff, ch(c.r), ch(c.g), ch(c.b));
   }
 
-  /// The default accent as plain RGB, for seeding the picker.
-  static const defaultAccent = Color(0xffe05a72);
+  /// **Spruce** — THE default accent (K-511), and the one constant to retune if
+  /// the shade is ever re-judged: the stock dark and light schemes both build
+  /// their accent pair from it, so a single edit here moves the whole family.
+  /// Hover derives by the same ±0x12 step [withAccent] gives a user-picked
+  /// accent (K-092), which is what makes `withAccent(defaultAccent)` reproduce
+  /// each stock scheme's pair exactly rather than approximately.
+  static const defaultAccent = Color(0xff35785e);
 
   /// The layer-label palette (TL2, K-188): bright, clearly distinct chips. A
   /// layer's label colours both its swatch and its bar in the lane area, and
@@ -637,8 +642,8 @@ class LumitTheme {
         textDisabled: _rgb(0x5e, 0x66, 0x6b),
         hairline: _rgb(0x26, 0x29, 0x2c),
         hairlineStrong: _rgb(0x3c, 0x41, 0x45),
-        accent: _rgb(0xe0, 0x5a, 0x72),
-        accentHover: _rgb(0xea, 0x72, 0x88),
+        accent: defaultAccent, // spruce #35785e
+        accentHover: _shift(defaultAccent, 0x12), // #478a70
         animated: _rgb(0xd8, 0xa2, 0x4a),
         success: _rgb(0x5f, 0xcf, 0xae),
         warning: _rgb(0xdd, 0x9a, 0x82),
@@ -705,8 +710,11 @@ class LumitTheme {
         textDisabled: _rgb(0xa8, 0xa8, 0xa4),
         hairline: _rgb(0xd8, 0xd6, 0xd2),
         hairlineStrong: _rgb(0xc4, 0xc1, 0xbc),
-        accent: _rgb(0xc2, 0x3f, 0x58),
-        accentHover: _rgb(0xa8, 0x30, 0x48),
+        // Spruce holds on white as it is: 5.3:1, where the clay it replaces had
+        // to be darkened to c23f58 to reach the same floor (§9). So Light takes
+        // the same accent as Dark and only the hover direction flips (K-092).
+        accent: defaultAccent, // spruce #35785e
+        accentHover: _shift(defaultAccent, -0x12), // #23664c
         // Provisional pending the light-mode pass: the dark scheme's amber
         // taken down until it holds against white.
         animated: _rgb(0x9a, 0x6a, 0x1c),
@@ -999,16 +1007,18 @@ class LumitTheme {
   List<Color> get backgroundPresets =>
       const [Color(0xFF000000), Color(0xFFFFFFFF)];
 
-  /// The five accents the Settings drawing offers as one click each: Lumit's
-  /// own, then a blue, a green, an amber and a violet.
+  /// The six accents the Settings drawing offers as one click each: Lumit's
+  /// own spruce, then the clay it replaced (K-511 — one click back for anyone
+  /// who preferred it), then a blue, a mint, an amber and a violet.
   ///
-  /// The same five in every scheme, and deliberately: an accent is the one
+  /// The same six in every scheme, and deliberately: an accent is the one
   /// colour the user is choosing *for* the chrome rather than out of it, so it
   /// cannot be mirrored per mode without the swatch under the pointer changing
   /// meaning as the theme does. The full wheel is still a click away in the
   /// theme editor — these are the quick answers, not the whole answer.
   static const List<Color> accentPresets = [
-    Color(0xFFE05A72),
+    defaultAccent, // spruce
+    Color(0xFFE05A72), // clay - the pre-K-511 default
     Color(0xFF4AA3E0),
     Color(0xFF46C98E),
     Color(0xFFE0A33C),

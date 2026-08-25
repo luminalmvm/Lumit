@@ -912,8 +912,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ],
       );
 
-  /// The five one-click accents, and the hex of whatever the accent actually
-  /// is — which is not always one of the five, because the theme editor can
+  /// The six one-click accents, and the hex of whatever the accent actually
+  /// is — which is not always one of the six, because the theme editor can
   /// set any colour at all and a custom theme carries its own.
   Widget _accentSwatches(LumitTheme t, LumitUiState ui) => Row(
         mainAxisSize: MainAxisSize.min,
@@ -931,7 +931,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 decoration: BoxDecoration(
                   color: colour,
                   borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-                  // The chosen one is ringed, so which of the five is in force
+                  // The chosen one is ringed, so which of the six is in force
                   // is readable without reading the hex beside them.
                   border: _hex(colour) == _hex(t.accent)
                       ? Border.all(color: t.textPrimary)
@@ -949,7 +949,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ],
       );
 
-  /// A colour as the drawing writes it: `#e05a72`. The channels are read as
+  /// A colour as the drawing writes it: `#35785e`. The channels are read as
   /// the workspace file reads them, so what is shown here and what is stored
   /// there can never drift apart by a rounding.
   static String _hex(Color c) {
