@@ -213,7 +213,8 @@
       vec3 page = vec3(0.043, 0.047, 0.055);  // #0b0c0e, the page itself
       float fade = smoothstep(0.0, 0.42, uv.y);
       float matte = fbm(p * 1.1 + vec2(3.7, 11.3));
-      col = mix(page, col, clamp(fade * 1.5 - 0.25 + (matte - 0.5) * 0.9, 0.0, 1.0));
+      float alpha = clamp(fade * 1.5 - 0.25 + (matte - 0.5) * 0.9, 0.0, 1.0);
+      col = mix(page, col, alpha);
 
       // The field arrives by expanding out of the wordmark's own box rather
       // than fading up everywhere at once. bdist is the distance from that box
@@ -248,7 +249,12 @@
       float behind = clamp((front - bdist) / 260.0, 0.0, 1.0);
       float ring = vis
         * smoothstep(1.0, 0.0, behind)
-        * (1.0 - smoothstep(0.8, 1.0, u_reveal));
+        * (1.0 - smoothstep(0.8, 1.0, u_reveal))
+        // ... and by how much field there is at this pixel to overexpose. The
+        // bottom of the band is mostly page by then, and page does not glow:
+        // the exposure falls away down there exactly as the field does, patch
+        // by patch, rather than lighting up the black it dissolves into.
+        * alpha;
       col = col * (1.0 + ring * 1.6) + vec3(0.30, 0.28, 0.34) * ring * 0.55;
 
       col = mix(page, col, vis);
