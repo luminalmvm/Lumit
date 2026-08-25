@@ -14523,3 +14523,70 @@ config-supplied name cannot reach the filesystem. The packaging scripts carry th
 `build-installer.ps1` (the Windows installer and, downstream, the update zip),
 `make-dmg.sh` (before the signing pass), and release.yml's Linux staging step (which the
 Flatpak repacks wholesale).
+
+## K-528 — The Node preview folds into the Viewer as an "at effect" chip
+
+**DECIDED 2026-08-25** (owner ruling: *"node preview is just the viewer"*). **Supersedes
+K-486** and closes out K-448: the Node preview panel, its bounded-thumbnail seam and its
+place in the Effects workspace sidebar are all removed.
+
+**The panel was a second viewport for a still.** K-448 gave the question its own panel and
+K-486 settled its transport the small way — a 256px thumbnail on the worker's existing
+response stream, because a still that changes when the pick or the playhead moves does not
+need a second zero-copy target. Both answers were right about the transport and wrong about
+the *place*. The question "what does the picture look like here" is a question about the
+Viewer's picture, and answering it in a postage stamp beside the Viewer means judging an
+effect at a size you would never grade at, on a mat that is not the Viewer's, with none of
+the ways of looking — the exposure, the channel, the transparency board, the scopes reading
+it — applying to it. Answered *in* the Viewer it costs no panel, no width, no second
+plumbing, and the whole viewing apparatus comes with it for nothing.
+
+**So it is a chip on the Viewer's own picture.** Whenever exactly one effect is selected,
+a small chip reading *at &lt;effect&gt;* appears over the picture. Toggling it renders the
+composition with that layer's effect stack **truncated after the selected effect**, at the
+Viewer's full quality through the ordinary present path — not a thumbnail, not a second
+target, not a reduced raster. The chip names the effect, flips between the finished picture
+and the cut one, and goes away with the selection. Engaged, it reads as engaged: the Viewer
+must never quietly show an unfinished composition.
+
+**And it is not a node-graph feature.** The graph's box and the Effect controls stack's
+heading are **one selection** (K-300) — the graph already fronts an effect box in the
+ordinary effect selection — so the chip follows that one channel and appears from either
+surface without either panel knowing the chip exists. That is the half of this ruling worth
+stating plainly: a capability that lived in the Nodes workspace now belongs to whoever has
+an effect selected, which is most of the time.
+
+**The prefix rides the render request, and the worker latches it.**
+`render_frame(frame, scale, mode, prefix)` takes an optional `BridgePrefixPoint` — a layer
+(which carries its composition) and the effect instance to stop after. Turning the chip on
+or off therefore costs the one render it was always going to cost, rather than a call of
+its own. The worker holds the point beside where the user is looking, so the drag previews,
+playback and the idle fill that follow show the same picture: the alternative was nine
+`RenderCompRequestWithPreview` constructors each growing a parameter, and a drag that
+snapped back to the finished picture in the middle of the gesture the chip exists for.
+A point naming another composition's layer, a layer that has gone, or an effect the layer
+no longer carries **cuts nothing** — a stale chip is harmless rather than wrong.
+
+**What K-486 got right survives untouched.** The prefix is a length, not a render path:
+`graph::prefix_len` turns the point into a count and `graph::truncated_effects` makes the
+patched copy, exactly as every drag preview does, so export-equals-preview and the retained
+decode hold at this seam for free. The frame key already hashes each layer's effects, so a
+shorter stack names its own frame and no field was added to the key. Both were proved for
+the thumbnail (`node_prefix_preview.rs`) and are asserted again for the interactive path.
+
+**One thing the interactive path needed that the thumbnail did not.** The worker memoises
+frame names by `(comp, frame, quality)` against the document *revision*, and turning the
+chip on renames every frame **without moving the revision** — the one case the memo cannot
+see. Left standing it serves the full stack's name for the cut picture and the Viewer shows
+the frame it already had: the chip looks dead and nothing else is measurably wrong. So
+latching a point empties the memo, which is precisely the rule the viewer look already
+follows for the same reason.
+
+**A panel folded away must not cost anyone their arrangement.** Every workspace saved while
+the Node preview existed still names it, and the dock's pane lookup was a bare `!` — so
+reading one back would have thrown and taken the stored settings with it. A pane naming a
+panel this build does not have is dropped now, with its group and its share tidied after.
+That rule is general and outlives this entry.
+
+**If a live second viewport is ever wanted** — two pictures on screen at once, at different
+points in the chain — that is a new thing to decide, not a quiet return of this one.

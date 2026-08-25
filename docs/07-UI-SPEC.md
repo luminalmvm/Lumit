@@ -120,7 +120,7 @@ Graph and Node panels are in no other.
   Effects & Presets expanded on the right with Scopes and the Debug view tabbed behind;
   Timeline slightly shorter than Edit. Seeing the picture *at* one effect rather than at
   the end of the stack is not a panel of this preset or any other: it is the Viewer's own
-  **"at effect" chip** (K-524, §2.2), which appears over the picture whenever an effect is
+  **"at effect" chip** (K-528, §2.2), which appears over the picture whenever an effect is
   selected — in the Effect controls stack or as a box on the graph — and shows the
   composition with that layer's effects stopping there.
 - **Colour**: Scopes given a wide right-hand column showing waveform and vectorscope
@@ -142,7 +142,7 @@ Graph and Node panels are in no other.
   panel** (the selected node's parameter rows) lower right. The approved Nodes-workspace
   drawing governs the layout; the panel rules are 15-DESIGN §12A.7 and the model is
   [impl/node-graph.md](impl/node-graph.md). Picking a box and seeing the picture there is
-  the small Viewer's own chip (K-524), so this preset needs no second viewport for it. It
+  the small Viewer's own chip (K-528), so this preset needs no second viewport for it. It
   is also the one preset whose root splits
   **across** rather than down, because the Timeline runs under the graph column only:
   shares 0.76/0.24 across, the graph column 0.82 Graph to 0.18 Timeline, the right column
@@ -464,7 +464,7 @@ which mode is in force** ("Adaptive res" or "Every frame") and never the tier it
 settled on: which tier a frame was made at is item 9's badge, which appears only when
 there is something to say.
 
-#### 2.2.1 The "at effect" chip (K-524)
+#### 2.2.1 The "at effect" chip (K-528)
 
 **Whenever exactly one effect is selected, the Viewer offers to stop the picture there.**
 A small chip reading *at &lt;effect name&gt;* appears over the top-left of the picture,

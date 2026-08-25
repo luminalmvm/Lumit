@@ -2810,7 +2810,7 @@ fn a_scope_needs_five_colour_triples() {
     ));
 }
 
-/// The Viewer's "at effect" chip rides the ordinary render request (K-524):
+/// The Viewer's "at effect" chip rides the ordinary render request (K-528):
 /// one dispatch whether the chip is on or off, because deciding what an effect
 /// id *means* needs the document and the document lives on the worker's side
 /// of this call. A point naming an effect nothing carries dispatches just the

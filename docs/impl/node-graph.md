@@ -3,7 +3,7 @@
 **Decision:** K-471 (the stack stays the spine; a layer gains an additive driver graph),
 K-472 (port types, wire colours, the points stream), K-473 (the selected node border).
 **Related:** K-445 (the graph is a second view that can also wire), K-446 (Particulate
-emits a points stream), K-448/K-486/K-524 (the picture at a node — its own panel, then a
+emits a points stream), K-448/K-486/K-528 (the picture at a node — its own panel, then a
 bounded thumbnail, now the Viewer's own chip), K-458 (the drawing is
 authoritative), K-381 (the effect registry), K-395 (the uniform matte row), K-142 (matte
 sources), K-305 (expressions). This note is the *how* for the whole of redesign phase 3:
@@ -507,14 +507,14 @@ read-only second viewport showing one node's output without soloing. **K-486** l
 that way on 2026-08-24 as a bounded 256px thumbnail rather than a second zero-copy
 target.
 
-**K-524 folded it into the Viewer** (owner ruling: "node preview is just the viewer") and
+**K-528 folded it into the Viewer** (owner ruling: "node preview is just the viewer") and
 supersedes both. The panel is gone. Selecting an effect — a box on this canvas *or* a
 heading in the Effect controls stack, which are one selection (K-300) — offers an **"at
 &lt;effect&gt;" chip** over the Viewer's own picture, and turning it on renders the
 composition with that layer's stack truncated there, down the ordinary frame transport at
 the Viewer's full quality. A second viewport for a still was the thing worth removing: at
 full size, in the Viewer you are already looking at, it is the same picture answered
-properly. K-524 carries the reasoning; the seam is `render_frame`'s optional
+properly. K-528 carries the reasoning; the seam is `render_frame`'s optional
 `BridgePrefixPoint` (docs/17).
 
 The three things WP5 established all survive the fold, and two of them are why it was

@@ -1,4 +1,4 @@
-// The Viewer's **"at effect" chip** (K-524): the picture at one point in a
+// The Viewer's **"at effect" chip** (K-528): the picture at one point in a
 // layer's effect stack, in the Viewer rather than in a panel of its own.
 //
 // **In plain terms.** Select an effect — its heading in the Effect controls

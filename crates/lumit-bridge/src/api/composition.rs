@@ -1627,7 +1627,7 @@ impl CompositionReference {
     /// Below 1.0 the engine decodes and composites smaller, which is how a
     /// Viewer that is not filling the screen stays cheap.
     ///
-    /// `prefix` is the Viewer's "at effect" chip (K-524): the layer whose
+    /// `prefix` is the Viewer's "at effect" chip (K-528): the layer whose
     /// effect stack to cut short and the effect to stop after, or `None` for
     /// the picture as the document has it. It rides *this* request rather than
     /// having a call of its own, so turning the chip on or off costs the one

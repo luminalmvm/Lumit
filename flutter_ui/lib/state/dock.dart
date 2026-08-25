@@ -57,7 +57,7 @@ sealed class DockNode {
   /// one — and its parent drops it.
   ///
   /// **A folded-away panel must not cost anyone their arrangement.** Panels do
-  /// go: the Node preview became a chip on the Viewer's own picture (K-524).
+  /// go: the Node preview became a chip on the Viewer's own picture (K-528).
   /// Every workspace saved while it existed still names it, and reading that
   /// as a fault would have thrown on the way in — a stored layout taking the
   /// settings down with it, which is the worst way to learn a panel was

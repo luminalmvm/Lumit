@@ -1,4 +1,4 @@
-// The Viewer's "at effect" chip (K-524), against the real engine.
+// The Viewer's "at effect" chip (K-528), against the real engine.
 //
 // The chip replaced a whole panel, so what it has to prove is what the panel
 // proved and one thing more:

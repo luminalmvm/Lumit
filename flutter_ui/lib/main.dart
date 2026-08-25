@@ -992,7 +992,7 @@ class LumitUiState extends ChangeNotifier {
         mode: workspace.performance.playback == PlaybackMode.adaptive
             ? BridgePlaybackMode.adaptive
             : BridgePlaybackMode.everyFrame,
-        // The "at effect" chip (K-524). The engine latches it, so the drags,
+        // The "at effect" chip (K-528). The engine latches it, so the drags,
         // the playback and the idle fill that follow show the same picture.
         prefix: viewerPrefix,
       );
@@ -1197,7 +1197,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Whether the Viewer is showing the picture **at** the selected effect —
   /// that layer's stack stopping there — rather than the finished composition
-  /// (K-524). The "at effect" chip over the picture is what turns it on.
+  /// (K-528). The "at effect" chip over the picture is what turns it on.
   ///
   /// Session state at the shell level, like the armed tool and the picked
   /// graph box: it is set on the Viewer and read where the render is asked

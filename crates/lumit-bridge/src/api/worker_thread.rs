@@ -56,7 +56,7 @@ pub struct WorkerState {
     /// idle cache-fill's anchor (docs/06 §5.5).
     last_shown: Option<(CompositionReference, u64, f32)>,
     /// Where the Viewer is cutting a layer's effect stack short — the "at
-    /// effect" chip, off when `None` (K-524).
+    /// effect" chip, off when `None` (K-528).
     ///
     /// Held here rather than carried by every request for the same reason
     /// [`Self::last_shown`] is: it says what the Viewer is *showing*, not what
@@ -2010,7 +2010,7 @@ pub struct RenderCompRequest {
     pub comp: CompositionReference,
     pub frame: u64,
     /// Where to cut this layer's effect stack short, or `None` for the picture
-    /// as the document has it (K-524). Latched onto [`WorkerState::prefix`],
+    /// as the document has it (K-528). Latched onto [`WorkerState::prefix`],
     /// so it describes the Viewer from here until the next render says
     /// otherwise.
     pub prefix: Option<crate::api::state::BridgePrefixPoint>,
@@ -3122,7 +3122,7 @@ fn watched<R>(
     out
 }
 
-/// Latch the "at effect" prefix the Viewer is asking under (K-524).
+/// Latch the "at effect" prefix the Viewer is asking under (K-528).
 ///
 /// **A prefix is a way of looking, and a way of looking renames every frame.**
 /// The name memo is keyed by `(comp, frame, quality)` against a document
@@ -3145,7 +3145,7 @@ fn set_prefix(state: &mut WorkerState, prefix: Option<crate::api::state::BridgeP
 
 /// `document` as the Viewer is showing it: the committed snapshot, with the
 /// prefix layer's stack cut short after the picked effect while the chip is on
-/// (K-524, superseding K-486's thumbnail).
+/// (K-528, superseding K-486's thumbnail).
 ///
 /// **In plain terms.** The image chain a layer has *is* its effect stack, so
 /// "the picture at the third effect" is the picture the composition makes with
@@ -4002,7 +4002,7 @@ mod tests {
         }
     }
 
-    /// **The Viewer's own prefix cut, on the interactive path** (K-524).
+    /// **The Viewer's own prefix cut, on the interactive path** (K-528).
     ///
     /// Three things, and each is a way the chip could look as if it worked
     /// while showing the wrong picture:
@@ -4110,7 +4110,7 @@ mod tests {
     }
 
     /// **Turning the chip on renames every frame without moving the document**
-    /// (K-524) — the one case the name memo's revision check cannot see, and
+    /// (K-528) — the one case the name memo's revision check cannot see, and
     /// the same trap the viewer look fell into. Left standing, the memo serves
     /// the full stack's name for the cut picture and the Viewer shows the
     /// frame it already had: the chip looks dead and nothing else is wrong.

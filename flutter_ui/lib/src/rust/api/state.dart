@@ -158,7 +158,7 @@ class BridgeLayerTiming {
 }
 
 /// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's
-/// point (K-524, superseding K-486's thumbnail seam).
+/// point (K-528, superseding K-486's thumbnail seam).
 ///
 /// **In plain terms.** Picking an effect and turning the chip on shows the
 /// composition rendered with that layer's stack stopping after the picked

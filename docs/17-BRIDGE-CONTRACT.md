@@ -673,7 +673,7 @@ path, documented beside the types in
     **fraction of the picture**, not a pixel, and the reply says which raster it
     cut from: the engine may be working at preview resolution, so neither side
     can name a pixel in the other's grid.
-- **The Viewer's picture may be cut short at an effect (K-524, superseding
+- **The Viewer's picture may be cut short at an effect (K-528, superseding
     K-486's thumbnail seam).** `CompositionReference::render_frame(frame, scale,
     mode, prefix)` takes an optional `BridgePrefixPoint` — a layer (which
     carries its composition) and the effect instance to stop **after**. With one

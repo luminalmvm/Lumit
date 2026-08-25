@@ -70,7 +70,7 @@ void main() {
   });
 
   /// The Effects workspace's right-hand column, now that the Node preview is
-  /// the Viewer's own chip (K-524): Effects & presets fronted, Scopes and the
+  /// the Viewer's own chip (K-528): Effects & presets fronted, Scopes and the
   /// Debug panel behind it. Nothing took the folded panel's slot, because
   /// nothing was waiting for one.
   test('the Effects workspace sidebar is Effects, Scopes and Debug', () {
@@ -86,7 +86,7 @@ void main() {
   });
 
   /// **A panel that has been folded away must not cost anyone their
-  /// arrangement** (K-524). Every workspace saved while the Node preview
+  /// arrangement** (K-528). Every workspace saved while the Node preview
   /// existed still names it, and the pane lookup used to be a bare `!` — so
   /// reading one back threw, and the stored layout took the settings with it.
   /// A pane naming a panel this build does not have is dropped instead, and

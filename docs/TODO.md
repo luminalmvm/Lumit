@@ -471,7 +471,7 @@ does not gate the four. Delete each phase here when it lands, as with everything
     second view of the effect stack that can also wire effects together, auto-wire
     and heal toggles, type-coloured wires from `viz_*`-family tokens, the Nodes
     workspace with the small viewer and short timeline, and the picture at a node
-    (K-448, K-486, folded into the Viewer's own "at effect" chip by K-524). The
+    (K-448, K-486, folded into the Viewer's own "at effect" chip by K-528). The
     design step has answered the document-model question (K-471, K-472, K-473): the
     stack stays the spine and each layer gains an additive driver graph -
     **docs/impl/node-graph.md** holds the model and the six ordered work packages
@@ -507,7 +507,7 @@ does not gate the four. Delete each phase here when it lands, as with everything
     preview stages the effect list, so a driver's number moves the picture
     while it is dragged rather than only on release.
     ~~WP5, the picture at a node~~ — **landed 2026-08-24** as its own panel
-    (K-486), **folded into the Viewer 2026-08-25** (K-524): selecting an effect
+    (K-486), **folded into the Viewer 2026-08-25** (K-528): selecting an effect
     on the graph or in the Effect controls stack offers an "at effect" chip over
     the Viewer's picture, and the panel, its seam and its 256px thumbnail are
     gone. WP1's named gap is closed:
