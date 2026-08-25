@@ -545,13 +545,9 @@ WP1's, so fixtures are authored alongside WP1–2 rather than at the end.
 **WP1 and WP2 have landed**: `crates/lumit-colour` holds the op set, the samplers, the
 bake, the `.spi1d`/`.spi3d`/CLF readers, the `config.ocio` grammar, resolution, the
 interchange bridge and the refusal taxonomy, with its own test suite and
-`tests/refusals/` as the taxonomy's corpus. Two things they could not finish and WP6
-owns, both recorded rather than approximated: the golden fixtures generated with the
-reference OpenColorIO library (the checked-in ones are published external constants;
-the reference rows are `#[ignore]`d with what each waits for), and the vendored
-`BuiltinTransform` bakes — until those exist, the ACES output-transform styles refuse
-by name, which also means the OCIO v2 ACES configs do not load end to end yet while the
-legacy 1.0.3/1.2 configs, being pure config data, do.
+`tests/refusals/` as the taxonomy's corpus. The two things they could not finish —
+the reference-library fixtures and the vendored `BuiltinTransform` bakes — landed with
+WP6 on 2026-08-25, so both shipped ACES configs now resolve end to end.
 
 **WP3 and WP4 have landed too.** `Document::colour` and the per-item tag carry their two
 ops, `lumit-render::colour` loads and bakes with the degrade ladder and the frame-key
@@ -567,41 +563,39 @@ well, *Choose…*, *Clear*, the state line, the fixed working-space reading), th
 colour picker grows a section per display with its views as rows and says calmly when a
 named config is not in force, the export's colour dropdown lists the config's spaces
 under their own heading with per-name enable off `can_deliver_colour_space`, and a
-footage row's **Colour space** submenu assigns one. One thing it left owed:
+footage row's **Colour space** submenu assigns one. One thing it left owed, still owed:
 
 - **The working-space reading has one sentence, not two** (note §2.1, §6.4): the Project
     settings row always says "Linear Rec. 709", because `BridgeColourSummary` carries no
     flag for a legacy config composing through its `scene_linear` role. It wants a field
     on the summary and a second sentence behind it.
 
-**WP6 has landed too**, except for the two things it always said it could not invent.
-The CLF suite is real: eight documents from the Common LUT Format specification's own
-example and implementation-test set, vendored byte for byte in
+**WP6 has landed, whole.** The CLF suite is real: eight documents from the Common LUT
+Format specification's own example and implementation-test set, vendored byte for byte in
 `crates/lumit-colour/tests/fixtures/clf/`, each gated against values that are
 published rather than measured — and they found two reader faults the day they
 landed (vendor elements inside an `Info` block read as process nodes; an XML comment
-inside an `Array` gluing the numbers either side of it into one token). The §5.4
-bounds are re-measured with dense sweeps and hold, with the clarification that the
-1e-5 figure is the *curve's* and a chain's error is that times its matrix's gain.
-And the K-031 parity row is now a colour matrix in
-`crates/lumit-render/tests/ocio_parity.rs`: no config, every built-in colour family
-at export, a config's display/view, a config's space at export — plus a plain-gamma
-view that must render differently, without which the rest pass when nothing is bound.
+inside an `Array` gluing the numbers either side of it into one token). The K-031
+parity row is a colour matrix in `crates/lumit-render/tests/ocio_parity.rs`: no config,
+every built-in colour family at export, a config's display/view, a config's space at
+export — plus a plain-gamma view that must render differently, without which the rest
+pass when nothing is bound.
 
-What remains of OCIO is **exactly two artefact drops, both data**:
+**And both reference fixtures are in**, from one PyOpenColorIO 2.5.2 session:
+`aces-1.2` (128 rows, its five reachable LUTs at 14 MiB of a 444 MiB set) and `aces-cg`
+(784 rows over every role edge and all 37 display/view pairs of
+`cg-config-v4.0.0_aces-v2.0_ocio-v2.5`), with five vendored bakes at 47 MiB. They were
+planned as data drops and turned out to be five reader faults and four new §5.4
+measurements — see `tests/fixtures/README.md`, K-516, K-517, K-518.
 
-- **`tests/fixtures/aces-1.2/` + `aces-1.2.fixture`** and **`tests/fixtures/aces-cg/`
-    + `aces-cg.fixture`**, the latter with the vendored `BuiltinTransform` bakes in
-    `crates/lumit-colour/vendored/` from the same session. Neither is a coding job:
-    `conformance.rs` already resolves a row's config edge and runs both gates, and a
-    non-ignored test proves that reader today, so a drop is two paths, one deleted
-    `#[ignore]` and a test run. The recipes are written down and runnable on any
-    machine — `tests/fixtures/README.md` (a pinned PyPI wheel, both config sources,
-    the generator, the row format) and `vendored/README.md` (the provenance header,
-    the fixed shaper and grid, the red-fastest cube order). Until the bakes exist,
-    the ACES 2.x output styles refuse by name and the v2 configs do not resolve end
-    to end; `vendored/README.md` lists which eighteen styles `cg-config-v4.0.0` needs
-    and which two of them want no bake at all.
+What OCIO still owes, all of it recorded and none of it blocking:
+
+- **Exact Rust ports of the five vendored styles** (§4.1 tier two → tier one), one at a
+    time, each landing against the `aces-cg.fixture` rows that gate the bake it replaces.
+    The number they exist to bring down is **0.117 at the Rec.709 blue primary**, which is
+    what a 65-point cube costs on the ACES 2.0 rendering (K-518); inside the gamut the
+    same bake is better than 2 × 10⁻³. It also reclaims 47 MiB from the binary.
+- **The working-space reading has one sentence, not two** — see WP5 above.
 
 ## Next - engine/bridge follow-ups
 

@@ -9395,17 +9395,55 @@ through our reader, each one against an expectation the document itself publishe
 of them literally print the formula that generated their table). Those found two real
 faults the day they landed, which is what a test suite is for.
 
-The third kind is the one still outstanding: a run of the **official OpenColorIO library**
-over a real studio config, producing a few hundred expected answers to check ours
-against. That needs somebody to sit at a machine with the library installed, and the
-recipe for doing it — which library, which configs, which command — is written down in
-the fixtures folder so it can be done on any computer and the results simply dropped in.
-Until then the tests that would read those numbers are marked as waiting, by name, rather
-than quietly passing.
+The third kind is a run of the **official OpenColorIO library** over the two real studio
+configs everyone uses, producing nine hundred expected answers to check ours against.
+That needs somebody at a machine with the library installed, and the recipe — which
+library, which configs, which command — is written down in the fixtures folder so anyone
+can repeat it. It has now been done, and the results are checked in beside the configs
+that produced them.
+
+It was expected to be a data drop and it was not: it found five separate faults, every
+one of them the kind that only a real published config produces. One of them was that
+"do nothing" was not doing nothing (below). Another was that a placeholder the newer ACES
+configs write instead of a display's name — because one view description is shared by
+eight displays — was not being understood at all, which meant none of those configs'
+views worked. A third was that a *data* channel, a matte or a depth pass, was still being
+put through a colour conversion. It also put a number on something the design had only
+warned about: the newest ACES look, when stored as a table rather than as code, is
+accurate to well under one part in five hundred for ordinary colours and about a tenth
+off at a fully saturated blue. That number is written down and tested against, so the
+day someone writes the code version, the improvement is measurable rather than claimed.
 
 And when a config uses some feature we have not built, Lumit refuses it *by name* — it
 tells you what it cannot do — rather than quietly producing almost-right colours, because
 a plausible wrong picture is the one failure this design refuses to ship.
+
+### Why "do nothing" has to actually do nothing
+
+A config describes each colour space one way round and lets the program work out the
+other. So "convert from this space to that one" often ends up as a recipe like *apply this
+table of nine numbers, then apply the table that undoes it*. On paper those two cancel and
+the colour comes out exactly as it went in.
+
+On a computer they do not quite cancel, and the reason is worth knowing because it comes up
+everywhere. A number in the picture is stored to about seven decimal digits — very
+precise, but not exact. When the first table runs, one channel can be sent a long way from
+where it started; the second table brings it back. If the excursion was to a number ten
+thousand times bigger than the answer, the seven digits of precision that were plenty at
+the start are only three digits by the time it comes home. The colour is subtly wrong, and
+nothing in the recipe looks wrong at all.
+
+Lumit's answer is to never take the trip. When a recipe has two of these tables next to
+each other, they are multiplied together into one table *before* any picture goes through —
+and that multiplication is done at double precision, sixteen digits instead of seven, so
+the two really do cancel. If the combined table turns out to be the do-nothing one, it is
+dropped from the recipe altogether rather than kept as a formality.
+
+That last step sounds pedantic and is not. A picture can legitimately contain infinity —
+a value so bright it has run off the top of what the format holds. Multiplying infinity by
+a very small number is still infinity, and adding infinity to minus infinity gives "not a
+number", which shows up as a black or transparent hole. A step that does nothing must be
+*absent*, not merely harmless, or it can turn one broken channel into three.
 
 ### Colours off the end of the scale
 

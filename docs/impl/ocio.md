@@ -223,6 +223,8 @@ The transforms real configs are made of, each with forward and (where noted) inv
 |---|---|---|
 | Matrix | `MatrixTransform` (3×4: 3×3 + offset) | exact |
 | Exponent | `ExponentTransform`, `ExponentWithLinearTransform` (sRGB-style linear toe) | exact |
+| Negatives | the `style` key on either exponent form: `mirror`, `pass_thru` | exact |
+| ST 2084 | the PQ display encodings' curve, `Op::Pq` | exact |
 | Log | `LogTransform` (base only), `LogAffineTransform`, `LogCameraTransform` (lin-side break) | exact |
 | CDL | `CDLTransform` (slope/offset/power + saturation, ASC ordering) | exact except clamp |
 | Range | `RangeTransform` (scale + clamp) | exact on the non-clamped part |
@@ -232,6 +234,28 @@ The transforms real configs are made of, each with forward and (where noted) inv
 | Space-to-space | `ColorSpaceTransform` — resolved through the reference space | by construction |
 | Display/view | display + view → the view's transform (+ its look's transform if the view names one) | n/a |
 | Builtin | `BuiltinTransform` — a *named* transform implemented in code, not data | per style |
+
+Three notes on that table, each one a real config's doing rather than a design flourish.
+
+**Matrix coefficients are `f64`, and neighbouring matrices fold** (K-516). A config states
+one direction of a space and Lumit inverts it for the other, so a space-to-space chain
+routinely carries a matrix immediately followed by its own inverse. Walking that pair in
+single precision, rather than composing it away, cost 2 × 10⁻⁵ on a real ACEScc → ACEScg
+row. A composition that comes out as the identity is dropped from the chain altogether,
+because a kept near-identity still spreads one overflowed channel across the other two.
+Evaluation is unchanged: `matrix::apply` rounds to `f32` first, so the processor and the
+graphics card multiply the same twelve numbers.
+
+**A curve carries its own reading of negatives** (K-517). `Op::Negatives` wraps a curve in
+`mirror` (apply to the magnitude, put the sign back) or `pass_thru` (carry it through).
+Every display encoding in the ACES v2 configs mirrors, including the ones whose names do
+not say so — and the key a config *file* writes is `style`, not the API's `negativeStyle`,
+which is a distinction worth a line here because reading the wrong one finds nothing,
+applies the default, and is invisible above zero.
+
+**ST 2084 is an op, not a bake** (K-517). The reference library expresses the PQ display
+encodings as a 65536-entry half-domain table, but that table is the standard's published
+formula and four published constants, so it lands in tier one with the other curves.
 
 `BuiltinTransform` is the honest hard part: the OCIO v2 ACES configs express their
 output transforms as code names ("ACES-OUTPUT — … SDR-VIDEO"), not as data. v1 handles
@@ -245,6 +269,17 @@ A `BuiltinTransform` style in neither tier refuses the config by name. Note the
 happy accident of history: the *legacy* ACES configs (1.0.3/1.2, the most widespread)
 are pure config-data — matrices, logs and `.spi1d`/`.spi3d` files — and need no
 builtins at all; the file-transform path covers them wholesale.
+
+**Both tiers are populated** as of the ACES CG drop. Tier one holds fourteen styles:
+`IDENTITY` and `pass_thru`, the three ACES log/primaries conversions, the AP0→XYZ utility,
+and all eight display encodings the CG config names. Tier two holds five artefacts — the
+four ACES 2.0 output transforms and the ACES 1.3 Reference Gamut Compression LMT — at 47
+MiB, `include_str!`ed one arm each from `crates/lumit-colour/vendored/`. A vendored
+artefact is turned into ordinary chain steps rather than executed specially: the lg2
+shaper *is* a log curve with a lin-side offset and the cube *is* a 3D table, so a bake
+composes with a display encoding like anything else. **What tier two costs at the gamut
+edge is measured and stated in K-518 and §5.4** — 0.117 at the Rec.709 blue primary — and
+it is the number the Rust ports exist to reduce.
 
 Everything else a config can name — `FixedFunctionTransform`, `GradingTone`-family,
 `ExposureContrastTransform`, `AllocationTransform`-as-op, context variables in file
@@ -439,6 +474,36 @@ carry these numbers and the sweeps that produce them):
 | Shaper + cube, deep saturation (x, x/4, x/20) | 5 × 10⁻³ ceiling | 2.2 × 10⁻³ |
 | Shaper + cube, harsher saturation (x, x/20, 0) | *none stated* | 5.6 × 10⁻² |
 
+**And four more, measured against the reference library rather than against exact
+evaluation** — the reference fixtures found these, and each is a fact about a curve family
+the sweeps above never contained rather than a loosening of a promise about the same one:
+
+| What | Bound | Measured |
+|---|---|---|
+| Factorised, a chain leaving an ACES **log** encoding | 2 × 10⁻⁴ rel. | 1.4 × 10⁻⁴ |
+| Factorised, a gamma **encode** below the shaper's first cell | 5 × 10⁻³ | 6 × 10⁻⁴ |
+| Cube, past the shaper's reach (input > 32, or output past fp16) | 5 × 10⁻² | 3.9 × 10⁻² |
+| Cube, a **vendored ACES output bake** at a gamut primary | 1.5 × 10⁻¹ | 1.17 × 10⁻¹ |
+
+The first is arithmetic, not luck: ACEScct spends 17.52 stops over a 0–1 code range, so at
+code 1.0 the decode climbs far faster than the curve table's own log-spaced samples, and
+linear interpolation between them costs (ln 2 × 17.52 × h)² / 8 — 7.7 × 10⁻⁵ at the sample
+spacing there, times the matrix's gain. The **encode** direction is unaffected, because
+compressing 222 into 1.0 is the shallow way round.
+
+The second is the floor rather than the ceiling of the same domain story. The signed curve
+shaper's first sample above zero is at linear 7.8 × 10⁻⁶, so everything below that is one
+straight line down to black — while a gamma encode has infinite slope at zero. A 10⁻⁷ probe
+encoded to gamma 2.2 should be 6.6 × 10⁻⁴ and the table says 6.4 × 10⁻⁵. No table of any
+size does better with a curve of infinite slope; the bound is the height of that first cell.
+
+The fourth is **the number this section's out-of-domain warning becomes when a real ACES 2.0
+rendering meets a 65-point grid** (K-518). It is not an interpolation wobble: the eight
+corners of the cell containing the Rec.709 blue primary span 0.165 in Z and are not even
+monotone in blue. Inside the gamut the same bake holds 2 × 10⁻³. The upgrade path is §4.1's
+recorded one — port the output styles to tier one, one at a time — and these rows are the
+measurement it will be judged by.
+
 Two readings the table settles. First, the **1 × 10⁻⁵ is a statement about the
 curve**, and at the curve it holds with room; a whole chain is that error times the
 matrix's gain, because the matrix mixes three independently-wrong channels and its
@@ -561,11 +626,16 @@ Fidelity is proven, not asserted, and the proof is data checked into the reposit
    outputs per (source space → destination space) pair and per (display, view),
    generated **offline with the reference OpenColorIO library**, the library version
    and generation script recorded in the fixture header. CI never builds OCIO; it
-   reads the table.
+   reads the table. **Landed** — both configs, PyOpenColorIO 2.5.2, 912 rows.
 2. **Two gates per fixture row**: the resolved chain evaluated exactly on the CPU
    must match within 1 × 10⁻⁵; the baked artefact sampled by the CPU sampler must
    match within the §5.4 bound in-domain (out-of-domain rows carry their own looser
-   bound and exist to be tightened).
+   bound and exist to be tightened). Three details the real runs settled:
+   **absolute below one, relative above** (an absolute 10⁻⁵ at an output of 22.76 asks
+   for less than one `f32` ULP at that magnitude); a row whose reference answer is
+   **not finite** is compared by kind, since `NaN − NaN` is NaN and no tolerance passes
+   it; and an edge Lumit answers from a **vendored bake** carries the cube form's bound
+   on *both* gates, because "exact on the processor" then means "the table".
 3. **CLF suite**: the CLF specification's implementation-test files, vendored, parsed
    and evaluated against their published expectations. **Landed** — see WP6. Note
    what "published expectations" turned out to mean: no answer key is published
@@ -752,31 +822,40 @@ on it.** What is in CI now:
   picture — plus a plain-gamma view that must render *differently*, without which
   the other rows pass equally well when nothing is bound at all.
 
-What remains is **exactly two artefact drops**, both data:
+**Both artefact drops have landed** (2026-08-25, PyOpenColorIO 2.5.2, one session):
 
-1. `tests/fixtures/aces-1.2/` and `aces-1.2.fixture`;
-2. `tests/fixtures/aces-cg/` and `aces-cg.fixture`, together with the vendored
-   builtin bakes in `crates/lumit-colour/vendored/` that the same session produces.
+1. `tests/fixtures/aces-1.2/` and `aces-1.2.fixture` — the legacy config, its five
+   reachable LUTs (14 MiB of a 444 MiB set), and 128 rows over the role-space edges and
+   the sRGB and Rec.709 views.
+2. `tests/fixtures/aces-cg/` and `aces-cg.fixture` — `cg-config-v4.0.0_aces-v2.0_ocio-v2.5`
+   whole (33 KiB, no side files: a v2 config's transforms are builtins), 784 rows over
+   every role-space edge and **every** one of its 37 display/view pairs, together with the
+   five vendored bakes in `crates/lumit-colour/vendored/` from the same session.
 
-Neither is a coding job any more. `conformance.rs` already resolves a reference row's
-id through the config it names (`space: <from> -> <to>`, `view: <display> / <view>`)
-and runs both of §7.2's gates over it, and a non-ignored test proves that reader
-today against a stand-in config and the published sRGB numbers — so a drop is two
-paths, one deleted `#[ignore]`, and a test run. The exact recipe is written down:
-`tests/fixtures/README.md` for the fixtures (the library as a pinned PyPI wheel, both
-config sources, the generator, the row format, and which door the reference run must
-enter each config by — §2.1's two readings differ, and getting it wrong moves every
-view row by a primaries matrix while reading as a tolerance problem), and
-`vendored/README.md` for the bakes (the required provenance lines, the shaper and
-grid stated as fixed rather than chosen, the red-fastest cube order, and the rule
-that a bake and the rows proving it come from one session at one version).
+Both were expected to be pure data drops. Neither was, and what they found is the
+argument for having run them:
 
-`vendored/README.md` also names the debt concretely, read off `cg-config-v4.0.0`:
-eighteen builtin styles, four implemented. Two want no bake at all — `pass_thru` is
-the identity under a second name, and `ACEScc_to_ACES2065-1` is a log curve beside
-the ACEScct already written out — five need bakes, and eight are display encodings
-of which five want a mirrored curve the op set does not express. The shortest path
-to a v2 config that loads end to end is one bake, one style port and one decision.
+- **Five reader faults**, each invisible without a real config. Adjacent matrices were
+  walked rather than composed, so a matrix meeting its own inverse left 2 × 10⁻⁵ behind
+  (K-516). A shared view's `<USE_DISPLAY_NAME>` placeholder was not resolved, so *every*
+  view of *every* OCIO v2 ACES config failed to resolve at all. A conversion touching a
+  **data** space still ran the working-space bridge, putting a primaries matrix through a
+  matte. A view transform stating only `from_display_reference` had that transform read as
+  a scene-referred one and inverted, silently dropping the rendering. And the negative
+  style on an exponent was read from `negativeStyle` when a config file writes `style`
+  (K-517). Every one is now held by a unit regression as well as by fixture rows.
+- **Four new §5.4 measurements**, in the table there: the ACES log decode's own sampling
+  error, the gamma encode below the shaper's first cell, the cube past the shaper's reach,
+  and — the one that matters — 0.117 at the Rec.709 blue primary through a vendored ACES
+  2.0 output bake (K-518).
+
+The recipes that produced them are checked in beside the data: `tests/fixtures/README.md`
+and its `generate.py`, `vendored/README.md` and its `bake.py`.
+
+Tier one now answers fourteen builtin styles and tier two five, so **both shipped ACES
+configs resolve end to end**. What remains of §4.1's debt is the recorded upgrade, not a
+gap: exact Rust ports of the four output transforms and the LMT, one at a time, each
+measured against the rows that gate the bake it replaces.
 
 ## 9. Test plan — the core invariants
 
