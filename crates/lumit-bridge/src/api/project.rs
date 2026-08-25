@@ -20,6 +20,41 @@ pub struct BridgeHistory {
     pub can_redo: bool,
 }
 
+/// One colour on the project's shelf (K-448): four 0–1 channels and an
+/// optional name. Empty `name` means unnamed, which is the ordinary case — a
+/// shelf is read by eye.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeSwatch {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+    pub name: String,
+}
+
+impl BridgeSwatch {
+    #[frb(ignore)]
+    fn of(swatch: &lumit_core::model::Swatch) -> Self {
+        let [r, g, b, a] = swatch.colour.0;
+        Self {
+            r,
+            g,
+            b,
+            a,
+            name: swatch.name.clone().unwrap_or_default(),
+        }
+    }
+
+    #[frb(ignore)]
+    fn to_model(&self) -> lumit_core::model::Swatch {
+        lumit_core::model::Swatch {
+            colour: lumit_core::model::LinearColour([self.r, self.g, self.b, self.a]),
+            name: (!self.name.is_empty()).then(|| self.name.clone()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 #[frb]
 pub struct ProjectReference {
@@ -586,6 +621,41 @@ impl ProjectReference {
         state
             .store
             .commit(Op::SetAntiAliasing { anti_aliasing })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// The project's colour shelf, in the order the colours were kept (K-448).
+    ///
+    /// Empty for a project nobody has kept a colour in. The picker reads this
+    /// when it opens — a shelf is a handful of colours, so there is nothing to
+    /// stream and nothing to cache.
+    #[frb(sync)]
+    pub fn project_swatches(&self) -> Result<Vec<BridgeSwatch>, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(state
+            .store
+            .snapshot()
+            .swatches
+            .iter()
+            .map(BridgeSwatch::of)
+            .collect())
+    }
+
+    /// Replace the colour shelf whole — which is how a colour is kept and how
+    /// one is forgotten (`Op::SetProjectSwatches`).
+    ///
+    /// One ordinary op, so keeping a colour is one undo step and travels in the
+    /// `.lum` with everything else.
+    #[frb(sync)]
+    pub fn set_project_swatches(&self, swatches: Vec<BridgeSwatch>) -> Result<(), BridgeError> {
+        let swatches = swatches.iter().map(BridgeSwatch::to_model).collect();
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        state
+            .store
+            .commit(Op::SetProjectSwatches { swatches })
             .map_err(BridgeError::OpError)?;
         Ok(())
     }

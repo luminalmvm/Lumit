@@ -465,6 +465,17 @@ pub enum Op {
     SetAntiAliasing {
         anti_aliasing: crate::model::AntiAliasing,
     },
+    /// Replace the project's colour shelf whole (K-448, [`crate::model::Swatch`]).
+    ///
+    /// **The whole list, not an add and a remove pair.** Keeping a colour and
+    /// forgetting one are the only two edits there are, and both are a
+    /// one-line change to a short list — so one coarse op that swaps the list
+    /// is exactly invertible by construction (docs/03 §8), where a pair would
+    /// need an index each and would have to agree about what happens when the
+    /// list moved underneath them.
+    SetProjectSwatches {
+        swatches: Vec<crate::model::Swatch>,
+    },
     /// Point this project at an OCIO config, or clear it (K-490,
     /// docs/impl/ocio.md §3.1).
     ///
@@ -1508,6 +1519,10 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetAntiAliasing {
                 anti_aliasing: previous,
             })
+        }
+        Op::SetProjectSwatches { swatches } => {
+            let previous = std::mem::replace(&mut doc.swatches, swatches.clone());
+            Ok(Op::SetProjectSwatches { swatches: previous })
         }
         Op::SetColourConfig { config } => {
             let previous = std::mem::replace(&mut doc.colour.config, config.as_deref().cloned());

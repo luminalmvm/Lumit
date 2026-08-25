@@ -589,6 +589,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeStrokePoint dco_decode_bridge_stroke_point(dynamic raw);
 
   @protected
+  BridgeSwatch dco_decode_bridge_swatch(dynamic raw);
+
+  @protected
   BridgeTextDocument dco_decode_bridge_text_document(dynamic raw);
 
   @protected
@@ -779,6 +782,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeStrokePoint> dco_decode_list_bridge_stroke_point(dynamic raw);
+
+  @protected
+  List<BridgeSwatch> dco_decode_list_bridge_swatch(dynamic raw);
 
   @protected
   List<BridgeTrackPoint> dco_decode_list_bridge_track_point(dynamic raw);
@@ -1541,6 +1547,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeSwatch sse_decode_bridge_swatch(SseDeserializer deserializer);
+
+  @protected
   BridgeTextDocument sse_decode_bridge_text_document(
       SseDeserializer deserializer);
 
@@ -1768,6 +1777,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeStrokePoint> sse_decode_list_bridge_stroke_point(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeSwatch> sse_decode_list_bridge_swatch(
       SseDeserializer deserializer);
 
   @protected
@@ -2607,6 +2620,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeStrokePoint self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_swatch(BridgeSwatch self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_text_document(
       BridgeTextDocument self, SseSerializer serializer);
 
@@ -2844,6 +2860,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_stroke_point(
       List<BridgeStrokePoint> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_swatch(
+      List<BridgeSwatch> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_track_point(

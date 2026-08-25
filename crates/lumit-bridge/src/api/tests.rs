@@ -8903,3 +8903,49 @@ fn a_masks_per_point_feather_crosses_and_is_clamped() {
         "an opacity edit dropped the per-point widths"
     );
 }
+
+/// **The project's colour shelf crosses the seam and undoes** (K-448): the
+/// picker reads it, writes it whole, and each write is one undo step.
+#[test]
+fn the_project_colour_shelf_reads_writes_and_undoes_over_the_seam() {
+    use crate::api::project::BridgeSwatch;
+
+    let (project, _folder, _filed, _loose) = project_with_folder();
+    assert!(
+        project.project_swatches().expect("read").is_empty(),
+        "a new project has kept no colours"
+    );
+
+    let red = BridgeSwatch {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+        name: String::new(),
+    };
+    let sky = BridgeSwatch {
+        r: 0.0,
+        g: 0.25,
+        b: 0.5,
+        a: 1.0,
+        name: "Sky".into(),
+    };
+
+    project
+        .set_project_swatches(vec![red.clone(), sky.clone()])
+        .expect("kept");
+    assert_eq!(
+        project.project_swatches().expect("read"),
+        vec![red.clone(), sky.clone()],
+        "the shelf comes back in the order it was kept, name and all"
+    );
+
+    // Forgetting one is the same call with the shorter list, and one undo
+    // step: an unnamed swatch comes back unnamed rather than as an empty name.
+    project
+        .set_project_swatches(vec![sky.clone()])
+        .expect("forgotten");
+    assert_eq!(project.project_swatches().expect("read"), vec![sky.clone()]);
+    project.undo().expect("undone");
+    assert_eq!(project.project_swatches().expect("read"), vec![red, sky]);
+}

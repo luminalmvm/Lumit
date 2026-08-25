@@ -396,6 +396,56 @@ mod tests {
         assert!(store.snapshot().cache_location.is_some());
     }
 
+    /// **The colour shelf is one coarse, exactly invertible op** (K-448,
+    /// docs/03 §8): keeping a colour and forgetting one are both a whole-list
+    /// swap, so each is one undo step and undo puts the previous shelf back —
+    /// including the colour a remove took out.
+    #[test]
+    fn the_project_colour_shelf_undoes_and_redoes() {
+        let store = DocumentStore::new(Document::new());
+        assert!(store.snapshot().swatches.is_empty());
+
+        let red = Swatch {
+            colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+            name: None,
+        };
+        let blue = Swatch {
+            colour: LinearColour([0.0, 0.0, 1.0, 1.0]),
+            name: Some("Sky".into()),
+        };
+
+        store
+            .commit(Op::SetProjectSwatches {
+                swatches: vec![red.clone()],
+            })
+            .unwrap();
+        store
+            .commit(Op::SetProjectSwatches {
+                swatches: vec![red.clone(), blue.clone()],
+            })
+            .unwrap();
+        assert_eq!(store.snapshot().swatches, vec![red.clone(), blue.clone()]);
+
+        // Forgetting the first one is the same op with the shorter list.
+        store
+            .commit(Op::SetProjectSwatches {
+                swatches: vec![blue.clone()],
+            })
+            .unwrap();
+        assert_eq!(store.snapshot().swatches, vec![blue.clone()]);
+
+        store.undo().unwrap();
+        assert_eq!(
+            store.snapshot().swatches,
+            vec![red.clone(), blue.clone()],
+            "undo brings the forgotten colour back in its place"
+        );
+        store.undo().unwrap();
+        assert_eq!(store.snapshot().swatches, vec![red.clone()]);
+        store.redo().unwrap();
+        assert_eq!(store.snapshot().swatches, vec![red, blue]);
+    }
+
     /// **Both colour ops undo like anything else** (K-490, docs/impl/ocio.md
     /// §3.1). The project's config and one item's colour space are ordinary
     /// document changes: they change what every comp looks like, so they are

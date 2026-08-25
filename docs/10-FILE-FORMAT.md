@@ -68,6 +68,12 @@ Rules:
   byte that is almost always the default; ordered by id, so two saves of the same project
   stay byte-identical. Absent when nothing is tagged, so a project nobody has tagged gains
   no line for it and an older `.lum` opens with every item untagged.
+- **The project's colour shelf is a list, in the user's own order** (K-448): `swatches` is
+  the colours kept for this project, each `{ "colour": [r, g, b, a] }` with an optional
+  `"name"`, and the picker is where they are read and edited (docs/07 §6.1). A list rather
+  than a map, because the order is the only order there is; absent when the shelf is empty,
+  so a project nobody has kept a colour in is byte-identical to one written before swatches
+  existed.
 - **Unknown-field preservation is mandatory**: a reader keeps any keys it does not
   understand and writes them back out. This is what lets shared projects and newer/older
   Lumit versions coexist (K-065) and lets Placeholder effects round-trip

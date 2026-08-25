@@ -18,8 +18,8 @@ import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `next_comp_name_in`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `next_comp_name_in`, `of`, `to_model`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `eq`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
 /// Whether undo and redo have anything to do, for greying the menu items.
@@ -42,6 +42,40 @@ class BridgeHistory {
           runtimeType == other.runtimeType &&
           canUndo == other.canUndo &&
           canRedo == other.canRedo;
+}
+
+/// One colour on the project's shelf (K-448): four 0–1 channels and an
+/// optional name. Empty `name` means unnamed, which is the ordinary case — a
+/// shelf is read by eye.
+class BridgeSwatch {
+  final double r;
+  final double g;
+  final double b;
+  final double a;
+  final String name;
+
+  const BridgeSwatch({
+    required this.r,
+    required this.g,
+    required this.b,
+    required this.a,
+    required this.name,
+  });
+
+  @override
+  int get hashCode =>
+      r.hashCode ^ g.hashCode ^ b.hashCode ^ a.hashCode ^ name.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeSwatch &&
+          runtimeType == other.runtimeType &&
+          r == other.r &&
+          g == other.g &&
+          b == other.b &&
+          a == other.a &&
+          name == other.name;
 }
 
 class ProjectReference {
@@ -268,6 +302,16 @@ class ProjectReference {
         that: this,
       );
 
+  /// The project's colour shelf, in the order the colours were kept (K-448).
+  ///
+  /// Empty for a project nobody has kept a colour in. The picker reads this
+  /// when it opens — a shelf is a handful of colours, so there is nothing to
+  /// stream and nothing to cache.
+  List<BridgeSwatch> projectSwatches() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceProjectSwatches(
+        that: this,
+      );
+
   void redo() => BridgeLib.instance.api.crateApiProjectProjectReferenceRedo(
         that: this,
       );
@@ -334,6 +378,15 @@ class ProjectReference {
   /// a config that moved relinks by fingerprint like any other file.
   void setColourConfig({String? path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSetColourConfig(that: this, path: path);
+
+  /// Replace the colour shelf whole — which is how a colour is kept and how
+  /// one is forgotten (`Op::SetProjectSwatches`).
+  ///
+  /// One ordinary op, so keeping a colour is one undo step and travels in the
+  /// `.lum` with everything else.
+  void setProjectSwatches({required List<BridgeSwatch> swatches}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetProjectSwatches(
+          that: this, swatches: swatches);
 
   /// Record the arrangement to be written into the file on the next save.
   /// `None`, or JSON that does not parse, clears it rather than failing: a

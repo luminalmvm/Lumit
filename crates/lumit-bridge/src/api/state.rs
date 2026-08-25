@@ -426,6 +426,10 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // item — and the item's row will name its space, so both report.
         | Op::SetColourConfig { .. }
         | Op::SetFootageColourSpace { .. }
+        // The project's colour shelf (K-448). No panel draws it — the picker
+        // reads it when it opens — but it is a document change like the cache
+        // location above, so it reports rather than passing silently.
+        | Op::SetProjectSwatches { .. }
         // A solid def is a project item, and its name shows in the panel.
         | Op::SetSolidDef { .. } => (None, None, true),
 

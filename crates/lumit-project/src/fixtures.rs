@@ -212,6 +212,9 @@ pub fn stress_document(p: &StressParams) -> Document {
         // The default, on, like any new project (K-274).
         anti_aliasing: Default::default(),
         colour: Default::default(),
+        // And it keeps no colours: an empty shelf writes no line (K-448), so
+        // the fixture's bytes are the same as they were before swatches.
+        swatches: Vec::new(),
         // The fixture caches wherever the application is set to, like any
         // ordinary project.
         cache_location: None,

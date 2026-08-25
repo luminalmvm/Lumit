@@ -2115,6 +2115,24 @@ pub struct Document {
     /// one written before this existed.
     #[serde(default, skip_serializing_if = "ColourManagement::is_default")]
     pub colour: ColourManagement,
+    /// The project's own colour shelf: the colours kept for this project, in
+    /// the order they were kept (K-448, docs/07 §6.1).
+    ///
+    /// # In plain terms
+    ///
+    /// Colours a project uses over and over — a brand red, the two greys a
+    /// title sits on — are kept here so every picker in the application can
+    /// offer them. They live **inside the picker** rather than on a toolbar
+    /// strip (K-448), and inside the *project* rather than in a preference,
+    /// because they belong to the job: a copy of the `.lum` carries them, and
+    /// so does the machine it is opened on next.
+    ///
+    /// A `Vec`, because the order is the user's own and there is no other key
+    /// to sort by; absent from the file when it is empty, so a project nobody
+    /// has kept a colour in is byte-identical to one written before this
+    /// existed (docs/10 §1.1).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub swatches: Vec<Swatch>,
     /// How the interface was arranged for this project, as the frontend's own
     /// JSON: the panel layout, which comps were open, where the playhead sat
     /// (K-245, docs/10-FILE-FORMAT.md §1.2).
@@ -2136,6 +2154,23 @@ pub struct Document {
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// One colour on the project's shelf (see [`Document::swatches`]).
+///
+/// The channels are the picker's own: 0–1 for black to white, the same numbers
+/// its hex box reads, so a swatch means the same thing whether it is applied to
+/// a display colour on the 0–255 dial or to a scene-linear one. Alpha is kept
+/// because a colour parameter has one.
+///
+/// The name is optional and nothing generates one: a shelf of colours is read
+/// by eye, and a list of "Colour 1, Colour 2" would be noise. It is here so a
+/// project that *does* name its colours can say so.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Swatch {
+    pub colour: LinearColour,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 /// How many coverage samples per pixel the composite is drawn with (K-274,
@@ -2262,6 +2297,7 @@ impl Document {
             anti_aliasing: AntiAliasing::default(),
             cache_location: None,
             colour: ColourManagement::default(),
+            swatches: Vec::new(),
             ui_state: None,
             extra: serde_json::Map::new(),
         }

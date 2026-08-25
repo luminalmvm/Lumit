@@ -594,8 +594,8 @@ class BridgeParamInfo {
 
   /// What the number *is* (K-443): the rider the row draws beside the value,
   /// and — on a point pair — the unit a Viewer pick has to write in. Declared
-  /// per parameter engine-side, so `centre_x` can be px@comp on one effect
-  /// and a per cent of the frame on another without the panel guessing.
+  /// per parameter engine-side, so a row's unit travels with the row rather
+  /// than with its id and the panel never has to guess.
   final BridgeUnit unit;
 
   const BridgeParamInfo({

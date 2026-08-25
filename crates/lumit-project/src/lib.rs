@@ -2187,6 +2187,50 @@ mod tests {
         );
     }
 
+    /// **The colour shelf survives the file, and an empty one writes no line**
+    /// (K-448, docs/10 §1.1): a project nobody has kept a colour in must be
+    /// byte-identical to one written before swatches existed, and a shelf must
+    /// come back in the order it was kept, names and all.
+    #[test]
+    fn the_colour_shelf_round_trips_and_an_empty_one_writes_no_line() {
+        use lumit_core::model::{LinearColour, Swatch};
+
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("plain.lum");
+        save(&doc_with_item(), &plain).unwrap();
+        let json = String::from_utf8(entry_bytes(&plain, "project.json")).unwrap();
+        assert!(
+            !json.contains("\"swatches\""),
+            "a project with no swatches must write no line for them:\n{json}"
+        );
+
+        let path = dir.path().join("edit.lum");
+        let mut doc = doc_with_item();
+        doc.swatches = vec![
+            Swatch {
+                colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+                name: Some("Brand red".into()),
+            },
+            Swatch {
+                colour: LinearColour([0.0, 0.25, 0.5, 0.75]),
+                name: None,
+            },
+        ];
+        save(&doc, &path).unwrap();
+        let (loaded, _) = open(&path).unwrap();
+        assert_eq!(loaded.swatches, doc.swatches);
+
+        // An older file: the same project with the key removed, which is what a
+        // `.lum` written before the shelf existed looks like.
+        let older = dir.path().join("older.lum");
+        strip_document_key(&path, &older, "swatches");
+        let (old, _) = open(&older).unwrap();
+        assert!(
+            old.swatches.is_empty(),
+            "a file with no shelf must load with an empty one, not fail"
+        );
+    }
+
     /// **The colour settings survive the file, and cost an older one nothing**
     /// (K-490, docs/impl/ocio.md §3.1, §9.1). Three things, because only the
     /// first is visible and the other two are the ones a regression breaks:
