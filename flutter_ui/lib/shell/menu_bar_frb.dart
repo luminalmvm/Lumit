@@ -287,7 +287,12 @@ class LumitMenuBarFrb extends StatelessWidget {
       // middle of the window with the backdrop showing either side. The bar is
       // chrome: it spans the window, one colour, headings from the left edge.
       width: double.infinity,
-      color: t.surface2,
+      // The same hairline the toolbar draws under itself, so the two bars read
+      // as two bands of chrome rather than one 52px slab of surface2.
+      decoration: BoxDecoration(
+        color: t.surface2,
+        border: Border(bottom: BorderSide(color: t.hairline)),
+      ),
       // Nine menu names do not fit a narrow window, and a menu you cannot
       // reach is worse than one you have to scroll to — so the bar scrolls
       // sideways rather than clipping its last headings away.
