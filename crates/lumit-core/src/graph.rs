@@ -1295,6 +1295,87 @@ mod tests {
         );
     }
 
+    /// **The cross-layer tap is an ordinary wire out of an ordinary node**
+    /// (K-604, points-stream.md §1.2): the edge rules needed no arm for it,
+    /// which is the point of settling the design as a *layer-reference
+    /// parameter* rather than as an edge that crosses layers.
+    ///
+    /// What is asserted here is that nothing had to be relaxed to let it
+    /// through, and that the taxonomy still refuses everything it refused.
+    #[test]
+    fn a_points_tap_wires_like_any_other_driver_and_refuses_like_one() {
+        let tap = inst("layer_points");
+        let consumer = inst("clone_to_points");
+        let sample = inst("points_sample");
+        let from_tap = |to: InputRef| Edge {
+            from: OutputRef::Driver {
+                node: tap.id,
+                port: "points".to_owned(),
+            },
+            to,
+        };
+
+        // Into a stack effect's Points socket, and into a driver's: both are
+        // the ordinary type match, through the ordinary `Driver` arm.
+        for to in [
+            onto(&consumer, "points"),
+            InputRef::Param {
+                node: NodeRef::Driver(sample.id),
+                port: "points".to_owned(),
+            },
+        ] {
+            let graph = LayerGraph {
+                nodes: vec![tap.clone(), sample.clone()],
+                edges: vec![from_tap(to)],
+                ..LayerGraph::default()
+            };
+            graph
+                .validate(std::slice::from_ref(&consumer))
+                .expect("a tap is a Points source like any other");
+        }
+
+        // A stream is not a number, on this end as on the producer's.
+        let blur = inst("blur");
+        let mistyped = LayerGraph {
+            nodes: vec![tap.clone()],
+            edges: vec![from_tap(onto(&blur, "radius"))],
+            ..LayerGraph::default()
+        };
+        assert_eq!(
+            mistyped.validate(std::slice::from_ref(&blur)),
+            Err(GraphError::PortTypeMismatch)
+        );
+
+        // A tap has no input of its own — nothing to wire *into*, so naming one
+        // is naming a port that does not exist.
+        let wiggle = inst("wiggle");
+        let backwards = LayerGraph {
+            nodes: vec![tap.clone(), wiggle.clone()],
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: wiggle.id,
+                    port: "value".to_owned(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Driver(tap.id),
+                    port: "points".to_owned(),
+                },
+            }],
+            ..LayerGraph::default()
+        };
+        assert_eq!(backwards.validate(&[]), Err(GraphError::UnknownPort));
+
+        // And the tap takes its wires with it when the node goes, exactly as
+        // every other driver does — `prune_to` is the stack's business, so a
+        // graph without the node is simply a graph with a missing node.
+        let orphaned = LayerGraph {
+            nodes: Vec::new(),
+            edges: vec![from_tap(onto(&consumer, "points"))],
+            ..LayerGraph::default()
+        };
+        assert_eq!(orphaned.validate(&[consumer]), Err(GraphError::UnknownNode));
+    }
+
     /// §4 and K-471's promise: an empty graph writes nothing at all, so a layer
     /// that never opened the Graph panel carries no `graph` key — which is what
     /// makes an untouched document re-save byte for byte.

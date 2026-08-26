@@ -18305,3 +18305,57 @@ row Clone to points takes its stamp from, fitted to the op's own raster on the w
 kernel's `textureLoad` at a point's own pixel is the arithmetic the CPU reference does.
 **Unset reads this effect's own input picture**, which is the same reading an unset Matte
 gives Scatter.
+
+## K-604 — The cross-layer points tap is a node with a layer reference, and it reaches one layer
+
+**DECIDED 2026-08-26**, closing [docs/impl/points-stream.md](impl/points-stream.md) §2.3 and
+the family with it. **Layer points** is a driver in the Drivers category that names another
+layer and hands out that layer's points stream, so anything already taking a points wire —
+Clone to points, Trail, Connect points, the Points sample driver — takes another layer's
+points without knowing the difference.
+
+**It is a node, not an edge, and that was already decided.** §1.2 recorded that edges never
+cross layers (K-471) and that a cross-layer tap, if ever wanted, would be "a layer-reference
+parameter drawn as a derived source node — exactly Audio level's shape". This builds that
+sentence and nothing else. What is new is only that the shape now carries a *stream* where
+Audio level carries a number: the driver declares a Points **output** and no inputs at all,
+`eval_driver` pushes nothing because a stream is not a `Value`, and the walk fetches it
+through the points path instead (`Eval::points_input`, and `fx::driver_stream` for the draw
+builder).
+
+**A tap reaches one layer, never two.** The far layer is evaluated by a fresh walk over
+*that* layer's graph — so what a tap reads is what that layer draws, its producer's own
+wires applied, which is §1.3's property held across the boundary — and that walk is built
+with the crossing flag cleared. A tap on the far side therefore answers the documented empty
+stream. Two layers naming each other stop at the second hop, with **no visited set and no
+cycle to detect**: a bound that does not depend on the evaluation budget noticing, and one
+sentence to explain. The far walk shares the near one's remaining budget, so a fan of taps
+cannot buy itself more work than one frame's allowance.
+
+**Which producer is the first one that makes points**, asked of the signature rather than of
+a list of names (K-598's rule). A layer carrying two producers is a layer whose first one is
+tapped. A picker row is the obvious upgrade and nobody has asked for one; recorded here so
+that the absence is a choice rather than an oversight.
+
+**The refusal taxonomy widened on the degrade side alone** (node-graph.md §1.5), and that is
+the finding. The tap's *wiring* needed no new validation arm at all: it type-checks,
+one-wires and cycle-checks through the arms `OutputRef::Driver` already had, and a stream
+into a number socket is the existing `PortTypeMismatch`. What it *names* is the other half of
+the dividing line — an edit some other entity made — so every way of naming nothing reads as
+the empty stream: no layer named, a deleted layer, a layer with no producer, a bypassed
+producer or an fx switch off, a producer whose stream depends on a picture (K-599, K-603),
+and a second hop. The consumer draws the picture it was handed and the box wears K-509's "no
+stream" mark. Nothing faults, and nothing is guessed.
+
+**The frame key needed no new term, and this was checked rather than assumed.** What a tap
+reads off another layer is that layer's *stack*, not its source — so hashing the source alone
+would have left a stale frame behind every time somebody moved a producer over there. It does
+not: a driver node is hashed exactly as an effect is (node-graph.md §2.3), and its
+layer-reference row goes through the arm that already folds an Effects-and-masks source's
+whole effect stack (K-142). `a_cross_layer_points_tap_keys_on_the_layer_it_names` is the test
+of the claim.
+
+**The camera stays the consumer's.** A tap hands over unprojected positions; the projection
+applied when they are drawn is the *reading* layer's, because the consumer draws into its own
+rectangle and where the composition's camera puts that rectangle is the consumer's own
+placement (K-561). Nothing in `lumit-core` derives a camera, here as everywhere.

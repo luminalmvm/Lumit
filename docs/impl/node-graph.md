@@ -132,6 +132,20 @@ producer) is refused at commit by the cycle check, and it is bounded anyway by t
 evaluation budget and depth every other wire spends. One stream is evaluated per producer
 per frame's walk, however many wires read it.
 
+The programme adds an **eighth** (K-604, points-stream.md §1.2, §2.3), and it is the first
+driver whose *output* is a stream rather than a number:
+
+| Driver | Inputs | Outputs | Notes |
+|---|---|---|---|
+| **Layer points** | Points layer (layer reference) | Points (stream) | Another layer's points, brought into this layer's graph. The family's cross-layer tap. It has no wire inputs at all: what it reads is *named*, because edges never cross layers. The stream is the first enabled effect on the named layer that makes points, evaluated with **that layer's own graph applied** — so what a tap reads is what that layer draws. `eval_driver` pushes nothing (a stream is not a `Value`); the walk fetches it through `Eval::points_input` instead, and the draw builder through `fx::driver_stream`. |
+
+**A tap reaches one layer, never two.** The far side is evaluated by a fresh walk over that
+layer's graph, built with the crossing flag cleared, so a tap over there answers the empty
+stream. Two layers naming each other therefore stop at the second hop — no visited set, no
+cycle to detect, and a bound that does not depend on the budget noticing. The far walk shares
+the near one's remaining budget, so a fan of taps cannot buy itself more work than one
+frame's allowance.
+
 **Two corrections from the build (2026-08-24).** *Colour cycle* was drawn here with Phase
 alone, and a colour cycle that cannot cycle without a keyframe is not one — it gained
 **Rate**, so hue is `phase + rate x layer time`, and **Saturation** and **Brightness**,
@@ -158,11 +172,13 @@ row (`headless::tests::the_preview_and_export_paths_agree_on_an_audio_driven_com
 which asserts both that the two renders agree **and** that the driven picture differs
 from the same comp with the wire cut — equal pixels there would mean silence again.
 
-A driver's cross-layer input (Audio level's Audio) is a **layer-reference parameter**
-(docs/03 §8) — the existing machinery, with the existing degrade-to-no-op on a dangling
-id. **Edges never cross layers**; the canvas draws a referenced layer as a derived source
-node (the drawing's Music node) and the wire from it renders the parameter, exactly as
-the image chain's wires render the list.
+A driver's cross-layer input (Audio level's Audio, Layer points' Points layer) is a
+**layer-reference parameter** (docs/03 §8) — the existing machinery, with the existing
+degrade-to-no-op on a dangling id. **Edges never cross layers**; the canvas draws a
+referenced layer as a derived source node (the drawing's Music node) and the wire from it
+renders the parameter, exactly as the image chain's wires render the list. K-604 settles
+that this holds for a *stream* as well as for a number, which is what makes the family's
+cross-layer tap a node rather than a new kind of edge.
 
 ### 1.4 Edges, ports, and what a wire means
 
@@ -194,6 +210,29 @@ driver nodes. Refusal, not degradation, because unlike a dangling matte this sta
 only be reached by an edit we control, never by deleting some *other* entity — a deleted
 driver takes its edges with it inside the same commit. A dangling **layer reference** on
 a driver's parameter degrades exactly as a matte does.
+
+**The taxonomy, extended over the cross-layer points tap (K-604).** The dividing line is
+unchanged and worth restating, because a tap is the first node that can be *right* about
+its own graph and still answer nothing: **an edit this application made is refused; a state
+some other entity's edit produced is degraded.** A tap's wiring is the first kind — it type-
+checks, one-wires and cycle-checks through the existing arms with no new case, because it is
+an ordinary driver output into an ordinary Points socket. What it *names* is the second kind,
+and every way of naming nothing reads as the **empty stream** — the consumer draws the
+picture it was handed, and the box wears the "no stream" mark K-509 gave the family:
+
+| The tap | Answer | Why not a refusal |
+|---|---|---|
+| Names no layer (an unset row) | empty stream | A fresh node has an unset row; refusing it would refuse adding one. |
+| Names a layer somebody deleted | empty stream | The deletion was the *timeline's* edit, not the graph's — a matte dangles the same way. |
+| Names a layer with no producer on it | empty stream | The far layer's stack is its own to edit; this graph cannot be refused on its behalf. |
+| Names a layer whose producer is bypassed, or whose fx switch is off | empty stream | A producer that draws nothing hands out nothing; the stream and the picture agree about an off switch. |
+| Names a layer whose producer needs a picture (Scatter, Emit from image) | empty stream | K-599's recorded constraint, unchanged: at resolve time no picture exists. |
+| Is itself reached across a layer boundary — a **second hop** | empty stream | The one-hop rule (§1.3). It is a bound, not a judgement, and it is what makes two layers naming each other terminate. |
+
+Nothing here is a new refusal, and that is the finding: the tap needed the taxonomy widened
+on the **degrade** side only. Its wiring rules needed no change at all, which is the whole
+return on settling the design as a layer-reference parameter rather than as an edge that
+crosses layers.
 
 ## 2. Evaluation and determinism
 

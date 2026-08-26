@@ -1749,6 +1749,105 @@ mod tests {
         );
     }
 
+    /// **A cross-layer tap folds the layer it names, and that layer's stack**
+    /// (K-604, node-graph.md §2.3).
+    ///
+    /// This is the one thing the tap could have got wrong quietly. What it
+    /// reads off another layer is not that layer's *source* but the points its
+    /// effect stack makes — so if only the source were hashed, moving a
+    /// producer's Columns over there would leave the reading layer's frames
+    /// cached under a name that no longer describes them.
+    ///
+    /// It costs no new term: a driver node is hashed exactly as an effect is,
+    /// and its layer-reference row goes through the arm that already folds an
+    /// Effects-and-masks source's whole stack (K-142). Asserted here rather
+    /// than assumed, because "for free" is a claim and this is the test of it.
+    #[test]
+    fn a_cross_layer_points_tap_keys_on_the_layer_it_names() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+
+        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+            for p in &mut inst.params {
+                if p.id == id {
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                    return;
+                }
+            }
+            panic!("no parameter {id}");
+        };
+
+        let mut producer = lumit_core::fx::instantiate("grid").unwrap();
+        set(&mut producer, "columns", 5.0);
+        let consumer = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        let consumer_id = consumer.id;
+
+        // The source layer, whose stack makes the points.
+        let mut source = text_layer("source", 0.0, 5.0, 0.0);
+        source.effects = vec![producer.clone()];
+        let source_id = source.id;
+
+        let tap_named = |layer: Option<Uuid>| {
+            let mut node = lumit_core::fx::instantiate("layer_points").unwrap();
+            for p in &mut node.params {
+                if p.id == "source" {
+                    p.value = lumit_core::model::EffectValue::Layer(layer);
+                }
+            }
+            node
+        };
+        let reader_with = |node: lumit_core::model::EffectInstance| {
+            let node_id = node.id;
+            let mut l = text_layer("reader", 0.0, 5.0, 0.0);
+            l.effects = vec![consumer.clone()];
+            l.graph = LayerGraph {
+                nodes: vec![node],
+                edges: vec![Edge {
+                    from: OutputRef::Driver {
+                        node: node_id,
+                        port: "points".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Effect(consumer_id),
+                        port: "points".into(),
+                    },
+                }],
+                layout: Vec::new(),
+                exposed: Vec::new(),
+            };
+            l
+        };
+
+        let doc = Document::new();
+        let comp_of = |node: lumit_core::model::EffectInstance,
+                       fx: lumit_core::model::EffectInstance| {
+            let mut src = source.clone();
+            src.effects = vec![fx];
+            comp_with(vec![reader_with(node), src])
+        };
+        let wired = comp_of(tap_named(Some(source_id)), producer.clone());
+
+        // **Moving the far layer's producer renames this frame.** The points
+        // the tap hands over are a different set, so the picture is.
+        let mut wider = producer.clone();
+        set(&mut wider, "columns", 9.0);
+        assert_ne!(
+            key(&doc, &wired, 1.0),
+            key(&doc, &comp_of(tap_named(Some(source_id)), wider), 1.0),
+            "the tapped layer's stack is not in the reading layer's key"
+        );
+
+        // **Cutting the reference renames it too**: the consumer falls back to
+        // the empty stream and draws nothing.
+        assert_ne!(
+            key(&doc, &wired, 1.0),
+            key(&doc, &comp_of(tap_named(None), producer.clone()), 1.0),
+            "an unset Points layer row keys the same as a named one"
+        );
+
+        // And the same document twice is the same name, which is what makes
+        // any of the above an assertion rather than a coincidence.
+        assert_eq!(key(&doc, &wired, 1.0), key(&doc, &wired, 1.0));
+    }
     /// §2.3's other half: a **temporal** driver declares how far either side of
     /// the frame it reads, and that range is in the key — so widening Smooth's
     /// window retires the frames smoothed with the narrow one.

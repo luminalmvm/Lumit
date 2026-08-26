@@ -323,6 +323,7 @@ Key out safe
 Key out unsafe
 LUT
 Layer out
+Layer points
 Left and right
 Left bottom tangent x
 Left bottom tangent y
@@ -456,6 +457,7 @@ Point control
 Point x
 Point y
 Points
+Points layer
 Points sample
 Polar coordinates
 Polar to rectangular

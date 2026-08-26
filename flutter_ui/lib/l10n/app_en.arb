@@ -2045,6 +2045,10 @@
   "@fxIris": {
     "description": "Effect controls — a group of controls on Depth of field."
   },
+  "fxLayerPoints": "Layer points",
+  "@fxLayerPoints": {
+    "description": "Graph panel \u2014 the name of the Layer points node, which brings another layer's points stream into this layer's graph."
+  },
   "fxLeftAndRight": "Left and right",
   "@fxLeftAndRight": {
     "description": "Effect controls — a Pinning option on Turbulent displace."
@@ -9379,6 +9383,10 @@
   "scrubLadderShift": "SHIFT ×10",
   "@scrubLadderShift": {
     "description": "The coarsest rung of the small floating chip shown while a number is being dragged to change it. Holding Shift makes the drag ten times as fast. SHIFT is the key's name on the keyboard and stays as it is."
+  },
+  "fxPointsLayer": "Points layer",
+  "@fxPointsLayer": {
+    "description": "Graph panel \u2014 a control on Layer points: the layer whose points this node hands out. Unset hands out none."
   },
   "fxPointsSample": "Points sample",
   "@fxPointsSample": {

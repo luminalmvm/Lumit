@@ -320,25 +320,51 @@ fn points_input_for(
         node: NodeRef::Effect(consumer.id),
         port: port.id.to_owned(),
     });
-    // A number or the source matte is not a stream; the type check refused it
-    // at commit, so this is a stale line to ignore rather than a case to guess.
-    let Some(OutputRef::EffectData { effect, .. }) = wire else {
-        return none;
+    // Two things a points wire may come out of, and nothing else: a producer in
+    // this stack, or a **cross-layer tap** naming another layer's (K-604). A
+    // number or the source matte is neither; the type check refused those at
+    // commit, so they are stale lines to ignore rather than cases to guess.
+    enum Source {
+        /// A producer in this layer's own stack, by id.
+        Effect(uuid::Uuid),
+        /// A Layer points node in this layer's graph, by node id.
+        Tap(uuid::Uuid),
+    }
+    let source = match wire {
+        Some(OutputRef::EffectData { effect, .. }) => Source::Effect(*effect),
+        Some(OutputRef::Driver { node, .. }) => Source::Tap(*node),
+        _ => return none,
     };
-    let from = layer
-        .effects
-        .iter()
-        .position(|e| e.id == *effect)
-        .and_then(|i| u32::try_from(i).ok());
-    let at = |when: f64| {
-        lumit_core::fx::effect_stream(
+    // **Which producer the wire names, for the frame key** (K-600): the stack
+    // index of a same-layer producer, and `None` for a tap — whose own node,
+    // and with it the layer it names and that layer's whole stack, is already
+    // folded into this layer's key by the graph's driver-node hashing
+    // (node-graph.md §2.3).
+    let from = match &source {
+        Source::Effect(effect) => layer
+            .effects
+            .iter()
+            .position(|e| e.id == *effect)
+            .and_then(|i| u32::try_from(i).ok()),
+        Source::Tap(_) => None,
+    };
+    let at = |when: f64| match &source {
+        Source::Effect(effect) => lumit_core::fx::effect_stream(
             &layer.graph,
             *effect,
             when,
             context.clone(),
             Some(audio),
             projection,
-        )
+        ),
+        Source::Tap(node) => lumit_core::fx::driver_stream(
+            &layer.graph,
+            *node,
+            when,
+            context.clone(),
+            Some(audio),
+            projection,
+        ),
     };
     let Some(stream) = at(t) else {
         return none;

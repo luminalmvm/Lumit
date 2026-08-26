@@ -22,6 +22,7 @@
 use super::drivers::{
     audio_level::{AudioLevel, AudioLevelDef},
     colour_cycle::{ColourCycle, ColourCycleDef},
+    layer_points::{LayerPoints, LayerPointsDef},
     math::{Math, MathDef},
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
@@ -294,4 +295,8 @@ crate::catalogue![
     // arrived last and the order here is the order the Graph panel's search
     // shows.
     PointsSampleDef => PointsSample,
+    // The family's cross-layer tap (K-604): the first driver whose *output* is
+    // a stream rather than a number, and the one node that reaches outside the
+    // layer its graph belongs to.
+    LayerPointsDef => LayerPoints,
 ];

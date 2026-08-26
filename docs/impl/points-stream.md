@@ -158,11 +158,30 @@ sampling purposes — that package decides, with its own appended entry. Named, 
 
 ### 2.3 Deferred, as named packages
 
-Each of these is a future work package with its own design step, all consuming the
+Each of these was a future work package with its own design step, all consuming the
 contract in §3 unchanged: **Connect points** (lines between near particles — plexus),
 **Clone to points** (a layer instanced per particle, generalising Sprite mode),
 **Trail** (history drawn from closed-form back-evaluation, like Streak but longer),
-**cross-layer points taps** (§1.2). None blocks, none is built.
+**cross-layer points taps** (§1.2). **All four are built** (K-600, K-601, K-602, K-604),
+along with a fourth producer this list did not name — **Emit from image** (K-603), points
+where a layer's pixels are bright, which is Scatter asking the pixel about light instead of
+about coverage. The family is complete.
+
+Two of them settled something that belongs here rather than in one effect:
+
+- **Connect points bucketed the plane** (K-602). Its pairing is `n²/2` distances asked
+  plainly, which docs/13 would never pass, so the *projected* plane is cut into squares of
+  one Max distance and a point asks only the nine around it. The answer is identical to the
+  exhaustive one — a test runs both — and the remaining ceiling is a clump, marked with its
+  upgrade and its trigger. Nearness is judged in projected space because a line is drawn on
+  the picture, which is the same reading K-561 gave Points sample's Nearest distance.
+- **The cross-layer tap is a node, not an edge** (K-604), which is what §1.2 said it would
+  be: a **Layer points** driver with a layer-reference row and a Points *output*, so
+  anything that already takes a points wire takes this one without knowing the difference.
+  It reaches **one layer, never two** — the far side is evaluated by a fresh walk with the
+  crossing flag cleared — so two layers naming each other stop at the second hop with no
+  visited set and no cycle to detect. Its wiring needed no new validation arm; the refusal
+  taxonomy widened on the *degrade* side alone (node-graph.md §1.5).
 
 **The generators are built** (K-598, K-599): **Grid**, a lattice of points with a jitter
 per axis, and **Scatter**, points thrown uniformly inside the layer's own alpha or a

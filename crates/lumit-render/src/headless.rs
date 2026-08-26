@@ -6041,6 +6041,122 @@ surfaces:
         assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
     }
 
+    /// **One layer's effect draws another layer's points** (K-604) — the whole
+    /// cross-layer path, through the export walk: the tap's Points layer row is
+    /// resolved, the named layer's producer is evaluated with that layer's own
+    /// graph, and the stream reaches this layer's consumer on the carriage.
+    ///
+    /// The two arms differ **only** in whether the tap's row names the source
+    /// layer. The source layer is in both documents and draws the same thing in
+    /// both, so nothing else about the frame can move.
+    #[test]
+    fn a_layer_draws_the_points_of_another_layer_through_a_tap() {
+        let mut r = match HeadlessRenderer::new() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (64u32, 48u32);
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+
+        let build = |named: bool| {
+            use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
+            // The base **layer**, not the solid item `matrix_base` answers with:
+            // it is the only layer in the comp until the top one goes on.
+            let base = doc.comp(comp_id).unwrap().layers[0].id;
+            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+                for p in &mut inst.params {
+                    if p.id == id {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                        return;
+                    }
+                }
+                panic!("no parameter {id}");
+            };
+
+            // The producer lives on the **base** layer, which is comp-sized, and
+            // draws nothing of its own: the points are all it contributes.
+            let mut producer = lumit_core::fx::instantiate("grid").unwrap();
+            for (id, v) in [
+                ("columns", 3.0),
+                ("rows", 3.0),
+                ("planes", 1.0),
+                ("spacing_x", 4.0),
+                ("spacing_y", 3.0),
+                ("position_x", 6.0),
+                ("position_y", 5.0),
+                ("size", 1.0),
+                ("mix", 0.0),
+            ] {
+                set(&mut producer, id, v);
+            }
+
+            // The consumer lives on the top layer, and its only source of
+            // points is the tap.
+            let mut consumer = lumit_core::fx::instantiate("connect_points").unwrap();
+            for (id, v) in [
+                ("max_distance", 5.0),
+                ("max_links", 4.0),
+                ("width", 1.5),
+                ("fade", 0.0),
+            ] {
+                set(&mut consumer, id, v);
+            }
+            let consumer_id = consumer.id;
+
+            let mut node = lumit_core::fx::instantiate("layer_points").unwrap();
+            for p in &mut node.params {
+                if p.id == "source" {
+                    p.value = lumit_core::model::EffectValue::Layer(named.then_some(base));
+                }
+            }
+            let node_id = node.id;
+
+            let comp = doc.comp_mut(comp_id).unwrap();
+            comp.layers
+                .iter_mut()
+                .find(|l| l.id == base)
+                .unwrap()
+                .effects = vec![producer];
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = vec![consumer];
+            l.graph = LayerGraph {
+                nodes: vec![node],
+                edges: vec![Edge {
+                    from: OutputRef::Driver {
+                        node: node_id,
+                        port: "points".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Effect(consumer_id),
+                        port: "points".into(),
+                    },
+                }],
+                ..LayerGraph::default()
+            };
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let named = build(true);
+        let unset = build(false);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 6, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let webbed = frame_of(&named);
+        let bare = frame_of(&unset);
+        assert_ne!(
+            webbed, bare,
+            "a tap must put another layer's points on this layer's frame"
+        );
+        assert_eq!(webbed, frame_of(&named), "two renders of one frame differ");
+    }
+
     /// **The Source layer reaches the rejection, and its brightness decides**
     /// (K-603) — the whole path, through the export walk: the layer reference
     /// is resolved, the referenced layer's picture rides the carriage to the

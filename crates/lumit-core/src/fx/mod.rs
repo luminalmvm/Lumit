@@ -63,7 +63,8 @@ mod tests;
 pub use builtins::*;
 pub use catalogue::*;
 pub use drivers::{
-    effect_stream, resolve_drivers, resolve_drivers_projected, temporal_window, ResolvedDrivers,
+    driver_stream, effect_stream, resolve_drivers, resolve_drivers_projected, temporal_window,
+    ResolvedDrivers,
 };
 pub use markers::*;
 pub use maths::*;

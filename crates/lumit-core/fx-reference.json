@@ -16888,6 +16888,25 @@
       ],
       "groups": [],
       "matte_role": "none"
+    },
+    {
+      "slug": "layer-points",
+      "match_name": "layer_points",
+      "label": "Layer points",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "source",
+          "label": "Points layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
     }
   ]
 }

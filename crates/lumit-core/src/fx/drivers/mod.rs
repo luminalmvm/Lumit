@@ -4,9 +4,16 @@
 //!
 //! A driver makes a *value* rather than a picture, and a wire from a driver
 //! into an effect's socket makes that parameter follow the value instead of its
-//! keyframes. This module holds the seven of them — Wiggle, Audio level, Colour
-//! cycle, Math, Remap, Smooth, Points sample — and the small walk that works
-//! out, at one frame, what every wire is carrying.
+//! keyframes. This module holds the eight of them — Wiggle, Audio level, Colour
+//! cycle, Math, Remap, Smooth, Points sample, Layer points — and the small walk
+//! that works out, at one frame, what every wire is carrying.
+//!
+//! **One of them carries no value at all.** Layer points (K-604) is a *source*:
+//! it names another layer and hands out that layer's points stream, so what
+//! leaves it is read through [`Eval::points_input`] rather than substituted
+//! into a parameter. It is the family's cross-layer tap, and it is a
+//! layer-reference parameter rather than a wire because edges never cross
+//! layers (K-471).
 //!
 //! **One of them reads a picture effect's data.** Points sample takes a wire
 //! from Particulate's Points socket, which makes the walk *re-entrant through
@@ -46,6 +53,7 @@ use crate::graph::{InputRef, LayerGraph, NodeRef, OutputRef};
 
 pub mod audio_level;
 pub mod colour_cycle;
+pub mod layer_points;
 pub mod math;
 pub mod points_sample;
 pub mod remap;
@@ -161,6 +169,7 @@ pub fn resolve_drivers_projected(
         projection,
         budget: Cell::new(EVAL_BUDGET),
         streams: RefCell::new(Vec::new()),
+        cross: true,
     };
     let mut out = ResolvedDrivers::default();
     // Document order in, sorted order out: the wires a layer carries are a
@@ -234,8 +243,51 @@ pub fn effect_stream(
             projection,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
+            cross: true,
         };
         ev.stream(effect, t, 0)
+    }?;
+    Some(Rc::try_unwrap(stream).unwrap_or_else(|shared| (*shared).clone()))
+}
+
+/// **One cross-layer tap's points stream**, at layer time `t` and in px@comp
+/// (K-604) — [`effect_stream`]'s sibling, for the other kind of thing a points
+/// wire can come out of.
+///
+/// # In plain terms
+///
+/// A wire into Clone to points may come from a producer in the same stack, or
+/// from a **Layer points** node naming another layer entirely. The draw builder
+/// asks whichever this one is, through the same walk the driver graph uses, so
+/// a consumer stamps one set of points however they arrived.
+///
+/// `None` means *no stream*, which is always the documented calm rather than a
+/// fault: the node is not a tap, it is bypassed, its row names no layer or a
+/// deleted one, that layer carries no producer, or the walk has already crossed
+/// one layer boundary (see [`Eval::tap_stream`]).
+#[must_use]
+pub fn driver_stream(
+    graph: &LayerGraph,
+    node: Uuid,
+    t: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+) -> Option<PointsStream> {
+    // The `Eval` is dropped before the stream is unwrapped, as `effect_stream`
+    // does and for the same reason: the common case moves rather than copies
+    // eight vectors of up to the cap.
+    let stream = {
+        let ev = Eval {
+            graph,
+            context,
+            audio,
+            projection,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+            cross: true,
+        };
+        ev.tap_stream(node, t, 0)
     }?;
     Some(Rc::try_unwrap(stream).unwrap_or_else(|shared| (*shared).clone()))
 }
@@ -293,6 +345,16 @@ struct Eval<'a> {
     /// and a linear scan over three entries beats hashing a `Uuid`. The stream
     /// is shared rather than cloned: it is eight `Vec`s of up to the cap.
     streams: RefCell<Vec<(Uuid, Rc<PointsStream>)>>,
+    /// **Whether this walk may still cross a layer boundary** (K-604).
+    ///
+    /// A cross-layer tap evaluates the named layer with a fresh walk over
+    /// *that* layer's graph, and that walk is built with this set false — so a
+    /// tap reaches one layer and never two. It is the whole of the recursion
+    /// argument for the tap: two layers naming each other stop at the second
+    /// hop, with the far one reading the documented empty stream. No visited
+    /// set, no cycle to detect, and a bound that does not depend on the budget
+    /// noticing.
+    cross: bool,
 }
 
 impl Eval<'_> {
@@ -411,10 +473,85 @@ impl Eval<'_> {
         })?;
         match from {
             OutputRef::EffectData { effect, .. } => self.stream(*effect, t, depth),
-            // A number or a texture is not a stream. Refused at commit by the
-            // type check; ignored here rather than guessed at.
-            OutputRef::Driver { .. } | OutputRef::SourceMatte => None,
+            // **A cross-layer tap** (K-604): a driver whose output is a stream
+            // rather than a number, so a points socket may legitimately be fed
+            // by one. Anything else on a driver's output is a number, which is
+            // not a stream and was refused at commit by the type check.
+            OutputRef::Driver { node, .. } => self.tap_stream(*node, t, depth),
+            // A texture is not a stream either.
+            OutputRef::SourceMatte => None,
         }
+    }
+
+    /// The stream a **cross-layer tap** hands out (K-604,
+    /// points-stream.md §1.2): the first producer on the layer its Points layer
+    /// row names, evaluated with that layer's own graph applied.
+    ///
+    /// `None` — the documented empty stream, never a fault — for every absence
+    /// there is: a node this build does not know, a bypassed one, a row naming
+    /// no layer or a deleted one, a layer with no producer or with its fx
+    /// switch off, a producer whose stream depends on a picture (K-599, K-603),
+    /// and **a second hop**.
+    ///
+    /// The second hop is the recursion argument and it is deliberately blunt: a
+    /// tap reaches one layer, and the walk it starts there carries
+    /// [`cross`](Eval::cross) false, so a tap on the far side answers nothing.
+    /// Two layers naming each other therefore stop at the second hop with no
+    /// visited set and no cycle to detect. The far walk shares this one's
+    /// remaining budget, so a fan of taps cannot buy itself more work than one
+    /// frame's allowance.
+    fn tap_stream(&self, node: Uuid, t: f64, depth: u32) -> Option<Rc<PointsStream>> {
+        if let Some((_, s)) = self.streams.borrow().iter().find(|(id, _)| *id == node) {
+            return Some(Rc::clone(s));
+        }
+        if !self.cross || depth >= MAX_DEPTH || self.budget.get() == 0 {
+            return None;
+        }
+        self.budget.set(self.budget.get() - 1);
+        let inst = self.graph.node(node)?;
+        // Bypass (the `B` badge, §1.4): a bypassed tap carries nothing, exactly
+        // as a bypassed driver carries no number.
+        if !inst.enabled || inst.effect.match_name != layer_points::MATCH_NAME {
+            return None;
+        }
+        let layer_id = inst.layer_ref(layer_points::SOURCE_PARAM)?;
+        let doc = &self.context.document;
+        let comp = doc.comp(self.context.comp?)?;
+        let layer = comp.layers.iter().find(|l| l.id == layer_id)?;
+        if !layer.switches.fx {
+            return None;
+        }
+        // **The first producer on it**, asked of the signature rather than of a
+        // list of names (K-598's rule). A layer carrying two is a layer whose
+        // first one is tapped.
+        let producer = layer.effects.iter().find(|e| {
+            e.enabled
+                && super::BUILTIN_DEFS
+                    .get(&e.effect.match_name)
+                    .is_some_and(|def| points::wants_schedule(def.signature()))
+        })?;
+        // A fresh walk over **that** layer's graph and context, so the stream a
+        // tap reads is the stream that layer draws — its producer's own wires
+        // applied. The camera stays this layer's: the consumer draws into its
+        // own rectangle, and where the composition's camera puts that rectangle
+        // is the consumer's own placement, never the producer's.
+        let far = Eval {
+            graph: &layer.graph,
+            context: Arc::new(ExpressionContext {
+                layer: Some(layer_id),
+                ..(*self.context).clone()
+            }),
+            audio: self.audio,
+            projection: self.projection,
+            budget: Cell::new(self.budget.get()),
+            streams: RefCell::new(Vec::new()),
+            cross: false,
+        };
+        let stream = far.stream(producer.id, t, 0);
+        self.budget.set(far.budget.get());
+        let stream = stream?;
+        self.streams.borrow_mut().push((node, Rc::clone(&stream)));
+        Some(stream)
     }
 
     /// One stack effect's points stream at layer time `t`, memoised.
@@ -1666,6 +1803,7 @@ mod tests {
             projection: points::Projection::FLAT,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
+            cross: true,
         };
         assert!(ev.output(a.id, points_sample::COUNT_PORT, 1.0, 0).is_some());
         assert!(ev
@@ -1730,6 +1868,7 @@ mod tests {
             projection: points::Projection::FLAT,
             budget: Cell::new(EVAL_BUDGET),
             streams: RefCell::new(Vec::new()),
+            cross: true,
         };
         let _ = ev.output(sampler.id, points_sample::COUNT_PORT, 1.0, 0);
         assert!(
@@ -1959,5 +2098,295 @@ mod tests {
             (got - 50.0).abs() < 1e-3,
             "Remap saw a clamped input: {got} rather than 50"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // The cross-layer points tap (K-604, points-stream.md §1.2, §2.3).
+    // -----------------------------------------------------------------------
+
+    /// A comp of **two** layers: a reader whose graph `reader_graph` builds
+    /// from the source layer's id, and a source carrying `source_effects` and
+    /// `source_graph`.
+    ///
+    /// The closure exists because a tap names the source layer by id, and that
+    /// id does not exist until the layer does — so the reader's graph is built
+    /// after it, not before.
+    fn staged_pair(
+        reader_graph: impl FnOnce(Uuid) -> LayerGraph,
+        source_effects: Vec<EffectInstance>,
+        source_graph: LayerGraph,
+    ) -> (Arc<ExpressionContext>, Uuid) {
+        use crate::model::{Composition, Document, LayerKind, ProjectItem, Switches};
+        use crate::time::{CompTime, Duration, FrameRate, Rational};
+
+        let at = |s: i64| CompTime(Rational::new(s, 1).expect("a whole second"));
+        let layer =
+            |name: &str, effects: Vec<EffectInstance>, graph: LayerGraph| crate::model::Layer {
+                graph,
+                id: Uuid::now_v7(),
+                name: name.into(),
+                kind: LayerKind::Solid {
+                    def: Uuid::now_v7(),
+                },
+                in_point: at(0),
+                out_point: at(10),
+                start_offset: at(0),
+                transform: Default::default(),
+                matte: None,
+                parent: None,
+                label: 0,
+                volume_db: crate::anim::Property::zero(),
+                audio_only: false,
+                adjustment: false,
+                retime: None,
+                blend: Default::default(),
+                masks: Vec::new(),
+                effects,
+                switches: Switches::default(),
+                interpolation: Default::default(),
+                parked_flow: None,
+                markers: Vec::new(),
+                paint: Default::default(),
+                extra: serde_json::Map::new(),
+            };
+        let source = layer("source", source_effects, source_graph);
+        let source_id = source.id;
+        let reader = layer("reader", Vec::new(), reader_graph(source_id));
+        let reader_id = reader.id;
+        let comp = Composition {
+            id: Uuid::now_v7(),
+            name: "c".into(),
+            width: 1920,
+            height: 1080,
+            frame_rate: FrameRate::new(60, 1).expect("60 fps"),
+            duration: Duration(Rational::new(10, 1).expect("ten seconds")),
+            background: crate::model::LinearColour::BLACK,
+            work_area: None,
+            layers: vec![reader, source],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let comp_id = comp.id;
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(comp));
+        (
+            Arc::new(ExpressionContext {
+                document: Arc::new(doc),
+                comp: Some(comp_id),
+                layer: Some(reader_id),
+                comp_time: 0.0,
+                current_depth: 0,
+            }),
+            source_id,
+        )
+    }
+
+    /// A Layer points node naming `layer` — or naming nothing, when `layer` is
+    /// `None`.
+    fn tap(layer: Option<Uuid>) -> EffectInstance {
+        let mut node = inst("layer_points");
+        for p in &mut node.params {
+            if p.id == "source" {
+                p.value = EffectValue::Layer(layer);
+            }
+        }
+        node
+    }
+
+    /// A 5 × 3 Grid, whose lattice a test can count without measuring it.
+    fn lattice() -> EffectInstance {
+        let mut producer = inst("grid");
+        set(&mut producer, "columns", 5.0);
+        set(&mut producer, "rows", 3.0);
+        set(&mut producer, "planes", 1.0);
+        producer
+    }
+
+    /// The stream a tap named `node` hands out, on the reader layer `context`
+    /// points at.
+    fn tapped(
+        context: &Arc<ExpressionContext>,
+        graph: &LayerGraph,
+        node: Uuid,
+    ) -> Option<PointsStream> {
+        driver_stream(
+            graph,
+            node,
+            0.0,
+            context.clone(),
+            None,
+            points::Projection::FLAT,
+        )
+    }
+
+    /// One reader layer carrying a single tap, and the source layer it names:
+    /// the graph, the tap's node id, and a context pointed at the reader.
+    fn one_tap(
+        row: Option<Uuid>,
+        source_effects: Vec<EffectInstance>,
+        source_graph: LayerGraph,
+        enabled: bool,
+    ) -> (Arc<ExpressionContext>, LayerGraph, Uuid) {
+        let mut node_id = Uuid::nil();
+        let mut built = LayerGraph::default();
+        let (context, _) = staged_pair(
+            |source| {
+                // `row` overrides which layer is named: `Some` for the tests
+                // about a dangling or absent reference, and the real source
+                // layer otherwise.
+                let mut node = tap(if row.is_some() { row } else { Some(source) });
+                node.enabled = enabled;
+                node_id = node.id;
+                built = LayerGraph {
+                    nodes: vec![node],
+                    ..LayerGraph::default()
+                };
+                built.clone()
+            },
+            source_effects,
+            source_graph,
+        );
+        (context, built, node_id)
+    }
+
+    /// **A tap hands out the points of the layer it names** (K-604): the stream
+    /// the *other* layer's producer makes, reaching this layer's graph as an
+    /// ordinary wire out of a derived source node — no edge crosses anything.
+    #[test]
+    fn a_tap_reads_the_points_of_the_layer_it_names() {
+        let (context, graph, node) = one_tap(None, vec![lattice()], LayerGraph::default(), true);
+        let stream = tapped(&context, &graph, node).expect("the tap answered nothing");
+        assert_eq!(stream.len(), 15, "not the other layer's 5 × 3 lattice");
+        assert_eq!(stream.id, (0..15).collect::<Vec<u64>>());
+    }
+
+    /// **Every absence is the empty stream** (K-604) — the labelled no-op a
+    /// dangling layer reference has always been, over the five ways a tap can
+    /// come to nothing. None of them is a refusal: a tap that answers nothing
+    /// leaves its consumer drawing the picture it was handed.
+    #[test]
+    fn a_tap_that_names_nothing_useful_hands_over_nothing() {
+        let mut bypassed = lattice();
+        bypassed.enabled = false;
+        let cases: Vec<(&str, Option<Uuid>, Vec<EffectInstance>, bool)> = vec![
+            // A row nobody set.
+            ("an unset row", Some(Uuid::nil()), vec![lattice()], true),
+            // A layer somebody deleted: an id that names nothing in the comp.
+            (
+                "a dangling reference",
+                Some(Uuid::now_v7()),
+                vec![lattice()],
+                true,
+            ),
+            // A layer with no producer on it at all.
+            ("no producer", None, vec![inst("blur")], true),
+            // A bypassed producer draws nothing, so it hands out nothing.
+            ("a bypassed producer", None, vec![bypassed], true),
+            // A bypassed tap — the `B` badge, as on every other driver.
+            ("a bypassed tap", None, vec![lattice()], false),
+        ];
+        for (what, row, effects, enabled) in cases {
+            // `Uuid::nil` stands for the unset row, which stores no id at all.
+            let row = row.filter(|id| !id.is_nil());
+            let unset_row = matches!(what, "an unset row");
+            let (context, graph, node) = if unset_row {
+                one_tap(Some(Uuid::nil()), effects, LayerGraph::default(), enabled)
+            } else {
+                one_tap(row, effects, LayerGraph::default(), enabled)
+            };
+            assert!(
+                tapped(&context, &graph, node).is_none(),
+                "{what} answered a stream"
+            );
+        }
+    }
+
+    /// **A tap reaches one layer, never two** (K-604) — the recursion argument,
+    /// asserted rather than reasoned about. The source layer's own graph
+    /// carries a tap of its own and no producer; the far tap answers nothing,
+    /// so the near one does, and two layers naming each other terminate at the
+    /// second hop.
+    #[test]
+    fn a_tap_does_not_follow_a_second_tap() {
+        let far = tap(Some(Uuid::now_v7()));
+        let (context, graph, node) = one_tap(
+            None,
+            Vec::new(),
+            LayerGraph {
+                nodes: vec![far],
+                ..LayerGraph::default()
+            },
+            true,
+        );
+        assert!(tapped(&context, &graph, node).is_none());
+    }
+
+    /// **What a tap reads is what the other layer draws** (points-stream.md
+    /// §1.3): the far layer's producer is resolved with its *own* graph's
+    /// substitutions applied, so a wire over there moves the points a tap hands
+    /// over here.
+    #[test]
+    fn a_tap_reads_the_far_layers_own_driver_wires() {
+        let feed = constant(9.0);
+        let producer = lattice();
+        let far_graph = LayerGraph {
+            nodes: vec![feed.clone()],
+            edges: vec![edge(
+                &feed,
+                "value",
+                NodeRef::Effect(producer.id),
+                "columns",
+            )],
+            ..LayerGraph::default()
+        };
+        let (context, graph, node) = one_tap(None, vec![producer], far_graph, true);
+        let stream = tapped(&context, &graph, node).expect("the tap answered nothing");
+        assert_eq!(
+            stream.len(),
+            27,
+            "the far layer's wire on Columns was not applied"
+        );
+    }
+
+    /// **A driver reads a tap the same way it reads a producer** (K-604):
+    /// Points sample counts another layer's points, which is the wire the
+    /// family's whole cross-layer story is for.
+    #[test]
+    fn points_sample_counts_another_layers_points_through_a_tap() {
+        let sample = inst("points_sample");
+        let target = inst("blur");
+        let sample_id = sample.id;
+        let mut built = LayerGraph::default();
+        let (context, _) = staged_pair(
+            |source| {
+                let node = tap(Some(source));
+                built = LayerGraph {
+                    nodes: vec![node.clone(), sample.clone()],
+                    edges: vec![
+                        Edge {
+                            from: OutputRef::Driver {
+                                node: node.id,
+                                port: "points".into(),
+                            },
+                            to: InputRef::Param {
+                                node: NodeRef::Driver(sample_id),
+                                port: "points".into(),
+                            },
+                        },
+                        edge(&sample, "count", NodeRef::Effect(target.id), "radius"),
+                    ],
+                    ..LayerGraph::default()
+                };
+                built.clone()
+            },
+            vec![lattice()],
+            LayerGraph::default(),
+        );
+        let drivers = resolve_drivers(&built, 0.0, context, None);
+        let count = drivers
+            .param(NodeRef::Effect(target.id), ParamId::new("radius"))
+            .expect("Count drove nothing");
+        assert_eq!(count, Value::Float(15.0), "not the far lattice's count");
     }
 }

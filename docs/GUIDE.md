@@ -10819,8 +10819,31 @@ whichever end it is. And when a point has more near neighbours than it has room 
 the nearest ones — with the point's own number breaking any tie, so two computers never
 choose differently.
 
-**What is left of the family** is not a consumer at all: a way for one layer's graph to read
-*another* layer's points. The full plan lives in docs/impl/points-stream.md, and the
+**Layer points: reading another layer's points, without a wire leaving the layer.** The last
+piece, and the one where the rule and the want pull against each other. Wires live inside one
+layer — that is deliberate, and it is what keeps the graph honest about the plain list view of
+the same stack. But "web up the particles from *that* layer over here" is an obvious thing to
+want.
+
+The way out is the way the application already handles sound. **Audio level** does not run a
+wire to the music layer; it *names* it, in an ordinary row, and the canvas draws that named
+layer as a little source box with a wire coming out of it. Layer points does the same thing
+with points instead of loudness: name a layer, and out comes whatever points that layer's own
+generator is making, on a wire that never leaves the layer it is drawn on. Everything that
+already reads points reads this without knowing the difference.
+
+Two rules keep it simple. It takes the **first** points-making effect on the layer it names —
+one producer per layer is the normal case, and a picker can come the day somebody wants two.
+And **it reaches one layer, never two**: if the layer it names has a Layer points of its own,
+that one answers nothing. That single rule is what stops two layers pointing at each other
+from chasing each other for ever, and it needs no clever loop detection to do it.
+
+Everything else is the ordinary calm this application applies to a name that has come to
+nothing: no layer named, a layer somebody deleted, a layer with nothing on it that makes
+points — each simply hands over no points, the effect draws nothing, and a small mark on the
+box says why.
+
+**The family is complete.** The full plan lives in docs/impl/points-stream.md, and the
 effect's own design — every slider, formula and budget — in docs/impl/particulate.md.
 
 ## 24. What the export writes, and how big: colour spaces and resampling, in plain terms
