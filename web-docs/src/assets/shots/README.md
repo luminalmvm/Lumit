@@ -29,7 +29,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `waveform.png` | [/use/audio/](/use/audio/) | A footage layer's waveform in its lane. |
 | `workspace.png` | [/use/workspaces/](/use/workspaces/) | A workspace: Viewer, Timeline, and Project docked together. |
 | `effects-presets.png` | [/panels/effects-presets/](/panels/effects-presets/) | The Effects & Presets panel. |
-| `export.png` | [/start/first-composition/](/start/first-composition/) | The export settings. |
+| `export.png` | [/use/export/](/use/export/), [/start/first-composition/](/start/first-composition/) | The export dialogue, on the Output tab. |
 | `graph-editor.png` | [/panels/graph-editor/](/panels/graph-editor/) | The graph editor, showing the value graph. |
 | `keyframes-stopwatch.png` | [/start/first-composition/](/start/first-composition/) | The stopwatch beside Position, turned on, with two keyframes on the row. |
 | `layer-switches.png` | [/use/layers/](/use/layers/) | The switches on a layer's row. |
@@ -48,11 +48,11 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `export-queue.png` | [/use/export/](/use/export/) | The export queue, with one composition waiting. |
 | `welcome.png` | [/start/install/](/start/install/) | The welcome screen: the three cards and the RECENT well. |
 | `nodes-workspace.png` | [/use/workspaces/](/use/workspaces/) | The Nodes workspace: the graph across the window, Viewer beside it. |
-| `graph-panel.png` | - | The Node graph panel: a wired image chain and a driver. No page for it yet. |
+| `graph-panel.png` | [/use/nodes/](/use/nodes/), [/tutorials/node-graph/](/tutorials/node-graph/) | The Node graph panel: a wired image chain and a driver. |
 | `effects-presets-ofx.png` | [/panels/effects-presets/](/panels/effects-presets/) | An OFX plugin's own heading in the panel, under the folded built-in categories. |
 | `layers-shut.png` | [/panels/timeline/](/panels/timeline/) | Layers mode, everything shut: summary diamonds on the bars. |
 | `layers-open.png` | [/panels/timeline/](/panels/timeline/) | Layers mode, a layer twirled open: shaped marks on two lanes. |
-| `layers-selected.png` | [/panels/timeline/](/panels/timeline/) | The same, with one keyframe picked. |
+| `layers-selected.png` | [/panels/timeline/](/panels/timeline/), [/tutorials/many-keyframes/](/tutorials/many-keyframes/) | The same, with one keyframe picked. |
 | `graph-mode.png` | [/panels/timeline/](/panels/timeline/) | Graph mode: the opacity curve of the picked property. |
 
 ## Waiting on the feature

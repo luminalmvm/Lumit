@@ -76,12 +76,16 @@ r.addEventListener("input",set);set()})})`,
       plugins: [
         starlightSidebarTopics(
           [
-            // Read in order, once: install it, learn the shape of a composition.
+            // Read in order, once: install it, learn the shape of a
+            // composition, then the task-shaped walkthroughs underneath.
             {
               label: "Tutorials",
               link: "/start/install/",
               icon: "open-book",
-              items: [{ label: "Start here", autogenerate: { directory: "start" } }],
+              items: [
+                { label: "Start here", autogenerate: { directory: "start" } },
+                { label: "Going further", autogenerate: { directory: "tutorials" } },
+              ],
             },
             // The working manual. Five groups roughly in the order a shot is
             // made, then one page per panel of the application.

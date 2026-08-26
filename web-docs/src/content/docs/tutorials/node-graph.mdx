@@ -1,0 +1,107 @@
+---
+title: Working with the node graph
+description: Drive a glow from the music, and feed one effect's points into another.
+sidebar:
+  order: 2
+---
+
+import Shot from "../../../components/Shot.astro";
+
+Two jobs the [node graph](/use/nodes/) does that no panel of numbers can: it makes a
+parameter follow something else in the composition, and it lets one effect hand its work
+to another. Both are a wire.
+
+<Shot file="graph-panel.png" caption="A layer's chain with a Wiggle driver wired into Glow's Threshold." eager/>
+
+Open the graph from **Window ▸ Node graph**, or switch to the **Nodes** workspace, which
+gives it most of the window. It follows whichever layer is selected in the Timeline.
+
+## Make a glow pulse with the music
+
+The composition has a music layer and a layer you want to react to it.
+
+**1. Put a Glow on the layer.** Select it and add **Effect ▸ Stylise ▸ Glow**. It appears
+in the graph as a box between Source and Layer out, because the graph is drawing the
+effect stack.
+
+**2. Add the driver.** Click empty canvas and press `Tab`. The search lists the
+[drivers](/effects/#drivers) — effects that make a value rather than a picture. Type
+`audio` and pick **[Audio level](/effects/drivers/audio-level/)**.
+
+**3. Point it at the sound.** A driver never reaches across to another layer with a wire,
+so Audio level has an **Audio** row instead: pick the music layer on it. The box now hands
+out two numbers — **Amplitude**, the whole sound, and **Low**, the bottom end alone, which
+follows a kick drum rather than a hi-hat.
+
+**4. Give yourself something to wire into.** An effect only draws sockets for its
+parameters once you ask. Click the **E** badge in Glow's header and a hollow socket appears
+beside every one of its parameters.
+
+**5. Fit the range.** Loudness runs between nought and about a half; Glow's Intensity wants
+something you choose. Press `Tab` again and add a
+**[Remap](/effects/drivers/remap/)**. Drag from Audio level's **Low** socket to Remap's
+**Value** socket, then set **In high** to about `0.4` and **Out low** / **Out high** to the
+quiet and loud ends of the glow you want — say `0.5` and `3`.
+
+**6. Wire it home.** Drag from Remap's output to Glow's **Intensity** socket. Play the
+composition back.
+
+The Intensity row in [Effect controls](/panels/effect-controls/) now reads *driven* and
+names the driver where its number was. Any keyframes it had are overridden while the wire
+is there and are exactly where you left them when you pull it.
+
+:::tip
+Wire the amplitude straight into a parameter first and watch what it does before adding the
+Remap. Half of driving something from audio is finding out what range the track actually
+produces.
+:::
+
+## Feed one effect's points into another
+
+Some effects hand out more than a picture. The points family produces a **stream** — a
+set of positions — on a teal socket, and another effect reads it. That is one effect wired
+into another, and it is the only kind of wiring between two effects there is: the picture
+itself always runs straight down the stack.
+
+**1. Add the producer.** On a layer, add **Effect ▸ Generate ▸ Grid**. It draws a lattice
+of soft discs, and hands the same lattice out on a **Points** socket.
+
+**2. Add the consumer, below it.** Add **Effect ▸ Generate ▸ Clone to points**. It must sit
+**after** Grid in the stack — a data wire only ever runs downstream, because a consumer
+reads the stream at its own place in the chain. Its **Points** socket is drawn whether the
+box is exposed or not: there is no row for it in Effect controls, so the socket is the only
+way to reach it. Until something is wired in, the box says **No stream** and draws nothing.
+
+**3. Wire them.** Drag from Grid's Points socket to Clone to points' Points socket. Both
+are teal, so they take each other; dropping a wire on a socket of another kind is simply
+refused.
+
+**4. Choose what gets cloned.** Set **Clone layer** on the Clone to points row to the layer
+you want stamped at every point.
+
+**5. Take the lattice out of the picture.** You probably want the copies, not the discs.
+Turn Grid's **Mix** down to nought: the stream is still handed out while nothing is drawn.
+
+From there, [Connect points](/effects/generate/connect-points/) draws a mesh over the same
+lattice, [Trail](/effects/generate/trail/) leaves a tail behind each one, and
+[Scatter](/effects/generate/scatter/) or
+[Emit from image](/effects/generate/emit-from-image/) can stand in for Grid as the producer.
+Any of them will feed the same socket.
+
+## Two things worth remembering
+
+**The stack is the picture's path, always.** There is no branching and no merging on the
+canvas: an effect's **Input** takes exactly one wire and it is the effect above it. That is
+why the Effect controls list can always show honestly what the graph is doing — the list is
+what the graph is drawing.
+
+**Colour is the whole legend.** A wire's colour is the kind of value it carries — blue for
+image and matte, amber for numbers, magenta for colour, teal for shapes and points, green
+for audio. The key sits in the corner of the canvas, and nothing else on it is colour-coded.
+
+## Related
+
+- [The node graph](/use/nodes/) - the panel itself, box by box.
+- [Drivers](/effects/#drivers) - all eight of them.
+- [Effects](/use/effects/)
+- [Expressions](/use/expressions/) - the other way to drive a value.
