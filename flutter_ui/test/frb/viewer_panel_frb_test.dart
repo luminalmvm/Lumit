@@ -890,7 +890,7 @@ void main() {
     /// own ratio asks for a few hundred million pixels — on a button with no
     /// warning on it. Uncapped this assertion misses by an order of magnitude
     /// (and the run before it allocates a gigabyte), so the cap is the
-    /// regression, not the advice. Since K-610 the bound is the *region*
+    /// regression, not the advice. Since K-612 the bound is the *region*
     /// photographed rather than the resolution it is photographed at, and the
     /// photograph goes back over the part of the picture it came from — which
     /// is the second pair of assertions here. What it keeps of the detail is

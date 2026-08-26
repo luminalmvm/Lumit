@@ -27,6 +27,7 @@ void main() {
         internallayerId: id,
       ),
       info: BridgeLayerInfo(
+        textAnimators: const [],
         name: name,
         kind: kind,
         switches: const BridgeLayerSwitches(

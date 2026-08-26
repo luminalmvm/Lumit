@@ -153,7 +153,7 @@ Future<Uint8List?> captureViewerPicturePng() async {
 }
 
 /// Which part of [picture] the [panel] around it can actually show, in the
-/// picture's own coordinates (K-610).
+/// picture's own coordinates (K-612).
 ///
 /// The whole of it while the picture fits; the panel's own rectangle, slid onto
 /// the picture, once magnification has taken the rest off screen. Empty when the
@@ -286,7 +286,7 @@ class _ViewerPanelFrbState extends State<ViewerPanelFrb>
     super.dispose();
   }
 
-  /// Photograph the picture as it stands — the part of it on screen (K-610).
+  /// Photograph the picture as it stands — the part of it on screen (K-612).
   ///
   /// At the device's own pixel ratio, so a snapshot held against the live
   /// picture is the same sharpness rather than a softer copy of it, and **never
@@ -904,7 +904,7 @@ class _Stage extends StatelessWidget {
   final dartui.Image? snapshot;
 
   /// Which slice of the picture that snapshot is, in fractions of the picture's
-  /// rectangle (K-610): the whole of it unless it was taken while zoomed in,
+  /// rectangle (K-612): the whole of it unless it was taken while zoomed in,
   /// where it is the part that was on screen. Null when nothing is stored.
   final Rect? snapshotArea;
 
@@ -1101,7 +1101,7 @@ class _Stage extends StatelessWidget {
   }
 
   /// Where a held snapshot goes: the slice of the picture it was taken from,
-  /// measured against the picture as it stands now (K-610). A snapshot taken
+  /// measured against the picture as it stands now (K-612). A snapshot taken
   /// while the whole picture was on screen covers the whole of it, as it always
   /// did; one taken zoomed in covers the part it photographed, wherever that
   /// part has since moved to.

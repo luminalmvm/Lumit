@@ -446,7 +446,7 @@ Every control on either strip keeps the behaviour its item below defines. The it
     more pixels than the panel can show: the boundary is the picture's rectangle, which
     at high magnification is the comp and not the panel (an HD comp at 400 % is 7680
     pixels across), so what is photographed is the **visible region** of that rectangle
-    and not the whole of it (K-610) — never more pixels than the panel has, and every
+    and not the whole of it (K-612) — never more pixels than the panel has, and every
     one of them at the resolution the live picture is drawn at, which is what a
     before/after at 400 % needs. The stored picture MUST go back over the part of the
     live picture it was taken from, so a zoom or pan since compares like with like; a

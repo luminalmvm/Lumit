@@ -18773,7 +18773,11 @@ Tests: in Flutter, `a chained pair scales a keyed half key by key` — the curve
 the pair is separate, every key doubled with times and sides held when it is chained, one undo
 restoring both halves, and a nought factor writing nothing.
 
-## K-610 — A snapshot photographs the visible region, at the resolution it is drawn at
+## K-612 — A snapshot photographs the visible region, at the resolution it is drawn at
+
+*(Renumbered: this entry and the chained-pair entry above both claimed K-610 when two
+packages landed in one wave; the pair entry keeps the number, this one takes K-612 —
+so it stands out of numeric order here, as K-478 already does.)*
 
 **Status: DECIDED (2026-08-26).** Amends [07-UI-SPEC.md](07-UI-SPEC.md) §2.2 item 14; the
 mechanism of K-416 and the two marks of K-532 are untouched.

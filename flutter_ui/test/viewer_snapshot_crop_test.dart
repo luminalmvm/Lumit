@@ -1,4 +1,4 @@
-// A Viewer snapshot photographs the visible region, at full detail (K-610).
+// A Viewer snapshot photographs the visible region, at full detail (K-612).
 //
 // The boundary a snapshot is taken from is the picture's rectangle, which at
 // high magnification is the *comp* and not the panel — an HD comp at 400 % is

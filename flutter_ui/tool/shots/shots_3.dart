@@ -77,7 +77,7 @@ Future<void> main() async {
   comp.addFootageLayer(footage: gameplay, asSequence: true);
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Chapter two',
       size: 120,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),

@@ -136,7 +136,7 @@ Future<void> _stageTitles() async {
 
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Northern lights',
       size: 140,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
@@ -228,7 +228,7 @@ Future<void> _blendKeysAndWaveform() async {
   comp.addFootageLayer(footage: logoItem, asSequence: false);
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Northern lights',
       size: 140,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
@@ -377,7 +377,7 @@ Future<void> _speedRamp() async {
       asSequence: true);
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Chapter two',
       size: 120,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),
