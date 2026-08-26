@@ -447,6 +447,20 @@ pub fn export_presets_path() -> Option<PathBuf> {
     Some(dirs.data_dir().join("export-presets.json"))
 }
 
+/// Where the **export defaults** live — what the export dialogue opens on when
+/// nothing else has been said (docs/07 §15): the preset to start from, the
+/// format, the filename template and where finished files are written.
+///
+/// One small JSON file beside [`export_presets_path`], for the same reason and
+/// in the same roaming app-data area: this is a preference about how *this
+/// person* exports, not a fact about any one project, so it never goes near a
+/// `.lum`. `None` only when the platform has no home directory, in which case
+/// the dialogue simply opens on its built-in defaults.
+pub fn export_defaults_path() -> Option<PathBuf> {
+    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    Some(dirs.data_dir().join("export-defaults.json"))
+}
+
 /// The file name of the sound an export plays when it finishes, if the
 /// *When done → make a noise* hook is set (docs/07 §11).
 pub const EXPORT_DONE_SOUND: &str = "export-done.wav";

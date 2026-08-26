@@ -149,6 +149,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeEffectValue dco_decode_box_autoadd_bridge_effect_value(dynamic raw);
 
   @protected
+  BridgeExportDefaults dco_decode_box_autoadd_bridge_export_defaults(
+      dynamic raw);
+
+  @protected
   BridgeExportSpec dco_decode_box_autoadd_bridge_export_spec(dynamic raw);
 
   @protected
@@ -360,6 +364,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeEnabledWhen dco_decode_bridge_enabled_when(dynamic raw);
+
+  @protected
+  BridgeExportDefaults dco_decode_bridge_export_defaults(dynamic raw);
 
   @protected
   BridgeExportPreset dco_decode_bridge_export_preset(dynamic raw);
@@ -1060,6 +1067,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeExportDefaults sse_decode_box_autoadd_bridge_export_defaults(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeExportSpec sse_decode_box_autoadd_bridge_export_spec(
       SseDeserializer deserializer);
 
@@ -1310,6 +1321,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeEnabledWhen sse_decode_bridge_enabled_when(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExportDefaults sse_decode_bridge_export_defaults(
       SseDeserializer deserializer);
 
   @protected
@@ -2105,6 +2120,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeEffectValue self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_export_defaults(
+      BridgeExportDefaults self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_export_spec(
       BridgeExportSpec self, SseSerializer serializer);
 
@@ -2375,6 +2394,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_enabled_when(
       BridgeEnabledWhen self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_export_defaults(
+      BridgeExportDefaults self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_export_preset(

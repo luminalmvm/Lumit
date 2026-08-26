@@ -420,6 +420,47 @@ pub fn export_preset_delete(name: String) -> Result<(), BridgeError> {
     crate::export::preset_delete(&name).map_err(BridgeError::ExportFailed)
 }
 
+/// What the export dialogue opens on when nothing else has been said (K-588) —
+/// the subset of a spec worth remembering between sessions, kept beside the
+/// preset library in the application's own data area and never in a `.lum`.
+///
+/// Every field is a string, and every empty string means "nothing has been
+/// said", so a store that has never been written asks for exactly the export
+/// Lumit has always opened on.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct BridgeExportDefaults {
+    /// A preset name from the store, or empty for the dialogue's own choice.
+    pub preset: String,
+    /// The output format key, or empty for the preset's own.
+    pub codec: String,
+    /// The filename pattern in the tokens the exporter already substitutes —
+    /// `{comp}`, `{preset}`, `{date}` (K-119). Empty gives each preset's own
+    /// suggested name.
+    pub filename_template: String,
+    /// Where a finished file is written: `ask` every time, `project` for
+    /// beside the project file, or `folder` for [`Self::folder`]. Always one
+    /// of the three on the way out — an answer a newer Lumit wrote reads as
+    /// `ask`, which is the one that cannot write somewhere surprising.
+    pub destination: String,
+    /// The folder `destination: "folder"` means; empty is the same as `ask`.
+    pub folder: String,
+}
+
+/// The stored export defaults, or the built-in answers when none were ever
+/// saved. Read as the dialogue and the Settings page open, never per rebuild.
+#[frb(sync)]
+pub fn export_defaults_get() -> BridgeExportDefaults {
+    crate::export::defaults_get()
+}
+
+/// Remember these as what the export dialogue opens on — the *Set as default*
+/// action in the preset strip, and every row of Settings ▸ Export.
+#[frb(sync)]
+pub fn export_defaults_set(defaults: BridgeExportDefaults) -> Result<(), BridgeError> {
+    crate::export::defaults_set(&defaults).map_err(BridgeError::ExportFailed)
+}
+
 /// What a delivery preset stamps into the dialogue, and what to call the file.
 ///
 /// A blank `preset` gives the custom defaults. `template` drives the

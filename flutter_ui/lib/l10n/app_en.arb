@@ -9756,5 +9756,61 @@
   "dropAeProject": "An After Effects project is brought in with File › Import › After Effects project.",
   "@dropAeProject": {
     "description": "Status-line notice after an .aep file or a zipped Lumit Bridge bundle was dragged onto the Project panel from the file manager. It is not imported silently, because the conversion is a long job that ends in a report."
+  },
+  "exportPresetSetDefault": "Set as default",
+  "@exportPresetSetDefault": {
+    "description": "Button in the Export dialog's preset strip, beside Edit and Save as. Remembers the preset and format currently chosen as the ones the Export dialog opens on in future sessions."
+  },
+  "settingsPageExport": "Export",
+  "@settingsPageExport": {
+    "description": "Name of the Export page in the Settings window's sidebar of pages."
+  },
+  "settingsGroupExportDefaults": "Defaults",
+  "@settingsGroupExportDefaults": {
+    "description": "Section heading on the Settings window's Export page, over the rows that say what the Export dialog opens on."
+  },
+  "settingsExportPreset": "Default preset",
+  "@settingsExportPreset": {
+    "description": "Row label on Settings > Export. Chooses which saved export preset the Export dialog starts from."
+  },
+  "settingsExportPresetNone": "None",
+  "@settingsExportPresetNone": {
+    "description": "Option in the default-preset dropdown on Settings > Export, meaning no preset has been chosen and the Export dialog opens on the first built-in one."
+  },
+  "settingsExportFilename": "Filename template",
+  "@settingsExportFilename": {
+    "description": "Row label on Settings > Export. A pattern the suggested file name of an export is built from."
+  },
+  "settingsExportFilenameHint": "{comp}-{date}",
+  "@settingsExportFilenameHint": {
+    "description": "Placeholder text shown inside the empty filename-template field on Settings > Export. It is an example pattern rather than a sentence. Both values arrive as literal token text in curly braces — the composition-name token and the date token — which Lumit substitutes when it builds a file name; never translate the tokens themselves, only the punctuation between them.",
+    "placeholders": {
+      "comp": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsExportDestination": "Destination",
+  "@settingsExportDestination": {
+    "description": "Row label on Settings > Export. Chooses where finished exports are written."
+  },
+  "settingsExportAsk": "Ask every time",
+  "@settingsExportAsk": {
+    "description": "Destination option on Settings > Export: the Export dialog opens with no file chosen and the user browses for one."
+  },
+  "settingsExportBesideProject": "Beside the project",
+  "@settingsExportBesideProject": {
+    "description": "Destination option on Settings > Export: exports are written into the folder the project file is in."
+  },
+  "settingsExportChosenFolder": "A folder I choose",
+  "@settingsExportChosenFolder": {
+    "description": "Destination option on Settings > Export: exports are always written into one fixed folder, picked with the Choose button beside the dropdown."
+  },
+  "settingsExportNoFolder": "No folder chosen yet",
+  "@settingsExportNoFolder": {
+    "description": "Line under the Destination row on Settings > Export, shown when the fixed-folder option is chosen but no folder has been picked. The folder's path replaces it once one is picked."
   }
 }

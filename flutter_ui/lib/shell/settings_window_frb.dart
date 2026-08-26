@@ -9,13 +9,12 @@
 // with its control beside it. There are no cards and no help sentences: the
 // drawing has room for neither, and what a setting does is said by its name.
 //
-// **The pages are the drawing's.** General, Appearance, Timeline, Viewer,
-// Audio, Autosave, Preview and cache, Shortcuts. The drawing lists one more —
-// Export — and it is not here, because there is nothing to put on it: the
-// engine keeps no export defaults between sessions yet, and an empty page is a
-// promise the window cannot keep. It arrives with the settings it would hold,
-// which is how Audio arrived (K-586) and then Autosave (K-587): each waited
-// until the engine could actually do the thing its page would set.
+// **The pages are the drawing's, and they are all here now.** General,
+// Appearance, Timeline, Viewer, Audio, Autosave, Export, Preview and cache,
+// Shortcuts. Each of the last three the drawing named arrived with the settings
+// it would hold rather than as an empty promise — Audio (K-586), Autosave
+// (K-587) and Export (K-588), which waited for the engine to have somewhere to
+// keep an export default between sessions.
 //
 // **What lives where.** Appearance is Dart's own: the theme is the frontend's
 // and the engine has no opinion about it. Timeline and Viewer are working
@@ -41,6 +40,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
+import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart';
@@ -63,6 +63,13 @@ import '../widgets/escape_ladder.dart';
 import '../widgets/theme_swatches.dart';
 import 'about_window_frb.dart';
 import 'cache_confirm_frb.dart';
+import 'export_dialog_frb.dart'
+    show
+        exportDestinationAsk,
+        exportDestinationFolder,
+        exportDestinationProject,
+        exportTokenComp,
+        exportTokenDate;
 import 'menu_bar_frb.dart';
 import 'settings_rows.dart';
 import 'theme_editor_frb.dart';
@@ -139,6 +146,7 @@ enum SettingsPage {
   viewer,
   audio,
   autosave,
+  export,
   previewAndCache,
   shortcuts;
 
@@ -152,6 +160,7 @@ enum SettingsPage {
         SettingsPage.viewer => l10n.panelViewer,
         SettingsPage.audio => l10n.settingsPageAudio,
         SettingsPage.autosave => l10n.settingsPageAutosave,
+        SettingsPage.export => l10n.settingsPageExport,
         SettingsPage.previewAndCache => l10n.settingsPagePreviewAndCache,
         SettingsPage.shortcuts => l10n.settingsPageShortcuts,
       };
@@ -208,6 +217,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// above. Null until the page has been opened once.
   BridgeAudioDevices? _audio;
 
+  /// The Export page's two engine readings (K-588) — what the export dialog
+  /// opens on, and the presets it could open on — taken when the page comes
+  /// forward and after every edit. Null until the page has been opened once.
+  BridgeExportDefaults? _exportDefaults;
+  List<BridgeExportPresetEntry> _exportPresets = const [];
+
+  /// The filename template, held by a controller so it can be typed into and
+  /// committed on Enter or on clicking away rather than on every keystroke.
+  final TextEditingController _filenameTemplate = TextEditingController();
+
   void _pollPerf() => _perf = (
         ram: cacheStats(),
         vram: vramCacheStats(),
@@ -229,6 +248,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       // while Settings is open, and stepping off the page and back is the
       // obvious way to ask again.
       if (page == SettingsPage.audio) _audio = listAudioDevices();
+      if (page == SettingsPage.export) _readExportDefaults();
       // The keymap filters engine-side, so the shared search has to be handed
       // over when the page it belongs to comes forward.
       if (page == SettingsPage.shortcuts) _keymapState()?.query = _query;
@@ -521,6 +541,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       SettingsPage.viewer => _viewer(t, ui),
       SettingsPage.audio => _audioPage(t, ui),
       SettingsPage.autosave => _autosavePage(t, ui),
+      SettingsPage.export => _exportPage(t),
       SettingsPage.previewAndCache => _performance(t, ui),
       SettingsPage.shortcuts => _keymap(t, ui),
     };
@@ -643,6 +664,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         _chooseAudioDevice(workspace, null);
       case SettingsPage.autosave:
         _setAutosave(workspace, minutes: 5, keep: 5);
+      case SettingsPage.export:
+        // Everything blank is what an unwritten store says, which is the export
+        // Lumit has always opened on.
+        _writeExportDefaults(const BridgeExportDefaults(
+          preset: '',
+          codec: '',
+          filenameTemplate: '',
+          destination: exportDestinationAsk,
+          folder: '',
+        ));
       case SettingsPage.previewAndCache:
         _perfEdit(() {
           workspace.performance.playback = PlaybackMode.adaptive;
@@ -1498,6 +1529,174 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     setState(() => workspace.setAutosave(minutes, keep));
   }
 
+  // ---- Export (K-588) ------------------------------------------------------
+
+  /// What the export dialog opens on, when nothing in a particular export says
+  /// otherwise (K-588, building the last of K-465's drawn-but-unbuilt pages).
+  ///
+  /// Three answers, and none of them is part of a project: which preset the
+  /// dialog starts from, how a suggested file name is built, and where finished
+  /// files are written. They live in the application's own data area beside the
+  /// export-preset library, so they follow the person rather than the `.lum`.
+  ///
+  /// The dialog's preset strip carries a *Set as default* action for the first
+  /// of the three, because that is where a person is when they decide a preset
+  /// is the one they always want. This page is where the other two are set, and
+  /// where all three can be read in one place.
+  List<Widget> _exportPage(LumitTheme t) {
+    final defaults = _exportDefaults ?? _noExportDefaults;
+    // A default naming a preset that has since been deleted reads as none,
+    // rather than as a name the list cannot show.
+    final preset = _exportPresets.any((p) => p.name == defaults.preset)
+        ? defaults.preset
+        : '';
+    final folder = defaults.destination == exportDestinationFolder;
+    return _sections(t, [
+      (
+        l10n.settingsGroupExportDefaults,
+        [
+          _row(
+            t,
+            l10n.settingsExportPreset,
+            _dropdown<String>(
+              key: 'settings-export-preset',
+              value: preset,
+              options: ['', ..._exportPresets.map((p) => p.name)],
+              width: _ddWide,
+              label: (name) =>
+                  name.isEmpty ? l10n.settingsExportPresetNone : name,
+              onChanged: (name) => _setExportDefaults(preset: name),
+            ),
+          ),
+          _row(
+            t,
+            l10n.settingsExportFilename,
+            SizedBox(
+              width: _ddWide,
+              height: settingsControlHeight,
+              child: HouseTextField(
+                key: const ValueKey('settings-export-template'),
+                controller: _filenameTemplate,
+                width: _ddWide,
+                fill: t.surface0,
+                // The tokens are the field's own hint rather than a sentence
+                // under the row (K-465): an empty template well has to say what
+                // it takes, and a full one no longer needs to.
+                hint: l10n.settingsExportFilenameHint(
+                    exportTokenComp, exportTokenDate),
+                submitOnLostFocus: true,
+                onSubmitted: (text) => _setExportDefaults(template: text.trim()),
+              ),
+            ),
+          ),
+          _row(
+            t,
+            l10n.settingsExportDestination,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: _ddWide,
+                  height: settingsControlHeight,
+                  child: BareDropdown<String>(
+                    key: const ValueKey('settings-export-destination'),
+                    value: defaults.destination,
+                    options: const [
+                      exportDestinationAsk,
+                      exportDestinationProject,
+                      exportDestinationFolder,
+                    ],
+                    label: _destinationLabel,
+                    onChanged: (d) => _setExportDefaults(destination: d),
+                  ),
+                ),
+                if (folder) ...[
+                  const SizedBox(width: 8),
+                  HouseButton(
+                    key: const ValueKey('settings-export-folder'),
+                    small: true,
+                    onPressed: _pickExportFolder,
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                ],
+              ],
+            ),
+            // The one thing this page has to *report*: which folder, when a
+            // folder is what was chosen. A path is too long for the label
+            // column, which is what the full-width line under a row is for.
+            description: folder
+                ? (defaults.folder.isEmpty
+                    ? l10n.settingsExportNoFolder
+                    : defaults.folder)
+                : '',
+          ),
+        ],
+      ),
+    ]);
+  }
+
+  /// What an unwritten store says: nothing, and ask where to write.
+  static const BridgeExportDefaults _noExportDefaults = BridgeExportDefaults(
+    preset: '',
+    codec: '',
+    filenameTemplate: '',
+    destination: exportDestinationAsk,
+    folder: '',
+  );
+
+  static String _destinationLabel(String destination) => switch (destination) {
+        exportDestinationProject => l10n.settingsExportBesideProject,
+        exportDestinationFolder => l10n.settingsExportChosenFolder,
+        _ => l10n.settingsExportAsk,
+      };
+
+  /// Read the store and the preset list. Both are file reads, so they happen
+  /// when the page comes forward and after an edit — never in `build`.
+  void _readExportDefaults() {
+    _exportDefaults = exportDefaultsGet();
+    _exportPresets = exportPresetList();
+    _filenameTemplate.text = _exportDefaults?.filenameTemplate ?? '';
+  }
+
+  /// Change one answer and leave the rest alone.
+  void _setExportDefaults({
+    String? preset,
+    String? template,
+    String? destination,
+    String? folder,
+  }) {
+    final now = _exportDefaults ?? _noExportDefaults;
+    _writeExportDefaults(BridgeExportDefaults(
+      preset: preset ?? now.preset,
+      // Not a row on this page: the format is remembered by the dialog's own
+      // *Set as default*, and this page has no business clearing it.
+      codec: now.codec,
+      filenameTemplate: template ?? now.filenameTemplate,
+      destination: destination ?? now.destination,
+      folder: folder ?? now.folder,
+    ));
+  }
+
+  /// Write the store, then read it back so every row shows what was actually
+  /// kept. A machine with no home directory keeps nothing and says so by the
+  /// rows not moving — there is no data here to lose, only a preference that
+  /// this machine cannot hold.
+  void _writeExportDefaults(BridgeExportDefaults next) {
+    try {
+      exportDefaultsSet(defaults: next);
+    } catch (_) {
+      // Nowhere to keep it; the read-back below shows what is still in force.
+    }
+    setState(_readExportDefaults);
+  }
+
+  Future<void> _pickExportFolder() async {
+    final folder = await pickFolder();
+    if (folder == null || !mounted) return;
+    _setExportDefaults(
+        destination: exportDestinationFolder, folder: folder);
+  }
+
   // ---- Shortcuts (K-199) ---------------------------------------------------
 
   /// Every shortcut, grouped by where it is live. The table is the engine's —
@@ -1702,6 +1901,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   void dispose() {
     _perfTimer?.cancel();
     _search?.dispose();
+    _filenameTemplate.dispose();
     _scroll.dispose();
     super.dispose();
   }

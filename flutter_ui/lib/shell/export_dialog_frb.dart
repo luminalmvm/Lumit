@@ -3,7 +3,9 @@
 // **The shape is the approved drawing's.** A frame of 640: a kicker title
 // strip naming the composition, a row of section tabs, the preset strip
 // (K-487 — a preset sets and saves every section, so it is chrome over the
-// whole page rather than a row inside Output), and a body of titled
+// whole page rather than a row inside Output; K-588 added *Set as default*
+// there, which remembers the preset in force between sessions), and a body of
+// titled
 // groups — Output, Composition, Time, Picture, Colour, Audio, Metadata — whose
 // rows are a label in a fixed column with the control beside it, two to a line
 // where the rows are short. The footer states the facts (frames, length, size,
@@ -97,7 +99,7 @@ const double exportColumnGap = 20;
 /// The room the frame's own bands take: the title strip, the tab row, the
 /// preset strip and the footer, plus a little air — what the body has to fit
 /// inside when the window is short.
-const double exportChromeHeight = 199;
+const double exportChromeHeight = 229;
 
 const double exportButtonWidth = 72;
 const double exportNumberWell = 56;
@@ -107,15 +109,35 @@ const double exportSizeWell = 64;
 /// and 8 below it, over a hairline — chrome above the scroll, exactly as the
 /// tab row is (the owner's ruling; K-487).
 ///
-/// A second line of the same 22 and 8 appears while a preset is being named,
-/// which is why this is the *resting* height rather than the band's only one.
-const double exportPresetStrip = 38;
+/// **Two lines at rest** since K-588: the list with *Edit* and *Save as…*, and
+/// *Set as default* under them. Three buttons will not stand beside a 220px
+/// list in the 600 the strip has — the third overflowed by 118 — and the
+/// drawing's own numbers win over the band's height, which is the rule K-469
+/// settled for exactly this kind of collision. A further line of the same 22
+/// and 8 appears while a preset is being named, which is why this is the
+/// *resting* height rather than the band's only one.
+const double exportPresetStrip = 68;
 const double exportPresetStripGap = 8;
 
 /// The preset list itself. 220 in the 502 the strip has after its label column
-/// leaves the two buttons their content width and 146 of air after them, so
-/// neither *Edit* nor *Save as…* is ever cut (K-487).
+/// leaves the three buttons their content width and air after them, so none of
+/// *Edit*, *Save as…* or *Set as default* is ever cut (K-487, K-588).
 const double exportPresetDropdown = 220;
+
+/// The three destination policies the export defaults store knows (K-588), by
+/// the engine's own names. Here rather than in the Settings window because the
+/// dialogue is what *acts* on them and Settings only sets them, and two places
+/// spelling `"project"` differently would seed the wrong folder in silence.
+const String exportDestinationAsk = 'ask';
+const String exportDestinationProject = 'project';
+const String exportDestinationFolder = 'folder';
+
+/// The tokens a filename template may carry (K-119) — the exporter's own, and
+/// the whole list: it substitutes these three and nothing else. Syntax rather
+/// than prose, which is why they are spelled here and not in the arb: a
+/// translated `{comp}` would stop being a token.
+const String exportTokenComp = '{comp}';
+const String exportTokenDate = '{date}';
 
 /// A crop inset's well — four of them and their T · L · B · R marks fit the
 /// row beside the region tick and the final-size reading.
@@ -290,6 +312,10 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _naming = false;
   final TextEditingController _presetName = TextEditingController();
 
+  /// The preset the defaults store names (K-588), so the strip can show whether
+  /// what is in force is already the default. Empty when nothing was saved.
+  String _defaultPreset = '';
+
   _Format _format = _formats.first;
   int _bitrate = 0;
   int _peak = 0;
@@ -452,10 +478,31 @@ class _ExportDialogState extends State<_ExportDialog> {
       }
     }
     _presets = exportPresetList();
-    // The dialog opens on the first built-in — *Master*, the composition's own
-    // frame at a worked-out bitrate — rather than a blank Custom: a fresh
-    // dialog showing "Custom" with a bit rate of 0 read as broken.
-    if (_presets.isNotEmpty) _applyPreset(_presets.first.name);
+    // What the last *Set as default* — or Settings ▸ Export — asked for (K-588).
+    // Read once here: this is the one moment the store is consulted, and
+    // `build` crosses no bridge.
+    final defaults = exportDefaultsGet();
+    _defaultPreset = defaults.preset;
+    // The dialog opens on the named default, else on the first built-in —
+    // *Master*, the composition's own frame at a worked-out bitrate — rather
+    // than a blank Custom: a fresh dialog showing "Custom" with a bit rate of 0
+    // read as broken. A default naming a preset that has since been deleted
+    // falls through to the same place rather than opening on nothing.
+    final named = _presets.any((p) => p.name == _defaultPreset);
+    if (named) {
+      _applyPreset(_defaultPreset);
+    } else if (_presets.isNotEmpty) {
+      _applyPreset(_presets.first.name);
+    }
+    // The format is remembered separately from the preset: the same settings in
+    // a different container is a thing people want, and applying the preset
+    // first means an unset codec changes nothing.
+    if (defaults.codec.isNotEmpty) {
+      final format =
+          _formats.where((f) => f.key == defaults.codec).firstOrNull;
+      if (format != null) _format = format;
+    }
+    _seedDestination(defaults);
     _recompute();
     _scroll.addListener(_spy);
   }
@@ -878,6 +925,22 @@ class _ExportDialogState extends State<_ExportDialog> {
                     l10n.exportPresetSaveAs, () => _nameAPreset('')),
               ],
             ),
+            // *Set as default* stands with the preset controls because it is
+            // one of them (K-588): what it remembers is the preset in force.
+            // On its own line because three buttons will not stand beside a
+            // 220px list in 600, and under the list rather than beside the
+            // label because it acts on what is above it. It reads as in-force
+            // when the preset showing is already the default, which is how a
+            // press that saved says so.
+            _stripRow(
+              t,
+              '',
+              [
+                _stripButton(t, 'export-preset-set-default',
+                    l10n.exportPresetSetDefault, _setAsDefault,
+                    active: _preset == _defaultPreset),
+              ],
+            ),
             // Naming a preset: the one line *Edit* and *Save as…* both open,
             // because saving over a name and renaming into it are the same act
             // (the store replaces a preset of that name in its own row). It
@@ -942,12 +1005,14 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// A strip button at its content width — §12A.4's 12 either side of an
   /// outlined label, which is the whole of the clipping fix.
   Widget _stripButton(
-          LumitTheme t, String id, String label, VoidCallback onPressed) =>
+          LumitTheme t, String id, String label, VoidCallback onPressed,
+          {bool active = false}) =>
       SizedBox(
         height: dialogControlHeight,
         child: HouseButton(
           key: ValueKey<String>(id),
           padding: const EdgeInsets.symmetric(horizontal: 12),
+          active: active,
           onPressed: onPressed,
           child: Text(label, style: t.body),
         ),
@@ -1968,6 +2033,81 @@ class _ExportDialogState extends State<_ExportDialog> {
       _diskCache = stored.diskCacheReadOnly;
       _effects = stored.effects;
       _honourSolo = stored.honourSolo;
+    });
+  }
+
+  /// Fill in the destination the defaults store asks for (K-588), so a person
+  /// who always writes to the same place opens the dialog with a file name
+  /// already in the Destination row.
+  ///
+  /// *Ask* leaves it empty, which is what the dialog has always done. *Beside
+  /// the project* falls back to asking when the project has never been saved
+  /// and so has no folder to be beside — a policy that cannot be honoured is
+  /// not a reason to invent a folder.
+  void _seedDestination(BridgeExportDefaults defaults) {
+    final folder = switch (defaults.destination) {
+      exportDestinationFolder => defaults.folder,
+      exportDestinationProject => _projectFolder(),
+      _ => '',
+    };
+    if (folder.isEmpty) return;
+    // The engine builds the name: the template's tokens are its own, and a
+    // second substitution in Dart is a second answer to the same question.
+    final name = exportPreset(
+      preset: _preset,
+      compName: _compName,
+      template: defaults.filenameTemplate,
+    ).defaultName;
+    if (name.isEmpty) return;
+    _path = _join(
+        folder,
+        name.replaceFirst(
+            RegExp(r'\.[A-Za-z0-9]+$'), '.${_format.extension}'));
+  }
+
+  /// The folder the open project's file sits in, or empty where it has never
+  /// been saved.
+  String _projectFolder() {
+    try {
+      final path = widget.project?.path();
+      if (path == null) return '';
+      final cut = path.lastIndexOf(RegExp(r'[/\\]'));
+      return cut <= 0 ? '' : path.substring(0, cut);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// A folder and a file name as one path, in the separator the folder itself
+  /// is written with — a Windows folder keeps its backslashes.
+  static String _join(String folder, String name) {
+    if (folder.endsWith('/') || folder.endsWith('\\')) return '$folder$name';
+    return '$folder${folder.contains('\\') ? '\\' : '/'}$name';
+  }
+
+  /// *Set as default*: remember the preset and the format in force as what the
+  /// dialog opens on (K-588). The filename template and the destination policy
+  /// are left exactly as they were — those are Settings ▸ Export's rows, and
+  /// this button must not quietly answer questions it does not ask.
+  void _setAsDefault() {
+    final stored = exportDefaultsGet();
+    try {
+      exportDefaultsSet(
+        defaults: BridgeExportDefaults(
+          preset: _preset,
+          codec: _format.key,
+          filenameTemplate: stored.filenameTemplate,
+          destination: stored.destination,
+          folder: stored.folder,
+        ),
+      );
+    } catch (error) {
+      setState(() => _refused = '$error');
+      return;
+    }
+    setState(() {
+      _refused = null;
+      _defaultPreset = _preset;
     });
   }
 

@@ -17121,3 +17121,57 @@ pages, with Export the last one still owed its own stock.
   number wells. No "autosave before risky operations" switch: docs/10 §4 names that
   behaviour but nothing in the engine performs it yet, and K-465's rule against drawing a
   row with nothing behind it applies to this page as much as to the others.
+
+## K-588 — Settings → Export is built, the defaults are a file of their own, and the preset strip grows a line
+
+**DECIDED 2026-08-26.** The last of K-465's nine drawn Settings pages arrives with the
+settings it would hold, which is the rule the other two waited on (Audio K-586, Autosave
+K-587). docs/07 §13.5 and §15 carry the result.
+
+**The export dialogue now opens on something remembered.** Four answers are kept between
+sessions — the **preset** it starts from, the **format**, the **filename template**, and
+where finished files are **written** — in `export-defaults.json` in the application's own
+data area, beside the export-preset library (`lumit_render::export_defaults`). This
+supersedes K-469's "Export defaults are not a Settings page here": the queue's engine half
+still remembers nothing, and that is unchanged — what has been added is a store the
+*dialogue* reads as it opens, which is a different thing from a queue that survives a
+restart.
+
+**It is machine-local, which reverses docs/07 §13.5's placement.** That paragraph said
+export defaults would land in Project settings when they were built. They do not: a
+project sent to somebody else must not tell their copy of Lumit where to write files on
+their disk, and a person's export habit should follow them between projects. So this is
+Settings, never the `.lum` — the same reasoning K-286 used to decide which window a value
+belongs in, applied the other way round.
+
+**Every field is a string, and every empty string means "nothing has been said".** That
+makes a store that has never been written identical to the export Lumit has always opened
+on, and it makes the file forward-compatible without ceremony: `serde(default)` with
+unknown fields ignored, so a file from a newer Lumit still opens and the answers this
+version understands are kept. A **destination policy it does not recognise reads as *ask
+every time***, which is the one answer that cannot write a file somewhere the user was not
+looking. A missing or damaged file reads as an empty store, exactly as the preset library
+does — losing this costs three clicks, not an export.
+
+**Only the tokens that already exist are exposed.** The filename template takes `{comp}`,
+`{preset}` and `{date}` and nothing else, because those are what
+`export::render_filename_template` substitutes (K-119). They are spelled in Dart rather
+than in the arb: gen_l10n's ICU parser will not carry a literal brace, and a translated
+`{comp}` would stop being a token — the arb owns the *arrangement* (the example pattern
+takes the two tokens as placeholders), the engine owns the token names.
+
+**Set as default lives in the preset strip, and the strip grows a second resting line.**
+K-487 put the preset controls in a band of their own; the action that says "this is the
+preset I always want" belongs where a person is when they decide it. It will not fit
+beside the other two: at 180px it overflowed the 600 the strip has by 118, so it takes a
+line of its own under the list, and `exportPresetStrip` goes 38 → 68 (`exportChromeHeight`
+199 → 229). K-487's own rule decides this — a button is its content's width, and it is the
+band that gives way, not the label. The button remembers the **preset and the format
+only**: the template and the destination are Settings' rows to ask about, and a button
+must not quietly answer questions it does not put.
+
+**Beside the project falls back to asking.** A project that has never been saved has no
+folder to be beside, and a policy that cannot be honoured is not a licence to invent a
+folder. The same is true of a fixed folder that has not been picked yet, which is the state
+the Settings row is in between the two clicks — the dropdown keeps the choice and the row
+reports that no folder has been chosen.

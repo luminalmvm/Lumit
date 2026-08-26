@@ -11149,3 +11149,48 @@ this machine copies your work is a property of the machine, so they live in the 
 settings file and a project sent to somebody else says nothing about them. The interface
 hands both to the engine when Lumit starts and again whenever you change them, and the
 engine holds nothing else — there is no autosave state in the `.lum` file.
+
+## 30. Export defaults, in plain terms
+
+Most people export the same way most of the time: the same preset, into the same folder,
+under names built the same way. Until now the export dialog forgot all of that the moment
+it closed. Every session it opened on the first built-in preset, with no destination at
+all, and you told it the same three things again.
+
+**Settings → Export** is where those three things are now said once:
+
+- **Default preset** — the named preset the dialog starts from. Pick *None* and it opens
+  on the first built-in, which is what it always did.
+- **Filename template** — the pattern a suggested file name is built from. Three tokens
+  are understood, and they are the ones the exporter already substituted:
+  `{comp}` becomes the composition's name, `{preset}` the preset's, and `{date}` today's
+  date as `2026-08-26`. Leave it empty and each preset suggests its own name, exactly as
+  before. Nothing else is a token: `{scene}` is not magic, it is four letters in your
+  file name.
+- **Destination** — one of three answers. *Ask every time* is the old behaviour: the
+  dialog opens with nothing in the Write to row and you browse. *Beside the project*
+  writes next to the `.lum` file (and quietly falls back to asking when the project has
+  never been saved, because there is no folder to be beside). *A folder I choose* offers
+  a folder picker and then always starts there.
+
+There is a shortcut for the first of them. The export dialog's preset strip carries a
+**Set as default** button, because the moment you realise a preset is the one you always
+want is the moment you are looking at it. Pressing it remembers the preset and the format
+in force and nothing else — it does not quietly answer the other two questions, which are
+Settings' to ask. When the preset showing is already the default, the button reads as
+in-force, which is how a press that saved says so.
+
+### Where this is kept, and why it is not in your project
+
+The answers go in one small JSON file in Lumit's own data folder, beside the export-preset
+library — `export-defaults.json`. **Never in the `.lum`.** This is a preference about how
+*you* export, not a fact about a project: a project sent to somebody else should not tell
+their copy of Lumit where to write files on their disk, and your own habit should follow
+you from one project to the next.
+
+Like the preset library, the file is a convenience and never a correctness matter. If it
+is missing, or damaged, or written by a newer version of Lumit that knows answers this one
+does not, it reads as "nothing has been said" — which is precisely the behaviour Lumit had
+before the file existed. Losing it costs you three clicks, not an export. And an answer
+this version does not recognise reads as *ask every time*, which is the one answer that
+cannot put a file somewhere you were not looking.

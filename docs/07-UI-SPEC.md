@@ -2554,7 +2554,11 @@ what-it-does, control-on-the-right) in a window of its own, and it exists so tha
   v1 fixes at linear Rec. 709. There is no separate relink: *Choose…* is how a configuration
   that moved is pointed at again.
 
-Export defaults land here when they are built, not in Settings. The disk
+**Export defaults are not here** (K-588, reversing this paragraph's earlier ruling): the
+preset, filename template and destination policy the export dialogue opens on are machine-
+local — a preference about how this person exports, never a fact about a project — so they
+live in Settings ▸ Export and in a JSON file beside the export-preset library, and a `.lum`
+sent to someone else says nothing about where their copy of Lumit writes files. The disk
 cache's *Applies to* row stays in Settings ▸ Performance (K-215): choosing between the two
 scopes is that control's whole job, so it is the one that stands in both.
 
@@ -2711,8 +2715,16 @@ that may be a night's work and there is nothing to undo. With nothing parked it 
 a question about deleting nothing is only noise. The status line's cache meter grew a matching
 third bar (Disk), which asks the same question when clicked. **Autosave** is its own page
 (K-587): how often a spare copy is written, in minutes, and how many copies are kept, with
-zero minutes meaning off. The **Export** group is not built: it has nothing behind it on
-this frontend ([TODO.md](TODO.md)), and an empty page is a promise the window cannot keep.
+zero minutes meaning off. **Export** is its own page too (K-588), and is the last of the
+drawing's nine to arrive: a **default preset** (the named preset the export dialogue opens
+on, or *None* for the first built-in), a **filename template** in the tokens the exporter
+already substitutes — `{comp}`, `{preset}`, `{date}` (K-119), blank giving each preset's
+own suggested name — and a **destination policy** of *Ask every time* / *Beside the
+project* / *A folder I choose*, the last offering a folder picker beside the dropdown and
+reporting the folder under the row. All three are machine-local, kept in a JSON file beside
+the export-preset library and never in a `.lum`; the export dialogue's preset strip carries
+a **Set as default** action for the preset alone, which is the one of the three a person
+decides while looking at it.
 
 All bindings are remappable in Settings → Keymap (search, conflict detection, per-context
 display); the keymap serialises to a shareable file. An "After Effects" alternate preset

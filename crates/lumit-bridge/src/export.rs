@@ -106,7 +106,9 @@ fn preset_default_file_name(name: &str) -> &'static str {
 // will it run at — answered by the engine rather than re-derived in Dart.
 // ---------------------------------------------------------------------------
 
-use crate::api::export::{BridgeCrop, BridgeExportPresetEntry, BridgeExportSpec, BridgeFormatCaps};
+use crate::api::export::{
+    BridgeCrop, BridgeExportDefaults, BridgeExportPresetEntry, BridgeExportSpec, BridgeFormatCaps,
+};
 use lumit_render::colour::ColourState;
 // Only the conversion names a metadata field, and only a build with an encoder
 // converts anything.
@@ -207,6 +209,34 @@ pub(crate) fn preset_save(name: &str, spec: &BridgeExportSpec) -> Result<(), Str
     let mut library = lumit_render::export_presets::PresetLibrary::load_default();
     library.put(name, resolved)?;
     library.save_default()
+}
+
+/// What the export dialogue opens on (K-588). Read whole each time, for the
+/// reason [`preset_save`] gives: five short strings in one small file, and a
+/// copy held in memory would be a second thing to keep in step.
+pub(crate) fn defaults_get() -> BridgeExportDefaults {
+    let stored = lumit_render::export_defaults::ExportDefaults::load_default();
+    BridgeExportDefaults {
+        preset: stored.preset.clone(),
+        codec: stored.codec.clone(),
+        // Normalised on the way over, so Dart never has to guess what an answer
+        // it does not recognise means.
+        destination: stored.policy().to_owned(),
+        filename_template: stored.filename_template,
+        folder: stored.folder,
+    }
+}
+
+/// Remember these as what the dialogue opens on.
+pub(crate) fn defaults_set(defaults: &BridgeExportDefaults) -> Result<(), String> {
+    lumit_render::export_defaults::ExportDefaults {
+        preset: defaults.preset.clone(),
+        codec: defaults.codec.clone(),
+        filename_template: defaults.filename_template.clone(),
+        destination: defaults.destination.clone(),
+        folder: defaults.folder.clone(),
+    }
+    .save_default()
 }
 
 /// Forget a preset of one's own.

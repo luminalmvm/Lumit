@@ -354,7 +354,8 @@ void main() {
       expect(strip.top, tabs.bottom,
           reason: 'it sits directly under the tab row');
       expect(strip.height, exportPresetStrip,
-          reason: '8 above a 22px control and 8 below, and no rule under it');
+          reason: 'K-588: two lines of 22 at rest, 8 above each and 8 under '
+              'the last, and no rule under the band');
       expect(output.top, greaterThanOrEqualTo(strip.bottom),
           reason: 'and above the body, which scrolls under it');
 
@@ -368,6 +369,10 @@ void main() {
     /// *Save as…* used to share a 173px paired column with a list and *Edit*,
     /// and lost. Each button is now its own content's width, with air after
     /// the last of them.
+    ///
+    /// K-588's *Set as default* is why the band has two lines: at 180px wide
+    /// it overflowed the strip by 118 standing beside the other two, so it took
+    /// a line of its own, starting under the list rather than under the label.
     testWidgets('the preset controls have room to breathe', (tester) async {
       await open(tester);
 
@@ -375,6 +380,7 @@ void main() {
       final list = band(tester, 'export-preset');
       final edit = band(tester, 'export-preset-edit');
       final saveAs = band(tester, 'export-preset-save-as');
+      final setDefault = band(tester, 'export-preset-set-default');
 
       expect(list.left - strip.left,
           dialogPadding + 12 + exportLabelColumn + exportRowGap,
@@ -384,6 +390,10 @@ void main() {
           reason: 'the list itself is 220');
       expect(edit.left - list.right, exportPresetStripGap);
       expect(saveAs.left - edit.right, exportPresetStripGap);
+      expect(setDefault.left, list.left,
+          reason: 'K-588: on its own line, under the list it acts on');
+      expect(setDefault.top - saveAs.bottom, exportPresetStripGap,
+          reason: 'the strip\'s own 8 between one line and the next');
 
       // The label is drawn whole — a clipped button is a Text narrower than
       // its own word, which is what the old column produced.
@@ -395,7 +405,9 @@ void main() {
           reason: '§12A.4: 12 either side of an outlined label — and the '
               'button\'s own 1px edge either side of that — no less');
       expect(strip.right - dialogPadding - saveAs.right, greaterThan(60),
-          reason: 'and the row still has air after it at 640');
+          reason: 'and the first line still has air after it at 640');
+      expect(strip.right - dialogPadding - setDefault.right, greaterThan(0),
+          reason: 'as does the second');
     });
 
     /// 6f. **Naming a preset happens in the same strip**, on a second line
