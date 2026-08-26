@@ -18701,6 +18701,15 @@ opacity and tint rather than the animators' settings: two different selectors th
 letters the same way draw the same frame and may share it, and a swept range keys per frame
 because its weights change per frame.
 
+**The Animators section sits in the Effect controls panel, outside the layer-cards choice.**
+Transform, Source and Retime move between that panel and the Timeline's fold because they exist
+in both (K-193); the Animators section has no Timeline home yet, so hiding it with them would
+hide the whole feature from anybody who has not turned the layer cards on. Every number in it is
+keyable from its own row — the stopwatch and the ◄ ◆ ► navigator every effect parameter has — and
+the read model already carries the animators beside the masks and the strokes, so the Timeline's
+fold rows and the graph editor's curves are a wiring job on top of what is here rather than a
+second model. **Not built yet:** those fold rows and graph channels, and renaming an animator.
+
 **Spaces go with the word before them.** Counting words, a run of whitespace takes the index of
 the word it follows (leading whitespace takes the first word's), so a range sweeping a sentence
 does not pause on each gap as though it were a word of its own.

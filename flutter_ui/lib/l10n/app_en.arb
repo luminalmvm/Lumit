@@ -5211,6 +5211,67 @@
   "@switchVisible": {
     "description": "Layer switch: the layer is drawn. One or two words — it is a tooltip."
   },
+  "textAnimatorAdd": "Add animator",
+  "@textAnimatorAdd": {
+    "description": "Button at the foot of the Animators section that adds a new animator group to a text layer."
+  },
+  "textAnimatorBasis": "Based on",
+  "@textAnimatorBasis": {
+    "description": "Row label in the Animators section for the choice of what the range counts: single letters or whole words."
+  },
+  "textAnimatorBasisCharacters": "Characters",
+  "@textAnimatorBasisCharacters": {
+    "description": "Option in the Animators section's Based on picker: the range counts single letters."
+  },
+  "textAnimatorBasisWords": "Words",
+  "@textAnimatorBasisWords": {
+    "description": "Option in the Animators section's Based on picker: the range counts whole words, so a word's letters move together."
+  },
+  "textAnimatorDefaultName": "Animator {index}",
+  "@textAnimatorDefaultName": {
+    "description": "The name a newly added text animator is given, numbered in the order they were added.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "textAnimatorFillOffset": "Fill offset",
+  "@textAnimatorFillOffset": {
+    "description": "Row label in the Animators section: three numbers added to the layer's fill colour on a letter the range reaches, so it can tint one way or the other."
+  },
+  "textAnimatorRangeEnd": "Range end",
+  "@textAnimatorRangeEnd": {
+    "description": "Row label in the Animators section: where the stretch of letters this animator moves ends, as a per cent of the words."
+  },
+  "textAnimatorRangeOffset": "Range offset",
+  "@textAnimatorRangeOffset": {
+    "description": "Row label in the Animators section: how far the whole start-to-end stretch is slid along the words, as a per cent. Animating this is what makes a cascade."
+  },
+  "textAnimatorRangeStart": "Range start",
+  "@textAnimatorRangeStart": {
+    "description": "Row label in the Animators section: where the stretch of letters this animator moves begins, as a per cent of the words."
+  },
+  "textAnimatorRemove": "Remove",
+  "@textAnimatorRemove": {
+    "description": "Button on one animator's heading row in the Animators section that deletes that animator."
+  },
+  "textAnimatorShape": "Shape",
+  "@textAnimatorShape": {
+    "description": "Row label in the Animators section for how much of the movement each letter in the range gets."
+  },
+  "textAnimatorShapeRamp": "Ramp",
+  "@textAnimatorShapeRamp": {
+    "description": "Option in the Animators section's Shape picker: the movement rises evenly from nothing at the range's start to the whole way at its end."
+  },
+  "textAnimatorShapeSquare": "Square",
+  "@textAnimatorShapeSquare": {
+    "description": "Option in the Animators section's Shape picker: letters inside the range move the whole way, letters outside do not move."
+  },
+  "textAnimatorsSection": "Animators",
+  "@textAnimatorsSection": {
+    "description": "Heading of the section in the Effect controls panel where a text layer's per-letter animators are edited."
+  },
   "themeCopiedTo": "Copied to {name}.",
   "@themeCopiedTo": {
     "description": "Shown after duplicating a theme. {name} is the new theme name.",

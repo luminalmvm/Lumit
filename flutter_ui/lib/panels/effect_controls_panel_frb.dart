@@ -71,6 +71,7 @@ import '../state/drag_payloads.dart';
 import 'placeholder.dart';
 import 'flow_rows_frb.dart';
 import 'source_rows_frb.dart';
+import 'text_animator_rows_frb.dart';
 import 'timeline_timings.dart';
 
 class EffectControlsPanelFrb extends StatefulWidget {
@@ -610,6 +611,24 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                       onToggle: () => _toggle('transform'),
                     ),
                   ],
+                  // **The letters, one at a time** (K-609), and outside the
+                  // choice above on purpose. Transform, Source and Retime move
+                  // between this panel and the Timeline's fold because they
+                  // exist in both; the Animators section has no Timeline home
+                  // yet, so hiding it with them would hide the whole feature
+                  // from anybody who has not turned the layer cards on. It
+                  // shows itself only where there is something to show: a
+                  // layer that is not a Text layer has no letters to animate.
+                  TextAnimatorRowsFrb(
+                    key: ValueKey<String>('anim-card-${layer.internallayerId}'),
+                    layer: layer,
+                    onChanged: ui.model.refresh,
+                    comp: comp,
+                    playheadFrame: playhead,
+                    onSeek: (frame) => ui.playheadFrame.value = frame,
+                    open: _isOpen('animators'),
+                    onToggle: () => _toggle('animators'),
+                  ),
                   // A null layer has no picture, so nothing here changes one
                   // — but the parameters are real, animatable values, which is
                   // exactly what a null is for once expressions can read them

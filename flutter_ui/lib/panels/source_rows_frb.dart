@@ -127,6 +127,11 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           fill: fill ?? document.fill,
           path: clearPath ? null : (path ?? document.path),
           pathOffset: pathOffset ?? document.pathOffset,
+          // Carried through untouched: the animators are edited on their own
+          // section (K-609), and a document written from here must not drop
+          // them — the write takes the whole document, so anything left out is
+          // deleted.
+          animators: document.animators,
         ),
       );
       widget.onChanged();

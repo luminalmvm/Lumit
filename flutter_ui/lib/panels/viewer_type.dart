@@ -333,8 +333,10 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
           size: options.textSize,
           fill: options.fillRgba,
           // A layer being made has no mask to run along yet, so it lays
-          // straight (K-607).
+          // straight (K-607), and has no letters to animate separately
+          // (K-609).
           pathOffset: const BridgeScalar.static_(0),
+          animators: const [],
         ),
         x: cx,
         y: cy,
@@ -475,6 +477,9 @@ class _ViewerTypeLayerState extends State<ViewerTypeLayer> {
       fill: _fill,
       path: current?.path,
       pathOffset: current?.pathOffset ?? const BridgeScalar.static_(0),
+      // Carried along for the same reason the path is: typing into a line
+      // whose letters are animated must not throw the animators away (K-609).
+      animators: current?.animators ?? const [],
     );
   }
 
