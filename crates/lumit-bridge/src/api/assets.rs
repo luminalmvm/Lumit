@@ -46,6 +46,58 @@ pub struct BridgeTextDocument {
     /// How far along that curve the line starts, px@comp, on the composition's
     /// clock like every other animatable channel that crosses here (K-213).
     pub path_offset: BridgeScalar,
+    /// The animator groups moving the letters separately (K-609). Empty is the
+    /// ordinary text layer.
+    pub animators: Vec<BridgeTextAnimator>,
+}
+
+/// What a range selector counts (K-609).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorBasis {
+    Characters,
+    Words,
+}
+
+/// How a range selector's weight falls off across its range (K-609).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeSelectorShape {
+    Square,
+    Ramp,
+}
+
+/// Which stretch of the words an animator reaches, in per cent of the run.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeRangeSelector {
+    pub start: BridgeScalar,
+    pub end: BridgeScalar,
+    pub offset: BridgeScalar,
+    pub basis: BridgeSelectorBasis,
+    pub shape: BridgeSelectorShape,
+}
+
+/// One animator group: what a reached letter is asked to do, and the range
+/// saying which letters those are (K-609).
+///
+/// Every animator carries all five property groups — the decision entry argues
+/// why there is no menu of properties to add them from — defaulted to values
+/// that change nothing: no push, no turn, 100 % size, 100 % opacity, no tint.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeTextAnimator {
+    pub name: String,
+    pub selector: BridgeRangeSelector,
+    pub position_x: BridgeScalar,
+    pub position_y: BridgeScalar,
+    pub rotation: BridgeScalar,
+    pub scale_x: BridgeScalar,
+    pub scale_y: BridgeScalar,
+    pub opacity: BridgeScalar,
+    pub fill_r: BridgeScalar,
+    pub fill_g: BridgeScalar,
+    pub fill_b: BridgeScalar,
 }
 
 /// A solid asset's definition.
@@ -74,6 +126,11 @@ impl LayerReference {
             fill: colour_of(document.fill),
             path: document.path,
             path_offset: BridgeScalar::read_at(&document.path_offset, offset),
+            animators: document
+                .animators
+                .iter()
+                .map(|a| read_animator(a, offset))
+                .collect(),
         }))
     }
 
@@ -82,17 +139,68 @@ impl LayerReference {
     /// The whole document rather than a field at a time, for the same reason
     /// every other edit here takes a whole value: retyping a word and changing
     /// its size is one action to the user and should be one undo step.
+    ///
+    /// **Adding the first animator moves the anchor with it** (K-609). An
+    /// animated line is drawn into a box one text size larger a side, with the
+    /// words that far in, so a letter has somewhere to drop in from — and the
+    /// anchor is a fixed coordinate in the layer's own pixels, so without this
+    /// the words would jump by that margin the moment the first animator
+    /// arrived. Removing the last one puts it back. One `Op::Batch`, so it is
+    /// one undo step: the same rule K-230 set for typing, where committing the
+    /// document and the pivot separately made `Ctrl+Z` undo a pivot nobody had
+    /// moved.
     #[frb(sync)]
     pub fn set_text(&self, document: BridgeTextDocument) -> Result<(), BridgeError> {
         let layer = self.item()?;
-        let lumit_core::model::LayerKind::Text { .. } = layer.kind else {
+        let lumit_core::model::LayerKind::Text { document: before } = &layer.kind else {
             return Err(BridgeError::NotText);
         };
-        self.commit(lumit_core::Op::SetTextDocument {
+        let offset = layer.start_offset.0;
+        // A line on a path already has its room and its corner at the layer's
+        // origin (K-607), so nothing there moves.
+        let straight = before.path.is_none() && document.path.is_none();
+        let was = !before.animators.is_empty();
+        let now = !document.animators.is_empty();
+        #[allow(clippy::cast_possible_truncation)]
+        let margin = f64::from(lumit_text::animator_margin(document.size as f32));
+        let shift = if straight && was != now {
+            if now {
+                margin
+            } else {
+                -margin
+            }
+        } else {
+            0.0
+        };
+
+        let set = lumit_core::Op::SetTextDocument {
             comp: self.comp_id,
             layer: self.layer_id,
-            document: text_document_of(document, layer.start_offset.0)?,
-        })
+            document: text_document_of(document, offset)?,
+        };
+        if shift == 0.0 {
+            return self.commit(set);
+        }
+        let mut ops = vec![set];
+        for (prop, mut property) in [
+            (
+                lumit_core::model::TransformProp::AnchorX,
+                layer.transform.anchor_x.clone(),
+            ),
+            (
+                lumit_core::model::TransformProp::AnchorY,
+                layer.transform.anchor_y.clone(),
+            ),
+        ] {
+            shift_property(&mut property, shift);
+            ops.push(lumit_core::Op::SetTransformProperty {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                prop,
+                animation: property.animation,
+            });
+        }
+        self.commit(lumit_core::Op::Batch { ops })
     }
 
     /// Replace a text layer's document **and its anchor and position
@@ -380,6 +488,85 @@ pub(crate) fn text_document_of(
             animation: document.path_offset.animation_at(offset)?,
             extra: serde_json::Map::new(),
         },
+        animators: document
+            .animators
+            .into_iter()
+            .map(|a| animator_from(a, offset))
+            .collect::<Result<Vec<_>, _>>()?,
+        extra: serde_json::Map::new(),
+    })
+}
+
+/// One animator on its way out to the panel, its keys on the comp's clock.
+#[frb(ignore)]
+pub(crate) fn read_animator(
+    animator: &lumit_core::text::TextAnimator,
+    offset: lumit_core::time::Rational,
+) -> BridgeTextAnimator {
+    let read = |p| BridgeScalar::read_at(p, offset);
+    BridgeTextAnimator {
+        name: animator.name.clone(),
+        selector: BridgeRangeSelector {
+            start: read(&animator.selector.start),
+            end: read(&animator.selector.end),
+            offset: read(&animator.selector.offset),
+            basis: match animator.selector.basis {
+                lumit_core::text::SelectorBasis::Characters => BridgeSelectorBasis::Characters,
+                lumit_core::text::SelectorBasis::Words => BridgeSelectorBasis::Words,
+            },
+            shape: match animator.selector.shape {
+                lumit_core::text::SelectorShape::Square => BridgeSelectorShape::Square,
+                lumit_core::text::SelectorShape::Ramp => BridgeSelectorShape::Ramp,
+            },
+        },
+        position_x: read(&animator.position_x),
+        position_y: read(&animator.position_y),
+        rotation: read(&animator.rotation),
+        scale_x: read(&animator.scale_x),
+        scale_y: read(&animator.scale_y),
+        opacity: read(&animator.opacity),
+        fill_r: read(&animator.fill_r),
+        fill_g: read(&animator.fill_g),
+        fill_b: read(&animator.fill_b),
+    }
+}
+
+/// And back: the panel's animator returned to the layer's own clock.
+#[frb(ignore)]
+fn animator_from(
+    animator: BridgeTextAnimator,
+    offset: lumit_core::time::Rational,
+) -> Result<lumit_core::text::TextAnimator, BridgeError> {
+    let write = |s: &BridgeScalar| -> Result<lumit_core::anim::Property, BridgeError> {
+        Ok(lumit_core::anim::Property {
+            animation: s.animation_at(offset)?,
+            extra: serde_json::Map::new(),
+        })
+    };
+    Ok(lumit_core::text::TextAnimator {
+        name: animator.name,
+        selector: lumit_core::text::RangeSelector {
+            start: write(&animator.selector.start)?,
+            end: write(&animator.selector.end)?,
+            offset: write(&animator.selector.offset)?,
+            basis: match animator.selector.basis {
+                BridgeSelectorBasis::Characters => lumit_core::text::SelectorBasis::Characters,
+                BridgeSelectorBasis::Words => lumit_core::text::SelectorBasis::Words,
+            },
+            shape: match animator.selector.shape {
+                BridgeSelectorShape::Square => lumit_core::text::SelectorShape::Square,
+                BridgeSelectorShape::Ramp => lumit_core::text::SelectorShape::Ramp,
+            },
+        },
+        position_x: write(&animator.position_x)?,
+        position_y: write(&animator.position_y)?,
+        rotation: write(&animator.rotation)?,
+        scale_x: write(&animator.scale_x)?,
+        scale_y: write(&animator.scale_y)?,
+        opacity: write(&animator.opacity)?,
+        fill_r: write(&animator.fill_r)?,
+        fill_g: write(&animator.fill_g)?,
+        fill_b: write(&animator.fill_b)?,
         extra: serde_json::Map::new(),
     })
 }

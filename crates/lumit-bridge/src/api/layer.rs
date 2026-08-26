@@ -1204,6 +1204,12 @@ pub struct BridgeLayerInfo {
     /// read model rather than as a call, because both rows are rebuilt on every
     /// document revision and a call there is exactly the cost K-184 removed.
     pub track_corrected: bool,
+    /// A Text layer's animator groups (K-609), in order; empty on every other
+    /// kind. Carried for the same reason the masks and the strokes are: the
+    /// Timeline draws a row per animator property and the graph editor reads
+    /// its curves from here, and asking per row per frame is exactly the cost
+    /// K-184 exists to remove. Edits still go through `set_text`.
+    pub text_animators: Vec<crate::api::assets::BridgeTextAnimator>,
 }
 
 /// One marker on a layer's bar: the marker itself plus where it lands at the
@@ -1345,6 +1351,14 @@ pub(crate) fn read_layer_info(
                         } if tracked == layer.id
                     ) && lumit_core::track::has_correction(l)
                 })),
+        text_animators: match &layer.kind {
+            K::Text { document } => document
+                .animators
+                .iter()
+                .map(|a| crate::api::assets::read_animator(a, layer.start_offset.0))
+                .collect(),
+            _ => Vec::new(),
+        },
     }
 }
 

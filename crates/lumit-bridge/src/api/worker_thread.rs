@@ -5292,6 +5292,7 @@ mod tests {
             },
             path: None,
             path_offset: crate::api::effect::BridgeScalar::Static(0.0),
+            animators: Vec::new(),
         };
 
         let mut text = LayerKind::Text {

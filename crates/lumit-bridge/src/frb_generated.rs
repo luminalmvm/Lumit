@@ -12389,6 +12389,8 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
         let mut var_flow = <bool>::sse_decode(deserializer);
         let mut var_flowInputRate = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_trackCorrected = <bool>::sse_decode(deserializer);
+        let mut var_textAnimators =
+            <Vec<crate::api::assets::BridgeTextAnimator>>::sse_decode(deserializer);
         return crate::api::layer::BridgeLayerInfo {
             name: var_name,
             kind: var_kind,
@@ -12414,6 +12416,7 @@ impl SseDecode for crate::api::layer::BridgeLayerInfo {
             flow: var_flow,
             flow_input_rate: var_flowInputRate,
             track_corrected: var_trackCorrected,
+            text_animators: var_textAnimators,
         };
     }
 }
@@ -13117,6 +13120,24 @@ impl SseDecode for crate::api::footage::BridgeProxyState {
     }
 }
 
+impl SseDecode for crate::api::assets::BridgeRangeSelector {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_start = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_end = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_offset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_basis = <crate::api::assets::BridgeSelectorBasis>::sse_decode(deserializer);
+        let mut var_shape = <crate::api::assets::BridgeSelectorShape>::sse_decode(deserializer);
+        return crate::api::assets::BridgeRangeSelector {
+            start: var_start,
+            end: var_end,
+            offset: var_offset,
+            basis: var_basis,
+            shape: var_shape,
+        };
+    }
+}
+
 impl SseDecode for crate::api::effect::BridgeRational {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -13273,6 +13294,30 @@ impl SseDecode for crate::api::state::BridgeScopeTrace {
         return crate::api::state::BridgeScopeTrace {
             kind: var_kind,
             rgba: var_rgba,
+        };
+    }
+}
+
+impl SseDecode for crate::api::assets::BridgeSelectorBasis {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::assets::BridgeSelectorBasis::Characters,
+            1 => crate::api::assets::BridgeSelectorBasis::Words,
+            _ => unreachable!("Invalid variant for BridgeSelectorBasis: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::assets::BridgeSelectorShape {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::assets::BridgeSelectorShape::Square,
+            1 => crate::api::assets::BridgeSelectorShape::Ramp,
+            _ => unreachable!("Invalid variant for BridgeSelectorShape: {}", inner),
         };
     }
 }
@@ -13521,6 +13566,36 @@ impl SseDecode for crate::api::project::BridgeSwatch {
     }
 }
 
+impl SseDecode for crate::api::assets::BridgeTextAnimator {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_name = <String>::sse_decode(deserializer);
+        let mut var_selector = <crate::api::assets::BridgeRangeSelector>::sse_decode(deserializer);
+        let mut var_positionX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_positionY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_rotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_scaleX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_scaleY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_opacity = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_fillR = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_fillG = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_fillB = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        return crate::api::assets::BridgeTextAnimator {
+            name: var_name,
+            selector: var_selector,
+            position_x: var_positionX,
+            position_y: var_positionY,
+            rotation: var_rotation,
+            scale_x: var_scaleX,
+            scale_y: var_scaleY,
+            opacity: var_opacity,
+            fill_r: var_fillR,
+            fill_g: var_fillG,
+            fill_b: var_fillB,
+        };
+    }
+}
+
 impl SseDecode for crate::api::assets::BridgeTextDocument {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -13530,6 +13605,8 @@ impl SseDecode for crate::api::assets::BridgeTextDocument {
         let mut var_fill = <crate::api::assets::BridgeColourRgba>::sse_decode(deserializer);
         let mut var_path = <Option<uuid::Uuid>>::sse_decode(deserializer);
         let mut var_pathOffset = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_animators =
+            <Vec<crate::api::assets::BridgeTextAnimator>>::sse_decode(deserializer);
         return crate::api::assets::BridgeTextDocument {
             text: var_text,
             expression: var_expression,
@@ -13537,6 +13614,7 @@ impl SseDecode for crate::api::assets::BridgeTextDocument {
             fill: var_fill,
             path: var_path,
             path_offset: var_pathOffset,
+            animators: var_animators,
         };
     }
 }
@@ -14435,6 +14513,20 @@ impl SseDecode for Vec<crate::api::project::BridgeSwatch> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::project::BridgeSwatch>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::assets::BridgeTextAnimator> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::assets::BridgeTextAnimator>::sse_decode(
                 deserializer,
             ));
         }
@@ -17118,6 +17210,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeLayerInfo {
             self.flow.into_into_dart().into_dart(),
             self.flow_input_rate.into_into_dart().into_dart(),
             self.track_corrected.into_into_dart().into_dart(),
+            self.text_animators.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -18042,6 +18135,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::footage::BridgeProxyState>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeRangeSelector {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.start.into_into_dart().into_dart(),
+            self.end.into_into_dart().into_dart(),
+            self.offset.into_into_dart().into_dart(),
+            self.basis.into_into_dart().into_dart(),
+            self.shape.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeRangeSelector
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeRangeSelector>
+    for crate::api::assets::BridgeRangeSelector
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeRangeSelector {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeRational {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -18271,6 +18388,48 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::state::BridgeScopeTrace>
     for crate::api::state::BridgeScopeTrace
 {
     fn into_into_dart(self) -> crate::api::state::BridgeScopeTrace {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeSelectorBasis {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Characters => 0.into_dart(),
+            Self::Words => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeSelectorBasis
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeSelectorBasis>
+    for crate::api::assets::BridgeSelectorBasis
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeSelectorBasis {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeSelectorShape {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Square => 0.into_dart(),
+            Self::Ramp => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeSelectorShape
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeSelectorShape>
+    for crate::api::assets::BridgeSelectorShape
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeSelectorShape {
         self
     }
 }
@@ -18528,6 +18687,36 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::project::BridgeSwatch>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeTextAnimator {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.name.into_into_dart().into_dart(),
+            self.selector.into_into_dart().into_dart(),
+            self.position_x.into_into_dart().into_dart(),
+            self.position_y.into_into_dart().into_dart(),
+            self.rotation.into_into_dart().into_dart(),
+            self.scale_x.into_into_dart().into_dart(),
+            self.scale_y.into_into_dart().into_dart(),
+            self.opacity.into_into_dart().into_dart(),
+            self.fill_r.into_into_dart().into_dart(),
+            self.fill_g.into_into_dart().into_dart(),
+            self.fill_b.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::assets::BridgeTextAnimator
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::assets::BridgeTextAnimator>
+    for crate::api::assets::BridgeTextAnimator
+{
+    fn into_into_dart(self) -> crate::api::assets::BridgeTextAnimator {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeTextDocument {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -18537,6 +18726,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::assets::BridgeTextDocument {
             self.fill.into_into_dart().into_dart(),
             self.path.into_into_dart().into_dart(),
             self.path_offset.into_into_dart().into_dart(),
+            self.animators.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -20029,6 +20219,7 @@ impl SseEncode for crate::api::layer::BridgeLayerInfo {
         <bool>::sse_encode(self.flow, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.flow_input_rate, serializer);
         <bool>::sse_encode(self.track_corrected, serializer);
+        <Vec<crate::api::assets::BridgeTextAnimator>>::sse_encode(self.text_animators, serializer);
     }
 }
 
@@ -20585,6 +20776,17 @@ impl SseEncode for crate::api::footage::BridgeProxyState {
     }
 }
 
+impl SseEncode for crate::api::assets::BridgeRangeSelector {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::effect::BridgeScalar>::sse_encode(self.start, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.end, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.offset, serializer);
+        <crate::api::assets::BridgeSelectorBasis>::sse_encode(self.basis, serializer);
+        <crate::api::assets::BridgeSelectorShape>::sse_encode(self.shape, serializer);
+    }
+}
+
 impl SseEncode for crate::api::effect::BridgeRational {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -20707,6 +20909,38 @@ impl SseEncode for crate::api::state::BridgeScopeTrace {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u32>::sse_encode(self.kind, serializer);
         <Vec<u8>>::sse_encode(self.rgba, serializer);
+    }
+}
+
+impl SseEncode for crate::api::assets::BridgeSelectorBasis {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::assets::BridgeSelectorBasis::Characters => 0,
+                crate::api::assets::BridgeSelectorBasis::Words => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::assets::BridgeSelectorShape {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::assets::BridgeSelectorShape::Square => 0,
+                crate::api::assets::BridgeSelectorShape::Ramp => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -20861,6 +21095,23 @@ impl SseEncode for crate::api::project::BridgeSwatch {
     }
 }
 
+impl SseEncode for crate::api::assets::BridgeTextAnimator {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.name, serializer);
+        <crate::api::assets::BridgeRangeSelector>::sse_encode(self.selector, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.position_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.position_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.rotation, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.scale_x, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.scale_y, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.fill_r, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.fill_g, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.fill_b, serializer);
+    }
+}
+
 impl SseEncode for crate::api::assets::BridgeTextDocument {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -20870,6 +21121,7 @@ impl SseEncode for crate::api::assets::BridgeTextDocument {
         <crate::api::assets::BridgeColourRgba>::sse_encode(self.fill, serializer);
         <Option<uuid::Uuid>>::sse_encode(self.path, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.path_offset, serializer);
+        <Vec<crate::api::assets::BridgeTextAnimator>>::sse_encode(self.animators, serializer);
     }
 }
 
@@ -21583,6 +21835,16 @@ impl SseEncode for Vec<crate::api::project::BridgeSwatch> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::project::BridgeSwatch>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::assets::BridgeTextAnimator> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::assets::BridgeTextAnimator>::sse_encode(item, serializer);
         }
     }
 }

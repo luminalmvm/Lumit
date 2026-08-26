@@ -8,8 +8,8 @@ import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `colour_of`, `linear_of`, `shift_property`, `text_document_of`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animator_from`, `colour_of`, `linear_of`, `read_animator`, `shift_property`, `text_document_of`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// A colour as the document stores it: scene-linear RGBA, which may exceed 1
 /// (an HDR tint) or dip below 0 (a lift), so it is not a byte triple.
@@ -38,6 +38,56 @@ class BridgeColourRgba {
           g == other.g &&
           b == other.b &&
           a == other.a;
+}
+
+/// Which stretch of the words an animator reaches, in per cent of the run.
+class BridgeRangeSelector {
+  final BridgeScalar start;
+  final BridgeScalar end;
+  final BridgeScalar offset;
+  final BridgeSelectorBasis basis;
+  final BridgeSelectorShape shape;
+
+  const BridgeRangeSelector({
+    required this.start,
+    required this.end,
+    required this.offset,
+    required this.basis,
+    required this.shape,
+  });
+
+  @override
+  int get hashCode =>
+      start.hashCode ^
+      end.hashCode ^
+      offset.hashCode ^
+      basis.hashCode ^
+      shape.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeRangeSelector &&
+          runtimeType == other.runtimeType &&
+          start == other.start &&
+          end == other.end &&
+          offset == other.offset &&
+          basis == other.basis &&
+          shape == other.shape;
+}
+
+/// What a range selector counts (K-609).
+enum BridgeSelectorBasis {
+  characters,
+  words,
+  ;
+}
+
+/// How a range selector's weight falls off across its range (K-609).
+enum BridgeSelectorShape {
+  square,
+  ramp,
+  ;
 }
 
 /// A solid asset's definition.
@@ -69,6 +119,71 @@ class BridgeSolidDef {
           height == other.height;
 }
 
+/// One animator group: what a reached letter is asked to do, and the range
+/// saying which letters those are (K-609).
+///
+/// Every animator carries all five property groups — the decision entry argues
+/// why there is no menu of properties to add them from — defaulted to values
+/// that change nothing: no push, no turn, 100 % size, 100 % opacity, no tint.
+class BridgeTextAnimator {
+  final String name;
+  final BridgeRangeSelector selector;
+  final BridgeScalar positionX;
+  final BridgeScalar positionY;
+  final BridgeScalar rotation;
+  final BridgeScalar scaleX;
+  final BridgeScalar scaleY;
+  final BridgeScalar opacity;
+  final BridgeScalar fillR;
+  final BridgeScalar fillG;
+  final BridgeScalar fillB;
+
+  const BridgeTextAnimator({
+    required this.name,
+    required this.selector,
+    required this.positionX,
+    required this.positionY,
+    required this.rotation,
+    required this.scaleX,
+    required this.scaleY,
+    required this.opacity,
+    required this.fillR,
+    required this.fillG,
+    required this.fillB,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^
+      selector.hashCode ^
+      positionX.hashCode ^
+      positionY.hashCode ^
+      rotation.hashCode ^
+      scaleX.hashCode ^
+      scaleY.hashCode ^
+      opacity.hashCode ^
+      fillR.hashCode ^
+      fillG.hashCode ^
+      fillB.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeTextAnimator &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          selector == other.selector &&
+          positionX == other.positionX &&
+          positionY == other.positionY &&
+          rotation == other.rotation &&
+          scaleX == other.scaleX &&
+          scaleY == other.scaleY &&
+          opacity == other.opacity &&
+          fillR == other.fillR &&
+          fillG == other.fillG &&
+          fillB == other.fillB;
+}
+
 /// A text layer's document (v1: one styled run — docs/03 §9.1).
 class BridgeTextDocument {
   final String text;
@@ -90,6 +205,10 @@ class BridgeTextDocument {
   /// clock like every other animatable channel that crosses here (K-213).
   final BridgeScalar pathOffset;
 
+  /// The animator groups moving the letters separately (K-609). Empty is the
+  /// ordinary text layer.
+  final List<BridgeTextAnimator> animators;
+
   const BridgeTextDocument({
     required this.text,
     this.expression,
@@ -97,6 +216,7 @@ class BridgeTextDocument {
     required this.fill,
     this.path,
     required this.pathOffset,
+    required this.animators,
   });
 
   @override
@@ -106,7 +226,8 @@ class BridgeTextDocument {
       size.hashCode ^
       fill.hashCode ^
       path.hashCode ^
-      pathOffset.hashCode;
+      pathOffset.hashCode ^
+      animators.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -118,5 +239,6 @@ class BridgeTextDocument {
           size == other.size &&
           fill == other.fill &&
           path == other.path &&
-          pathOffset == other.pathOffset;
+          pathOffset == other.pathOffset &&
+          animators == other.animators;
 }

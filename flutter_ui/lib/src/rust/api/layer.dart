@@ -343,6 +343,13 @@ class BridgeLayerInfo {
   /// document revision and a call there is exactly the cost K-184 removed.
   final bool trackCorrected;
 
+  /// A Text layer's animator groups (K-609), in order; empty on every other
+  /// kind. Carried for the same reason the masks and the strokes are: the
+  /// Timeline draws a row per animator property and the graph editor reads
+  /// its curves from here, and asking per row per frame is exactly the cost
+  /// K-184 exists to remove. Edits still go through `set_text`.
+  final List<BridgeTextAnimator> textAnimators;
+
   const BridgeLayerInfo({
     required this.name,
     required this.kind,
@@ -368,6 +375,7 @@ class BridgeLayerInfo {
     required this.flow,
     required this.flowInputRate,
     required this.trackCorrected,
+    required this.textAnimators,
   });
 
   @override
@@ -395,7 +403,8 @@ class BridgeLayerInfo {
       markers.hashCode ^
       flow.hashCode ^
       flowInputRate.hashCode ^
-      trackCorrected.hashCode;
+      trackCorrected.hashCode ^
+      textAnimators.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -425,7 +434,8 @@ class BridgeLayerInfo {
           markers == other.markers &&
           flow == other.flow &&
           flowInputRate == other.flowInputRate &&
-          trackCorrected == other.trackCorrected;
+          trackCorrected == other.trackCorrected &&
+          textAnimators == other.textAnimators;
 }
 
 /// What kind of source a layer has — what the Timeline draws its bar and its
@@ -2356,6 +2366,16 @@ class LayerReference {
   /// The whole document rather than a field at a time, for the same reason
   /// every other edit here takes a whole value: retyping a word and changing
   /// its size is one action to the user and should be one undo step.
+  ///
+  /// **Adding the first animator moves the anchor with it** (K-609). An
+  /// animated line is drawn into a box one text size larger a side, with the
+  /// words that far in, so a letter has somewhere to drop in from — and the
+  /// anchor is a fixed coordinate in the layer's own pixels, so without this
+  /// the words would jump by that margin the moment the first animator
+  /// arrived. Removing the last one puts it back. One `Op::Batch`, so it is
+  /// one undo step: the same rule K-230 set for typing, where committing the
+  /// document and the pivot separately made `Ctrl+Z` undo a pivot nobody had
+  /// moved.
   void setText({required BridgeTextDocument document}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetText(that: this, document: document);
 
