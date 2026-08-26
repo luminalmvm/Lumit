@@ -511,7 +511,13 @@ pub mod prop_keys {
     pub const SUPPORTED_COMPONENTS: &str = "OfxImageEffectPropSupportedComponents";
     pub const SUPPORTED_CONTEXTS: &str = "OfxImageEffectPropSupportedContexts";
     pub const SUPPORTED_PIXEL_DEPTHS: &str = "OfxImageEffectPropSupportedPixelDepths";
-    pub const SUPPORTS_MULTIPLE_CLIP_DEPTHS: &str = "OfxImageEffectPropSupportsMultipleClipDepths";
+    /// **The property is not named after its macro.** `ofxImageEffect.h` spells
+    /// the macro `kOfxImageEffectPropSupportsMultipleClipDepths` and the string
+    /// `OfxImageEffectPropMultipleClipDepths`, and a host that seeds the macro's
+    /// own name has the property under a name no plugin ever asks for. ntsc-rs
+    /// reads this one during `kOfxActionLoad` and refuses to load without it,
+    /// which is how it was found (K-595).
+    pub const SUPPORTS_MULTIPLE_CLIP_DEPTHS: &str = "OfxImageEffectPropMultipleClipDepths";
     pub const SUPPORTS_MULTIPLE_CLIP_PARS: &str = "OfxImageEffectPropSupportsMultipleClipPARs";
     pub const SETABLE_FRAME_RATE: &str = "OfxImageEffectPropSetableFrameRate";
     pub const SETABLE_FIELDING: &str = "OfxImageEffectPropSetableFielding";
@@ -572,14 +578,24 @@ pub mod prop_keys {
     pub const PROJECT_SIZE: &str = "OfxImageEffectPropProjectSize";
     pub const PROJECT_OFFSET: &str = "OfxImageEffectPropProjectOffset";
     pub const PROJECT_EXTENT: &str = "OfxImageEffectPropProjectExtent";
-    pub const PROJECT_PIXEL_ASPECT_RATIO: &str = "OfxImageEffectPropProjectPixelAspectRatio";
+    /// How long the effect runs, in frames. An instance property, and one the
+    /// OFX support library reads when a plugin is constructed — a plugin that
+    /// cannot find it does not exist (K-595).
+    pub const EFFECT_DURATION: &str = "OfxImageEffectInstancePropEffectDuration";
+    /// As [`SUPPORTS_MULTIPLE_CLIP_DEPTHS`]: the macro is
+    /// `kOfxImageEffectPropProjectPixelAspectRatio`, the string is not.
+    pub const PROJECT_PIXEL_ASPECT_RATIO: &str = "OfxImageEffectPropPixelAspectRatio";
 
     pub const PIXEL_DEPTH: &str = "OfxImageEffectPropPixelDepth";
     pub const COMPONENTS: &str = "OfxImageEffectPropComponents";
     pub const PRE_MULTIPLICATION: &str = "OfxImageEffectPropPreMultiplication";
     pub const CLIP_CONNECTED: &str = "OfxImageClipPropConnected";
     pub const CLIP_CONTINUOUS_SAMPLES: &str = "OfxImageClipPropContinuousSamples";
-    pub const CLIP_UNMAPPED_FRAME_RANGE: &str = "OfxImageClipPropUnmappedFrameRange";
+    /// The clip instance's unmapped frame range. Spelled `OfxImageEffectProp…`
+    /// rather than `OfxImageClipProp…` — it is a clip property with an effect
+    /// property's name, which is what the header says and what the OFX support
+    /// library reads (K-595).
+    pub const CLIP_UNMAPPED_FRAME_RANGE: &str = "OfxImageEffectPropUnmappedFrameRange";
     pub const CLIP_UNMAPPED_COMPONENTS: &str = "OfxImageClipPropUnmappedComponents";
     pub const CLIP_FIELD_ORDER: &str = "OfxImageClipPropFieldOrder";
 
@@ -703,9 +719,12 @@ pub mod prop_values {
     pub const TYPE_CLIP: &str = "OfxTypeClip";
     pub const TYPE_IMAGE: &str = "OfxTypeImage";
     /// The only premultiplication state this host hands out (docs/12 §2.1).
-    pub const IMAGE_PRE_MULTIPLIED: &str = "OfxImagePreMultiplied";
-    pub const IMAGE_FIELD_NONE: &str = "OfxImageFieldNone";
-    pub const IMAGE_FIELD_BOTH: &str = "OfxImageFieldBoth";
+    /// The macro is `kOfxImagePreMultiplied`; the string is not (K-595).
+    pub const IMAGE_PRE_MULTIPLIED: &str = "OfxImageAlphaPremultiplied";
+    /// Macro `kOfxImageFieldNone`, string `OfxFieldNone` (K-595).
+    pub const IMAGE_FIELD_NONE: &str = "OfxFieldNone";
+    /// Macro `kOfxImageFieldBoth`, string `OfxFieldBoth` (K-595).
+    pub const IMAGE_FIELD_BOTH: &str = "OfxFieldBoth";
     pub const CHANGE_USER_EDITED: &str = "OfxChangeUserEdited";
     pub const CHANGE_PLUGIN_EDITED: &str = "OfxChangePluginEdited";
     pub const CHANGE_TIME: &str = "OfxChangeTime";

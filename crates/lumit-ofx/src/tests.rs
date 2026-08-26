@@ -18,8 +18,9 @@ use lumit_eval::epoch::Epoch;
 use crate::bundle::{scan_dir, Bundle, BUNDLE_ARCH_DIR};
 use crate::describe::{describe_bundle, Context, DescribedPlugin, Rejection, ScanReport};
 use crate::ffi::{
-    actions, prop_keys as keys, OfxHost, OfxImageEffectSuiteV1, OfxMemorySuiteV1,
-    OfxMessageSuiteV1, OfxMultiThreadSuiteV1, OfxParameterSuiteV1, OfxPlugin, OfxPropertySuiteV1,
+    actions, prop_keys as keys, prop_values as values, OfxHost, OfxImageEffectSuiteV1,
+    OfxMemorySuiteV1, OfxMessageSuiteV1, OfxMultiThreadSuiteV1, OfxParameterSuiteV1, OfxPlugin,
+    OfxPropertySuiteV1,
 };
 use crate::handles::{Handle, HandleKind, HandleRegistry};
 use crate::host::{dump, host, host_props_handle, state};
@@ -347,6 +348,7 @@ fn the_host_property_table_says_only_true_things() {
         "\
 OfxImageEffectHostPropIsBackground = 0
 OfxImageEffectInstancePropSequentialRender = 0
+OfxImageEffectPropMultipleClipDepths = 0
 OfxImageEffectPropSetableFielding = 0
 OfxImageEffectPropSetableFrameRate = 0
 OfxImageEffectPropSupportedComponents = \"OfxImageComponentRGBA\"
@@ -355,7 +357,6 @@ OfxImageEffectPropSupportedContexts = \"OfxImageEffectContextFilter\", \
 \"OfxImageEffectContextTransition\"
 OfxImageEffectPropSupportedPixelDepths = \"OfxBitDepthFloat\"
 OfxImageEffectPropSupportsMultiResolution = 0
-OfxImageEffectPropSupportsMultipleClipDepths = 0
 OfxImageEffectPropSupportsMultipleClipPARs = 0
 OfxImageEffectPropSupportsOverlays = 0
 OfxImageEffectPropSupportsTiles = 0
@@ -385,6 +386,62 @@ OfxPropVersionLabel = \"{version}\"
     // The two that would break plugins if they were ever quietly flipped.
     assert_eq!(set.get_int(keys::SUPPORTS_TILES, 0), Ok(0));
     assert_eq!(set.get_int(keys::TEMPORAL_CLIP_ACCESS, 0), Ok(1));
+}
+
+/// **Six OFX properties are not named after their macros**, and a host that
+/// seeds the macro's own name puts the property where no plugin will ever look
+/// for it — silently, because a property nobody finds is a property nobody
+/// complains about. ntsc-rs refuses to load without the first of them; the
+/// conformance bench is what found that, and this is the list it came back with
+/// (K-595). Each line is `ofxImageEffect.h`'s `#define`, verbatim.
+#[test]
+fn the_properties_whose_names_are_not_their_macros_are_spelled_the_headers_way() {
+    for (macro_name, string, ours) in [
+        (
+            "kOfxImageEffectPropSupportsMultipleClipDepths",
+            "OfxImageEffectPropMultipleClipDepths",
+            keys::SUPPORTS_MULTIPLE_CLIP_DEPTHS,
+        ),
+        (
+            "kOfxImageEffectPropProjectPixelAspectRatio",
+            "OfxImageEffectPropPixelAspectRatio",
+            keys::PROJECT_PIXEL_ASPECT_RATIO,
+        ),
+        (
+            "kOfxImageEffectPropUnmappedFrameRange",
+            "OfxImageEffectPropUnmappedFrameRange",
+            keys::CLIP_UNMAPPED_FRAME_RANGE,
+        ),
+        (
+            "kOfxImagePreMultiplied",
+            "OfxImageAlphaPremultiplied",
+            values::IMAGE_PRE_MULTIPLIED,
+        ),
+        (
+            "kOfxImageFieldNone",
+            "OfxFieldNone",
+            values::IMAGE_FIELD_NONE,
+        ),
+        (
+            "kOfxImageFieldBoth",
+            "OfxFieldBoth",
+            values::IMAGE_FIELD_BOTH,
+        ),
+    ] {
+        assert_eq!(
+            ours, string,
+            "{macro_name} is a macro name, not a property name"
+        );
+    }
+
+    // And the host really answers to the corrected name, which is the half a
+    // constant on its own cannot promise.
+    // The handle is fetched **before** the state is locked: `host_props_handle`
+    // takes the same lock, and this mutex is not reentrant.
+    let handle = host_props_handle().expect("the host has properties");
+    let state = state();
+    let set = state.props.get(handle).expect("the host's set is live");
+    assert_eq!(set.get_int(keys::SUPPORTS_MULTIPLE_CLIP_DEPTHS, 0), Ok(0));
 }
 
 #[test]
@@ -1579,6 +1636,97 @@ fn a_clip_can_be_measured_before_the_render_action() {
     // And the pictures did not stay behind afterwards, which is the other half
     // of binding them earlier.
     assert_eq!(crate::suites::memory::image_bytes_live(), 0);
+}
+
+/// **An instance carries the project it is part of**, and a plugin reads all of
+/// it while it is being constructed: the project's size and extent, how long the
+/// effect runs, whether tiles are on. A plugin that cannot find one of them
+/// throws before it exists — six of the conformance bench's plugins died on
+/// `ProjectExtent` alone, and none of them had done anything wrong (K-595).
+///
+/// The size is the frame being rendered, not a standing default, because a
+/// generator places itself by it.
+#[test]
+fn an_instance_knows_how_big_the_project_is_and_the_render_keeps_it_true() {
+    let _ledger = image_ledger();
+    let Some((_root, bundle, report)) = a_described_bundle("an_instance_knows_how_big") else {
+        return;
+    };
+    let plugin = plugin_of(&bundle, "com.lumitlab.testplug.passthrough");
+    let descriptor = &described(&report, "com.lumitlab.testplug.passthrough").descriptor;
+    let instance = Instance::create(plugin, descriptor, Context::Filter, &ParamSnapshot::new())
+        .expect("an instance");
+
+    let props_of = |handle: Handle| -> PropertySet {
+        let state = state();
+        let props = state.effects.get(handle).expect("the instance").props;
+        state.props.get(props).expect("its property set").clone()
+    };
+
+    let born = props_of(instance.handle());
+    assert_eq!(born.get_double(keys::PROJECT_SIZE, 0), Ok(1920.0));
+    assert_eq!(born.get_double(keys::PROJECT_EXTENT, 1), Ok(1080.0));
+    assert_eq!(born.get_double(keys::EFFECT_DURATION, 0), Ok(1.0));
+    assert_eq!(born.get_int(keys::SUPPORTS_TILES, 0), Ok(0));
+
+    // A render of a 9x4 frame says so, rather than leaving 1080p standing.
+    let token = Epoch::new().token();
+    let request = RenderRequest::filter(0.0, a_test_frame(9, 4));
+    crate::render::render(plugin, &instance, &request, &token).expect("it rendered");
+    let after = props_of(instance.handle());
+    assert_eq!(after.get_double(keys::PROJECT_SIZE, 0), Ok(9.0));
+    assert_eq!(after.get_double(keys::PROJECT_SIZE, 1), Ok(4.0));
+    assert_eq!(after.get_double(keys::PROJECT_EXTENT, 0), Ok(9.0));
+
+    instance.destroy(plugin).expect("destroyed");
+}
+
+/// `clipGetHandle`'s property set is **optional** — the header says "if not
+/// null" — and answering `kOfxStatErrValue` to a plugin that passed null for it
+/// failed an action the plugin had done nothing wrong in. ntsc-rs passes null
+/// (K-595).
+#[test]
+fn a_clip_handle_can_be_asked_for_without_its_property_set() {
+    let _ledger = image_ledger();
+    let Some((_root, bundle, report)) = a_described_bundle("a_clip_handle_without_props") else {
+        return;
+    };
+    let plugin = plugin_of(&bundle, "com.lumitlab.testplug.passthrough");
+    let descriptor = &described(&report, "com.lumitlab.testplug.passthrough").descriptor;
+    let instance = Instance::create(plugin, descriptor, Context::Filter, &ParamSnapshot::new())
+        .expect("an instance");
+
+    let suite = &crate::suites::image_effect::SUITE;
+    let mut clip: *mut c_void = std::ptr::null_mut();
+    // SAFETY: a live handle, a valid clip out-parameter, and a null property
+    // set — which is the thing under test.
+    unsafe {
+        assert_eq!(
+            (suite.clip_get_handle)(
+                instance.handle().as_ptr(),
+                c"Source".as_ptr(),
+                &raw mut clip,
+                std::ptr::null_mut(),
+            ),
+            Status::Ok.code(),
+            "a null property set is a plugin not wanting one, not an error"
+        );
+        assert!(!clip.is_null(), "the clip handle still came back");
+
+        // Nowhere to put the clip handle *is* an error: that argument is not
+        // optional, and the call would have done nothing at all.
+        assert_eq!(
+            (suite.clip_get_handle)(
+                instance.handle().as_ptr(),
+                c"Source".as_ptr(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ),
+            Status::ErrValue.code()
+        );
+    }
+
+    instance.destroy(plugin).expect("destroyed");
 }
 
 /// The pixel path itself: a plugin that changes nothing must give back exactly

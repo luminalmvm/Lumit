@@ -278,6 +278,13 @@ pub fn render_with_prefetch(
 
     let previous = set_images(handle, images, BTreeMap::new())?;
     drop(previous);
+    // The project is the frame being rendered, and the plugin is told so before
+    // it is asked anything: a generator places itself by these two numbers.
+    crate::instance::set_project_size(
+        handle,
+        f64::from(request.bounds.x2 - request.bounds.x1),
+        f64::from(request.bounds.y2 - request.bounds.y1),
+    )?;
 
     let outcome = ask(plugin, instance, request, token, prefetch);
 

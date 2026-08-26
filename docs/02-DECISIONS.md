@@ -17779,25 +17779,47 @@ five-step manual pass — including the unhappy half, where the licence is pulle
 layer must wear a calm badge — and says the result is recorded in the pull request that ran
 it, not in a document that would rot.
 
-**The bench was run, and it changed the host twice.** openfx-misc built and drove: 205
-plugin/context pairs, and **no bad handle or bad value in the whole pass** — K-589's handle
-discipline holds against eighty plugins nobody here wrote. Two things did not hold. The
-clips were bound just before `kOfxImageEffectActionRender`, and real plugins ask their input
-how big it is inside `getRegionOfDefinition` and fetch it in `isIdentity`; they were being
-told "there is no image" and failing the action. The pictures now go on before the first
-question and come off on every path out, which is nineteen of those pairs. And the
-parameter suite's unbuilt half answered the wrong no to a forged handle, above.
+**The bench was run, and it changed the host five times.** openfx-misc built and drove:
+207 plugin/context pairs, 11 of them passing at the first attempt and 74 by the end, with
+**no bad handle and no bad value in the whole pass** — K-589's handle discipline holds
+against eighty plugins nobody here wrote. What did not hold, each now with a regression
+test:
 
-**What the bench found that this package does not fix, it names.** Half the remaining
-failures are one gap: openfx-misc writes parameter values during
-`kOfxActionCreateInstance`, and this host cannot accept a write, so the support library
-throws and the instance never exists. Accepting it needs to *read* the value, and reading
-it needs a C-variadic entry point — the ceiling K-591 already recorded for `paramGetValue`.
-The read side got away with four fixed pointers because pointers all pass alike; the write
-side cannot, because an `int` and a `double` arrive in different registers. That is a C
-shim and a package of its own, alongside making a plugin's writes reach the document
-(docs/12 §2.2). It is written down in the note rather than papered over, and the harness
-prints the count on every run.
+- **The clips were bound just before the render action**, and a real plugin asks its input
+  how big it is inside `getRegionOfDefinition` and fetches it in `isIdentity`. They were
+  told there was no image and failed the action. The pictures now go on before the first
+  question and come off on every path out, and the render lock covers the whole
+  conversation rather than the render alone, because every action in it calls into the
+  plugin.
+- **Six OFX properties are not named after their macros**, and this host had seeded the
+  macro names: `kOfxImageEffectPropSupportsMultipleClipDepths` is really
+  `OfxImageEffectPropMultipleClipDepths`, and so on for the project pixel aspect ratio, the
+  clip's unmapped frame range, `OfxImageAlphaPremultiplied`, `OfxFieldNone` and
+  `OfxFieldBoth`. A property under the wrong name is invisible rather than wrong, which is
+  why nothing had ever noticed; ntsc-rs reads the first of them during `kOfxActionLoad` and
+  would not load at all. The six are pinned by name in a test, against the header's own
+  `#define`s.
+- **An instance did not know how big the project was.** The OFX support library reads
+  `ProjectSize`, `ProjectExtent`, `InstancePropEffectDuration` and the instance's own
+  `SupportsTiles` while constructing a plugin, and a plugin that cannot find one of them
+  throws before it exists. They are seeded at creation, and the size is refreshed from the
+  frame being rendered rather than left at a default, because a generator places itself by
+  it.
+- **`clipGetHandle`'s property set is optional** — "if not null", says the header — and
+  answering `kOfxStatErrValue` to a plugin that passed null for it failed an action the
+  plugin had done nothing wrong in.
+- The parameter suite's wrong no to a forged handle, above.
+
+**What the bench found that this package does not fix, it names.** 53 of the 64 remaining
+failures are one gap: openfx-misc writes parameter values during `kOfxActionCreateInstance`,
+this host cannot accept a write, and the support library throws before the instance exists.
+Accepting it means reading the value, and that needs a C-variadic entry point — still
+unstable in Rust (`rustc 1.97`, rust-lang#44930), which is the ceiling K-591 already
+recorded for `paramGetValue`. The read side got away with four fixed pointers because
+pointers all pass alike; the write side cannot, because an `int` and a `double` arrive in
+different registers. That is a small piece of C and a package of its own, alongside making a
+plugin's writes reach the document (docs/12 §2.2). It is written down in the note rather
+than papered over, and the harness prints the count on every run.
 
 **So the pass asserts about the host and measures the plugins.** No suite call refused, no
 broken frame, every plugin Lumit wrote driving cleanly — those are assertions.

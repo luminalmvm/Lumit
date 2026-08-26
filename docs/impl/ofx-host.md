@@ -209,29 +209,46 @@ registered into the same catalogue the built-ins live in — the seam
      one target of openfx-misc (CImg) wants a header its shallow clone does not bring, and
      the other seventy-odd plugins compile beside it.
 
-   **What the first real run said** (openfx-misc at master, ntsc-rs 1.7, Windows, 205
-   plugin/context pairs): 30 passed, 71 rejected at describe, 104 failed, and **no bad
-   handle or bad value in the whole pass** — the handle discipline of K-589 holds against
-   eighty plugins nobody here wrote. Two findings came straight back into the host: the
-   clip binding above, worth nineteen of those pairs, and the parameter suite's
-   `kOfxStatErrUnsupported` to forged handles (item 2). The remainder is a list of things
-   the host has not built yet rather than things it got wrong:
+   **What the run said, and what it changed** (openfx-misc at master, ntsc-rs 1.7, Windows,
+   207 plugin/context pairs). The first pass: 11 passed, 123 failed. After the five host
+   bugs it exposed: **74 passed, 69 rejected at describe, 64 failed**, and **no bad handle
+   or bad value in the whole pass** — K-589's handle discipline holds against eighty
+   plugins nobody here wrote. The five, each with a regression test:
 
-   - **Half the failures are one gap: a plugin writes a parameter value.** openfx-misc
-     calls `paramSetValueAtTime` during `kOfxActionCreateInstance`; this host answers
-     `kOfxStatErrUnsupported`, the support library throws, and the instance never exists.
-     Accepting the write needs the value, and reading it needs a **C-variadic** entry
-     point, which is the ceiling K-591 already recorded for `paramGetValue` — the fixed
-     four-pointer trick works for reads because pointers all pass alike and does not work
-     for writes, where an `int` and a `double` arrive in different registers. So the fix is
-     a small C shim or nothing, and it belongs with the package that makes a plugin's
-     writes reach the document (docs/12 §2.2).
-   - The rest of the failures are plugins whose render or region-of-definition needs
-     something else again, and a handful of `createInstance` refusals with no single
-     cause; each is a row in the table with the action and the status it answered.
-   - **ntsc-rs does not load at all** — `kOfxActionLoad` answers `kOfxStatErrUnknown`
-     before anything can be described. Worth its own look; nothing about it is diagnosed
-     here.
+   - **The clips were bound too late.** A plugin asks its input how big it is inside
+     `getRegionOfDefinition` and fetches it in `isIdentity`; they were being told there was
+     no image and failing the action. §3 above now says when the clips go on.
+   - **Six property strings were their macro's name.** `ofxImageEffect.h` spells
+     `kOfxImageEffectPropSupportsMultipleClipDepths` as the *string*
+     `OfxImageEffectPropMultipleClipDepths`, and five more do the same
+     (`ProjectPixelAspectRatio` → `…PropPixelAspectRatio`, the clip's unmapped frame range,
+     `kOfxImagePreMultiplied` → `OfxImageAlphaPremultiplied`, `kOfxImageFieldNone` and
+     `…Both` → `OfxFieldNone`/`OfxFieldBoth`). A host that seeds the macro's own name puts
+     the property where no plugin will look for it, silently. ntsc-rs reads the first of
+     them during `kOfxActionLoad` and would not load at all.
+   - **An instance did not know how big the project was.** `ProjectSize`, `ProjectExtent`,
+     `InstancePropEffectDuration` and the instance's own `SupportsTiles` are read by the
+     OFX support library while a plugin is being constructed; a plugin that cannot find one
+     throws before it exists. They are seeded at creation and the size is refreshed from
+     the frame being rendered, because a generator places itself by it.
+   - **`clipGetHandle`'s property set is optional** — "if not null", says the header — and
+     answering `kOfxStatErrValue` to a plugin that passed null failed an action it had done
+     nothing wrong in.
+   - The parameter suite's wrong no to a forged handle (item 2).
+
+   **What is left is one gap and a short tail.** 53 of the 64 remaining failures are the
+   same thing: openfx-misc writes a parameter value during `kOfxActionCreateInstance`, this
+   host answers `kOfxStatErrUnsupported`, the support library throws, and the instance never
+   exists. Accepting the write means *reading* the value, and reading it needs a
+   **C-variadic** entry point — unstable in Rust to this day (`rustc 1.97`,
+   [rust-lang#44930](https://github.com/rust-lang/rust/issues/44930)), which is the ceiling
+   K-591 already recorded for `paramGetValue`. The fixed four-pointer trick works for reads
+   because pointers all pass alike; it cannot work for writes, where an `int` and a `double`
+   arrive in different registers. So the fix is a small C shim, and it belongs with the
+   package that makes a plugin's writes reach the document (docs/12 §2.2). The tail is ten
+   plugins whose own render or region-of-definition answers `kOfxStatErrUnsupported` for
+   reasons of their own, and one `createInstance` that answers `kOfxStatErrUnknown`; each is
+   a row in the table with its action and its status.
 
 2. Handle fuzzing: call every suite function with forged/expired handles → correct OFX
    status codes, zero UB (run under ASan in CI). **Landed** as

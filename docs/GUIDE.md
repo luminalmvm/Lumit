@@ -11631,26 +11631,36 @@ answer it gives, and the pass fails if "that is not a handle" or "that is not a 
 ever one of them.
 
 **What the first real run said.** Eighty plugins nobody here wrote, in two hundred-odd
-combinations of plugin and shape: thirty worked, seventy were turned away at the door for
-reasons that are true, and a hundred failed — and not one of them ever handed the host a
-number it could not make sense of, which is the thing the whole handle design was for.
+combinations of plugin and shape. Eleven worked. By the end of the day seventy-four did,
+and not one plugin in any run ever handed the host a number it could not make sense of —
+which is the thing the whole handle design was for.
 
-Two of those failures were ours and are fixed. The interesting one: Lumit was handing a
+Five things were ours, and all five are fixed. The one worth telling: Lumit was handing a
 plugin its pictures just before asking it to paint, and real plugins ask about their input
 much earlier than that — "how big is it?" is the first question most of them ask. They were
-being told there was no picture at all, and sensibly gave up. The pictures go on at the
-start of the conversation now.
+told there was no picture at all and sensibly gave up. The pictures go on at the start of
+the conversation now.
+
+The strangest one is worth knowing about because it can happen again. In the OFX headers,
+the *name a programmer types* and the *name the property actually has* are two different
+strings, and for six properties they disagree — one is called
+`kOfxImageEffectPropSupportsMultipleClipDepths` in the code and
+`OfxImageEffectPropMultipleClipDepths` on the wire. Lumit had been using the first for
+both. A property filed under a name nobody asks for is not wrong, it is **invisible**: no
+error, no warning, just a plugin that quietly cannot find something and gives up. One of
+the two plugin sets refused to load at all because of it, and nothing in three months of
+testing had noticed. They are pinned by name in a test now.
 
 The largest remaining failure is not a bug but a gap with a name: these plugins **write** a
 value back into their own controls while they are starting up, and Lumit cannot yet accept
 a write from a plugin. There is a specific, boring reason it cannot, and it is worth
 knowing because it decides when it will be fixed: the C function a plugin calls to write a
 value takes "however many numbers this control has" — a shape C can express and Rust
-cannot, on its own. Reading is fine, because reading passes addresses and all addresses
-look alike; writing passes the numbers themselves, and a whole number and a decimal one
-travel in different places inside the machine. So that fix is a small piece of C, and it
-arrives with the work that makes a plugin's writes reach your project properly. Until then
-the number is printed on every run rather than quietly forgotten.
+cannot, on its own, to this day. Reading is fine, because reading passes addresses and all
+addresses look alike; writing passes the numbers themselves, and a whole number and a
+decimal one travel in different places inside the machine. So that fix is a small piece of
+C, and it arrives with the work that makes a plugin's writes reach your project properly.
+Until then the number is printed on every run rather than quietly forgotten.
 
 ### Handing every door a key that does not fit
 

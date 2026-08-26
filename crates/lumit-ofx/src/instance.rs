@@ -503,6 +503,28 @@ fn seed_instance_properties(
     seed_string(keys::PLUGIN_RENDER_THREAD_SAFETY, thread_safety.ofx_name());
 
     props.seed(keys::IS_INTERACTIVE, PropValue::int(0));
+    // **The project's size, and this instance's own tiles answer.** The OFX
+    // support library reads all of these when a plugin is constructed, and a
+    // plugin that cannot find one of them throws before it exists — six of the
+    // conformance bench's plugins died on `ProjectExtent` alone (K-595).
+    //
+    // The numbers here are a standing default; [`set_project_size`] replaces
+    // them with the frame actually being rendered before the plugin is asked
+    // anything, because a generator places itself by them.
+    props.seed(
+        keys::PROJECT_SIZE,
+        PropValue::Double(vec![DEFAULT_PROJECT.0, DEFAULT_PROJECT.1]),
+    );
+    props.seed(
+        keys::PROJECT_EXTENT,
+        PropValue::Double(vec![DEFAULT_PROJECT.0, DEFAULT_PROJECT.1]),
+    );
+    // One frame: Lumit renders a frame at a time and tells a plugin nothing
+    // about the layer it sits on (docs/12 §2.1). A plugin that reads this to
+    // place a ramp across the clip gets a one-frame clip, which is honest for a
+    // host that hands over one frame.
+    props.seed(keys::EFFECT_DURATION, PropValue::double(1.0));
+    props.seed(keys::SUPPORTS_TILES, PropValue::int(0));
     props.seed(keys::FRAME_RATE, PropValue::double(25.0));
     props.seed(keys::PROJECT_OFFSET, PropValue::Double(vec![0.0, 0.0]));
     props.seed(keys::PROJECT_PIXEL_ASPECT_RATIO, PropValue::double(1.0));
@@ -538,6 +560,23 @@ fn seed_clip_instance_properties(props: &mut PropertySet) {
         keys::CLIP_UNMAPPED_FRAME_RANGE,
         PropValue::Double(vec![0.0, 0.0]),
     );
+}
+
+/// The project size an instance is born with, in pixels: 1080p, replaced by the
+/// real frame at the first render ([`set_project_size`]).
+const DEFAULT_PROJECT: (f64, f64) = (1920.0, 1080.0);
+
+/// Tell an instance how big the picture it is about to be handed is.
+///
+/// Called before the first action of every render, because a plugin reads the
+/// project size to place things and a stale one puts them in the wrong place.
+pub(crate) fn set_project_size(handle: Handle, width: f64, height: f64) -> Result<(), Status> {
+    let mut state = state();
+    let props = state.effects.get(handle)?.props;
+    let set = state.props.get_mut(props)?;
+    set.set(keys::PROJECT_SIZE, PropValue::Double(vec![width, height]));
+    set.set(keys::PROJECT_EXTENT, PropValue::Double(vec![width, height]));
+    Ok(())
 }
 
 /// A time as a key that can be compared exactly.

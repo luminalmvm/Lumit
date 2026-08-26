@@ -172,15 +172,25 @@ unsafe extern "C" fn clip_get_handle(
                 .ok_or(Status::ErrUnknown)
         })?;
         let (props, clip_handle) = found;
+        if clip.is_null() {
+            // The clip handle is the one the spec does not make optional, and a
+            // plugin that asked for a clip with nowhere to put it has a bug.
+            return Err(Status::ErrValue);
+        }
         // A clip *handle* names a live image input, which only an instance has.
         // A descriptor's clip has none, and null is the honest answer there;
         // the property set is what a describing plugin is actually after.
-        if !clip.is_null() {
+        // SAFETY: the plugin's out-parameter, checked non-null above.
+        unsafe { *clip = clip_handle.map_or(std::ptr::null_mut(), Handle::as_ptr) };
+        // **The property set is optional**: `ofxImageEffect.h` says "if not
+        // null, the ... property set will be placed here", and ntsc-rs passes
+        // null for it. Answering `kOfxStatErrValue` to that made the plugin
+        // fail an action it had done nothing wrong in (K-595).
+        if !property_set.is_null() {
             // SAFETY: the plugin's out-parameter, checked non-null.
-            unsafe { *clip = clip_handle.map_or(std::ptr::null_mut(), Handle::as_ptr) };
+            unsafe { *property_set = props.as_ptr() };
         }
-        // SAFETY: as above.
-        unsafe { out_handle(property_set, props) }
+        Ok(())
     })
 }
 
