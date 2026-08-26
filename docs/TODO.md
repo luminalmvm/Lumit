@@ -56,15 +56,15 @@ tracker (wants a generic effect-point overlay); planar on a Precomp; the 2D
 point-track exports; SolveNote surfaced across the bridge; an audio device-change
 stream rebuild during playback; docs/13 B9's five-second measurement on real loss.
 
-**FP3.5 - lock hardening (after FP3 lands; found by the 9d96a24f investigation).**
-Three more locks held across slow work in the bridge, same class as the freeze that was
-fixed: FootageReference::thumbnail holds the WRITE lock across an FFmpeg decode, and save
-holds locks across serialize + fsync (the autosave half was fixed with the K-587
-scheduler). Each wants the 9d96a24f shape - take what
-the slow work needs under the lock, release, then do the work. Runs after FP3 because the
-autosave scheduler agent is building in that exact code. Also from the same hunt, landed
-already: the idle measure's guard (9d96a24f) and the graph grid's non-finite spin
-(595fa150).
+**FP3.5 and the OFX host: LANDED 2026-08-26.** The last two locks let the project go
+(add6e2e0), the no-decoder build stopped pretending (7dea1973), and OFX hosting landed
+whole as K-589..K-595: the lumit-ofx crate (forgery-proof handles, property and
+parameter suites, in-process render), the broker process (a dying plugin costs one
+frame and respawns), the registry widened so a plugin is an effect the render cannot
+tell apart, discovery with per-plugin disable prefs, the Effects & presets OFX group,
+and a conformance bench that runs openfx-misc and ntsc-rs - which found and fixed six
+host faults the day it ran. 7.23's LFX half stays waiting on the LFX C ABI
+(docs/12, roadmap phase 4 - not commissioned).
 
 **FP4 - the points family and shapes (K-561, K-564).**
 - Particulate to 3D with camera interaction (K-561), then the family, each its own
