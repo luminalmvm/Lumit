@@ -53,6 +53,8 @@ const _bannedWordIsAnotherSense = {
   'menuTrackMatte',
   'toolCameraPan',
   'fxCameraTrack',
+  // The planar tracker (K-579) is the same verb sense as the camera's.
+  'fxPlanarTrack',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.

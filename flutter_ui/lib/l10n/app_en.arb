@@ -5545,7 +5545,7 @@
   "@tipBrushShape": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
   },
-  "tipBrushPressure": "Stylus pressure sets the brush width",
+  "tipBrushPressure": "Pen pressure",
   "@tipBrushPressure": {
     "description": "Tooltip on the toolbar's pressure tick, shown when a painting tool is in hand. Explains what the tick does: on a pen tablet, pressing harder makes a wider mark."
   },
