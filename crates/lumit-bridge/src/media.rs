@@ -89,16 +89,6 @@ pub(crate) fn decode_frame(
     decoder.frame_rgba(n, None).ok()
 }
 
-/// Decode a thumbnail for `id` from `path`, memoised in `cache`.
-///
-/// It takes the cache and the resolved path rather than a whole bridge, which is
-/// what let the v0 wrapper and the frb `FootageReference` drive the same decode,
-/// the same box filter and the same cache. The v0 wrapper went with the Project
-/// panel's port; `FootageReference::thumbnail` is the only caller now.
-///
-/// `max_edge` is clamped to 1..=4096: a request for a zero-pixel or absurd
-/// thumbnail is a caller bug, not something to allocate for.
-#[cfg(feature = "media")]
 /// A thumbnail already decoded, if there is one. Read-only, so a caller can
 /// check under a read lock and let it go before decoding anything.
 #[cfg(feature = "media")]
@@ -113,11 +103,14 @@ pub(crate) fn thumb_cached(
 
 /// Decode and downscale one frame, touching no cache and holding no lock.
 ///
-/// Split out from [`thumbnail_from_path`] because decoding a video frame takes
-/// long enough to matter: doing it with the project locked stalls every reader,
-/// and the render worker is one of them ([14-ENGINEERING-RULES.md] §3 — no
-/// locks held across expensive work). Callers check [`thumb_cached`], let the
-/// lock go, decode here, and take the lock again only to [`thumb_store`].
+/// Decoding a video frame takes long enough to matter: doing it with the
+/// project locked stalls every reader, and the render worker is one of them
+/// ([14-ENGINEERING-RULES.md] §1 — no locks held across expensive work). Every
+/// caller checks [`thumb_cached`], lets the lock go, decodes here, and takes
+/// the lock again only to [`thumb_store`].
+///
+/// `max_edge` is clamped to 1..=4096: a request for a zero-pixel or absurd
+/// thumbnail is a caller bug, not something to allocate for.
 #[cfg(feature = "media")]
 pub(crate) fn thumb_decode(
     src: &lumit_media::MediaSource,
@@ -152,25 +145,6 @@ pub(crate) fn thumb_store(
         *h,
         rgba.clone(),
     );
-}
-
-#[cfg(feature = "media")]
-pub(crate) fn thumbnail_from_path(
-    cache: &mut MediaCache,
-    id: Uuid,
-    max_edge: u32,
-    src: &lumit_media::MediaSource,
-    at_frame: i64,
-) -> Option<(u32, u32, Vec<u8>)> {
-    let max_edge = max_edge.clamp(1, 4096);
-    let at_frame = at_frame.max(0);
-    if let Some(hit) = cache.thumb_get(id, max_edge, at_frame) {
-        return Some(hit);
-    }
-    let frame = decode_frame(src, at_frame.unsigned_abs())?;
-    let (w, h, rgba) = downscale_to_max_edge(frame.width, frame.height, &frame.rgba, max_edge);
-    cache.thumb_put(id, max_edge, at_frame, w, h, rgba.clone());
-    Some((w, h, rgba))
 }
 
 /// Downscale tightly-packed RGBA8 `src` (`sw`×`sh`) so its longer edge is at

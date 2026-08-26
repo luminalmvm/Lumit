@@ -459,27 +459,44 @@ impl ProjectReference {
     /// A successful save clears the crash journal: the journal covers work
     /// *between* saves, so once the document is on disk it is redundant.
     pub fn save(&self, path: String) -> Result<String, BridgeError> {
-        let state = self.state()?;
-        let mut state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        let project = self.state()?;
 
-        let target = if path.trim().is_empty() {
-            // Never saved and no path given: the caller has to pick one.
-            state.path.clone().ok_or(BridgeError::NoProjectPath)?
-        } else {
-            let mut target = std::path::PathBuf::from(path);
-            // A name typed without any extension is a name, not a choice: the
-            // save dialogue on Windows hands back exactly what was typed, and a
-            // bare `my comp` would sit on disk unopenable by its own file type.
-            // A *different* extension the user typed is a choice, and stands.
-            if target.extension().is_none() {
-                target.set_extension("lum");
-            }
-            target
+        // **The destination, the revision and an `Arc` clone of the document
+        // under the guard, then let it go.** Serialising a whole project and
+        // fsyncing it is seconds of work on a large one, and a guard held
+        // across that is the interface stopped — a Rust `RwLock` turns new
+        // readers away once a writer is waiting, so every `#[frb(sync)]`
+        // question queues behind the disk (docs/14 §1, the freeze of
+        // 9d96a24f). This is the shape the autosave sweep already writes in
+        // (`crate::autosave::sweep_one`); the lock comes back at the end only
+        // to record where the file went.
+        let (document, target, revision) = {
+            let state = project.read().map_err(|_| BridgeError::ReadFailed)?;
+            let target = if path.trim().is_empty() {
+                // Never saved and no path given: the caller has to pick one.
+                state.path.clone().ok_or(BridgeError::NoProjectPath)?
+            } else {
+                let mut target = std::path::PathBuf::from(path);
+                // A name typed without any extension is a name, not a choice:
+                // the save dialogue on Windows hands back exactly what was
+                // typed, and a bare `my comp` would sit on disk unopenable by
+                // its own file type. A *different* extension the user typed is
+                // a choice, and stands.
+                if target.extension().is_none() {
+                    target.set_extension("lum");
+                }
+                target
+            };
+            (state.store.snapshot(), target, state.store.revision())
         };
 
+        // Everything from here is outside the lock.
         let dir = target.parent().unwrap_or_else(|| std::path::Path::new(""));
-        let doc = lumit_project::rebase_for_save(&state.store.snapshot(), dir);
+        let doc = lumit_project::rebase_for_save(&document, dir);
         lumit_project::save(&doc, &target).map_err(|_| BridgeError::WriteFailed)?;
+
+        let written = target.to_string_lossy().into_owned();
+        let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;
 
         // The journal covers work *between* saves, so once the document is on
         // disk it is redundant — and keeping it would mean a later recovery
@@ -490,9 +507,11 @@ impl ProjectReference {
             }
             *journal = None;
         }
-        let written = target.to_string_lossy().into_owned();
         state.path = Some(target);
-        state.saved_revision = state.store.revision();
+        // The revision the file *contains*, read before the write — not
+        // whatever the store is on now. An edit made while the disk was busy
+        // is not in the file, and must still read as unsaved.
+        state.saved_revision = revision;
         Ok(written)
     }
 

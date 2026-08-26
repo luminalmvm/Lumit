@@ -347,34 +347,51 @@ impl FootageReference {
 
     #[cfg(feature = "media")]
     pub fn thumbnail(&self, max_edge: u32) -> Result<Option<BridgeRenderedFrame>, BridgeError> {
-        let proj = self.project()?;
-        let mut proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        let project = self.project()?;
 
-        let Some(src) = ({
-            let snapshot = proj.store.snapshot();
-            match snapshot.item(self.id) {
-                Some(lumit_core::model::ProjectItem::Footage(footage)) => {
-                    Self::resolve_source(&proj, footage)
-                }
-                _ => None,
-            }
-        }) else {
-            return Ok(None);
+        // **The path and any cached picture under the guard, then let it go.**
+        // An FFmpeg decode is far too slow to hold a project across, and the
+        // write half is worse than the read half — a Rust `RwLock` with a
+        // writer waiting turns new readers away, so a decode under the write
+        // guard is every `#[frb(sync)]` question queued behind a video file
+        // opening (docs/14 §1, and the freeze of 9d96a24f). The lock comes back
+        // only to store the result, which is what `clip_thumbnail` already
+        // does for the Timeline's version of this picture.
+        let (src, cached) = {
+            let proj = project.read().map_err(|_| BridgeError::ReadFailed)?;
+            let doc = proj.store.snapshot();
+            let Some(lumit_core::model::ProjectItem::Footage(footage)) = doc.item(self.id) else {
+                return Ok(None);
+            };
+            let Some(src) = Self::resolve_source(&proj, footage) else {
+                return Ok(None);
+            };
+            let cached = crate::media::thumb_cached(&proj.media, self.id, max_edge, 0);
+            (src, cached)
         };
 
-        let id = self.id;
-        Ok(
-            crate::media::thumbnail_from_path(&mut proj.media, id, max_edge, &src, 0).map(
-                |(width, height, rgba)| BridgeRenderedFrame {
-                    // A thumbnail is of the media's own first frame, not of a
-                    // composition — there is no playhead behind it to report.
-                    frame: 0,
-                    width,
-                    height,
-                    rgba,
-                },
-            ),
-        )
+        let thumb = match cached {
+            Some(hit) => hit,
+            None => {
+                let Some(decoded) = crate::media::thumb_decode(&src, max_edge, 0) else {
+                    return Ok(None);
+                };
+                if let Ok(mut proj) = project.write() {
+                    crate::media::thumb_store(&mut proj.media, self.id, max_edge, 0, &decoded);
+                }
+                decoded
+            }
+        };
+
+        let (width, height, rgba) = thumb;
+        Ok(Some(BridgeRenderedFrame {
+            // A thumbnail is of the media's own first frame, not of a
+            // composition — there is no playhead behind it to report.
+            frame: 0,
+            width,
+            height,
+            rgba,
+        }))
     }
 
     /// This footage's declared size, rate and length, or `None` when the file

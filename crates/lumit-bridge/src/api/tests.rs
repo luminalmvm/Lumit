@@ -9492,3 +9492,114 @@ fn a_corner_pin_is_refused_with_nothing_to_pin_or_nowhere_to_put_it() {
     // And an effect id nothing was tracked under.
     assert!(create_corner_pin(shot, Uuid::now_v7()).is_err());
 }
+
+/// **Saving does not hold the project across the disk** (docs/14 §1, FP3.5).
+///
+/// `save` used to take the write guard first and keep it over
+/// `rebase_for_save`, the serialise and the fsync — seconds of work on a large
+/// project, with every `#[frb(sync)]` question the interface asks queued behind
+/// it, because a Rust `RwLock` turns new readers away once a writer is waiting.
+/// It now takes the destination, the revision and an `Arc` of the document
+/// under a *read* guard, drops it, and writes with nothing held — the shape
+/// `autosave::sweep_one` already had.
+///
+/// The proof is a reader that does not let go: this test holds a read guard for
+/// the whole of another thread's save, and the file has to appear on disk
+/// anyway. Under the old code nothing could be written until the guard was
+/// released.
+#[test]
+fn saving_writes_the_file_while_a_reader_holds_the_project() {
+    let (project, ..) = project_with_folder();
+    let dir = std::env::temp_dir().join("lumit-save-lock-freedom");
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let target = dir.join("held.lum");
+
+    let state = project.state().expect("state");
+    let reader = state.read().expect("a reader gets in");
+
+    let saving = {
+        let project = project.clone();
+        let target = target.clone();
+        std::thread::spawn(move || project.save(target.to_string_lossy().into_owned()))
+    };
+
+    // The save's own write guard comes back at the end, to record where the
+    // file went — so the file lands first, and this waits for it rather than
+    // for the thread.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !target.is_file() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(
+        target.is_file(),
+        "the document was serialised and written with a reader still holding \
+         the project: a guard held across the disk is the interface stopped"
+    );
+
+    drop(reader);
+    let written = saving.join().expect("the saving thread").expect("saved");
+    assert!(written.ends_with("held.lum"));
+    assert!(
+        !project.is_dirty().expect("dirty"),
+        "the revision the file contains is the one stamped as saved"
+    );
+
+    project.close().expect("closed");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A thumbnail is answered without the write guard** (docs/14 §1, FP3.5).
+///
+/// `thumbnail` used to take the *write* half of the project's lock and hold it
+/// across an FFmpeg decode — tens of milliseconds on a cold file, with every
+/// reader turned away for the whole of it. It now reads the path and any
+/// cached picture under a read guard, decodes with nothing held, and takes the
+/// lock again only to store the result.
+///
+/// A reader that does not let go is the proof again: with the picture already
+/// decoded there is nothing left to store, so the answer must come back while
+/// this test holds a read guard. Under the old code the write guard could not
+/// be had and the call would not return at all.
+///
+/// Needs an ffmpeg on PATH for the fixture; skips itself without one.
+#[test]
+#[cfg(feature = "media")]
+fn a_cached_thumbnail_is_answered_while_a_reader_holds_the_project() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
+        return; // no ffmpeg on this machine
+    };
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let footage = project
+        .import_footage(clip.to_string_lossy().into_owned())
+        .expect("imported");
+    let first = footage.thumbnail(32).expect("decoded").expect("a picture");
+
+    let state = project.state().expect("state");
+    let reader = state.read().expect("a reader gets in");
+
+    // Through a channel rather than a join, so a regression fails the test
+    // instead of hanging it: under the old code the answer never comes.
+    let (tell, answer) = std::sync::mpsc::channel();
+    let held = std::thread::spawn({
+        let (p, id) = (footage.project_id(), footage.id());
+        move || tell.send(FootageReference::new(p, id).thumbnail(32))
+    });
+    let again = answer
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .expect("answered with a reader still holding the project")
+        .expect("decoded")
+        .expect("a picture");
+
+    drop(reader);
+    held.join().expect("the thumbnail thread").expect("sent");
+    assert_eq!(
+        (first.width, first.height),
+        (again.width, again.height),
+        "the same picture, from the cache"
+    );
+
+    project.close().expect("closed");
+}
