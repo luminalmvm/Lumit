@@ -8,18 +8,27 @@
 //! and with `paramGetHandle` and the two property-set lookups it is the whole
 //! of what a describing plugin needs.
 //!
-//! The value half — read this parameter at frame 42, put a keyframe here,
-//! delete that one — is P3's, because nothing has a value until an effect is
-//! on a layer. Those entry points answer `kOfxStatErrUnsupported`.
+//! **Reading a value is answered from the host, never from the plugin.**
+//! `paramGetValue` and `paramGetValueAtTime` look the control up in the
+//! instance's snapshot — what every parameter read at the moment this
+//! evaluation was scheduled ([`crate::instance::ParamSnapshot`]) — because
+//! Lumit owns parameter storage, animation and expressions (docs/12 §2.2). A
+//! plugin has no store of its own to be asked for, which is exactly why a
+//! render is reproducible from the document.
+//!
+//! Writing a value, keyframing, and the derivative and integral of an animated
+//! control are still `kOfxStatErrUnsupported`: they need the property system
+//! the host has not been wired to yet, and answering them with a guess would
+//! be worse than answering them with the truth.
 //!
 //! **A parameter's type is fixed at definition and never afterwards.** The bag
 //! it hands back is seeded with the type, the standard defaults for that type,
 //! and nothing else; the plugin overwrites what it cares about through the
 //! property suite, which refuses to change a property's type (`props.rs`).
 
-use std::ffi::{c_char, c_int, c_uint};
+use std::ffi::{c_char, c_int, c_uint, c_void};
 
-use crate::describe::ParamRef;
+use crate::describe::{ParamRecord, ParamRef};
 use crate::ffi::{
     double_types, param_types, prop_keys as keys, prop_values as values, string_modes,
     OfxParamHandle, OfxParamSetHandle, OfxParameterSuiteV1, OfxPropertySetHandle, OfxRangeD,
@@ -100,7 +109,11 @@ unsafe extern "C" fn param_define(
         }
 
         let props = state.props.insert(param_property_set(&name, param_type))?;
-        let handle = state.params.insert(props)?;
+        let handle = state.params.insert(ParamRecord {
+            props,
+            effect,
+            name: name.clone(),
+        })?;
         state.effects.get_mut(effect)?.params.push(ParamRef {
             name,
             param_type: param_type.to_owned(),
@@ -282,22 +295,126 @@ unsafe extern "C" fn param_get_property_set(
     prop_handle: *mut OfxPropertySetHandle,
 ) -> c_int {
     guard(|| {
-        let props = *state().params.get(Handle::from_ptr(param))?;
+        let props = state().params.get(Handle::from_ptr(param))?.props;
         // SAFETY: the plugin's out-parameter, checked non-null inside.
         unsafe { out_handle(prop_handle, props) }
     })
 }
 
-// ------------------------------------------------- the value half, from P3 --
+// ---------------------------------------------------------- reading values --
 
-unsafe extern "C" fn param_get_value(param: OfxParamHandle) -> c_int {
-    let _ = param;
-    Status::ErrUnsupported.code()
+/// Write one parameter's value into the plugin's out-parameters.
+///
+/// The four slots are the widest a standard parameter can be — RGBA — and only
+/// as many as the value has dimensions are written. See
+/// [`crate::ffi::OfxParameterSuiteV1`] for why the arity is fixed rather than
+/// variadic, and what that costs.
+///
+/// # Safety
+///
+/// Each of `slots[0..dimension]` must be null or point at writable storage of
+/// the type the parameter declares, which is the contract of every OFX
+/// `paramGetValue` call.
+unsafe fn write_value(param: OfxParamHandle, slots: [*mut c_void; 4]) -> Result<(), Status> {
+    let handle = Handle::from_ptr(param);
+
+    let state = state();
+    let record = state.params.get(handle)?;
+    let param_type = state
+        .props
+        .get(record.props)?
+        .get_string(keys::PARAM_TYPE, 0)?
+        .to_string_lossy()
+        .into_owned();
+    // A push button has no value at all, and inventing one for it would have a
+    // plugin read a number where the spec says there is nothing to read.
+    if param_type == param_types::PUSH_BUTTON {
+        return Err(Status::ErrUnsupported);
+    }
+
+    let instance = state
+        .effects
+        .get(record.effect)?
+        .instance
+        .as_ref()
+        // A descriptor's parameters have no values: nothing has been evaluated.
+        .ok_or(Status::ErrUnsupported)?;
+    let value = instance
+        .params
+        .get(&record.name)
+        .ok_or(Status::ErrUnknown)?;
+
+    for (index, slot) in slots.into_iter().enumerate() {
+        if slot.is_null() {
+            continue;
+        }
+        match value {
+            PropValue::Int(values) => {
+                let Some(&found) = values.get(index) else {
+                    break;
+                };
+                // SAFETY: the caller's contract — an integer parameter's slots
+                // are `int*`.
+                unsafe { *slot.cast::<c_int>() = found };
+            }
+            PropValue::Double(values) => {
+                let Some(&found) = values.get(index) else {
+                    break;
+                };
+                // SAFETY: the caller's contract — a double parameter's slots
+                // are `double*`.
+                unsafe { *slot.cast::<f64>() = found };
+            }
+            PropValue::String(values) => {
+                let Some(found) = values.get(index) else {
+                    break;
+                };
+                // The pointer belongs to the host and stays valid until the
+                // value is next written — the same contract `propGetString`
+                // gives, and the reason the snapshot owns its strings.
+                // SAFETY: the caller's contract — a string parameter's slot is
+                // `char**`.
+                unsafe { *slot.cast::<*const c_char>() = found.as_ptr() };
+            }
+            // A custom parameter's blob is stored and round-tripped, never
+            // interpreted (docs/12 §2.2), so there is nothing to hand back
+            // through a typed pointer.
+            PropValue::Pointer(_) => return Err(Status::ErrUnsupported),
+        }
+    }
+    Ok(())
 }
 
-unsafe extern "C" fn param_get_value_at_time(param: OfxParamHandle, time: OfxTime) -> c_int {
-    let _ = (param, time);
-    Status::ErrUnsupported.code()
+unsafe extern "C" fn param_get_value(
+    param: OfxParamHandle,
+    v0: *mut c_void,
+    v1: *mut c_void,
+    v2: *mut c_void,
+    v3: *mut c_void,
+) -> c_int {
+    // SAFETY: the plugin's out-parameters, as OFX declares them.
+    guard(|| unsafe { write_value(param, [v0, v1, v2, v3]) })
+}
+
+unsafe extern "C" fn param_get_value_at_time(
+    param: OfxParamHandle,
+    time: OfxTime,
+    v0: *mut c_void,
+    v1: *mut c_void,
+    v2: *mut c_void,
+    v3: *mut c_void,
+) -> c_int {
+    // The snapshot *is* the answer at a time: it was taken at the time this
+    // evaluation was scheduled, with every curve and expression already
+    // resolved (docs/12 §2.2). A plugin asking for another time — a retimer
+    // reading its own control ahead — gets the same value, which is right for
+    // a control that does not animate and is the ceiling for one that does.
+    // Lifting it needs the property system on the far side of the bridge and
+    // the frame prefetch `getFramesNeeded` already plans; until then the honest
+    // thing is to answer from the snapshot rather than from nothing.
+    let _ = time;
+    // SAFETY: as `param_get_value`.
+    guard(|| unsafe { write_value(param, [v0, v1, v2, v3]) })
 }
 
 unsafe extern "C" fn param_get_derivative(param: OfxParamHandle, time: OfxTime) -> c_int {

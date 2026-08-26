@@ -15,8 +15,12 @@
 //! user. On top of that sits **describe** ([`describe`]): the conversation
 //! where a plugin says what it is called, what shapes of effect it can be, and
 //! what controls it has, and where Lumit writes that answer down as the same
-//! declaration a built-in effect carries ([`schema`]). Instances, values and
-//! rendering come next, and everything they add stands on the two ideas here.
+//! declaration a built-in effect carries ([`schema`]).
+//!
+//! On top of *that* sits the frame. An [`instance`] is one live copy of the
+//! effect, with a value in every control; an [`image`] is the picture crossing
+//! the boundary, widened to float and possibly upside-down on purpose; and
+//! [`render`] is the fixed order of actions that turns the two into a frame.
 //!
 //! **Honesty.** The host describes itself in a table of properties, and every
 //! answer in it is one the rest of Lumit keeps. Claiming to support tiled
@@ -46,8 +50,11 @@ pub mod describe;
 pub mod ffi;
 pub mod handles;
 pub mod host;
+pub mod image;
+pub mod instance;
 pub mod props;
 pub mod quirks;
+pub mod render;
 pub mod schema;
 pub mod status;
 pub mod suites;
@@ -59,7 +66,10 @@ mod tests;
 pub use bundle::{Bundle, BundleError};
 pub use describe::{describe, describe_bundle, Context, PluginDescriptor, Rejection, ScanReport};
 pub use handles::{Handle, HandleKind, HandleRegistry};
+pub use image::{Frame16, Image, RectI, RowOrder};
+pub use instance::{Instance, ParamSnapshot, ThreadSafety};
 pub use props::{Element, PropValue, PropertySet};
 pub use quirks::{Quirks, QuirksTable};
+pub use render::{render, RenderError, RenderRequest, Rendered};
 pub use schema::schema_of;
 pub use status::{OfxStatus, Status};

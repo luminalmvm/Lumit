@@ -21,6 +21,7 @@ use crate::status::{finish, OfxStatus, Status, StatusResult};
 pub mod image_effect;
 pub mod memory;
 pub mod message;
+pub mod multi_thread;
 pub mod parameter;
 pub mod property;
 

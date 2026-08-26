@@ -17317,3 +17317,79 @@ The reasons a rejection carries are English text in the engine. They are not use
 yet — nothing in the frontend can reach them, because no engine crate depends on
 `lumit-ofx` — and they gain their `app_en.arb` keys and `engine_labels.dart` entries in the
 package that puts the scan report in front of a person (K-303).
+
+## K-591 — A frame renders through a plugin in process: fp32 at the boundary, row bytes that may be negative, and the plugin's own thread-safety obeyed
+
+**DECIDED 2026-08-26.** The third package of the OFX host (K-589, K-590, K-061).
+`lumit-ofx` now creates an instance, drives the whole ordered render conversation, and
+hands back real pixels — `kOfxActionCreateInstance` to `kOfxActionDestroyInstance`, in
+process. docs/12 §2.1 and §2.2 and docs/impl/ofx-host.md §3 say what must happen; neither
+changes. What is decided is the shape of the boundary.
+
+**The action order is written down once and asserted verbatim.** `render::RENDER_ACTIONS`
+is the driver's order and the test's expectation: region of definition, regions of
+interest, clip preferences, frames needed, `isIdentity`, then the render between
+`beginSequenceRender` and `endSequenceRender`. docs/impl/ofx-host.md §3 is amended in the
+same commit to list all eight: it left `getClipPreferences` and `isIdentity` implicit,
+and docs/12 §2.1 names both among the actions the host dispatches, so the note was
+incomplete rather than in conflict. `getRegionsOfInterest` is dispatched and its answer
+deliberately ignored: this host renders whole frames, `kOfxImageEffectPropSupportsTiles`
+is nought, and every clip is handed its full region of definition whatever it asked for.
+`isIdentity` short-circuits to the named input with no render at all.
+
+**Row bytes carry a sign and the host means it.** Lumit's frames are top-down; OFX counts
+rows upwards from the bottom. Rather than flip every frame twice, an image may be handed
+over with a **negative** `kOfxImagePropRowBytes` and a data pointer into the last row of
+the block (`image::RowOrder`). Both layouts are offered, both are tested, and both must
+produce the same picture. fp16 widens to fp32 at the boundary and narrows on the way back,
+in one module; the round trip is exact, which is inside the docs/08 §1.6 tolerance by
+construction rather than by measurement.
+
+**Image memory is the host's arena, not the plugin's allocator.** Picture blocks are
+tracked in a list of their own, behind a lock of their own, deliberately unreachable from
+`memoryFree` — a plugin handed an input frame must not be able to free it — and each block
+is released when its `Image` drops at the end of the render. `clipGetImage` answers only
+while a render is in flight; releasing the same image twice is `kOfxStatErrBadHandle`, not
+a second free.
+
+**Values are answered from the host's snapshot, never from plugin-side state.**
+`paramGetValue` and `paramGetValueAtTime` read the instance's `ParamSnapshot` — every
+control as of the moment the evaluation was scheduled — which is docs/12 §2.2's rule made
+mechanical. **Ceiling:** a request at a time other than the snapshot's answers the snapshot
+value; lifting that needs the property system across the bridge and the prefetch
+`getFramesNeeded` already plans, whose answer is carried out on `Rendered::frames_needed`
+and used by nothing yet.
+
+**Two of the parameter suite's variadics are declared with fixed arity.** Rust cannot
+define a C-variadic function on stable, so `paramGetValue` and `paramGetValueAtTime` take
+four trailing pointers — RGBA, the widest a standard parameter asks for — and read only as
+many as the parameter has dimensions. On x86-64, Windows and System V alike, a variadic
+call places pointer arguments exactly where a fixed call does, so a plugin compiled against
+the C header lands its out-parameters where these declarations read them. **Ceiling:** the
+arm64 Apple ABI passes variadic arguments on the stack, so a third-party plugin's
+`paramGetValue` would read rubbish there. Lumit is Windows-first, the test plugin shares
+these declarations so both sides agree everywhere, and the real fix is the out-of-process
+broker (docs/impl/ofx-host.md §4), where the call is unpacked from a message rather than
+from a register.
+
+**Thread safety is the plugin's declaration and the host's obligation.** Fully safe renders
+take no lock; instance safe takes the instance's; unsafe queues behind one process-wide
+lock, which is the bundle's once the broker gives each bundle a process (docs/12 §2.3).
+Silence reads as the spec's own default, instance safe, and anything unrecognised as fully
+unsafe (docs/13 §6: an undeclared effect is the pessimistic case). `OfxMultiThreadSuiteV1`
+runs over a dedicated `rayon` pool sized by the same sum the evaluation pool uses
+(`cores − 3`, min 2), so `multiThreadNumCPUs` is the number the host really spends, and
+`multiThreadIndex` is set per thread because plugins key per-thread scratch by it.
+
+**Cancellation reaches inside the plugin.** The driver takes an epoch token and checks it
+between every action; the suite's `abort` answers from the same token through a
+thread-local set around the render call. **Ceiling:** a thread the plugin spawned through
+`multiThread` sees no token and is told to carry on, which is where every plugin in the
+bench polls it from anyway. A plugin that fails an action yields a typed `RenderError` and
+its half-written output buffer is dropped rather than handed on; `endSequenceRender` still
+runs on that path, so a plugin that allocated in the begin gets its chance to free.
+
+`lumit-ofx` gains four dependencies for this: `lumit-eval` (epoch tokens and the pool
+sizing), `half`, `parking_lot` and `rayon`. The edge still runs one way — **no engine crate
+depends on `lumit-ofx`**, and none does yet — so nothing outside the host can render
+through a plugin, which is deliberate until the process boundary exists.

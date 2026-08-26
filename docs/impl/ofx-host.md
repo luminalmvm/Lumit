@@ -48,11 +48,21 @@ describe:  kOfxActionDescribe                         → plugin fills descripto
            kOfxImageEffectActionDescribeInContext     → per context (Filter, General)
 instance:  kOfxActionCreateInstance                   → after params exist with defaults
 render:    kOfxImageEffectActionGetRegionOfDefinition
-           (kOfxImageEffectActionGetRegionsOfInterest — even untiled, answer full RoD)
+           kOfxImageEffectActionGetRegionsOfInterest  → even untiled, answer full RoD
+           kOfxImageEffectActionGetClipPreferences
            kOfxImageEffectActionGetFramesNeeded       → temporal clips (Twixtor!)
-           kOfxImageEffectActionRender                → between Begin/EndSequenceRender
+           kOfxImageEffectActionIsIdentity            → yes ⇒ passthrough, no render at all
+           kOfxImageEffectActionBeginSequenceRender
+           kOfxImageEffectActionRender
+           kOfxImageEffectActionEndSequenceRender
 teardown:  kOfxActionDestroyInstance, kOfxActionUnload
 ```
+
+That listing is the whole render order and `lumit-ofx::render::RENDER_ACTIONS` is its
+transcription; a test records what the plugin observed and compares the two verbatim
+(K-591). `getClipPreferences` and `isIdentity` are here because
+[12-PLUGINS.md](../12-PLUGINS.md) §2.1 names them among the actions the host dispatches;
+earlier revisions of this note left them implicit.
 
 Param changed actions (`kOfxActionInstanceChanged`) must fire between renders, wrapped in
 `kOfxActionBeginInstanceChanged/End...` — Sapphire relies on it.

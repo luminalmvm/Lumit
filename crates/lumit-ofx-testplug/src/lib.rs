@@ -10,27 +10,36 @@
 //! unload, describe themselves, and record what happened so a test can check
 //! the order.
 //!
-//! There are five, because the host has five kinds of answer to give and each
+//! There are eight, because the host has eight kinds of answer to give and each
 //! needs something to give it to (see [`Variant`]): a plugin with one parameter
 //! of every standard kind, a second version of the same plugin, a plugin that
 //! works only in a context this host does not drive, a plugin that fails to
-//! describe, and a plugin whose parameters collide.
+//! describe, a plugin whose parameters collide, a plugin that hands its input
+//! back untouched, a plugin that says it is a no-op, and a plugin that says two
+//! of its renders may never run at once.
 //!
 //! They also carry a few extra exports of their own — names beginning
 //! `LumitTestPlug` — which no real plugin has. They are how a test asks what
 //! was seen: how many times a host was handed over, whether one was in hand
-//! before the load, and which suites the host actually gave.
+//! before the load, which suites the host actually gave, **the exact sequence
+//! of actions the host dispatched**, and how many renders were ever in flight
+//! at one moment.
 //!
-//! Render still answers `kOfxStatErrMissingHostFeature`: there is nothing to
-//! render into until an instance exists.
+//! The renders are real. They fetch images through `clipGetImage`, read the
+//! data pointer, the bounds and the row bytes out of the property set they get
+//! back, **honour the sign of the row bytes**, write float RGBA, and release
+//! what they fetched. That is the whole of what a plugin does, and a host that
+//! survives it is a host.
 
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, c_uint, c_void, CStr};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use lumit_ofx::ffi::{
-    actions, OfxHost, OfxImageEffectSuiteV1, OfxMessageSuiteV1, OfxParamSetHandle,
-    OfxParameterSuiteV1, OfxPlugin, OfxPropertySetHandle, OfxPropertySuiteV1,
-    K_OFX_IMAGE_EFFECT_PLUGIN_API_VERSION,
+    actions, OfxHost, OfxImageClipHandle, OfxImageEffectSuiteV1, OfxMessageSuiteV1,
+    OfxMultiThreadSuiteV1, OfxParamHandle, OfxParamSetHandle, OfxParameterSuiteV1, OfxPlugin,
+    OfxPropertySetHandle, OfxPropertySuiteV1, K_OFX_IMAGE_EFFECT_PLUGIN_API_VERSION,
 };
 use lumit_ofx::status::{OfxStatus, Status};
 
@@ -64,9 +73,29 @@ pub const SUITE_PARAMETER: u32 = 32;
 pub const LOAD_MESSAGE: &CStr = c"lumit-ofx-testplug loaded";
 
 /// How many plugins the bundle declares.
-pub const PLUGIN_COUNT: c_int = 5;
+pub const PLUGIN_COUNT: c_int = 8;
 
-/// What each of the five plugins is for.
+/// Every action the host has dispatched since the log was last reset, comma
+/// separated. Read through [`LumitTestPlugActionLog`].
+static ACTION_LOG: Mutex<String> = Mutex::new(String::new());
+
+/// Renders in flight at this moment, and the most there have ever been.
+static RENDERS_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+/// See [`RENDERS_IN_FLIGHT`].
+static MAX_RENDERS_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+/// How many renders must be in flight before any of them may finish. Nought
+/// turns the rendezvous off; see [`LumitTestPlugSetRenderRendezvous`].
+static RENDER_RENDEZVOUS: AtomicUsize = AtomicUsize::new(0);
+
+/// Non-zero makes every render answer `kOfxStatFailed`.
+static RENDER_FAILS: AtomicUsize = AtomicUsize::new(0);
+
+/// How long a render waits at the rendezvous before giving up. A host that
+/// serialises the render will never reach the count, and the wait must end
+/// rather than hang the test suite.
+const RENDEZVOUS_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// What each of the eight plugins is for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Variant {
     /// `com.lumitlab.testplug` v1: one parameter of every standard kind, a
@@ -82,6 +111,17 @@ pub enum Variant {
     /// Defines `centre` as a 2-D double **and** `centre_x` as a double, which
     /// collide once the 2-D one is spread across two rows.
     Duplicate,
+    /// Hands its input back untouched, at fp32, and declares
+    /// `kOfxImageEffectRenderFullySafe`. The plugin a host's pixel path is
+    /// proved against: anything but the picture it was given is the host's
+    /// fault.
+    Passthrough,
+    /// Answers `isIdentity` with its Source clip, so the host never renders it
+    /// at all.
+    Identity,
+    /// Renders like the passthrough but declares
+    /// `kOfxImageEffectRenderUnsafe`, so two of its renders must never overlap.
+    ThreadUnsafe,
 }
 
 // ------------------------------------------------------------ the plugins --
@@ -142,6 +182,27 @@ plugin!(
     1,
     Variant::Duplicate
 );
+plugin!(
+    PASSTHROUGH,
+    entry_passthrough,
+    c"com.lumitlab.testplug.passthrough",
+    1,
+    Variant::Passthrough
+);
+plugin!(
+    IDENTITY,
+    entry_identity,
+    c"com.lumitlab.testplug.identity",
+    1,
+    Variant::Identity
+);
+plugin!(
+    THREAD_UNSAFE,
+    entry_thread_unsafe,
+    c"com.lumitlab.testplug.unsafe",
+    1,
+    Variant::ThreadUnsafe
+);
 
 /// `OfxGetNumberOfPlugins`.
 #[no_mangle]
@@ -158,6 +219,9 @@ pub extern "C" fn OfxGetPlugin(index: c_int) -> *const OfxPlugin {
         2 => std::ptr::from_ref(&GENERATOR.0),
         3 => std::ptr::from_ref(&BROKEN.0),
         4 => std::ptr::from_ref(&DUPLICATE.0),
+        5 => std::ptr::from_ref(&PASSTHROUGH.0),
+        6 => std::ptr::from_ref(&IDENTITY.0),
+        7 => std::ptr::from_ref(&THREAD_UNSAFE.0),
         _ => std::ptr::null(),
     }
 }
@@ -213,8 +277,8 @@ unsafe fn dispatch(
     variant: Variant,
     action: *const c_char,
     handle: *const c_void,
-    _in_args: *mut c_void,
-    _out_args: *mut c_void,
+    in_args: *mut c_void,
+    out_args: *mut c_void,
 ) -> OfxStatus {
     if action.is_null() {
         return Status::ErrValue.code();
@@ -223,17 +287,29 @@ unsafe fn dispatch(
     let Ok(action) = (unsafe { CStr::from_ptr(action) }).to_str() else {
         return Status::ErrValue.code();
     };
+    record_action(action);
 
     match action {
         actions::LOAD => on_load(),
         actions::UNLOAD => Status::Ok.code(),
         actions::DESCRIBE => describe(variant, handle.cast_mut()),
         actions::DESCRIBE_IN_CONTEXT => describe_in_context(variant, handle.cast_mut()),
-        // The copy-the-input render lands with the instance package.
-        actions::RENDER => Status::ErrMissingHostFeature.code(),
+        actions::CREATE_INSTANCE | actions::DESTROY_INSTANCE => Status::Ok.code(),
+        actions::BEGIN_SEQUENCE_RENDER | actions::END_SEQUENCE_RENDER => Status::Ok.code(),
+        actions::IS_IDENTITY => is_identity(variant, out_args),
+        actions::RENDER => render(variant, handle.cast_mut(), in_args),
         // An action a plugin does not implement is not an error.
         _ => Status::ReplyDefault.code(),
     }
+}
+
+/// Note an action in the log the test reads back.
+fn record_action(action: &str) {
+    let mut log = ACTION_LOG.lock().unwrap_or_else(PoisonError::into_inner);
+    if !log.is_empty() {
+        log.push(',');
+    }
+    log.push_str(action);
 }
 
 /// `kOfxActionLoad`: note the order, fetch the suites, and say hello through
@@ -361,6 +437,15 @@ fn describe(variant: Variant, handle: *mut c_void) -> OfxStatus {
         0,
         c"Lumit/Test",
     );
+    // The declaration the host schedules from. Saying it here, at describe
+    // time, is where a real plugin says it too.
+    set_string(
+        props_suite,
+        props,
+        c"OfxImageEffectPluginRenderThreadSafety",
+        0,
+        thread_safety_of(variant),
+    );
     set_string(
         props_suite,
         props,
@@ -424,6 +509,17 @@ fn label_of(variant: Variant) -> &'static CStr {
         Variant::GeneratorOnly => c"Test generator",
         Variant::Broken => c"Test broken",
         Variant::Duplicate => c"Test duplicate",
+        Variant::Passthrough => c"Test passthrough",
+        Variant::Identity => c"Test identity",
+        Variant::ThreadUnsafe => c"Test unsafe",
+    }
+}
+
+/// What each variant declares about running two renders at once.
+fn thread_safety_of(variant: Variant) -> &'static CStr {
+    match variant {
+        Variant::ThreadUnsafe => c"OfxImageEffectRenderUnsafe",
+        _ => c"OfxImageEffectRenderFullySafe",
     }
 }
 
@@ -511,6 +607,10 @@ fn describe_in_context(variant: Variant, handle: *mut c_void) -> OfxStatus {
                 return Status::Failed.code();
             }
         }
+        // The three render plugins have no controls at all: what they are for
+        // is the pixels, and a control would only be something else to explain
+        // when one of those tests goes red.
+        Variant::Passthrough | Variant::Identity | Variant::ThreadUnsafe => {}
         _ => describe_full(props_suite, param_suite, params),
     }
     Status::Ok.code()
@@ -660,6 +760,291 @@ fn describe_full(
     }
 }
 
+// ----------------------------------------------------------------- render --
+
+/// `kOfxImageEffectActionIsIdentity`. Only one variant ever says yes, and it
+/// says it by naming the clip its output would have been.
+fn is_identity(variant: Variant, out_args: *mut c_void) -> OfxStatus {
+    if variant != Variant::Identity {
+        return Status::ReplyDefault.code();
+    }
+    let Some(props_suite) = properties() else {
+        return Status::ErrMissingHostFeature.code();
+    };
+    set_string(props_suite, out_args, c"OfxPropName", 0, c"Source");
+    set_double(props_suite, out_args, c"OfxPropTime", 0, 0.0);
+    Status::Ok.code()
+}
+
+/// One image, as the four numbers that describe it.
+struct ImageView {
+    /// The pixel at the bottom-left, which for a top-down image is inside the
+    /// block rather than at its start.
+    data: *mut c_void,
+    /// `x1, y1, x2, y2`.
+    bounds: [c_int; 4],
+    /// **Signed.** Negative means the rows run backwards through memory, and
+    /// this plugin honours it rather than assuming.
+    row_bytes: c_int,
+    /// The property set to release when the render is done.
+    handle: OfxPropertySetHandle,
+}
+
+impl ImageView {
+    /// The floats of one OFX row, `y` counted up from `y1`.
+    ///
+    /// # Safety
+    ///
+    /// The image must still be pinned — fetched and not yet released.
+    unsafe fn row(&self, y: usize) -> *mut f32 {
+        let offset = (y as isize) * (self.row_bytes as isize);
+        // SAFETY: the caller's contract, plus `y` being inside the bounds the
+        // host itself gave us; the sign of `row_bytes` is what makes this land
+        // in the block either way.
+        unsafe { self.data.cast::<u8>().offset(offset).cast::<f32>() }
+    }
+
+    fn width(&self) -> usize {
+        (self.bounds[2] - self.bounds[0]).max(0) as usize
+    }
+
+    fn height(&self) -> usize {
+        (self.bounds[3] - self.bounds[1]).max(0) as usize
+    }
+}
+
+/// Fetch one clip's image and read its description out of the property set.
+fn fetch_image(
+    effect_suite: &OfxImageEffectSuiteV1,
+    props_suite: &OfxPropertySuiteV1,
+    clip: OfxImageClipHandle,
+    time: f64,
+) -> Option<ImageView> {
+    if clip.is_null() {
+        return None;
+    }
+    let mut handle: OfxPropertySetHandle = std::ptr::null_mut();
+    // SAFETY: the host's own function, given a valid out-parameter.
+    let status =
+        unsafe { (effect_suite.clip_get_image)(clip, time, std::ptr::null(), &raw mut handle) };
+    if status != Status::Ok.code() || handle.is_null() {
+        return None;
+    }
+
+    let mut data: *mut c_void = std::ptr::null_mut();
+    // SAFETY: the host's own function; `OfxImagePropData` is a pointer
+    // property, which is what `propGetPointer` reads.
+    let got = unsafe {
+        (props_suite.prop_get_pointer)(handle, c"OfxImagePropData".as_ptr(), 0, &raw mut data)
+    };
+    let mut bounds = [0; 4];
+    for (index, slot) in bounds.iter_mut().enumerate() {
+        // SAFETY: as above; the bounds are an int property of four elements.
+        unsafe {
+            (props_suite.prop_get_int)(
+                handle,
+                c"OfxImagePropBounds".as_ptr(),
+                index as c_int,
+                slot,
+            );
+        }
+    }
+    let mut row_bytes: c_int = 0;
+    // SAFETY: as above.
+    unsafe {
+        (props_suite.prop_get_int)(
+            handle,
+            c"OfxImagePropRowBytes".as_ptr(),
+            0,
+            &raw mut row_bytes,
+        );
+    }
+    if got != Status::Ok.code() || data.is_null() {
+        // SAFETY: the host's own function, given the handle it just minted.
+        unsafe { (effect_suite.clip_release_image)(handle) };
+        return None;
+    }
+    Some(ImageView {
+        data,
+        bounds,
+        row_bytes,
+        handle,
+    })
+}
+
+/// One clip handle, or null.
+fn clip_handle(
+    effect_suite: &OfxImageEffectSuiteV1,
+    effect: *mut c_void,
+    name: &CStr,
+) -> OfxImageClipHandle {
+    let mut clip: OfxImageClipHandle = std::ptr::null_mut();
+    let mut props: OfxPropertySetHandle = std::ptr::null_mut();
+    // SAFETY: the host's own function, given valid out-parameters and a string
+    // that outlives the call.
+    let status = unsafe {
+        (effect_suite.clip_get_handle)(effect, name.as_ptr(), &raw mut clip, &raw mut props)
+    };
+    if status == Status::Ok.code() {
+        clip
+    } else {
+        std::ptr::null_mut()
+    }
+}
+
+/// One double control's value at a time, or `fallback` if the plugin has no
+/// such control.
+fn param_double(
+    param_suite: &OfxParameterSuiteV1,
+    props_suite: &OfxPropertySuiteV1,
+    effect_suite: &OfxImageEffectSuiteV1,
+    effect: *mut c_void,
+    name: &CStr,
+    time: f64,
+    fallback: f64,
+) -> f64 {
+    let _ = props_suite;
+    let mut params: OfxParamSetHandle = std::ptr::null_mut();
+    // SAFETY: the host's own function, given a valid out-parameter.
+    if unsafe { (effect_suite.get_param_set)(effect, &raw mut params) } != Status::Ok.code() {
+        return fallback;
+    }
+    let mut param: OfxParamHandle = std::ptr::null_mut();
+    let mut param_props: OfxPropertySetHandle = std::ptr::null_mut();
+    // SAFETY: as above.
+    let status = unsafe {
+        (param_suite.param_get_handle)(params, name.as_ptr(), &raw mut param, &raw mut param_props)
+    };
+    if status != Status::Ok.code() || param.is_null() {
+        return fallback;
+    }
+    let mut value = fallback;
+    // SAFETY: the host declares this entry point with four trailing pointers
+    // and reads only as many as the parameter has dimensions; a double is one.
+    let read = unsafe {
+        (param_suite.param_get_value_at_time)(
+            param,
+            time,
+            std::ptr::from_mut(&mut value).cast(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if read == Status::Ok.code() {
+        value
+    } else {
+        fallback
+    }
+}
+
+/// `kOfxImageEffectActionRender` — the whole point.
+fn render(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> OfxStatus {
+    let in_flight = RENDERS_IN_FLIGHT.fetch_add(1, Ordering::SeqCst) + 1;
+    MAX_RENDERS_IN_FLIGHT.fetch_max(in_flight, Ordering::SeqCst);
+    // If a test asked for a rendezvous, hold here until enough renders have
+    // arrived — or until the deadline, which is what a host that serialises
+    // them will hit. Either way the maximum above is the answer.
+    let wanted = RENDER_RENDEZVOUS.load(Ordering::SeqCst);
+    if wanted > 1 {
+        let deadline = Instant::now() + RENDEZVOUS_TIMEOUT;
+        while RENDERS_IN_FLIGHT.load(Ordering::SeqCst) < wanted && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+    }
+    let status = render_body(variant, effect, in_args);
+    RENDERS_IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+    status
+}
+
+/// Fill and scale: every pixel of the output is the matching pixel of the
+/// Source multiplied by the `gain` control, and where there is no Source at all
+/// the output is filled with a flat colour instead.
+fn render_body(variant: Variant, effect: *mut c_void, in_args: *mut c_void) -> OfxStatus {
+    let (Some(props_suite), Some(effect_suite), Some(param_suite)) =
+        (properties(), image_effect_suite(), parameter_suite())
+    else {
+        return Status::ErrMissingHostFeature.code();
+    };
+
+    // The plugin that says no, on demand. It refuses **after** the host has
+    // set the render up, which is the case that matters: the output buffer
+    // exists and is half-written, and the host must not hand it on.
+    if RENDER_FAILS.load(Ordering::SeqCst) != 0 {
+        return Status::Failed.code();
+    }
+
+    let mut time = 0.0;
+    // SAFETY: the host's own function, given the `inArgs` it passed us.
+    unsafe {
+        (props_suite.prop_get_double)(in_args, c"OfxPropTime".as_ptr(), 0, &raw mut time);
+    }
+
+    let output = clip_handle(effect_suite, effect, c"Output");
+    let Some(destination) = fetch_image(effect_suite, props_suite, output, time) else {
+        return Status::Failed.code();
+    };
+    let source = fetch_image(
+        effect_suite,
+        props_suite,
+        clip_handle(effect_suite, effect, c"Source"),
+        time,
+    );
+
+    // A passthrough scales by one, whatever anybody's control says.
+    let gain = if variant == Variant::Full || variant == Variant::Slim {
+        param_double(
+            param_suite,
+            props_suite,
+            effect_suite,
+            effect,
+            c"gain",
+            time,
+            1.0,
+        )
+    } else {
+        1.0
+    };
+    // The flat colour for the no-input case: opaque mid grey, which is
+    // recognisably "the plugin filled this" and not "the host forgot to".
+    let fill = [0.5_f32, 0.5, 0.5, 1.0];
+
+    let (width, height) = (destination.width(), destination.height());
+    for y in 0..height {
+        // SAFETY: the image is pinned until it is released below, and `y` is
+        // inside the bounds the host gave us.
+        let row = unsafe { destination.row(y) };
+        for x in 0..width {
+            for (channel, flat) in fill.iter().enumerate() {
+                let index = x * 4 + channel;
+                let value = match &source {
+                    Some(source) if source.width() == width && source.height() == height => {
+                        // SAFETY: as above, for the source.
+                        let from = unsafe { source.row(y) };
+                        // SAFETY: `index` is inside one row of four-channel
+                        // pixels, which is what both rows hold.
+                        unsafe { *from.add(index) * (gain as f32) }
+                    }
+                    _ => *flat,
+                };
+                // SAFETY: as above.
+                unsafe { *row.add(index) = value };
+            }
+        }
+    }
+
+    // Releasing is not optional and releasing twice is not allowed; both are
+    // things the host is tested on, so this plugin does the correct one.
+    if let Some(source) = source {
+        // SAFETY: the host's own function, given a handle it minted and this
+        // plugin has not released.
+        unsafe { (effect_suite.clip_release_image)(source.handle) };
+    }
+    // SAFETY: as above.
+    unsafe { (effect_suite.clip_release_image)(destination.handle) };
+    Status::Ok.code()
+}
+
 // ------------------------------------------------------------- the probes --
 
 /// How many times a plugin here was given a host.
@@ -678,4 +1063,119 @@ pub extern "C" fn LumitTestPlugHostSeenBeforeLoad() -> c_int {
 #[no_mangle]
 pub extern "C" fn LumitTestPlugSuiteMask() -> c_int {
     SUITE_MASK.load(Ordering::SeqCst) as c_int
+}
+
+/// Forget the action log and the concurrency high-water mark, and turn the
+/// rendezvous off. A test calls this immediately before the stretch it means to
+/// observe.
+#[no_mangle]
+pub extern "C" fn LumitTestPlugResetProbes() {
+    ACTION_LOG
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
+    RENDERS_IN_FLIGHT.store(0, Ordering::SeqCst);
+    MAX_RENDERS_IN_FLIGHT.store(0, Ordering::SeqCst);
+    RENDER_RENDEZVOUS.store(0, Ordering::SeqCst);
+    RENDER_FAILS.store(0, Ordering::SeqCst);
+}
+
+/// Make every render answer `kOfxStatFailed`, or stop doing so.
+#[no_mangle]
+pub extern "C" fn LumitTestPlugSetRenderFails(fails: c_int) {
+    RENDER_FAILS.store(fails.max(0) as usize, Ordering::SeqCst);
+}
+
+/// Copy the action log into `buffer` as a NUL-terminated string, and answer
+/// with how long the log actually is. A buffer too small is truncated, not
+/// overrun.
+///
+/// # Safety
+///
+/// `buffer` must be null or point at `capacity` writable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn LumitTestPlugActionLog(buffer: *mut c_char, capacity: c_int) -> c_int {
+    let log = ACTION_LOG.lock().unwrap_or_else(PoisonError::into_inner);
+    let bytes = log.as_bytes();
+    let length = c_int::try_from(bytes.len()).unwrap_or(c_int::MAX);
+    if buffer.is_null() || capacity <= 0 {
+        return length;
+    }
+    let room = (capacity as usize).saturating_sub(1).min(bytes.len());
+    for (index, byte) in bytes.iter().take(room).enumerate() {
+        // SAFETY: the caller's contract; `index` is below `capacity - 1`.
+        unsafe { *buffer.add(index) = *byte as c_char };
+    }
+    // SAFETY: as above; `room` is at most `capacity - 1`.
+    unsafe { *buffer.add(room) = 0 };
+    length
+}
+
+/// The most renders that were ever in flight at one moment since the last
+/// reset. One means the host serialised them.
+#[no_mangle]
+pub extern "C" fn LumitTestPlugMaxConcurrentRenders() -> c_int {
+    c_int::try_from(MAX_RENDERS_IN_FLIGHT.load(Ordering::SeqCst)).unwrap_or(c_int::MAX)
+}
+
+/// Make every render wait until `count` of them are in flight before any
+/// finishes, so "did these two overlap?" is a question with a definite answer
+/// rather than a race with a sleep in it. Nought turns it off.
+#[no_mangle]
+pub extern "C" fn LumitTestPlugSetRenderRendezvous(count: c_int) {
+    RENDER_RENDEZVOUS.store(count.max(0) as usize, Ordering::SeqCst);
+}
+
+/// What the multi-thread suite told this plugin, so a test can read the host's
+/// answers from the plugin's side rather than from the host's.
+///
+/// Answers `numCPUs`, and then runs a fan-out of that many threads which
+/// records the indices it was given: the return is the number of *distinct*
+/// indices seen, which equals the thread count exactly when
+/// `multiThreadIndex` is right.
+///
+/// # Safety
+///
+/// `num_cpus_out` must be null or point at writable storage for one `int`.
+#[no_mangle]
+pub unsafe extern "C" fn LumitTestPlugFanOut(num_cpus_out: *mut c_int) -> c_int {
+    // SAFETY: `OfxMultiThreadSuiteV1` is what the host declares for this name.
+    let Some(suite) = (unsafe { suite::<OfxMultiThreadSuiteV1>(c"OfxMultiThreadSuite") }) else {
+        return -1;
+    };
+    let mut cpus: c_uint = 0;
+    // SAFETY: the host's own function, given a valid out-parameter.
+    if unsafe { (suite.multi_thread_num_cpus)(&raw mut cpus) } != Status::Ok.code() {
+        return -1;
+    }
+    if !num_cpus_out.is_null() {
+        // SAFETY: the caller's out-parameter, checked non-null.
+        unsafe { *num_cpus_out = cpus as c_int };
+    }
+
+    FAN_OUT_SEEN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clear();
+    // SAFETY: the host's own function, given this plugin's own thread body and
+    // a null custom argument, which the body does not follow.
+    let status = unsafe { (suite.multi_thread)(fan_out_body, cpus, std::ptr::null_mut()) };
+    if status != Status::Ok.code() {
+        return -1;
+    }
+    let mut seen = FAN_OUT_SEEN.lock().unwrap_or_else(PoisonError::into_inner);
+    seen.sort_unstable();
+    seen.dedup();
+    c_int::try_from(seen.len()).unwrap_or(c_int::MAX)
+}
+
+/// The indices the last fan-out handed out.
+static FAN_OUT_SEEN: Mutex<Vec<c_uint>> = Mutex::new(Vec::new());
+
+/// One thread of [`LumitTestPlugFanOut`]: note the index the host says this is.
+unsafe extern "C" fn fan_out_body(thread_index: c_uint, _thread_max: c_uint, _arg: *mut c_void) {
+    FAN_OUT_SEEN
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(thread_index);
 }

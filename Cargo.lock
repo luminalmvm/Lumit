@@ -1642,9 +1642,13 @@ dependencies = [
 name = "lumit-ofx"
 version = "0.2.0"
 dependencies = [
+ "half",
  "libloading",
  "lumit-core",
+ "lumit-eval",
  "lumit-ofx-testplug",
+ "parking_lot",
+ "rayon",
  "serde",
  "serde_json",
  "tempfile",

@@ -43,15 +43,20 @@ use crate::schema::schema_of;
 use crate::status::Status;
 use lumit_core::fx::EffectSchema;
 
-/// One clip a describing plugin defined, while it is still being defined.
+/// One clip a plugin defined, on a descriptor or on an instance.
 pub struct ClipRef {
     /// The name the plugin gave it: `Source`, `Output`, `Mask`.
     pub name: String,
     /// Its property set.
     pub props: Handle,
+    /// The `OfxImageClipHandle` the plugin holds, on an **instance**. A
+    /// descriptor's clip has none: a clip handle names a live image input, and
+    /// a description has no images (`clipGetHandle` answers null for it, which
+    /// is what the spec says a descriptor's clip is worth).
+    pub handle: Option<Handle>,
 }
 
-/// One parameter a describing plugin defined, while it is still being defined.
+/// One parameter a plugin defined, on a descriptor or on an instance.
 pub struct ParamRef {
     /// The name the plugin gave it, which is also its stable id.
     pub name: String,
@@ -63,7 +68,35 @@ pub struct ParamRef {
     pub props: Handle,
 }
 
-/// An effect descriptor: what the two describe actions fill in.
+/// What an `OfxParamHandle` names in the host's registry.
+///
+/// The name and the owning effect are kept beside the property set because
+/// that is exactly what `paramGetValue` needs and has nothing else to work
+/// from: it is handed one parameter handle and must find the **instance's**
+/// snapshot value for it (docs/12 §2.2).
+pub struct ParamRecord {
+    /// The parameter's property set.
+    pub props: Handle,
+    /// The effect or instance it belongs to.
+    pub effect: Handle,
+    /// Its name, which is its key in the snapshot.
+    pub name: String,
+}
+
+/// What an `OfxImageClipHandle` names in the host's registry.
+pub struct ClipBinding {
+    /// The instance it belongs to.
+    pub effect: Handle,
+    /// Which clip of that instance it is.
+    pub name: String,
+    /// The clip's property set.
+    pub props: Handle,
+}
+
+/// An effect descriptor: what the two describe actions fill in — and, once
+/// `instance` is filled in, an **instance** of that effect. They are one kind
+/// of object in OFX (both are an `OfxImageEffectHandle` with a property set,
+/// clips and parameters), so they are one kind of object here.
 pub struct EffectDescriptor {
     /// The effect's own property set.
     pub props: Handle,
@@ -72,6 +105,8 @@ pub struct EffectDescriptor {
     /// The parameters it defined, in definition order. **Order is a promise**
     /// (docs/impl/effect-registry.md §5): it is the order the panel draws.
     pub params: Vec<ParamRef>,
+    /// The live half, present only on an instance ([`crate::instance`]).
+    pub instance: Option<crate::instance::InstanceState>,
 }
 
 /// The context this host drives a plugin in.
@@ -158,6 +193,12 @@ pub struct PluginDescriptor {
     /// `kOfxImageEffectPropTemporalClipAccess`, which is what a retimer must
     /// set to be one.
     pub temporal: bool,
+    /// `kOfxImageEffectPluginRenderThreadSafety`, verbatim, or `None` if the
+    /// plugin never said. The host reads it into
+    /// [`ThreadSafety`](crate::instance::ThreadSafety), which treats anything
+    /// it does not recognise — silence included — as the most pessimistic
+    /// answer (docs/13 §6).
+    pub render_thread_safety: Option<String>,
 }
 
 impl PluginDescriptor {
@@ -341,6 +382,10 @@ pub fn describe(plugin: &PluginRef) -> Result<PluginDescriptor, Rejection> {
         params,
         clips,
         temporal: base_props.get_int(keys::TEMPORAL_CLIP_ACCESS, 0) == Ok(1),
+        render_thread_safety: base_props
+            .get_string(keys::PLUGIN_RENDER_THREAD_SAFETY, 0)
+            .ok()
+            .map(|text| text.to_string_lossy().into_owned()),
     })
 }
 
@@ -457,10 +502,14 @@ pub(crate) fn base_property_set(identifier: &str) -> PropertySet {
     seed_string(&mut set, keys::SHORT_LABEL, "");
     seed_string(&mut set, keys::LONG_LABEL, "");
     seed_string(&mut set, keys::GROUPING, "");
+    // The spec's own default, and not the generous one: a plugin that never
+    // says gets instance-safe, which is what the OFX header says it means, and
+    // a string this host does not recognise is read as fully unsafe
+    // (docs/13 §6: an undeclared effect is the pessimistic case).
     seed_string(
         &mut set,
         keys::PLUGIN_RENDER_THREAD_SAFETY,
-        values::RENDER_THREAD_SAFETY_FULLY_SAFE,
+        values::RENDER_THREAD_SAFETY_INSTANCE_SAFE,
     );
     set.seed(keys::SUPPORTED_CONTEXTS, PropValue::String(Vec::new()));
     set.seed(keys::SUPPORTED_PIXEL_DEPTHS, PropValue::String(Vec::new()));
@@ -479,6 +528,7 @@ pub(crate) fn new_descriptor(props: PropertySet) -> Result<Handle, Status> {
         props,
         clips: Vec::new(),
         params: Vec::new(),
+        instance: None,
     })
 }
 
@@ -489,20 +539,34 @@ fn snapshot_of(handle: Handle) -> Result<PropertySet, Status> {
     Ok(state.props.get(props)?.clone())
 }
 
-/// Destroy a descriptor and everything hanging off it. Every handle the plugin
-/// was given during the describe is dead from here on, which is exactly what
-/// the OFX lifetime rules say: a descriptor lives only as long as the action.
+/// Destroy a descriptor — or an instance — and everything hanging off it.
+/// Every handle the plugin was given is dead from here on, which is exactly
+/// what the OFX lifetime rules say: a descriptor lives only as long as the
+/// action, and an instance only until it is destroyed.
+///
+/// Any pictures the instance still held are moved out and dropped **after** the
+/// host lock is released. An image's block belongs to the arena, which has a
+/// lock of its own, and taking two locks in an order nobody wrote down is how a
+/// deadlock gets built (docs/14 §7); here the images simply outlive the guard
+/// by one line.
 pub(crate) fn release_descriptor(handle: Handle) {
-    let mut state = state();
-    let Ok(descriptor) = state.effects.remove(handle) else {
-        return;
+    let images = {
+        let mut state = state();
+        let Ok(descriptor) = state.effects.remove(handle) else {
+            return;
+        };
+        let _ = state.props.remove(descriptor.props);
+        for clip in &descriptor.clips {
+            let _ = state.props.remove(clip.props);
+            if let Some(clip_handle) = clip.handle {
+                let _ = state.clips.remove(clip_handle);
+            }
+        }
+        for param in &descriptor.params {
+            let _ = state.props.remove(param.props);
+            let _ = state.params.remove(param.handle);
+        }
+        descriptor.instance.map(|instance| instance.images)
     };
-    let _ = state.props.remove(descriptor.props);
-    for clip in &descriptor.clips {
-        let _ = state.props.remove(clip.props);
-    }
-    for param in &descriptor.params {
-        let _ = state.props.remove(param.props);
-        let _ = state.params.remove(param.handle);
-    }
+    drop(images);
 }

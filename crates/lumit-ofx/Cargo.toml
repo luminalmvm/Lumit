@@ -13,6 +13,20 @@ publish = false
 # the schema types come from the same place. The edge runs one way only —
 # nothing in the engine depends on the plugin host.
 lumit-core = { path = "../lumit-core" }
+# Cancellation epochs and the worker-pool sizing. A render carries an epoch
+# token like every other piece of scheduled work (docs/13 §6), and
+# `multiThreadNumCPUs` answers with the same sum the evaluation pool uses, so
+# the number a plugin sizes its scratch from is the number the host really
+# spends. The edge runs one way: `lumit-eval` knows nothing about plugins.
+lumit-eval = { path = "../lumit-eval" }
+# Lumit's working frames are half floats; the boundary widens them to fp32,
+# which is the only depth this host advertises (docs/12 §2.1).
+half = "2"
+# The multi-thread suite's mutexes are these, and so is the render
+# serialisation an unsafe plugin needs.
+parking_lot = "0.12"
+# The fan-out `multiThread` runs on, on a pool of its own.
+rayon = "1"
 # The bundle binary is a plain DLL/dylib opened at run time; libloading is the
 # portable `LoadLibraryW`/`dlopen` wrapper and is already in the tree.
 libloading = "0.8"

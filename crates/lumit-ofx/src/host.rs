@@ -21,7 +21,7 @@
 use std::ffi::{c_char, c_int, c_void, CStr};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
-use crate::describe::EffectDescriptor;
+use crate::describe::{ClipBinding, EffectDescriptor, ParamRecord};
 use crate::ffi::{prop_keys as keys, prop_values as values, suite_names, OfxHost};
 use crate::handles::{Handle, HandleKind, HandleRegistry};
 use crate::props::{PropValue, PropertySet};
@@ -48,14 +48,22 @@ pub struct HostMessage {
 pub struct HostState {
     /// Every property set the host owns, including its own.
     pub props: HandleRegistry<PropertySet>,
-    /// Every effect descriptor a describe pass has minted. An instance is the
-    /// same kind of handle and lands in the same registry (P4).
+    /// Every effect descriptor a describe pass has minted, and every instance:
+    /// they are one kind of handle, so they are one registry
+    /// ([`EffectDescriptor`]).
     pub effects: HandleRegistry<EffectDescriptor>,
-    /// Every parameter, as the property set it is: a parameter *is* its
-    /// properties until it has a value, which is P3's business.
-    pub params: HandleRegistry<Handle>,
+    /// Every parameter: its property set, and the effect and name that let a
+    /// value be looked up in that effect's snapshot.
+    pub params: HandleRegistry<ParamRecord>,
+    /// Every clip handle an instance has minted. A descriptor's clips are not
+    /// in here: a clip handle names a live image input, and a description has
+    /// none.
+    pub clips: HandleRegistry<ClipBinding>,
     /// The host's own property set, once it exists.
     pub host_props: Option<Handle>,
+    /// Every lock a plugin asked the host to keep for it
+    /// ([`crate::suites::multi_thread`]).
+    pub mutexes: HandleRegistry<std::sync::Arc<suites::multi_thread::HostMutex>>,
     /// Live plugin allocations: address to size. Keeping the addresses means
     /// `memoryFree` can reject one we never handed out **without following
     /// it**, which is the only safe answer to a forged pointer.
@@ -75,6 +83,8 @@ impl HostState {
             props,
             effects: HandleRegistry::new(HandleKind::ImageEffect),
             params: HandleRegistry::new(HandleKind::Param),
+            clips: HandleRegistry::new(HandleKind::Clip),
+            mutexes: HandleRegistry::new(HandleKind::Mutex),
             host_props,
             allocations: std::collections::BTreeMap::new(),
             messages: Vec::new(),
@@ -167,6 +177,7 @@ unsafe extern "C" fn fetch_suite(
         (suite_names::MESSAGE, 1) => std::ptr::from_ref(&suites::message::SUITE).cast(),
         (suite_names::IMAGE_EFFECT, 1) => std::ptr::from_ref(&suites::image_effect::SUITE).cast(),
         (suite_names::PARAMETER, 1) => std::ptr::from_ref(&suites::parameter::SUITE).cast(),
+        (suite_names::MULTI_THREAD, 1) => std::ptr::from_ref(&suites::multi_thread::SUITE).cast(),
         _ => std::ptr::null(),
     }
 }

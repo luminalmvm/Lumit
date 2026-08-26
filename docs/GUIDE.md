@@ -11311,6 +11311,92 @@ Groups and pages, the plugin's own way of tidying its controls, become the panel
 collapsible sections, so a plugin with thirty controls arrives already organised the way its
 author organised it.
 
+### What a clip, an image and a render action are
+
+Three words do most of the work once a plugin is actually being asked for pictures, and
+none of them means quite what it sounds like.
+
+A **clip**, in OFX's vocabulary, is not a Lumit clip. It is one *image socket* on the
+effect: a place a picture goes in, or the place the picture comes out. Nearly every effect
+has exactly two, called `Source` and `Output`; a keyer might have a third called `Mask`.
+The plugin names them when it describes itself, and from then on it asks for pictures by
+those names. (Lumit's own word *clip* — a piece of footage on a Sequence layer — is a
+different thing entirely, which is why the glossary keeps them apart.)
+
+An **image** is one picture at one moment, handed over as a plain block of memory plus four
+facts about how to read it: where it starts, how big it is, how many bytes to step to get
+from one row to the next, and what the numbers mean. Lumit keeps its working frames in
+half floats, sixteen bits a channel, because that is what a GPU likes; OFX plugins are
+told this host offers thirty-two-bit float and nothing else, because that is what every
+major plugin accepts and because a host that claims several depths and then fumbles one is
+the classic way to break a plugin that believed it. So each picture is widened on the way
+in and narrowed on the way out, in one place, and the narrowing loses nothing: every half
+float is exactly a float, so a plugin that hands the picture back untouched hands back the
+picture.
+
+The fourth of those facts hides a real trap. **OFX counts rows from the bottom** — y goes
+upwards, and the pointer names the pixel at the bottom-left. Lumit's frames, like most
+things with a GPU underneath, are stored the other way up, with the first row in memory
+being the top of the picture. Rather than flip every frame twice, the standard lets the
+host say so by giving the row step as a **negative** number: stepping "up" a row steps
+*backwards* through the block. It is legal, it is common, and a plugin that assumes the
+step is positive reads one picture and writes another upside-down. Lumit hands out both
+layouts and the tests render the same frame through each, demanding the same picture back.
+
+The memory behind a picture belongs to the host, not the plugin. It comes out of an arena
+the host keeps, it is pinned for as long as the plugin holds it, and it is let go of when
+the render that made it ends. A plugin that asks for the same picture twice and releases it
+twice gets an ordinary error code the second time, not a second free — the handle was
+struck off the first time, and a handle nobody recognises is a thing this host is built to
+survive rather than follow.
+
+A **render action** is not one call. Asking a plugin for a frame is a short conversation in
+a fixed order, and the order is not a matter of taste — plugins are written against it,
+cache things between its steps, and crash when a host improvises:
+
+1. *How big are you?* — the region the effect can produce at all, which for a blur is
+   bigger than the picture that went in.
+2. *What do you need to see?* — the parts of each input it wants. Lumit renders whole
+   frames rather than tiles, so it asks and then hands over everything regardless; saying
+   "tiles" and meaning "frames" is a promise a host cannot keep.
+3. *What shape are the pictures?* — already answered honestly by the host's own table.
+4. *Which frames do you need?* — the question a retimer lives on. Twixtor renders frame 100
+   by reading frames 95 through 105, and this is where it says so.
+5. *Are you a no-op right now?* — a plugin at its default settings usually is, and the
+   honest answer to that is to hand its input straight through without rendering anything.
+6. **Render**, wrapped in a *begin* and an *end*. The wrapping is not decoration: a plugin
+   allocates its scratch memory in the begin and frees it in the end, and a render without
+   them leaks or crashes depending on whose plugin it is.
+
+A change to a control gets the same treatment — it is announced, made, and closed, and it
+happens **between** renders and never inside one, because plugins reorganise themselves
+when they hear it.
+
+Two other things the host owes the plugin. **It must be able to stop.** Every step of that
+conversation checks whether the frame is still wanted, and the plugin's own "should I give
+up?" question is answered from the same place — so a scrub that lands mid-frame stops the
+work instead of waiting it out. And **failure is a value, not a crash**: a plugin that
+answers a step with an error yields a plain typed error on Lumit's side, and the
+half-written picture it was in the middle of goes in the bin rather than to the viewer,
+because half a frame that looks like a whole one is worse than no frame.
+
+### How many of them may run at once
+
+A plugin declares, when it describes itself, whether two of its renders may run at the same
+time — all of them, one per copy of the effect, or never more than one anywhere. Lumit
+obeys the declaration rather than guessing, and treats silence and anything it does not
+recognise as the cautious answer. That is the difference between a machine with sixteen
+cores rendering sixteen frames and one rendering sixteen crashes.
+
+The other direction is the **threading suite**: a plugin that wants more than one core does
+not start threads of its own, it hands Lumit a piece of work and says "run this *n* times,
+and tell each run which one it is". Two details there look trivial and are not. The count
+Lumit answers with has to be the number of threads it is really willing to spend, because
+plugins size their scratch memory from it. And each run has to be told a *different*
+number, because plugins index that scratch by it — two runs both told they are number three
+write over each other, and the picture comes out with a band in it on some runs and not
+others.
+
 ### Quirks are a file, not code
 
 Every OFX host in the world implements the standard slightly differently, and every
@@ -11332,17 +11418,29 @@ values, allocate memory, say something to the user. On top of that, the describe
 conversation above: a plugin can now declare itself and come out the other side as an
 effect Lumit knows how to list, lay out and keyframe.
 
-What is not there yet is everything that needs a *live* copy of the effect. A described
-plugin has controls but no values in them, no pictures to work on, and nothing to render
-into, so every part of the host that belongs to a running instance says plainly that it is
-not available rather than pretending — which is an answer the standard requires plugins to
-cope with, and one they meet in every host while a feature is still catching up.
+On top of *that*, the live copy: an instance with a value in every control, pictures going
+in and coming out, and the whole ordered conversation above driven from
+`kOfxActionCreateInstance` to `kOfxActionDestroyInstance`. Real pixels go through a real
+plugin, in this process, today. The values a plugin reads are Lumit's — a snapshot taken
+when the frame was scheduled, with every curve and expression already worked out — so the
+plugin has no store of its own to be asked for, and a render is reproducible from the
+document alone.
+
+What is not there yet is the part that makes it safe to run somebody else's code:
+everything still happens **inside Lumit's own process**, so a plugin that crashes still
+takes the application with it. That is what the broker package is for, and until it lands
+nothing outside the plugin host depends on any of this. Beside it, three smaller gaps that
+are written down rather than papered over: writing a value back and keyframing from a
+plugin, reading a control at a time other than the snapshot's, and overlays, which
+gracefully turn into no overlay.
 
 There is also a small set of plugins of Lumit's own, `lumit-ofx-testplug`, which exist only
 so the host has something honest to be tested against — a commercial plugin cannot live in
 the repository and a free one would change underneath the tests. They are real OFX plugins,
 and between them they give the host each of its answers something to answer: one with a
 control of every kind there is, a second version of the same plugin, one that only works in
-a shape Lumit cannot drive, one that refuses to describe itself, and one whose controls
-collide. They also keep a count of what they were told and when, so a test can prove the
-host said the right things in the right order.
+a shape Lumit cannot drive, one that refuses to describe itself, one whose controls
+collide, one that hands its picture back untouched, one that says it is a no-op, and one
+that says two of its renders may never overlap. They also keep a count of what they were
+told and when — including the exact list of actions they were sent — so a test can prove
+the host said the right things in the right order.

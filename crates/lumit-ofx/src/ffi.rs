@@ -31,6 +31,8 @@ pub type OfxParamHandle = *mut c_void;
 pub type OfxImageClipHandle = *mut c_void;
 /// `OfxImageMemoryHandle` — a block of image memory the host owns.
 pub type OfxImageMemoryHandle = *mut c_void;
+/// `OfxMutexHandle` — a lock the host owns on the plugin's behalf.
+pub type OfxMutexHandle = *mut c_void;
 
 /// `OfxTime` — a frame number, as a decimal so a plugin can ask between two.
 pub type OfxTime = f64;
@@ -317,11 +319,25 @@ pub struct OfxImageEffectSuiteV1 {
 ///
 /// Eight of them are **C-variadic** in the header (`paramGetValue` and its
 /// relatives take the out-parameters as trailing arguments, one per dimension).
-/// Rust cannot define a C-variadic function on stable, and the same argument
-/// [`OfxMessageSuiteV1`] records applies: the fixed prefix is ABI-identical on
-/// every platform this host targets, and none of the eight reads a trailing
-/// argument in this package — they answer `kOfxStatErrUnsupported`, because
-/// nothing has a value until an instance exists (P3).
+/// Rust cannot define a C-variadic function on stable, so the two that must
+/// now answer with a value — `paramGetValue` and `paramGetValueAtTime` — are
+/// declared with the **widest fixed arity a standard parameter can ask for**:
+/// four trailing pointers, which is RGBA, the largest of them.
+///
+/// That is deliberate and it has a ceiling worth writing down (K-591). On
+/// x86-64 — Windows and System V alike — a variadic call and a fixed call
+/// place pointer arguments in exactly the same registers and stack slots, so a
+/// plugin compiled against the C header lands its out-parameters where these
+/// declarations read them, and the trailing pointers a one-dimensional
+/// parameter never passed are simply never read. On Apple silicon that is not
+/// true: the arm64 Apple ABI puts *variadic* arguments on the stack while
+/// fixed ones stay in registers, so a third-party plugin's `paramGetValue`
+/// would read rubbish. Lumit is Windows-first, the test plugin shares these
+/// same declarations (so both sides agree on every platform), and the real fix
+/// is the out-of-process broker, where the call is unpacked from a message
+/// rather than from a register — docs/impl/ofx-host.md §4.
+///
+/// The remaining six variadics stay stubs that read no trailing argument.
 #[repr(C)]
 pub struct OfxParameterSuiteV1 {
     pub param_define: unsafe extern "C" fn(
@@ -344,9 +360,21 @@ pub struct OfxParameterSuiteV1 {
         param: OfxParamHandle,
         prop_handle: *mut OfxPropertySetHandle,
     ) -> OfxStatus,
-    pub param_get_value: unsafe extern "C" fn(param: OfxParamHandle) -> OfxStatus,
-    pub param_get_value_at_time:
-        unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
+    pub param_get_value: unsafe extern "C" fn(
+        param: OfxParamHandle,
+        v0: *mut c_void,
+        v1: *mut c_void,
+        v2: *mut c_void,
+        v3: *mut c_void,
+    ) -> OfxStatus,
+    pub param_get_value_at_time: unsafe extern "C" fn(
+        param: OfxParamHandle,
+        time: OfxTime,
+        v0: *mut c_void,
+        v1: *mut c_void,
+        v2: *mut c_void,
+        v3: *mut c_void,
+    ) -> OfxStatus,
     pub param_get_derivative:
         unsafe extern "C" fn(param: OfxParamHandle, time: OfxTime) -> OfxStatus,
     pub param_get_integral:
@@ -380,6 +408,32 @@ pub struct OfxParameterSuiteV1 {
     pub param_edit_end: unsafe extern "C" fn(param_set: OfxParamSetHandle) -> OfxStatus,
 }
 
+/// `OfxThreadFunctionV1` — the body a plugin asks `multiThread` to run once on
+/// each of `threadMax` threads, told which one it is.
+pub type OfxThreadFunctionV1 =
+    unsafe extern "C" fn(thread_index: c_uint, thread_max: c_uint, custom_arg: *mut c_void);
+
+/// `OfxMultiThreadSuiteV1` — nine entry points, in header order.
+#[repr(C)]
+pub struct OfxMultiThreadSuiteV1 {
+    pub multi_thread: unsafe extern "C" fn(
+        func: OfxThreadFunctionV1,
+        n_threads: c_uint,
+        custom_arg: *mut c_void,
+    ) -> OfxStatus,
+    pub multi_thread_num_cpus: unsafe extern "C" fn(n_cpus: *mut c_uint) -> OfxStatus,
+    pub multi_thread_index: unsafe extern "C" fn(thread_index: *mut c_uint) -> OfxStatus,
+    /// The one entry point that is not a status: non-zero means "you are on a
+    /// thread `multiThread` spawned".
+    pub multi_thread_is_spawned_thread: unsafe extern "C" fn() -> c_int,
+    pub mutex_create:
+        unsafe extern "C" fn(mutex: *mut OfxMutexHandle, lock_count: c_int) -> OfxStatus,
+    pub mutex_destroy: unsafe extern "C" fn(mutex: OfxMutexHandle) -> OfxStatus,
+    pub mutex_lock: unsafe extern "C" fn(mutex: OfxMutexHandle) -> OfxStatus,
+    pub mutex_un_lock: unsafe extern "C" fn(mutex: OfxMutexHandle) -> OfxStatus,
+    pub mutex_try_lock: unsafe extern "C" fn(mutex: OfxMutexHandle) -> OfxStatus,
+}
+
 /// Suite names, as `fetchSuite` spells them.
 pub mod suite_names {
     /// `kOfxPropertySuite`
@@ -394,7 +448,7 @@ pub mod suite_names {
     /// `kOfxParameterSuite` — the definition half only (see
     /// [`OfxParameterSuiteV1`]).
     pub const PARAMETER: &str = "OfxParameterSuite";
-    /// `kOfxMultiThreadSuite` — not implemented in this package.
+    /// `kOfxMultiThreadSuite`
     pub const MULTI_THREAD: &str = "OfxMultiThreadSuite";
     /// `kOfxInteractSuite` — deliberately never fetched successfully in v1;
     /// overlays degrade to no overlay (docs/impl/ofx-host.md §2).
@@ -417,6 +471,26 @@ pub mod actions {
     pub const CREATE_INSTANCE: &str = "OfxActionCreateInstance";
     /// `kOfxActionDestroyInstance`
     pub const DESTROY_INSTANCE: &str = "OfxActionDestroyInstance";
+    /// `kOfxImageEffectActionGetRegionOfDefinition`
+    pub const GET_REGION_OF_DEFINITION: &str = "OfxImageEffectActionGetRegionOfDefinition";
+    /// `kOfxImageEffectActionGetRegionsOfInterest`
+    pub const GET_REGIONS_OF_INTEREST: &str = "OfxImageEffectActionGetRegionsOfInterest";
+    /// `kOfxImageEffectActionGetClipPreferences`
+    pub const GET_CLIP_PREFERENCES: &str = "OfxImageEffectActionGetClipPreferences";
+    /// `kOfxImageEffectActionGetFramesNeeded`
+    pub const GET_FRAMES_NEEDED: &str = "OfxImageEffectActionGetFramesNeeded";
+    /// `kOfxImageEffectActionIsIdentity`
+    pub const IS_IDENTITY: &str = "OfxImageEffectActionIsIdentity";
+    /// `kOfxImageEffectActionBeginSequenceRender`
+    pub const BEGIN_SEQUENCE_RENDER: &str = "OfxImageEffectActionBeginSequenceRender";
+    /// `kOfxImageEffectActionEndSequenceRender`
+    pub const END_SEQUENCE_RENDER: &str = "OfxImageEffectActionEndSequenceRender";
+    /// `kOfxActionBeginInstanceChanged`
+    pub const BEGIN_INSTANCE_CHANGED: &str = "OfxActionBeginInstanceChanged";
+    /// `kOfxActionInstanceChanged`
+    pub const INSTANCE_CHANGED: &str = "OfxActionInstanceChanged";
+    /// `kOfxActionEndInstanceChanged`
+    pub const END_INSTANCE_CHANGED: &str = "OfxActionEndInstanceChanged";
 }
 
 /// The property keys this package uses, spelled exactly as the C headers do.
@@ -477,6 +551,64 @@ pub mod prop_keys {
 
     pub const CLIP_OPTIONAL: &str = "OfxImageClipPropOptional";
     pub const CLIP_IS_MASK: &str = "OfxImageClipPropIsMask";
+
+    // -------------------------------------------- instances, clips, images --
+
+    pub const TIME: &str = "OfxPropTime";
+    pub const IS_INTERACTIVE: &str = "OfxPropIsInteractive";
+    pub const CHANGE_REASON: &str = "OfxPropChangeReason";
+
+    pub const RENDER_WINDOW: &str = "OfxImageEffectPropRenderWindow";
+    pub const RENDER_SCALE: &str = "OfxImageEffectPropRenderScale";
+    pub const FIELD_TO_RENDER: &str = "OfxImageEffectPropFieldToRender";
+    pub const SEQUENTIAL_RENDER_STATUS: &str = "OfxImageEffectPropSequentialRenderStatus";
+    pub const INTERACTIVE_RENDER_STATUS: &str = "OfxImageEffectPropInteractiveRenderStatus";
+    pub const RENDER_QUALITY_DRAFT: &str = "OfxImageEffectPropRenderQualityDraft";
+    pub const REGION_OF_DEFINITION: &str = "OfxImageEffectPropRegionOfDefinition";
+    pub const REGION_OF_INTEREST: &str = "OfxImageEffectPropRegionOfInterest";
+    pub const FRAME_RANGE: &str = "OfxImageEffectPropFrameRange";
+    pub const FRAME_RATE: &str = "OfxImageEffectPropFrameRate";
+    pub const FRAME_STEP: &str = "OfxImageEffectPropFrameStep";
+    pub const PROJECT_SIZE: &str = "OfxImageEffectPropProjectSize";
+    pub const PROJECT_OFFSET: &str = "OfxImageEffectPropProjectOffset";
+    pub const PROJECT_EXTENT: &str = "OfxImageEffectPropProjectExtent";
+    pub const PROJECT_PIXEL_ASPECT_RATIO: &str = "OfxImageEffectPropProjectPixelAspectRatio";
+
+    pub const PIXEL_DEPTH: &str = "OfxImageEffectPropPixelDepth";
+    pub const COMPONENTS: &str = "OfxImageEffectPropComponents";
+    pub const PRE_MULTIPLICATION: &str = "OfxImageEffectPropPreMultiplication";
+    pub const CLIP_CONNECTED: &str = "OfxImageClipPropConnected";
+    pub const CLIP_CONTINUOUS_SAMPLES: &str = "OfxImageClipPropContinuousSamples";
+    pub const CLIP_UNMAPPED_FRAME_RANGE: &str = "OfxImageClipPropUnmappedFrameRange";
+    pub const CLIP_UNMAPPED_COMPONENTS: &str = "OfxImageClipPropUnmappedComponents";
+    pub const CLIP_FIELD_ORDER: &str = "OfxImageClipPropFieldOrder";
+
+    pub const IMAGE_DATA: &str = "OfxImagePropData";
+    pub const IMAGE_BOUNDS: &str = "OfxImagePropBounds";
+    pub const IMAGE_REGION_OF_DEFINITION: &str = "OfxImagePropRegionOfDefinition";
+    pub const IMAGE_ROW_BYTES: &str = "OfxImagePropRowBytes";
+    pub const IMAGE_FIELD: &str = "OfxImagePropField";
+    pub const IMAGE_UNIQUE_IDENTIFIER: &str = "OfxImagePropUniqueIdentifier";
+    pub const PIXEL_ASPECT_RATIO: &str = "OfxImagePropPixelAspectRatio";
+
+    /// `kOfxImageEffectPropFramesNeeded` is spelled per clip, as
+    /// `OfxImageClipPropFrameRange_<clip>`; see [`super::frames_needed_key`].
+    pub const CLIP_FRAME_RANGE_PREFIX: &str = "OfxImageClipPropFrameRange_";
+    /// As above, for the regions-of-interest out-args:
+    /// `OfxImageClipPropRoI_<clip>`.
+    pub const CLIP_ROI_PREFIX: &str = "OfxImageClipPropRoI_";
+}
+
+/// The per-clip out-arg key `getFramesNeeded` writes into.
+#[must_use]
+pub fn frames_needed_key(clip: &str) -> String {
+    format!("{}{clip}", prop_keys::CLIP_FRAME_RANGE_PREFIX)
+}
+
+/// The per-clip out-arg key `getRegionsOfInterest` writes into.
+#[must_use]
+pub fn region_of_interest_key(clip: &str) -> String {
+    format!("{}{clip}", prop_keys::CLIP_ROI_PREFIX)
 }
 
 /// The parameter types `paramDefine` accepts — every standard type, spelled as
@@ -563,9 +695,20 @@ pub mod prop_values {
     pub const CONTEXT_RETIMER: &str = "OfxImageEffectContextRetimer";
     pub const CONTEXT_PAINT: &str = "OfxImageEffectContextPaint";
     pub const RENDER_THREAD_SAFETY_FULLY_SAFE: &str = "OfxImageEffectRenderFullySafe";
+    pub const RENDER_THREAD_SAFETY_INSTANCE_SAFE: &str = "OfxImageEffectRenderInstanceSafe";
+    pub const RENDER_THREAD_SAFETY_UNSAFE: &str = "OfxImageEffectRenderUnsafe";
     pub const TYPE_IMAGE_EFFECT: &str = "OfxTypeImageEffect";
+    pub const TYPE_IMAGE_EFFECT_INSTANCE: &str = "OfxTypeImageEffectInstance";
     pub const TYPE_PARAMETER: &str = "OfxTypeParameter";
     pub const TYPE_CLIP: &str = "OfxTypeClip";
+    pub const TYPE_IMAGE: &str = "OfxTypeImage";
+    /// The only premultiplication state this host hands out (docs/12 §2.1).
+    pub const IMAGE_PRE_MULTIPLIED: &str = "OfxImagePreMultiplied";
+    pub const IMAGE_FIELD_NONE: &str = "OfxImageFieldNone";
+    pub const IMAGE_FIELD_BOTH: &str = "OfxImageFieldBoth";
+    pub const CHANGE_USER_EDITED: &str = "OfxChangeUserEdited";
+    pub const CHANGE_PLUGIN_EDITED: &str = "OfxChangePluginEdited";
+    pub const CHANGE_TIME: &str = "OfxChangeTime";
 }
 
 /// The message types of `OfxMessageSuiteV1`.

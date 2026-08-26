@@ -57,6 +57,9 @@ pub enum HandleKind {
     /// the effect handle straight back is what stops an effect handle being
     /// accepted where a param set was meant, and the other way round.
     ParamSet = 5,
+    /// An `OfxMutexHandle` — a lock the host holds on a plugin's behalf
+    /// ([`crate::suites::multi_thread`]).
+    Mutex = 6,
 }
 
 impl HandleKind {
@@ -113,6 +116,7 @@ impl Handle {
             3 => Some(HandleKind::Param),
             4 => Some(HandleKind::Clip),
             5 => Some(HandleKind::ParamSet),
+            6 => Some(HandleKind::Mutex),
             _ => None,
         }
     }

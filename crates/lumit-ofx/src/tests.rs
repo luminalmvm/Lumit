@@ -12,16 +12,22 @@ use std::path::{Path, PathBuf};
 
 use lumit_core::fx::EffectSchema;
 
+use half::f16;
+use lumit_eval::epoch::Epoch;
+
 use crate::bundle::{scan_dir, Bundle, BUNDLE_ARCH_DIR};
 use crate::describe::{describe_bundle, Context, DescribedPlugin, Rejection, ScanReport};
 use crate::ffi::{
-    prop_keys as keys, OfxHost, OfxImageEffectSuiteV1, OfxMemorySuiteV1, OfxMessageSuiteV1,
-    OfxParameterSuiteV1, OfxPlugin, OfxPropertySuiteV1,
+    actions, prop_keys as keys, OfxHost, OfxImageEffectSuiteV1, OfxMemorySuiteV1,
+    OfxMessageSuiteV1, OfxMultiThreadSuiteV1, OfxParameterSuiteV1, OfxPlugin, OfxPropertySuiteV1,
 };
 use crate::handles::{Handle, HandleKind, HandleRegistry};
 use crate::host::{dump, host, host_props_handle, state};
+use crate::image::{Frame16, Image, RowOrder};
+use crate::instance::{Instance, ParamSnapshot, ThreadSafety};
 use crate::props::{Element, PropValue, PropertySet};
 use crate::quirks::QuirksTable;
+use crate::render::{RenderError, RenderRequest, Rendered};
 use crate::status::Status;
 use crate::suites::{memory, message, property};
 
@@ -398,11 +404,11 @@ fn fetch_suite_answers_for_what_exists_and_null_for_what_does_not() {
 
     assert!(!ask(c"OfxImageEffectSuite", 1).is_null());
     assert!(!ask(c"OfxParameterSuite", 1).is_null());
+    assert!(!ask(c"OfxMultiThreadSuite", 1).is_null());
 
     // Not built yet, and an honest null is the whole point: overlays degrade
     // to no overlay rather than to a crash.
     assert!(ask(c"OfxInteractSuite", 1).is_null());
-    assert!(ask(c"OfxMultiThreadSuite", 1).is_null());
 
     // A version we do not have is a null, not the version we do have.
     assert!(ask(c"OfxPropertySuite", 2).is_null());
@@ -1064,9 +1070,18 @@ fn a_parameter_defined_twice_under_one_name_is_refused() {
         );
         assert_eq!(back, props);
 
-        // The value half is not here yet, and says so rather than lying.
+        // A *descriptor's* parameters have no values: nothing has been
+        // evaluated, so there is nothing to read, and the suite says so rather
+        // than handing back the default as though it were a value.
+        let mut value = 0.0_f64;
         assert_eq!(
-            (params.param_get_value)(handle),
+            (params.param_get_value)(
+                handle,
+                std::ptr::from_mut(&mut value).cast(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            ),
             Status::ErrUnsupported.code()
         );
     }
@@ -1160,29 +1175,37 @@ fn the_definition_suites_refuse_a_forged_handle() {
     crate::describe::release_descriptor(effect);
 }
 
+/// The clip half of the suite is live now, but only for a clip handle the host
+/// actually minted: a forged one is a status, never a followed pointer.
 #[test]
-fn the_instance_half_of_the_image_effect_suite_says_it_is_not_here() {
+fn the_clip_entry_points_refuse_a_handle_that_is_not_a_clip() {
     let suite = &crate::suites::image_effect::SUITE;
     let mut out: *mut c_void = std::ptr::null_mut();
     let mut bounds = crate::ffi::OfxRectD::default();
 
-    // SAFETY: valid out-parameters; each of these is a stub that must answer a
-    // status a plugin expects rather than pretend.
+    // SAFETY: valid out-parameters; each of these is handed a handle it was
+    // never given and must answer a status a plugin expects.
     unsafe {
         assert_eq!(
             (suite.clip_get_property_set)(std::ptr::null_mut(), &raw mut out),
-            Status::ErrUnsupported.code()
+            Status::ErrBadHandle.code()
         );
         assert_eq!(
             (suite.clip_get_image)(std::ptr::null_mut(), 0.0, std::ptr::null(), &raw mut out),
-            Status::ErrUnsupported.code()
+            Status::ErrBadHandle.code()
         );
         assert_eq!(
             (suite.clip_get_region_of_definition)(std::ptr::null_mut(), 0.0, &raw mut bounds),
-            Status::ErrUnsupported.code()
+            Status::ErrBadHandle.code()
+        );
+        // Releasing something that is not an image is a status too.
+        assert_eq!(
+            (suite.clip_release_image)(std::ptr::null_mut()),
+            Status::ErrBadHandle.code()
         );
         // `abort` is the one that is not a status, and nought is what lets a
-        // render carry on. Nothing is cancellable yet, so nothing is cancelled.
+        // render carry on. No render is in flight on this thread, so nothing is
+        // cancelled.
         assert_eq!((suite.abort)(std::ptr::null_mut()), 0);
     }
 }
@@ -1215,5 +1238,671 @@ fn the_two_new_suite_tables_are_laid_out_as_c_lays_them_out() {
     assert_eq!(
         offset_of!(OfxParameterSuiteV1, param_edit_end),
         17 * pointer
+    );
+}
+
+// ------------------------------------------------- instances and rendering --
+
+/// A picture whose every pixel says where it is and which channel it is, so an
+/// upside-down or mirrored frame is obvious rather than plausible.
+fn a_test_frame(width: usize, height: usize) -> Frame16 {
+    let mut pixels = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            pixels.push(f16::from_f32(x as f32 / 16.0));
+            pixels.push(f16::from_f32(y as f32 / 16.0));
+            // A value above one, because the working space is scene-linear and
+            // highlights above one are legal and meaningful (docs/08 §2.1).
+            pixels.push(f16::from_f32(2.5));
+            pixels.push(f16::ONE);
+        }
+    }
+    Frame16::from_pixels(width, height, pixels).expect("the count matches the size")
+}
+
+/// A loaded bundle and its scan, ready for instances to be made from.
+fn a_described_bundle(test: &str) -> Option<(tempfile::TempDir, Bundle, ScanReport)> {
+    let (root, bundle) = a_loaded_bundle(test)?;
+    let report = describe_bundle(&bundle);
+    Some((root, bundle, report))
+}
+
+/// The `PluginRef` in `bundle` with this identifier.
+fn plugin_of<'a>(bundle: &'a Bundle, identifier: &str) -> &'a crate::bundle::PluginRef {
+    bundle
+        .plugins()
+        .iter()
+        .find(|plugin| plugin.identifier == identifier)
+        .expect("the test bundle declares it")
+}
+
+/// One described plugin out of a scan, by identifier.
+fn described<'a>(report: &'a ScanReport, identifier: &str) -> &'a DescribedPlugin {
+    report
+        .effects
+        .iter()
+        .find(|effect| effect.descriptor.identifier == identifier)
+        .expect("the plugin described itself")
+}
+
+/// The action log the test plugin recorded, as the host's own action names.
+fn action_log(probe: &libloading::Library) -> Vec<String> {
+    // SAFETY: the export is declared in the test plugin with this signature.
+    let symbol: Result<libloading::Symbol<unsafe extern "C" fn(*mut c_char, c_int) -> c_int>, _> =
+        unsafe { probe.get(b"LumitTestPlugActionLog\0") };
+    let Ok(symbol) = symbol else {
+        return Vec::new();
+    };
+    let mut buffer = vec![0 as c_char; 4096];
+    // SAFETY: the buffer is 4096 writable bytes, which is what is promised.
+    let _ = unsafe { symbol(buffer.as_mut_ptr(), 4096) };
+    // SAFETY: the plugin wrote a NUL-terminated string into the buffer.
+    let text = unsafe { CStr::from_ptr(buffer.as_ptr()) }
+        .to_string_lossy()
+        .into_owned();
+    if text.is_empty() {
+        return Vec::new();
+    }
+    text.split(',').map(str::to_owned).collect()
+}
+
+/// Call one of the plugin's no-argument probe exports.
+fn probe_call(probe: &libloading::Library, name: &[u8]) -> c_int {
+    // SAFETY: every probe named this way is declared with this signature.
+    let symbol: Result<libloading::Symbol<unsafe extern "C" fn() -> c_int>, _> =
+        unsafe { probe.get(name) };
+    match symbol {
+        // SAFETY: as above.
+        Ok(symbol) => unsafe { symbol() },
+        Err(_) => -1,
+    }
+}
+
+/// Call one of the plugin's one-argument probe setters.
+fn probe_set(probe: &libloading::Library, name: &[u8], value: c_int) {
+    // SAFETY: every setter named this way is declared with this signature.
+    let symbol: Result<libloading::Symbol<unsafe extern "C" fn(c_int)>, _> =
+        unsafe { probe.get(name) };
+    if let Ok(symbol) = symbol {
+        // SAFETY: as above.
+        unsafe { symbol(value) };
+    }
+}
+
+/// A handle on the loaded plugin binary of our own, so the probes can be read.
+/// The loader hands back the same module for the same path, so this reads the
+/// counters the bundle's copy is writing.
+fn a_probe(bundle: &Bundle) -> Option<libloading::Library> {
+    // SAFETY: loading a library runs its initialisers; this one is ours, and it
+    // is already loaded, so this only takes a second reference to it.
+    unsafe { libloading::Library::new(bundle.path()) }.ok()
+}
+
+/// The whole of an instance's life in one arrangement: create, render, destroy.
+fn render_once(
+    bundle: &Bundle,
+    report: &ScanReport,
+    identifier: &str,
+    request: &RenderRequest,
+    values: &ParamSnapshot,
+) -> Result<Rendered, RenderError> {
+    let plugin = plugin_of(bundle, identifier);
+    let descriptor = &described(report, identifier).descriptor;
+    let instance =
+        Instance::create(plugin, descriptor, Context::Filter, values).map_err(RenderError::Host)?;
+    let token = Epoch::new().token();
+    let rendered = crate::render::render(plugin, &instance, request, &token);
+    instance.destroy(plugin).expect("it was destroyed");
+    rendered
+}
+
+/// The plugin reads its `gain` control out of the snapshot the host handed in,
+/// and multiplies the picture by it. Real pixels, through a real plugin, in
+/// process.
+#[test]
+fn a_frame_goes_through_a_plugin_and_comes_out_scaled() {
+    let Some((_root, bundle, report)) = a_described_bundle("a_frame_goes_through_a_plugin") else {
+        return;
+    };
+    let source = a_test_frame(8, 5);
+
+    // The default in the descriptor is 0.5, and the instance is created with its
+    // parameters already holding their defaults — which is what the plugin reads
+    // back through `paramGetValueAtTime`.
+    let rendered = render_once(
+        &bundle,
+        &report,
+        "com.lumitlab.testplug",
+        &RenderRequest::filter(0.0, source.clone()),
+        &ParamSnapshot::new(),
+    )
+    .expect("it rendered");
+    assert_eq!(rendered.identity_of, None, "it is not a no-op");
+    for y in 0..5 {
+        for x in 0..8 {
+            let (was, now) = (source.pixel(x, y), rendered.frame.pixel(x, y));
+            for channel in 0..4 {
+                assert!(
+                    (now[channel] - was[channel] * 0.5).abs() <= 0.01,
+                    "pixel {x},{y} channel {channel}: {} is not half of {}",
+                    now[channel],
+                    was[channel]
+                );
+            }
+        }
+    }
+
+    // And a value the *host* supplies overrides the default, which is the whole
+    // point of the snapshot: the plugin has no store of its own.
+    let mut values = ParamSnapshot::new();
+    values.set("gain", PropValue::double(2.0));
+    let rendered = render_once(
+        &bundle,
+        &report,
+        "com.lumitlab.testplug",
+        &RenderRequest::filter(0.0, source.clone()),
+        &values,
+    )
+    .expect("it rendered");
+    let (was, now) = (source.pixel(3, 2), rendered.frame.pixel(3, 2));
+    assert!((now[1] - was[1] * 2.0).abs() <= 0.01, "{now:?} vs {was:?}");
+}
+
+/// The pixel path itself: a plugin that changes nothing must give back exactly
+/// what it was given. The comparison is bit-for-bit at fp16 because the
+/// fp16 → fp32 → fp16 round trip is lossless — every half float is exactly a
+/// float — which is well inside the docs/08 §1.6 tolerance of two fp16 ULP.
+#[test]
+fn a_passthrough_plugin_returns_the_input_unchanged() {
+    let Some((_root, bundle, report)) = a_described_bundle("a_passthrough_plugin_returns") else {
+        return;
+    };
+    let source = a_test_frame(9, 4);
+    let rendered = render_once(
+        &bundle,
+        &report,
+        "com.lumitlab.testplug.passthrough",
+        &RenderRequest::filter(0.0, source.clone()),
+        &ParamSnapshot::new(),
+    )
+    .expect("it rendered");
+    assert_eq!(rendered.frame, source, "the round trip is not lossless");
+}
+
+/// The same picture whichever way the block runs. A top-down image is handed
+/// over with **negative** row bytes, the plugin steps backwards through memory
+/// because the host told it to, and the picture comes back the right way up.
+#[test]
+fn a_negative_row_bytes_image_comes_back_the_right_way_up() {
+    let Some((_root, bundle, report)) = a_described_bundle("a_negative_row_bytes_image") else {
+        return;
+    };
+    let source = a_test_frame(6, 7);
+
+    let mut both = Vec::new();
+    for order in [RowOrder::BottomUp, RowOrder::TopDown] {
+        let mut request = RenderRequest::filter(0.0, source.clone());
+        request.order = order;
+        let rendered = render_once(
+            &bundle,
+            &report,
+            "com.lumitlab.testplug.passthrough",
+            &request,
+            &ParamSnapshot::new(),
+        )
+        .expect("it rendered");
+        assert_eq!(rendered.frame, source, "{order:?} came back wrong");
+        both.push(rendered.frame);
+    }
+    assert_eq!(both[0], both[1], "the two layouts disagree");
+
+    // And the sign really was negative for the top-down one, so the test above
+    // is testing what it says it is.
+    let image = Image::from_frame(&source, RowOrder::TopDown).expect("an image");
+    assert!(image.row_bytes() < 0, "top-down means negative row bytes");
+}
+
+/// The action order, verbatim: the sequence the plugin observed against the
+/// listing in docs/impl/ofx-host.md §3, which `render::RENDER_ACTIONS`
+/// transcribes.
+#[test]
+fn the_action_order_is_the_one_the_note_lists() {
+    let Some((_root, bundle, report)) = a_described_bundle("the_action_order") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("the_action_order_is_the_one_the_note_lists");
+        return;
+    };
+    probe_call(&probe, b"LumitTestPlugResetProbes\0");
+
+    let _ = render_once(
+        &bundle,
+        &report,
+        "com.lumitlab.testplug.passthrough",
+        &RenderRequest::filter(0.0, a_test_frame(4, 4)),
+        &ParamSnapshot::new(),
+    )
+    .expect("it rendered");
+
+    let seen = action_log(&probe);
+    let mut expected = vec![actions::CREATE_INSTANCE.to_owned()];
+    expected.extend(
+        crate::render::RENDER_ACTIONS
+            .iter()
+            .map(|action| (*action).to_owned()),
+    );
+    expected.push(actions::DESTROY_INSTANCE.to_owned());
+    assert_eq!(seen, expected);
+
+    // And the constant really is the note's listing, spelled out here so that a
+    // change to either has to be a change to both.
+    assert_eq!(
+        expected,
+        vec![
+            "OfxActionCreateInstance",
+            "OfxImageEffectActionGetRegionOfDefinition",
+            "OfxImageEffectActionGetRegionsOfInterest",
+            "OfxImageEffectActionGetClipPreferences",
+            "OfxImageEffectActionGetFramesNeeded",
+            "OfxImageEffectActionIsIdentity",
+            "OfxImageEffectActionBeginSequenceRender",
+            "OfxImageEffectActionRender",
+            "OfxImageEffectActionEndSequenceRender",
+            "OfxActionDestroyInstance",
+        ]
+    );
+}
+
+/// A change to a control fires wrapped in begin and end, and lands **between**
+/// renders — never inside one, which is the thing Sapphire relies on.
+#[test]
+fn a_changed_control_fires_wrapped_and_between_renders() {
+    let Some((_root, bundle, report)) = a_described_bundle("a_changed_control_fires") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("a_changed_control_fires_wrapped_and_between_renders");
+        return;
+    };
+
+    let identifier = "com.lumitlab.testplug";
+    let plugin = plugin_of(&bundle, identifier);
+    let instance = Instance::create(
+        plugin,
+        &described(&report, identifier).descriptor,
+        Context::Filter,
+        &ParamSnapshot::new(),
+    )
+    .expect("an instance");
+
+    probe_call(&probe, b"LumitTestPlugResetProbes\0");
+    let token = Epoch::new().token();
+    let source = a_test_frame(4, 4);
+    let request = RenderRequest::filter(0.0, source.clone());
+    let _ = crate::render::render(plugin, &instance, &request, &token).expect("first render");
+    instance
+        .changed(
+            plugin,
+            "gain",
+            PropValue::double(3.0),
+            crate::ffi::prop_values::CHANGE_USER_EDITED,
+            0.0,
+        )
+        .expect("the change went through");
+    let after = crate::render::render(plugin, &instance, &request, &token).expect("second render");
+    instance.destroy(plugin).expect("destroyed");
+
+    let seen = action_log(&probe);
+    let position = |wanted: &str| {
+        seen.iter()
+            .position(|action| action == wanted)
+            .unwrap_or_else(|| panic!("{wanted} never fired: {seen:?}"))
+    };
+    let begin = position(actions::BEGIN_INSTANCE_CHANGED);
+    let changed = position(actions::INSTANCE_CHANGED);
+    let end = position(actions::END_INSTANCE_CHANGED);
+    assert!(begin < changed && changed < end, "{seen:?}");
+
+    // Between renders: every render action is either wholly before the begin or
+    // wholly after the end.
+    for (index, action) in seen.iter().enumerate() {
+        if crate::render::RENDER_ACTIONS.contains(&action.as_str()) {
+            assert!(
+                index < begin || index > end,
+                "{action} landed inside the change: {seen:?}"
+            );
+        }
+    }
+
+    // And the new value is what the second render used.
+    let (was, now) = (source.pixel(2, 2), after.frame.pixel(2, 2));
+    assert!((now[1] - was[1] * 3.0).abs() <= 0.02, "{now:?} vs {was:?}");
+}
+
+/// Two instances of a fully safe plugin overlap; two of an unsafe one cannot.
+///
+/// The plugin holds each render at a rendezvous until two are in flight, or
+/// until its own deadline — so "did they overlap?" has a definite answer rather
+/// than a race with a sleep in it.
+#[test]
+fn concurrent_renders_follow_the_plugins_own_declaration() {
+    let Some((_root, bundle, report)) = a_described_bundle("concurrent_renders") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("concurrent_renders_follow_the_plugins_own_declaration");
+        return;
+    };
+
+    /// A `PluginRef` shared with the threads of one scope.
+    struct Shared(*const crate::bundle::PluginRef);
+    // SAFETY: the pointer is into the bundle's plugin list, which outlives the
+    // scope that reads it; nothing mutates the `PluginRef`; and calling the
+    // plugin's own entry from two threads is exactly what its declared thread
+    // safety is a statement about — which the host obeys, so the unsafe plugin
+    // is never actually re-entered.
+    unsafe impl Sync for Shared {}
+
+    for (identifier, expected, safety) in [
+        (
+            "com.lumitlab.testplug.passthrough",
+            2,
+            ThreadSafety::FullySafe,
+        ),
+        ("com.lumitlab.testplug.unsafe", 1, ThreadSafety::Unsafe),
+    ] {
+        let plugin = plugin_of(&bundle, identifier);
+        let descriptor = &described(&report, identifier).descriptor;
+        let instances: Vec<Instance> = (0..2)
+            .map(|_| {
+                Instance::create(plugin, descriptor, Context::Filter, &ParamSnapshot::new())
+                    .expect("an instance")
+            })
+            .collect();
+        assert_eq!(instances[0].thread_safety(), safety, "{identifier}");
+
+        probe_call(&probe, b"LumitTestPlugResetProbes\0");
+        probe_set(&probe, b"LumitTestPlugSetRenderRendezvous\0", 2);
+
+        let shared = Shared(std::ptr::from_ref(plugin));
+        std::thread::scope(|scope| {
+            for instance in &instances {
+                let shared = &shared;
+                scope.spawn(move || {
+                    // SAFETY: as the `unsafe impl` above.
+                    let plugin = unsafe { &*shared.0 };
+                    let token = Epoch::new().token();
+                    let request = RenderRequest::filter(0.0, a_test_frame(4, 4));
+                    let _ = crate::render::render(plugin, instance, &request, &token);
+                });
+            }
+        });
+
+        let seen = probe_call(&probe, b"LumitTestPlugMaxConcurrentRenders\0");
+        assert_eq!(seen, expected, "{identifier} ran {seen} renders at once");
+        probe_set(&probe, b"LumitTestPlugSetRenderRendezvous\0", 0);
+
+        for instance in instances {
+            instance.destroy(plugin).expect("destroyed");
+        }
+    }
+}
+
+/// A plugin that says it is a no-op is not rendered at all: the input is the
+/// output, and no begin, render or end is dispatched.
+#[test]
+fn an_identity_plugin_short_circuits_to_its_input() {
+    let Some((_root, bundle, report)) = a_described_bundle("an_identity_plugin") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("an_identity_plugin_short_circuits_to_its_input");
+        return;
+    };
+    probe_call(&probe, b"LumitTestPlugResetProbes\0");
+
+    let source = a_test_frame(5, 3);
+    let rendered = render_once(
+        &bundle,
+        &report,
+        "com.lumitlab.testplug.identity",
+        &RenderRequest::filter(0.0, source.clone()),
+        &ParamSnapshot::new(),
+    )
+    .expect("it answered");
+
+    assert_eq!(rendered.identity_of.as_deref(), Some("Source"));
+    assert_eq!(rendered.frame, source);
+    let seen = action_log(&probe);
+    for action in [
+        actions::BEGIN_SEQUENCE_RENDER,
+        actions::RENDER,
+        actions::END_SEQUENCE_RENDER,
+    ] {
+        assert!(
+            !seen.iter().any(|had| had == action),
+            "{action} in {seen:?}"
+        );
+    }
+}
+
+/// A plugin that fails its render yields a typed error, and the half-written
+/// output buffer goes with it rather than to the caller.
+#[test]
+fn a_failed_render_is_an_error_and_not_a_half_written_frame() {
+    let Some((_root, bundle, report)) = a_described_bundle("a_failed_render") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("a_failed_render_is_an_error_and_not_a_half_written_frame");
+        return;
+    };
+    probe_call(&probe, b"LumitTestPlugResetProbes\0");
+    probe_set(&probe, b"LumitTestPlugSetRenderFails\0", 1);
+
+    let outcome = render_once(
+        &bundle,
+        &report,
+        "com.lumitlab.testplug.passthrough",
+        &RenderRequest::filter(0.0, a_test_frame(4, 4)),
+        &ParamSnapshot::new(),
+    );
+    probe_set(&probe, b"LumitTestPlugSetRenderFails\0", 0);
+
+    assert_eq!(
+        outcome.err(),
+        Some(RenderError::Plugin {
+            action: actions::RENDER,
+            status: Status::Failed,
+        })
+    );
+    // The end action still ran, so a plugin that allocated in the begin got its
+    // chance to free.
+    let seen = action_log(&probe);
+    assert!(seen.iter().any(|had| had == actions::END_SEQUENCE_RENDER));
+    // And nothing is left of the pictures.
+    assert_eq!(crate::suites::memory::image_bytes_live(), 0);
+}
+
+/// Cancellation: an epoch that has already turned over stops the render before
+/// the plugin is asked anything at all.
+#[test]
+fn a_stale_epoch_stops_the_render_before_the_plugin_is_asked() {
+    let Some((_root, bundle, report)) = a_described_bundle("a_stale_epoch") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("a_stale_epoch_stops_the_render_before_the_plugin_is_asked");
+        return;
+    };
+
+    let identifier = "com.lumitlab.testplug.passthrough";
+    let plugin = plugin_of(&bundle, identifier);
+    let instance = Instance::create(
+        plugin,
+        &described(&report, identifier).descriptor,
+        Context::Filter,
+        &ParamSnapshot::new(),
+    )
+    .expect("an instance");
+
+    probe_call(&probe, b"LumitTestPlugResetProbes\0");
+    let epoch = Epoch::new();
+    let token = epoch.token();
+    epoch.bump();
+
+    let request = RenderRequest::filter(0.0, a_test_frame(4, 4));
+    let outcome = crate::render::render(plugin, &instance, &request, &token);
+    instance.destroy(plugin).expect("destroyed");
+
+    assert_eq!(outcome.err(), Some(RenderError::Cancelled));
+    let seen = action_log(&probe);
+    assert!(
+        seen.iter()
+            .all(|action| action == actions::DESTROY_INSTANCE),
+        "the plugin was asked something: {seen:?}"
+    );
+}
+
+/// Releasing an image twice is a status, not a second free. The first release
+/// strikes the handle off; the second finds nothing, which is exactly the
+/// forged-handle path every suite call already walks.
+#[test]
+fn releasing_an_image_twice_is_a_status() {
+    let Some((_root, bundle, report)) = a_described_bundle("releasing_an_image_twice") else {
+        return;
+    };
+    let identifier = "com.lumitlab.testplug.passthrough";
+    let plugin = plugin_of(&bundle, identifier);
+    let instance = Instance::create(
+        plugin,
+        &described(&report, identifier).descriptor,
+        Context::Filter,
+        &ParamSnapshot::new(),
+    )
+    .expect("an instance");
+
+    // Put a picture on the instance by hand, so the fetch below has something
+    // to find without a render being in flight.
+    let mut images = std::collections::BTreeMap::new();
+    images.insert(
+        "Source".to_owned(),
+        Image::from_frame(&a_test_frame(4, 4), RowOrder::TopDown).expect("an image"),
+    );
+    drop(crate::instance::set_images(instance.handle(), images).expect("set"));
+
+    let suite = &crate::suites::image_effect::SUITE;
+    let mut clip: *mut c_void = std::ptr::null_mut();
+    let mut props: *mut c_void = std::ptr::null_mut();
+    let mut image: *mut c_void = std::ptr::null_mut();
+    // SAFETY: valid out-parameters, and handles the host itself minted.
+    unsafe {
+        assert_eq!(
+            (suite.clip_get_handle)(
+                instance.handle().as_ptr(),
+                c"Source".as_ptr(),
+                &raw mut clip,
+                &raw mut props,
+            ),
+            Status::Ok.code()
+        );
+        assert!(!clip.is_null(), "an instance's clip has a handle");
+        assert_eq!(
+            (suite.clip_get_image)(clip, 0.0, std::ptr::null(), &raw mut image),
+            Status::Ok.code()
+        );
+        assert_eq!((suite.clip_release_image)(image), Status::Ok.code());
+        assert_eq!(
+            (suite.clip_release_image)(image),
+            Status::ErrBadHandle.code(),
+            "the second release must be a status, not a second free"
+        );
+    }
+
+    drop(crate::instance::take_images(instance.handle()).expect("taken"));
+    instance.destroy(plugin).expect("destroyed");
+    assert_eq!(crate::suites::memory::image_bytes_live(), 0);
+}
+
+// -------------------------------------------------------- the thread suite --
+
+/// `multiThreadNumCPUs` says what the host really spends, and every thread of a
+/// fan-out is told a different index — which is what plugins key their
+/// per-thread scratch by.
+#[test]
+fn the_thread_suite_counts_honestly_and_indexes_correctly() {
+    let Some((_root, bundle)) = a_loaded_bundle("the_thread_suite_counts_honestly") else {
+        return;
+    };
+    let Some(probe) = a_probe(&bundle) else {
+        skipped("the_thread_suite_counts_honestly_and_indexes_correctly");
+        return;
+    };
+    // SAFETY: the export is declared in the test plugin with this signature.
+    let symbol: Result<libloading::Symbol<unsafe extern "C" fn(*mut c_int) -> c_int>, _> =
+        unsafe { probe.get(b"LumitTestPlugFanOut\0") };
+    let Ok(fan_out) = symbol else {
+        skipped("the_thread_suite_counts_honestly_and_indexes_correctly");
+        return;
+    };
+
+    let mut cpus: c_int = 0;
+    // SAFETY: a valid out-parameter.
+    let distinct = unsafe { fan_out(&raw mut cpus) };
+    let expected = crate::suites::multi_thread::host_thread_count();
+    assert_eq!(
+        usize::try_from(cpus),
+        Ok(expected),
+        "the count must be what the host really spends"
+    );
+    assert_eq!(
+        usize::try_from(distinct),
+        Ok(expected),
+        "every thread must be told a different index"
+    );
+}
+
+#[test]
+fn a_host_mutex_locks_unlocks_and_refuses_a_forged_handle() {
+    let suite = &crate::suites::multi_thread::SUITE;
+    let mut mutex: *mut c_void = std::ptr::null_mut();
+    // SAFETY: valid out-parameters, and handles this test minted through the
+    // suite itself.
+    unsafe {
+        assert_eq!((suite.mutex_create)(&raw mut mutex, 0), Status::Ok.code());
+        assert_eq!((suite.mutex_lock)(mutex), Status::Ok.code());
+        // Somebody already holds it, so a try is a plain failure.
+        assert_eq!((suite.mutex_try_lock)(mutex), Status::Failed.code());
+        assert_eq!((suite.mutex_un_lock)(mutex), Status::Ok.code());
+        assert_eq!((suite.mutex_try_lock)(mutex), Status::Ok.code());
+        assert_eq!((suite.mutex_un_lock)(mutex), Status::Ok.code());
+        // Unlocking one nobody holds is the plugin's bug and a status, never a
+        // second unlock.
+        assert_eq!((suite.mutex_un_lock)(mutex), Status::ErrValue.code());
+        assert_eq!((suite.mutex_destroy)(mutex), Status::Ok.code());
+        // And every one of them refuses a handle it never gave out — including
+        // the one just destroyed.
+        for forged in [
+            std::ptr::null_mut::<c_void>(),
+            0xdead_beef_usize as *mut c_void,
+            mutex,
+        ] {
+            assert_eq!((suite.mutex_lock)(forged), Status::ErrBadHandle.code());
+            assert_eq!((suite.mutex_destroy)(forged), Status::ErrBadHandle.code());
+        }
+    }
+}
+
+#[test]
+fn the_thread_suite_table_is_laid_out_as_c_lays_it_out() {
+    let pointer = size_of::<*const c_void>();
+    // Nine entry points, in the order the header declares them.
+    assert_eq!(size_of::<OfxMultiThreadSuiteV1>(), 9 * pointer);
+    assert_eq!(offset_of!(OfxMultiThreadSuiteV1, multi_thread), 0);
+    assert_eq!(offset_of!(OfxMultiThreadSuiteV1, mutex_create), 4 * pointer);
+    assert_eq!(
+        offset_of!(OfxMultiThreadSuiteV1, mutex_try_lock),
+        8 * pointer
     );
 }
